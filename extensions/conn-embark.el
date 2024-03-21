@@ -196,24 +196,6 @@ up out of a keymap."
 (add-to-list 'embark-target-injection-hooks
              '(conn-change-pair embark--ignore-target))
 
-(define-keymap
-  :keymap embark-region-map
-  "b"             'conn-isearch-region-forward
-  "B"             'conn-isearch-region-backward
-  "c"             'conn-region-case-map
-  "S-<backspace>" 'conn-collapse-whitespace-pair
-  "w"             'delete-region
-  "j"             'conn-join-lines
-  "i"             'indent-rigidly
-  "R"             'conn-replace-region-substring
-  "d"             'conn-duplicate-region
-  "D"             'conn-duplicate-and-comment-region
-  "'"             'conn-insert-pair
-  "\""            'conn-change-pair
-  "DEL"           'conn-delete-pair
-  "l"             'conn-occur-region
-  "r"             'conn-rgrep-region)
-
 (defun conn--embark-target-region ()
   (let ((start (region-beginning))
         (end (region-end)))
