@@ -2851,13 +2851,10 @@ With a prefix ARG `push-mark' without activating it."
   (delete-indentation nil start end)
   (indent-according-to-mode))
 
-(defvar hi-lock-mode)
-(defvar hi-lock-auto-select-face)
 (defun conn-highlight-region (start end)
   "`highlight-phrase' in region from START and END."
   (interactive (list (region-beginning)
                      (region-end)))
-  (require 'hi-lock)
   (let* ((regexp (regexp-quote (buffer-substring-no-properties start end)))
          (hi-lock-auto-select-face t)
          (face (hi-lock-read-face-name)))
