@@ -199,12 +199,14 @@ Each element may be either a symbol or a list of the form
   (if (car forms)
       `((setq ,needle ,first)
         ,@(apply #'conn--thread-1 needle forms))
-    `(,first)))
+    (list first)))
 
 (defmacro conn--thread (needle form &rest forms)
   (declare (indent 2))
-  `(let ((,needle ,form))
-     ,@(apply #'conn--thread-1 needle forms)))
+  (if forms
+      `(let ((,needle ,form))
+         ,@(apply #'conn--thread-1 needle forms))
+    form))
 
 (defun conn--exit-completion ()
   (completion-in-region-mode -1))
