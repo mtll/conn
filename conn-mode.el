@@ -201,25 +201,13 @@ Each element may be either a symbol or a list of the form
         ,@(apply #'conn--thread-1 needle forms))
     `(,first)))
 
-(defmacro conn--thread (needle &rest forms)
+(defmacro conn--thread (needle form &rest forms)
   (declare (indent 2))
-  `(let ((,needle))
+  `(let ((,needle ,form))
      ,@(apply #'conn--thread-1 needle forms)))
 
 (defun conn--exit-completion ()
   (completion-in-region-mode -1))
-
-(defun conn--region-beginning ()
-  (let ((mark-even-if-inactive t))
-    (region-beginning)))
-
-(defun conn--region-end ()
-  (let ((mark-even-if-inactive t))
-    (region-end)))
-
-(defun conn--region-bounds ()
-  (let ((mark-even-if-inactive t))
-    (region-bounds)))
 
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
@@ -1348,7 +1336,8 @@ BODY contains code to be executed each time the transition function is executed.
                   (conn--setup-aux-maps)
                   (setq conn--local-mode-maps
                         (alist-get conn-current-state conn--mode-maps))
-                  (conn--update-cursor))
+                  (conn--update-cursor)
+                  (conn--update-mode-line-indicator))
                 ,@body
                 (run-hooks 'conn-transition-hook)
                 (force-mode-line-update)))))))
@@ -3752,7 +3741,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 ;;;; Mode Definition
 
-(defun conn-update-mode-line-indicator ()
+(defun conn--update-mode-line-indicator ()
   "Update conn mode-line indicator."
   (setq conn-mode-line-indicator
         (or (get conn-current-state :conn-indicator) "")))
@@ -3838,7 +3827,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (add-hook 'conn-transition-hook 'conn--exit-completion)
     (if conn-mode
         (progn
-          (add-hook 'conn-transition-hook #'conn-update-mode-line-indicator)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor))
