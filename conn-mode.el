@@ -3135,11 +3135,10 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive
-   (list (cond ((consp current-prefix-arg)
-                (conn-read-matching-dot-buffers))
-               (current-prefix-arg
-                (conn-read-dot-buffers))
-               (t (list (current-buffer))))))
+   (list (pcase current-prefix-arg
+           ('(4) (conn-read-matching-dot-buffers))
+           ('nil (list (current-buffer)))
+           (_    (conn-read-dot-buffers)))))
   (conn--macro-dispatch
    buffers
    :before (lambda (dot)
@@ -3155,11 +3154,10 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive
-   (list (cond ((consp current-prefix-arg)
-                (conn-read-matching-dot-buffers))
-               (current-prefix-arg
-                (conn-read-dot-buffers))
-               (t (list (current-buffer))))))
+   (list (pcase current-prefix-arg
+           ('(4) (conn-read-matching-dot-buffers))
+           ('nil (list (current-buffer)))
+           (_    (conn-read-dot-buffers)))))
   (conn--macro-dispatch
    buffers
    :before (lambda (dot)
@@ -3176,11 +3174,10 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive
-   (list (cond ((consp current-prefix-arg)
-                (conn-read-matching-dot-buffers))
-               (current-prefix-arg
-                (conn-read-dot-buffers))
-               (t (list (current-buffer))))))
+   (list (pcase current-prefix-arg
+           ('(4) (conn-read-matching-dot-buffers))
+           ('nil (list (current-buffer)))
+           (_    (conn-read-dot-buffers)))))
   (conn--macro-dispatch
    buffers
    :before (lambda (dot)
@@ -3197,11 +3194,10 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive
-   (list (cond ((consp current-prefix-arg)
-                (conn-read-matching-dot-buffers))
-               (current-prefix-arg
-                (conn-read-dot-buffers))
-               (t (list (current-buffer))))))
+   (list (pcase current-prefix-arg
+           ('(4) (conn-read-matching-dot-buffers))
+           ('nil (list (current-buffer)))
+           (_    (conn-read-dot-buffers)))))
   (conn--macro-dispatch
    buffers
    :before (lambda (dot)
