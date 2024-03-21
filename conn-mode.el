@@ -181,6 +181,8 @@ Each element may be either a symbol or a list of the form
 (defvar-local conn--local-mode-maps nil)
 (defvar conn--transition-maps nil)
 
+(defvar conn--prev-mark-even-if-inactive nil)
+
 ;;;;; Command Histories
 
 (defvar conn-thing-history nil)
@@ -748,9 +750,9 @@ after applying FUNC."
        (lambda (dot)
          (funcall func dot)
          (when (and transforms (>= (nth 2 (car transforms))
-                                   (conn--region-beginning)))
+                                   (region-beginning)))
            (user-error "Overlapping regions"))
-         (push (list dot (conn--region-beginning) (conn--region-end)) transforms))
+         (push (list dot (region-beginning) (region-end)) transforms))
        '<))
     (dolist (tform transforms)
       (apply #'conn--move-dot tform))))
@@ -933,8 +935,8 @@ BODY finishes executing are removed and the previous dots are restored."
           (overlay-put dot 'face nil)
           (when before (funcall before dot))
           (kmacro-start-macro nil)
-          (pulse-momentary-highlight-region (conn--region-beginning)
-                                            (conn--region-end)
+          (pulse-momentary-highlight-region (region-beginning)
+                                            (region-end)
                                             'conn-dot-face)
           (unwind-protect
               (recursive-edit)
@@ -945,7 +947,7 @@ BODY finishes executing are removed and the previous dots are restored."
         (overlay-put dot 'evaporate evaporate)
         (user-error "A keyboard macro was not defined."))
       (overlay-put dot 'evaporate t)
-      (conn--move-dot dot (conn--region-beginning) (conn--region-end)))))
+      (conn--move-dot dot (region-beginning) (region-end)))))
 
 (cl-defmethod conn--macro-dispatch ((dot overlay) &key before after &allow-other-keys)
   (let ((mark-ring mark-ring))
@@ -955,14 +957,14 @@ BODY finishes executing are removed and the previous dots are restored."
             (overlay-put dot 'evaporate nil)
             (when before (funcall before dot))
             (kmacro-call-macro nil nil nil last-kbd-macro))
-        (conn--move-dot dot (conn--region-beginning) (conn--region-end))
+        (conn--move-dot dot (region-beginning) (region-end))
         (when after (funcall after dot))
         (overlay-put dot 'evaporate t)))))
 
 (defun conn--dot-after-movement ()
   (when conn--handle-mark
-    (conn--create-dots (cons (conn--region-beginning)
-                             (conn--region-end)))))
+    (conn--create-dots (cons (region-beginning)
+                             (region-end)))))
 
 
 ;;;; Advice
@@ -990,7 +992,7 @@ BODY finishes executing are removed and the previous dots are restored."
 (defun conn--copy-region-ad (beg end &optional region)
   "Pulse region when copying."
   (if region
-      (pulse-momentary-highlight-region (conn--region-beginning) (conn--region-end) 'region)
+      (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)
     (pulse-momentary-highlight-region beg end 'region)))
 
 (defun conn--quiet-in-isearch-ad ()
@@ -1001,8 +1003,8 @@ BODY finishes executing are removed and the previous dots are restored."
 when `use-region-p' is non-nil."
   (when (use-region-p)
     (if (rectangle-mark-mode)
-        (delete-rectangle (conn--region-beginning) (conn--region-end))
-      (delete-region (conn--region-beginning) (conn--region-end)))))
+        (delete-rectangle (region-beginning) (region-end))
+      (delete-region (region-beginning) (region-end)))))
 
 (defun conn--setup-advice ()
   (if conn-mode
@@ -1727,7 +1729,7 @@ If start is non-nil go to the start of last do instead."
 
 (defun conn-dot-region (bounds)
   "Dot current region."
-  (interactive (list (conn--region-bounds)))
+  (interactive (list (region-bounds)))
   (apply #'conn--create-dots bounds)
   (deactivate-mark))
 
@@ -1735,8 +1737,8 @@ If start is non-nil go to the start of last do instead."
   "Dot region and `search-foward' for string matching region.
 If ARG is non-nil repeat ARG times.
 If region is already a dot `search-forward', dot, and `search-forward' again."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      (prefix-numeric-value current-prefix-arg)))
   (let ((str (buffer-substring-no-properties start end)))
     (goto-char end)
@@ -1754,8 +1756,8 @@ If region is already a dot `search-forward', dot, and `search-forward' again."
   "Dot region and `search-backward' for string matching region.
 If ARG is non-nil repeat ARG times.
 If region is already a dot `search-backward', dot, and `search-backward' again."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      (prefix-numeric-value current-prefix-arg)))
   (let ((str (buffer-substring-no-properties start end)))
     (goto-char start)
@@ -1771,8 +1773,8 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
 
 (defun conn-dot-skip-forward (start end &optional arg)
   "`search-forward', skipping this region."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (let ((str (buffer-substring-no-properties start end)))
     (unless (= (point) end)
@@ -1785,8 +1787,8 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
 
 (defun conn-dot-skip-backward (start end &optional arg)
   "`search-backward', skipping this region."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (with-demoted-errors "%s"
     (let ((str (buffer-substring-no-properties start end)))
@@ -1863,8 +1865,8 @@ between `point-min' and `point-max'."
 If REFINE is non-nil only dot occurrences in dots.
 
 When called interactively uses point and mark."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (conn-add-dots-matching-string (buffer-substring-no-properties start end)
                                  nil nil refine))
@@ -1881,8 +1883,8 @@ When called interactively uses point and mark."
   "Dot each line in region from START to END.
 
 When called START is `region-beginning' and END is `region-end'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (save-excursion
     (goto-char start)
     (conn--create-dots (cons (line-beginning-position)
@@ -1895,7 +1897,7 @@ When called START is `region-beginning' and END is `region-end'."
   "Remove all dots outside region from START to END.
 
 When called interactively operates within `region-bounds'."
-  (interactive (list (conn--region-beginning) (conn--region-end)))
+  (interactive (list (region-beginning) (region-end)))
   (conn--for-each-dot #'conn--delete-dot nil (point-min) start)
   (conn--for-each-dot #'conn--delete-dot nil end (point-max)))
 
@@ -2009,8 +2011,8 @@ between `point-min' and `point-max'."
 (defun conn-kill-to-dots (start end)
   "Kill region from START to END and insert region to each dot.
 When called interactively START and END default to point and mark."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (let ((str (buffer-substring start end)))
     (delete-region start end)
     (conn--for-each-dot
@@ -2132,7 +2134,7 @@ between `point-min' and `point-max'."
   "Copy region between point and mark to each dot.
 If prepend is non-nil prepend text instead of appending it."
   (interactive "P")
-  (let ((region (buffer-substring (conn--region-beginning) (conn--region-end))))
+  (let ((region (buffer-substring (region-beginning) (region-end))))
     (save-excursion
       (conn--for-each-dot
        (lambda (dot)
@@ -2146,7 +2148,7 @@ If prepend is non-nil prepend text instead of appending it."
   "Copy text within each to region between point and mark."
   (interactive (list (read-string "Separator: " "\n")))
   (let ((first t))
-    (delete-region (conn--region-beginning) (conn--region-end))
+    (delete-region (region-beginning) (region-end))
     (conn--for-each-dot
      (lambda (dot)
        (if first
@@ -2168,7 +2170,7 @@ THING is something with a forward-op as defined by thingatpt."
                                     'conn-thing-history)))))
   (save-excursion
     (with-restriction
-        (conn--region-beginning) (conn--region-end)
+        (region-beginning) (region-end)
       (goto-char (point-min))
       (forward-thing thing)
       (conn--create-dots (bounds-of-thing-at-point thing))
@@ -2416,8 +2418,8 @@ Interactively TO-STRING is read in the minibuffer with the string contained
 in BEG to END set to the previous item in the history.  If ARG is nil replace
 within entire buffer, if ARG is >= 0 then replace only matches after point and
 if ARG is < 0 then replace only matches before point."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (let ((ov (make-overlay beg end)))
     (overlay-put ov 'face 'isearch)
@@ -2441,8 +2443,8 @@ if ARG is < 0 then replace only matches before point."
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (let ((search-string (read-string "Search for: "
                                     (regexp-quote (buffer-substring-no-properties beg end))
                                     'grep-regexp-history)))
@@ -2451,8 +2453,8 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-occur-region (beg end)
   "`occur' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (let ((search-string (read-string "Search for: "
                                     (regexp-quote (buffer-substring-no-properties beg end))
                                     'grep-regexp-history)))
@@ -2461,8 +2463,8 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
 Interactively `region-beginning' and `region-end'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (isearch-mode t)
   (with-isearch-suspended
    (setq isearch-new-string (buffer-substring-no-properties beg end)
@@ -2472,8 +2474,8 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-isearch-region-backward (beg end)
   "Isearch backward for region from BEG to END.
 Interactively `region-beginning' and `region-end'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (isearch-mode nil)
   (with-isearch-suspended
    (setq isearch-new-string (buffer-substring-no-properties beg end)
@@ -2571,14 +2573,14 @@ Handles rectangular regions."
     (let* ((case-fold-search nil))
       (if (null rectangle-mark-mode)
           (with-restriction
-              (conn--region-beginning) (conn--region-end)
+              (region-beginning) (region-end)
             (funcall transform-func))
         (apply-on-rectangle
          (lambda (start-col end-col)
            (with-restriction
                (+ (point) start-col) (+ (point) end-col)
              (funcall transform-func)))
-         (conn--region-beginning) (conn--region-end))))))
+         (region-beginning) (region-end))))))
 
 (defun conn-region-case-dwim ()
   "Cycle case in region.
@@ -2693,8 +2695,8 @@ Optionally if REGISTER is specified append kill to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively."
   (interactive
-   (list (conn--region-beginning)
-         (conn--region-end)
+   (list (region-beginning)
+         (region-end)
          (when current-prefix-arg
            (register-read-with-preview "Append kill to register: "))))
   (if register
@@ -2711,8 +2713,8 @@ interactively."
 Optionally if REGISTER is specified prepend kill to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      (when current-prefix-arg
                        (register-read-with-preview "Prepend kill to register: "))))
   (if register
@@ -2758,7 +2760,7 @@ interactively."
                  (pcase (alist-get char insert-pair-alist)
                    (`(,close . nil) (list char close))
                    (`(,open ,close) (list open close))
-                   (_ (list char char))))
+                   (_               (list char char))))
                (seq-map needle str)
                (apply #'seq-mapn 'string needle)
                (cons (car needle) (nreverse (cadr needle)))))
@@ -2769,8 +2771,8 @@ interactively."
 
 When called interactively inserts STRING at `point' and `mark'."
   (interactive (list (conn--read-pair)
-                     (conn--region-beginning)
-                     (conn--region-end)))
+                     (region-beginning)
+                     (region-end)))
   (save-mark-and-excursion
     (pcase-let ((`(,open . ,close) brackets))
       (goto-char end)
@@ -2783,8 +2785,8 @@ When called interactively inserts STRING at `point' and `mark'."
   (interactive (list (conn--read-pair) current-prefix-arg))
   (conn-delete-pair (or arg 1))
   (conn-insert-pair brackets
-                    (conn--region-beginning)
-                    (conn--region-end)))
+                    (region-beginning)
+                    (region-end)))
 
 (defun conn-delete-pair (arg)
   "Delete ARG chars at `point' and `mark'."
@@ -2853,8 +2855,8 @@ With a prefix ARG `push-mark' without activating it."
 
 (defun conn-join-lines (start end)
   "`delete-indentation' in region from START and END."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (delete-indentation nil start end)
   (indent-according-to-mode))
 
@@ -2862,8 +2864,8 @@ With a prefix ARG `push-mark' without activating it."
 (defvar hi-lock-auto-select-face)
 (defun conn-highlight-region (start end)
   "`highlight-phrase' in region from START and END."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (require 'hi-lock)
   (let* ((regexp (regexp-quote (buffer-substring-no-properties start end)))
          (hi-lock-auto-select-face t)
@@ -2882,8 +2884,8 @@ With a prefix ARG `push-mark' without activating it."
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (goto-char end)
   (conn-yank-keys)
@@ -2971,8 +2973,8 @@ for the meaning of prefix ARG."
   "Copy region between START and END as kill.
 
 If REGISTER is given copy to REGISTER instead."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      (when current-prefix-arg
                        (register-read-with-preview "Copy to register: "))))
   (if register
@@ -2994,26 +2996,25 @@ the region instead of killing it.
 
 If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
-  (let ((mark-even-if-inactive t))
-    (cond ((= (point) (mark t))
-           (conn-backward-delete-keys))
-          ((consp arg)
-           (conn-delete-region-keys))
-          ((numberp arg)
-           (thread-first
-             (concat "Kill "
-                     (if rectangle-mark-mode "Rectangle " " ")
-                     "to register:")
-             (register-read-with-preview)
-             (copy-to-register nil nil t t)))
-          (t (conn-kill-region-keys)))))
+  (cond ((= (point) (mark t))
+         (conn-backward-delete-keys))
+        ((consp arg)
+         (conn-delete-region-keys))
+        ((numberp arg)
+         (thread-first
+           (concat "Kill "
+                   (if rectangle-mark-mode "Rectangle " " ")
+                   "to register:")
+           (register-read-with-preview)
+           (copy-to-register nil nil t t)))
+        (t (conn-kill-region-keys))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
 
 If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (let ((ov (make-overlay start end))
         exchange)
@@ -3079,11 +3080,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive "p")
   (if (region-active-p)
       (duplicate-dwim)
-    (let ((end (set-marker (make-marker) (conn--region-end))))
+    (let ((end (set-marker (make-marker) (region-end))))
       (unwind-protect
           (dotimes (_ arg)
-            (conn--duplicate-region-1 (conn--region-beginning)
-                                      (conn--region-end)))
+            (conn--duplicate-region-1 (region-beginning)
+                                      (region-end)))
         (goto-char end)
         (set-marker end nil)))))
 
@@ -3092,10 +3093,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 If there's no region, the current line will be duplicated.  However, if
 there's a region, all lines that region covers will be duplicated."
   (interactive
-   (let ((mark-even-if-inactive t))
-     (list (conn--region-beginning)
-           (conn--region-end)
-           (prefix-numeric-value current-prefix-arg))))
+   (list (region-beginning)
+         (region-end)
+         (prefix-numeric-value current-prefix-arg)))
   (let* ((origin (point))
          (oend end)
          (region (buffer-substring-no-properties beg end)))
@@ -3251,8 +3251,8 @@ If ARG is negative open a new line above point and enter insert state."
 
 If KILL is non-nil add region to the `kill-ring'.
 When in `rectangle-mark-mode' defer to `string-rectangle'."
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)
+  (interactive (list (region-beginning)
+                     (region-end)
                      current-prefix-arg))
   (cond ((and rectangle-mark-mode kill)
          (copy-rectangle-as-kill start end)
@@ -3839,7 +3839,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (if conn-mode
         (progn
           (add-hook 'conn-transition-hook #'conn-update-mode-line-indicator)
+          (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
+                mark-even-if-inactive t)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor))
+      (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor))))
 
 (provide 'conn-mode)
