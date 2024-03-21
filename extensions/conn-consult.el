@@ -116,33 +116,33 @@ THING BEG and END are bound in BODY."
       (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
 
 (defun conn-consult-ripgrep-region (beg end)
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (consult-ripgrep nil (buffer-substring-no-properties beg end)))
 
 (defun conn-consult-line-region (beg end)
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (consult-line (buffer-substring-no-properties beg end)))
 
 (defun conn-consult-line-multi-region (beg end)
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (consult-line-multi nil (buffer-substring-no-properties beg end)))
 
 (defun conn-consult-locate-region (beg end)
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (consult-locate (buffer-substring-no-properties beg end)))
 
 (defun conn-consult-git-grep-region (beg end)
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (consult-git-grep nil (buffer-substring-no-properties beg end)))
 
 (defun conn-consult-find-region (beg end)
-  (interactive (list (conn--region-beginning)
-                     (conn--region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)))
   (consult-find nil (buffer-substring-no-properties beg end)))
 
 (defvar-keymap conn-consult-region-search-map

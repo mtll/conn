@@ -215,8 +215,8 @@ up out of a keymap."
   "r"             'conn-rgrep-region)
 
 (defun conn--embark-target-region ()
-  (let ((start (conn--region-beginning))
-        (end (conn--region-end)))
+  (let ((start (region-beginning))
+        (end (region-end)))
     `(region ,(buffer-substring start end) . (,start . ,end))))
 
 (defun conn-embark-region ()
@@ -230,7 +230,7 @@ up out of a keymap."
 
 (defun conn-embark-replace-region (string)
   (interactive (list (read-string "Replace with: ")))
-  (delete-region (conn--region-beginning) (conn--region-end))
+  (delete-region (region-beginning) (region-end))
   (insert string))
 
 (provide 'conn-embark)
