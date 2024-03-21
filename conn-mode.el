@@ -3384,37 +3384,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "_" 'calc-grab-sum-across
   "y" 'yank-rectangle)
 
-(defvar-keymap conn-buffer-map
-  :prefix 'conn-buffer-map
-  "/"   'tab-bar-history-back
-  "0"   'bury-buffer
-  "4"   'other-tab-prefix
-  "?"   'tab-bar-history-forward
-  "A"   'append-to-file
-  "C-/" 'tab-undo
-  "E"   'ediff-buffers
-  "H"   'highlight-compare-buffers
-  "W"   'tear-off-window
-  "b"   'ibuffer
-  "c"   'copy-to-buffer
-  "d"   'conn-tab-bar-duplicate-and-name-tab
-  "e"   'ediff-files
-  "f"   'diff-buffer-with-file
-  "g"   'tab-rename
-  "i"   'tab-bar-switch-to-prev-tab
-  "j"   'previous-buffer
-  "k"   'tab-bar-switch-to-next-tab
-  "l"   'next-buffer
-  "n"   'conn-tab-bar-new-named-tab
-  "o"   'tab-close-other
-  "q"   'tab-close
-  "r"   'revert-buffer-with-fine-grain
-  "t"   'tab-switch
-  "w"   'tab-detach
-  "]"   'append-to-buffer
-  "["   'prepend-to-buffer
-  "}"   'append-to-file)
-
 (defvar-keymap conn-tab-bar-history-mode-repeat-map
   :repeat t
   "/" 'tab-bar-history-back
@@ -3542,8 +3511,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "%"                'conn-query-remove-dots
   "t"                'conn-dot-this-map
   "w"                'conn-remove-dot-at-point
-  "{"                'conn-first-dot
   "|"                'conn-split-region-on-regexp
+  "{"                'conn-first-dot
   "}"                'conn-last-dot)
 
 (define-keymap
@@ -3573,7 +3542,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-common-map
-  ";"   'conn-buffer-map
   "j"   'conn-goto-char-backward
   "l"   'conn-goto-char-forward
   "!"   'kmacro-start-macro-or-insert-counter
