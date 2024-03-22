@@ -3411,10 +3411,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap (conn-get-mode-map 'emacs-state 'rectangle-mark-mode)
-  "C-S-m C" 'conn-state-rectangle
-  "C-S-m F" 'conn-emacs-state-rectangle
-  "C-S-m T" 'conn-change-rectangle
-  "C-S-m E" 'conn-emacs-state-after-rectangle)
+  "M-D C" 'conn-state-rectangle
+  "M-D F" 'conn-emacs-state-rectangle
+  "M-D T" 'conn-change-rectangle
+  "M-D E" 'conn-emacs-state-after-rectangle)
 
 (defvar-keymap conn-tab-bar-history-mode-repeat-map
   :repeat t
