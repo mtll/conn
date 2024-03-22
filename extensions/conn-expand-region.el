@@ -25,21 +25,4 @@
   (activate-mark)
   (er/expand-region arg))
 
-;;;###autoload
-(defun conn-expand-dots (arg)
-  "Expand each dot using `er/expand-region'."
-  (interactive "p")
-  (conn--move-each-dot
-   (lambda (d)
-     (goto-char (overlay-start d))
-     (push-mark (overlay-end d) t t)
-     (let ((expand-region-fast-keys-enabled nil))
-       (er/expand-region arg)))))
-
-;;;###autoload
-(defun conn-contract-dots (arg)
-  "Contract each dot using `er/expand-region'."
-  (interactive "p")
-  (conn-expand-dots (- arg)))
-
 (provide 'conn-expand-region)
