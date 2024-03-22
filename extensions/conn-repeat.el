@@ -56,6 +56,8 @@ If STATE is nil make COMMAND always repeat."
         conn-remove-dot-backward
         conn-remove-dot-forward
         duplicate-line
+        duplicate-dwim
+        conn-duplicate-region
         conn-delete-pair
         bury-buffer))
 
