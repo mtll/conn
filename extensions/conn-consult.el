@@ -161,3 +161,27 @@ THING BEG and END are bound in BODY."
 (keymap-set conn-mode-map "M-s p" 'conn-consult-page)
 
 (provide 'conn-consult)
+
+(with-eval-after-load 'consult
+  (defun conn-state-grep-candidates (cands)
+    (conn--dispatch-on-regions
+     (mapcar (lambda (cand)
+               (let ((marker (car (consult--grep-position cand))))
+                 (cons marker marker)))
+             cands)
+     :transition 'conn-state))
+  (add-to-list 'embark-multitarget-actions 'conn-state-grep-candidates)
+  (keymap-set embark-consult-grep-map "m" 'conn-state-grep-candidates)
+
+  (defun conn-state-location-candidates (cands)
+    (conn--dispatch-on-regions
+     (mapcar (lambda (cand)
+               (let ((marker (car (consult--get-location cand))))
+                 (cons marker marker)))
+             cands)
+     :transition 'conn-state))
+  (add-to-list 'embark-multitarget-actions 'conn-state-location-candidates)
+  (keymap-set embark-consult-location-map "m" 'conn-state-location-candidates)
+
+  (keymap-set embark-consult-location-map "D" 'conn-dot-consult-location-candidate)
+  (keymap-set embark-consult-grep-map "D" 'conn-dot-consult-grep-candidate))
