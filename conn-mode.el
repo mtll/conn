@@ -649,11 +649,10 @@ to determine if mark cursor should be hidden in buffer."
   (macro nil :read-only t)
   (transition nil :read-only t))
 
-(cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) arg)
-  (let ((dots (save-mark-and-excursion (conn-first-dot))))
-    (if conn--macro-dispatch-p
-        (throw 'conn-dispatch-register val)
-      (user-error "Not defining dispatch macro"))))
+(cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) _arg)
+  (if conn--macro-dispatch-p
+      (throw 'conn-dispatch-register val)
+    (user-error "Not defining dispatch macro")))
 
 (cl-defmethod register-val-describe ((val conn-macro-dispatch-register) _arg)
   (conn--thread needle
@@ -1577,15 +1576,12 @@ org-tree-edit state."
 
 ;;;;; Dot Commands
 
-(defun conn-macro-at-point-and-mark (&optional register)
+(defun conn-macro-at-point-and-mark ()
   "Dispatch dot macro at point and mark.
-With prefix arg of 0 dispatch the contents of `conn-last-dispatch-macro-register'.
-With any other prefix arg prompt for a dot register to use for dispatch."
-  (interactive
-   (list (pcase current-prefix-arg
-           ('nil)
-           (0 conn-last-dispatch-macro-register)
-           (_ (register-read-with-preview "Dot register: ")))))
+With prefix arg of 0 dispatch the contents of
+`conn-last-dispatch-macro-register'.  With any other prefix arg prompt
+for a dot register to use for dispatch."
+  (interactive)
   (when-let ((mark (mark t))
              (pt (point-marker)))
     (conn--dispatch-on-regions
