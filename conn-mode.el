@@ -964,10 +964,11 @@ BODY finishes executing are removed and the previous dots are restored."
     (unwind-protect
         (progn
           (dolist (buf buffers)
-            (dolist (ov (conn--all-overlays #'conn-dotp))
-              (push (cons (conn--create-marker (overlay-start ov))
-                          (conn--create-marker (overlay-end ov)))
-                    regions)))
+            (with-current-buffer buf
+              (dolist (ov (conn--all-overlays #'conn-dotp))
+                (push (cons (conn--create-marker (overlay-start ov))
+                            (conn--create-marker (overlay-end ov)))
+                      regions))))
           (conn--dispatch-on-regions regions :before before :after after))
       (pcase-dolist (`(,m1 . ,m2) regions)
         (set-marker m1 nil)
