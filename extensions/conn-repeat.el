@@ -40,6 +40,14 @@ If STATE is nil make COMMAND always repeat."
 (mapc #'conn-set-repeat-command
       '(transpose-words
         transpose-sexps
+        transpose-chars
+        transpose-lines
+        transpose-paragraphs
+        conn-transpose-words-backward
+        conn-transpose-sexps-backward
+        conn-transpose-chars-backward
+        conn-transpose-lines-backward
+        conn-transpose-paragraphs-backward
         conn-set-window-dedicated
         previous-error
         next-error
@@ -47,10 +55,7 @@ If STATE is nil make COMMAND always repeat."
         conn-region-case-dwim
         conn-remove-dot-backward
         conn-remove-dot-forward
-        transpose-chars
-        transpose-lines
         duplicate-line
-        transpose-paragraphs
         conn-delete-pair
         bury-buffer))
 
