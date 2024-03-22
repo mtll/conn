@@ -978,19 +978,17 @@ BODY finishes executing are removed and the previous dots are restored."
                             (overlay-put ov 'face 'conn-dot-face)
                             (overlay-put ov 'evaporate t))))
                   (if after (add-function :after (var after) fn) fn)))
-        regions)
-    (unwind-protect
-        (progn
-          (dolist (buf buffers)
-            (with-current-buffer buf
-              (dolist (ov (conn--all-overlays #'conn-dotp))
-                (push (cons (conn--create-marker (overlay-start ov))
-                            (conn--create-marker (overlay-end ov)))
-                      regions))))
-          (conn--dispatch-on-regions regions :before before :after after))
-      (pcase-dolist (`(,m1 . ,m2) regions)
-        (set-marker m1 nil)
-        (set-marker m2 nil)))))
+         regions)
+    (dolist (buf buffers)
+      (with-current-buffer buf
+        (dolist (ov (conn--all-overlays #'conn-dotp))
+          (push (cons (conn--create-marker (overlay-start ov))
+                      (conn--create-marker (overlay-end ov)))
+                regions))))
+    (conn--dispatch-on-regions regions
+                               :before before
+                               :after after
+                               :cleanup-marks t)))
 
 (defun conn--dot-after-movement ()
   (when conn--handle-mark
@@ -3115,6 +3113,42 @@ there's a region, all lines that region covers will be duplicated."
   (conn--remove-dots)
   (conn-pop-state))
 
+(defun conn-change-rectangle ()
+  (interactive)
+  (conn--dispatch-on-regions
+   (region-bounds)
+   :before (lambda (beg end)
+             (delete-region beg end)
+             (emacs-state))
+   :cleanup-marks t)
+  (rectangle-mark-mode 1))
+
+(defun conn-emacs-state-after-rectangle ()
+  (interactive)
+  (conn--dispatch-on-regions
+   (region-bounds)
+   :before (lambda (&rest _)
+             (exchange-point-and-mark (not mark-active))
+             (emacs-state))
+   :cleanup-marks t)
+  (rectangle-mark-mode 1))
+
+(defun conn-emacs-state-rectangle ()
+  (interactive)
+  (conn--dispatch-on-regions
+   (region-bounds)
+   :before (lambda (&rest _) (emacs-state))
+   :cleanup-marks t)
+  (rectangle-mark-mode 1))
+
+(defun conn-state-rectangle ()
+  (interactive)
+  (conn--dispatch-on-regions
+   (region-bounds)
+   :before (lambda (&rest _) (conn-state))
+   :cleanup-marks t)
+  (rectangle-mark-mode 1))
+
 (defun conn-dots-command (buffers)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
@@ -3366,10 +3400,21 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
+  "C" 'conn-state-rectangle
+  "F" 'conn-emacs-state-rectangle
+  "T" 'conn-change-rectangle
+  "E" 'conn-emacs-state-after-rectangle
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
   "y" 'yank-rectangle)
+
+(define-keymap
+  :keymap (conn-get-mode-map 'emacs-state 'rectangle-mark-mode)
+  "C-S-m C" 'conn-state-rectangle
+  "C-S-m F" 'conn-emacs-state-rectangle
+  "C-S-m T" 'conn-change-rectangle
+  "C-S-m E" 'conn-emacs-state-after-rectangle)
 
 (defvar-keymap conn-tab-bar-history-mode-repeat-map
   :repeat t
@@ -3509,7 +3554,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "|"   'shell-command-on-region
   ":"   'quoted-insert
   "*"   'calc-dispatch
-  "C"   'conn-copy-region
   "C-y" 'conn-yank-replace
   "M-y" 'conn-completing-yank-replace
   "Q"   'kill-buffer-and-window
