@@ -2162,6 +2162,31 @@ THING is something with a forward-op as defined by thingatpt."
 
 ;;;;; Isearch commands
 
+(defun conn--isearch-matches-in-buffer (&optional buffer)
+  (with-current-buffer (or buffer (current-buffer))
+    (let ((beg (if isearch-forward (point-min) (point-max)))
+          (end (if isearch-forward (point-max) (point-min)))
+          matches)
+      (save-excursion
+        (goto-char beg)
+        (while (isearch-search-string isearch-string end t)
+          (when (funcall isearch-filter-predicate
+                         (match-beginning 0) (match-end 0))
+            (push (cons (conn--create-marker (match-beginning 0))
+                        (conn--create-marker (match-end 0)))
+                  matches))))
+      matches)))
+
+(defun conn--isearch-dispatch (&rest keys)
+  (let ((matches
+         (if (or (not (boundp 'multi-isearch-buffer-list))
+                 (not multi-isearch-buffer-list))
+             (conn--isearch-matches-in-buffer (current-buffer))
+           (mapcan 'conn--isearch-matches-in-buffer
+                   multi-isearch-buffer-list))))
+    (isearch-exit)
+    (apply #'conn--dispatch-on-regions matches keys)))
+
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
     (>= (overlay-end ov) end)))
@@ -2181,19 +2206,10 @@ THING is something with a forward-op as defined by thingatpt."
 (defun conn--isearch-add-dots-1 (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
     (dot-state)
-    (let ((refine (advice-function-member-p #'conn-isearch-in-dot-p isearch-filter-predicate))
-          (beg (if isearch-forward (point-min) (point-max)))
-          (end (if isearch-forward (point-max) (point-min)))
-          new-dots)
-      (save-excursion
-        (goto-char beg)
-        (while (isearch-search-string isearch-string end t)
-          (when (funcall isearch-filter-predicate
-                         (match-beginning 0) (match-end 0))
-            (push (cons (match-beginning 0) (match-end 0)) new-dots)))
-        (when refine
-          (conn--remove-dots (point-min) (point-max)))
-        (apply #'conn--create-dots new-dots)))))
+    (when (advice-function-member-p #'conn-isearch-in-dot-p
+                                    isearch-filter-predicate)
+      (conn--remove-dots (point-min) (point-max)))
+    (apply #'conn--create-dots (conn--isearch-matches-in-buffer))))
 
 (defun conn-isearch-add-dots ()
   "Dot all isearch matches."
@@ -3100,6 +3116,34 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Transition Functions
 
+(defun conn-state-isearch-matches ()
+  (interactive)
+  (conn--isearch-dispatch
+   :before (lambda (&rest _) (conn-state))
+   :cleanup-marks t))
+
+(defun conn-emacs-state-isearch-matches ()
+  (interactive)
+  (conn--isearch-dispatch
+   :before (lambda (&rest _) (emacs-state))
+   :cleanup-marks t))
+
+(defun conn-emacs-state-after-isearch-matches ()
+  (interactive)
+  (conn--isearch-dispatch
+   :before (lambda (&rest _)
+             (exchange-point-and-mark (not mark-active))
+             (emacs-state))
+   :cleanup-marks t))
+
+(defun conn-change-isearch-matches ()
+  (interactive)
+  (conn--isearch-dispatch
+   :before (lambda (&rest _)
+             (delete-region)
+             (emacs-state))
+   :cleanup-marks t))
+
 (defun view-state-quit ()
   "Pop state and goto point where view-state was entered."
   (interactive)
@@ -3366,6 +3410,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap isearch-mode-map
+  "M-D c"       'conn-state-isearch-matches
+  "M-D f"       'conn-emacs-state-isearch-matches
+  "M-D t"       'conn-change-isearch-matches
+  "M-D e"       'conn-emacs-state-after-isearch-matches
   "C-c C-c"     conn-isearch-dot-map
   "C-c C-c C-o" 'conn-isearch-edit-each-match
   "M-<return>"  'conn-isearch-exit-and-mark)
