@@ -892,34 +892,51 @@ BODY finishes executing are removed and the previous dots are restored."
   (let ((regions (conn--normalize-regions regions))
         (last-kbd-macro nil)
         (conn--macro-dispatch-p t)
-        (wind (current-window-configuration)))
+        (wind (current-window-configuration))
+        (undo-outer-limit nil)
+        (undo-limit most-positive-fixnum)
+        (undo-strong-limit most-positive-fixnum)
+        (success nil)
+        (handles nil))
     (unwind-protect
         (progn
           (unless regions (user-error "No regions for dispatch"))
           (pcase-dolist (`(,buffer . ,rs) regions)
+            (push (prepare-change-group buffer) handles)
             (apply 'conn--dispatch-in-buffer buffer rs rest))
+          (setq success t)
           (set-register conn-last-dot-macro-register
                         (make-conn-dot-macro-register
                          :macro last-kbd-macro
                          :before (plist-get rest :before)
                          :after (plist-get rest :after))))
+      (if (not success)
+          (mapc #'cancel-change-group handles)
+        (dolist (handle handles)
+          (accept-change-group handle)
+          (undo-amalgamate-change-group handle)))
+      (when (plist-get rest :cleanup-marks)
+        (pcase-dolist (`(,_ . ,rs) regions)
+          (pcase-dolist (`(,beg . ,end) rs)
+            (set-marker beg nil)
+            (set-marker end nil))))
       (set-window-configuration wind))))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "\(fn REGIONS &key BEFORE AFTER)"
   (pop-to-buffer-same-window buffer)
   (conn-with-saved-state
-    (conn--as-merged-undo
-      (save-mark-and-excursion
-        (deactivate-mark t)
-        (pcase-dolist (`(,beg . ,end) regions)
-          (apply 'conn--macro-dispatch-1 beg end rest))))))
+    (save-mark-and-excursion
+      (deactivate-mark t)
+      (pcase-dolist (`(,beg . ,end) regions)
+        (apply 'conn--macro-dispatch-1 beg end rest)))))
 
-(cl-defgeneric conn--macro-dispatch (beg end &key before after))
+(cl-defgeneric conn--macro-dispatch (beg end &key before after &allow-other-keys))
 
 (cl-defmethod conn--macro-dispatch-1 (beg end
                                           &context (last-kbd-macro (eql nil))
-                                          &key before after)
+                                          &key before after
+                                          &allow-other-keys)
   (let ((mark-ring mark-ring))
     (unwind-protect
         (progn
@@ -937,7 +954,7 @@ BODY finishes executing are removed and the previous dots are restored."
       (unless last-kbd-macro
         (user-error "A keyboard macro was not defined.")))))
 
-(cl-defmethod conn--macro-dispatch-1 (beg end &key before after)
+(cl-defmethod conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
   (let ((mark-ring mark-ring))
     (with-demoted-errors "Error in macro dispatch: %s"
       (catch 'dispatch-skip
