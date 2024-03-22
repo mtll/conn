@@ -3250,6 +3250,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 ;;;; Keymaps
 
+(dolist (state '(conn-state emacs-state))
+  (define-keymap
+    :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
+    "C-z" 'exit-recursive-edit))
+
 (dolist (state '(conn-state emacs-state dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
