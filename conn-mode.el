@@ -856,6 +856,10 @@ BODY finishes executing are removed and the previous dots are restored."
            (overlay-put dot 'dot t))))))
 
 (defun conn--canonicalize-regions (regions)
+  "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
+
+Transform a flat list of elements of the form (MARKER-OR-INT . MARKER-OR-INT)
+into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
   (conn--thread needle
       (pcase-lambda (`(,beg . ,end))
         (cons (if (integerp beg) (conn--create-marker beg) beg)
@@ -883,11 +887,32 @@ BODY finishes executing are removed and the previous dots are restored."
       needle)))
 
 (defun conn--dispatch-on-regions (regions &rest rest)
-  "\(fn REGIONS &key BEFORE AFTER)"
+  "Begin a macro dispatch on REGIONS.
+
+REGIONS should be a list of elements of the form
+(MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations in
+the current buffer.
+
+All of the keyword arguments are options.
+
+BEFORE should be a function that will be called with the markers bounding
+the region to be acted upon before any other setup is performed.
+
+TRANSITION is called interactively and should put the buffer in the
+desired conn state.
+
+AFTER should be a function that will be called with the markers bounding the
+region after the keyboard macro has been run.  AFTER is guarenteed to be
+called if BEFORE is called.
+
+MACRO is a keyboard macro to use instead of recording a new macro on the
+first iteration of dispatch.
+
+\(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
   (when conn--macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions))
-        (last-kbd-macro nil)
+        (last-kbd-macro (plist-get rest :macro))
         (conn--macro-dispatch-p t)
         (wind (current-window-configuration))
         (undo-outer-limit nil)
@@ -933,7 +958,9 @@ BODY finishes executing are removed and the previous dots are restored."
       (set-window-configuration wind))))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
-  "\(fn REGIONS &key BEFORE AFTER)"
+  "Begin a macro dispatch on REGIONS in BUFFER.
+
+\(fn BUFFER REGIONS &key BEFORE AFTER TRANSITION)"
   (pop-to-buffer-same-window buffer)
   (conn-with-saved-state
     (save-mark-and-excursion
@@ -941,18 +968,20 @@ BODY finishes executing are removed and the previous dots are restored."
       (pcase-dolist (`(,beg . ,end) regions)
         (apply 'conn--macro-dispatch-1 beg end rest)))))
 
-(cl-defgeneric conn--macro-dispatch (beg end &key before after transition &allow-other-keys))
+(cl-defgeneric conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
+  "Dispatch on region from BEG to END.")
 
 (cl-defmethod conn--macro-dispatch-1 (beg end
                                           &context (last-kbd-macro (eql nil))
                                           &key before after transition
                                           &allow-other-keys)
+  "Perform first iteration of macro dispatch."
   (let ((mark-ring mark-ring))
     (unwind-protect
         (progn
+          (when before (funcall before beg end))
           (goto-char beg)
           (conn--push-ephemeral-mark end)
-          (when before (funcall before beg end))
           (when transition (call-interactively transition))
           (kmacro-start-macro nil)
           (pulse-momentary-highlight-region (region-beginning)
@@ -966,6 +995,7 @@ BODY finishes executing are removed and the previous dots are restored."
       (user-error "A keyboard macro was not defined."))))
 
 (cl-defmethod conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
+  "Perform remaining iterations of macro dispatch."
   (let ((mark-ring mark-ring))
     (with-demoted-errors "Error in macro dispatch: %s"
       (unwind-protect
@@ -978,6 +1008,7 @@ BODY finishes executing are removed and the previous dots are restored."
         (when after (funcall after beg end))))))
 
 (cl-defun conn--dot-macro-dispatch (buffers &key transition before after)
+  "Perform macro dispatch on all dots in BUFFERS."
   (let* ((ov)
          (before (let ((fn (lambda (_ end)
                              (setq ov (conn--dot-before-point end))
