@@ -866,9 +866,6 @@ first iteration of dispatch.
   (unless (= point (point-max))
     (seq-find #'conn-dotp (overlays-in point (1+ point)))))
 
-(defun conn--dots-in-region (beg end)
-  (seq-filter #'conn-dotp (overlays-in beg end)))
-
 (defun conn--for-each-dot (func &optional sort-predicate start end)
   "Apply FUNC to each dot.
 Optionally between START and END and sorted by SORT-PREDICATE."
@@ -876,22 +873,6 @@ Optionally between START and END and sorted by SORT-PREDICATE."
                        (conn--sorted-overlays #'conn-dotp sort-predicate start end)
                      (conn--all-overlays #'conn-dotp start end))))
     (mapc func dots)))
-
-(defun conn--move-each-dot (func)
-  "Move each dot to the value of `region-beginning' and `region-end'
-after applying FUNC."
-  (let (transforms)
-    (save-mark-and-excursion
-      (conn--for-each-dot
-       (lambda (dot)
-         (funcall func dot)
-         (when (and transforms (>= (nth 2 (car transforms))
-                                   (region-beginning)))
-           (user-error "Overlapping regions"))
-         (push (list dot (region-beginning) (region-end)) transforms))
-       '<))
-    (dolist (tform transforms)
-      (apply #'conn--move-dot tform))))
 
 (defun conn--move-dot (dot start end)
   (let ((old-start (overlay-start dot))
@@ -929,7 +910,7 @@ after applying FUNC."
           (push `(create ,start . ,end) conn--dot-this-undo))))))
 
 (defun conn--remove-dots (&optional start end)
-  (remove-overlays start end 'dot t))
+  (mapc #'conn--delete-dot (conn--all-overlays #'conn-dotp start end)))
 
 (defun conn--all-overlays (predicate &optional start end)
   "Get all overlays between START and END satisfying PREDICATE."
@@ -937,25 +918,9 @@ after applying FUNC."
               (overlays-in (or start (conn--beginning-of-region-or-restriction))
                            (or end (conn--end-of-region-or-restriction)))))
 
-(defun conn--replace-each-dot (strings dots)
-  "Replaces contents of each dot in DOTS with corresponding string in STRINGS."
-  (unless (= (length strings) (length dots))
-    (error "STRINGS length does not match CONN--ACTIVE-DOTS length"))
-  (save-excursion
-    (while strings
-      (let ((dot (pop dots)))
-        (goto-char (overlay-start dot))
-        (insert (pop strings))
-        (delete-region (point) (overlay-end dot))))))
-
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
   (overlay-get overlay 'dot))
-
-(defun conn--dot-string (dot)
-  "Return contents of DOT as a string."
-  (buffer-substring-no-properties
-   (overlay-start dot) (overlay-end dot)))
 
 (defun conn--clear-dots-in-buffers (buffers)
   "Delete all dots in BUFFERS."
@@ -974,7 +939,8 @@ If BUFFER is nil use current buffer."
       (save-excursion
         (goto-char (point-min))
         (goto-char (next-overlay-change (point)))
-        (while (and (not (setq result (conn--dots-in-region
+        (while (and (not (setq result (conn--all-overlays
+                                       #'conn-dotp
                                        (max (point-min) (1- (point)))
                                        (min (point-max) (1+ (point))))))
                     (/= (point) (point-max)))
@@ -994,27 +960,6 @@ If BUFFER is nil use current buffer."
          (funcall ,saved-state)
          (setq conn-previous-state ,saved-previous-state)))))
 
-(defmacro conn-stash-dots (&rest body)
-  "Execute BODY with dots stashed.
-
-BODY is executed as if the current buffer had no dots. Any dots left after
-BODY finishes executing are removed and the previous dots are restored."
-  (declare (indent defun))
-  (let ((saved-dots (gensym "saved-dots")))
-    `(let (,saved-dots)
-       (unwind-protect
-           (progn
-             (dolist (dot (conn--all-overlays #'conn-dotp))
-               (push (cons dot (overlay-get dot 'evaporate))
-                     ,saved-dots)
-               (overlay-put dot 'evaporate nil)
-               (overlay-put dot 'dot nil))
-             ,@body)
-         (conn--remove-dots)
-         (pcase-dolist (`(,dot . ,evaporate) ,saved-dots)
-           (overlay-put dot 'evaporate evaporate)
-           (overlay-put dot 'dot t))))))
-
 (cl-defun conn--dot-macro-dispatch (buffers &key transition before after)
   "Perform macro dispatch on all dots in BUFFERS."
   (let* ((ov)
@@ -1024,6 +969,7 @@ BODY finishes executing are removed and the previous dots are restored."
                              (overlay-put ov 'evaporate nil))))
                    (if before (add-function :before (var before) fn) fn)))
          (after (let ((fn (lambda (&rest _)
+                            (conn--move-dot ov (region-beginning) (region-end))
                             (overlay-put ov 'face 'conn-dot-face)
                             (overlay-put ov 'evaporate t))))
                   (if after (add-function :after (var after) fn) fn)))
@@ -1038,11 +984,6 @@ BODY finishes executing are removed and the previous dots are restored."
                                :before before
                                :after after
                                :transition transition)))
-
-(defun conn--dot-after-movement ()
-  (when conn--handle-mark
-    (conn--create-dots (cons (region-beginning)
-                             (region-end)))))
 
 
 ;;;; Advice
@@ -1531,17 +1472,13 @@ from dot state.  See `dot-state-map' for commands bound by dot state."
                 ("<f9>"     . conn-pop-state))
   (if dot-state
       (progn
-        (setq conn--dot-undo-ring nil
-              conn--prev-read-only buffer-read-only
-              buffer-read-only t)
+        (setq conn--dot-undo-ring nil)
         (conn--for-each-dot
          (lambda (dot)
            (push `(create ,(overlay-start dot) . ,(overlay-end dot))
                  conn--dot-this-undo)))
         (add-hook 'post-command-hook #'conn--dot-post-command-hook t t))
-    (conn-dot-movement-mode -1)
-    (setq conn--dot-undo-ring nil
-          buffer-read-only conn--prev-read-only)
+    (setq conn--dot-undo-ring nil)
     (remove-hook 'post-command-hook #'conn--dot-post-command-hook t)))
 
 (define-conn-state org-tree-edit-state
@@ -1613,35 +1550,6 @@ org-tree-edit state."
 ;;;; Commands
 
 ;;;;; Dot Commands
-
-(defun conn-macro-at-point-and-mark ()
-  "Dispatch dot macro at point and mark.
-With prefix arg of 0 dispatch the contents of
-`conn-last-dispatch-macro-register'.  With any other prefix arg prompt
-for a dot register to use for dispatch."
-  (interactive)
-  (when-let ((mark (mark t))
-             (pt (point-marker)))
-    (conn--dispatch-on-regions
-     (list (cons pt pt)
-           (cons mark mark))
-     :before (lambda (beg end)
-               (goto-char beg)
-               (conn--push-ephemeral-mark end)
-               (conn-state)))
-    (set-marker pt nil)))
-
-(define-minor-mode conn-dot-movement-mode
-  "Dot after any thing movement command."
-  :lighter (:propertize " Dot-M" face conn-dot-state-lighter-face)
-  (if conn-dot-movement-mode
-      (add-hook 'post-command-hook 'conn--dot-after-movement 91 t)
-    (remove-hook 'post-command-hook 'conn--dot-after-movement t)))
-
-(defun conn-last-dot-macro-to-register (register)
-  "Set REGISTER to last dot macro."
-  (interactive (list (register-read-with-preview "register: ")))
-  (set-register register (get-register conn-last-dispatch-macro-register)))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
@@ -1728,25 +1636,6 @@ With a numerical prefix argument read buffers using `completing-read'."
     (when (called-interactively-p 'interactive)
       (message "Dots redone"))))
 
-(defun conn-apply-on-dots (function &optional activate-mark)
-  "Call FUNCTION on each dot.  `point' and `mark' are set
-to end and start of dot respectively before function is called."
-  (interactive
-   (list (eval (read--expression "Expression: "))
-         current-prefix-arg))
-  (save-mark-and-excursion
-    (conn--for-each-dot
-     (lambda (dot)
-       (goto-char (overlay-end dot))
-       (push-mark (overlay-start dot) t activate-mark)
-       (funcall function)))))
-
-(defun conn-dots-reverse ()
-  "Reverse dots."
-  (interactive)
-  (let ((dots (conn--sorted-overlays #'conn-dotp)))
-    (conn--replace-each-dot (mapcar #'conn--dot-string (reverse dots)) dots)))
-
 (defun conn-first-dot (&optional start)
   "Go to the end of the first dot in buffer.
 If start is non-nil go to the start of last dot instead."
@@ -1778,21 +1667,22 @@ If start is non-nil go to the start of last do instead."
       (conn--push-ephemeral-mark (overlay-start dot)))))
 
 (defun conn-remove-dot-backward (arg)
-  "Remove nearest dot within the range `point-min' to `point'."
+  "Remove nearest dot within the range `point-min' to `point'.
+If region is active remove all dots in region."
   (interactive "p")
-  (let ((dot (or (conn--dot-before-point (point))
-                 (when (conn--previous-dot-1)
-                   (conn--next-dot-1)))))
-    (while (and (> arg 0) dot)
-      (conn--delete-dot dot)
-      (setq dot (or (conn--dot-before-point (point))
-                    (when (conn--previous-dot-1)
-                      (conn--next-dot-1)))
-            arg (1- arg)))
-    (when dot
-      (conn--push-ephemeral-mark (overlay-start dot))))
-  (when (called-interactively-p 'interactive)
-    (message "Region removed backward")))
+  (if (use-region-p)
+      (conn--remove-dots (region-beginning) (region-end))
+    (let ((dot (or (conn--dot-before-point (point))
+                   (when (conn--previous-dot-1)
+                     (conn--next-dot-1)))))
+      (while (and (> arg 0) dot)
+        (conn--delete-dot dot)
+        (setq dot (or (conn--dot-before-point (point))
+                      (when (conn--previous-dot-1)
+                        (conn--next-dot-1)))
+              arg (1- arg)))
+      (when dot
+        (conn--push-ephemeral-mark (overlay-start dot))))))
 
 (defun conn-remove-dot-forward (arg)
   "Remove nearest dot within the range `point' to `point-max'."
@@ -1816,6 +1706,20 @@ If start is non-nil go to the start of last do instead."
   (interactive (list (region-bounds)))
   (apply #'conn--create-dots bounds)
   (deactivate-mark))
+
+(defun conn-dot-word-at-point ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'word)
+    (`(,beg . ,end)
+     (conn-add-dots-matching-regexp
+      (concat "\\b" (regexp-quote (buffer-substring beg end)) "\\b")))))
+
+(defun conn-dot-sexp-at-point ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'sexp)
+    (`(,beg . ,end)
+     (conn-add-dots-matching-regexp
+      (concat "\\_<" (regexp-quote (buffer-substring beg end)) "\\_>")))))
 
 (defun conn-dot-region-forward (start end &optional arg)
   "Dot region and `search-foward' for string matching region.
@@ -1893,7 +1797,7 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
                        'conn-thing-history))))
   (conn--create-dots (bounds-of-thing-at-point thing)))
 
-(defun conn-add-dots-matching-string (string &optional start end refine)
+(defun conn-add-dots-matching-literal (string &optional start end refine)
   "Dot all occurrences of STRING in region from START to END.
 If REFINE is non-nil only dot occurrences in dots.
 
@@ -1903,20 +1807,7 @@ between `point-min' and `point-max'."
                      (conn--beginning-of-region-or-restriction)
                      (conn--end-of-region-or-restriction)
                      current-prefix-arg))
-  (setq start (or start (point-min))
-        end (or end (point-max)))
-  (let (new-dots)
-    (save-excursion
-      (goto-char start)
-      (while (search-forward string end t)
-        (cond
-         ((not refine)
-          (conn--create-dots (cons (match-beginning 0) (match-end 0))))
-         ((conn-isearch-in-dot-p (match-beginning 0) (match-end 0))
-          (push (cons (match-beginning 0) (match-end 0)) new-dots))))
-      (when refine
-        (conn--remove-dots start end)
-        (apply #'conn--create-dots new-dots)))))
+  (conn-add-dots-matching-regexp (regexp-quote string) start end refine))
 
 (defun conn-add-dots-matching-regexp (regexp &optional start end refine)
   "Dot things matching REGEXP in region from START to END.
@@ -1952,8 +1843,8 @@ When called interactively uses point and mark."
   (interactive (list (region-beginning)
                      (region-end)
                      current-prefix-arg))
-  (conn-add-dots-matching-string (buffer-substring-no-properties start end)
-                                 nil nil refine))
+  (conn-add-dots-matching-literal
+   (buffer-substring-no-properties start end) nil nil refine))
 
 (defun conn-dot-lines (start end)
   "Dot each line in region from START to END.
@@ -2309,6 +2200,28 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (conn-isearch-split-dots t))
 
 ;;;;; Editing Commands
+
+(defun conn-last-macro-dispatch-to-register (register)
+  "Set REGISTER to last dot macro."
+  (interactive (list (register-read-with-preview "register: ")))
+  (set-register register (get-register conn-last-dispatch-macro-register)))
+
+(defun conn-macro-at-point-and-mark ()
+  "Dispatch dot macro at point and mark.
+With prefix arg of 0 dispatch the contents of
+`conn-last-dispatch-macro-register'.  With any other prefix arg prompt
+for a dot register to use for dispatch."
+  (interactive)
+  (when-let ((mark (mark t))
+             (pt (point-marker)))
+    (conn--dispatch-on-regions
+     (list (cons pt pt)
+           (cons mark mark))
+     :before (lambda (beg end)
+               (goto-char beg)
+               (conn--push-ephemeral-mark end)
+               (conn-state)))
+    (set-marker pt nil)))
 
 (defun conn-scroll-down ()
   "`scroll-down-command' leaving point at the same relative window position."
@@ -3230,7 +3143,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
            (_    (conn-read-dot-buffers)))))
-  (conn--dot-macro-dispatch buffers :transition conn-state))
+  (conn--dot-macro-dispatch buffers :transition 'conn-state))
 
 (defun conn-dots-change (buffers)
   "Begin recording dot macro for BUFFERS, beginning with `conn-change'.
@@ -3346,6 +3259,47 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (dolist (state '(conn-state emacs-state dot-state))
   (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
+(defvar-keymap conn-region-map
+  :prefix 'conn-region-map
+  "m"   'conn-command-at-point-and-mark
+  "k"   'conn-macro-at-point-and-mark
+  "a c" 'align-current
+  "a e" 'align-entire
+  "a h" 'align-highlight-rule
+  "a n" 'align-newline-and-indent
+  "a r" 'align-regexp
+  "a u" 'align-unhighlight-rule
+  "c"   'conn-region-case-map
+  "u"   'conn-replace-region-substring
+  "j"   'conn-join-lines
+  "I"   'indent-rigidly
+  "i"   'indent-region
+  "w"   'delete-region
+  "e"   'eval-region
+  "d"   'conn-duplicate-region
+  "D"   'conn-duplicate-and-comment-region
+  "o"   'conn-insert-pair
+  "DEL" 'conn-delete-pair
+  "p"   'conn-change-pair
+  "b"   'conn-isearch-region-forward
+  "B"   'conn-isearch-region-backward
+  "l"   'conn-occur-region
+  "r"   'conn-rgrep-region
+  ";"   'comment-or-uncomment-region
+  "f"   'fill-region
+  "n"   'narrow-to-region
+  "s a" 'sort-pages
+  "s c" 'sort-columns
+  "s l" 'sort-lines
+  "s n" 'sort-numeric-fields
+  "s p" 'sort-paragraphs
+  "s r" 'sort-regexp-fields
+  "_"   'calc-grab-sum-across
+  ":"   'calc-grab-sum-down
+  "*"   'calc-grab-region
+  "$"   'ispell-region
+  "v"   'vc-region-history)
+
 (defvar-keymap conn-c-x-4-map
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward
@@ -3375,23 +3329,30 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-c" 'conn-dots-command
   "C-t" 'conn-dots-change
   "C-f" 'conn-dots-insert
-  "C-e" 'conn-dots-insert-after
-  "C-a" 'conn-apply-on-dots)
+  "C-e" 'conn-dots-insert-after)
 
 (defvar-keymap conn-dot-this-map
   :prefix 'conn-dot-this-map
   :doc "Dot this map."
   "p" 'conn-dot-text-property
-  "u" 'conn-dot-skip-backward
-  "o" 'conn-dot-skip-forward
-  "l" 'conn-dot-region-forward
-  "j" 'conn-dot-region-backward
+  "t" 'conn-dot-thing
+  "o" 'conn-dot-word-at-point
+  "m" 'conn-dot-sexp-at-point
   "w" 'conn-remove-dot-backward
   "d" 'conn-remove-dot-forward)
 
-(define-keymap
-  :keymap conn-dot-this-map
-  "t" 'conn-add-dots-matching-region
+(defvar-keymap conn-dot-region-repeat-map
+  :repeat t
+  "j" 'conn-dot-region-backward
+  "k" 'conn-dot-region-forward
+  "u" 'conn-dot-skip-backward
+  "i" 'conn-dot-skip-forward)
+
+(defvar-keymap conn-dot-region-map
+  :parent conn-region-map
+  "k" 'conn-dot-region-forward
+  "j" 'conn-dot-region-backward
+  "e" 'conn-add-dots-matching-region
   "a" 'conn-dot-all-things-in-region)
 
 (define-keymap
@@ -3401,16 +3362,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "F"      'conn-dots-insert
   "E"      'conn-dots-insert-after
   "C"      'conn-dots-command
-  "R"      'conn-apply-on-dots
   "S-<f8>" 'conn-dots-command
   "<f8>"   'conn-state)
-
-(defvar-keymap conn-dot-region-repeat-map
-  :repeat t
-  "j" 'conn-dot-region-backward
-  "l" 'conn-dot-region-forward
-  "u" 'conn-dot-skip-backward
-  "o" 'conn-dot-skip-forward)
 
 (define-keymap
   :keymap isearch-mode-map
@@ -3494,47 +3447,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "S" 'conn-capital-snake-case-region
   "s" 'conn-snake-case-region)
 
-(defvar-keymap conn-region-map
-  :prefix 'conn-region-map
-  "m"   'conn-command-at-point-and-mark
-  "k"   'conn-macro-at-point-and-mark
-  "a c" 'align-current
-  "a e" 'align-entire
-  "a h" 'align-highlight-rule
-  "a n" 'align-newline-and-indent
-  "a r" 'align-regexp
-  "a u" 'align-unhighlight-rule
-  "c"   'conn-region-case-map
-  "u"   'conn-replace-region-substring
-  "j"   'conn-join-lines
-  "I"   'indent-rigidly
-  "i"   'indent-region
-  "w"   'delete-region
-  "e"   'eval-region
-  "d"   'conn-duplicate-region
-  "D"   'conn-duplicate-and-comment-region
-  "o"   'conn-insert-pair
-  "DEL" 'conn-delete-pair
-  "p"   'conn-change-pair
-  "b"   'conn-isearch-region-forward
-  "B"   'conn-isearch-region-backward
-  "l"   'conn-occur-region
-  "r"   'conn-rgrep-region
-  ";"   'comment-or-uncomment-region
-  "f"   'fill-region
-  "n"   'narrow-to-region
-  "s a" 'sort-pages
-  "s c" 'sort-columns
-  "s l" 'sort-lines
-  "s n" 'sort-numeric-fields
-  "s p" 'sort-paragraphs
-  "s r" 'sort-regexp-fields
-  "_"   'calc-grab-sum-across
-  ":"   'calc-grab-sum-down
-  "*"   'calc-grab-region
-  "$"   'ispell-region
-  "v"   'vc-region-history)
-
 (defvar-keymap conn-misc-edit-map
   :prefix 'conn-misc-edit-map
   "y"   'yank-rectangle
@@ -3563,20 +3475,20 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (defvar-keymap conn-ctl-x-r-map
   "\\" 'conn-set-register-seperator
-  "."  'conn-last-dot-macro-to-register
+  "."  'conn-last-macro-dispatch-to-register
   ","  'conn-dot-state-to-register
   "!"  'kmacro-to-register
   "W"  'conn-clear-register)
 
 (define-keymap
   :keymap dot-state-map
-  "$"                'conn-add-dots-matching-string
-  "'"                'conn-remove-dots-outside-region
+  "$"                'conn-add-dots-matching-literal
+  "d"                'conn-remove-dots-outside-region
   "("                'conn-add-dots-matching-regexp
   "<backspace>"      'conn-kill-to-dots
   "<return>"         'conn-dot-lines
   "<tab>"            'conn-remove-all-dots
-  "C-<return>"       'conn-split-dots-on-newline
+  "TAB"              'conn-remove-all-dots
   "C-n"              'conn-next-dot
   "C-p"              'conn-previous-dot
   "M-<down-mouse-1>" 'conn-dot-at-click
@@ -3587,14 +3499,15 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "]"                'conn-remove-dots-after
   "_"                'conn-dot-trim-regexp
   "`"                'conn-dot-movement-mode
-  "d"                'conn-dot-region
+  "e"                'conn-dot-region
   "q"                'conn-dot-point
   "%"                'conn-query-remove-dots
   "t"                'conn-dot-this-map
-  "w"                'conn-remove-dot-at-point
+  "w"                'conn-remove-dot
   "|"                'conn-split-region-on-regexp
   "{"                'conn-first-dot
-  "}"                'conn-last-dot)
+  "}"                'conn-last-dot
+  "r"                conn-dot-region-map)
 
 (define-keymap
   :keymap conn-state-map
@@ -3823,7 +3736,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
-    (conn-dot-movement-mode -1)
     (without-restriction
       (conn--remove-dots))
     (when conn-current-state
