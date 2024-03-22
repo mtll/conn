@@ -3564,6 +3564,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-state-map
+  ";"   'save-buffer
   "\\"  'indent-region
   "r"   'conn-region-map
   "z"   'conn-exchange-mark-command
