@@ -652,7 +652,10 @@ to determine if mark cursor should be hidden in buffer."
 (cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) _arg)
   (if conn--macro-dispatch-p
       (throw 'conn-dispatch-register val)
-    (user-error "Not defining dispatch macro")))
+    (conn--dispatch-on-regions
+     (region-bounds)
+     :transition (conn-macro-dispatch-register-transition val)
+     :macro (conn-macro-dispatch-register-macro val))))
 
 (cl-defmethod register-val-describe ((val conn-macro-dispatch-register) _arg)
   (conn--thread needle
