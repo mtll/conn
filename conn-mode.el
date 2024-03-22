@@ -615,7 +615,7 @@ See `conn--dispatch-on-regions'.")
                 (symbol-name state)
               "")
             (key-description (conn-macro-dispatch-register-macro val)))
-    (apply 'format "%s Dispatch Macro:\n   %s" needle)
+    (apply 'format "%s dispatch macro:\n   %s" needle)
     (princ needle)))
 
 (defun conn--canonicalize-regions (regions)
