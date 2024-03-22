@@ -37,6 +37,10 @@
 If STATE is nil make COMMAND always repeat."
   (put command :conn-repeat-command (or state t)))
 
+(defun conn-unset-repeat-command (command)
+  "Remove repeat property from COMMAND."
+  (put command :conn-repeat-command nil))
+
 (mapc #'conn-set-repeat-command
       '(transpose-words
         transpose-sexps
