@@ -3951,12 +3951,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   (dolist (state '(conn-state dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
-      "<remap> <backward-kill-word>" 'paredit-backward-kill-word
-      "<remap> <backward-delete>" 'paredit-backward-delete
       "<remap> <forward-sexp>" 'paredit-forward
       "<remap> <backward-sexp>" 'paredit-backward
-      "<remap> <forward-sentence>" 'paredit-forward-up
-      "<remap> <backward-sentence>" 'paredit-backward-up))
+      "O" 'paredit-forward-up
+      "U" 'paredit-backward-up))
 
   (conn-add-mark-commands '(paredit-forward
                             paredit-backward
