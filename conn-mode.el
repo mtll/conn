@@ -1124,8 +1124,7 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-C-c-keys             "C-c")
 (conn-define-remapping-command conn-M-s-keys             "M-s")
 (conn-define-remapping-command conn-M-g-keys             "M-g")
-(conn-define-remapping-command conn-C-x-4-keys           "C-x 4")
-(conn-define-remapping-command conn-C-x-5-keys           "C-x 5")
+(conn-define-remapping-command conn-C-x-t-keys           "C-x t")
 (conn-define-remapping-command conn-delete-char-keys     "C-d")
 (conn-define-remapping-command conn-yank-keys            "C-y")
 (conn-define-remapping-command conn-kill-region-keys     "C-w")
@@ -3258,6 +3257,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (dolist (state '(conn-state emacs-state dot-state))
   (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
+(defvar-keymap conn-other-window-repeat-map
+  :repeat t
+  "`" 'other-window)
+
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
   "m"   'conn-command-at-point-and-mark
@@ -3425,16 +3428,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward)
 
-(defvar-keymap conn-tab-bar-repeat-map
-  :repeat t
-  "k" 'tab-bar-switch-to-next-tab
-  "i" 'tab-bar-switch-to-prev-tab)
-
-(defvar-keymap conn-buffer-repeat-map
-  :repeat t
-  "j" 'previous-buffer
-  "l" 'next-buffer)
-
 (defvar-keymap conn-region-case-map
   :prefix 'conn-region-case-map
   "-" 'conn-kebab-case-region
@@ -3459,7 +3452,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "M"   'transpose-paragraphs
   "r"   'query-replace-regexp
   "v"   'conn-mark-thing
-  "d"   'duplicate-line
+  "d"   'duplicate-dwim
   "j"   'join-line
   "i"   'conn-transpose-lines-backward
   ","   'conn-transpose-chars-backward
@@ -3517,7 +3510,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "."    'other-window-prefix
   "$"    'ispell-word
   "|"    'shell-command-on-region
-  ":"    'quoted-insert
   "*"    'calc-dispatch
   "C-y"  'conn-yank-replace
   "M-y"  'conn-completing-yank-replace
@@ -3525,13 +3517,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "Y"    'yank-from-kill-ring
   "["    'conn-kill-prepend-region
   "]"    'conn-kill-append-region
-  "`"    'conn-C-x-4-keys
   "c"    'conn-C-c-keys
   "d"    'conn-delete-char-keys
   "q"    'conn-misc-edit-map
   "w"    'conn-kill-region
-  "y"    'conn-yank-keys
-  "~"    'conn-C-x-5-keys)
+  "y"    'conn-yank-keys)
 
 (define-keymap
   :keymap conn-common-map
@@ -3562,10 +3552,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "o"   'forward-word
   "m"   'forward-sexp
   "n"   'backward-sexp
-  "b"   'isearch-forward
+  "b"   'switch-to-buffer
+  "B"   'conn-C-x-t-keys
+  "`"   'other-window
   "p"   'conn-register-load
   "s"   'conn-M-s-keys
-  "B"   'isearch-backward
   "v"   'conn-toggle-mark-command
   "x"   'conn-C-x-keys
   "c"   'conn-C-c-keys
@@ -3576,8 +3567,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   :keymap view-state-map
   "SPC"     'conn-scroll-up
   "DEL"     'conn-scroll-down
-  "`"       'conn-C-x-4-keys
-  "~"       'conn-C-x-5-keys
   "a"       'execute-extended-command
   "q"       'quit-window
   "Q"       'kill-buffer-and-window
@@ -3586,8 +3575,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "x"       'conn-C-x-keys
   "j"       'backward-page
   "l"       'forward-page
-  "b"       'isearch-forward
-  "B"       'isearch-backward
+  "b"       'switch-to-buffer
+  "B"       'conn-C-x-t-keys
   "i"       'conn-scroll-down
   "k"       'conn-scroll-up
   "."       'point-to-register
@@ -3603,42 +3592,40 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   :keymap org-tree-edit-state-map
   "SPC" 'conn-scroll-up
   "DEL" 'conn-scroll-down
-  "`" 'conn-C-x-4-keys
-  "~" 'conn-C-x-5-keys
-  "u" 'outline-up-heading
-  "a" 'execute-extended-command
-  "z" 'conn-exchange-mark-command
-  "Q" 'kill-buffer-and-window
-  "s" 'conn-M-s-keys
-  "g" 'conn-M-g-keys
-  "x" 'conn-C-x-keys
-  "c" 'conn-C-c-keys
-  "w" 'org-refile
-  "b" 'isearch-forward
-  "B" 'isearch-backward
-  "p" 'conn-register-load
-  "." 'point-to-register
-  "j" 'org-previous-visible-heading
-  "l" 'org-next-visible-heading
-  "i" 'org-backward-heading-same-level
-  "k" 'org-forward-heading-same-level
-  "I" 'org-metaup
-  "K" 'org-metadown
-  "L" 'org-metaright
-  "J" 'org-metaleft
-  "U" 'org-previous-block
-  "O" 'org-next-block
-  ">" 'org-demote-subtree
-  "<" 'org-promote-subtree
-  "m" 'org-mark-subtree
-  ";" 'org-toggle-comment
-  "t" 'org-todo
-  "n" 'conn-org-tree-edit-insert-heading
-  "N" 'org-toggle-narrow-to-subtree
-  "_" 'org-columns
-  "^" 'org-sort
-  "/" 'undo-only
-  "?" 'undo-redo)
+  "u"   'outline-up-heading
+  "a"   'execute-extended-command
+  "z"   'conn-exchange-mark-command
+  "Q"   'kill-buffer-and-window
+  "s"   'conn-M-s-keys
+  "g"   'conn-M-g-keys
+  "x"   'conn-C-x-keys
+  "c"   'conn-C-c-keys
+  "w"   'org-refile
+  "b"   'switch-to-buffer
+  "B"   'conn-C-x-t-keys
+  "p"   'conn-register-load
+  "."   'point-to-register
+  "j"   'org-previous-visible-heading
+  "l"   'org-next-visible-heading
+  "i"   'org-backward-heading-same-level
+  "k"   'org-forward-heading-same-level
+  "I"   'org-metaup
+  "K"   'org-metadown
+  "L"   'org-metaright
+  "J"   'org-metaleft
+  "U"   'org-previous-block
+  "O"   'org-next-block
+  ">"   'org-demote-subtree
+  "<"   'org-promote-subtree
+  "m"   'org-mark-subtree
+  ";"   'org-toggle-comment
+  "t"   'org-todo
+  "n"   'conn-org-tree-edit-insert-heading
+  "N"   'org-toggle-narrow-to-subtree
+  "_"   'org-columns
+  "^"   'org-sort
+  "/"   'undo-only
+  "?"   'undo-redo)
 
 (defvar-keymap conn-mode-map
   "<remap> <scroll-up-command>" 'conn-scroll-up
@@ -3646,8 +3633,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "M-RET"   'conn-open-line-and-indent
   "C-x n t" 'conn-narrow-to-thing
   "C-x r"   conn-ctl-x-r-map
-  "C-x 5 ~" 'other-frame-prefix
   "C-x 4"   conn-c-x-4-map
+  "C-x t s" 'tab-switch
   "C-x n >" 'conn-narrow-to-end-of-buffer
   "C-x n <" 'conn-narrow-to-beginning-of-buffer
   "<pause>" 'conn-toggle-minibuffer-focus
