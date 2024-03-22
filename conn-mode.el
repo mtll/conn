@@ -1558,13 +1558,16 @@ With any other prefix arg prompt for a dot register to use for dispatch."
            ('nil)
            (0 conn-last-dot-macro-register)
            (_ (register-read-with-preview "Dot register: ")))))
-  (when-let ((mark (mark t)))
-    (conn-stash-dots
-      (conn--create-dots (cons (point) (point))
-                         (cons mark mark))
-      (if register
-          (register-val-jump-to (get-register register) nil)
-        (call-interactively #'conn-dots-command)))))
+  (when-let ((mark (mark t))
+             (pt (point-marker)))
+    (conn--dispatch-on-regions
+     (list (cons pt pt)
+           (cons mark mark))
+     :before (lambda (beg end)
+               (goto-char beg)
+               (conn--push-ephemeral-mark end)
+               (conn-state)))
+    (set-marker pt nil)))
 
 (define-minor-mode conn-dot-movement-mode
   "Dot after any thing movement command."
