@@ -590,12 +590,188 @@ to determine if mark cursor should be hidden in buffer."
   (setq conn--mark-cursor nil))
 
 
-;;;; Dots
-
-;;;;; Variables
+;;;; Macro Dispatch
 
 (defvar conn--macro-dispatch-p nil
   "Non-nil when a keyboard is being executed on dots.")
+
+(cl-defstruct (conn-macro-dispatch-register)
+  (macro nil :read-only t)
+  (transition nil :read-only t))
+
+(cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) _arg)
+  (if conn--macro-dispatch-p
+      (throw 'conn-dispatch-register val)
+    (conn--dispatch-on-regions
+     (region-bounds)
+     :transition (conn-macro-dispatch-register-transition val)
+     :macro (conn-macro-dispatch-register-macro val))))
+
+(cl-defmethod register-val-describe ((val conn-macro-dispatch-register) _arg)
+  (conn--thread needle
+      (list (if-let ((state (conn-macro-dispatch-register-transition val)))
+                (symbol-name state)
+              "")
+            (key-description (conn-macro-dispatch-register-macro val)))
+    (apply 'format "%s Dispatch Macro:\n   %s" needle)
+    (princ needle)))
+
+(defun conn--canonicalize-regions (regions)
+  "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
+
+Transform a flat list of elements of the form (MARKER-OR-INT . MARKER-OR-INT)
+into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
+  (conn--thread needle
+      (pcase-lambda (`(,beg . ,end))
+        (cons (if (integerp beg) (conn--create-marker beg) beg)
+              (if (integerp end) (conn--create-marker end) end)))
+    (mapcar needle regions)
+    (seq-group-by (pcase-lambda (`(,beg . ,_))
+                    (marker-buffer beg))
+                  needle)
+    (mapcar (pcase-lambda (`(,key . ,val))
+              (cons key (sort val (lambda (a b) (> (car a) (car b))))))
+            needle)
+    (if-let ((curr (seq-find (lambda (c)
+                               (eq (car c) (current-buffer)))
+                             needle))
+             (first (conn--minimize
+                     (pcase-lambda (`(,beg . ,end))
+                       (min (abs (- beg (point)))
+                            (abs (- end (point)))))
+                     (cdr curr)))
+             (rest (remq first (cdr curr))))
+        (cons (cons (car curr) (cons first rest))
+              (seq-remove (lambda (c)
+                            (eq (car c) (current-buffer)))
+                          needle))
+      needle)))
+
+(defun conn--dispatch-on-regions (regions &rest rest)
+  "Begin a macro dispatch on REGIONS.
+
+REGIONS should be a list of elements of the form
+(MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations in
+the current buffer.
+
+All of the keyword arguments are options.
+
+BEFORE should be a function that will be called with the markers bounding
+the region to be acted upon before any other setup is performed.
+
+TRANSITION is called interactively and should put the buffer in the
+desired conn state.
+
+AFTER should be a function that will be called with the markers bounding the
+region after the keyboard macro has been run.  AFTER is guarenteed to be
+called if BEFORE is called.
+
+MACRO is a keyboard macro to use instead of recording a new macro on the
+first iteration of dispatch.
+
+\(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
+  (when conn--macro-dispatch-p
+    (user-error "Recursive call to macro dispatch"))
+  (let ((regions (conn--canonicalize-regions regions))
+        (last-kbd-macro (plist-get rest :macro))
+        (conn--macro-dispatch-p t)
+        (wind (current-window-configuration))
+        (undo-outer-limit nil)
+        (undo-limit most-positive-fixnum)
+        (undo-strong-limit most-positive-fixnum)
+        (register nil)
+        (success nil)
+        (handles nil))
+    (unwind-protect
+        (progn
+          (unless regions (user-error "No regions for dispatch"))
+          (setq register (catch 'conn-dispatch-register
+                           (pcase-dolist (`(,buffer . ,rs) regions)
+                             (push (prepare-change-group buffer) handles)
+                             (apply 'conn--dispatch-in-buffer buffer rs rest))))
+          (when (conn-macro-dispatch-register-p register)
+            (mapc #'cancel-change-group handles)
+            (setf handles nil
+                  last-kbd-macro (conn-macro-dispatch-register-macro register)
+                  (plist-get rest :transition) (conn-macro-dispatch-register-transition
+                                                register))
+
+            (pcase-dolist (`(,buffer . ,rs) regions)
+              (push (prepare-change-group buffer) handles)
+              (apply 'conn--dispatch-in-buffer buffer rs rest)))
+          (setq success t)
+          (if register
+              (set-register conn-last-dispatch-macro-register register)
+            (set-register conn-last-dispatch-macro-register
+                          (make-conn-macro-dispatch-register
+                           :macro last-kbd-macro
+                           :transition (plist-get rest :transition)))))
+      (if (not success)
+          (mapc #'cancel-change-group handles)
+        (dolist (handle handles)
+          (accept-change-group handle)
+          (undo-amalgamate-change-group handle)))
+      (unless (plist-get rest :preserve-marks)
+        (pcase-dolist (`(,_ . ,rs) regions)
+          (pcase-dolist (`(,beg . ,end) rs)
+            (set-marker beg nil)
+            (set-marker end nil))))
+      (set-window-configuration wind))))
+
+(defun conn--dispatch-in-buffer (buffer regions &rest rest)
+  "Begin a macro dispatch on REGIONS in BUFFER.
+
+\(fn BUFFER REGIONS &key BEFORE AFTER TRANSITION)"
+  (pop-to-buffer-same-window buffer)
+  (conn-with-saved-state
+    (save-mark-and-excursion
+      (deactivate-mark t)
+      (pcase-dolist (`(,beg . ,end) regions)
+        (apply 'conn--macro-dispatch-1 beg end rest)))))
+
+(cl-defgeneric conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
+  "Dispatch on region from BEG to END.")
+
+(cl-defmethod conn--macro-dispatch-1 (beg end
+                                          &context (last-kbd-macro (eql nil))
+                                          &key before after transition
+                                          &allow-other-keys)
+  "Perform first iteration of macro dispatch."
+  (let ((mark-ring mark-ring))
+    (unwind-protect
+        (progn
+          (when before (funcall before beg end))
+          (goto-char beg)
+          (conn--push-ephemeral-mark end)
+          (when transition (call-interactively transition))
+          (kmacro-start-macro nil)
+          (pulse-momentary-highlight-region (region-beginning)
+                                            (region-end)
+                                            'conn-dot-face)
+          (unwind-protect
+              (recursive-edit)
+            (kmacro-end-macro nil)))
+      (when after (funcall after beg end)))
+    (unless last-kbd-macro
+      (user-error "A keyboard macro was not defined."))))
+
+(cl-defmethod conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
+  "Perform remaining iterations of macro dispatch."
+  (let ((mark-ring mark-ring))
+    (with-demoted-errors "Error in macro dispatch: %s"
+      (unwind-protect
+          (progn
+            (when before (funcall before beg end))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end)
+            (when transition (call-interactively transition))
+            (kmacro-call-macro nil nil nil last-kbd-macro))
+        (when after (funcall after beg end))))))
+
+
+;;;; Dots
+
+;;;;; Variables
 
 (defvar-local conn--dot-undoing nil)
 (defvar-local conn--dot-undo-ring nil)
@@ -644,27 +820,6 @@ to determine if mark cursor should be hidden in buffer."
   "Store current dots in REGISTER."
   (interactive (list (register-read-with-preview "Dot state to register: ")))
   (set-register register (conn-make-dot-register)))
-
-(cl-defstruct (conn-macro-dispatch-register)
-  (macro nil :read-only t)
-  (transition nil :read-only t))
-
-(cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) _arg)
-  (if conn--macro-dispatch-p
-      (throw 'conn-dispatch-register val)
-    (conn--dispatch-on-regions
-     (region-bounds)
-     :transition (conn-macro-dispatch-register-transition val)
-     :macro (conn-macro-dispatch-register-macro val))))
-
-(cl-defmethod register-val-describe ((val conn-macro-dispatch-register) _arg)
-  (conn--thread needle
-      (list (if-let ((state (conn-macro-dispatch-register-transition val)))
-                (symbol-name state)
-              "")
-            (key-description (conn-macro-dispatch-register-macro val)))
-    (apply 'format "%s Dispatch Macro:\n   %s" needle)
-    (princ needle)))
 
 ;;;;; Dot Functions
 
@@ -857,158 +1012,6 @@ BODY finishes executing are removed and the previous dots are restored."
          (pcase-dolist (`(,dot . ,evaporate) ,saved-dots)
            (overlay-put dot 'evaporate evaporate)
            (overlay-put dot 'dot t))))))
-
-(defun conn--canonicalize-regions (regions)
-  "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
-
-Transform a flat list of elements of the form (MARKER-OR-INT . MARKER-OR-INT)
-into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
-  (conn--thread needle
-      (pcase-lambda (`(,beg . ,end))
-        (cons (if (integerp beg) (conn--create-marker beg) beg)
-              (if (integerp end) (conn--create-marker end) end)))
-    (mapcar needle regions)
-    (seq-group-by (pcase-lambda (`(,beg . ,_))
-                    (marker-buffer beg))
-                  needle)
-    (mapcar (pcase-lambda (`(,key . ,val))
-              (cons key (sort val (lambda (a b) (> (car a) (car b))))))
-            needle)
-    (if-let ((curr (seq-find (lambda (c)
-                               (eq (car c) (current-buffer)))
-                             needle))
-             (first (conn--minimize
-                     (pcase-lambda (`(,beg . ,end))
-                       (min (abs (- beg (point)))
-                            (abs (- end (point)))))
-                     (cdr curr)))
-             (rest (remq first (cdr curr))))
-        (cons (cons (car curr) (cons first rest))
-              (seq-remove (lambda (c)
-                            (eq (car c) (current-buffer)))
-                          needle))
-      needle)))
-
-(defun conn--dispatch-on-regions (regions &rest rest)
-  "Begin a macro dispatch on REGIONS.
-
-REGIONS should be a list of elements of the form
-(MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations in
-the current buffer.
-
-All of the keyword arguments are options.
-
-BEFORE should be a function that will be called with the markers bounding
-the region to be acted upon before any other setup is performed.
-
-TRANSITION is called interactively and should put the buffer in the
-desired conn state.
-
-AFTER should be a function that will be called with the markers bounding the
-region after the keyboard macro has been run.  AFTER is guarenteed to be
-called if BEFORE is called.
-
-MACRO is a keyboard macro to use instead of recording a new macro on the
-first iteration of dispatch.
-
-\(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
-  (when conn--macro-dispatch-p
-    (user-error "Recursive call to macro dispatch"))
-  (let ((regions (conn--canonicalize-regions regions))
-        (last-kbd-macro (plist-get rest :macro))
-        (conn--macro-dispatch-p t)
-        (wind (current-window-configuration))
-        (undo-outer-limit nil)
-        (undo-limit most-positive-fixnum)
-        (undo-strong-limit most-positive-fixnum)
-        (register nil)
-        (success nil)
-        (handles nil))
-    (unwind-protect
-        (progn
-          (unless regions (user-error "No regions for dispatch"))
-          (setq register (catch 'conn-dispatch-register
-                           (pcase-dolist (`(,buffer . ,rs) regions)
-                             (push (prepare-change-group buffer) handles)
-                             (apply 'conn--dispatch-in-buffer buffer rs rest))))
-          (when (conn-macro-dispatch-register-p register)
-            (mapc #'cancel-change-group handles)
-            (setf handles nil
-                  last-kbd-macro (conn-macro-dispatch-register-macro register)
-                  (plist-get rest :transition) (conn-macro-dispatch-register-transition
-                                                register))
-
-            (pcase-dolist (`(,buffer . ,rs) regions)
-              (push (prepare-change-group buffer) handles)
-              (apply 'conn--dispatch-in-buffer buffer rs rest)))
-          (setq success t)
-          (if register
-              (set-register conn-last-dispatch-macro-register register)
-            (set-register conn-last-dispatch-macro-register
-                          (make-conn-macro-dispatch-register
-                           :macro last-kbd-macro
-                           :transition (plist-get rest :transition)))))
-      (if (not success)
-          (mapc #'cancel-change-group handles)
-        (dolist (handle handles)
-          (accept-change-group handle)
-          (undo-amalgamate-change-group handle)))
-      (unless (plist-get rest :preserve-marks)
-        (pcase-dolist (`(,_ . ,rs) regions)
-          (pcase-dolist (`(,beg . ,end) rs)
-            (set-marker beg nil)
-            (set-marker end nil))))
-      (set-window-configuration wind))))
-
-(defun conn--dispatch-in-buffer (buffer regions &rest rest)
-  "Begin a macro dispatch on REGIONS in BUFFER.
-
-\(fn BUFFER REGIONS &key BEFORE AFTER TRANSITION)"
-  (pop-to-buffer-same-window buffer)
-  (conn-with-saved-state
-    (save-mark-and-excursion
-      (deactivate-mark t)
-      (pcase-dolist (`(,beg . ,end) regions)
-        (apply 'conn--macro-dispatch-1 beg end rest)))))
-
-(cl-defgeneric conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
-  "Dispatch on region from BEG to END.")
-
-(cl-defmethod conn--macro-dispatch-1 (beg end
-                                          &context (last-kbd-macro (eql nil))
-                                          &key before after transition
-                                          &allow-other-keys)
-  "Perform first iteration of macro dispatch."
-  (let ((mark-ring mark-ring))
-    (unwind-protect
-        (progn
-          (when before (funcall before beg end))
-          (goto-char beg)
-          (conn--push-ephemeral-mark end)
-          (when transition (call-interactively transition))
-          (kmacro-start-macro nil)
-          (pulse-momentary-highlight-region (region-beginning)
-                                            (region-end)
-                                            'conn-dot-face)
-          (unwind-protect
-              (recursive-edit)
-            (kmacro-end-macro nil)))
-      (when after (funcall after beg end)))
-    (unless last-kbd-macro
-      (user-error "A keyboard macro was not defined."))))
-
-(cl-defmethod conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
-  "Perform remaining iterations of macro dispatch."
-  (let ((mark-ring mark-ring))
-    (with-demoted-errors "Error in macro dispatch: %s"
-      (unwind-protect
-          (progn
-            (when before (funcall before beg end))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (when transition (call-interactively transition))
-            (kmacro-call-macro nil nil nil last-kbd-macro))
-        (when after (funcall after beg end))))))
 
 (cl-defun conn--dot-macro-dispatch (buffers &key transition before after)
   "Perform macro dispatch on all dots in BUFFERS."
