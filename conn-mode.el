@@ -155,7 +155,7 @@ Defines default STATE for buffers matching REGEXP."
 
 ;;;;; Internal Vars
 
-(defvar conn--states nil)
+(defvar conn-states nil)
 
 (defvar-local conn--input-method nil
   "Current input for buffer.")
@@ -181,7 +181,8 @@ Each element may be either a symbol or a list of the form
 (defvar conn--transition-maps nil)
 
 (defvar conn--prev-mark-even-if-inactive nil)
-(defvar-local conn--prev-read-only nil)
+
+(defvar conn-isearch-recursive-edit-p nil)
 
 ;;;;; Command Histories
 
@@ -1054,7 +1055,7 @@ when `use-region-p' is non-nil."
 (defun conn-keymap-local-set (key state command)
   (interactive
    (list (key-description (read-key-sequence "Set key sequence locally: " nil t))
-         (intern-soft (completing-read "In state: " (mapcar #'symbol-name conn--states) nil t))
+         (intern-soft (completing-read "In state: " (mapcar #'symbol-name conn-states) nil t))
          (read-command "To command: ")))
   (keymap-set (or (alist-get state conn--local-maps)
                   (setf (alist-get state conn--local-maps)
@@ -1333,7 +1334,7 @@ BODY contains code to be executed each time the transition function is executed.
        (put ',name :conn-cursor-type ',cursor-name)
        (put ',name :conn-indicator ',indicator-name)
 
-       (push ',name conn--states)
+       (cl-pushnew ',name conn-states)
        (push (cons ',name ,map-name) conn--state-maps)
        (push (cons ',name ,transition-map-name) conn--transition-maps)
 
@@ -2294,18 +2295,10 @@ ARG has the same meaning as in `kmacro-call-macro'."
                         matches)))
               (setq matches (nreverse matches))
               (with-isearch-suspended
-               (define-keymap
-                 :keymap (current-local-map)
-                 "<remap> <exit-recursive-edit>" (cons "Finish edit"
-                                                       'conn-exit-edit-each-match)
-                 "M-C" (cons "Repeat last kmacro"
-                             'conn-edit-each-match-repeat-kmacro))
                (pcase-dolist (`(,m1 . ,m2) matches)
                  (goto-char m1)
                  (conn--push-ephemeral-mark m2)
                  (recursive-edit))))
-          (keymap-local-unset "<remap> <exit-recursive-edit>" t)
-          (keymap-local-unset "M-C" t)
           (pcase-dolist (`(,m1 . ,m2) matches)
             (set-marker m1 nil)
             (set-marker m2 nil))
@@ -2318,7 +2311,8 @@ Inside each recursive edit \\[exit-recursive-edit] is remapped to
 a single undo."
   (interactive)
   (catch 'conn-exit-edit-each-match
-    (let ((wind (current-window-configuration)))
+    (let ((wind (current-window-configuration))
+          (conn-isearch-recursive-edit-p t))
       (unwind-protect
           (if (or (not (boundp 'multi-isearch-buffer-list))
                   (not multi-isearch-buffer-list))
@@ -3250,10 +3244,16 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 ;;;; Keymaps
 
-(dolist (state '(conn-state emacs-state))
+(dolist (state conn-states)
   (define-keymap
     :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
     "C-z" 'exit-recursive-edit))
+
+(dolist (state conn-states)
+  (define-keymap
+    :keymap (conn-get-mode-map state 'conn-isearch-recursive-edit-p)
+    "C-z" 'conn-exit-edit-each-match
+    "M-D" 'conn-edit-each-match-repeat-kmacro))
 
 (dolist (state '(conn-state emacs-state dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
@@ -3373,8 +3373,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "M-D f"       'conn-emacs-state-isearch-matches
   "M-D t"       'conn-change-isearch-matches
   "M-D e"       'conn-emacs-state-after-isearch-matches
-  "C-c C-c"     conn-isearch-dot-map
-  "C-c C-c C-o" 'conn-isearch-edit-each-match
+  "M-D o"       'conn-isearch-edit-each-match
+  "M-D d"       conn-isearch-dot-map
   "M-<return>"  'conn-isearch-exit-and-mark)
 
 (define-keymap
@@ -3577,30 +3577,30 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap view-state-map
-  "SPC" 'conn-scroll-up
-  "DEL" 'conn-scroll-down
-  "`" 'conn-C-x-4-keys
-  "~" 'conn-C-x-5-keys
-  "a" 'execute-extended-command
-  "q" 'quit-window
-  "Q" 'kill-buffer-and-window
-  "s" 'conn-M-s-keys
-  "g" 'conn-M-g-keys
-  "x" 'conn-C-x-keys
-  "j" 'backward-page
-  "l" 'forward-page
-  "b" 'isearch-forward
-  "B" 'isearch-backward
-  "i" 'conn-scroll-down
-  "k" 'conn-scroll-up
-  "." 'point-to-register
-  "m" 'mark-page
-  "p" 'conn-register-load
-  "z" 'conn-exchange-mark-command
-  "<up>" 'conn-scroll-down
-  "<down>" 'conn-scroll-up
+  "SPC"     'conn-scroll-up
+  "DEL"     'conn-scroll-down
+  "`"       'conn-C-x-4-keys
+  "~"       'conn-C-x-5-keys
+  "a"       'execute-extended-command
+  "q"       'quit-window
+  "Q"       'kill-buffer-and-window
+  "s"       'conn-M-s-keys
+  "g"       'conn-M-g-keys
+  "x"       'conn-C-x-keys
+  "j"       'backward-page
+  "l"       'forward-page
+  "b"       'isearch-forward
+  "B"       'isearch-backward
+  "i"       'conn-scroll-down
+  "k"       'conn-scroll-up
+  "."       'point-to-register
+  "m"       'mark-page
+  "p"       'conn-register-load
+  "z"       'conn-exchange-mark-command
+  "<up>"    'conn-scroll-down
+  "<down>"  'conn-scroll-up
   "<right>" 'forward-page
-  "<left>" 'backward-page)
+  "<left>"  'backward-page)
 
 (define-keymap
   :keymap org-tree-edit-state-map
