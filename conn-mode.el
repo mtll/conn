@@ -592,15 +592,17 @@ to determine if mark cursor should be hidden in buffer."
 
 ;;;; Macro Dispatch
 
-(defvar conn--macro-dispatch-p nil
-  "Non-nil when a keyboard is being executed on dots.")
+(defvar conn-macro-dispatch-p nil
+  "Non-nil during macro dispatch.
+
+See `conn--dispatch-on-regions'.")
 
 (cl-defstruct (conn-macro-dispatch-register)
   (macro nil :read-only t)
   (transition nil :read-only t))
 
 (cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) _arg)
-  (if conn--macro-dispatch-p
+  (if conn-macro-dispatch-p
       (throw 'conn-dispatch-register val)
     (conn--dispatch-on-regions
      (region-bounds)
@@ -670,11 +672,11 @@ MACRO is a keyboard macro to use instead of recording a new macro on the
 first iteration of dispatch.
 
 \(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
-  (when conn--macro-dispatch-p
+  (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions))
         (last-kbd-macro (plist-get rest :macro))
-        (conn--macro-dispatch-p t)
+        (conn-macro-dispatch-p t)
         (wind (current-window-configuration))
         (undo-outer-limit nil)
         (undo-limit most-positive-fixnum)
@@ -896,13 +898,13 @@ after applying FUNC."
         (old-end (overlay-end dot)))
     (move-overlay dot start end)
     (unless (or conn--dot-undoing
-                conn--macro-dispatch-p)
+                conn-macro-dispatch-p)
       (push `(move (,start . ,end) . (,old-start . ,old-end))
             conn--dot-this-undo))))
 
 (defun conn--delete-dot (dot)
   (unless (or conn--dot-undoing
-              conn--macro-dispatch-p)
+              conn-macro-dispatch-p)
     (push `(delete ,(overlay-start dot) . ,(overlay-end dot))
           conn--dot-this-undo))
   (overlay-put dot 'dot nil)
@@ -923,7 +925,7 @@ after applying FUNC."
         (overlay-put overlay 'priority conn-overlay-priority)
         (overlay-put overlay 'face 'conn-dot-face)
         (unless (or conn--dot-undoing
-                    conn--macro-dispatch-p)
+                    conn-macro-dispatch-p)
           (push `(create ,start . ,end) conn--dot-this-undo))))))
 
 (defun conn--remove-dots (&optional start end)
