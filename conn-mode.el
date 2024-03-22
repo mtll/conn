@@ -3513,28 +3513,28 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-state-map
-  ";"   'save-buffer
-  "\\"  'indent-region
-  "r"   'conn-region-map
-  "z"   'conn-exchange-mark-command
-  "."   'other-window-prefix
-  "$"   'ispell-word
-  "|"   'shell-command-on-region
-  ":"   'quoted-insert
-  "*"   'calc-dispatch
-  "C-y" 'conn-yank-replace
-  "M-y" 'conn-completing-yank-replace
-  "Q"   'kill-buffer-and-window
-  "Y"   'yank-from-kill-ring
-  "["   'conn-kill-prepend-region
-  "]"   'conn-kill-append-region
-  "`"   'conn-C-x-4-keys
-  "c"   'conn-C-c-keys
-  "d"   'conn-delete-char-keys
-  "q"   'conn-misc-edit-map
-  "w"   'conn-kill-region
-  "y"   'conn-yank-keys
-  "~"   'conn-C-x-5-keys)
+  "<f4>" 'save-buffer
+  "\\"   'indent-region
+  "r"    'conn-region-map
+  "z"    'conn-exchange-mark-command
+  "."    'other-window-prefix
+  "$"    'ispell-word
+  "|"    'shell-command-on-region
+  ":"    'quoted-insert
+  "*"    'calc-dispatch
+  "C-y"  'conn-yank-replace
+  "M-y"  'conn-completing-yank-replace
+  "Q"    'kill-buffer-and-window
+  "Y"    'yank-from-kill-ring
+  "["    'conn-kill-prepend-region
+  "]"    'conn-kill-append-region
+  "`"    'conn-C-x-4-keys
+  "c"    'conn-C-c-keys
+  "d"    'conn-delete-char-keys
+  "q"    'conn-misc-edit-map
+  "w"    'conn-kill-region
+  "y"    'conn-yank-keys
+  "~"    'conn-C-x-5-keys)
 
 (define-keymap
   :keymap conn-common-map
@@ -3547,7 +3547,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "<"   'beginning-of-defun
   ">"   'end-of-defun
   "@"   'kmacro-end-or-call-macro
-  "A"   'execute-extended-command-for-buffer
   "I"   'backward-paragraph
   "J"   'conn-beginning-of-inner-line
   "K"   'forward-paragraph
@@ -3557,7 +3556,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "O"   'forward-sentence
   "SPC" 'conn-set-mark-command
   "U"   'backward-sentence
-  "a"   'execute-extended-command
+  ";"   'execute-extended-command
+  "a"   'conn-copy-region
   "g"   'conn-M-g-keys
   "i"   'previous-line
   "u"   'backward-word
