@@ -21,9 +21,20 @@
 ;;;###autoload
 (defun conn-avy-goto-dot ()
   (interactive)
-  (avy-process (mapcar (lambda (dot)
-                         (cons (overlay-start dot)
-                               (overlay-end dot)))
-                       (conn--all-overlays #'conn-dotp))))
+  (let ((avy-all-windows t))
+    (avy-process
+     (let ((dots))
+       (walk-windows
+        (lambda (win)
+          (with-current-buffer (window-buffer win)
+            (dolist (dot (conn--all-overlays #'conn-dotp
+                                             (window-start win)
+                                             (window-end)))
+              (push (cons (cons (overlay-start dot)
+                                (overlay-end dot))
+                          win)
+                    dots))))
+        'no-minibuffer)
+       dots))))
 
 (provide 'conn-avy)
