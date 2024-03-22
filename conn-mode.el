@@ -862,7 +862,7 @@ BODY finishes executing are removed and the previous dots are restored."
            (overlay-put dot 'evaporate evaporate)
            (overlay-put dot 'dot t))))))
 
-(defun conn--normalize-regions (regions)
+(defun conn--canonicalize-regions (regions)
   (conn--thread needle
       (pcase-lambda (`(,beg . ,end))
         (cons (if (integerp beg) (conn--create-marker beg) beg)
@@ -874,22 +874,23 @@ BODY finishes executing are removed and the previous dots are restored."
     (mapcar (pcase-lambda (`(,key . ,val))
               (cons key (sort val (lambda (a b) (> (car a) (car b))))))
             needle)
-    (sort needle (lambda (a _) (eq (car a) (current-buffer))))
-    (progn
-      (when (eq (caar needle) (current-buffer))
-        (let* ((first (conn--minimize
-                      (pcase-lambda (`(,beg . ,end))
-                        (min (abs (- beg (point)))
-                             (abs (- end (point)))))
-                      (cdar needle)))
-              (rest (remq first (cdar needle))))
-          (setf (alist-get (current-buffer) needle)
-                (cons first rest))))
+    (if-let ((curr (seq-find (lambda (c)
+                               (eq (car c) (current-buffer)))
+                             needle))
+             (first (conn--minimize
+                     (pcase-lambda (`(,beg . ,end))
+                       (min (abs (- beg (point)))
+                            (abs (- end (point)))))
+                     (cdr curr)))
+             (rest (remq first (cdr curr))))
+        (cons curr (seq-remove (lambda (c)
+                                 (eq (car c) (current-buffer)))
+                               needle))
       needle)))
 
 (defun conn--dispatch-on-regions (regions &rest rest)
   "\(fn REGIONS &key BEFORE AFTER)"
-  (let ((regions (conn--normalize-regions regions))
+  (let ((regions (conn--canonicalize-regions regions))
         (last-kbd-macro nil)
         (conn--macro-dispatch-p t)
         (wind (current-window-configuration))
