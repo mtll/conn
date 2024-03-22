@@ -3525,6 +3525,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-common-map
+  "W"   'widen
   "j"   'conn-goto-char-backward
   "l"   'conn-goto-char-forward
   "!"   'kmacro-start-macro-or-insert-counter
