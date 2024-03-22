@@ -874,8 +874,7 @@ BODY finishes executing are removed and the previous dots are restored."
     (mapcar (pcase-lambda (`(,key . ,val))
               (cons key (sort val (lambda (a b) (> (car a) (car b))))))
             needle)
-    (sort needle (pcase-lambda (`(,key . ,_))
-                   (eq key (current-buffer))))
+    (sort needle (lambda (a _) (eq (car a) (current-buffer))))
     (progn
       (when (eq (caar needle) (current-buffer))
         (let* ((first (conn--minimize
