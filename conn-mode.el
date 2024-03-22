@@ -209,9 +209,6 @@ Each element may be either a symbol or a list of the form
          ,@(apply #'conn--thread-1 needle forms))
     form))
 
-(defun conn--exit-completion ()
-  (completion-in-region-mode -1))
-
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
@@ -3782,7 +3779,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (conn--setup-mark)
     (conn--setup-advice)
     (conn--setup-extensions)
-    (add-hook 'conn-transition-hook 'conn--exit-completion)
     (if conn-mode
         (progn
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
@@ -3794,6 +3790,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (provide 'conn-mode)
 
 ;;; Load Extensions
+
+(with-eval-after-load 'corfu
+  (defun conn--exit-completion ()
+    (completion-in-region-mode -1))
+  (add-hook 'conn-transition-hook 'conn--exit-completion))
 
 (with-eval-after-load 'repeat
   (require 'conn-repeat)
