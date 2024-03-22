@@ -1612,7 +1612,7 @@ If the region is active remove all dots in region."
   (if (use-region-p)
       (conn--remove-dots (region-beginning) (region-end))
     (save-mark-and-excursion
-      (if-let ((dot (conn--dot-before-point point)))
+      (if-let ((dot (conn--dot-before-point (point))))
           (progn
             (conn--delete-dot dot)
             (when (called-interactively-p 'interactive)
