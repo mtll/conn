@@ -968,15 +968,14 @@ BODY finishes executing are removed and the previous dots are restored."
 (cl-defmethod conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
   (let ((mark-ring mark-ring))
     (with-demoted-errors "Error in macro dispatch: %s"
-      (catch 'dispatch-skip
-        (unwind-protect
-            (progn
-              (goto-char beg)
-              (conn--push-ephemeral-mark end)
-              (when before (funcall before beg end))
-              (when transition (call-interactively transition))
-              (kmacro-call-macro nil nil nil last-kbd-macro))
-          (when after (funcall after beg end)))))))
+      (unwind-protect
+          (progn
+            (when before (funcall before beg end))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end)
+            (when transition (call-interactively transition))
+            (kmacro-call-macro nil nil nil last-kbd-macro))
+        (when after (funcall after beg end))))))
 
 (cl-defun conn--dot-macro-dispatch (buffers &key transition before after)
   (let* ((ov)
