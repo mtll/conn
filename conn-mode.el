@@ -51,7 +51,6 @@
 (defvar conn--mark-cursor-timer nil)
 (defvar conn--aux-timer nil)
 (defvar conn-modes)
-(defvar zz-add-zone-anyway-p)
 
 
 ;;;; Variables
@@ -2700,9 +2699,7 @@ interactively."
                        (conn--things 'conn--defined-thing-p) nil nil nil
                        'conn-thing-history))))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    ;; Tell the zones package to add this to zz-izones-var
-    (let ((zz-add-zone-anyway-p t))
-      (narrow-to-region (car bounds) (cdr bounds)))))
+    (narrow-to-region (car bounds) (cdr bounds))))
 
 (defun conn--read-pair ()
   (pcase (string-split (minibuffer-with-setup-hook
@@ -3875,3 +3872,17 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
                             paredit-forward-up
                             paredit-backward-up)
                           (conn-continuous-thing-handler 'sexp)))
+
+(with-eval-after-load 'zones
+  (defvar zz-add-zone-anyway-p)
+  ;; Make this command add narrowings to izone var
+  (defun conn-narrow-to-thing (thing)
+    "Narrow to THING at point."
+    (interactive (list (intern
+                        (completing-read
+                         (format "Thing: ")
+                         (conn--things 'conn--defined-thing-p) nil nil nil
+                         'conn-thing-history))))
+    (when-let ((bounds (bounds-of-thing-at-point thing)))
+      (let ((zz-add-zone-anyway-p t))
+        (narrow-to-region (car bounds) (cdr bounds))))))
