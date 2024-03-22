@@ -656,7 +656,7 @@ to determine if mark cursor should be hidden in buffer."
       (if (use-region-p)
           (apply #'conn--create-dots (region-bounds))
         (conn-dot-point (point))))
-    (conn--macro-dispatch
+    (conn--dot-macro-dispatch
      (if arg (conn-read-dot-buffers) (list (current-buffer)))
      :before (conn-dot-macro-register-before val)
      :after (conn-dot-macro-register-after val)
