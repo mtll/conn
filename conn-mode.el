@@ -709,9 +709,6 @@ to determine if mark cursor should be hidden in buffer."
             (seq-take conn--dot-undo-ring conn-dot-undo-ring-max)))
     (setq conn--dot-this-undo nil)))
 
-(defun conn--dot-at-point (point)
-  (seq-find #'conn-dotp (overlays-at point)))
-
 (defun conn--dot-before-point (point)
   (unless (= point (point-min))
     (seq-find #'conn-dotp (overlays-in (1- point) point))))
@@ -869,61 +866,71 @@ BODY finishes executing are removed and the previous dots are restored."
            (overlay-put dot 'evaporate evaporate)
            (overlay-put dot 'dot t))))))
 
-(cl-defgeneric conn--macro-dispatch (buffers &key before after &allow-other-keys))
+(defun conn--normalize-regions (regions)
+  (conn--thread needle
+      (pcase-lambda (`(,beg . ,end))
+        (cons (if (integerp beg) (conn--create-marker beg) beg)
+              (if (integerp end) (conn--create-marker end) end)))
+    (mapcar needle regions)
+    (seq-group-by (pcase-lambda (`(,beg . ,_))
+                    (marker-buffer beg))
+                  needle)
+    (mapcar (pcase-lambda (`(,key . ,val))
+              (cons key (sort val (lambda (a b) (> (car a) (car b))))))
+            needle)
+    (sort needle (pcase-lambda (`(,key . ,_))
+                   (eq key (current-buffer))))
+    (progn
+      (when (eq (caar needle) (current-buffer))
+        (let* ((first (conn--minimize
+                      (pcase-lambda (`(,beg . ,end))
+                        (min (abs (- beg (point)))
+                             (abs (- end (point)))))
+                      (cdar needle)))
+              (rest (remq first (cdar needle))))
+          (setf (alist-get (current-buffer) needle)
+                (cons first rest))))
+      needle)))
 
-(cl-defmethod conn--macro-dispatch ((buffers list) &rest rest
-                                    &key before after macro &allow-other-keys)
-  (let ((last-kbd-macro macro)
+(defun conn--dispatch-on-regions (regions &rest rest)
+  "\(fn REGIONS &key BEFORE AFTER)"
+  (let ((regions (conn--normalize-regions regions))
+        (last-kbd-macro nil)
         (conn--macro-dispatch-p t)
         (wind (current-window-configuration)))
     (unwind-protect
         (progn
-          (when (cl-notany 'conn--dots-active-p buffers)
-            (error "No dots for dispatch"))
-          (dolist (buf buffers)
-            (apply 'conn--macro-dispatch buf rest))
+          (unless regions (user-error "No regions for dispatch"))
+          (pcase-dolist (`(,buffer . ,rs) regions)
+            (apply 'conn--dispatch-in-buffer buffer rs rest))
           (set-register conn-last-dot-macro-register
-                        (make-conn-dot-macro-register :macro last-kbd-macro
-                                                      :before before
-                                                      :after after)))
+                        (make-conn-dot-macro-register
+                         :macro last-kbd-macro
+                         :before (plist-get rest :before)
+                         :after (plist-get rest :after))))
       (set-window-configuration wind))))
 
-(cl-defmethod conn--macro-dispatch ((buf buffer) &context (last-kbd-macro (eql nil))
-                                    &rest rest &key &allow-other-keys)
-  (pop-to-buffer-same-window buf)
+(defun conn--dispatch-in-buffer (buffer regions &rest rest)
+  "\(fn REGIONS &key BEFORE AFTER)"
+  (pop-to-buffer-same-window buffer)
   (conn-with-saved-state
     (conn--as-merged-undo
       (save-mark-and-excursion
         (deactivate-mark t)
-        (dolist (dot (let* ((dots (conn--sorted-overlays #'conn-dotp '>))
-                            (first (conn--minimize
-                                    (lambda (ov)
-                                      (min (abs (- (overlay-start ov) (point)))
-                                           (abs (- (overlay-end ov) (point)))))
-                                    dots))
-                            (rest (remq first dots)))
-                       (cons first rest)))
-          (apply 'conn--macro-dispatch dot rest))))))
+        (pcase-dolist (`(,beg . ,end) regions)
+          (apply 'conn--macro-dispatch-1 beg end rest))))))
 
-(cl-defmethod conn--macro-dispatch ((buf buffer) &rest rest
-                                    &key &allow-other-keys)
-  (pop-to-buffer-same-window buf)
-  (conn-with-saved-state
-    (conn--as-merged-undo
-      (save-mark-and-excursion
-        (deactivate-mark t)
-        (dolist (dot (conn--sorted-overlays #'conn-dotp '>))
-          (apply 'conn--macro-dispatch dot rest))))))
+(cl-defgeneric conn--macro-dispatch (beg end &key before after))
 
-(cl-defmethod conn--macro-dispatch ((dot overlay) &context (last-kbd-macro (eql nil))
-                                    &key before after &allow-other-keys)
-  (let ((mark-ring mark-ring)
-        (evaporate (overlay-get dot 'evaporate)))
+(cl-defmethod conn--macro-dispatch-1 (beg end
+                                          &context (last-kbd-macro (eql nil))
+                                          &key before after)
+  (let ((mark-ring mark-ring))
     (unwind-protect
         (progn
-          (overlay-put dot 'evaporate nil)
-          (overlay-put dot 'face nil)
-          (when before (funcall before dot))
+          (goto-char beg)
+          (conn--push-ephemeral-mark end)
+          (when before (funcall before beg end))
           (kmacro-start-macro nil)
           (pulse-momentary-highlight-region (region-beginning)
                                             (region-end)
@@ -931,25 +938,45 @@ BODY finishes executing are removed and the previous dots are restored."
           (unwind-protect
               (recursive-edit)
             (kmacro-end-macro nil)))
-      (when after (funcall after dot))
-      (overlay-put dot 'face 'conn-dot-face)
+      (when after (funcall after beg end))
       (unless last-kbd-macro
-        (overlay-put dot 'evaporate evaporate)
-        (user-error "A keyboard macro was not defined."))
-      (overlay-put dot 'evaporate t)
-      (conn--move-dot dot (region-beginning) (region-end)))))
+        (user-error "A keyboard macro was not defined.")))))
 
-(cl-defmethod conn--macro-dispatch ((dot overlay) &key before after &allow-other-keys)
+(cl-defmethod conn--macro-dispatch-1 (beg end &key before after)
   (let ((mark-ring mark-ring))
     (with-demoted-errors "Error in macro dispatch: %s"
-      (unwind-protect
-          (progn
-            (overlay-put dot 'evaporate nil)
-            (when before (funcall before dot))
-            (kmacro-call-macro nil nil nil last-kbd-macro))
-        (conn--move-dot dot (region-beginning) (region-end))
-        (when after (funcall after dot))
-        (overlay-put dot 'evaporate t)))))
+      (catch 'dispatch-skip
+        (unwind-protect
+            (progn
+              (when before (funcall before beg end))
+              (goto-char beg)
+              (conn--push-ephemeral-mark end)
+              (kmacro-call-macro nil nil nil last-kbd-macro))
+          (when after (funcall after beg end)))))))
+
+(cl-defun conn--dot-macro-dispatch (buffers &key before after)
+  (let* ((ov)
+         (before (let ((fn (lambda (_ end)
+                             (setq ov (conn--dot-before-point end))
+                             (overlay-put ov 'face nil)
+                             (overlay-put ov 'evaporate nil))))
+                   (if before (add-function :before (var before) fn) fn)))
+         (after (let ((fn (lambda (&rest _)
+                            (overlay-put ov 'face 'conn-dot-face)
+                            (overlay-put ov 'evaporate t))))
+                  (if after (add-function :after (var after) fn) fn)))
+        regions)
+    (unwind-protect
+        (progn
+          (dolist (buf buffers)
+            (dolist (ov (conn--all-overlays #'conn-dotp))
+              (push (cons (conn--create-marker (overlay-start ov))
+                          (conn--create-marker (overlay-end ov)))
+                    regions)))
+          (conn--dispatch-on-regions regions :before before :after after))
+      (pcase-dolist (`(,m1 . ,m2) regions)
+        (set-marker m1 nil)
+        (set-marker m2 nil)))))
 
 (defun conn--dot-after-movement ()
   (when conn--handle-mark
@@ -3136,11 +3163,11 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
            (_    (conn-read-dot-buffers)))))
-  (conn--macro-dispatch
+  (conn--dot-macro-dispatch
    buffers
-   :before (lambda (dot)
-               (goto-char (overlay-start dot))
-               (conn--push-ephemeral-mark (overlay-end dot))
+   :before (lambda (beg end)
+               (goto-char beg)
+               (conn--push-ephemeral-mark end)
                (conn-state))))
 
 (defun conn-dots-change (buffers)
@@ -3155,10 +3182,10 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
            (_    (conn-read-dot-buffers)))))
-  (conn--macro-dispatch
+  (conn--dot-macro-dispatch
    buffers
-   :before (lambda (dot)
-             (goto-char (overlay-start dot))
+   :before (lambda (beg end)
+             (goto-char beg)
              (delete-region (point) (overlay-end dot))
              (conn--push-ephemeral-mark (point))
              (emacs-state))))
@@ -3175,11 +3202,11 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
            (_    (conn-read-dot-buffers)))))
-  (conn--macro-dispatch
+  (conn--dot-macro-dispatch
    buffers
-   :before (lambda (dot)
-             (goto-char (overlay-start dot))
-             (conn--push-ephemeral-mark (overlay-end dot))
+   :before (lambda (beg end)
+             (goto-char beg)
+             (conn--push-ephemeral-mark end)
              (emacs-state))))
 
 (defun conn-dots-insert-after (buffers)
@@ -3195,10 +3222,11 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
            (_    (conn-read-dot-buffers)))))
-  (conn--macro-dispatch
+  (conn--dot-macro-dispatch
    buffers
-   :before (lambda (dot)
-             (goto-char (overlay-end dot))
+   :before (lambda (beg end)
+             (goto-char end)
+             (conn--push-ephemeral-mark beg)
              (emacs-state))))
 
 (defun conn-quoted-insert-overwrite ()
