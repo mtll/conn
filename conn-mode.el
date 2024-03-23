@@ -3089,12 +3089,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "$"   'ispell-region
   "v"   'vc-region-history)
 
-(defvar-keymap conn-c-x-4-map
-  "/" 'tab-bar-history-back
-  "?" 'tab-bar-history-forward
-  "`" 'other-window-prefix
-  "-" 'conn-window-resize-map)
-
 (defvar-keymap conn-window-resize-map
   :repeat t
   :prefix 'conn-window-resize-map
@@ -3223,13 +3217,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "o"   'transpose-words
   "SPC" 'transpose-regions
   "u"   'conn-transpose-words-backward)
-
-(defvar-keymap conn-ctl-x-r-map
-  "\\" 'conn-set-register-seperator
-  "."  'conn-last-macro-dispatch-to-register
-  ","  'conn-dot-state-to-register
-  "!"  'kmacro-to-register
-  "W"  'conn-clear-register)
 
 (define-keymap
   :keymap dot-state-map
@@ -3404,12 +3391,26 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "/"   'undo-only
   "?"   'undo-redo)
 
+(defvar-keymap conn-ctl-x-r-map
+  "\\" 'conn-set-register-seperator
+  "."  'conn-last-macro-dispatch-to-register
+  ","  'conn-dot-state-to-register
+  "!"  'kmacro-to-register
+  "W"  'conn-clear-register)
+
+(defvar-keymap conn-c-x-4-map
+  "/" 'tab-bar-history-back
+  "?" 'tab-bar-history-forward
+  "-" 'conn-window-resize-map)
+
 (defvar-keymap conn-mode-map
   "M-RET"   'conn-open-line-and-indent
   "C-x n t" 'conn-narrow-to-thing
   "C-x r"   conn-ctl-x-r-map
   "C-x 4"   conn-c-x-4-map
   "C-x t s" 'tab-switch
+  "C-x t N" 'conn-tab-bar-new-named-tab
+  "C-x t D" 'conn-tab-bar-duplicate-and-name-tab
   "C-x n >" 'conn-narrow-to-end-of-buffer
   "C-x n <" 'conn-narrow-to-beginning-of-buffer
   "<pause>" 'conn-toggle-minibuffer-focus
