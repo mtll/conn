@@ -3275,7 +3275,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-common-map
-  ";"   'save-buffer
   "C-0" 'delete-window
   "C-1" 'delete-other-windows
   "C-2" 'split-window-below
