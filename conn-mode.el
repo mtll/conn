@@ -2213,12 +2213,6 @@ With arg N, insert N newlines."
   (interactive)
   (narrow-to-region (point-min) (point)))
 
-(defun conn-isearch-forward-symbol-at-point ()
-  "Isearch forward for symbol at point."
-  (interactive)
-  (funcall-interactively #'isearch-forward-symbol-at-point 1))
-(put 'conn-isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
-
 (defun conn-isearch-backward-symbol-at-point ()
   "Isearch backward for symbol at point."
   (interactive)
@@ -3148,7 +3142,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (defvar-keymap conn-search-map
   ","     'conn-isearch-backward-symbol-at-point
-  "."     'conn-isearch-forward-symbol-at-point
+  "."     'isearch-forward-symbol-at-point
   "TAB"   'conn-isearch-backward-symbol
   "M-TAB" 'conn-isearch-forward-symbol
   "0"     'xref-find-references
@@ -3544,9 +3538,12 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (conn--setup-extensions)
     (if conn-mode
         (progn
+          (put 'isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor))
+      (when (eq 'conn-isearch-repeat-map (get 'isearch-forward-symbol-at-point 'repeat-map))
+        (put 'isearch-forward-symbol-at-point 'repeat-map nil))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor))))
 
