@@ -2773,7 +2773,7 @@ for the meaning of prefix ARG."
      (unless (string-search "access aborted" (error-message-string err))
        (insert-register reg (not arg))))))
 
-(defun conn-clear-register (register)
+(defun conn-unset-register (register)
   "Reset REGISTER value."
   (interactive (list (register-read-with-preview "Clear register: ")))
   (set-register register nil))
@@ -3396,7 +3396,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "."  'conn-last-macro-dispatch-to-register
   ","  'conn-dot-state-to-register
   "!"  'kmacro-to-register
-  "W"  'conn-clear-register)
+  "W"  'conn-unset-register)
 
 (defvar-keymap conn-c-x-4-map
   "/" 'tab-bar-history-back
