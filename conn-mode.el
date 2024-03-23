@@ -1011,9 +1011,6 @@ If BUFFER is nil use current buffer."
       (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)
     (pulse-momentary-highlight-region beg end 'region)))
 
-(defun conn--quiet-in-isearch-ad ()
-  (not isearch-mode))
-
 (defun conn--insert-register-ad (_register &optional _arg)
   "`delete-region' or `delete-rectangle' before `insert-register'
 when `use-region-p' is non-nil."
