@@ -3243,7 +3243,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (dolist (state conn-states)
   (define-keymap
     :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
-    "C-z" 'exit-recursive-edit))
+    "<remap> <kmacro-end-macro>"                'exit-recursive-edit
+    "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
+    "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
+    "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit))
 
 (dolist (state conn-states)
   (define-keymap
