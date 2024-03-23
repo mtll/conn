@@ -3178,7 +3178,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "c"   'conn-region-case-map
   "j"   'conn-join-lines
   "I"   'indent-rigidly
-  "i"   'indent-region
   "w"   'delete-region
   "e"   'eval-region
   "d"   'conn-duplicate-region
@@ -3289,7 +3288,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "TAB"   'conn-isearch-backward-symbol
   "M-TAB" 'conn-isearch-forward-symbol
   "0"     'xref-find-references
-  "C-."   'conn-xref-definition-prompt
+  ","     'conn-xref-definition-prompt
   "a"     'xref-find-apropos
   "i"     'imenu
   "o"     'occur
@@ -3535,8 +3534,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "?"   'undo-redo)
 
 (defvar-keymap conn-mode-map
-  "<remap> <scroll-up-command>" 'conn-scroll-up
-  "<remap> <scroll-down-command>" 'conn-scroll-down
   "M-RET"   'conn-open-line-and-indent
   "C-x n t" 'conn-narrow-to-thing
   "C-x r"   conn-ctl-x-r-map
