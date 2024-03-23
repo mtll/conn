@@ -171,7 +171,7 @@ THING BEG and END are bound in BODY."
              cands)
      :transition 'conn-state))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
-  (keymap-set embark-consult-grep-map "m" 'conn-dispatch-grep-candidates)
+  (keymap-set embark-consult-grep-map "C-z" 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
     (conn--dispatch-on-regions
@@ -181,7 +181,7 @@ THING BEG and END are bound in BODY."
              cands)
      :transition 'conn-state))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
-  (keymap-set embark-consult-location-map "m" 'conn-dispatch-location-candidates)
+  (keymap-set embark-consult-location-map "C-z" 'conn-dispatch-location-candidates)
 
   (keymap-set embark-consult-location-map "D" 'conn-dot-consult-location-candidate)
   (keymap-set embark-consult-grep-map "D" 'conn-dot-consult-grep-candidate))
