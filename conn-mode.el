@@ -587,6 +587,8 @@ to determine if mark cursor should be hidden in buffer."
 
 See `conn--dispatch-on-regions'.")
 
+(defvar conn-last-dispatch-macro nil)
+
 (defun conn--canonicalize-regions (regions)
   "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
 
@@ -640,41 +642,37 @@ first iteration of dispatch.
 \(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
-  (let (kbd-macro)
-    (let ((regions (conn--canonicalize-regions regions))
-          (last-kbd-macro (plist-get rest :macro))
-          (conn-macro-dispatch-p t)
-          (wind (current-window-configuration))
-          (undo-outer-limit nil)
-          (undo-limit most-positive-fixnum)
-          (undo-strong-limit most-positive-fixnum)
-          (register nil)
-          (success nil)
-          (handles nil))
-      (unwind-protect
-          (progn
-            (unless regions (user-error "No regions for dispatch"))
-            (pcase-dolist (`(,buffer . ,rs) regions)
-              (push (prepare-change-group buffer) handles)
-              (apply 'conn--dispatch-in-buffer buffer rs rest))
-            (setq success t)
-            (if register
-                (set-register conn-last-dispatch-macro-register register)
-              (kmacro-to-register conn-last-dispatch-macro-register)))
-        (if (not success)
-            (mapc #'cancel-change-group handles)
-          (dolist (handle handles)
-            (accept-change-group handle)
-            (undo-amalgamate-change-group handle)))
-        (unless (plist-get rest :preserve-marks)
-          (pcase-dolist (`(,_ . ,rs) regions)
-            (pcase-dolist (`(,beg . ,end) rs)
-              (set-marker beg nil)
-              (set-marker end nil))))
-        (set-window-configuration wind))
-      (setq kbd-macro last-kbd-macro))
-    (kmacro-push-ring)
-    (setq last-kbd-macro kbd-macro)))
+  (let ((regions (conn--canonicalize-regions regions))
+        (conn-last-dispatch-macro)
+        (conn-macro-dispatch-p t)
+        (wind (current-window-configuration))
+        (undo-outer-limit nil)
+        (undo-limit most-positive-fixnum)
+        (undo-strong-limit most-positive-fixnum)
+        (register nil)
+        (success nil)
+        (handles nil))
+    (unwind-protect
+        (progn
+          (unless regions (user-error "No regions for dispatch"))
+          (pcase-dolist (`(,buffer . ,rs) regions)
+            (push (prepare-change-group buffer) handles)
+            (apply 'conn--dispatch-in-buffer buffer rs rest))
+          (setq success t)
+          (if register
+              (set-register conn-last-dispatch-macro-register register)
+            (kmacro-to-register conn-last-dispatch-macro-register)))
+      (if (not success)
+          (mapc #'cancel-change-group handles)
+        (dolist (handle handles)
+          (accept-change-group handle)
+          (undo-amalgamate-change-group handle)))
+      (unless (plist-get rest :preserve-marks)
+        (pcase-dolist (`(,_ . ,rs) regions)
+          (pcase-dolist (`(,beg . ,end) rs)
+            (set-marker beg nil)
+            (set-marker end nil))))
+      (set-window-configuration wind))))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "Begin a macro dispatch on REGIONS in BUFFER.
@@ -690,7 +688,7 @@ first iteration of dispatch.
   "Dispatch on region from BEG to END.")
 
 (cl-defmethod conn--macro-dispatch-1 (beg end
-                                          &context (last-kbd-macro (eql nil))
+                                          &context (conn-last-dispatch-macro (eql nil))
                                           &key before after
                                           &allow-other-keys)
   "Perform first iteration of macro dispatch."
@@ -707,9 +705,10 @@ first iteration of dispatch.
                                               'conn-dot-face)
             (unwind-protect
                 (recursive-edit)
-              (kmacro-end-macro nil)))
+              (kmacro-end-macro nil))
+            (setq conn-last-dispatch-macro last-kbd-macro))
         (when after (funcall after beg end))))
-    (unless last-kbd-macro
+    (unless conn-last-dispatch-macro
       (user-error "A keyboard macro was not defined."))))
 
 (cl-defmethod conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
@@ -722,7 +721,7 @@ first iteration of dispatch.
                 (when before (funcall before beg end))
                 (goto-char beg)
                 (conn--push-ephemeral-mark end)
-                (kmacro-call-macro nil nil nil last-kbd-macro))
+                (kmacro-call-macro nil nil nil conn-last-dispatch-macro))
             (when after (funcall after beg end)))
         (user-error "Error in macro dispatch: %s" err)))))
 
