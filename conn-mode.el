@@ -2999,29 +2999,25 @@ there's a region, all lines that region covers will be duplicated."
   (conn--remove-dots)
   (conn-pop-state))
 
-(defun conn-change-rectangle ()
+(defun conn-change-region ()
   (interactive)
-  (conn--dispatch-on-regions (region-bounds) :transition 'conn-change)
-  (rectangle-mark-mode 1))
+  (conn--dispatch-on-regions (region-bounds) :transition 'conn-change))
 
-(defun conn-emacs-state-after-rectangle ()
+(defun conn-emacs-state-after-region ()
   (interactive)
   (conn--dispatch-on-regions
    (region-bounds) :transition (lambda ()
                                  (interactive)
                                  (conn-exchange-mark-command)
-                                 (emacs-state)))
-  (rectangle-mark-mode 1))
+                                 (emacs-state))))
 
-(defun conn-emacs-state-rectangle ()
+(defun conn-emacs-state-region ()
   (interactive)
-  (conn--dispatch-on-regions (region-bounds) :transition 'emacs-state)
-  (rectangle-mark-mode 1))
+  (conn--dispatch-on-regions (region-bounds) :transition 'emacs-state))
 
-(defun conn-state-rectangle ()
+(defun conn-state-region ()
   (interactive)
-  (conn--dispatch-on-regions (region-bounds) :transition 'conn-state)
-  (rectangle-mark-mode 1))
+  (conn--dispatch-on-regions (region-bounds) :transition 'conn-state))
 
 (defun conn-dots-command (buffers)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
@@ -3306,21 +3302,25 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
-  "C" 'conn-state-rectangle
-  "F" 'conn-emacs-state-rectangle
-  "T" 'conn-change-rectangle
-  "E" 'conn-emacs-state-after-rectangle
+  "C" 'conn-state-region
+  "F" 'conn-emacs-state-region
+  "T" 'conn-change-region
+  "E" 'conn-emacs-state-after-region
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
   "y" 'yank-rectangle)
 
-(define-keymap
-  :keymap (conn-get-mode-map 'emacs-state 'rectangle-mark-mode)
-  "M-D C" 'conn-state-rectangle
-  "M-D F" 'conn-emacs-state-rectangle
-  "M-D T" 'conn-change-rectangle
-  "M-D E" 'conn-emacs-state-after-rectangle)
+(defvar-keymap conn-dispatch-map
+  :prefix 'conn-dispatch-map
+  "C" 'conn-state-region
+  "F" 'conn-emacs-state-region
+  "T" 'conn-change-region
+  "E" 'conn-emacs-state-after-region
+  "c" 'conn-state-region
+  "f" 'conn-emacs-state-region
+  "t" 'conn-change-region
+  "e" 'conn-emacs-state-after-region)
 
 (defvar-keymap conn-tab-bar-history-mode-repeat-map
   :repeat t
@@ -3402,6 +3402,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-state-map
+  "M-D"  'conn-dispatch-map
   "<f4>" 'save-buffer
   "\\"   'indent-region
   "r"    'conn-region-map
