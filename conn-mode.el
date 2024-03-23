@@ -137,7 +137,7 @@ Defines default STATE for buffers matching REGEXP."
   :type 'integer
   :group 'conn-dots)
 
-(defcustom conn-last-dispatch-macro-register ?.
+(defcustom conn-last-dispatch-macro-register ?z
   "Register used for the last dot macro."
   :type 'character
   :group 'conn-dots)
