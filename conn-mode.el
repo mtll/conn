@@ -2213,23 +2213,18 @@ With arg N, insert N newlines."
   (interactive)
   (narrow-to-region (point-min) (point)))
 
-(defvar-keymap conn-isearch-symbol-repeat-map
-  :repeat t
-  "m" 'isearch-repeat-forward
-  "n" 'isearch-repeat-backward)
-
 (defun conn-isearch-forward-symbol-at-point ()
   "Isearch forward for symbol at point."
   (interactive)
   (funcall-interactively #'isearch-forward-symbol-at-point 1))
-(put 'conn-isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-symbol-repeat-map)
+(put 'conn-isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-isearch-backward-symbol-at-point ()
   "Isearch backward for symbol at point."
   (interactive)
   (funcall-interactively #'isearch-forward-symbol-at-point -1)
   (isearch-repeat-backward))
-(put 'conn-isearch-backward-symbol-at-point 'repeat-map 'conn-isearch-symbol-repeat-map)
+(put 'conn-isearch-backward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-command-at-point-and-mark ()
   "Run the next command at both the point and the mark."
@@ -2281,6 +2276,7 @@ Interactively `region-beginning' and `region-end'."
    (setq isearch-new-string (buffer-substring-no-properties beg end)
          isearch-new-message (mapconcat 'isearch-text-char-description
                                         isearch-new-string ""))))
+(put 'conn-isearch-region-forward 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-isearch-region-backward (beg end)
   "Isearch backward for region from BEG to END.
@@ -2292,6 +2288,7 @@ Interactively `region-beginning' and `region-end'."
    (setq isearch-new-string (buffer-substring-no-properties beg end)
          isearch-new-message (mapconcat 'isearch-text-char-description
                                         isearch-new-string ""))))
+(put 'conn-isearch-region-backward 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-org-tree-edit-insert-heading ()
   (interactive)
@@ -3050,6 +3047,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   :repeat t
   "`" 'other-window)
 
+(defvar-keymap conn-isearch-repeat-map
+  :repeat t
+  "." 'isearch-repeat-forward
+  "," 'isearch-repeat-backward)
+
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
   "b"   'conn-command-at-point-and-mark
@@ -3070,8 +3072,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "u"   'conn-insert-pair
   "DEL" 'conn-delete-pair
   "p"   'conn-change-pair
-  "s"   'conn-isearch-region-forward
-  "r"   'conn-isearch-region-backward
+  "."   'conn-isearch-region-forward
+  ","   'conn-isearch-region-backward
   "o"   'conn-occur-region
   "g"   'conn-rgrep-region
   ";"   'comment-or-uncomment-region
@@ -3151,12 +3153,12 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  "n"     'conn-isearch-backward-symbol-at-point
-  "m"     'conn-isearch-forward-symbol-at-point
+  ","     'conn-isearch-backward-symbol-at-point
+  "."     'conn-isearch-forward-symbol-at-point
   "TAB"   'conn-isearch-backward-symbol
   "M-TAB" 'conn-isearch-forward-symbol
   "0"     'xref-find-references
-  ","     'conn-xref-definition-prompt
+  "x"     'conn-xref-definition-prompt
   "a"     'xref-find-apropos
   "i"     'imenu
   "o"     'occur
@@ -3270,7 +3272,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "\\"   'indent-region
   "r"    'conn-region-map
   "z"    'conn-exchange-mark-command
-  "."    'other-window-prefix
   "$"    'ispell-word
   "|"    'shell-command-on-region
   "*"    'calc-dispatch
@@ -3333,10 +3334,14 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "x"   'conn-C-x-keys
   "c"   'conn-C-c-keys
   "/"   'undo-only
-  "?"   'undo-redo)
+  "?"   'undo-redo
+  ","   'isearch-backward
+  "."   'isearch-forward)
 
 (define-keymap
   :keymap view-state-map
+  "."       'isearch-forward
+  ","       'isearch-forward
   "SPC"     'conn-scroll-up
   "DEL"     'conn-scroll-down
   "a"       'execute-extended-command
@@ -3351,7 +3356,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "B"       'conn-C-x-t-keys
   "i"       'conn-scroll-down
   "k"       'conn-scroll-up
-  "."       'point-to-register
+  "n"       'point-to-register
   "m"       'mark-page
   "p"       'conn-register-load
   "z"       'conn-exchange-mark-command
