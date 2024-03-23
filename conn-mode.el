@@ -2355,35 +2355,6 @@ a single undo."
                       (call-interactively command)))))
     (add-hook 'pre-command-hook before -80 t)))
 
-(defun conn-replace-region-substring (beg end &optional arg to-string)
-  "Replace string contained in BEG to END with TO-STRING.
-
-Interactively TO-STRING is read in the minibuffer with the string contained
-in BEG to END set to the previous item in the history.  If ARG is nil replace
-within entire buffer, if ARG is >= 0 then replace only matches after point and
-if ARG is < 0 then replace only matches before point."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
-  (let ((ov (make-overlay beg end)))
-    (overlay-put ov 'face 'isearch)
-    (unwind-protect
-        (let* ((from-string (buffer-substring-no-properties beg end))
-               (hist (make-symbol "history"))
-               (to-string (or to-string
-                              (progn
-                                (set hist (list from-string))
-                                (read-string "Replace with: " nil hist))))
-               (bound))
-          (save-excursion
-            (cond ((null arg) (goto-char (point-min)))
-                  ((< (prefix-numeric-value arg) 0)
-                   (setq bound (point))
-                   (goto-char (point-min))))
-            (while (re-search-forward from-string bound t)
-              (replace-match to-string nil nil))))
-      (delete-overlay ov))))
-
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
@@ -3275,7 +3246,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "c"   'conn-region-case-map
-  "u"   'conn-replace-region-substring
   "j"   'conn-join-lines
   "I"   'indent-rigidly
   "i"   'indent-region
