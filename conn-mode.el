@@ -972,8 +972,8 @@ If BUFFER is nil use current buffer."
 (defun conn--copy-region-ad (beg end &optional region)
   "Pulse region when copying."
   (if region
-      (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)
-    (pulse-momentary-highlight-region beg end 'region)))
+      (pulse-momentary-highlight-region (region-beginning) (region-end))
+    (pulse-momentary-highlight-region beg end)))
 
 (defun conn--insert-register-ad (_register &optional _arg)
   "`delete-region' or `delete-rectangle' before `insert-register'
@@ -2799,7 +2799,7 @@ If REGISTER is given copy to REGISTER instead."
     (if rectangle-mark-mode
         (copy-rectangle-as-kill start end)
       (copy-region-as-kill start end)))
-  (pulse-momentary-highlight-region start end 'region))
+  (pulse-momentary-highlight-region start end))
 
 (defun conn-kill-region (&optional arg)
   "Kill region between START and END.
