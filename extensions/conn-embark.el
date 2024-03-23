@@ -18,6 +18,17 @@
 (require 'conn-mode)
 (require 'embark)
 
+(defcustom embark-alt-default-action-overrides nil
+  "`embark-default-action-overrides' for alternate actions."
+  :type '(alist :key-type (choice (symbol :tag "Type")
+                                  (cons (symbol :tag "Type")
+                                        (symbol :tag "Command")))
+                :value-type (function :tag "Default action")))
+
+(defcustom conn-embark-alt-key "M-RET"
+  "Key for embark-alt-dwim."
+  :type 'string)
+
 (defun conn-complete-keys--get-bindings (prefix map)
   (let ((prefix-map (if (= 0 (seq-length prefix))
                         map
@@ -186,6 +197,77 @@ up out of a keymap."
     (when (eq prefix-help-command 'conn-complete-keys)
       (setq prefix-help-command conn-complete-keys--prefix-cmd-backup))))
 
+(defun conn-embark-alt--default-action (type)
+  "`embark--default-action' for alt actions"
+  (or (alist-get (cons type embark--command) embark-alt-default-action-overrides
+                 nil nil #'equal)
+      (alist-get type embark-alt-default-action-overrides)
+      (alist-get t embark-alt-default-action-overrides)
+      (keymap-lookup (embark--raw-action-keymap type) conn-embark-alt-key)))
+
+;;;###autoload
+(defun conn-embark-alt-dwim (&optional arg)
+  "alternate `embark-dwim'."
+  (interactive "P")
+  (if-let ((targets (embark--targets)))
+      (let* ((target
+              (or (nth
+                   (if (or (null arg) (minibufferp))
+                       0
+                     (mod (prefix-numeric-value arg) (length targets)))
+                   targets)))
+             (type (plist-get target :type))
+             (default-action (conn-embark-alt--default-action type))
+             (action (or (command-remapping default-action) default-action)))
+        (unless action
+          (user-error "No alt action for %s targets" type))
+        (when (and arg (minibufferp)) (setq embark--toggle-quit t))
+        (embark--act action
+                     (if (and (eq default-action embark--command)
+                              (not (memq default-action
+                                         embark-multitarget-actions)))
+                         (embark--orig-target target)
+                       target)
+                     (embark--quit-p action)))
+    (user-error "No target found.")))
+
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-state 'conn-embark-dwim-keys)
+  "e" 'embark-dwim
+  "h" 'embark-alt-dwim)
+
+(defvar conn-embark-alt-expression-map)
+(defvar conn-embark-alt-symbol-map)
+(defvar conn-embark-alt-defun-map)
+(defvar conn-embark-alt-identifier-map)
+(defvar conn-embark-alt-heading-map)
+
+(autoload 'conn-embark-dwim-keys "conn-embark" "Conn embark dwim keys." t)
+(conn-define-extension conn-embark-dwim-keys
+  (if conn-embark-dwim-keys
+      (progn
+        (setf
+         conn-embark-alt-symbol-map     (define-keymap conn-embark-alt-key 'xref-find-references)
+         conn-embark-alt-expression-map (define-keymap conn-embark-alt-key 'comment-region)
+         conn-embark-alt-defun-map      (define-keymap conn-embark-alt-key 'comment-region)
+         conn-embark-alt-heading-map    (define-keymap conn-embark-alt-key 'narrow-to-heading)
+         conn-embark-alt-identifier-map (define-keymap conn-embark-alt-key 'describe-symbol))
+        (pcase-dolist (`(,map . ,thing) '((conn-embark-alt-expression-map . expression)
+                                          (conn-embark-alt-symbol-map     . symbol)
+                                          (conn-embark-alt-defun-map      . defun)
+                                          (conn-embark-alt-heading-map    . heading)
+                                          (conn-embark-alt-identifier-map . identifier)))
+          (unless (memq map (alist-get thing embark-keymap-alist))
+            (setf (alist-get thing embark-keymap-alist)
+                  (nconc (alist-get thing embark-keymap-alist) (list map))))))
+    (pcase-dolist (`(,map . ,thing) '((conn-embark-alt-expression-map . expression)
+                                      (conn-embark-alt-symbol-map     . symbol)
+                                      (conn-embark-alt-defun-map      . defun)
+                                      (conn-embark-alt-heading-map    . heading)
+                                      (conn-embark-alt-identifier-map . identifier)))
+      (setf (alist-get thing embark-keymap-alist)
+            (remq map (alist-get thing embark-keymap-alist))))))
+
 (keymap-set conn-mode-map "M-S-<iso-lefttab>" 'conn-complete-keys)
 
 (setf (alist-get 'conn-replace-region-substring embark-target-injection-hooks)
@@ -195,24 +277,5 @@ up out of a keymap."
              '(conn-insert-pair embark--ignore-target))
 (add-to-list 'embark-target-injection-hooks
              '(conn-change-pair embark--ignore-target))
-
-(defun conn--embark-target-region ()
-  (let ((start (region-beginning))
-        (end (region-end)))
-    `(region ,(buffer-substring start end) . (,start . ,end))))
-
-(defun conn-embark-region ()
-  (interactive)
-  (let* ((mark-even-if-inactive t)
-         (embark-target-finders
-             (cons 'conn--embark-target-region
-                   (remq 'embark-target-active-region
-                         embark-target-finders))))
-    (embark-act)))
-
-(defun conn-embark-replace-region (string)
-  (interactive (list (read-string "Replace with: ")))
-  (delete-region (region-beginning) (region-end))
-  (insert string))
 
 (provide 'conn-embark)
