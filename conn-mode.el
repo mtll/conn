@@ -544,13 +544,6 @@ to determine if mark cursor should be hidden in buffer."
     (if conn--handle-mark (apply conn--handle-mark))))
 (put 'conn--mark-post-command-hook 'permanent-local-hook t)
 
-(defun conn--pop-mark-ad ()
-  (when mark-ring
-    (set-marker (mark-marker) (car mark-ring))
-    (set-marker (car mark-ring) nil)
-    (pop mark-ring))
-  (deactivate-mark))
-
 (defun conn--buffer-bounds ()
   (cons (point-min) (point-max)))
 (put 'buffer 'bounds-of-thing-at-point 'conn--buffer-bounds)
@@ -984,6 +977,13 @@ If BUFFER is nil use current buffer."
 
 
 ;;;; Advice
+
+(defun conn--pop-mark-ad ()
+  (when mark-ring
+    (set-marker (mark-marker) (car mark-ring))
+    (set-marker (car mark-ring) nil)
+    (pop mark-ring))
+  (deactivate-mark))
 
 (defun conn--pop-to-mark-command-ad (&rest _)
   (unless (null (mark t))
