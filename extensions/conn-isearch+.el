@@ -37,4 +37,17 @@
 (defun conn--isearch-in-dots-hook ()
   (isearchp-add-filter-predicate '("[dot]" conn-isearch-in-dot-p "[DOT]")))
 
+(define-keymap
+  :keymap isearch-mode-map
+  "C-y m" 'isearchp-yank-sexp-symbol-or-char
+  "C-y o" 'isearchp-yank-word-or-char-forward
+  "C-y u" 'isearchp-yank-word-or-char-backward
+  "C-y i" 'isearchp-yank-line-backward
+  "C-y k" 'isearchp-yank-line-forward
+  "C-y l" 'isearchp-yank-char
+  "M-o"   isearchp-filter-map)
+
+;; (keymap-set isearchp-filter-map "f" 'isearchp-add-filter-predicate)
+;; (keymap-set isearchp-filter-map "r" 'isearchp-add-regexp-filter-predicate)
+
 (provide 'conn-isearch+)
