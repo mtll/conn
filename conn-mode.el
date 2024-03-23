@@ -937,8 +937,7 @@ If BUFFER is nil use current buffer."
                 regions))))
     (conn--dispatch-on-regions regions
                                :before before
-                               :after after
-                               :transition transition)))
+                               :after after)))
 
 
 ;;;; Advice
