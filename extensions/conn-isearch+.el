@@ -45,7 +45,8 @@
   "C-y i" 'isearchp-yank-line-backward
   "C-y k" 'isearchp-yank-line-forward
   "C-y l" 'isearchp-yank-char
-  "M-o"   isearchp-filter-map)
+  "M-o"   isearchp-filter-map
+  "C-z"   'conn-isearch-dispatch)
 
 ;; (keymap-set isearchp-filter-map "f" 'isearchp-add-filter-predicate)
 ;; (keymap-set isearchp-filter-map "r" 'isearchp-add-regexp-filter-predicate)
