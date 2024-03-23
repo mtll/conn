@@ -917,17 +917,10 @@ If BUFFER is nil use current buffer."
 
 (cl-defun conn--dot-macro-dispatch (buffers &key before after)
   "Perform macro dispatch on all dots in BUFFERS."
-  (let* ((ov)
-         (before (lambda (beg end)
-                   (setq ov (conn--dot-before-point end))
-                   (overlay-put ov 'face nil)
-                   (overlay-put ov 'evaporate nil)
+  (let* ((before (lambda (beg end)
+                   (conn--delete-dot (conn--dot-before-point end))
+                   (conn-state)
                    (when before (funcall before beg end))))
-         (after (lambda (beg end)
-                  (when after (funcall after beg end))
-                  (conn--move-dot ov (region-beginning) (region-end))
-                  (overlay-put ov 'face 'conn-dot-face)
-                  (overlay-put ov 'evaporate t)))
          regions)
     (dolist (buf buffers)
       (with-current-buffer buf
@@ -937,7 +930,14 @@ If BUFFER is nil use current buffer."
                 regions))))
     (conn--dispatch-on-regions regions
                                :before before
-                               :after after)))
+                               :after after
+                               :preserve-marks t)
+    (apply #'conn--create-dots
+           (mapcar (pcase-lambda (`(,m1 . ,m2))
+                     (prog1 (cons (min m1 m2) (max m1 m2))
+                       (set-marker m1 nil)
+                       (set-marker m2 nil)))
+                   regions))))
 
 
 ;;;; Advice
