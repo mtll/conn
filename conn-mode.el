@@ -2364,7 +2364,10 @@ Not for use in lisp code."
     (when-let ((pos (or (save-excursion
                           (backward-char)
                           (search-backward conn--goto-char-last-char (window-start) t))
-                        (user-error "%s character not found." char))))
+                        (progn
+                          (put this-command 'repeat-map nil)
+                          (user-error "%s character not found."
+                                      conn--goto-char-last-char)))))
       (goto-char pos))))
 
 (defvar-keymap conn-goto-char-forward-repeat-map
@@ -2393,7 +2396,10 @@ Not for use in lisp code."
     (when-let ((pos (or (save-excursion
                           (forward-char)
                           (search-forward conn--goto-char-last-char (window-end) t))
-                        (user-error "%s character not found." char))))
+                        (progn
+                          (put this-command 'repeat-map nil)
+                          (user-error "%s character not found."
+                                      conn--goto-char-last-char)))))
       (goto-char pos))))
 
 (defun conn-pop-state ()
