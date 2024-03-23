@@ -2251,69 +2251,6 @@ With arg N, insert N newlines."
   (interactive)
   (narrow-to-region (point-min) (point)))
 
-(defun conn-exit-edit-each-match (&optional arg)
-  "Exit recursive edit and go to next match within `conn-isearch-edit-each-match'.
-When called with non-nil ARG abort the entire `conn-isearch-edit-each-match'."
-  (interactive "P")
-  (if arg
-      (throw 'conn-exit-edit-each-match t)
-    (exit-recursive-edit)))
-
-(defun conn-edit-each-match-repeat-kmacro (&optional arg)
-  "Repeat last keyboard macro and goto next match.
-ARG has the same meaning as in `kmacro-call-macro'."
-  (interactive "P")
-  (kmacro-call-macro arg)
-  (exit-recursive-edit))
-
-(defun conn--isearch-edit-each-match-1 (&optional buffer)
-  "Perform one iteration for `conn-isearch-edit-each-match'."
-  (unless (or (not buffer) (eq buffer (current-buffer)))
-    (pop-to-buffer-same-window buffer t))
-  (with-current-buffer (or buffer (current-buffer))
-    (conn--as-merged-undo
-      (let ((beg (if isearch-forward (point-min) (point-max)))
-            (end (if isearch-forward (point-max) (point-min)))
-            (prev-state conn-current-state)
-            matches)
-        (unwind-protect
-            (save-excursion
-              (goto-char beg)
-              (while (isearch-search-string isearch-string end t)
-                (when (funcall isearch-filter-predicate
-                               (match-beginning 0) (match-end 0))
-                  (push (cons
-                         (set-marker (make-marker) (match-beginning 0))
-                         (set-marker (make-marker) (match-end 0)))
-                        matches)))
-              (setq matches (nreverse matches))
-              (with-isearch-suspended
-               (pcase-dolist (`(,m1 . ,m2) matches)
-                 (goto-char m1)
-                 (conn--push-ephemeral-mark m2)
-                 (recursive-edit))))
-          (pcase-dolist (`(,m1 . ,m2) matches)
-            (set-marker m1 nil)
-            (set-marker m2 nil))
-          (funcall prev-state))))))
-
-(defun conn-isearch-edit-each-match ()
-  "Enter a recursive edit at each isearch match.
-Inside each recursive edit \\[exit-recursive-edit] is remapped to
-`conn-exit-edit-each-match'.  All edits within a buffer will be merged into
-a single undo."
-  (interactive)
-  (catch 'conn-exit-edit-each-match
-    (let ((wind (current-window-configuration))
-          (conn-isearch-recursive-edit-p t))
-      (unwind-protect
-          (if (or (not (boundp 'multi-isearch-buffer-list))
-                  (not multi-isearch-buffer-list))
-              (conn--isearch-edit-each-match-1)
-            (dolist (buf multi-isearch-buffer-list)
-              (when buf (conn--isearch-edit-each-match-1 buf))))
-        (set-window-configuration wind)))))
-
 (defvar-keymap conn-isearch-symbol-repeat-map
   :repeat t
   "m" 'isearch-repeat-forward
@@ -3215,12 +3152,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
     "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
     "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit))
-
-(dolist (state conn-states)
-  (define-keymap
-    :keymap (conn-get-mode-map state 'conn-isearch-recursive-edit-p)
-    "C-z" 'conn-exit-edit-each-match
-    "M-D" 'conn-edit-each-match-repeat-kmacro))
 
 (dolist (state '(conn-state emacs-state dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
