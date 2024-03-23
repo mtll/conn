@@ -1087,6 +1087,8 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-M-s-keys             "M-s")
 (conn-define-remapping-command conn-M-g-keys             "M-g")
 (conn-define-remapping-command conn-C-x-t-keys           "C-x t")
+(conn-define-remapping-command conn-C-x-4-keys           "C-x 4")
+(conn-define-remapping-command conn-C-x-5-keys           "C-x 5")
 (conn-define-remapping-command conn-delete-char-keys     "C-d")
 (conn-define-remapping-command conn-yank-keys            "C-y")
 (conn-define-remapping-command conn-kill-region-keys     "C-w")
@@ -3290,7 +3292,16 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-common-map
+  ";"   'save-buffer
+  "C-0" 'delete-window
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-4" 'conn-C-x-4-keys
+  "C-5" 'conn-C-x-5-keys
   "W"   'widen
+  "C"   'conn-copy-region
+  "R"   'indent-relative
   "j"   'conn-goto-char-backward
   "l"   'conn-goto-char-forward
   "!"   'kmacro-start-macro-or-insert-counter
@@ -3309,8 +3320,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "O"   'forward-sentence
   "SPC" 'conn-set-mark-command
   "U"   'backward-sentence
-  ";"   'execute-extended-command
-  "a"   'conn-copy-region
+  "a"   'execute-extended-command
   "g"   'conn-M-g-keys
   "i"   'previous-line
   "u"   'backward-word
