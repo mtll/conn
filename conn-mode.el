@@ -1355,8 +1355,7 @@ from Emacs state.  See `emacs-state-map' for commands bound by Emacs state."
   :transitions (("<escape>" . view-state)
                 ("<f7>"     . conn-pop-state)
                 ("<f8>"     . conn-state)
-                ("<f9>"     . dot-state)
-                ("M-D"      . conn-region-dispatch)))
+                ("<f9>"     . dot-state)))
 
 (define-conn-state view-state
   "Activate `view-state' in the current buffer.
@@ -1408,13 +1407,9 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                 ("<f7>"     . emacs-state)
                 ("<f8>"     . conn-pop-state)
                 ("<f9>"     . dot-state)
-                ("="        . dot-state)
-                ("M-D"      . conn-region-dispatch)))
+                ("="        . dot-state)))
 
-(set-default-conn-state '(prog-mode
-                          text-mode
-                          conf-mode)
-                        'conn-state)
+(set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
 (define-conn-state dot-state
   "Activate `dot-state' in the current buffer.
@@ -1435,8 +1430,7 @@ from dot state.  See `dot-state-map' for commands bound by dot state."
                 ("f"        . conn-emacs-state)
                 ("E"        . emacs-state-eol)
                 ("A"        . emacs-state-bol)
-                ("Q"        . conn-dot-quit)
-                ("M-D"      . conn-dots-dispatch))
+                ("Q"        . conn-dot-quit))
   (if dot-state
       (progn
         (setq conn--dot-undo-ring nil)
@@ -3043,7 +3037,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     "<remap> <kmacro-end-macro>"                'exit-recursive-edit
     "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
     "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
-    "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit))
+    "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit
+    "C-z"                                       'exit-recursive-edit))
 
 (dolist (state '(conn-state emacs-state dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
@@ -3146,7 +3141,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap isearch-mode-map
-  "M-D"         'conn-isearch-dispatch
+  "C-z"         'conn-isearch-dispatch
   "C-c C-d"     conn-isearch-dot-map
   "M-<return>"  'conn-isearch-exit-and-mark)
 
@@ -3180,10 +3175,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
-  "C" 'conn-state-region
-  "F" 'conn-emacs-state-region
-  "T" 'conn-change-region
-  "E" 'conn-emacs-state-after-region
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
@@ -3240,6 +3231,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap dot-state-map
+  "C-z"              'conn-dots-dispatch
   "$"                'conn-add-dots-matching-literal
   "d"                'conn-remove-dots-outside-region
   "("                'conn-add-dots-matching-regexp
@@ -3268,8 +3260,12 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "r"                conn-dot-region-map)
 
 (define-keymap
+  :keymap emacs-state-map
+  "C-z"  'conn-region-dispatch)
+
+(define-keymap
   :keymap conn-state-map
-  "M-D"  'conn-region-dispatch
+  "C-z"  'conn-region-dispatch
   "<f4>" 'save-buffer
   "\\"   'indent-region
   "r"    'conn-region-map
