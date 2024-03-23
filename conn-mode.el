@@ -587,27 +587,6 @@ to determine if mark cursor should be hidden in buffer."
 
 See `conn--dispatch-on-regions'.")
 
-(cl-defstruct (conn-macro-dispatch-register)
-  (macro nil :read-only t)
-  (transition nil :read-only t))
-
-(cl-defmethod register-val-jump-to ((val conn-macro-dispatch-register) _arg)
-  (if conn-macro-dispatch-p
-      (throw 'conn-dispatch-register val)
-    (conn--dispatch-on-regions
-     (region-bounds)
-     :transition (conn-macro-dispatch-register-transition val)
-     :macro (conn-macro-dispatch-register-macro val))))
-
-(cl-defmethod register-val-describe ((val conn-macro-dispatch-register) _arg)
-  (conn--thread needle
-      (list (if-let ((state (conn-macro-dispatch-register-transition val)))
-                (symbol-name state)
-              "")
-            (key-description (conn-macro-dispatch-register-macro val)))
-    (apply 'format "%s dispatch macro:\n   %s" needle)
-    (princ needle)))
-
 (defun conn--canonicalize-regions (regions)
   "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
 
@@ -651,9 +630,6 @@ All of the keyword arguments are options.
 BEFORE should be a function that will be called with the markers bounding
 the region to be acted upon before any other setup is performed.
 
-TRANSITION is called interactively and should put the buffer in the
-desired conn state.
-
 AFTER should be a function that will be called with the markers bounding the
 region after the keyboard macro has been run.  AFTER is guarenteed to be
 called if BEFORE is called.
@@ -664,101 +640,90 @@ first iteration of dispatch.
 \(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
-  (let ((regions (conn--canonicalize-regions regions))
-        (last-kbd-macro (plist-get rest :macro))
-        (conn-macro-dispatch-p t)
-        (wind (current-window-configuration))
-        (undo-outer-limit nil)
-        (undo-limit most-positive-fixnum)
-        (undo-strong-limit most-positive-fixnum)
-        (register nil)
-        (success nil)
-        (handles nil))
-    (unwind-protect
-        (progn
-          (unless regions (user-error "No regions for dispatch"))
-          (setq register (catch 'conn-dispatch-register
-                           (pcase-dolist (`(,buffer . ,rs) regions)
-                             (push (prepare-change-group buffer) handles)
-                             (apply 'conn--dispatch-in-buffer buffer rs rest))))
-          (when (conn-macro-dispatch-register-p register)
-            (mapc #'cancel-change-group handles)
-            (setf handles nil
-                  last-kbd-macro (conn-macro-dispatch-register-macro register)
-                  (plist-get rest :transition) (conn-macro-dispatch-register-transition
-                                                register))
-
+  (let (kbd-macro)
+    (let ((regions (conn--canonicalize-regions regions))
+          (last-kbd-macro (plist-get rest :macro))
+          (conn-macro-dispatch-p t)
+          (wind (current-window-configuration))
+          (undo-outer-limit nil)
+          (undo-limit most-positive-fixnum)
+          (undo-strong-limit most-positive-fixnum)
+          (register nil)
+          (success nil)
+          (handles nil))
+      (unwind-protect
+          (progn
+            (unless regions (user-error "No regions for dispatch"))
             (pcase-dolist (`(,buffer . ,rs) regions)
               (push (prepare-change-group buffer) handles)
-              (apply 'conn--dispatch-in-buffer buffer rs rest)))
-          (setq success t)
-          (if register
-              (set-register conn-last-dispatch-macro-register register)
-            (set-register conn-last-dispatch-macro-register
-                          (make-conn-macro-dispatch-register
-                           :macro last-kbd-macro
-                           :transition (plist-get rest :transition)))))
-      (if (not success)
-          (mapc #'cancel-change-group handles)
-        (dolist (handle handles)
-          (accept-change-group handle)
-          (undo-amalgamate-change-group handle)))
-      (unless (plist-get rest :preserve-marks)
-        (pcase-dolist (`(,_ . ,rs) regions)
-          (pcase-dolist (`(,beg . ,end) rs)
-            (set-marker beg nil)
-            (set-marker end nil))))
-      (set-window-configuration wind))))
+              (apply 'conn--dispatch-in-buffer buffer rs rest))
+            (setq success t)
+            (if register
+                (set-register conn-last-dispatch-macro-register register)
+              (kmacro-to-register conn-last-dispatch-macro-register)))
+        (if (not success)
+            (mapc #'cancel-change-group handles)
+          (dolist (handle handles)
+            (accept-change-group handle)
+            (undo-amalgamate-change-group handle)))
+        (unless (plist-get rest :preserve-marks)
+          (pcase-dolist (`(,_ . ,rs) regions)
+            (pcase-dolist (`(,beg . ,end) rs)
+              (set-marker beg nil)
+              (set-marker end nil))))
+        (set-window-configuration wind))
+      (setq kbd-macro last-kbd-macro))
+    (setq last-kbd-macro kbd-macro)))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "Begin a macro dispatch on REGIONS in BUFFER.
 
 \(fn BUFFER REGIONS &key BEFORE AFTER TRANSITION)"
   (pop-to-buffer-same-window buffer)
-  (conn-with-saved-state
-    (save-mark-and-excursion
-      (deactivate-mark t)
-      (pcase-dolist (`(,beg . ,end) regions)
-        (apply 'conn--macro-dispatch-1 beg end rest)))))
+  (save-mark-and-excursion
+    (deactivate-mark t)
+    (pcase-dolist (`(,beg . ,end) regions)
+      (apply 'conn--macro-dispatch-1 beg end rest))))
 
-(cl-defgeneric conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
+(cl-defgeneric conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
   "Dispatch on region from BEG to END.")
 
 (cl-defmethod conn--macro-dispatch-1 (beg end
                                           &context (last-kbd-macro (eql nil))
-                                          &key before after transition
+                                          &key before after
                                           &allow-other-keys)
   "Perform first iteration of macro dispatch."
   (let ((mark-ring mark-ring))
-    (unwind-protect
-        (progn
-          (when before (funcall before beg end))
-          (goto-char beg)
-          (conn--push-ephemeral-mark end)
-          (when transition (call-interactively transition))
-          (kmacro-start-macro nil)
-          (pulse-momentary-highlight-region (region-beginning)
-                                            (region-end)
-                                            'conn-dot-face)
-          (unwind-protect
-              (recursive-edit)
-            (kmacro-end-macro nil)))
-      (when after (funcall after beg end)))
-    (unless last-kbd-macro
-      (user-error "A keyboard macro was not defined."))))
-
-(cl-defmethod conn--macro-dispatch-1 (beg end &key before after transition &allow-other-keys)
-  "Perform remaining iterations of macro dispatch."
-  (let ((mark-ring mark-ring))
-    (with-demoted-errors "Error in macro dispatch: %s"
+    (conn-with-saved-state
       (unwind-protect
           (progn
             (when before (funcall before beg end))
             (goto-char beg)
             (conn--push-ephemeral-mark end)
-            (when transition (call-interactively transition))
-            (kmacro-call-macro nil nil nil last-kbd-macro))
-        (when after (funcall after beg end))))))
+            (kmacro-start-macro nil)
+            (pulse-momentary-highlight-region (region-beginning)
+                                              (region-end)
+                                              'conn-dot-face)
+            (unwind-protect
+                (recursive-edit)
+              (kmacro-end-macro nil)))
+        (when after (funcall after beg end))))
+    (unless last-kbd-macro
+      (user-error "A keyboard macro was not defined."))))
+
+(cl-defmethod conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
+  "Perform remaining iterations of macro dispatch."
+  (let ((mark-ring mark-ring))
+    (conn-with-saved-state
+      (condition-case err
+          (unwind-protect
+              (progn
+                (when before (funcall before beg end))
+                (goto-char beg)
+                (conn--push-ephemeral-mark end)
+                (kmacro-call-macro nil nil nil last-kbd-macro))
+            (when after (funcall after beg end)))
+        (user-error "Error in macro dispatch: %s" err)))))
 
 
 ;;;; Dots
@@ -950,7 +915,7 @@ If BUFFER is nil use current buffer."
          (funcall ,saved-state)
          (setq conn-previous-state ,saved-previous-state)))))
 
-(cl-defun conn--dot-macro-dispatch (buffers &key transition before after)
+(cl-defun conn--dot-macro-dispatch (buffers &key before after)
   "Perform macro dispatch on all dots in BUFFERS."
   (let* ((ov)
          (before (lambda (beg end)
@@ -1388,7 +1353,8 @@ from Emacs state.  See `emacs-state-map' for commands bound by Emacs state."
   :transitions (("<escape>" . view-state)
                 ("<f7>"     . conn-pop-state)
                 ("<f8>"     . conn-state)
-                ("<f9>"     . dot-state)))
+                ("<f9>"     . dot-state)
+                ("M-D"      . conn-region-dispatch)))
 
 (define-conn-state view-state
   "Activate `view-state' in the current buffer.
@@ -1440,7 +1406,8 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                 ("<f7>"     . emacs-state)
                 ("<f8>"     . conn-pop-state)
                 ("<f9>"     . dot-state)
-                ("="        . dot-state)))
+                ("="        . dot-state)
+                ("M-D"      . conn-region-dispatch)))
 
 (set-default-conn-state '(prog-mode
                           text-mode
@@ -1462,7 +1429,12 @@ from dot state.  See `dot-state-map' for commands bound by dot state."
   :transitions (("<escape>" . view-state)
                 ("<f7>"     . emacs-state)
                 ("<f8>"     . conn-state)
-                ("<f9>"     . conn-pop-state))
+                ("<f9>"     . conn-pop-state)
+                ("f"        . conn-emacs-state)
+                ("E"        . emacs-state-eol)
+                ("A"        . emacs-state-bol)
+                ("Q"        . conn-dot-quit)
+                ("M-D"      . conn-dots-dispatch))
   (if dot-state
       (progn
         (setq conn--dot-undo-ring nil)
@@ -2107,7 +2079,8 @@ THING is something with a forward-op as defined by thingatpt."
                   matches))))
       matches)))
 
-(defun conn--isearch-dispatch (&rest keys)
+(defun conn-isearch-dispatch ()
+  (interactive)
   (let ((matches
          (if (or (not (boundp 'multi-isearch-buffer-list))
                  (not multi-isearch-buffer-list))
@@ -2115,7 +2088,7 @@ THING is something with a forward-op as defined by thingatpt."
            (mapcan 'conn--isearch-matches-in-buffer
                    multi-isearch-buffer-list))))
     (isearch-exit)
-    (apply #'conn--dispatch-on-regions matches keys)))
+    (conn--dispatch-on-regions matches)))
 
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
@@ -2205,16 +2178,9 @@ With prefix arg of 0 dispatch the contents of
 `conn-last-dispatch-macro-register'.  With any other prefix arg prompt
 for a dot register to use for dispatch."
   (interactive)
-  (when-let ((mark (mark t))
-             (pt (point-marker)))
-    (conn--dispatch-on-regions
-     (list (cons pt pt)
-           (cons mark mark))
-     :before (lambda (beg end)
-               (goto-char beg)
-               (conn--push-ephemeral-mark end)
-               (conn-state)))
-    (set-marker pt nil)))
+  (when-let ((mark (mark t)))
+    (conn--dispatch-on-regions (list (cons (point) (point))
+                                     (cons mark mark)))))
 
 (defun conn-scroll-down ()
   "`scroll-down-command' leaving point at the same relative window position."
@@ -2973,25 +2939,6 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Transition Functions
 
-(defun conn-state-isearch-matches ()
-  (interactive)
-  (conn--isearch-dispatch :transition 'conn-state))
-
-(defun conn-emacs-state-isearch-matches ()
-  (interactive)
-  (conn--isearch-dispatch :transition 'emacs-state))
-
-(defun conn-emacs-state-after-isearch-matches ()
-  (interactive)
-  (conn--isearch-dispatch :transition (lambda ()
-                                        (interactive)
-                                        (conn-exchange-mark-command)
-                                        (emacs-state))))
-
-(defun conn-change-isearch-matches ()
-  (interactive)
-  (conn--isearch-dispatch :transition 'conn-change))
-
 (defun view-state-quit ()
   "Pop state and goto point where view-state was entered."
   (interactive)
@@ -3005,27 +2952,11 @@ there's a region, all lines that region covers will be duplicated."
   (conn--remove-dots)
   (conn-pop-state))
 
-(defun conn-change-region ()
+(defun conn-region-dispatch ()
   (interactive)
-  (conn--dispatch-on-regions (region-bounds) :transition 'conn-change))
+  (conn--dispatch-on-regions (region-bounds)))
 
-(defun conn-emacs-state-after-region ()
-  (interactive)
-  (conn--dispatch-on-regions
-   (region-bounds) :transition (lambda ()
-                                 (interactive)
-                                 (conn-exchange-mark-command)
-                                 (emacs-state))))
-
-(defun conn-emacs-state-region ()
-  (interactive)
-  (conn--dispatch-on-regions (region-bounds) :transition 'emacs-state))
-
-(defun conn-state-region ()
-  (interactive)
-  (conn--dispatch-on-regions (region-bounds) :transition 'conn-state))
-
-(defun conn-dots-command (buffers)
+(defun conn-dots-dispatch (buffers)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
@@ -3037,50 +2968,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
            (_    (conn-read-dot-buffers)))))
-  (conn--dot-macro-dispatch buffers :transition 'conn-state))
-
-(defun conn-dots-change (buffers)
-  "Begin recording dot macro for BUFFERS, beginning with `conn-change'.
-
-Interactively buffers defaults to current buffer.
-With prefix argument \\[universal-argument] ask for a regexp and operate
-on all buffers matching regexp.
-With any other prefix argument select buffers with `completing-read-multiple'."
-  (interactive
-   (list (pcase current-prefix-arg
-           ('(4) (conn-read-matching-dot-buffers))
-           ('nil (list (current-buffer)))
-           (_    (conn-read-dot-buffers)))))
-  (conn--dot-macro-dispatch buffers :transition 'conn-change))
-
-(defun conn-dots-insert (buffers)
-  "Begin recording dot macro for BUFFERS, beginning with `emacs-state'.
-
-Interactively buffers defaults to current buffer.
-With prefix argument \\[universal-argument] ask for a regexp and operate
-on all buffers matching regexp.
-With any other prefix argument select buffers with `completing-read-multiple'."
-  (interactive
-   (list (pcase current-prefix-arg
-           ('(4) (conn-read-matching-dot-buffers))
-           ('nil (list (current-buffer)))
-           (_    (conn-read-dot-buffers)))))
-  (conn--dot-macro-dispatch buffers :transition 'emacs-state))
-
-(defun conn-dots-insert-after (buffers)
-  "Begin recording dot macro for BUFFERS, beginning at the end of each dot
- and in `emacs-state'.
-
-Interactively buffers defaults to current buffer.
-With prefix argument \\[universal-argument] ask for a regexp and operate
-on all buffers matching regexp.
-With any other prefix argument select buffers with `completing-read-multiple'."
-  (interactive
-   (list (pcase current-prefix-arg
-           ('(4) (conn-read-matching-dot-buffers))
-           ('nil (list (current-buffer)))
-           (_    (conn-read-dot-buffers)))))
-  (conn--dot-macro-dispatch buffers :transition 'emacs-state))
+  (conn--dot-macro-dispatch buffers))
 
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
@@ -3224,14 +3112,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (defvar-keymap conn-isearch-dot-map
   :repeat t
-  "C-d" 'conn-isearch-add-dots
+  "C-e" 'conn-isearch-add-dots
   "C-r" 'conn-isearch-refine-dots
   "C-w" 'conn-isearch-remove-dots
   "C-x" 'conn-isearch-split-dots
-  "C-c" 'conn-dots-command
-  "C-t" 'conn-dots-change
-  "C-f" 'conn-dots-insert
-  "C-e" 'conn-dots-insert-after)
+  "C-d" 'conn-dots-dispatch)
 
 (defvar-keymap conn-dot-this-map
   :prefix 'conn-dot-this-map
@@ -3258,23 +3143,9 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "a" 'conn-dot-all-things-in-region)
 
 (define-keymap
-  :keymap dot-state-transition-map
-  "Q"      'conn-dot-quit
-  "T"      'conn-dots-change
-  "F"      'conn-dots-insert
-  "E"      'conn-dots-insert-after
-  "C"      'conn-dots-command
-  "S-<f8>" 'conn-dots-command
-  "<f8>"   'conn-state)
-
-(define-keymap
   :keymap isearch-mode-map
-  "M-D c"       'conn-state-isearch-matches
-  "M-D f"       'conn-emacs-state-isearch-matches
-  "M-D t"       'conn-change-isearch-matches
-  "M-D e"       'conn-emacs-state-after-isearch-matches
-  "M-D o"       'conn-isearch-edit-each-match
-  "M-D d"       conn-isearch-dot-map
+  "M-D"         'conn-isearch-dispatch
+  "C-c C-d"     conn-isearch-dot-map
   "M-<return>"  'conn-isearch-exit-and-mark)
 
 (define-keymap
@@ -3315,17 +3186,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
   "y" 'yank-rectangle)
-
-(defvar-keymap conn-dispatch-map
-  :prefix 'conn-dispatch-map
-  "C" 'conn-state-region
-  "F" 'conn-emacs-state-region
-  "T" 'conn-change-region
-  "E" 'conn-emacs-state-after-region
-  "c" 'conn-state-region
-  "f" 'conn-emacs-state-region
-  "t" 'conn-change-region
-  "e" 'conn-emacs-state-after-region)
 
 (defvar-keymap conn-tab-bar-history-mode-repeat-map
   :repeat t
@@ -3407,7 +3267,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-state-map
-  "M-D"  'conn-dispatch-map
+  "M-D"  'conn-region-dispatch
   "<f4>" 'save-buffer
   "\\"   'indent-region
   "r"    'conn-region-map
