@@ -147,17 +147,17 @@ THING BEG and END are bound in BODY."
 
 (defvar-keymap conn-consult-region-search-map
   :prefix 'conn-consult-region-search-map
-  "l" 'conn-consult-line-region
-  "L" 'conn-consult-line-multi-region
-  "F" 'conn-consult-locate-region
-  "g" 'conn-consult-git-grep-region
+  "o" 'conn-consult-line-region
+  "O" 'conn-consult-line-multi-region
+  "l" 'conn-consult-locate-region
+  "i" 'conn-consult-git-grep-region
   "f" 'conn-consult-find-region
-  "r" 'conn-consult-ripgrep-region)
+  "g" 'conn-consult-ripgrep-region)
 
-(keymap-set conn-region-map "l" 'conn-consult-line-region)
-(keymap-set conn-region-map "r" 'conn-consult-ripgrep-region)
+(keymap-set conn-region-map "o" 'conn-consult-line-region)
+(keymap-set conn-region-map "g" 'conn-consult-ripgrep-region)
 (keymap-set conn-region-map "h" 'conn-consult-region-search-map)
-(keymap-set conn-mode-map "M-s t" 'conn-consult-thing)
+(keymap-set conn-mode-map "M-s T" 'conn-consult-thing)
 (keymap-set conn-mode-map "M-s p" 'conn-consult-page)
 
 (provide 'conn-consult)

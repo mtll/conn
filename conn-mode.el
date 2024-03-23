@@ -3237,8 +3237,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
-  "m"   'conn-command-at-point-and-mark
-  "k"   'conn-macro-at-point-and-mark
+  "b"   'conn-command-at-point-and-mark
+  "m"   'conn-macro-at-point-and-mark
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -3253,24 +3253,22 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "e"   'eval-region
   "d"   'conn-duplicate-region
   "D"   'conn-duplicate-and-comment-region
-  "o"   'conn-insert-pair
+  "u"   'conn-insert-pair
   "DEL" 'conn-delete-pair
   "p"   'conn-change-pair
-  "b"   'conn-isearch-region-forward
-  "B"   'conn-isearch-region-backward
-  "l"   'conn-occur-region
-  "r"   'conn-rgrep-region
+  "s"   'conn-isearch-region-forward
+  "r"   'conn-isearch-region-backward
+  "o"   'conn-occur-region
+  "g"   'conn-rgrep-region
   ";"   'comment-or-uncomment-region
-  "f"   'fill-region
+  "TAB" 'fill-region
   "n"   'narrow-to-region
-  "s a" 'sort-pages
-  "s c" 'sort-columns
-  "s l" 'sort-lines
-  "s n" 'sort-numeric-fields
-  "s p" 'sort-paragraphs
-  "s r" 'sort-regexp-fields
-  "_"   'calc-grab-sum-across
-  ":"   'calc-grab-sum-down
+  "< a" 'sort-pages
+  "< c" 'sort-columns
+  "< l" 'sort-lines
+  "< n" 'sort-numeric-fields
+  "< p" 'sort-paragraphs
+  "< r" 'sort-regexp-fields
   "*"   'calc-grab-region
   "$"   'ispell-region
   "v"   'vc-region-history)
