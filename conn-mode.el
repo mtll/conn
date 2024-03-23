@@ -673,6 +673,7 @@ first iteration of dispatch.
               (set-marker end nil))))
         (set-window-configuration wind))
       (setq kbd-macro last-kbd-macro))
+    (kmacro-push-ring)
     (setq last-kbd-macro kbd-macro)))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
