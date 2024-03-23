@@ -1485,12 +1485,17 @@ org-tree-edit state."
 
        (defun ,name (enable)
          ,(or doc "")
+         (interactive (list (not ,name)))
          (when (xor enable ,name)
            (let ((fn (get ',name :conn-feature-function)))
-             (when (and conn-mode enable)
-               (funcall fn enable))
+             (when conn-mode (funcall fn enable))
              (if enable
-                 (add-hook 'conn--extensions fn)
+                 (progn
+                   (when (called-interactively-p 'interactive)
+                     (message ,(conn--stringify name " enabled.")))
+                   (add-hook 'conn--extensions fn))
+               (when (called-interactively-p 'interactive)
+                 (message ,(conn--stringify name " disabled.")))
                (remove-hook 'conn--extensions fn)))))
 
        (when-let ((body-fn (get ',name :conn-feature-function)))
@@ -1500,8 +1505,7 @@ org-tree-edit state."
 
        (let ((body-sym (make-symbol ,(conn--stringify name "-body-fn"))))
          (fset body-sym (lambda (enable)
-                          (message "Called")
-                          (setq ,name enable)
+                          (setq ,name (when enable t))
                           ,@body))
          (put ',name :conn-feature-function body-sym))
 
