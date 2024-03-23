@@ -3302,7 +3302,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "O"   'forward-sentence
   "SPC" 'conn-set-mark-command
   "U"   'backward-sentence
-  "a"   'execute-extended-command
+  ";"   'execute-extended-command
   "g"   'conn-M-g-keys
   "i"   'previous-line
   "u"   'backward-word
@@ -3310,7 +3310,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "o"   'forward-word
   "m"   'forward-sexp
   "n"   'backward-sexp
-  "b"   'switch-to-buffer
+  "a"   'switch-to-buffer
   "B"   'conn-C-x-t-keys
   "`"   'other-window
   "p"   'conn-register-load
@@ -3329,7 +3329,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   ","       'isearch-forward
   "SPC"     'conn-scroll-up
   "DEL"     'conn-scroll-down
-  "a"       'execute-extended-command
+  ";"       'execute-extended-command
   "q"       'quit-window
   "Q"       'kill-buffer-and-window
   "s"       'conn-M-s-keys
@@ -3337,7 +3337,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "x"       'conn-C-x-keys
   "j"       'backward-page
   "l"       'forward-page
-  "b"       'switch-to-buffer
+  "a"       'switch-to-buffer
   "B"       'conn-C-x-t-keys
   "i"       'conn-scroll-down
   "k"       'conn-scroll-up
@@ -3355,7 +3355,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "SPC" 'conn-scroll-up
   "DEL" 'conn-scroll-down
   "u"   'outline-up-heading
-  "a"   'execute-extended-command
+  ";"   'execute-extended-command
   "z"   'conn-exchange-mark-command
   "Q"   'kill-buffer-and-window
   "s"   'conn-M-s-keys
@@ -3363,7 +3363,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "x"   'conn-C-x-keys
   "c"   'conn-C-c-keys
   "w"   'org-refile
-  "b"   'switch-to-buffer
+  "a"   'switch-to-buffer
   "B"   'conn-C-x-t-keys
   "p"   'conn-register-load
   "."   'point-to-register
@@ -3656,3 +3656,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (when-let ((bounds (bounds-of-thing-at-point thing)))
       (let ((zz-add-zone-anyway-p t))
         (narrow-to-region (car bounds) (cdr bounds))))))
+
+(with-eval-after-load 'expreg
+  (require 'conn-expreg))
