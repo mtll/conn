@@ -1030,7 +1030,8 @@ when `use-region-p' is non-nil."
                                       ;; conn--major-mode-maps
                                       ;; conn--local-maps
                                       conn--aux-maps
-                                      conn--state-maps))))
+                                      conn--state-maps)))
+        (conn-mode nil))
     (keymap-lookup nil binding t)))
 
 (defun conn--aux-map-timer-func ()
