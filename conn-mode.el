@@ -703,12 +703,17 @@ first iteration of dispatch.
       (unwind-protect
           (recursive-edit)
         (if defining-kbd-macro
-            (kmacro-end-macro nil)
-          (user-error "No keyboard macro defined."))
+            (end-kbd-macro)
+          (user-error "Not defining keyboard macro."))
+        ;; From kmacro.  We want to user-error at the end
+        ;; of this so we can't use kmacro-end-macro.
+        (when (and last-kbd-macro (= (length last-kbd-macro) 0))
+          (setq last-kbd-macro nil)
+          (while (and (null last-kbd-macro) kmacro-ring)
+	    (kmacro-pop-ring1))
+          (user-error "Ignore empty macro"))
         (when after (funcall after beg end)))))
-  (setq conn-last-dispatch-macro last-kbd-macro)
-  (unless conn-last-dispatch-macro
-    (user-error "A keyboard macro was not defined.")))
+  (setq conn-last-dispatch-macro last-kbd-macro))
 
 (cl-defmethod conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
   "Perform remaining iterations of macro dispatch."
