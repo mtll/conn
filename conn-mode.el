@@ -37,6 +37,7 @@
 (require 'hi-lock)
 (require 'kmacro)
 (require 'seq)
+(require 'tab-bar)
 (eval-when-compile
   (require 'cl-lib))
 
