@@ -2388,7 +2388,7 @@ Not for use in lisp code."
         (forward-char arg))
     (when char
       (setq conn--goto-char-last-char (if (stringp char) char (string char)))
-      (put this-command 'repeat-map conn-goto-char-forward-repeat-map))
+      (put this-command 'repeat-map 'conn-goto-char-forward-repeat-map))
     (when-let ((pos (or (save-excursion
                           (forward-char)
                           (search-forward conn--goto-char-last-char (window-end) t))
