@@ -2277,31 +2277,18 @@ Interactively PARTIAL-MATCH is the prefix argument."
 (defun conn-query-replace-region (start end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (let* ((from (buffer-substring-no-properties start end))
-         (prompt (concat "Query replace"
-		         (if current-prefix-arg
-		             (if (eq current-prefix-arg '-) " backward" " word")
-		           "")
-		         (if (use-region-p) " in region" "")))
-         (to (query-replace-read-to from prompt nil)))
-    (query-replace from to nil nil nil
-                   (eq current-prefix-arg '-)
-                   (use-region-noncontiguous-p))))
+  (let* ((from (buffer-substring-no-properties start end)))
+    (minibuffer-with-setup-hook
+        (:append (lambda () (insert from)))
+      (call-interactively #'query-replace))))
 
 (defun conn-query-replace-regexp-region (start end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (let* ((from (regexp-quote (buffer-substring-no-properties start end)))
-         (prompt (concat "Query replace"
-		         (if current-prefix-arg
-		             (if (eq current-prefix-arg '-) " backward" " word")
-		           "")
-		         " regexp"
-		         (if (use-region-p) " in region" "")))
-         (to (query-replace-read-to from prompt t)))
-    (query-replace-regexp from to nil nil nil
-                          (eq current-prefix-arg '-)
-                          (use-region-noncontiguous-p))))
+  (let* ((from (buffer-substring-no-properties start end)))
+    (minibuffer-with-setup-hook
+        (:append (lambda () (insert from)))
+      (call-interactively #'query-replace-regexp))))
 
 (defun conn-dispatch-text-property (start end &optional reverse)
   "Dot each region between START and END with text property PROP equal to VAL.
