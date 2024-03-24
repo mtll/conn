@@ -3309,7 +3309,9 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "F"   'fill-paragraph
   "N"   'conn-transpose-paragraphs-backward
   "M"   'transpose-paragraphs
-  "r"   'query-replace-regexp
+  "r"   'query-replace
+  "x"   'query-replace-regexp
+  "b"   'regexp-builder
   "v"   'conn-mark-thing
   "d"   'duplicate-dwim
   "j"   'join-line
