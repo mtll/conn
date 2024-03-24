@@ -3393,6 +3393,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-state-map
+  "#"    'conn-query-replace-region
+  "%"    'conn-query-replace-regexp-region
   "\""   'conn-insert-pair
   "C-z"  'conn-region-dispatch
   "<f4>" 'save-buffer
