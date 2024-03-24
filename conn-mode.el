@@ -2177,6 +2177,35 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
+(defun conn-dispatch-text-property (start end)
+  "Dot each region between START and END with text property PROP equal to VAL.
+
+When region is active operates within `region-bounds', otherwise operates
+between `point-min' and `point-max'."
+  (interactive (list (conn--beginning-of-region-or-restriction)
+                     (conn--end-of-region-or-restriction)))
+  (let* ((prop (intern (completing-read
+                        "Property: "
+                        (cl-loop for prop in (text-properties-at (point))
+                                 by #'cddr
+                                 collect prop)
+                        nil t)))
+         (vals (mapcar (lambda (s) (cons (message "%s" s) s))
+                       (ensure-list (get-text-property (point) prop))))
+         (val (alist-get (completing-read "Value: " vals) vals
+                         nil nil #'string=))
+         regions)
+    (save-excursion
+      (with-restriction
+          start end
+        (goto-char (point-min))
+        (let (match)
+          (while (setq match (text-property-search-forward prop val t))
+            (push (cons (prop-match-beginning match)
+                        (prop-match-end match))
+                  regions)))))
+    (conn--dispatch-on-regions regions)))
+
 (defun conn-last-macro-dispatch-to-register (register)
   "Set REGISTER to last dot macro."
   (interactive (list (register-read-with-preview "register: ")))
