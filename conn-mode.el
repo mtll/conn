@@ -38,6 +38,7 @@
 (require 'kmacro)
 (require 'seq)
 (require 'tab-bar)
+(require 'thingatpt)
 (eval-when-compile
   (require 'cl-lib))
 
