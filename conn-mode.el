@@ -3535,16 +3535,16 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn--initialize-buffer
   :group 'conn-mode
-  :predicate '((not special-mode)
-               (not minibuffer-mode)
-               (not dired-mode)
-               (not compilation-mode)
-               (not slime-xref-mode)
-               (not calc-mode)
-               (not calc-trail-mode)
-               eshell-mode
+  :predicate '(occur-mode
                grep-mode
-               occur-mode
+               occur-edit-mode
+               eshell-mode
+               (not minibuffer-mode
+                    dired-mode
+                    slime-xref-mode
+                    calc-mode
+                    calc-trail-mode
+                    view-mode)
                t)
   (progn
     (conn--setup-keymaps)
