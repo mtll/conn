@@ -162,14 +162,13 @@ THING BEG and END are bound in BODY."
 
 (provide 'conn-consult)
 
-(with-eval-after-load 'consult
+(with-eval-after-load 'embark
   (defun conn-dispatch-grep-candidates (cands)
     (conn--dispatch-on-regions
      (mapcar (lambda (cand)
                (let ((marker (car (consult--grep-position cand))))
                  (cons marker marker)))
-             cands)
-     :transition 'conn-state))
+             cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
   (keymap-set embark-consult-grep-map "C-z" 'conn-dispatch-grep-candidates)
 
@@ -178,8 +177,7 @@ THING BEG and END are bound in BODY."
      (mapcar (lambda (cand)
                (let ((marker (car (consult--get-location cand))))
                  (cons marker marker)))
-             cands)
-     :transition 'conn-state))
+             cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
   (keymap-set embark-consult-location-map "C-z" 'conn-dispatch-location-candidates)
 
