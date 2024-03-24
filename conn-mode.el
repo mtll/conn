@@ -709,9 +709,9 @@ first iteration of dispatch.
           (recursive-edit)
         (if defining-kbd-macro
             (end-kbd-macro)
-          (user-error "Not defining keyboard macro."))
+          (user-error "Not defining keyboard macro"))
         ;; From kmacro.  We want to user-error at the end
-        ;; of this so we can't use kmacro-end-macro.
+        ;; of this so we can't just use kmacro-end-macro.
         (when (and last-kbd-macro (= (length last-kbd-macro) 0))
           (setq last-kbd-macro nil)
           (while (and (null last-kbd-macro) kmacro-ring)
@@ -3730,12 +3730,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
                emacs-state
                dot-state))
     (add-to-list 'polymode-move-these-vars-from-old-buffer v)))
-
-(with-eval-after-load 'corfu
-  (defun conn-exit-completion ()
-    (completion-in-region-mode -1))
-
-  (add-hook 'conn-transition-hook 'conn-exit-completion))
 
 (with-eval-after-load 'eldoc
   (eldoc-add-command 'conn-end-of-inner-line
