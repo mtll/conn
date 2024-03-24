@@ -2274,6 +2274,11 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
+(defun conn-toggle-sort-fold-case ()
+  (interactive)
+  (message "Sort fold case: %s"
+           (setq-local sort-fold-case (not sort-fold-case))))
+
 (defun conn-query-replace-region (start end)
   (interactive (list (region-beginning)
                      (region-end)))
@@ -3309,44 +3314,50 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "." 'isearch-repeat-forward
   "," 'isearch-repeat-backward)
 
+(defvar-keymap conn-sort-region-map
+  :prefix 'conn-sort-region-map
+  "u" 'conn-toggle-sort-fold-case
+  "a" 'sort-pages
+  "c" 'sort-columns
+  "l" 'sort-lines
+  "n" 'sort-numeric-fields
+  "p" 'sort-paragraphs
+  "r" 'sort-regexp-fields)
+(put 'conn-toggle-sort-fold-case 'repeat-map 'conn-sort-region-map)
+
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
-  "r"   'conn-query-replace-region
-  "x"   'conn-query-replace-regexp-region
-  "b"   'conn-command-at-point-and-mark
-  "m"   'conn-macro-at-point-and-mark
+  "DEL" 'conn-delete-pair
+  "TAB" 'fill-region
+  "$"   'ispell-region
+  "*"   'calc-grab-region
+  ","   'conn-isearch-region-backward
+  "."   'conn-isearch-region-forward
+  ";"   'comment-or-uncomment-region
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
+  "b"   'conn-command-at-point-and-mark
   "c"   'conn-region-case-map
-  "j"   'conn-join-lines
-  "I"   'indent-rigidly
-  "w"   'delete-region
-  "e"   'eval-region
-  "d"   'conn-duplicate-region
   "D"   'conn-duplicate-and-comment-region
-  "u"   'conn-insert-pair
-  "DEL" 'conn-delete-pair
-  "p"   'conn-change-pair
-  "."   'conn-isearch-region-forward
-  ","   'conn-isearch-region-backward
-  "o"   'conn-occur-region
+  "d"   'conn-duplicate-region
+  "e"   'eval-region
   "g"   'conn-rgrep-region
-  ";"   'comment-or-uncomment-region
-  "TAB" 'fill-region
+  "I"   'indent-rigidly
+  "j"   'conn-join-lines
+  "m"   'conn-macro-at-point-and-mark
   "n"   'narrow-to-region
-  "< a" 'sort-pages
-  "< c" 'sort-columns
-  "< l" 'sort-lines
-  "< n" 'sort-numeric-fields
-  "< p" 'sort-paragraphs
-  "< r" 'sort-regexp-fields
-  "*"   'calc-grab-region
-  "$"   'ispell-region
-  "v"   'vc-region-history)
+  "o"   'conn-occur-region
+  "p"   'conn-change-pair
+  "r"   'conn-query-replace-region
+  "s"   'conn-sort-region-map
+  "u"   'conn-insert-pair
+  "v"   'vc-region-history
+  "w"   'delete-region
+  "x"   'conn-query-replace-regexp-region)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
