@@ -63,7 +63,10 @@ If STATE is nil make COMMAND always repeat."
         duplicate-dwim
         conn-duplicate-region
         conn-delete-pair
-        bury-buffer))
+        bury-buffer
+        conn-duplicate-region
+        conn-duplicate-and-comment-region
+        conn-other-window))
 
 (conn-define-extension conn-repeatable-commands
   (if conn-repeatable-commands

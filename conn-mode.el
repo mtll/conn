@@ -3051,7 +3051,6 @@ there's a region, all lines that region covers will be duplicated."
                    (remove (selected-window) (window-list nil 'no-mini)))))
         (select-window win)
       (other-window 1))))
-(put 'conn-other-window :conn-repeat-command t)
 
 ;;;;; Transition Functions
 
