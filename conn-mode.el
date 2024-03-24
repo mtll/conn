@@ -3418,7 +3418,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-3" 'split-window-right
   "C-4" 'conn-C-x-4-keys
   "C-5" 'conn-C-x-5-keys
-  "C-7" 'conn-other-window
   "C-8" 'conn-swap-window-buffers
   "C-=" 'balance-windows
   "W"   'widen
