@@ -36,6 +36,7 @@
 (require 'repeat)
 (require 'hi-lock)
 (require 'kmacro)
+(require 'seq)
 (eval-when-compile
   (require 'cl-lib))
 
