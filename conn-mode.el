@@ -2953,9 +2953,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (goto-char end)
     (conn--push-ephemeral-mark (+ (point) (length region)))))
 
-(defun conn-duplicate-region (&optional arg)
+(defun conn-duplicate-region (beg end &optional arg)
   "Duplicates the current region ARG times."
-  (interactive "p")
+  (interactive (list (region-beginning)
+                     (region-end)
+                     (prefix-numeric-value current-prefix-arg)))
   (if (use-region-p)
       (duplicate-dwim)
     (let ((end (set-marker (make-marker) (region-end))))
@@ -2971,19 +2973,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "Duplicates the current line or region ARG times.
 If there's no region, the current line will be duplicated.  However, if
 there's a region, all lines that region covers will be duplicated."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (prefix-numeric-value current-prefix-arg)))
-  (let* ((origin (point))
-         (oend end)
-         (region (buffer-substring-no-properties beg end)))
-    (dotimes (_i arg)
-      (goto-char end)
-      (insert region)
-      (setq end (point)))
-    (goto-char (+ origin (* (length region) arg)))
-    (comment-region beg oend)))
+  (interactive (list (region-beginning)
+                     (region-end)
+                     (prefix-numeric-value current-prefix-arg)))
+  (save-mark-and-excursion
+    (conn-duplicate-region beg end arg)
+    (comment-region (region-beginning)
+                    (region-end))))
 
 (cl-macrolet
     ((transpose-backward (&body fns)
