@@ -23,7 +23,7 @@
   "States in which to expand from the current point and mark.")
 
 (defcustom conn-expreg-leave-region-active
-  nil
+  t
   "Whether to leave the region active after expreg commands when the
 current state is in `conn-expreg-always-use-region-states'.")
 
@@ -40,7 +40,7 @@ current state is in `conn-expreg-always-use-region-states'.")
     (when always-use-region (activate-mark t))
     (unwind-protect
         (apply fn args)
-      (when (and always-use-region conn-expreg-leave-region-active)
+      (when (and always-use-region (not conn-expreg-leave-region-active))
         (deactivate-mark)))))
 
 (conn-define-extension conn-expreg-always-use-region
