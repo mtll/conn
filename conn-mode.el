@@ -3380,7 +3380,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   ">"   'org-demote-subtree
   "<"   'org-promote-subtree
   "m"   'org-mark-subtree
-  ";"   'org-toggle-comment
+  "M-;"   'org-toggle-comment
   "t"   'org-todo
   "n"   'conn-org-tree-edit-insert-heading
   "N"   'org-toggle-narrow-to-subtree
