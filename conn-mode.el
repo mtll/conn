@@ -676,11 +676,11 @@ called if BEFORE is called.
 
 If REVERSE is non-nil execute macro on regions from last to first.
 
-\(fn REGIONS &key BEFORE AFTER TRANSITION REVERSE)"
+\(fn REGIONS &key BEFORE AFTER TRANSITION REVERSE MACRO)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
-        (conn-last-dispatch-macro)
+        (conn-last-dispatch-macro (plist-get :macro rest))
         (conn-macro-dispatch-p t)
         (wind (current-window-configuration))
         (undo-outer-limit nil)
@@ -3160,6 +3160,15 @@ there's a region, all lines that region covers will be duplicated."
         (conn--dispatch-on-regions (region-bounds) :reverse reverse)
       (when rect (rectangle-mark-mode 1)))))
 
+(defun conn-region-dispatch-last-macro (&optional reverse)
+  (interactive "P")
+  (let ((rect rectangle-mark-mode))
+    (unwind-protect
+        (conn--dispatch-on-regions (region-bounds)
+                                   :reverse reverse
+                                   :macro last-kbd-macro)
+      (when rect (rectangle-mark-mode 1)))))
+
 (defun conn-dots-dispatch (buffers &optional reverse)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
@@ -3174,6 +3183,23 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            (_    (conn-read-dot-buffers)))
          current-prefix-arg))
   (conn--dot-macro-dispatch buffers :reverse reverse))
+
+(defun conn-dots-dispatch-last-macro (buffers &optional reverse)
+  "Begin recording dot macro for BUFFERS, initially in conn-state.
+
+Interactively buffers defaults to current buffer.
+With prefix argument \\[universal-argument] ask for a regexp and operate
+on all buffers matching regexp.
+With any other prefix argument select buffers with `completing-read-multiple'."
+  (interactive
+   (list (pcase current-prefix-arg
+           ('(4) (conn-read-matching-dot-buffers))
+           ('nil (list (current-buffer)))
+           (_    (conn-read-dot-buffers)))
+         current-prefix-arg))
+  (conn--dot-macro-dispatch buffers
+                            :reverse reverse
+                            :macro last-kbd-macro))
 
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
@@ -3460,33 +3486,35 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap dot-state-map
-  "C-z"              'conn-dots-dispatch
+  "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
-  "d"                'conn-remove-dots-outside-region
-  "("                'conn-add-dots-matching-regexp
+  "%"                'conn-query-remove-dots
+  "("                'conn-dots-dispatch
+  ")"                'conn-dots-dispatch-last-macro
   "<backspace>"      'conn-kill-to-dots
   "<return>"         'conn-dot-lines
   "<tab>"            'conn-remove-all-dots
-  "TAB"              'conn-remove-all-dots
-  "C-n"              'conn-next-dot
-  "C-p"              'conn-previous-dot
-  "M-<down-mouse-1>" 'conn-dot-at-click
-  "M-?"              'conn-dot-redo
-  "M-/"              'conn-dot-undo
   "["                'conn-remove-dots-before
   "\\"               'conn-split-dots-on-regexp
   "]"                'conn-remove-dots-after
   "_"                'conn-dot-trim-regexp
   "`"                'conn-dot-movement-mode
+  "C-n"              'conn-next-dot
+  "C-p"              'conn-previous-dot
+  "C-z"              'conn-dots-dispatch
+  "d"                'conn-remove-dots-outside-region
   "e"                'conn-dot-region
+  "M-/"              'conn-dot-undo
+  "M-<down-mouse-1>" 'conn-dot-at-click
+  "M-?"              'conn-dot-redo
   "q"                'conn-dot-point
-  "%"                'conn-query-remove-dots
+  "r"                conn-dot-region-map
   "t"                'conn-dot-this-map
+  "TAB"              'conn-remove-all-dots
   "w"                'conn-remove-dot
-  "|"                'conn-split-region-on-regexp
   "{"                'conn-first-dot
-  "}"                'conn-last-dot
-  "r"                conn-dot-region-map)
+  "|"                'conn-split-region-on-regexp
+  "}"                'conn-last-dot)
 
 (define-keymap
   :keymap emacs-state-map
@@ -3502,6 +3530,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "$"    'ispell-word
   "%"    'conn-query-replace-regexp-region
   "("    'conn-region-dispatch
+  ")"    'conn-region-dispatch-last-macro
   "*"    'calc-dispatch
   "["    'conn-kill-prepend-region
   "\""   'conn-insert-pair
