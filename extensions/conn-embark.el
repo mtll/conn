@@ -150,8 +150,8 @@ up out of a keymap."
                        (if (seq-empty-p prefix)
                            map
                          (keymap-lookup map (key-description prefix)))))))))
-         prompt choice cand)
-    (while t
+         prompt choice cand return)
+    (while (not return)
       (setq cand (conn-complete-keys--formatted-bindings
                   (conn-complete-keys--get-bindings prefix map))
             prompt (if (> (length prefix) 0)
@@ -174,20 +174,22 @@ up out of a keymap."
                                        (category . embark-keybinding))
                           (complete-with-action action cand string predicate)))
                       nil nil)))
-      (pcase (assoc choice cand)
-        ('nil
-         (if (not (string= choice ""))
-             (cl-return-from conn-complete-keys)
-           (setq prefix (ignore-errors (seq-subseq prefix 0 -1)))
-           (when (and (> (length prefix) 0)
-                      (= 27 (elt prefix (1- (length prefix)))))
-             ;; This was a meta bind so we need to
-             ;; remove the ESC key as well
-             (setq prefix (ignore-errors (seq-subseq prefix 0 -1))))))
-        (`(,_ ,_ ,cmd ,key ,_)
-         (if (keymapp cmd)
-             (setq prefix (vconcat prefix key))
-           (cl-return-from conn-complete-keys (call-interactively cmd))))))))
+      (pcase-exhaustive (assoc choice cand)
+        ((and 'nil (guard (string= choice "")))
+         (setq prefix (ignore-errors (seq-subseq prefix 0 -1)))
+         (when (and (> (length prefix) 0)
+                    (= 27 (elt prefix (1- (length prefix)))))
+           ;; This was a meta bind so we need to
+           ;; remove the ESC key as well
+           (setq prefix (ignore-errors (seq-subseq prefix 0 -1)))))
+        ('nil (setq return t))
+        ((and `(,_ ,_ ,cmd . ,_)
+              (guard (commandp (keymap--menu-item-binding cmd))))
+         (setq return t)
+         (call-interactively cmd))
+        ((and `(,_ ,_ ,cmd ,key . ,_)
+              (guard (keymapp cmd)))
+         (setq prefix (vconcat prefix key)))))))
 
 (conn-define-extension conn-complete-keys-prefix-help-command
   (if conn-complete-keys-prefix-help-command
