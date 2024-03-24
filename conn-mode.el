@@ -408,9 +408,9 @@ THING is always returned.
   "Return a continuous mark handler for THING.
 If one has already been created return it, otherwise create a new one.
 Continuous handlers will mark all THINGs when moving over multiple THINGs
-at once unless `region-active-p'."
+at once unless `use-region-p'."
   (lambda (beg)
-    (unless (or (region-active-p)
+    (unless (or (use-region-p)
                 (= (point) beg)
                 (= 0 (prefix-numeric-value current-prefix-arg)))
       (let* ((dir (cl-signum (- (point) beg)))
@@ -426,9 +426,9 @@ at once unless `region-active-p'."
   "Return a discrete mark handler for THING.
 If one has already been created return it, otherwise create a new one.
 Discrete handlers will only mark the last THING when moving over multiple
-THINGs at once unless `region-active-p'."
+THINGs at once unless `use-region-p'."
   (lambda (_)
-    (unless (region-active-p)
+    (unless (use-region-p)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
          (conn--push-ephemeral-mark (if (= (point) end) beg end)))
@@ -437,8 +437,8 @@ THINGs at once unless `region-active-p'."
 (defun conn-jump-handler (beg)
   "Mark trail handler.
 The mark trail handler pushes an ephemeral mark at the starting point
-of the movement command unless `region-active-p'."
-  (unless (or (region-active-p)
+of the movement command unless `use-region-p'."
+  (unless (or (use-region-p)
               (eq beg (point)))
     (conn--push-ephemeral-mark beg)))
 
@@ -2673,7 +2673,7 @@ When called interactively inserts STRING at `point' and `mark'."
 
 With a prefix ARG activate `rectangle-mark-mode'."
   (interactive "P")
-  (cond (arg (if (region-active-p)
+  (cond (arg (if (use-region-p)
                  (rectangle-mark-mode 'toggle)
                (activate-mark)
                (rectangle-mark-mode)))
@@ -2685,7 +2685,7 @@ With a prefix ARG activate `rectangle-mark-mode'."
   (cond (arg
          (rectangle-mark-mode 'toggle))
         ((eq last-command 'conn-set-mark-command)
-         (if (region-active-p)
+         (if (use-region-p)
              (progn
                (deactivate-mark)
                (message "Mark deactivated"))
@@ -2927,7 +2927,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-duplicate-region (&optional arg)
   "Duplicates the current region ARG times."
   (interactive "p")
-  (if (region-active-p)
+  (if (use-region-p)
       (duplicate-dwim)
     (let ((end (set-marker (make-marker) (region-end))))
       (unwind-protect
