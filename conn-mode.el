@@ -786,16 +786,18 @@ first iteration of dispatch.
 ;;;;; Dot Functions
 
 (if (version<= "29" emacs-version)
-    (cl-defun conn--sorted-overlays (typep &optional (predicate '<) start end)
+    (defun conn--sorted-overlays (typep &optional predicate start end)
       "Get all dots between START and END sorted by starting position."
+      (unless predicate (setq predicate #'<))
       (let ((overlays (conn--all-overlays typep start end)))
         (pcase predicate
           ('< overlays)
           ('> (nreverse overlays))
           (_ (sort overlays predicate)))))
 
-  (cl-defun conn--sorted-overlays (typep &optional (predicate '<) start end)
+  (defun conn--sorted-overlays (typep &optional predicate start end)
     "Get all dots between START and END sorted by starting position."
+    (unless predicate (setq predicate #'<))
     (let ((overlays (conn--all-overlays typep start end)))
       (pcase predicate
         ('< (cl-sort overlays #'< :key #'overlay-start))
