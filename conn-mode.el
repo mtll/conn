@@ -3241,6 +3241,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "S" 'conn-capital-snake-case-region
   "s" 'conn-snake-case-region)
 
+(defvar-keymap conn-join-line-repeat-map
+  :repeat t
+  "J" 'join-line)
+
 (defvar-keymap conn-misc-edit-map
   :prefix 'conn-misc-edit-map
   "y"   'yank-rectangle
@@ -3256,6 +3260,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "v"   'conn-mark-thing
   "d"   'duplicate-dwim
   "j"   'join-line
+  "J"   'join-line
   "i"   'conn-transpose-lines-backward
   ","   'conn-transpose-chars-backward
   "k"   'transpose-lines
