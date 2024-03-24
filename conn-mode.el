@@ -372,6 +372,30 @@ Uses `read-regexp' to read the regexp."
 
 (defvar-local conn--handle-mark nil)
 
+(defun conn-define-thing (thing &rest rest)
+  "Define a new thing.
+
+\(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS)"
+  (unless (or (memq :forward-op rest)
+              (memq :bounds-op rest)
+              (and (memq :end-op rest)
+                   (memq :beg-op rest)))
+    (error "Thing definition requires at least one of: %s, %s, (%s and %s)"
+           :forward-op :bounds-op :beg-op :end-op))
+  (when-let ((forward (plist-get rest :forward-op)))
+    (put thing 'forward-op forward))
+  (when-let ((beg (plist-get rest :beg-op)))
+    (put thing 'beginning-op beg))
+  (when-let ((end (plist-get rest :end-op)))
+    (put thing 'end-op end))
+  (when-let ((bounds (plist-get rest :bounds-op)))
+    (put thing 'bounds-of-thing-at-point bounds))
+  (when-let ((commands (plist-get rest :commands)))
+    (pcase-dolist (`(,handler . ,cmds) (if (listp (car commands))
+                                           commands
+                                         (list commands)))
+      (conn-add-mark-commands cmds (funcall handler thing)))))
+
 (defmacro conn-define-thing-handler (name args &rest rest)
   "Define a thing movement command mark handler constructor.
 
@@ -456,8 +480,6 @@ of the movement command unless `use-region-p'."
      ,(conn-sequential-thing-handler 'sexp))
     ((beginning-of-buffer end-of-buffer)
      ,(conn-individual-thing-handler 'buffer))
-    ((move-end-of-line move-beginning-of-line)
-     ,(conn-individual-thing-handler 'outer-line))
     ((forward-word backward-word)
      ,(conn-sequential-thing-handler 'word))
     ((forward-line conn-backward-line)
@@ -470,8 +492,6 @@ of the movement command unless `use-region-p'."
      ,(conn-sequential-thing-handler 'sentence))
     ((forward-whitespace conn-backward-whitespace)
      ,(conn-sequential-thing-handler 'whitespace))
-    ((conn-end-of-inner-line conn-beginning-of-inner-line)
-     ,(conn-individual-thing-handler 'inner-line))
     ((conn-next-dot conn-previous-dot)
      ,(conn-sequential-thing-handler 'dot))
     ((next-line
@@ -482,8 +502,6 @@ of the movement command unless `use-region-p'."
       forward-whitespace)
      conn-jump-handler))
   "Default conn mark commands and their handlers.")
-(put 'outer-line 'beginning-op 'beginning-of-line)
-(put 'outer-line 'end-op 'end-of-line)
 
 (defun conn--mark-cursor-p (ov)
   (eq (overlay-get ov 'type) 'conn--mark-cursor))
@@ -2786,15 +2804,14 @@ of deleting it."
   (conn--push-ephemeral-mark isearch-other-end))
 
 (defun conn--end-of-inner-line-1 ()
-  (if-let ((cs (and (conn--point-is-in-comment-p)
-                    (save-excursion
-                      (comment-search-backward
-                       (line-beginning-position) t)))))
-      (goto-char cs)
-    (goto-char (line-end-position)))
+  (goto-char (line-end-position))
+  (when-let ((cs (and (conn--point-is-in-comment-p)
+                      (save-excursion
+                        (comment-search-backward
+                         (line-beginning-position) t)))))
+    (goto-char cs))
   (skip-chars-backward " \t" (line-beginning-position))
   (when (bolp) (skip-chars-forward " \t" (line-end-position))))
-(put 'inner-line 'end-op 'conn--end-of-inner-line-1)
 
 (defun conn-end-of-inner-line (&optional N)
   (interactive "P")
@@ -2822,7 +2839,6 @@ of deleting it."
                          (point))))
       (goto-char (line-beginning-position))
       (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
-(put 'inner-line 'beginning-op 'back-to-indentation)
 
 (defun conn-xref-definition-prompt ()
   "`xref-find-definitions' but always prompt."
@@ -3154,6 +3170,25 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   (beginning-of-line N)
   (back-to-indentation)
   (emacs-state))
+
+;;;;; Thing Definitions
+
+(conn-define-thing
+ 'outer-line
+ :beg-op (lambda () (move-beginning-of-line nil))
+ :end-op (lambda () (move-end-of-line nil))
+ :commands '(conn-individual-thing-handler
+             move-beginning-of-line
+             move-end-of-line))
+
+(conn-define-thing
+ 'inner-line
+ :beg-op 'back-to-indentation
+ :end-op 'conn--end-of-inner-line-1
+ :commands '(conn-individual-thing-handler
+             back-to-indentation
+             conn-beginning-of-inner-line
+             conn-end-of-inner-line))
 
 
 ;;;; Keymaps
