@@ -2960,11 +2960,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                      (prefix-numeric-value current-prefix-arg)))
   (if (use-region-p)
       (duplicate-dwim)
-    (let ((end (set-marker (make-marker) (region-end))))
+    (let ((end (set-marker (make-marker) end)))
       (unwind-protect
           (dotimes (_ arg)
-            (conn--duplicate-region-1 (region-beginning)
-                                      (region-end)))
+            (conn--duplicate-region-1 beg end))
         (goto-char end)
         (set-marker end nil)
         (indent-region (region-beginning) (region-end))))))
