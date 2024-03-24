@@ -2169,6 +2169,35 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
+(defun conn-query-replace-region (start end)
+  (interactive (list (region-beginning)
+                     (region-end)))
+  (let* ((from (buffer-substring-no-properties start end))
+         (prompt (concat "Query replace"
+		         (if current-prefix-arg
+		             (if (eq current-prefix-arg '-) " backward" " word")
+		           "")
+		         (if (use-region-p) " in region" "")))
+         (to (query-replace-read-to from prompt nil)))
+    (query-replace from to nil nil nil
+                   (eq current-prefix-arg '-)
+                   (use-region-noncontiguous-p))))
+
+(defun conn-query-replace-regexp-region (start end)
+  (interactive (list (region-beginning)
+                     (region-end)))
+  (let* ((from (regexp-quote (buffer-substring-no-properties start end)))
+         (prompt (concat "Query replace"
+		         (if current-prefix-arg
+		             (if (eq current-prefix-arg '-) " backward" " word")
+		           "")
+		         " regexp"
+		         (if (use-region-p) " in region" "")))
+         (to (query-replace-read-to from prompt t)))
+    (query-replace-regexp from to nil nil nil
+                          (eq current-prefix-arg '-)
+                          (use-region-noncontiguous-p))))
+
 (defun conn-dispatch-text-property (start end &optional reverse)
   "Dot each region between START and END with text property PROP equal to VAL.
 
@@ -3156,6 +3185,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
+  "r"   'conn-query-replace-region
+  "x"   'conn-query-replace-regexp-region
   "b"   'conn-command-at-point-and-mark
   "m"   'conn-macro-at-point-and-mark
   "a c" 'align-current
