@@ -2982,6 +2982,10 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Window Commands
 
+(defcustom conn-other-window-prompt-threshold 4
+  "Number of windows before conn-other-window prompts for window."
+  :type 'integer)
+
 (defun conn--create-window-prompt-overlay (window id)
   (with-current-buffer (window-buffer window)
     (let ((overlay (make-overlay (window-start window)
@@ -2994,21 +2998,23 @@ there's a region, all lines that region covers will be duplicated."
       overlay)))
 
 (defun conn--prompt-for-window (windows)
-  (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
-                                   windows))
-        num)
-    (unwind-protect
-        (progn
-          (if (length> windows 10)
-              (while (and (not (setq num (read-number "Window: ")))
+  (if (length= windows 1)
+      (car windows)
+    (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
+                                     windows))
+          num)
+      (unwind-protect
+          (progn
+            (if (length> windows 10)
+                (while (and (not (setq num (read-number "Window: ")))
+                            (>= num 0)
+                            (length> windows num)))
+              (while (and (not (setq num (- (read-char "Window: ") ?0)))
                           (>= num 0)
-                          (length> windows num)))
-            (while (and (not (setq num (- (read-char "Window: ") ?0)))
-                        (>= num 0)
-                        (length> windows num))))
-          (nth num windows))
-      (dolist (ov overlays)
-        (delete-overlay ov)))))
+                          (length> windows num))))
+            (nth num windows))
+        (dolist (ov overlays)
+          (delete-overlay ov))))))
 
 (defun conn-swap-window-buffers ()
   (interactive)
@@ -3017,24 +3023,23 @@ there's a region, all lines that region covers will be duplicated."
          (other-windows (remove win1 (window-list nil 'no-mini))))
     (pcase (length other-windows)
       (0)
-      (1 (let* ((win2 (car other-windows))
-                (buf2 (window-buffer win2)))
-           (set-window-buffer win1 buf2)
-           (set-window-buffer win2 buf1)
-           (other-window 1)))
       (_ (when-let ((win2 (conn--prompt-for-window other-windows))
                     (buf2 (window-buffer win2)))
            (set-window-buffer win2 buf1)
            (set-window-buffer win1 buf2)
            (select-window win2))))))
 
-(defun conn-goto-window (&optional swap)
+(defun conn-other-window (&optional swap)
   (interactive "P")
   (if swap
       (conn-swap-window-buffers)
-    (when-let ((win (conn--prompt-for-window
-                     (remove (selected-window) (window-list nil 'no-mini)))))
-      (select-window win))))
+    (if-let ((other-windows (remove (selected-window) (window-list nil 'no-mini)))
+             (_ (not (length< other-windows conn-other-window-prompt-threshold)))
+             (win (conn--prompt-for-window
+                   (remove (selected-window) (window-list nil 'no-mini)))))
+        (select-window win)
+      (other-window 1))))
+(put 'conn-other-window :conn-repeat-command t)
 
 ;;;;; Transition Functions
 
@@ -3397,7 +3402,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-3" 'split-window-right
   "C-4" 'conn-C-x-4-keys
   "C-5" 'conn-C-x-5-keys
-  "C-7" 'conn-goto-window
+  "C-7" 'conn-other-window
   "C-8" 'conn-swap-window-buffers
   "C-=" 'balance-windows
   "W"   'widen
@@ -3431,7 +3436,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "n"   'backward-sexp
   "a"   'switch-to-buffer
   "B"   'conn-C-x-t-keys
-  "`"   'other-window
+  "`"   'conn-other-window
   "p"   'conn-register-load
   "s"   'conn-M-s-keys
   "v"   'conn-toggle-mark-command
