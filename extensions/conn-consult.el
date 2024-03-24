@@ -1,5 +1,9 @@
 ;;; conn-consult.el --- Conn consult extension -*- lexical-binding: t -*-
 ;;
+;; Author: David Feller
+;; Version: 0.1
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") consult conn-mode)
+;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation; either version 3, or (at your option)
@@ -12,6 +16,8 @@
 ;;
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
+;;
+;;; Commentary:
 ;;
 ;;; Code:
 
@@ -54,7 +60,8 @@ THING BEG and END are bound in BODY."
       (user-error "No lines"))
     (nreverse candidates)))
 
-(defun conn-consult-thing (&optional initial thing start)
+;;;###autoload
+(defun conn-consult-thing (&optional initial thing)
   "Search for a matching top-level THING."
   (interactive (list nil
                      (intern
@@ -83,24 +90,6 @@ THING BEG and END are bound in BODY."
                        (prog1 isearch-string (isearch-done))))
      :state (consult--location-state candidates))))
 
-(defun conn-consult-page ()
-    "Search for a page."
-    (interactive)
-    (let* ((candidates (consult--slow-operation
-                           "Collecting headings..."
-                         (consult--page-candidates))))
-      (consult--read
-       candidates
-       :prompt "Go to page: "
-       :annotate (consult--line-prefix)
-       :category 'consult-location
-       :sort nil
-       :require-match t
-       :lookup #'consult--line-match
-       :history '(:input consult--line-history)
-       :add-history (thing-at-point 'symbol)
-       :state (consult--location-state candidates))))
-
 (defun conn-dot-consult-location-candidate (cand)
   (let ((marker (car (consult--get-location cand))))
     (with-current-buffer (marker-buffer marker)
@@ -115,36 +104,43 @@ THING BEG and END are bound in BODY."
       (unless (bolp) (beginning-of-line))
       (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
 
+;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
   (consult-ripgrep nil (buffer-substring-no-properties beg end)))
 
+;;;###autoload
 (defun conn-consult-line-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
   (consult-line (buffer-substring-no-properties beg end)))
 
+;;;###autoload
 (defun conn-consult-line-multi-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
   (consult-line-multi nil (buffer-substring-no-properties beg end)))
 
+;;;###autoload
 (defun conn-consult-locate-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
   (consult-locate (buffer-substring-no-properties beg end)))
 
+;;;###autoload
 (defun conn-consult-git-grep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
   (consult-git-grep nil (buffer-substring-no-properties beg end)))
 
+;;;###autoload
 (defun conn-consult-find-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
   (consult-find nil (buffer-substring-no-properties beg end)))
 
+;;;###autoload
 (defvar-keymap conn-consult-region-search-map
   :prefix 'conn-consult-region-search-map
   "o" 'conn-consult-line-region
@@ -158,11 +154,14 @@ THING BEG and END are bound in BODY."
 (keymap-set conn-region-map "g" 'conn-consult-ripgrep-region)
 (keymap-set conn-region-map "h" 'conn-consult-region-search-map)
 (keymap-set conn-mode-map "M-s T" 'conn-consult-thing)
-(keymap-set conn-mode-map "M-s p" 'conn-consult-page)
 
 (provide 'conn-consult)
 
 (with-eval-after-load 'embark
+  (defvar embark-multitarget-actions)
+  (defvar embark-consult-grep-map)
+  (defvar embark-consult-location-map)
+  
   (defun conn-dispatch-grep-candidates (cands)
     (conn--dispatch-on-regions
      (mapcar (lambda (cand)
@@ -183,3 +182,4 @@ THING BEG and END are bound in BODY."
 
   (keymap-set embark-consult-location-map "D" 'conn-dot-consult-location-candidate)
   (keymap-set embark-consult-grep-map "D" 'conn-dot-consult-grep-candidate))
+;;; conn-consult.el ends here

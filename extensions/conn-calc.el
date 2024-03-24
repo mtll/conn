@@ -35,3 +35,4 @@
     (advice-remove 'calc-dispatch 'conn--calc-dispatch-ad)))
 
 (provide 'conn-calc)
+;;; conn-calc.el ends here

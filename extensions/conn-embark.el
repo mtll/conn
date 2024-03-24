@@ -1,4 +1,8 @@
-;;; conn-embark --- Conn embark extension -*- lexical-binding: t -*-
+;;; conn-embark.el --- Conn embark extension -*- lexical-binding: t -*-
+;;
+;; Author: David Feller
+;; Version: 0.1
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") (embark "1.0") conn-mode)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -20,16 +24,23 @@
 (require 'conn-mode)
 (require 'embark)
 
+(defgroup conn-embark nil
+  "Conn-mode states."
+  :prefix "conn-"
+  :group 'conn-mode)
+
 (defcustom embark-alt-default-action-overrides nil
   "`embark-default-action-overrides' for alternate actions."
   :type '(alist :key-type (choice (symbol :tag "Type")
                                   (cons (symbol :tag "Type")
                                         (symbol :tag "Command")))
-                :value-type (function :tag "Default action")))
+                :value-type (function :tag "Default action"))
+  :group 'conn-embark)
 
 (defcustom conn-embark-alt-key "M-RET"
   "Key for embark-alt-dwim."
-  :type 'string)
+  :type 'string
+  :group 'conn-embark)
 
 (defun conn-complete-keys--get-bindings (prefix map)
   (let ((prefix-map (if (= 0 (seq-length prefix))
@@ -76,10 +87,9 @@ If NESTED is non-nil subkeymaps are not flattened."
                                     (key-description key))))))
          (width (cl-loop for (_name _cmd _key desc) in commands
                          maximize (length desc)))
-         (default)
          (candidates
           (cl-loop for item in commands
-                   for (name cmd key desc) = item
+                   for (name cmd _key desc) = item
                    for desc-rep =
                    (concat
                     (propertize desc 'face 'embark-keybinding)
@@ -112,14 +122,17 @@ If NESTED is non-nil subkeymaps are not flattened."
   "M-j"
   "Keys bound in `conn-complete-keys' to toggle between tree and flat display.
 Value must satisfy `key-valid-p'."
-  :type 'string)
+  :type 'string
+  :group 'conn-embark)
 
+;;;###autoload
 (defun conn-complete-keys (prefix map)
-  "Complete key sequence beginning with current keys using `completing-read'.
-When called via \\[conn-complete-keys] and with a prefix argument restrict completion
-to key bindings defined by `conn-mode'. `conn-complete-keys-toggle-display-keys' toggles
-between a tree view and the embark flat view. In the default tree view DEL will navigate
-up out of a keymap."
+  "Complete key sequence beginning with current keys using
+`completing-read'.  When called via \\[conn-complete-keys] and with a
+prefix argument restrict completion to key bindings defined by
+`conn-mode'. `conn-complete-keys-toggle-display-keys' toggles between
+a tree view and the embark flat view. In the default tree view DEL
+will navigate up out of a keymap."
   (interactive
    (let* ((prefix (seq-subseq (this-command-keys-vector) 0 -1)))
      (list prefix
@@ -193,6 +206,9 @@ up out of a keymap."
               (guard (keymapp cmd)))
          (setq prefix (vconcat prefix key)))))))
 
+(defvar conn-complete-keys--prefix-cmd-backup nil)
+
+;;;###autoload (autoload 'conn-complete-keys-prefix-help-command "conn-embark" nil t)
 (conn-define-extension conn-complete-keys-prefix-help-command
   (if conn-complete-keys-prefix-help-command
       (progn
@@ -209,6 +225,7 @@ up out of a keymap."
       (alist-get t embark-alt-default-action-overrides)
       (keymap-lookup (embark--raw-action-keymap type) conn-embark-alt-key)))
 
+;;;###autoload
 (defun conn-embark-alt-dwim (&optional arg)
   "alternate `embark-dwim'."
   (interactive "P")
@@ -245,6 +262,7 @@ up out of a keymap."
 (defvar conn-embark-alt-identifier-map)
 (defvar conn-embark-alt-heading-map)
 
+;;;###autoload (autoload 'conn-embark-dwim-keys "conn-embark" nil t)
 (conn-define-extension conn-embark-dwim-keys
   (if conn-embark-dwim-keys
       (progn
@@ -281,3 +299,4 @@ up out of a keymap."
              '(conn-change-pair embark--ignore-target))
 
 (provide 'conn-embark)
+;;; conn-embark.el ends here

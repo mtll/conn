@@ -1,4 +1,10 @@
-;;; conn-mode.el --- Conn avy extension -*- lexical-binding: t -*-
+;;; conn-avy.el --- Conn avy extension -*- lexical-binding: t -*-
+;;
+;; Filename: conn-avy.el
+;; Description: Avy extensions for Conn Mode
+;; Author: David Feller
+;; Package-Version: 0.1
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") avy conn-mode)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -18,6 +24,7 @@
 (require 'avy)
 (require 'conn-mode)
 
+;;;###autoload
 (defun conn-avy-goto-dot ()
   (interactive)
   (let ((avy-all-windows t))
@@ -37,3 +44,4 @@
        dots))))
 
 (provide 'conn-avy)
+;;; conn-avy.el ends here

@@ -1,5 +1,11 @@
 ;;; conn-isearch+.el --- Conn isearch+ extension -*- lexical-binding: t -*-
 ;;
+;; Filename: conn-isearch+.el
+;; Description: Isearch+ extensions for Conn Mode
+;; Author: David Feller
+;; Package-Version: 0.1
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") isearch+ conn-mode)
+;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation; either version 3, or (at your option)
@@ -26,6 +32,7 @@
             isearchp-current-filter-preds-alist
             :test #'equal)
 
+;;;###autoload
 (defun conn-isearch-in-dot-toggle ()
   "Toggle restricting search to dots."
   (interactive)
@@ -51,3 +58,4 @@
 ;; (keymap-set isearchp-filter-map "r" 'isearchp-add-regexp-filter-predicate)
 
 (provide 'conn-isearch+)
+;;; conn-isearch+.el ends here

@@ -1,4 +1,8 @@
-;;; conn-expreg.el -*- lexical-binding: t -*-
+;;; conn-expreg.el --- Expreg extension for Conn Mode -*- lexical-binding: t -*-
+;;
+;; Author: David Feller
+;; Version: 0.1
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") expreg conn-mode)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -18,14 +22,23 @@
 (require 'conn-mode)
 (require 'expreg)
 
+(defgroup conn-expreg nil
+  "Conn-mode states."
+  :prefix "conn-"
+  :group 'conn-mode)
+
 (defcustom conn-expreg-always-use-region-states
   '(conn-state dot-state)
-  "States in which to expand from the current point and mark.")
+  "States in which to expand from the current point and mark."
+  :type '(list symbol)
+  :group 'conn-expreg)
 
 (defcustom conn-expreg-leave-region-active
   t
   "Whether to leave the region active after expreg commands when the
-current state is in `conn-expreg-always-use-region-states'.")
+current state is in `conn-expreg-always-use-region-states'."
+  :type 'boolean
+  :group 'conn-expreg)
 
 (define-keymap
   :keymap conn-common-map
@@ -43,6 +56,7 @@ current state is in `conn-expreg-always-use-region-states'.")
       (when (and always-use-region (not conn-expreg-leave-region-active))
         (deactivate-mark)))))
 
+;;;###autoload (autoload 'conn-expreg-always-use-region "conn-expreg" nil t)
 (conn-define-extension conn-expreg-always-use-region
   (if conn-expreg-always-use-region
       (progn
@@ -58,3 +72,4 @@ current state is in `conn-expreg-always-use-region-states'.")
     (put 'expreg-expand 'repeat-check-key nil)))
 
 (provide 'conn-expreg)
+;;; conn-expreg.el ends here
