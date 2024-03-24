@@ -195,6 +195,9 @@ Each element may be either a symbol or a list of the form
 
 (defvar conn-isearch-recursive-edit-p nil)
 
+(defvar conn-dot-macro-dispatch-p nil
+  "Non-nil during dot macro dispatch.")
+
 ;;;;; Command Histories
 
 (defvar conn-thing-history nil)
@@ -206,19 +209,6 @@ Each element may be either a symbol or a list of the form
 
 
 ;;;; Utilities
-
-(defun conn--thread-1 (needle first &rest forms)
-  (if (car forms)
-      `((setq ,needle ,first)
-        ,@(apply #'conn--thread-1 needle forms))
-    (list first)))
-
-(defmacro conn--thread (needle form &rest forms)
-  (declare (indent 2))
-  (if forms
-      `(let ((,needle ,form))
-         ,@(apply #'conn--thread-1 needle forms))
-    form))
 
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
@@ -757,7 +747,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
         (when (and last-kbd-macro (= (length last-kbd-macro) 0))
           (setq last-kbd-macro nil)
           (while (and (null last-kbd-macro) kmacro-ring)
-	    (kmacro-pop-ring1))
+            (kmacro-pop-ring1))
           (user-error "Ignore empty macro"))
         (when after (funcall after beg end)))))
   (setq conn-last-dispatch-macro last-kbd-macro))
@@ -1549,6 +1539,83 @@ org-tree-edit state."
          (put ',name :conn-feature-function body-sym))
 
        ',name)))
+
+;;;;; Repeat Extension
+
+
+(defcustom conn-repeating-cursor-color
+  "#a60000"
+  "Cursor color while repeat map is active."
+  :type 'color
+  :group 'conn-mode)
+
+(defun conn--repeat-get-map-ad ()
+  (when-let (repeat-mode
+             (prop (repeat--command-property :conn-repeat-command))
+             (m (or (eq prop t)
+                    (eq prop conn-current-state))))
+    (define-keymap (single-key-description last-command-event) this-command)))
+
+(defun conn-set-repeat-command (command &optional state)
+  "Make COMMAND repeatable in STATE with whatever key called it.
+
+If STATE is nil make COMMAND always repeat."
+  (put command :conn-repeat-command (or state t)))
+
+(defun conn-unset-repeat-command (command)
+  "Remove repeat property from COMMAND."
+  (put command :conn-repeat-command nil))
+
+(mapc #'conn-set-repeat-command
+      '(transpose-words
+        transpose-sexps
+        transpose-chars
+        transpose-lines
+        transpose-paragraphs
+        conn-transpose-words-backward
+        conn-transpose-sexps-backward
+        conn-transpose-chars-backward
+        conn-transpose-lines-backward
+        conn-transpose-paragraphs-backward
+        conn-set-window-dedicated
+        previous-error
+        next-error
+        pop-global-mark
+        conn-region-case-dwim
+        conn-remove-dot-backward
+        conn-remove-dot-forward
+        duplicate-line
+        duplicate-dwim
+        conn-duplicate-region
+        conn-delete-pair
+        bury-buffer
+        conn-duplicate-region
+        conn-duplicate-and-comment-region
+        conn-other-window))
+
+(conn-define-extension conn-repeatable-commands
+  (if conn-repeatable-commands
+      (advice-add 'repeat-get-map :after-until 'conn--repeat-get-map-ad)
+    (advice-remove 'repeat-get-map 'conn--repeat-get-map-ad)))
+
+(let (original-cursor-color)
+  (defun conn--repeat-cursor-message-ad (map)
+    (when (and map (not original-cursor-color))
+      (setq original-cursor-color (face-background 'cursor)))
+    (modify-all-frames-parameters
+     `((cursor-color . ,(if map
+                            conn-repeating-cursor-color
+                          original-cursor-color))))
+    (unless map (setq original-cursor-color nil))))
+
+(conn-define-extension conn-repeat-cursor
+  "Change the cursor color when a repeat map is active."
+  (if conn-repeat-cursor
+      (add-function :after repeat-echo-function 'conn--repeat-cursor-message-ad)
+    (remove-function repeat-echo-function 'conn--repeat-cursor-message-ad)))
+
+(conn-repeatable-commands t)
+(conn-repeat-cursor t)
 
 
 ;;;; Commands
@@ -3756,11 +3823,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (completion-in-region-mode -1))
   (add-hook 'conn-transition-hook 'conn--exit-completion))
 
-(with-eval-after-load 'repeat
-  (require 'conn-repeat)
-  (conn-repeatable-commands t)
-  (conn-repeat-cursor t))
-
 (with-eval-after-load 'isearch+
   (require 'conn-isearch+))
 
@@ -3849,3 +3911,4 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (with-eval-after-load 'expreg
   (require 'conn-expreg))
+;;; conn-mode.el ends here
