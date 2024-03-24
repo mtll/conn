@@ -157,6 +157,10 @@ Defines default STATE for buffers matching REGEXP."
   :type '(repeat symbol)
   :group 'conn-marks)
 
+(defcustom conn-other-window-prompt-threshold 4
+  "Number of windows before conn-other-window prompts for window."
+  :type 'integer)
+
 ;;;;; Internal Vars
 
 (defvar conn-states nil)
@@ -2981,10 +2985,6 @@ there's a region, all lines that region covers will be duplicated."
                       transpose-chars))
 
 ;;;;; Window Commands
-
-(defcustom conn-other-window-prompt-threshold 4
-  "Number of windows before conn-other-window prompts for window."
-  :type 'integer)
 
 (defun conn--create-window-prompt-overlay (window id)
   (with-current-buffer (window-buffer window)
