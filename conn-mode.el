@@ -722,7 +722,7 @@ first iteration of dispatch.
                 (conn--push-ephemeral-mark end)
                 (kmacro-call-macro nil nil nil conn-last-dispatch-macro))
             (when after (funcall after beg end)))
-        (user-error "Error in macro dispatch: %s" err)))))
+        (user-error (message "Error in macro dispatch: %s" err) nil)))))
 
 
 ;;;; Dots
