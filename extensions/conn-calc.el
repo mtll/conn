@@ -1,5 +1,9 @@
 ;;; conn-calc.el --- Conn calc shim -*- lexical-binding: t -*-
 ;;
+;; Author: David Feller
+;; Version: 0.1
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") conn-mode)
+;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation; either version 3, or (at your option)
