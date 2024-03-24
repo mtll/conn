@@ -432,15 +432,16 @@ THING is always returned.
         (ss (gensym "ssymbol"))
         (thing (car args)))
     `(progn
+       (defvar ,name)
        (if (boundp ',name)
            (conn--thread needle
-             (pcase-lambda  (`(,,ts . ,,ss))
-               (let ((,thing ,ts))
-                 (fset ,ss ,lambda-form)
-                 (cons ,ss ,thing)))
+               (pcase-lambda  (`(,,ts . ,,ss))
+                 (let ((,thing ,ts))
+                   (fset ,ss ,lambda-form)
+                   (cons ,ss ,thing)))
              (mapcar needle ,name)
              (setf ,name needle))
-         (defvar ,name nil))
+         (setq ,name nil))
 
        (defun ,name ,args
          ,docstring
@@ -3841,8 +3842,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   (require 'conn-consult))
 
 (with-eval-after-load 'calc
-  (require 'conn-calc)
-  (conn-calc-shim t))
+  (require 'conn-calc))
 
 (with-eval-after-load 'org
   (defvar org-mode-map)
