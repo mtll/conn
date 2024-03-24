@@ -4,7 +4,7 @@
 ;; Description: A modal keybinding mode and keyboard macro enhancement
 ;; Author: David Feller
 ;; Package-Version: 0.1
-;; Package-Requires: ((emacs "28.1") (compat "29.1.4.4"))
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4"))
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -42,8 +42,6 @@
 
 
 ;;;; Declarations
-
-(declare-function conn--sorted-overlays "conn-mode")
 
 (defvar conn-mode nil)
 (defvar conn-local-mode)
@@ -793,24 +791,14 @@ first iteration of dispatch.
 
 ;;;;; Dot Functions
 
-(if (version<= "29" emacs-version)
-    (defun conn--sorted-overlays (typep &optional predicate start end)
-      "Get all dots between START and END sorted by starting position."
-      (unless predicate (setq predicate #'<))
-      (let ((overlays (conn--all-overlays typep start end)))
-        (pcase predicate
-          ('< overlays)
-          ('> (nreverse overlays))
-          (_ (sort overlays predicate)))))
-
-  (defun conn--sorted-overlays (typep &optional predicate start end)
-    "Get all dots between START and END sorted by starting position."
-    (unless predicate (setq predicate #'<))
-    (let ((overlays (conn--all-overlays typep start end)))
-      (pcase predicate
-        ('< (cl-sort overlays #'< :key #'overlay-start))
-        ('> (cl-sort overlays #'> :key #'overlay-start))
-        (_  (cl-sort overlays predicate))))))
+(defun conn--sorted-overlays (typep &optional predicate start end)
+  "Get all dots between START and END sorted by starting position."
+  (unless predicate (setq predicate #'<))
+  (let ((overlays (conn--all-overlays typep start end)))
+    (pcase predicate
+      ('< overlays)
+      ('> (nreverse overlays))
+      (_ (sort overlays predicate)))))
 
 (defun conn--clear-overlays ()
   "Delete all conn overlays."
