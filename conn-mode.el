@@ -3589,7 +3589,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
                     slime-xref-mode
                     calc-mode
                     calc-trail-mode
-                    view-mode)
+                    view-mode
+                    special-mode)
                t)
   (progn
     (conn--setup-keymaps)
