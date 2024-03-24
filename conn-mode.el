@@ -312,6 +312,19 @@ Uses `read-regexp' to read the regexp."
   (if (use-region-p) (region-end) (point-max)))
 
 (eval-and-compile
+  (defun conn--thread-1 (needle first &rest forms)
+    (if (car forms)
+        `((setq ,needle ,first)
+          ,@(apply #'conn--thread-1 needle forms))
+      (list first)))
+
+  (defmacro conn--thread (needle form &rest forms)
+    (declare (indent 2))
+    (if forms
+        `(let ((,needle ,form))
+           ,@(apply #'conn--thread-1 needle forms))
+      form))
+
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (conn--thread needle
