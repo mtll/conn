@@ -2985,7 +2985,10 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-region-dispatch ()
   (interactive)
-  (conn--dispatch-on-regions (region-bounds)))
+  (let ((rect rectangle-mark-mode))
+    (unwind-protect
+        (conn--dispatch-on-regions (region-bounds))
+      (when rect (rectangle-mark-mode 1)))))
 
 (defun conn-dots-dispatch (buffers)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
