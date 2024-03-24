@@ -2237,19 +2237,28 @@ for a dot register to use for dispatch."
     (conn--dispatch-on-regions (list (cons (point) (point))
                                      (cons mark mark)))))
 
-(defun conn-scroll-down ()
+(defvar-keymap conn-scroll-repeat-map
+  :repeat t
+  "SPC" 'conn-scroll-up
+  "DEL" 'conn-scroll-down)
+
+(defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position."
-  (interactive)
+  (interactive "P")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
-    (scroll-down)))
+    (scroll-down arg)))
+(put 'conn-scroll-down 'repeat-check-key 'no)
+(put 'conn-scroll-down 'repeat-map 'conn-scroll-repeat-map)
 
-(defun conn-scroll-up ()
+(defun conn-scroll-up (&optional arg)
   "`scroll-up-command' leaving point at the same relative window position."
-  (interactive)
+  (interactive "P")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
-    (scroll-up)))
+    (scroll-up arg)))
+(put 'conn-scroll-up 'repeat-check-key 'no)
+(put 'conn-scroll-up 'repeat-map 'conn-scroll-repeat-map)
 
 (defun conn-open-line-and-indent (N)
   "Insert a newline, leave point before it and indent the new line.
@@ -3526,6 +3535,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "-" 'conn-window-resize-map)
 
 (defvar-keymap conn-mode-map
+  "C-v"     'conn-scroll-up
+  "M-v"     'conn-scroll-down
   "M-RET"   'conn-open-line-and-indent
   "C-x /"   'tab-bar-history-back
   "C-x ?"   'tab-bar-history-forward
