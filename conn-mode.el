@@ -1060,7 +1060,7 @@ when `use-region-p' is non-nil."
                                       ;; conn--local-maps
                                       conn--aux-maps
                                       conn--state-maps)))
-        (conn-mode nil))
+        (conn-local-mode nil))
     (keymap-lookup nil binding t)))
 
 (defun conn--aux-map-timer-func ()
@@ -3647,9 +3647,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "?" 'tab-bar-history-forward
   "-" 'conn-window-resize-map)
 
-(defvar-keymap conn-mode-map
+(defvar-keymap conn-local-map
   "C-v"     'conn-scroll-up
-  "M-v"     'conn-scroll-down
+  "M-v"     'conn-scroll-down)
+
+(defvar-keymap conn-global-map
   "M-RET"   'conn-open-line-and-indent
   "C-x /"   'tab-bar-history-back
   "C-x ?"   'tab-bar-history-forward
@@ -3721,7 +3723,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :keymap conn-mode-map
+  :keymap conn-local-map
   :lighter (:eval conn-lighter)
   (if conn-local-mode
       (progn
@@ -3773,6 +3775,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn--initialize-buffer
+  :keymap conn-global-map
   :group 'conn-mode
   :predicate '(occur-mode
                grep-mode

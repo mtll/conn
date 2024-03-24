@@ -144,7 +144,7 @@ will navigate up out of a keymap."
                                          conn--local-maps
                                          conn--aux-maps
                                          conn--state-maps
-                                         conn-mode-map)))
+                                         conn-global-map)))
              (make-composed-keymap (current-active-maps t))))))
   (let* ((tree (lambda ()
                  (interactive)
@@ -288,7 +288,7 @@ will navigate up out of a keymap."
       (setf (alist-get thing embark-keymap-alist)
             (remq map (alist-get thing embark-keymap-alist))))))
 
-(keymap-set conn-mode-map "M-S-<iso-lefttab>" 'conn-complete-keys)
+(keymap-set conn-global-map "M-S-<iso-lefttab>" 'conn-complete-keys)
 
 (setf (alist-get 'conn-replace-region-substring embark-target-injection-hooks)
       (list #'embark--ignore-target))
