@@ -2892,7 +2892,8 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
             (conn--duplicate-region-1 (region-beginning)
                                       (region-end)))
         (goto-char end)
-        (set-marker end nil)))))
+        (set-marker end nil)
+        (indent-region (region-beginning) (region-end))))))
 
 (defun conn-duplicate-and-comment-region (beg end &optional arg)
   "Duplicates the current line or region ARG times.
