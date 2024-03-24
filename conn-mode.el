@@ -693,37 +693,35 @@ first iteration of dispatch.
   "Perform first iteration of macro dispatch."
   (let ((mark-ring mark-ring))
     (conn-with-saved-state
+      (goto-char beg)
+      (conn--push-ephemeral-mark end)
+      (pulse-momentary-highlight-region (region-beginning)
+                                        (region-end)
+                                        'conn-dot-face)
+      (when before (funcall before beg end))
+      (kmacro-start-macro nil)
       (unwind-protect
-          (progn
-            (when before (funcall before beg end))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (pulse-momentary-highlight-region (region-beginning)
-                                              (region-end)
-                                              'conn-dot-face)
-            (kmacro-start-macro nil)
-            (unwind-protect
-                (recursive-edit)
-              (if defining-kbd-macro
-                  (kmacro-end-macro nil)
-                (user-error "No keyboard macro defined.")))
-            (setq conn-last-dispatch-macro last-kbd-macro))
-        (when after (funcall after beg end))))
-    (unless conn-last-dispatch-macro
-      (user-error "A keyboard macro was not defined."))))
+          (recursive-edit)
+        (if defining-kbd-macro
+            (kmacro-end-macro nil)
+          (user-error "No keyboard macro defined."))
+        (when after (funcall after beg end)))))
+  (setq conn-last-dispatch-macro last-kbd-macro)
+  (unless conn-last-dispatch-macro
+    (user-error "A keyboard macro was not defined.")))
 
 (cl-defmethod conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
   "Perform remaining iterations of macro dispatch."
   (let ((mark-ring mark-ring))
     (conn-with-saved-state
       (condition-case err
-          (unwind-protect
-              (progn
-                (when before (funcall before beg end))
-                (goto-char beg)
-                (conn--push-ephemeral-mark end)
-                (kmacro-call-macro nil nil nil conn-last-dispatch-macro))
-            (when after (funcall after beg end)))
+          (progn
+            (goto-char beg)
+            (conn--push-ephemeral-mark end)
+            (when before (funcall before beg end))
+            (unwind-protect
+                (kmacro-call-macro nil nil nil conn-last-dispatch-macro)
+              (when after (funcall after beg end))))
         (user-error (message "Error in macro dispatch: %s" err) nil)))))
 
 
