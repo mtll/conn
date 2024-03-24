@@ -147,6 +147,10 @@ Defines default STATE for buffers matching REGEXP."
   "Face for mark."
   :group 'conn-marks)
 
+(defface conn-window-prompt-face
+  '((t (:height 5.0 :foreground "#d00000")))
+  "Face for conn window prompt overlay.")
+
 (defcustom conn-ephemeral-mark-states
   nil
   "States in which ephemeral marks should be used."
@@ -2976,6 +2980,61 @@ there's a region, all lines that region covers will be duplicated."
                       transpose-paragraphs
                       transpose-chars))
 
+;;;;; Window Commands
+
+(defun conn--create-window-prompt-overlay (window id)
+  (with-current-buffer (window-buffer window)
+    (let ((overlay (make-overlay (window-start window)
+                                 (window-end window))))
+      (overlay-put overlay 'face 'shadow)
+      (overlay-put overlay 'window window)
+      (overlay-put overlay 'before-string
+                   (propertize (number-to-string id)
+                               'face 'conn-window-prompt-face))
+      overlay)))
+
+(defun conn--prompt-for-window (windows)
+  (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
+                                   windows))
+        num)
+    (unwind-protect
+        (progn
+          (if (length> windows 10)
+              (while (and (not (setq num (read-number "Window: ")))
+                          (>= num 0)
+                          (length> windows num)))
+            (while (and (not (setq num (- (read-char "Window: ") ?0)))
+                        (>= num 0)
+                        (length> windows num))))
+          (nth num windows))
+      (dolist (ov overlays)
+        (delete-overlay ov)))))
+
+(defun conn-swap-window-buffers ()
+  (interactive)
+  (let* ((win1 (selected-window))
+         (buf1 (window-buffer win1))
+         (other-windows (remove win1 (window-list nil 'no-mini))))
+    (pcase (length other-windows)
+      (0)
+      (1 (let ((buf2 (window-buffer (car other-windows))))
+           (set-window-buffer win1 buf2)
+           (set-window-buffer win2 buf1)
+           (other-window 1)))
+      (_ (when-let ((win2 (conn--prompt-for-window other-windows))
+                    (buf2 (window-buffer win2)))
+           (set-window-buffer win2 buf1)
+           (set-window-buffer win1 buf2)
+           (select-window win2))))))
+
+(defun conn-goto-window (&optional swap)
+  (interactive "P")
+  (if swap
+      (conn-swap-window-buffers)
+    (when-let ((win (conn--prompt-for-window
+                     (remove (selected-window) (window-list nil 'no-mini)))))
+      (select-window win))))
+
 ;;;;; Transition Functions
 
 (defun view-state-quit ()
@@ -3337,6 +3396,9 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-3" 'split-window-right
   "C-4" 'conn-C-x-4-keys
   "C-5" 'conn-C-x-5-keys
+  "C-7" 'conn-goto-window
+  "C-8" 'conn-swap-window-buffers
+  "C-=" 'balance-windows
   "W"   'widen
   "C"   'conn-copy-region
   "R"   'indent-relative
