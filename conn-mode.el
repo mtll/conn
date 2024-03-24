@@ -404,7 +404,7 @@ THING is always returned.
                (fset ,sym ,lambda-form)
                (setf (alist-get ,thing ,name) ,sym)))))))
 
-(conn-define-thing-handler conn-continuous-thing-handler (thing)
+(conn-define-thing-handler conn-sequential-thing-handler (thing)
   "Return a continuous mark handler for THING.
 If one has already been created return it, otherwise create a new one.
 Continuous handlers will mark all THINGs when moving over multiple THINGs
@@ -422,7 +422,7 @@ at once unless `region-active-p'."
                        (lambda () (forward-thing thing (- dir)))))
           (conn--push-ephemeral-mark))))))
 
-(conn-define-thing-handler conn-discrete-thing-handler (thing)
+(conn-define-thing-handler conn-individual-thing-handler (thing)
   "Return a discrete mark handler for THING.
 If one has already been created return it, otherwise create a new one.
 Discrete handlers will only mark the last THING when moving over multiple
@@ -449,27 +449,27 @@ of the movement command unless `region-active-p'."
 
 (defvar conn--thing-mark-commands
   `(((forward-sexp backward-sexp)
-     ,(conn-continuous-thing-handler 'sexp))
+     ,(conn-sequential-thing-handler 'sexp))
     ((beginning-of-buffer end-of-buffer)
-     ,(conn-discrete-thing-handler 'buffer))
+     ,(conn-individual-thing-handler 'buffer))
     ((move-end-of-line move-beginning-of-line)
-     ,(conn-discrete-thing-handler 'outer-line))
+     ,(conn-individual-thing-handler 'outer-line))
     ((forward-word backward-word)
-     ,(conn-continuous-thing-handler 'word))
+     ,(conn-sequential-thing-handler 'word))
     ((forward-line conn-backward-line)
-     ,(conn-continuous-thing-handler 'line))
+     ,(conn-sequential-thing-handler 'line))
     ((beginning-of-defun end-of-defun)
-     ,(conn-continuous-thing-handler 'defun))
+     ,(conn-sequential-thing-handler 'defun))
     ((forward-paragraph backward-paragraph)
-     ,(conn-continuous-thing-handler 'paragraph))
+     ,(conn-sequential-thing-handler 'paragraph))
     ((forward-sentence backward-sentence)
-     ,(conn-continuous-thing-handler 'sentence))
+     ,(conn-sequential-thing-handler 'sentence))
     ((forward-whitespace conn-backward-whitespace)
-     ,(conn-continuous-thing-handler 'whitespace))
+     ,(conn-sequential-thing-handler 'whitespace))
     ((conn-end-of-inner-line conn-beginning-of-inner-line)
-     ,(conn-discrete-thing-handler 'inner-line))
+     ,(conn-individual-thing-handler 'inner-line))
     ((conn-next-dot conn-previous-dot)
-     ,(conn-continuous-thing-handler 'dot))
+     ,(conn-sequential-thing-handler 'dot))
     ((next-line
       previous-line
       conn-back-to-indentation-or-beginning
@@ -3716,7 +3716,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   (defvar org-mode-map)
   (conn-add-mark-commands '(org-forward-paragraph
                             org-backward-paragraph)
-                          (conn-continuous-thing-handler 'org-paragraph))
+                          (conn-sequential-thing-handler 'org-paragraph))
   (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
   (keymap-set org-mode-map "<remap> <view-state>" 'org-tree-edit-state)
@@ -3761,7 +3761,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
                             paredit-backward
                             paredit-forward-up
                             paredit-backward-up)
-                          (conn-continuous-thing-handler 'sexp)))
+                          (conn-sequential-thing-handler 'sexp)))
 
 (with-eval-after-load 'zones
   (defvar zz-add-zone-anyway-p)
