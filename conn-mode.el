@@ -1048,14 +1048,15 @@ when `use-region-p' is non-nil."
 
 (defun conn--setup-aux-maps (&optional buffer)
   "Setup conn aux maps for state in BUFFER."
-  (with-current-buffer (or buffer (current-buffer))
-    (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                         (make-sparse-keymap))))
-      (dolist (remapping conn--aux-bindings)
-        (when-let ((to-keys (where-is-internal remapping))
-                   (def (conn--lookup-binding (symbol-value remapping))))
-          (dolist (key to-keys)
-            (define-key aux-map key def)))))))
+  (unless (or defining-kbd-macro executing-kbd-macro)
+    (with-current-buffer (or buffer (current-buffer))
+      (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
+                           (make-sparse-keymap))))
+        (dolist (remapping conn--aux-bindings)
+          (when-let ((to-keys (where-is-internal remapping))
+                     (def (conn--lookup-binding (symbol-value remapping))))
+            (dolist (key to-keys)
+              (define-key aux-map key def))))))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
