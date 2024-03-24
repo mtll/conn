@@ -179,6 +179,9 @@ Each element may be either a symbol or a list of the form
 (defvar-local conn-previous-state nil
   "Previous conn state for buffer.")
 
+(defvar conn-this-thing-handler nil)
+(defvar conn-this-thing-start nil)
+
 (defvar conn--state-maps nil)
 (defvar-local conn--aux-maps nil)
 (defvar-local conn--local-maps nil)
@@ -542,13 +545,16 @@ to determine if mark cursor should be hidden in buffer."
 (defun conn--mark-pre-command-hook ()
   (if-let ((_ (memq conn-current-state conn-ephemeral-mark-states))
            (handler (conn--command-property :conn-mark-handler)))
-      (setq conn--handle-mark (list handler (point)))
-    (setq conn--handle-mark nil)))
+      (setq conn-this-thing-handler handler
+            conn-this-thing-start (point))
+    (setq conn-this-thing-handler nil
+          conn-this-thing-start nil)))
 (put 'conn--mark-pre-command-hook 'permanent-local-hook t)
 
 (defun conn--mark-post-command-hook ()
   (with-demoted-errors "error marking thing: %s"
-    (if conn--handle-mark (apply conn--handle-mark))))
+    (when conn-this-thing-handler
+      (funcall conn-this-thing-handler conn-this-thing-start))))
 (put 'conn--mark-post-command-hook 'permanent-local-hook t)
 
 (defun conn--buffer-bounds ()
@@ -2778,47 +2784,44 @@ of deleting it."
   (isearch-exit)
   (conn--push-ephemeral-mark isearch-other-end))
 
-(defun conn-end-of-inner-line (&optional N)
-  (interactive "p")
-  (unless N (setq N 1))
-  (let ((pt (point)))
-    (end-of-line (if (< N 0) (1+ N) N))
-    (while (and (not (eobp))
-                (and (eolp) (bolp)))
-      (end-of-line (if (< N 0) 0 2)))
-    (when-let ((cs (and (conn--point-is-in-comment-p)
-                        (save-excursion
-                          (comment-search-backward
-                           (line-beginning-position) t)))))
+(defun conn--end-of-inner-line-1 ()
+  (if-let ((cs (and (conn--point-is-in-comment-p)
+                    (save-excursion
+                      (comment-search-backward
+                       (line-beginning-position) t)))))
       (goto-char cs)
-      (skip-chars-backward " \t" (line-beginning-position))
-      (when (bolp)
-        (skip-chars-forward " \t" (line-end-position))))
-    (when (and (called-interactively-p 'any)
-               (= pt (point)))
-      (forward-line)
-      (conn-end-of-inner-line))))
-(put 'inner-line 'end-op 'conn-end-of-inner-line)
-(put 'inner-line 'forward-op 'conn-end-of-inner-line)
+    (goto-char (line-end-position)))
+  (skip-chars-backward " \t" (line-beginning-position))
+  (when (bolp) (skip-chars-forward " \t" (line-end-position))))
+(put 'inner-line 'end-op 'conn--end-of-inner-line-1)
+
+(defun conn-end-of-inner-line (&optional N)
+  (interactive "P")
+  (let ((point (point))
+        (mark (mark t)))
+    (when N (forward-line N))
+    (conn--end-of-inner-line-1)
+    (when (and (= point (point))
+               (= mark (save-excursion
+                         (back-to-indentation)
+                         (point))))
+      (goto-char (line-end-position))
+      (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
 
 (defun conn-beginning-of-inner-line (&optional N)
   "Go to first non-whitespace character in line."
-  (interactive "p")
-  (unless N (setq N 1))
-  (let ((pt (point)))
+  (interactive "P")
+  (let ((point (point))
+        (mark (mark t)))
+    (when N (forward-line (- N)))
     (back-to-indentation)
-    (unless (and (called-interactively-p 'any)
-                 (= pt (point)))
-      (cl-decf N (cl-signum N)))
-    (when (> N 0)
-      (setq pt (point))
-      (forward-line (- N))
-      (back-to-indentation)
-      (while (= (pos-eol) (pos-bol))
-        (forward-line (- (cl-signum N)))
-        (back-to-indentation))
-      (back-to-indentation))))
-(put 'inner-line 'beginning-op 'conn-beginning-of-inner-line)
+    (when (and (= point (point))
+               (= mark (save-excursion
+                         (conn--end-of-inner-line-1)
+                         (point))))
+      (goto-char (line-beginning-position))
+      (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
+(put 'inner-line 'beginning-op 'back-to-indentation)
 
 (defun conn-xref-definition-prompt ()
   "`xref-find-definitions' but always prompt."
