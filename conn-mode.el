@@ -37,8 +37,7 @@
 (require 'hi-lock)
 (require 'kmacro)
 (eval-when-compile
-  (require 'cl-lib)
-  (require 'subr-x))
+  (require 'cl-lib))
 
 
 ;;;; Declarations
@@ -2808,12 +2807,12 @@ If ARG is a numeric prefix argument kill region to a register."
         ((consp arg)
          (conn-delete-region-keys))
         ((numberp arg)
-         (thread-first
+         (conn--thread needle
            (concat "Kill "
                    (if rectangle-mark-mode "Rectangle " " ")
                    "to register:")
-           (register-read-with-preview)
-           (copy-to-register nil nil t t)))
+           (register-read-with-preview needle)
+           (copy-to-register needle nil nil t t)))
         (t (conn-kill-region-keys))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
