@@ -595,7 +595,7 @@ See `conn--dispatch-on-regions'.")
 
 (defvar conn-last-dispatch-macro nil)
 
-(defun conn--canonicalize-regions (regions)
+(defun conn--canonicalize-regions (regions &optional reverse)
   "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
 
 Transform a flat list of elements of the form (MARKER-OR-INT . MARKER-OR-INT)
@@ -609,22 +609,11 @@ into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
                     (marker-buffer beg))
                   needle)
     (mapcar (pcase-lambda (`(,key . ,val))
-              (cons key (sort val (lambda (a b) (> (car a) (car b))))))
-            needle)
-    (if-let ((curr (seq-find (lambda (c)
-                               (eq (car c) (current-buffer)))
-                             needle))
-             (first (conn--minimize
-                     (pcase-lambda (`(,beg . ,end))
-                       (min (abs (- beg (point)))
-                            (abs (- end (point)))))
-                     (cdr curr)))
-             (rest (remq first (cdr curr))))
-        (cons (cons (car curr) (cons first rest))
-              (seq-remove (lambda (c)
-                            (eq (car c) (current-buffer)))
-                          needle))
-      needle)))
+              (cons key
+                    (if reverse
+                        (sort val (lambda (a b) (> (car a) (car b))))
+                      (sort val (lambda (a b) (< (car a) (car b)))))))
+            needle)))
 
 (defun conn--dispatch-on-regions (regions &rest rest)
   "Begin a macro dispatch on REGIONS.
@@ -642,13 +631,12 @@ AFTER should be a function that will be called with the markers bounding the
 region after the keyboard macro has been run.  AFTER is guarenteed to be
 called if BEFORE is called.
 
-MACRO is a keyboard macro to use instead of recording a new macro on the
-first iteration of dispatch.
+If REVERSE is non-nil execute macro on regions from last to first.
 
-\(fn REGIONS &key BEFORE AFTER TRANSITION MACRO)"
+\(fn REGIONS &key BEFORE AFTER TRANSITION REVERSE)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
-  (let ((regions (conn--canonicalize-regions regions))
+  (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
         (conn-last-dispatch-macro)
         (conn-macro-dispatch-p t)
         (wind (current-window-configuration))
@@ -2093,8 +2081,8 @@ THING is something with a forward-op as defined by thingatpt."
                   matches))))
       matches)))
 
-(defun conn-isearch-dispatch ()
-  (interactive)
+(defun conn-isearch-dispatch (&optional reverse)
+  (interactive "P")
   (let ((matches
          (if (or (not (boundp 'multi-isearch-buffer-list))
                  (not multi-isearch-buffer-list))
@@ -2102,7 +2090,7 @@ THING is something with a forward-op as defined by thingatpt."
            (mapcan 'conn--isearch-matches-in-buffer
                    multi-isearch-buffer-list))))
     (isearch-exit)
-    (conn--dispatch-on-regions matches)))
+    (conn--dispatch-on-regions matches :reverse reverse)))
 
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
@@ -2181,13 +2169,14 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
-(defun conn-dispatch-text-property (start end)
+(defun conn-dispatch-text-property (start end &optional reverse)
   "Dot each region between START and END with text property PROP equal to VAL.
 
 When region is active operates within `region-bounds', otherwise operates
 between `point-min' and `point-max'."
   (interactive (list (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)))
+                     (conn--end-of-region-or-restriction)
+                     current-prefix-arg))
   (let* ((prop (intern (completing-read
                         "Property: "
                         (cl-loop for prop in (text-properties-at (point))
@@ -2208,7 +2197,7 @@ between `point-min' and `point-max'."
             (push (cons (prop-match-beginning match)
                         (prop-match-end match))
                   regions)))))
-    (conn--dispatch-on-regions regions)))
+    (conn--dispatch-on-regions regions :reverse reverse)))
 
 (defun conn-last-macro-dispatch-to-register (register)
   "Set REGISTER to last dot macro."
@@ -2223,7 +2212,8 @@ for a dot register to use for dispatch."
   (interactive)
   (when-let ((mark (mark t)))
     (conn--dispatch-on-regions (list (cons (point) (point))
-                                     (cons mark mark)))))
+                                     (cons mark mark))
+                               :reverse (> (point) mark))))
 
 (defvar-keymap conn-scroll-repeat-map
   :repeat t
@@ -3053,14 +3043,14 @@ there's a region, all lines that region covers will be duplicated."
   (conn--remove-dots)
   (conn-pop-state))
 
-(defun conn-region-dispatch ()
-  (interactive)
+(defun conn-region-dispatch (&optional reverse)
+  (interactive "P")
   (let ((rect rectangle-mark-mode))
     (unwind-protect
-        (conn--dispatch-on-regions (region-bounds))
+        (conn--dispatch-on-regions (region-bounds) :reverse reverse)
       (when rect (rectangle-mark-mode 1)))))
 
-(defun conn-dots-dispatch (buffers)
+(defun conn-dots-dispatch (buffers &optional reverse)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
@@ -3071,8 +3061,9 @@ With any other prefix argument select buffers with `completing-read-multiple'."
    (list (pcase current-prefix-arg
            ('(4) (conn-read-matching-dot-buffers))
            ('nil (list (current-buffer)))
-           (_    (conn-read-dot-buffers)))))
-  (conn--dot-macro-dispatch buffers))
+           (_    (conn-read-dot-buffers)))
+         current-prefix-arg))
+  (conn--dot-macro-dispatch buffers :reverse reverse))
 
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
