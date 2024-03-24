@@ -3494,28 +3494,29 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-state-map
-  "#"    'conn-query-replace-region
-  "%"    'conn-query-replace-regexp-region
-  "\""   'conn-insert-pair
-  "C-z"  'conn-region-dispatch
-  "<f4>" 'save-buffer
-  "\\"   'indent-region
-  "r"    'conn-region-map
-  "z"    'conn-exchange-mark-command
-  "$"    'ispell-word
-  "|"    'shell-command-on-region
-  "*"    'calc-dispatch
   "C-y"  'conn-yank-replace
+  "C-z"  'conn-region-dispatch
   "M-y"  'conn-completing-yank-replace
-  "Q"    'kill-buffer-and-window
-  "Y"    'yank-from-kill-ring
+  "<f4>" 'save-buffer
+  "#"    'conn-query-replace-region
+  "$"    'ispell-word
+  "%"    'conn-query-replace-regexp-region
+  "("    'conn-region-dispatch
+  "*"    'calc-dispatch
   "["    'conn-kill-prepend-region
+  "\""   'conn-insert-pair
+  "\\"   'indent-region
   "]"    'conn-kill-append-region
   "c"    'conn-C-c-keys
   "d"    'conn-delete-char-keys
   "q"    'conn-misc-edit-map
+  "Q"    'kill-buffer-and-window
+  "r"    'conn-region-map
   "w"    'conn-kill-region
-  "y"    'conn-yank-keys)
+  "y"    'conn-yank-keys
+  "Y"    'yank-from-kill-ring
+  "z"    'conn-exchange-mark-command
+  "|"    'shell-command-on-region)
 
 (define-keymap
   :keymap conn-common-map
@@ -3527,113 +3528,112 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-5" 'conn-C-x-5-keys
   "C-8" 'conn-swap-window-buffers
   "C-=" 'balance-windows
-  "W"   'widen
-  "C"   'conn-copy-region
-  "R"   'indent-relative
-  "j"   'conn-goto-char-backward
-  "l"   'conn-goto-char-forward
-  "!"   'kmacro-start-macro-or-insert-counter
-  "("   'conn-backward-whitespace
-  ")"   'forward-whitespace
-  "+"   'conn-set-register-seperator
-  "<"   'beginning-of-defun
-  ">"   'end-of-defun
-  "@"   'kmacro-end-or-call-macro
-  "I"   'backward-paragraph
-  "J"   'conn-beginning-of-inner-line
-  "K"   'forward-paragraph
-  "L"   'conn-end-of-inner-line
-  "M"   'forward-line
-  "N"   'conn-backward-line
-  "O"   'forward-sentence
   "SPC" 'conn-set-mark-command
-  "U"   'backward-sentence
+  "!"   'kmacro-start-macro-or-insert-counter
+  "+"   'conn-set-register-seperator
+  ","   'isearch-backward
+  "."   'isearch-forward
+  "/"   'undo-only
   ";"   'execute-extended-command
-  "g"   'conn-M-g-keys
-  "i"   'previous-line
-  "u"   'backward-word
-  "k"   'next-line
-  "o"   'forward-word
-  "m"   'forward-sexp
-  "n"   'backward-sexp
+  "<"   'conn-backward-line
+  ">"   'forward-line
+  "?"   'undo-redo
+  "@"   'kmacro-end-or-call-macro
+  "`"   'conn-other-window
   "a"   'switch-to-buffer
   "B"   'conn-C-x-t-keys
-  "`"   'conn-other-window
-  "p"   'conn-register-load
-  "s"   'conn-M-s-keys
-  "v"   'conn-toggle-mark-command
-  "x"   'conn-C-x-keys
   "c"   'conn-C-c-keys
-  "/"   'undo-only
-  "?"   'undo-redo
-  ","   'isearch-backward
-  "."   'isearch-forward)
+  "C"   'conn-copy-region
+  "g"   'conn-M-g-keys
+  "I"   'backward-paragraph
+  "i"   'previous-line
+  "J"   'conn-beginning-of-inner-line
+  "j"   'conn-goto-char-backward
+  "K"   'forward-paragraph
+  "k"   'next-line
+  "L"   'conn-end-of-inner-line
+  "l"   'conn-goto-char-forward
+  "M"   'end-of-defun
+  "m"   'forward-sexp
+  "n"   'backward-sexp
+  "N"   'beginning-of-defun
+  "O"   'forward-sentence
+  "o"   'forward-word
+  "p"   'conn-register-load
+  "R"   'indent-relative
+  "s"   'conn-M-s-keys
+  "U"   'backward-sentence
+  "u"   'backward-word
+  "v"   'conn-toggle-mark-command
+  "V"   'narrow-to-region
+  "W"   'widen
+  "x"   'conn-C-x-keys)
 
 (define-keymap
   :keymap view-state-map
-  "."       'isearch-forward
-  ","       'isearch-forward
-  "SPC"     'conn-scroll-up
+  "<down>"  'conn-scroll-up
+  "<left>"  'backward-page
+  "<right>" 'forward-page
+  "<up>"    'conn-scroll-down
   "DEL"     'conn-scroll-down
+  "SPC"     'conn-scroll-up
+  ","       'isearch-forward
+  "."       'isearch-forward
   ";"       'execute-extended-command
-  "q"       'quit-window
-  "Q"       'kill-buffer-and-window
-  "s"       'conn-M-s-keys
-  "g"       'conn-M-g-keys
-  "x"       'conn-C-x-keys
-  "j"       'backward-page
-  "l"       'forward-page
   "a"       'switch-to-buffer
   "B"       'conn-C-x-t-keys
+  "g"       'conn-M-g-keys
   "i"       'conn-scroll-down
+  "j"       'backward-page
   "k"       'conn-scroll-up
-  "n"       'point-to-register
+  "l"       'forward-page
   "m"       'mark-page
+  "n"       'point-to-register
   "p"       'conn-register-load
-  "z"       'conn-exchange-mark-command
-  "<up>"    'conn-scroll-down
-  "<down>"  'conn-scroll-up
-  "<right>" 'forward-page
-  "<left>"  'backward-page)
+  "Q"       'kill-buffer-and-window
+  "q"       'quit-window
+  "s"       'conn-M-s-keys
+  "x"       'conn-C-x-keys
+  "z"       'conn-exchange-mark-command)
 
 (define-keymap
   :keymap org-tree-edit-state-map
   "SPC" 'conn-scroll-up
   "DEL" 'conn-scroll-down
-  "u"   'outline-up-heading
+  "M-;" 'org-toggle-comment
+  "."   'point-to-register
+  "/"   'undo-only
   ";"   'execute-extended-command
-  "z"   'conn-exchange-mark-command
-  "Q"   'kill-buffer-and-window
-  "s"   'conn-M-s-keys
-  "g"   'conn-M-g-keys
-  "x"   'conn-C-x-keys
-  "c"   'conn-C-c-keys
-  "w"   'org-refile
+  "<"   'org-promote-subtree
+  ">"   'org-demote-subtree
+  "?"   'undo-redo
+  "^"   'org-sort
+  "_"   'org-columns
   "a"   'switch-to-buffer
   "B"   'conn-C-x-t-keys
-  "p"   'conn-register-load
-  "."   'point-to-register
-  "j"   'org-previous-visible-heading
-  "l"   'org-next-visible-heading
+  "c"   'conn-C-c-keys
+  "g"   'conn-M-g-keys
   "i"   'org-backward-heading-same-level
-  "k"   'org-forward-heading-same-level
   "I"   'org-metaup
+  "J"   'org-metaleft
+  "j"   'org-previous-visible-heading
+  "k"   'org-forward-heading-same-level
   "K"   'org-metadown
   "L"   'org-metaright
-  "J"   'org-metaleft
-  "U"   'org-previous-block
-  "O"   'org-next-block
-  ">"   'org-demote-subtree
-  "<"   'org-promote-subtree
+  "l"   'org-next-visible-heading
   "m"   'org-mark-subtree
-  "M-;"   'org-toggle-comment
-  "t"   'org-todo
   "n"   'conn-org-tree-edit-insert-heading
   "N"   'org-toggle-narrow-to-subtree
-  "_"   'org-columns
-  "^"   'org-sort
-  "/"   'undo-only
-  "?"   'undo-redo)
+  "O"   'org-next-block
+  "p"   'conn-register-load
+  "Q"   'kill-buffer-and-window
+  "s"   'conn-M-s-keys
+  "t"   'org-todo
+  "U"   'org-previous-block
+  "u"   'outline-up-heading
+  "w"   'org-refile
+  "x"   'conn-C-x-keys
+  "z"   'conn-exchange-mark-command)
 
 (defvar-keymap conn-ctl-x-r-map
   "\\" 'conn-set-register-seperator
