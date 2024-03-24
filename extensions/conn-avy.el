@@ -18,7 +18,6 @@
 (require 'avy)
 (require 'conn-mode)
 
-;;;###autoload
 (defun conn-avy-goto-dot ()
   (interactive)
   (let ((avy-all-windows t))

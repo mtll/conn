@@ -15,8 +15,8 @@
 ;;
 ;;; Code:
 
-(require 'isearch+)
 (require 'conn-mode)
+(require 'isearch+)
 
 (cl-pushnew '("~[dot]" conn-isearch-not-in-dot-p "~[DOT]")
             isearchp-current-filter-preds-alist
@@ -26,7 +26,6 @@
             isearchp-current-filter-preds-alist
             :test #'equal)
 
-;;;###autoload
 (defun conn-isearch-in-dot-toggle ()
   "Toggle restricting search to dots."
   (interactive)

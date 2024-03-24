@@ -13,6 +13,8 @@
 ;; You should have received a copy of the GNU General Public License
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ;;
+;;; Commentary:
+;;
 ;;; Code:
 
 (require 'conn-mode)
@@ -207,7 +209,6 @@ up out of a keymap."
       (alist-get t embark-alt-default-action-overrides)
       (keymap-lookup (embark--raw-action-keymap type) conn-embark-alt-key)))
 
-;;;###autoload
 (defun conn-embark-alt-dwim (&optional arg)
   "alternate `embark-dwim'."
   (interactive "P")
@@ -244,7 +245,6 @@ up out of a keymap."
 (defvar conn-embark-alt-identifier-map)
 (defvar conn-embark-alt-heading-map)
 
-(autoload 'conn-embark-dwim-keys "conn-embark" "Conn embark dwim keys." t)
 (conn-define-extension conn-embark-dwim-keys
   (if conn-embark-dwim-keys
       (progn
