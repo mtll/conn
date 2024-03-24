@@ -49,11 +49,13 @@ current state is in `conn-expreg-always-use-region-states'."
 
 (defun conn--expreg-advice (fn &rest args)
   (let ((always-use-region
-         (seq-find #'identity conn-expreg-always-use-region-states)))
+         (seq-find #'identity conn-expreg-always-use-region-states))
+        (active (region-active-p)))
     (when always-use-region (activate-mark t))
     (unwind-protect
         (apply fn args)
-      (when (and always-use-region (not conn-expreg-leave-region-active))
+      (when (and (not (or active conn-expreg-leave-region-active))
+                 always-use-region)
         (deactivate-mark)))))
 
 ;;;###autoload (autoload 'conn-expreg-always-use-region "conn-expreg" nil t)
