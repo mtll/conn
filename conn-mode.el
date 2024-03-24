@@ -366,6 +366,19 @@ Uses `read-regexp' to read the regexp."
            (accept-change-group ,handle)
            (undo-amalgamate-change-group ,handle))))))
 
+(defmacro conn-with-saved-state (&rest body)
+  "Execute BODY preserving current conn state and previous state values"
+  (declare (indent defun))
+  (let ((saved-state (gensym "saved-state"))
+        (saved-previous-state (gensym "saved-previous-state")))
+    `(let ((,saved-state conn-current-state)
+           (,saved-previous-state conn-previous-state)
+           (conn-previous-state conn-previous-state))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (funcall ,saved-state)
+         (setq conn-previous-state ,saved-previous-state)))))
+
 
 ;;;; Mark
 
@@ -930,22 +943,6 @@ If BUFFER is nil use current buffer."
                     (/= (point) (point-max)))
           (goto-char (next-overlay-change (point))))
         result))))
-
-(defmacro conn-with-saved-state (&rest body)
-  "Execute BODY preserving current conn state and previous state values"
-  (declare (indent defun))
-  (let ((saved-state (gensym "saved-state"))
-        (saved-previous-state (gensym "saved-previous-state")))
-    `(let ((,saved-state conn-current-state)
-           (,saved-previous-state conn-previous-state)
-           (conn-previous-state conn-previous-state))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (funcall ,saved-state)
-         (setq conn-previous-state ,saved-previous-state)))))
-
-(defvar conn-dot-macro-dispatch-p nil
-  "Non-nil during dot macro dispatch.")
 
 (defun conn--dot-macro-dispatch (buffers &rest rest)
   "Perform macro dispatch on all dots in BUFFERS.
