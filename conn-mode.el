@@ -3521,6 +3521,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (defvar-keymap conn-mode-map
   "M-RET"   'conn-open-line-and-indent
+  "C-x /"   'tab-bar-history-back
+  "C-x ?"   'tab-bar-history-forward
   "C-x n t" 'conn-narrow-to-thing
   "C-x r"   conn-ctl-x-r-map
   "C-x 4"   conn-c-x-4-map
