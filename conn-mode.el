@@ -698,13 +698,15 @@ first iteration of dispatch.
             (when before (funcall before beg end))
             (goto-char beg)
             (conn--push-ephemeral-mark end)
-            (kmacro-start-macro nil)
             (pulse-momentary-highlight-region (region-beginning)
                                               (region-end)
                                               'conn-dot-face)
+            (kmacro-start-macro nil)
             (unwind-protect
                 (recursive-edit)
-              (kmacro-end-macro nil))
+              (if defining-kbd-macro
+                  (kmacro-end-macro nil)
+                (user-error "No keyboard macro defined.")))
             (setq conn-last-dispatch-macro last-kbd-macro))
         (when after (funcall after beg end))))
     (unless conn-last-dispatch-macro
