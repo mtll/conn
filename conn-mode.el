@@ -838,8 +838,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
             conn--dot-this-undo))))
 
 (defun conn--delete-dot (dot)
-  (unless (or conn--dot-undoing
-              conn-macro-dispatch-p)
+  (unless (or conn--dot-undoing conn-dot-macro-dispatch-p)
     (push `(delete ,(overlay-start dot) . ,(overlay-end dot))
           conn--dot-this-undo))
   (overlay-put dot 'dot nil)
@@ -914,29 +913,41 @@ If BUFFER is nil use current buffer."
          (funcall ,saved-state)
          (setq conn-previous-state ,saved-previous-state)))))
 
-(cl-defun conn--dot-macro-dispatch (buffers &key before after)
-  "Perform macro dispatch on all dots in BUFFERS."
-  (let* ((before (lambda (beg end)
-                   (conn--delete-dot (conn--dot-before-point end))
-                   (conn-state)
-                   (when before (funcall before beg end))))
-         regions)
+(defvar conn-dot-macro-dispatch-p nil
+  "Non-nil during dot macro dispatch.")
+
+(defun conn--dot-macro-dispatch (buffers &rest rest)
+  "Perform macro dispatch on all dots in BUFFERS.
+
+\(fn BUFFERS &key BEFORE AFTER)"
+  (let* ((before (plist-get rest :before))
+         (after (plist-get rest :after))
+         (conn-dot-macro-dispatch-p t)
+         regions dots)
+    (setf rest (plist-put rest :before
+                          (lambda (beg end)
+                            (when before (funcall before beg end))
+                            (conn--delete-dot (conn--dot-before-point end))
+                            (conn-state)))
+          rest (plist-put rest :after
+                          (lambda (beg end)
+                            (push (cons (conn--create-marker (region-beginning))
+                                        (conn--create-marker (region-end)))
+                                  dots)
+                            (when after (funcall after beg end)))))
     (dolist (buf buffers)
       (with-current-buffer buf
         (dolist (ov (conn--all-overlays #'conn-dotp))
           (push (cons (conn--create-marker (overlay-start ov))
                       (conn--create-marker (overlay-end ov)))
                 regions))))
-    (conn--dispatch-on-regions regions
-                               :before before
-                               :after after
-                               :preserve-marks t)
-    (apply #'conn--create-dots
-           (mapcar (pcase-lambda (`(,m1 . ,m2))
-                     (prog1 (cons (min m1 m2) (max m1 m2))
-                       (set-marker m1 nil)
-                       (set-marker m2 nil)))
-                   regions))))
+    (apply #'conn--dispatch-on-regions regions rest)
+    ;; We cannot just move the dots in the after function
+    ;; as it may cause overlapping during dispatch.
+    (apply #'conn--create-dots dots)
+    (pcase-dolist (`(,m1 . ,m2) dots)
+      (set-marker m1 nil)
+      (set-marker m2 nil))))
 
 
 ;;;; Advice
