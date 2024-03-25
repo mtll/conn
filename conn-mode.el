@@ -676,13 +676,12 @@ If REVERSE is non-nil execute macro on regions from last to first.
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
-        (conn-last-dispatch-macro (plist-get :macro rest))
+        (conn-last-dispatch-macro (plist-get rest :macro))
         (conn-macro-dispatch-p t)
         (wind (current-window-configuration))
         (undo-outer-limit nil)
         (undo-limit most-positive-fixnum)
         (undo-strong-limit most-positive-fixnum)
-        (register nil)
         (success nil)
         (handles nil))
     (unwind-protect
@@ -692,9 +691,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
             (push (prepare-change-group buffer) handles)
             (apply 'conn--dispatch-in-buffer buffer rs rest))
           (setq success t)
-          (if register
-              (set-register conn-last-dispatch-macro-register register)
-            (kmacro-to-register conn-last-dispatch-macro-register)))
+          (kmacro-to-register conn-last-dispatch-macro-register))
       (if (not success)
           (mapc #'cancel-change-group handles)
         (dolist (handle handles)
@@ -737,7 +734,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
       (unwind-protect
           (recursive-edit)
         (if defining-kbd-macro
-            (end-kbd-macro)
+            (kmacro-end-macro nil)
           (user-error "Not defining keyboard macro"))
         ;; From kmacro.  We want to user-error at the end
         ;; of this so we can't just use kmacro-end-macro.
@@ -759,7 +756,9 @@ If REVERSE is non-nil execute macro on regions from last to first.
             (conn--push-ephemeral-mark end)
             (when before (funcall before beg end))
             (unwind-protect
-                (kmacro-call-macro nil nil nil conn-last-dispatch-macro)
+                (if (kmacro-p conn-last-dispatch-macro)
+                    (funcall conn-last-dispatch-macro)
+                  (kmacro-call-macro nil nil nil conn-last-dispatch-macro))
               (when after (funcall after beg end))))
         (user-error (message "Error in macro dispatch: %s" err) nil)))))
 
@@ -3143,14 +3142,45 @@ there's a region, all lines that region covers will be duplicated."
         (conn--dispatch-on-regions (region-bounds) :reverse reverse)
       (when rect (rectangle-mark-mode 1)))))
 
-(defun conn-region-dispatch-last-macro (&optional reverse)
-  (interactive "P")
+(defun conn--read-macro-for-dispatch ()
+  (pcase
+      (car (read-multiple-choice
+            "Dispatch what?"
+            '((?l "last-kbd-macro" "dispatch last-kbd-macro")
+              (?r "register" "dispatch a kmacro register"))
+            nil nil (and (not use-short-answers)
+                         (not (use-dialog-box-p)))))
+    (?l last-kbd-macro)
+    (?r (get-register (register-read-with-preview "Register: ")))))
+
+(defun conn-region-dispatch-macro (&optional register reverse)
+  (interactive
+   (list (conn--read-macro-for-dispatch)
+         current-prefix-arg))
+  (unless (or (null register)
+              (stringp register)
+              (vectorp register)
+              (kmacro-p register))
+    (user-error "Register is not a keyboard macro"))
   (let ((rect rectangle-mark-mode))
     (unwind-protect
         (conn--dispatch-on-regions (region-bounds)
                                    :reverse reverse
-                                   :macro last-kbd-macro)
+                                   :macro register)
       (when rect (rectangle-mark-mode 1)))))
+
+(defun conn--read-buffers-for-dispatch ()
+  (pcase-exhaustive
+      (car (read-multiple-choice
+            "Dispatch on multiple buffers?"
+            '((?y "yes" "dispatch on buffers read one by one")
+              (?n "no" "dispatch on current buffer")
+              (?r "matcing regexp" "dispatch on buffers matching regexp"))
+            nil nil (and (not use-short-answers)
+                         (not (use-dialog-box-p)))))
+    (?y (conn-read-dot-buffers))
+    (?r (conn-read-matching-dot-buffers))
+    (?n (list (current-buffer)))))
 
 (defun conn-dots-dispatch (buffers &optional reverse)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
@@ -3160,14 +3190,10 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive
-   (list (pcase current-prefix-arg
-           ('(4) (conn-read-matching-dot-buffers))
-           ('nil (list (current-buffer)))
-           (_    (conn-read-dot-buffers)))
-         current-prefix-arg))
+   (list (conn--read-buffers-for-dispatch) current-prefix-arg))
   (conn--dot-macro-dispatch buffers :reverse reverse))
 
-(defun conn-dots-dispatch-last-macro (buffers &optional reverse)
+(defun conn-dots-dispatch-macro (buffers register &optional reverse)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
@@ -3175,14 +3201,17 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive
-   (list (pcase current-prefix-arg
-           ('(4) (conn-read-matching-dot-buffers))
-           ('nil (list (current-buffer)))
-           (_    (conn-read-dot-buffers)))
+   (list (conn--read-buffers-for-dispatch)
+         (conn--read-macro-for-dispatch)
          current-prefix-arg))
+  (unless (or (null register)
+              (stringp register)
+              (vectorp register)
+              (kmacro-p register))
+    (user-error "Resiter is not a keyboard macro"))
   (conn--dot-macro-dispatch buffers
                             :reverse reverse
-                            :macro last-kbd-macro))
+                            :macro register))
 
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
@@ -3341,6 +3370,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (dolist (state conn-states)
   (define-keymap
     :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
+    "<remap> <conn-dots-dispatch>"              'exit-recursive-edit
+    "<remap> <conn-dots-dispatch-macro>"        'exit-recursive-edit
+    "<remap> <conn-region-dispatch>"            'exit-recursive-edit
+    "<remap> <conn-region-dispatch-macro>"      'exit-recursive-edit
     "<remap> <kmacro-end-macro>"                'exit-recursive-edit
     "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
     "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
@@ -3545,31 +3578,31 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-dot-state-map
+  "M-<down-mouse-1>" 'conn-dot-at-click
+  "<backspace>"      'conn-kill-to-dots
+  "<return>"         'conn-dot-lines
+  "<tab>"            'conn-remove-all-dots
+  "TAB"              'conn-remove-all-dots
+  "M-?"              'conn-dot-redo
+  "M-/"              'conn-dot-undo
+  "C-n"              'conn-next-dot
+  "C-p"              'conn-previous-dot
+  "C-z"              'conn-dots-dispatch
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
   "("                'conn-dots-dispatch
-  ")"                'conn-dots-dispatch-last-macro
-  "<backspace>"      'conn-kill-to-dots
-  "<return>"         'conn-dot-lines
-  "<tab>"            'conn-remove-all-dots
+  ")"                'conn-dots-dispatch-macro
   "["                'conn-remove-dots-before
   "\\"               'conn-split-dots-on-regexp
   "]"                'conn-remove-dots-after
   "_"                'conn-dot-trim-regexp
   "`"                'conn-dot-movement-mode
-  "C-n"              'conn-next-dot
-  "C-p"              'conn-previous-dot
-  "C-z"              'conn-dots-dispatch
   "d"                'conn-remove-dots-outside-region
   "e"                'conn-dot-region
-  "M-/"              'conn-dot-undo
-  "M-<down-mouse-1>" 'conn-dot-at-click
-  "M-?"              'conn-dot-redo
   "q"                'conn-dot-point
   "r"                conn-dot-region-map
   "t"                'conn-dot-this-map
-  "TAB"              'conn-remove-all-dots
   "w"                'conn-remove-dot
   "{"                'conn-first-dot
   "|"                'conn-split-region-on-regexp
@@ -3589,7 +3622,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "$"    'ispell-word
   "%"    'conn-query-replace-regexp-region
   "("    'conn-region-dispatch
-  ")"    'conn-region-dispatch-last-macro
+  ")"    'conn-region-dispatch-macro
   "*"    'calc-dispatch
   "["    'conn-kill-prepend-region
   "\""   'conn-insert-pair
