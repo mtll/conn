@@ -122,7 +122,7 @@
   :type 'boolean
   :group 'conn-states)
 
-(defcustom conn-default-state 'emacs-state
+(defcustom conn-default-state 'conn-emacs-state
   "Default conn state for new buffers."
   :type 'symbol
   :group 'conn-states)
@@ -1330,29 +1330,29 @@ BODY contains code to be executed each time the transition function is executed.
 
 ;;;; State Definitions
 
-(define-conn-state emacs-state
-  "Activate `emacs-state' in the current buffer.
-A `conn-mode' state for inserting text.  By default `emacs-state' does not
+(define-conn-state conn-emacs-state
+  "Activate `conn-emacs-state' in the current buffer.
+A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
 bind anything except transition commands.
 
-See `emacs-state-transition-map' for keybindings to enter other states
-from Emacs state.  See `emacs-state-map' for commands bound by Emacs state."
+See `conn-emacs-state-transition-map' for keybindings to enter other states
+from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state."
   :lighter-face ((t (:background "#cae1ff" :box (:line-width 2 :color "#355687"))))
   :indicator " E "
   :cursor box
   :buffer-face ((t :inherit default))
   :ephemeral-marks t
-  :transitions (("<escape>" . view-state)
+  :transitions (("<escape>" . conn-view-state)
                 ("<f7>"     . conn-pop-state)
                 ("<f8>"     . conn-state)
-                ("<f9>"     . dot-state)))
+                ("<f9>"     . conn-dot-state)))
 
-(define-conn-state view-state
-  "Activate `view-state' in the current buffer.
+(define-conn-state conn-view-state
+  "Activate `conn-view-state' in the current buffer.
 A `conn-mode' state for viewing and navigating buffers.
 
-See `view-state-transition-map' for keybindings to enter other states
-from view state.  See `view-state-map' for commands bound by view state."
+See `conn-view-state-transition-map' for keybindings to enter other states
+from view state.  See `conn-view-state-map' for commands bound by view state."
   :lighter-face ((t (:background "#f5c5ff" :box (:line-width 2 :color "#2d242f"))))
   :suppress-input-method t
   :cursor box
@@ -1360,21 +1360,21 @@ from view state.  See `view-state-map' for commands bound by view state."
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :ephemeral-marks nil
   :keymap (define-keymap :suppress t)
-  :transitions (("f"        . emacs-state)
-                ("E"        . emacs-state-eol)
-                ("A"        . emacs-state-eol)
-                ("="        . dot-state)
+  :transitions (("f"        . conn-emacs-state-command)
+                ("E"        . conn-emacs-state-eol)
+                ("A"        . conn-emacs-state-eol)
+                ("="        . conn-dot-state)
                 ("<f8>"     . conn-state)
-                ("<f9>"     . dot-state)
+                ("<f9>"     . conn-dot-state)
                 ("<escape>" . conn-pop-state)
-                ("w"        . view-state-quit)
+                ("w"        . conn-view-state-quit)
                 ("c"        . conn-state))
-  (if view-state
+  (if conn-view-state
       (progn
-        (setq-local view-state--start-marker (point-marker)))
-    (set-marker view-state--start-marker nil)
-    (setq-local view-state--start-marker nil)))
-(put 'view-state :conn-hide-mark t)
+        (setq-local conn-view-state--start-marker (point-marker)))
+    (set-marker conn-view-state--start-marker nil)
+    (setq-local conn-view-state--start-marker nil)))
+(put 'conn-view-state :conn-hide-mark t)
 
 (define-conn-state conn-state
   "Activate `conn-state' in the current buffer.
@@ -1388,40 +1388,40 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :ephemeral-marks t
   :buffer-face ((t :inherit default :background "#f7eee1"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
-  :transitions (("f"        . conn-emacs-state)
-                ("<escape>" . view-state)
+  :transitions (("f"        . conn-emacs-state-command)
+                ("<escape>" . conn-view-state)
                 ("t"        . conn-change)
                 ("'"        . conn-quoted-insert-overwrite)
-                ("E"        . emacs-state-eol)
-                ("A"        . emacs-state-bol)
-                ("<f7>"     . emacs-state)
+                ("E"        . conn-emacs-state-eol)
+                ("A"        . conn-emacs-state-bol)
+                ("<f7>"     . conn-emacs-state-command)
                 ("<f8>"     . conn-pop-state)
-                ("<f9>"     . dot-state)
-                ("="        . dot-state)))
+                ("<f9>"     . conn-dot-state)
+                ("="        . conn-dot-state)))
 
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
-(define-conn-state dot-state
-  "Activate `dot-state' in the current buffer.
+(define-conn-state conn-dot-state
+  "Activate `conn-dot-state' in the current buffer.
 A `conn-mode' state for dispatching keyboard macros on buffer regions.
 
-See `dot-state-transition-map' for keybindings to enter other states
-from dot state.  See `dot-state-map' for commands bound by dot state."
+See `conn-dot-state-transition-map' for keybindings to enter other states
+from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :lighter-face ((t (:background "#d1ead5" :box (:line-width 2 :color "#33553d"))))
   :suppress-input-method t
   :indicator " D "
   :ephemeral-marks t
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
-  :transitions (("<escape>" . view-state)
-                ("<f7>"     . emacs-state)
+  :transitions (("<escape>" . conn-view-state)
+                ("<f7>"     . conn-emacs-state)
                 ("<f8>"     . conn-state)
                 ("<f9>"     . conn-pop-state)
-                ("f"        . conn-emacs-state)
-                ("E"        . emacs-state-eol)
-                ("A"        . emacs-state-bol)
+                ("f"        . conn-emacs-state-command)
+                ("E"        . conn-emacs-state-eol)
+                ("A"        . conn-emacs-state-bol)
                 ("Q"        . conn-dot-quit))
-  (if dot-state
+  (if conn-dot-state
       (progn
         (setq conn--dot-undo-ring nil)
         (conn--for-each-dot
@@ -1432,26 +1432,27 @@ from dot state.  See `dot-state-map' for commands bound by dot state."
     (setq conn--dot-undo-ring nil)
     (remove-hook 'post-command-hook #'conn--dot-post-command-hook t)))
 
-(define-conn-state org-tree-edit-state
-  "Activate `org-tree-edit-state' in the current buffer.
+(define-conn-state conn-org-tree-edit-state
+  "Activate `conn-org-tree-edit-state' in the current buffer.
 A `conn-mode' state for structural editing of `org-mode' buffers.
 
-See `org-tree-edit-state-transition-map' for keybindings to enter other states
-from org-tree-edit state.  See `org-tree-edit-state-map' for commands bound by
-org-tree-edit state."
+See `conn-org-tree-edit-state-transition-map' for keybindings to enter
+other states from org-tree-edit state.  See
+`conn-org-tree-edit-state-map' for commands bound by org-tree-edit
+state."
   :lighter-face ((t :inherit conn-view-state-lighter-face))
   :suppress-input-method t
   :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
-  :buffer-face ((t :inherit view-state-buffer-face))
+  :buffer-face ((t :inherit conn-view-state-buffer-face))
   :keymap (define-keymap :suppress t)
-  :transitions (("f"        . emacs-state)
-                ("E"        . emacs-state-eol)
-                ("A"        . emacs-state-eol)
-                ("="        . dot-state)
+  :transitions (("f"        . conn-emacs-state-command)
+                ("E"        . conn-emacs-state-eol)
+                ("A"        . conn-emacs-state-eol)
+                ("="        . conn-dot-state)
                 ("<f8>"     . conn-state)
-                ("<f9>"     . dot-state)
+                ("<f9>"     . conn-dot-state)
                 ("<escape>" . conn-pop-state)))
-(put 'org-tree-edit-state :conn-hide-mark t)
+(put 'conn-org-tree-edit-state :conn-hide-mark t)
 
 
 ;;;; Extensions
@@ -2168,7 +2169,7 @@ THING is something with a forward-op as defined by thingatpt."
 
 (defun conn--isearch-add-dots-1 (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
-    (dot-state)
+    (conn-dot-state)
     (when (advice-function-member-p #'conn-isearch-in-dot-p
                                     isearch-filter-predicate)
       (conn--remove-dots (point-min) (point-max)))
@@ -3113,11 +3114,11 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Transition Functions
 
-(defun view-state-quit ()
-  "Pop state and goto point where view-state was entered."
+(defun conn-view-state-quit ()
+  "Pop state and goto point where conn-view-state was entered."
   (interactive)
-  (when view-state--start-marker
-    (goto-char view-state--start-marker))
+  (when conn-view-state--start-marker
+    (goto-char conn-view-state--start-marker))
   (conn-pop-state))
 
 (defun conn-dot-quit ()
@@ -3183,23 +3184,23 @@ With any other prefix argument select buffers with `completing-read-multiple'."
                                 'face 'minibuffer-prompt))
       (call-interactively #'quoted-insert))))
 
-(defun conn-emacs-state (&optional arg)
-  "Transition to Emacs-state.
+(defun conn-emacs-state-command (&optional arg)
+  "Transition to `conn-emacs-state'.
 
 If ARG is non-negative open a new line below point and enter insert state.
 
 If ARG is negative open a new line above point and enter insert state.
 
-If arg is \\[universal-argument] enter emacs-state in `overwrite-mode'."
+If arg is \\[universal-argument] enter `conn-emacs-state' in `overwrite-mode'."
   (interactive "P")
   (pcase arg
     ('nil
-     (emacs-state))
+     (conn-emacs-state))
     ('(4)
      (let ((hook (make-symbol "emacs-state-overwrite-hook")))
-       (emacs-state)
+       (conn-emacs-state)
        (fset hook (lambda ()
-                    (unless (eq conn-current-state 'emacs-state)
+                    (unless (eq conn-current-state 'conn-emacs-state)
                       (overwrite-mode -1)
                       (remove-hook 'conn-transition-hook hook))))
        (add-hook 'conn-transition-hook hook)
@@ -3207,7 +3208,7 @@ If arg is \\[universal-argument] enter emacs-state in `overwrite-mode'."
     ((guard (>= (prefix-numeric-value arg) 0))
      (move-end-of-line 1)
      (newline-and-indent)
-     (emacs-state))
+     (conn-emacs-state))
     (_
      (move-beginning-of-line 1)
      (open-line 1)
@@ -3215,7 +3216,7 @@ If arg is \\[universal-argument] enter emacs-state in `overwrite-mode'."
      (save-excursion
        (forward-line 1)
        (indent-according-to-mode))
-     (emacs-state))))
+     (conn-emacs-state))))
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
@@ -3232,23 +3233,23 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
          (call-interactively #'string-rectangle))
         (kill
          (conn-kill-region-keys)
-         (emacs-state))
+         (conn-emacs-state))
         (t
          (conn-delete-region-keys)
-         (emacs-state))))
+         (conn-emacs-state))))
 
-(defun emacs-state-eol (&optional N)
-  "Move point to end of line and enter `emacs-state'."
+(defun conn-emacs-state-eol (&optional N)
+  "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (end-of-line N)
-  (emacs-state))
+  (conn-emacs-state))
 
-(defun emacs-state-bol (&optional N)
-  "Move point to beginning of line and enter `emacs-state'."
+(defun conn-emacs-state-bol (&optional N)
+  "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (beginning-of-line N)
   (back-to-indentation)
-  (emacs-state))
+  (conn-emacs-state))
 
 ;;;;; Thing Definitions
 
@@ -3332,10 +3333,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit
     "C-z"                                       'exit-recursive-edit))
 
-(dolist (state '(conn-state emacs-state dot-state))
+(dolist (state '(conn-state conn-emacs-state conn-dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
-(dolist (state '(conn-state emacs-state dot-state))
+(dolist (state '(conn-state conn-emacs-state conn-dot-state))
   (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
 (defvar-keymap conn-other-window-repeat-map
@@ -3529,7 +3530,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "u"   'conn-transpose-words-backward)
 
 (define-keymap
-  :keymap dot-state-map
+  :keymap conn-dot-state-map
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
@@ -3561,7 +3562,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "}"                'conn-last-dot)
 
 (define-keymap
-  :keymap emacs-state-map
+  :keymap conn-emacs-state-map
   "C-z"  'conn-region-dispatch)
 
 (define-keymap
@@ -3643,7 +3644,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "x"   'conn-C-x-keys)
 
 (define-keymap
-  :keymap view-state-map
+  :keymap conn-view-state-map
   "<down>"  'conn-scroll-up
   "<left>"  'backward-page
   "<right>" 'forward-page
@@ -3670,7 +3671,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "z"       'conn-exchange-mark-command)
 
 (define-keymap
-  :keymap org-tree-edit-state-map
+  :keymap conn-org-tree-edit-state-map
   "SPC" 'conn-scroll-up
   "DEL" 'conn-scroll-down
   "M-;" 'org-toggle-comment
@@ -3757,7 +3758,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
         (define-keymap
           :keymap undo-repeat-map
           "u" `(menu-item "Undo" undo
-                          :filter ,(lambda (_) (when emacs-state 'undo)))))
+                          :filter ,(lambda (_)
+                                     (when conn-emacs-state 'undo)))))
     (when (eq (keymap-parent search-map) conn-search-map)
       (set-keymap-parent search-map nil))
     (when (eq (keymap-parent search-map) conn-search-map)
@@ -3922,9 +3924,9 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
    :forward-op 'org-forward-sentence
    :commands '(org-forward-sentence org-backward-sentence))
 
-  (keymap-set org-mode-map "<remap> <view-state>" 'org-tree-edit-state)
+  (keymap-set org-mode-map "<remap> <conn-view-state>" 'conn-org-tree-edit-state)
 
-  (dolist (state '(conn-state dot-state))
+  (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'org-mode)
       "<remap> <forward-paragraph>" 'org-forward-paragraph
@@ -3937,8 +3939,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   (dolist (v '(conn--mark-cursor
                conn-current-state
                conn-state
-               emacs-state
-               dot-state))
+               conn-emacs-state
+               conn-dot-state))
     (add-to-list 'polymode-move-these-vars-from-old-buffer v)))
 
 (with-eval-after-load 'eldoc
@@ -3952,7 +3954,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
                      'paredit-backward-up))
 
 (with-eval-after-load 'paredit
-  (dolist (state '(conn-state dot-state))
+  (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
       "<remap> <forward-sexp>" 'paredit-forward
