@@ -389,16 +389,20 @@ Uses `read-regexp' to read the regexp."
 
 (defvar-local conn--handle-mark nil)
 
-(defun conn-define-thing (thing &rest rest)
+(defun conn-define-thing (thing handler &rest rest)
   "Define a new thing.
 
 \(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS)"
-  (unless (or (memq :forward-op rest)
+  (unless (or (get thing 'forward-op)
+              (memq :forward-op rest)
+              (get thing 'bounds-of-thing-at-point)
               (memq :bounds-op rest)
+              (and (get thing 'beginning-op)
+                   (get thing 'end-op))
               (and (memq :end-op rest)
                    (memq :beg-op rest)))
-    (error "Thing definition requires at least one of: %s, %s, (%s and %s)"
-           :forward-op :bounds-op :beg-op :end-op))
+    (error "%s definition requires at least one of: %s, %s, (%s and %s)"
+           thing :forward-op :bounds-op :beg-op :end-op))
   (when-let ((forward (plist-get rest :forward-op)))
     (put thing 'forward-op forward))
   (when-let ((beg (plist-get rest :beg-op)))
@@ -408,10 +412,7 @@ Uses `read-regexp' to read the regexp."
   (when-let ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
   (when-let ((commands (plist-get rest :commands)))
-    (pcase-dolist (`(,handler . ,cmds) (if (listp (car commands))
-                                           commands
-                                         (list commands)))
-      (conn-add-mark-commands cmds (funcall handler thing)))))
+    (conn-set-mark-handler commands (funcall handler thing))))
 
 (defmacro conn-define-thing-handler (name args &rest rest)
   "Define a thing movement command mark handler constructor.
@@ -488,38 +489,38 @@ of the movement command unless `use-region-p'."
               (eq beg (point)))
     (conn--push-ephemeral-mark beg)))
 
-(defun conn-add-mark-commands (commands handler)
+(defun conn-set-mark-handler (commands handler)
   "Register a thing movement command for THING."
   (dolist (cmd (ensure-list commands))
     (put cmd :conn-mark-handler handler)))
 
-(defvar conn--thing-mark-commands
-  `(((forward-sexp backward-sexp)
-     ,(conn-sequential-thing-handler 'sexp))
-    ((beginning-of-buffer end-of-buffer)
-     ,(conn-individual-thing-handler 'buffer))
-    ((forward-word backward-word)
-     ,(conn-sequential-thing-handler 'word))
-    ((forward-line conn-backward-line)
-     ,(conn-sequential-thing-handler 'line))
-    ((beginning-of-defun end-of-defun)
-     ,(conn-sequential-thing-handler 'defun))
-    ((forward-paragraph backward-paragraph)
-     ,(conn-sequential-thing-handler 'paragraph))
-    ((forward-sentence backward-sentence)
-     ,(conn-sequential-thing-handler 'sentence))
-    ((forward-whitespace conn-backward-whitespace)
-     ,(conn-sequential-thing-handler 'whitespace))
-    ((conn-next-dot conn-previous-dot)
-     ,(conn-sequential-thing-handler 'dot))
-    ((next-line
-      previous-line
-      conn-back-to-indentation-or-beginning
-      conn-end-of-line-or-next
-      conn-backward-whitespace
-      forward-whitespace)
-     conn-jump-handler))
-  "Default conn mark commands and their handlers.")
+;; (defvar conn--thing-mark-commands
+;;   `(((forward-sexp backward-sexp)
+;;      ,(conn-sequential-thing-handler 'sexp))
+;;     ((beginning-of-buffer end-of-buffer)
+;;      ,(conn-individual-thing-handler 'buffer))
+;;     ((forward-word backward-word)
+;;      ,(conn-sequential-thing-handler 'word))
+;;     ((forward-line conn-backward-line)
+;;      ,(conn-sequential-thing-handler 'line))
+;;     ((beginning-of-defun end-of-defun)
+;;      ,(conn-sequential-thing-handler 'defun))
+;;     ((forward-paragraph backward-paragraph)
+;;      ,(conn-sequential-thing-handler 'paragraph))
+;;     ((forward-sentence backward-sentence)
+;;      ,(conn-sequential-thing-handler 'sentence))
+;;     ((forward-whitespace conn-backward-whitespace)
+;;      ,(conn-sequential-thing-handler 'whitespace))
+;;     ((conn-next-dot conn-previous-dot)
+;;      ,(conn-sequential-thing-handler 'dot))
+;;     ((next-line
+;;       previous-line
+;;       conn-back-to-indentation-or-beginning
+;;       conn-end-of-line-or-next
+;;       conn-backward-whitespace
+;;       forward-whitespace)
+;;      conn-jump-handler))
+;;   "Default conn mark commands and their handlers.")
 
 (defun conn--mark-cursor-p (ov)
   (eq (overlay-get ov 'type) 'conn--mark-cursor))
@@ -614,9 +615,6 @@ to determine if mark cursor should be hidden in buffer."
     (cancel-timer conn--mark-cursor-timer)
     (setq conn--mark-cursor-timer nil))
   (when conn-mode
-    (pcase-dolist (`(,commands ,handler)
-                   conn--thing-mark-commands)
-      (conn-add-mark-commands commands handler))
     (setq conn--mark-cursor-timer
           (run-with-idle-timer conn-mark-update-delay
                                t #'conn--mark-cursor-timer-func))))
@@ -3281,20 +3279,69 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 ;;;;; Thing Definitions
 
+(conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
+
+(conn-define-thing
+ 'dot
+ 'conn-individual-thing-handler
+ :beg-op (lambda () (conn-previous-dot 1))
+ :end-op (lambda () (conn-next-dot 1))
+ :commands '(conn-next-dot conn-previous-dot))
+
+(conn-define-thing
+ 'word
+ 'conn-sequential-thing-handler
+ :forward-op 'forward-word
+ :commands '(forward-word backward-word))
+
+(conn-define-thing
+ 'whitespace
+ 'conn-individual-thing-handler
+ :forward-op 'forward-whitespace
+ :commands '(forward-whitespace conn-backward-whitespace))
+
+(conn-define-thing
+ 'sentence
+ 'conn-sequential-thing-handler
+ :forward-op 'forward-sentence
+ :commands '(forward-sentence backward-sentence))
+
+(conn-define-thing
+ 'paragraph
+ 'conn-sequential-thing-handler
+ :forward-op 'forward-paragraph
+ :commands '(forward-paragraph backward-paragraph))
+
+(conn-define-thing
+ 'defun
+ 'conn-sequential-thing-handler
+ :commands '(end-of-defun beginning-of-defun))
+
+(conn-define-thing
+ 'buffer
+ 'conn-individual-thing-handler
+ :commands '(end-of-buffer beginning-of-buffer))
+
+(conn-define-thing
+ 'line
+ 'conn-sequential-thing-handler
+ :forward-op 'forward-line
+ :commands '(forward-line conn-backward-line))
+
 (conn-define-thing
  'outer-line
+ 'conn-individual-thing-handler
  :beg-op (lambda () (move-beginning-of-line nil))
  :end-op (lambda () (move-end-of-line nil))
- :commands '(conn-individual-thing-handler
-             move-beginning-of-line
+ :commands '(move-beginning-of-line
              move-end-of-line))
 
 (conn-define-thing
  'inner-line
+ 'conn-individual-thing-handler
  :beg-op 'back-to-indentation
  :end-op 'conn--end-of-inner-line-1
- :commands '(conn-individual-thing-handler
-             back-to-indentation
+ :commands '(back-to-indentation
              conn-beginning-of-inner-line
              conn-end-of-inner-line))
 
@@ -3889,10 +3936,18 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (with-eval-after-load 'org
   (defvar org-mode-map)
-  (conn-add-mark-commands '(org-forward-paragraph
-                            org-backward-paragraph)
-                          (conn-sequential-thing-handler 'org-paragraph))
-  (put 'org-paragraph 'forward-op 'org-forward-paragraph)
+
+  (conn-define-thing
+   'org-paragraph
+   'conn-sequential-thing-handler
+   :forward-op 'org-forward-paragraph
+   :commands '(org-forward-paragraph org-backward-paragraph))
+
+  (conn-define-thing
+   'org-sentence
+   'conn-sequential-thing-handler
+   :forward-op 'org-forward-sentence
+   :commands '(org-forward-sentence org-backward-sentence))
 
   (keymap-set org-mode-map "<remap> <view-state>" 'org-tree-edit-state)
 
@@ -3932,11 +3987,14 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
       "O" 'paredit-forward-up
       "U" 'paredit-backward-up))
 
-  (conn-add-mark-commands '(paredit-forward
-                            paredit-backward
-                            paredit-forward-up
-                            paredit-backward-up)
-                          (conn-sequential-thing-handler 'sexp)))
+  (conn-define-thing
+   'paredit-sexp
+   'conn-sequential-thing-handler
+   :forward-op 'paredit-forward
+   :commands '(paredit-forward
+               paredit-backward
+               paredit-forward-up
+               paredit-backward-up)))
 
 (with-eval-after-load 'zones
   (defvar zz-add-zone-anyway-p)
