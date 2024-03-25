@@ -2204,17 +2204,24 @@ Interactively PARTIAL-MATCH is the prefix argument."
 (defun conn-isearch-split-dots (&optional refine)
   "Split region from START to END into dots on REGEXP."
   (interactive "P")
-  (let (dots)
+  (let ((forward isearch-forward)
+        dots)
     (save-excursion
-      (dolist (dot (conn--all-overlays #'conn-dotp))
-        (goto-char (overlay-start dot))
-        (unless refine (push (point) dots))
-        (while (isearch-search-string isearch-string (overlay-end dot) t)
-          (when (funcall isearch-filter-predicate
-                         (match-beginning 0) (match-end 0))
-            (push (match-beginning 0) dots)
-            (push (match-end 0) dots)))
-        (unless refine (push (overlay-end dot) dots))))
+      (unwind-protect
+          (progn
+            ;; we need to ensure we are searching forward or the
+            ;; bound wont be correct for isearch-search-string
+            (unless forward (isearch-repeat-forward))
+            (dolist (dot (conn--all-overlays #'conn-dotp))
+              (goto-char (overlay-start dot))
+              (unless refine (push (point) dots))
+              (while (isearch-search-string isearch-string (overlay-end dot) t)
+                (when (funcall isearch-filter-predicate
+                               (match-beginning 0) (match-end 0))
+                  (push (match-beginning 0) dots)
+                  (push (match-end 0) dots)))
+              (unless refine (push (overlay-end dot) dots))))
+        (unless forward (isearch-repeat-backward))))
     (conn--remove-dots)
     (cl-loop for (beg end) on dots by #'cddr
              when (/= beg end)
@@ -3455,12 +3462,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "J" 'indent-rigidly-left-to-tab-stop)
 
 (defvar-keymap conn-isearch-dot-map
-  :repeat t
-  "C-e" 'conn-isearch-add-dots
-  "C-r" 'conn-isearch-refine-dots
-  "C-w" 'conn-isearch-remove-dots
-  "C-x" 'conn-isearch-split-dots
-  "C-d" 'conn-dots-dispatch)
+  "e" 'conn-isearch-add-dots
+  "r" 'conn-isearch-refine-dots
+  "w" 'conn-isearch-remove-dots
+  "x" 'conn-isearch-split-dots
+  "d" 'conn-dots-dispatch)
 
 (defvar-keymap conn-dot-this-map
   :prefix 'conn-dot-this-map
@@ -3489,7 +3495,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (define-keymap
   :keymap isearch-mode-map
   "C-z"         'conn-isearch-dispatch
-  "C-c C-d"     conn-isearch-dot-map
+  "M-."         conn-isearch-dot-map
   "M-<return>"  'conn-isearch-exit-and-mark)
 
 (define-keymap

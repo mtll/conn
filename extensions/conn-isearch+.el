@@ -49,7 +49,7 @@
   (isearch-mode (not backward))
   (conn-isearch-in-dot-toggle))
 
-(keymap-set conn-dot-state-map "M-." 'conn-isearch-in-dots)
+(keymap-set conn-dot-state-map "M-," 'conn-isearch-in-dots)
 
 (define-keymap
   :keymap isearch-mode-map
@@ -61,7 +61,7 @@
   "C-y l" 'isearchp-yank-char
   "M-o"   isearchp-filter-map
   "C-z"   'conn-isearch-dispatch
-  "M-."   'conn-isearch-in-dot-toggle)
+  "M-,"   'conn-isearch-in-dot-toggle)
 
 (provide 'conn-isearch+)
 ;;; conn-isearch+.el ends here
