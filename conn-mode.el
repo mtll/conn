@@ -3623,17 +3623,18 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "%"                'conn-query-remove-dots
   "("                'conn-dots-dispatch-prompt
   ")"                'conn-dots-dispatch-macro-prompt
+  "|"                'conn-remove-dots-outside-region
+  "\\"               'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
-  "\\"               'conn-split-dots-on-regexp
   "]"                'conn-remove-dots-after
-  "c"                'conn-dot-all-things-in-region
-  "C"                'conn-remove-dots-outside-region
+  "c"                'conn-split-dots-on-regexp
+  "C"                'conn-split-region-on-regexp
   "d"                'conn-dots-dispatch
   "E"                'conn-dot-point
   "e"                'conn-dot-region
   "q"                'conn-dot-this-map
   "r"                conn-dot-region-map
-  "t"                'conn-dot-trim-regexp
+  "t"                'conn-dot-all-things-in-region
   "w"                'conn-remove-dot
   "y"                'conn-dots-dispatch-macro
   "Y"                'conn-yank-to-dots)
