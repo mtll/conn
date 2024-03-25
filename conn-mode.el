@@ -661,12 +661,15 @@ the current buffer.
 
 MACRO specifies a keyboard macro to use instead of recording a new one.
 
+APPEND will append the recorded keyboard macro to the last keyboard macro.
+Has no effect if MACRO is specified.
+
 BEFORE should be a function that will be called with the markers bounding
 the region to be acted upon.
 
 If REVERSE is non-nil execute macro on regions from last to first.
 
-\(fn REGIONS &key BEFORE REVERSE MACRO)"
+\(fn REGIONS &key BEFORE REVERSE MACRO APPEND)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
@@ -701,7 +704,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "Begin a macro dispatch on REGIONS in BUFFER.
 
-\(fn BUFFER REGIONS &key BEFORE MACRO REVERSE)"
+\(fn BUFFER REGIONS &key BEFORE MACRO REVERSE APPEND)"
   (pop-to-buffer-same-window buffer)
   (let ((loop-fn (make-symbol "conn--kmacro-loop-fn"))
         (before (plist-get rest :before)))
