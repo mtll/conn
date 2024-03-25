@@ -2248,6 +2248,9 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive (list (region-beginning)
                      (region-end)))
   (let* ((from (buffer-substring-no-properties start end)))
+    (unless (or (not (called-interactively-p 'interactive))
+                (eq (point) start))
+      (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
         (:append (lambda () (insert from)))
       (call-interactively #'query-replace))))
@@ -2256,6 +2259,9 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive (list (region-beginning)
                      (region-end)))
   (let* ((from (buffer-substring-no-properties start end)))
+    (unless (or (not (called-interactively-p 'interactive))
+                (eq (point) start))
+      (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
         (:append (lambda () (insert from)))
       (call-interactively #'query-replace-regexp))))
