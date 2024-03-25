@@ -3229,20 +3229,34 @@ With any other prefix argument select buffers with `completing-read-multiple'."
 
 If ARG is non-negative open a new line below point and enter insert state.
 
-If ARG is negative open a new line above point and enter insert state."
+If ARG is negative open a new line above point and enter insert state.
+
+If arg is \\[universal-argument] enter emacs-state in `overwrite-mode'."
   (interactive "P")
-  (cond ((null arg))
-        ((>= (prefix-numeric-value arg) 0)
-         (move-end-of-line 1)
-         (newline-and-indent))
-        ((< (prefix-numeric-value arg) 0)
-         (move-beginning-of-line 1)
-         (open-line 1)
-         (indent-according-to-mode)
-         (save-excursion
-           (forward-line 1)
-           (indent-according-to-mode))))
-  (emacs-state))
+  (pcase arg
+    ('nil
+     (emacs-state))
+    ('(4)
+     (let ((hook (make-symbol "emacs-state-overwrite-hook")))
+       (emacs-state)
+       (fset hook (lambda ()
+                    (unless (eq conn-current-state 'emacs-state)
+                      (overwrite-mode -1)
+                      (remove-hook 'conn-transition-hook hook))))
+       (add-hook 'conn-transition-hook hook)
+       (overwrite-mode 1)))
+    ((guard (>= (prefix-numeric-value arg) 0))
+     (move-end-of-line 1)
+     (newline-and-indent)
+     (emacs-state))
+    (_
+     (move-beginning-of-line 1)
+     (open-line 1)
+     (indent-according-to-mode)
+     (save-excursion
+       (forward-line 1)
+       (indent-according-to-mode))
+     (emacs-state))))
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
