@@ -969,73 +969,44 @@ If BUFFER is nil use current buffer."
 
 ;;;; Advice
 
-(defun conn--pop-mark-ad ()
-  (when mark-ring
-    (set-marker (mark-marker) (car mark-ring))
-    (set-marker (car mark-ring) nil)
-    (pop mark-ring))
-  (deactivate-mark))
-
 (defun conn--pop-to-mark-command-ad (&rest _)
-  (unless (null (mark t))
-    (add-to-history 'conn--unpop-ring (copy-marker (mark-marker)) mark-ring-max))
-  (setq conn--ephemeral-mark nil))
+  (unless (or (null (mark t))
+              (= (point) (mark)))
+    (add-to-history 'conn--unpop-ring
+                    (conn--create-marker (mark t))
+                    mark-ring-max)))
 
 (defun conn--push-mark-ad (fn &rest args)
-  (if (and conn--ephemeral-mark
-           (not (use-region-p)))
+  (if conn--ephemeral-mark
       (let ((mark-ring nil))
-        (apply fn args))
+        (apply fn args)
+        (when (car mark-ring)
+          (set-marker (car mark-ring) nil)))
     (apply fn args))
   (setq conn--ephemeral-mark nil))
 
-(defun conn--save-ephemeral-mark-ad (fn &rest _)
-  (cons conn--ephemeral-mark (funcall fn)))
+(defun conn--save-ephemeral-mark-ad (&rest _)
+  (push conn--ephemeral-mark conn--saved-ephemeral-marks))
 
-(defun conn--restore-ephemeral-mark-ad (fn saved-mark-info)
-  (setq-local conn--ephemeral-mark (pop saved-mark-info))
-  (funcall fn saved-mark-info))
-
-(defun conn--copy-region-ad (beg end &optional region)
-  "Pulse region when copying."
-  (if region
-      (pulse-momentary-highlight-region (region-beginning) (region-end))
-    (pulse-momentary-highlight-region beg end)))
-
-(defun conn--insert-register-ad (_register &optional _arg)
-  "`delete-region' or `delete-rectangle' before `insert-register'
-when `use-region-p' is non-nil."
-  (when (use-region-p)
-    (if (rectangle-mark-mode)
-        (delete-rectangle (region-beginning) (region-end))
-      (delete-region (region-beginning) (region-end)))))
+(defun conn--restore-ephemeral-mark-ad (&rest _)
+  (setq-local conn--ephemeral-mark (pop conn--saved-ephemeral-marks)))
 
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
-        (advice-add 'insert-register :before #'conn--insert-register-ad)
-        (advice-add 'copy-region-as-kill :before #'conn--copy-region-ad)
         (advice-add 'push-mark :around #'conn--push-mark-ad)
-        (advice-add 'pop-to-mark-command :before #'conn--pop-to-mark-command-ad)
-        (advice-add 'pop-mark :override #'conn--pop-mark-ad)
         (advice-add 'save-mark-and-excursion--save
-                    :around #'conn--save-ephemeral-mark-ad)
+                    :before #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore
-                    :around #'conn--restore-ephemeral-mark-ad))
-    (advice-remove 'insert-register #'conn--insert-register-ad)
-    (advice-remove 'copy-region-as-kill #'conn--copy-region-ad)
+                    :after #'conn--restore-ephemeral-mark-ad)
+        (advice-add 'pop-to-mark-command :before 'conn--pop-to-mark-command-ad))
     (advice-remove 'push-mark #'conn--push-mark-ad)
-    (advice-remove 'pop-to-mark-command #'conn--pop-to-mark-command-ad)
-    (advice-remove 'pop-mark #'conn--pop-mark-ad)
-    (advice-remove 'save-mark-and-excursion--save
-                   #'conn--save-ephemeral-mark-ad)
-    (advice-remove 'save-mark-and-excursion--restore
-                   #'conn--restore-ephemeral-mark-ad)))
+    (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
+    (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)
+    (advice-remove 'pop-to-mark-command 'conn--pop-to-mark-command-ad)))
 
 
 ;;;; State Functionality
-
-(defvar conn--aux-bindings nil)
 
 (defun conn-keymap-local-set (key state command)
   (interactive
@@ -2937,6 +2908,10 @@ for the meaning of prefix ARG."
    (list
     (register-read-with-preview "Load register: ")
     current-prefix-arg))
+  (when (use-region-p)
+    (if (rectangle-mark-mode)
+        (delete-rectangle (region-beginning) (region-end))
+      (delete-region (region-beginning) (region-end))))
   (condition-case err
       (jump-to-register reg arg)
     (user-error
