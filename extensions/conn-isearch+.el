@@ -43,6 +43,14 @@
 (defun conn--isearch-in-dots-hook ()
   (isearchp-add-filter-predicate '("[dot]" conn-isearch-in-dot-p "[DOT]")))
 
+;;;###autoload
+(defun conn-isearch-in-dots (&optional backward)
+  (interactive "P")
+  (isearch-mode (not backward))
+  (conn-isearch-in-dot-toggle))
+
+(keymap-set conn-dot-state-map "M-." 'conn-isearch-in-dots)
+
 (define-keymap
   :keymap isearch-mode-map
   "C-y m" 'isearchp-yank-sexp-symbol-or-char
@@ -54,9 +62,6 @@
   "M-o"   isearchp-filter-map
   "C-z"   'conn-isearch-dispatch
   "M-."   'conn-isearch-in-dot-toggle)
-
-;; (keymap-set isearchp-filter-map "f" 'isearchp-add-filter-predicate)
-;; (keymap-set isearchp-filter-map "r" 'isearchp-add-regexp-filter-predicate)
 
 (provide 'conn-isearch+)
 ;;; conn-isearch+.el ends here
