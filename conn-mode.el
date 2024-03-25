@@ -43,16 +43,6 @@
   (require 'cl-lib))
 
 
-;;;; Declarations
-
-(defvar conn-mode nil)
-(defvar conn-local-mode)
-(defvar view-state)
-(defvar conn--mark-cursor-timer nil)
-(defvar conn--aux-timer nil)
-(defvar conn-modes)
-
-
 ;;;; Variables
 
 (defgroup conn-mode nil
@@ -151,6 +141,12 @@ Defines default STATE for buffers matching REGEXP."
   '((t (:height 5.0 :foreground "#d00000")))
   "Face for conn window prompt overlay.")
 
+(defcustom conn-repeating-cursor-color
+  "#a60000"
+  "Cursor color while repeat map is active."
+  :type 'color
+  :group 'conn-mode)
+
 (defcustom conn-ephemeral-mark-states
   nil
   "States in which ephemeral marks should be used."
@@ -183,6 +179,7 @@ Each element may be either a symbol or a list of the form
 (defvar conn-this-thing-handler nil)
 (defvar conn-this-thing-start nil)
 
+;; Keymaps
 (defvar conn--state-maps nil)
 (defvar-local conn--aux-maps nil)
 (defvar-local conn--local-maps nil)
@@ -197,6 +194,49 @@ Each element may be either a symbol or a list of the form
 
 (defvar conn-dot-macro-dispatch-p nil
   "Non-nil during dot macro dispatch.")
+
+(defvar-local conn--unpop-ring nil)
+
+(defvar conn--saved-ephemeral-marks nil)
+
+(defvar-local conn--ephemeral-mark nil)
+
+(defvar conn--mark-cursor-timer nil
+  "`run-with-idle-timer' timer to update `mark' cursor.")
+
+(defvar-local conn--mark-cursor nil
+  "`mark' cursor overlay.")
+(put 'conn--mark-cursor 'permanent-local t)
+
+(defvar-local conn--handle-mark nil)
+
+(defvar conn-macro-dispatch-p nil
+  "Non-nil during macro dispatch.
+
+See `conn--dispatch-on-regions'.")
+
+(defvar conn-last-dispatch-macro nil)
+(defvar-local conn--dot-undoing nil)
+(defvar-local conn--dot-undo-ring nil)
+(defvar-local conn--dot-undone nil)
+(defvar-local conn--dot-this-undo nil)
+
+(defvar conn-dot-undo-ring-max 32
+  "Maximum size of the dot undo ring.")
+
+(defvar conn--repat-check-key-prev-val)
+
+(defvar conn--aux-bindings nil)
+
+(defvar conn-common-map (make-sparse-keymap))
+
+(defvar-local view-state--start-marker nil)
+
+(defvar conn-mode nil)
+(defvar conn-local-mode)
+(defvar view-state)
+(defvar conn--aux-timer nil)
+(defvar conn-modes)
 
 ;;;;; Command Histories
 
@@ -372,23 +412,6 @@ Uses `read-regexp' to read the regexp."
 
 ;;;; Mark
 
-(defvar-local conn--unpop-ring nil
-  "Ring for marks popped with `pop-to-mark-command'.")
-
-(defvar conn--global-unpop-ring nil
-  "Ring for marks popped with `pop-global-mark'.")
-
-(defvar-local conn--ephemeral-mark nil)
-
-(defvar conn--mark-cursor-timer nil
-  "`run-with-idle-timer' timer to update `mark' cursor.")
-
-(defvar-local conn--mark-cursor nil
-  "`mark' cursor overlay.")
-(put 'conn--mark-cursor 'permanent-local t)
-
-(defvar-local conn--handle-mark nil)
-
 (defun conn-define-thing (thing handler &rest rest)
   "Define a new thing.
 
@@ -493,34 +516,6 @@ of the movement command unless `use-region-p'."
   "Register a thing movement command for THING."
   (dolist (cmd (ensure-list commands))
     (put cmd :conn-mark-handler handler)))
-
-;; (defvar conn--thing-mark-commands
-;;   `(((forward-sexp backward-sexp)
-;;      ,(conn-sequential-thing-handler 'sexp))
-;;     ((beginning-of-buffer end-of-buffer)
-;;      ,(conn-individual-thing-handler 'buffer))
-;;     ((forward-word backward-word)
-;;      ,(conn-sequential-thing-handler 'word))
-;;     ((forward-line conn-backward-line)
-;;      ,(conn-sequential-thing-handler 'line))
-;;     ((beginning-of-defun end-of-defun)
-;;      ,(conn-sequential-thing-handler 'defun))
-;;     ((forward-paragraph backward-paragraph)
-;;      ,(conn-sequential-thing-handler 'paragraph))
-;;     ((forward-sentence backward-sentence)
-;;      ,(conn-sequential-thing-handler 'sentence))
-;;     ((forward-whitespace conn-backward-whitespace)
-;;      ,(conn-sequential-thing-handler 'whitespace))
-;;     ((conn-next-dot conn-previous-dot)
-;;      ,(conn-sequential-thing-handler 'dot))
-;;     ((next-line
-;;       previous-line
-;;       conn-back-to-indentation-or-beginning
-;;       conn-end-of-line-or-next
-;;       conn-backward-whitespace
-;;       forward-whitespace)
-;;      conn-jump-handler))
-;;   "Default conn mark commands and their handlers.")
 
 (defun conn--mark-cursor-p (ov)
   (eq (overlay-get ov 'type) 'conn--mark-cursor))
@@ -628,13 +623,6 @@ to determine if mark cursor should be hidden in buffer."
 
 
 ;;;; Macro Dispatch
-
-(defvar conn-macro-dispatch-p nil
-  "Non-nil during macro dispatch.
-
-See `conn--dispatch-on-regions'.")
-
-(defvar conn-last-dispatch-macro nil)
 
 (defun conn--canonicalize-regions (regions &optional reverse)
   "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
@@ -767,18 +755,6 @@ If REVERSE is non-nil execute macro on regions from last to first.
 
 
 ;;;; Dots
-
-;;;;; Variables
-
-(defvar-local conn--dot-undoing nil)
-(defvar-local conn--dot-undo-ring nil)
-(defvar-local conn--dot-undone nil)
-(defvar-local conn--dot-this-undo nil)
-
-(defvar conn-dot-undo-ring-max 32
-  "Maximum size of the dot undo ring.")
-
-(defvar conn--repat-check-key-prev-val)
 
 ;;;;; Dot Registers
 
@@ -1335,10 +1311,6 @@ BODY contains code to be executed each time the transition function is executed.
 
 ;;;; State Definitions
 
-(defvar conn-common-map (make-sparse-keymap))
-
-(defvar-local view-state--start-marker nil)
-
 (define-conn-state emacs-state
   "Activate `emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `emacs-state' does not
@@ -1511,13 +1483,6 @@ org-tree-edit state."
        ',name)))
 
 ;;;;; Repeat Extension
-
-
-(defcustom conn-repeating-cursor-color
-  "#a60000"
-  "Cursor color while repeat map is active."
-  :type 'color
-  :group 'conn-mode)
 
 (defun conn--repeat-get-map-ad ()
   (when-let (repeat-mode
