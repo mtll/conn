@@ -3331,6 +3331,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 ;;;; Keymaps
 
+(defvar-keymap reb-navigation-repeat-map
+  :repeat t
+  "C-s" 'reb-next-match
+  "C-r" 'reb-prev-match)
+
 (keymap-set minibuffer-mode-map "M-Y" 'conn-minibuffer-yank-region)
 
 (dolist (state conn-states)
