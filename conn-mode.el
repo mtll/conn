@@ -661,18 +661,14 @@ REGIONS should be a list of elements of the form
 (MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations in
 the current buffer.
 
-All of the keyword arguments are options.
+MACRO specifies a keyboard macro to use instead of recording a new one.
 
 BEFORE should be a function that will be called with the markers bounding
-the region to be acted upon before any other setup is performed.
-
-AFTER should be a function that will be called with the markers bounding the
-region after the keyboard macro has been run.  AFTER is guarenteed to be
-called if BEFORE is called.
+the region to be acted upon.
 
 If REVERSE is non-nil execute macro on regions from last to first.
 
-\(fn REGIONS &key BEFORE AFTER TRANSITION REVERSE MACRO)"
+\(fn REGIONS &key BEFORE REVERSE MACRO)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
@@ -707,7 +703,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "Begin a macro dispatch on REGIONS in BUFFER.
 
-\(fn BUFFER REGIONS &key BEFORE AFTER TRANSITION)"
+\(fn BUFFER REGIONS &key BEFORE MACRO REVERSE)"
   (pop-to-buffer-same-window buffer)
   (let ((loop-fn (make-symbol "conn--kmacro-loop-fn"))
         (before (plist-get rest :before)))
