@@ -2770,10 +2770,13 @@ When called interactively inserts STRING at `point' and `mark'."
 
 With a prefix ARG activate `rectangle-mark-mode'."
   (interactive "P")
-  (cond (arg (if (use-region-p)
-                 (rectangle-mark-mode 'toggle)
-               (activate-mark)
-               (rectangle-mark-mode)))
+  (cond ((eq arg '-)
+         (conn-dot-region (region-bounds)))
+        (arg
+         (if (use-region-p)
+             (rectangle-mark-mode 'toggle)
+           (activate-mark)
+           (rectangle-mark-mode)))
         (mark-active (deactivate-mark))
         (t (activate-mark))))
 
