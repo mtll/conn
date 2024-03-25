@@ -45,6 +45,22 @@
 
 ;;;; Variables
 
+;;;;; Declerations
+
+;; Some of the following custom vars need
+;; these vars so we declare them here to
+;; stop the byte compiler complaining.
+(defvar conn-mode nil)
+(defvar conn-local-mode)
+(defvar conn-view-state)
+(defvar conn--aux-timer nil)
+(defvar conn-modes)
+
+(defvar conn--mark-cursor-timer nil
+  "`run-with-idle-timer' timer to update `mark' cursor.")
+
+;;;;; Customizable Variables
+
 (defgroup conn-mode nil
   "Modal keybinding mode."
   :prefix "conn-"
