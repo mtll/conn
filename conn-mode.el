@@ -426,15 +426,16 @@ Uses `read-regexp' to read the regexp."
   "Define a new thing.
 
 \(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS)"
-  (unless (or (get thing 'forward-op)
+  (unless (or (intern-soft (format "forward-%s" thing))
+              (get thing 'forward-op)
               (memq :forward-op rest)
               (get thing 'bounds-of-thing-at-point)
               (memq :bounds-op rest)
-              (and (get thing 'beginning-op)
-                   (get thing 'end-op))
-              (and (memq :end-op rest)
-                   (memq :beg-op rest)))
-    (error "%s definition requires at least one of: %s, %s, (%s and %s)"
+              (and (or (get thing 'beginning-op)
+                       (memq :beg-op rest))
+                   (or (get thing 'end-op)
+                       (memq :end-op rest))))
+    (error "%s definition requires at least one of: %s, %s, or (%s and %s)"
            thing :forward-op :bounds-op :beg-op :end-op))
   (when-let ((forward (plist-get rest :forward-op)))
     (put thing 'forward-op forward))
@@ -445,7 +446,7 @@ Uses `read-regexp' to read the regexp."
   (when-let ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
   (when-let ((commands (plist-get rest :commands)))
-    (conn-set-mark-handler commands (funcall handler thing))))
+    (conn-set-mark-handler commands handler)))
 
 (defmacro conn-define-thing-handler (name args &rest rest)
   "Define a thing movement command mark handler constructor.
@@ -2851,9 +2852,10 @@ of deleting it."
     (when N (forward-line N))
     (conn--end-of-inner-line-1)
     (when (and (= point (point))
-               (= mark (save-excursion
-                         (back-to-indentation)
-                         (point))))
+               (or (= mark (save-excursion
+                             (back-to-indentation)
+                             (point)))
+                   (use-region-p)))
       (goto-char (line-end-position))
       (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
 
@@ -2865,9 +2867,10 @@ of deleting it."
     (when N (forward-line (- N)))
     (back-to-indentation)
     (when (and (= point (point))
-               (= mark (save-excursion
-                         (conn--end-of-inner-line-1)
-                         (point))))
+               (or (= mark (save-excursion
+                             (conn--end-of-inner-line-1)
+                             (point)))
+                   (use-region-p)))
       (goto-char (line-beginning-position))
       (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
 
@@ -3291,63 +3294,48 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
 
 (conn-define-thing
- 'dot
- 'conn-individual-thing-handler
+ 'dot (conn-individual-thing-handler 'dot)
  :beg-op (lambda () (conn-previous-dot 1))
  :end-op (lambda () (conn-next-dot 1))
  :commands '(conn-next-dot conn-previous-dot))
 
 (conn-define-thing
- 'word
- 'conn-sequential-thing-handler
- :forward-op 'forward-word
+ 'word (conn-sequential-thing-handler 'word)
  :commands '(forward-word backward-word))
 
 (conn-define-thing
- 'whitespace
- 'conn-individual-thing-handler
- :forward-op 'forward-whitespace
+ 'whitespace (conn-individual-thing-handler 'whitespace)
  :commands '(forward-whitespace conn-backward-whitespace))
 
 (conn-define-thing
- 'sentence
- 'conn-sequential-thing-handler
- :forward-op 'forward-sentence
+ 'sentence (conn-sequential-thing-handler 'sentence)
  :commands '(forward-sentence backward-sentence))
 
 (conn-define-thing
- 'paragraph
- 'conn-sequential-thing-handler
- :forward-op 'forward-paragraph
+ 'paragraph (conn-sequential-thing-handler 'paragraph)
  :commands '(forward-paragraph backward-paragraph))
 
 (conn-define-thing
- 'defun
- 'conn-sequential-thing-handler
+ 'defun (conn-sequential-thing-handler 'defun)
  :commands '(end-of-defun beginning-of-defun))
 
 (conn-define-thing
- 'buffer
- 'conn-individual-thing-handler
+ 'buffer (conn-individual-thing-handler 'buffer)
  :commands '(end-of-buffer beginning-of-buffer))
 
 (conn-define-thing
- 'line
- 'conn-sequential-thing-handler
- :forward-op 'forward-line
+ 'line (conn-sequential-thing-handler 'line)
  :commands '(forward-line conn-backward-line))
 
 (conn-define-thing
- 'outer-line
- 'conn-individual-thing-handler
+ 'outer-line (conn-individual-thing-handler 'outer-line)
  :beg-op (lambda () (move-beginning-of-line nil))
  :end-op (lambda () (move-end-of-line nil))
  :commands '(move-beginning-of-line
              move-end-of-line))
 
 (conn-define-thing
- 'inner-line
- 'conn-individual-thing-handler
+ 'inner-line (conn-individual-thing-handler 'inner-line)
  :beg-op 'back-to-indentation
  :end-op 'conn--end-of-inner-line-1
  :commands '(back-to-indentation
@@ -3957,14 +3945,12 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   (defvar org-mode-map)
 
   (conn-define-thing
-   'org-paragraph
-   'conn-sequential-thing-handler
+   'org-paragraph (conn-sequential-thing-handler 'org-paragraph)
    :forward-op 'org-forward-paragraph
    :commands '(org-forward-paragraph org-backward-paragraph))
 
   (conn-define-thing
-   'org-sentence
-   'conn-sequential-thing-handler
+   'org-sentence (conn-sequential-thing-handler 'org-sentence)
    :forward-op 'org-forward-sentence
    :commands '(org-forward-sentence org-backward-sentence))
 
@@ -4007,8 +3993,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
       "U" 'paredit-backward-up))
 
   (conn-define-thing
-   'paredit-sexp
-   'conn-sequential-thing-handler
+   'paredit-sexp (conn-sequential-thing-handler 'paredit-sexp)
    :forward-op 'paredit-forward
    :commands '(paredit-forward
                paredit-backward
