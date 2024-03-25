@@ -2274,6 +2274,17 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
+(defun conn-minibuffer-yank-region ()
+  (interactive)
+  (let ((region)
+        (win (selected-window)))
+    (other-window 1)
+    (with-current-buffer (window-buffer (selected-window))
+      (setq region (buffer-substring-no-properties
+                    (region-beginning) (region-end))))
+    (select-window win)
+    (insert region)))
+
 (defun conn-toggle-sort-fold-case ()
   (interactive)
   (message "Sort fold case: %s"
@@ -3289,6 +3300,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 
 ;;;; Keymaps
+
+(keymap-set minibuffer-mode-map "M-Y" 'conn-minibuffer-yank-region)
 
 (dolist (state conn-states)
   (define-keymap
