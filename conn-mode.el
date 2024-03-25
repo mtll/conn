@@ -648,10 +648,8 @@ into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
                     (marker-buffer beg))
                   needle)
     (mapcar (pcase-lambda (`(,key . ,val))
-              (cons key
-                    (if reverse
-                        (sort val (lambda (a b) (> (car a) (car b))))
-                      (sort val (lambda (a b) (< (car a) (car b)))))))
+              (cons key (sort val (lambda (a b)
+                                    (xor reverse (< (car a) (car b)))))))
             needle)))
 
 (defun conn--dispatch-on-regions (regions &rest rest)
