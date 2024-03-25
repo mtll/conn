@@ -138,7 +138,10 @@ Defines default STATE for buffers matching REGEXP."
   "Face for dots."
   :group 'conn-dots)
 
-(defcustom conn-overlay-priority 1001
+;; Isearch uses a priority of 1001 for
+;; its lazy highlighting, we want to be
+;; less than that by default.
+(defcustom conn-overlay-priority 1000
   "Priority of dot overlays."
   :type 'integer
   :group 'conn-dots)
@@ -217,9 +220,6 @@ Each element may be either a symbol or a list of the form
 
 (defvar-local conn--ephemeral-mark nil)
 
-(defvar conn--mark-cursor-timer nil
-  "`run-with-idle-timer' timer to update `mark' cursor.")
-
 (defvar-local conn--mark-cursor nil
   "`mark' cursor overlay.")
 (put 'conn--mark-cursor 'permanent-local t)
@@ -246,13 +246,7 @@ See `conn--dispatch-on-regions'.")
 
 (defvar conn-common-map (make-sparse-keymap))
 
-(defvar-local view-state--start-marker nil)
-
-(defvar conn-mode nil)
-(defvar conn-local-mode)
-(defvar view-state)
-(defvar conn--aux-timer nil)
-(defvar conn-modes)
+(defvar-local conn-view-state--start-marker nil)
 
 ;;;;; Command Histories
 
