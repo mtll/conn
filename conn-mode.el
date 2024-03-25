@@ -960,7 +960,8 @@ If BUFFER is nil use current buffer."
               (= (point) (mark)))
     (add-to-history 'conn--unpop-ring
                     (conn--create-marker (mark t))
-                    mark-ring-max)))
+                    mark-ring-max
+                    'keep-duplicates)))
 
 (defun conn--push-mark-ad (fn &rest args)
   (if conn--ephemeral-mark
