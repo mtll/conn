@@ -1566,6 +1566,14 @@ If STATE is nil make COMMAND always repeat."
 
 ;;;;; Dot Commands
 
+(defun conn-yank-to-dots (buffers &optional reverse)
+  (interactive (list (conn--read-buffers-for-dispatch)
+                     current-prefix-arg))
+  (conn--dot-macro-dispatch buffers
+                            :before (lambda (_) (conn-emacs-state))
+                            :macro (kmacro conn-yank-keys)
+                            :reverse reverse))
+
 (defun conn-remove-dot ()
   "Remove dot at point.
 If the region is active remove all dots in region."
@@ -3598,34 +3606,37 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 (define-keymap
   :keymap conn-dot-state-map
   "M-<down-mouse-1>" 'conn-dot-at-click
-  "<backspace>"      'conn-kill-to-dots
-  "<return>"         'conn-dot-lines
-  "<tab>"            'conn-remove-all-dots
-  "TAB"              'conn-remove-all-dots
-  "M-?"              'conn-dot-redo
   "M-/"              'conn-dot-undo
+  "<tab>"            'conn-remove-all-dots
+  "<return>"         'conn-dot-lines
+  "<backspace>"      'conn-kill-to-dots
+  "M-?"              'conn-dot-redo
+  "TAB"              'conn-remove-all-dots
   "C-n"              'conn-next-dot
   "C-p"              'conn-previous-dot
   "C-z"              'conn-dots-dispatch
+  "{"                'conn-first-dot
+  "}"                'conn-last-dot
+  "|"                'conn-split-region-on-regexp
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
-  "("                'conn-dots-dispatch
-  ")"                'conn-dots-dispatch-macro
+  "("                'conn-dots-dispatch-prompt
+  ")"                'conn-dots-dispatch-macro-prompt
   "["                'conn-remove-dots-before
   "\\"               'conn-split-dots-on-regexp
   "]"                'conn-remove-dots-after
-  "_"                'conn-dot-trim-regexp
-  "`"                'conn-dot-movement-mode
-  "d"                'conn-remove-dots-outside-region
+  "c"                'conn-dot-all-things-in-region
+  "C"                'conn-remove-dots-outside-region
+  "d"                'conn-dots-dispatch
+  "E"                'conn-dot-point
   "e"                'conn-dot-region
-  "q"                'conn-dot-point
+  "q"                'conn-dot-this-map
   "r"                conn-dot-region-map
-  "t"                'conn-dot-this-map
+  "t"                'conn-dot-trim-regexp
   "w"                'conn-remove-dot
-  "{"                'conn-first-dot
-  "|"                'conn-split-region-on-regexp
-  "}"                'conn-last-dot)
+  "y"                'conn-dots-dispatch-macro
+  "Y"                'conn-yank-to-dots)
 
 (define-keymap
   :keymap conn-emacs-state-map
@@ -3636,7 +3647,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-y"  'conn-yank-replace
   "C-z"  'conn-region-dispatch
   "M-y"  'conn-completing-yank-replace
-  "<f4>" 'save-buffer
   "#"    'conn-query-replace-region
   "$"    'ispell-word
   "%"    'conn-query-replace-regexp-region
@@ -3655,7 +3665,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "w"    'conn-kill-region
   "y"    'conn-yank-keys
   "Y"    'yank-from-kill-ring
-  "z"    'conn-exchange-mark-command
   "|"    'shell-command-on-region)
 
 (define-keymap
@@ -3708,7 +3717,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "v"   'conn-toggle-mark-command
   "V"   'narrow-to-region
   "W"   'widen
-  "x"   'conn-C-x-keys)
+  "x"   'conn-C-x-keys
+  "z"   'conn-exchange-mark-command)
 
 (define-keymap
   :keymap conn-view-state-map
@@ -3793,19 +3803,19 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "M-v"     'conn-scroll-down)
 
 (defvar-keymap conn-global-map
-  "M-RET"   'conn-open-line-and-indent
-  "C-x /"   'tab-bar-history-back
-  "C-x ?"   'tab-bar-history-forward
-  "C-x n t" 'conn-narrow-to-thing
-  "C-x r"   conn-ctl-x-r-map
-  "C-x 4"   conn-c-x-4-map
-  "C-x t s" 'tab-switch
-  "C-x t N" 'conn-tab-bar-new-named-tab
-  "C-x t D" 'conn-tab-bar-duplicate-and-name-tab
-  "C-x n >" 'conn-narrow-to-end-of-buffer
-  "C-x n <" 'conn-narrow-to-beginning-of-buffer
   "<pause>" 'conn-toggle-minibuffer-focus
   "C-S-w"   'delete-region
+  "C-x /"   'tab-bar-history-back
+  "C-x 4"   conn-c-x-4-map
+  "C-x ?"   'tab-bar-history-forward
+  "C-x n <" 'conn-narrow-to-beginning-of-buffer
+  "C-x n >" 'conn-narrow-to-end-of-buffer
+  "C-x n t" 'conn-narrow-to-thing
+  "C-x r"   conn-ctl-x-r-map
+  "C-x t D" 'conn-tab-bar-duplicate-and-name-tab
+  "C-x t N" 'conn-tab-bar-new-named-tab
+  "C-x t s" 'tab-switch
+  "M-RET"   'conn-open-line-and-indent
   "M-O"     'pop-to-mark-command
   "M-U"     'conn-unpop-to-mark-command)
 

@@ -74,5 +74,13 @@
   "C-z"   'conn-isearch-dispatch
   "M-,"   'conn-isearch-in-dot-toggle)
 
+;; isearchp-highlight-lighter forces redisplay,
+;; this is not desirable during keyboard macros.
+;; I don't know if this is reasonable to apply by default.
+;;
+;; (defun conn--unless-executing-kbd-macro () executing-kbd-macro)
+;; (advice-add 'isearchp-highlight-lighter :before-until
+;;             'conn--unless-executing-kbd-macro)
+
 (provide 'conn-isearch+)
 ;;; conn-isearch+.el ends here
