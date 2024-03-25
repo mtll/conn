@@ -1198,6 +1198,7 @@ BODY contains code to be executed each time the transition function is executed.
          (lighter-face-name (conn--symbolicate name "-lighter-face"))
          (indicator-name (conn--symbolicate name "-indicator"))
          (buffer-face-name (conn--symbolicate name "-buffer-face"))
+         (enter (gensym "enter"))
          keyw
          lighter-face
          suppress-input-method
@@ -1209,7 +1210,7 @@ BODY contains code to be executed each time the transition function is executed.
          buffer-face)
     (while (keywordp (setq keyw (car body)))
       (setq body (cdr body))
-      (pcase keyw
+      (pcase-exhaustive keyw
         (:cursor (setq cursor (pop body)))
         (:lighter-face (setq lighter-face (pop body)))
         (:suppress-input-method (setq suppress-input-method (pop body)))
@@ -1222,8 +1223,7 @@ BODY contains code to be executed each time the transition function is executed.
                   map)))
         (:indicator (setq indicator (pop body)))
         (:ephemeral-marks (setq ephemeral-marks (pop body)))
-        (:buffer-face (setq buffer-face (pop body)))
-        (_ (pop body))))
+        (:buffer-face (setq buffer-face (pop body)))))
     `(progn
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
@@ -1232,8 +1232,15 @@ BODY contains code to be executed each time the transition function is executed.
          ,(conn--stringify "Keymap active in `" name "'."))
 
        (defvar ,transition-map-name ,transitions
-         ,(conn--stringify
-           "Keymap for commands that transition from `" name "' to other states."))
+         ,(with-temp-buffer
+            (insert (conn--stringify
+                     "Keymap for commands that transition from `"
+                     name "' to other states."))
+            (goto-char (point-min))
+            (let ((fill-column 70)
+                  (adaptive-fill-mode nil))
+              (fill-region (point-min) (point-max)))
+            (buffer-string)))
 
        (defface ,lighter-face-name
          ',lighter-face
@@ -1288,13 +1295,14 @@ BODY contains code to be executed each time the transition function is executed.
          ,doc
          (interactive)
          (when conn-current-state
-           (funcall (get conn-current-state :conn-transition-fn) t))
-         (funcall (get ',name :conn-transition-fn)))
+           (funcall (get conn-current-state :conn-transition-fn) :exit))
+         (funcall (get ',name :conn-transition-fn) :enter))
 
        (put ',name :conn-transition-fn
-            (lambda (&optional exit)
-              (unless (xor exit (eq conn-current-state ',name))
-                (if exit
+            (lambda (,enter)
+              (when (eq ,enter :exit) (setq ,enter nil))
+              (unless (and ,enter (eq conn-current-state ',name))
+                (if (not ,enter)
                     (progn
                       (setq ,name nil)
                       (setq conn-current-state nil)
@@ -3816,7 +3824,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (without-restriction
       (conn--remove-dots))
     (when conn-current-state
-      (funcall (get conn-current-state :conn-transition-fn) t))
+      (funcall (get conn-current-state :conn-transition-fn) :exit))
     (setq conn-current-state nil)
     (conn--delete-mark-cursor)
     (setq-local mode-line-format
