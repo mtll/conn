@@ -3453,16 +3453,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
 
-(defvar-keymap conn-isearch-dot-map
-  "e" 'conn-isearch-add-dots
-  "r" 'conn-isearch-refine-dots
-  "w" 'conn-isearch-remove-dots
-  "s" 'conn-isearch-split-dots
-  "(" 'conn-isearch-dots-dispatch
-  "d" 'conn-isearch-dots-dispatch
-  ")" 'conn-isearch-dots-dispatch-macro
-  "m" 'conn-isearch-dots-dispatch-macro)
-
 (defvar-keymap conn-dot-this-map
   :prefix 'conn-dot-this-map
   :doc "Dot this map."
@@ -3489,9 +3479,16 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap isearch-mode-map
-  "C-z"         'conn-isearch-dispatch
-  "M-."         conn-isearch-dot-map
-  "M-<return>"  'conn-isearch-exit-and-mark)
+  "M-<return>" 'conn-isearch-exit-and-mark
+  "M-E"        'conn-isearch-add-dots
+  "M-R"        'conn-isearch-refine-dots
+  "M-W"        'conn-isearch-remove-dots
+  "M-S"        'conn-isearch-split-dots
+  "M-("        'conn-isearch-dots-dispatch
+  "M-D"        'conn-isearch-dots-dispatch
+  "M-)"        'conn-isearch-dots-dispatch-macro
+  "M-M"        'conn-isearch-dots-dispatch-macro
+  "C-z"        'conn-isearch-dispatch)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'compilation-mode)
