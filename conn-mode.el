@@ -3222,6 +3222,16 @@ With any other prefix argument select buffers with `completing-read-multiple'."
                             :reverse reverse
                             :macro register))
 
+(defun conn-isearch-dots-dispatch ()
+  (interactive)
+  (isearch-done)
+  (call-interactively 'conn-dots-dispatch))
+
+(defun conn-isearch-dots-dispatch-macro ()
+  (interactive)
+  (isearch-done)
+  (call-interactively 'conn-dots-dispatch-macro))
+
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
   (interactive)
@@ -3467,8 +3477,11 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "e" 'conn-isearch-add-dots
   "r" 'conn-isearch-refine-dots
   "w" 'conn-isearch-remove-dots
-  "x" 'conn-isearch-split-dots
-  "d" 'conn-dots-dispatch)
+  "s" 'conn-isearch-split-dots
+  "(" 'conn-isearch-dots-dispatch
+  "d" 'conn-isearch-dots-dispatch
+  ")" 'conn-isearch-dots-dispatch-macro
+  "m" 'conn-isearch-dots-dispatch-macro)
 
 (defvar-keymap conn-dot-this-map
   :prefix 'conn-dot-this-map
@@ -3673,6 +3686,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "B"   'conn-C-x-t-keys
   "c"   'conn-C-c-keys
   "C"   'conn-copy-region
+  "D"   'conn-dot-region
   "g"   'conn-M-g-keys
   "I"   'backward-paragraph
   "i"   'previous-line
