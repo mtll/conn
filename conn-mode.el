@@ -666,7 +666,11 @@ APPEND will append the recorded keyboard macro to the last keyboard macro.
 Has no effect if MACRO is specified.
 
 BEFORE should be a function that will be called with the markers bounding
-the region to be acted upon.
+the region to be acted upon.  If BEFORE is specified it is expected to
+put the buffer into the desired conn state for dispatch.
+
+AFTER will be called once per buffer after all macros have finished
+running in that buffer.
 
 If REVERSE is non-nil execute macro on regions from last to first.
 
@@ -696,11 +700,10 @@ If REVERSE is non-nil execute macro on regions from last to first.
         (dolist (handle handles)
           (accept-change-group handle)
           (undo-amalgamate-change-group handle)))
-      (unless (plist-get rest :preserve-marks)
-        (pcase-dolist (`(,_ . ,rs) regions)
-          (pcase-dolist (`(,beg . ,end) rs)
-            (set-marker beg nil)
-            (set-marker end nil))))
+      (pcase-dolist (`(,_ . ,rs) regions)
+        (pcase-dolist (`(,beg . ,end) rs)
+          (set-marker beg nil)
+          (set-marker end nil)))
       (set-window-configuration wind))))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
@@ -712,35 +715,36 @@ If REVERSE is non-nil execute macro on regions from last to first.
         (before (plist-get rest :before)))
     (fset loop-fn (lambda ()
                     (pcase (pop regions)
-                      (`(,beg . ,end)
+                      ((and `(,beg . ,end) region)
+                       (if before
+                           (funcall before region)
+                         (conn-state))
                        (goto-char beg)
                        (conn--push-ephemeral-mark end)
-                       (conn-state)
-                       (when before (funcall before beg end))
                        t)
                       (_ nil))))
     (advice-add #'kmacro-loop-setup-function :before-while loop-fn)
+    (deactivate-mark t)
     (unwind-protect
-        (save-mark-and-excursion
-          (deactivate-mark t)
-          (conn-with-saved-state
-            (pcase conn-this-dispatch-macro
-              ((and (pred kmacro-p) kmacro)
-               (funcall kmacro 0))
-              ((and (pred identity) macro)
-               (kmacro-call-macro 0 nil nil macro))
-              ('nil
-               (funcall loop-fn)
-               (pulse-momentary-highlight-region (region-beginning)
-                                                 (region-end)
-                                                 'conn-dot-face)
-               (kmacro-start-macro (plist-get rest :append))
-               (unwind-protect
-                   (recursive-edit)
-                 (if (not defining-kbd-macro)
-                     (user-error "Not defining keyboard macro")
-                   (kmacro-end-macro 0)
-                   (setf conn-this-dispatch-macro (kmacro-ring-head))))))))
+        (conn-with-saved-state
+          (pcase conn-this-dispatch-macro
+            ((and (pred kmacro-p) kmacro)
+             (funcall kmacro 0))
+            ((and (pred identity) macro)
+             (kmacro-call-macro 0 nil nil macro))
+            ('nil
+             (funcall loop-fn)
+             (pulse-momentary-highlight-region (region-beginning)
+                                               (region-end)
+                                               'conn-dot-face)
+             (kmacro-start-macro (plist-get rest :append))
+             (unwind-protect
+                 (recursive-edit)
+               (if (not defining-kbd-macro)
+                   (user-error "Not defining keyboard macro")
+                 (kmacro-end-macro 0)
+                 (setf conn-this-dispatch-macro (kmacro-ring-head)))))))
+      (if-let ((after (plist-get rest :after))) (funcall after))
       (advice-remove 'kmacro-loop-setup-function loop-fn))))
 
 
@@ -906,31 +910,36 @@ If BUFFER is nil use current buffer."
   (let* ((before (plist-get rest :before))
          (after (plist-get rest :after))
          (conn-dot-macro-dispatch-p t)
+         (first-iter t)
          regions dots)
     (setf rest (plist-put rest :before
-                          (lambda (beg end)
-                            (when before (funcall before beg end))
-                            (conn--delete-dot (conn--dot-before-point end))
-                            (conn-state)))
+                          (lambda (next-region)
+                            (conn--delete-dot
+                             (conn--dot-before-point (cdr next-region)))
+                            (if first-iter
+                                (setq first-iter nil)
+                              (push (cons (conn--create-marker (region-beginning))
+                                          (conn--create-marker (region-end)))
+                                    dots))
+                            (if before
+                                (funcall before next-region)
+                              (conn-state))))
           rest (plist-put rest :after
-                          (lambda (beg end)
-                            (push (cons (conn--create-marker (region-beginning))
-                                        (conn--create-marker (region-end)))
-                                  dots)
-                            (when after (funcall after beg end)))))
+                          (lambda ()
+                            (apply #'conn--create-dots
+                                   (cons (cons (region-beginning) (region-end)) dots))
+                            (pcase-dolist (`(,m1 . ,m2) dots)
+                              (set-marker m1 nil)
+                              (set-marker m2 nil))
+                            (setq dots nil)
+                            (if after (funcall after)))))
     (dolist (buf buffers)
       (with-current-buffer buf
         (dolist (ov (conn--all-overlays #'conn-dotp))
           (push (cons (conn--create-marker (overlay-start ov))
                       (conn--create-marker (overlay-end ov)))
                 regions))))
-    (apply #'conn--dispatch-on-regions regions rest)
-    ;; We cannot just move the dots in the after function
-    ;; as it may cause overlapping during dispatch.
-    (apply #'conn--create-dots dots)
-    (pcase-dolist (`(,m1 . ,m2) dots)
-      (set-marker m1 nil)
-      (set-marker m2 nil))))
+    (apply #'conn--dispatch-on-regions regions rest)))
 
 
 ;;;; Advice
@@ -3163,16 +3172,42 @@ there's a region, all lines that region covers will be duplicated."
   (pcase-exhaustive
       (car (read-multiple-choice
             "Dispatch on multiple buffers?"
-            '((?y "yes" "dispatch on buffers read one by one")
-              (?n "no" "dispatch on current buffer")
+            '((?o "one by one" "dispatch on buffers read one by one")
               (?r "matcing regexp" "dispatch on buffers matching regexp"))
             nil nil (and (not use-short-answers)
                          (not (use-dialog-box-p)))))
-    (?y (conn-read-dot-buffers))
-    (?r (conn-read-matching-dot-buffers))
-    (?n (list (current-buffer)))))
+    (?o (conn-read-dot-buffers))
+    (?r (conn-read-matching-dot-buffers))))
 
-(defun conn-dots-dispatch (buffers &optional reverse)
+(defun conn-dots-dispatch (&optional reverse)
+  "Begin recording dot macro for BUFFERS, initially in conn-state.
+
+Interactively buffers defaults to current buffer.
+With prefix argument \\[universal-argument] ask for a regexp and operate
+on all buffers matching regexp.
+With any other prefix argument select buffers with `completing-read-multiple'."
+  (interactive "P")
+  (conn--dot-macro-dispatch (list (current-buffer)) :reverse reverse))
+
+(defun conn-dots-dispatch-macro (register &optional reverse)
+  "Begin recording dot macro for BUFFERS, initially in conn-state.
+
+Interactively buffers defaults to current buffer.
+With prefix argument \\[universal-argument] ask for a regexp and operate
+on all buffers matching regexp.
+With any other prefix argument select buffers with `completing-read-multiple'."
+  (interactive (list (conn--read-macro-for-dispatch)
+                     current-prefix-arg))
+  (unless (or (null register)
+              (stringp register)
+              (vectorp register)
+              (kmacro-p register))
+    (user-error "Resiter is not a keyboard macro"))
+  (conn--dot-macro-dispatch (list (current-buffer))
+                            :reverse reverse
+                            :macro register))
+
+(defun conn-dots-dispatch-prompt (buffers &optional reverse)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
@@ -3183,7 +3218,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
    (list (conn--read-buffers-for-dispatch) current-prefix-arg))
   (conn--dot-macro-dispatch buffers :reverse reverse))
 
-(defun conn-dots-dispatch-macro (buffers register &optional reverse)
+(defun conn-dots-dispatch-macro-prompt (buffers register &optional reverse)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
