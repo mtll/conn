@@ -231,7 +231,7 @@ Each element may be either a symbol or a list of the form
 
 See `conn--dispatch-on-regions'.")
 
-(defvar conn-last-dispatch-macro nil)
+(defvar conn-this-dispatch-macro nil)
 (defvar-local conn--dot-undoing nil)
 (defvar-local conn--dot-undo-ring nil)
 (defvar-local conn--dot-undone nil)
@@ -676,93 +676,73 @@ If REVERSE is non-nil execute macro on regions from last to first.
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
-        (conn-last-dispatch-macro (plist-get rest :macro))
         (conn-macro-dispatch-p t)
+        (conn-this-dispatch-macro (plist-get rest :macro))
         (wind (current-window-configuration))
         (undo-outer-limit nil)
         (undo-limit most-positive-fixnum)
         (undo-strong-limit most-positive-fixnum)
         (success nil)
         (handles nil))
-    (conn-with-saved-state
-      (conn-state)
-      (unwind-protect
-          (progn
-            (unless regions (user-error "No regions for dispatch"))
-            (pcase-dolist (`(,buffer . ,rs) regions)
-              (push (prepare-change-group buffer) handles)
-              (apply 'conn--dispatch-in-buffer buffer rs rest))
-            (setq success t)
-            (kmacro-to-register conn-last-dispatch-macro-register))
-        (if (not success)
-            (mapc #'cancel-change-group handles)
-          (dolist (handle handles)
-            (accept-change-group handle)
-            (undo-amalgamate-change-group handle)))
-        (unless (plist-get rest :preserve-marks)
-          (pcase-dolist (`(,_ . ,rs) regions)
-            (pcase-dolist (`(,beg . ,end) rs)
-              (set-marker beg nil)
-              (set-marker end nil))))
-        (set-window-configuration wind)))))
+    (unwind-protect
+        (progn
+          (unless regions (user-error "No regions for dispatch"))
+          (pcase-dolist (`(,buffer . ,rs) regions)
+            (push (prepare-change-group buffer) handles)
+            (apply 'conn--dispatch-in-buffer buffer rs rest))
+          (setq success t)
+          (kmacro-to-register conn-last-dispatch-macro-register))
+      (if (not success)
+          (mapc #'cancel-change-group handles)
+        (dolist (handle handles)
+          (accept-change-group handle)
+          (undo-amalgamate-change-group handle)))
+      (unless (plist-get rest :preserve-marks)
+        (pcase-dolist (`(,_ . ,rs) regions)
+          (pcase-dolist (`(,beg . ,end) rs)
+            (set-marker beg nil)
+            (set-marker end nil))))
+      (set-window-configuration wind))))
 
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "Begin a macro dispatch on REGIONS in BUFFER.
 
 \(fn BUFFER REGIONS &key BEFORE AFTER TRANSITION)"
   (pop-to-buffer-same-window buffer)
-  (save-mark-and-excursion
-    (deactivate-mark t)
-    (pcase-dolist (`(,beg . ,end) regions)
-      (apply 'conn--macro-dispatch-1 beg end rest))))
-
-(cl-defgeneric conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
-  "Dispatch on region from BEG to END.")
-
-(cl-defmethod conn--macro-dispatch-1 (beg end
-                                          &context (conn-last-dispatch-macro (eql nil))
-                                          &key before after
-                                          &allow-other-keys)
-  "Perform first iteration of macro dispatch."
-  (let ((mark-ring mark-ring))
-    (conn-with-saved-state
-      (goto-char beg)
-      (conn--push-ephemeral-mark end)
-      (pulse-momentary-highlight-region (region-beginning)
-                                        (region-end)
-                                        'conn-dot-face)
-      (when before (funcall before beg end))
-      (kmacro-start-macro nil)
-      (unwind-protect
-          (recursive-edit)
-        (if defining-kbd-macro
-            (kmacro-end-macro nil)
-          (user-error "Not defining keyboard macro"))
-        ;; From kmacro.  We want to user-error at the end
-        ;; of this so we can't just use kmacro-end-macro.
-        (when (and last-kbd-macro (= (length last-kbd-macro) 0))
-          (setq last-kbd-macro nil)
-          (while (and (null last-kbd-macro) kmacro-ring)
-            (kmacro-pop-ring1))
-          (user-error "Ignore empty macro"))
-        (when after (funcall after beg end)))))
-  (setq conn-last-dispatch-macro last-kbd-macro))
-
-(cl-defmethod conn--macro-dispatch-1 (beg end &key before after &allow-other-keys)
-  "Perform remaining iterations of macro dispatch."
-  (let ((mark-ring mark-ring))
-    (conn-with-saved-state
-      (condition-case err
-          (progn
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (when before (funcall before beg end))
-            (unwind-protect
-                (if (kmacro-p conn-last-dispatch-macro)
-                    (funcall conn-last-dispatch-macro)
-                  (kmacro-call-macro nil nil nil conn-last-dispatch-macro))
-              (when after (funcall after beg end))))
-        (user-error (message "Error in macro dispatch: %s" err) nil)))))
+  (let ((loop-fn (make-symbol "conn--kmacro-loop-fn"))
+        (before (plist-get rest :before)))
+    (fset loop-fn (lambda ()
+                    (pcase (pop regions)
+                      (`(,beg . ,end)
+                       (goto-char beg)
+                       (conn--push-ephemeral-mark end)
+                       (conn-state)
+                       (when before (funcall before beg end))
+                       t)
+                      (_ nil))))
+    (advice-add #'kmacro-loop-setup-function :before-while loop-fn)
+    (unwind-protect
+        (save-mark-and-excursion
+          (deactivate-mark t)
+          (conn-with-saved-state
+            (pcase conn-this-dispatch-macro
+              ((and (pred kmacro-p) kmacro)
+               (funcall kmacro 0))
+              ((and (pred identity) macro)
+               (kmacro-call-macro 0 nil nil macro))
+              ('nil
+               (funcall loop-fn)
+               (pulse-momentary-highlight-region (region-beginning)
+                                                 (region-end)
+                                                 'conn-dot-face)
+               (kmacro-start-macro (plist-get rest :append))
+               (unwind-protect
+                   (recursive-edit)
+                 (if (not defining-kbd-macro)
+                     (user-error "Not defining keyboard macro")
+                   (kmacro-end-macro 0)
+                   (setf conn-this-dispatch-macro (kmacro-ring-head))))))))
+      (advice-remove 'kmacro-loop-setup-function loop-fn))))
 
 
 ;;;; Dots
