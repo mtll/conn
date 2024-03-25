@@ -44,12 +44,23 @@
   (isearchp-add-filter-predicate '("[dot]" conn-isearch-in-dot-p "[DOT]")))
 
 ;;;###autoload
-(defun conn-isearch-in-dots (&optional backward)
-  (interactive "P")
-  (isearch-mode (not backward))
+(defun conn-isearch-forward-in-dots ()
+  (interactive)
+  (conn-dot-state)
+  (isearch-mode t)
   (conn-isearch-in-dot-toggle))
 
-(keymap-set conn-dot-state-map "M-," 'conn-isearch-in-dots)
+;;;###autoload
+(defun conn-isearch-backward-in-dots ()
+  (interactive)
+  (conn-dot-state)
+  (isearch-mode nil)
+  (conn-isearch-in-dot-toggle))
+
+(define-keymap
+  :keymap conn-common-map
+  "M-," 'conn-isearch-backward-in-dots
+  "M-." 'conn-isearch-forward-in-dots)
 
 (define-keymap
   :keymap isearch-mode-map
