@@ -244,8 +244,6 @@ See `conn--dispatch-on-regions'.")
 
 (defvar conn--aux-bindings nil)
 
-(defvar conn-common-map (make-sparse-keymap))
-
 (defvar-local conn-view-state--start-marker nil)
 
 ;;;;; Command Histories
@@ -1217,12 +1215,7 @@ BODY contains code to be executed each time the transition function is executed.
         (:lighter-face (setq lighter-face (pop body)))
         (:suppress-input-method (setq suppress-input-method (pop body)))
         (:keymap (setq keymap (pop body)))
-        (:transitions
-         (setq transitions
-               `(let ((map (make-sparse-keymap)))
-                  (pcase-dolist (`(,key . ,def) ',(pop body))
-                    (keymap-set map key def))
-                  map)))
+        (:transitions (setq transitions (pop body)))
         (:indicator (setq indicator (pop body)))
         (:ephemeral-marks (setq ephemeral-marks (pop body)))
         (:buffer-face (setq buffer-face (pop body)))))
@@ -1333,6 +1326,9 @@ BODY contains code to be executed each time the transition function is executed.
 
 ;;;; State Definitions
 
+(defvar-keymap conn-common-map
+  :doc "Keymap for bindings shared between dot and conn states.")
+
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
@@ -1345,10 +1341,11 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :cursor box
   :buffer-face ((t :inherit default))
   :ephemeral-marks t
-  :transitions (("<escape>" . conn-view-state)
-                ("<f7>"     . conn-pop-state)
-                ("<f8>"     . conn-state)
-                ("<f9>"     . conn-dot-state)))
+  :transitions (define-keymap
+                 "<escape>" 'conn-view-state
+                 "<f7>"     'conn-pop-state
+                 "<f8>"     'conn-state
+                 "<f9>"     'conn-dot-state))
 
 (conn-define-state conn-view-state
   "Activate `conn-view-state' in the current buffer.
@@ -1363,14 +1360,15 @@ from view state.  See `conn-view-state-map' for commands bound by view state."
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :ephemeral-marks nil
   :keymap (define-keymap :suppress t)
-  :transitions (("f"        . conn-emacs-state)
-                ("F"        . conn-emacs-state-prompt)
-                ("="        . conn-dot-state)
-                ("<f8>"     . conn-state)
-                ("<f9>"     . conn-dot-state)
-                ("<escape>" . conn-pop-state)
-                ("w"        . conn-view-state-quit)
-                ("c"        . conn-state))
+  :transitions (define-keymap
+                 "f"        'conn-emacs-state
+                 "F"        'conn-emacs-state-prompt
+                 "="        'conn-dot-state
+                 "<f8>"     'conn-state
+                 "<f9>"     'conn-dot-state
+                 "<escape>" 'conn-pop-state
+                 "w"        'conn-view-state-quit
+                 "c"        'conn-state)
   (if conn-view-state
       (progn
         (setq-local conn-view-state--start-marker (point-marker)))
@@ -1390,15 +1388,16 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :ephemeral-marks t
   :buffer-face ((t :inherit default :background "#f7eee1"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
-  :transitions (("f"        . conn-emacs-state)
-                ("F"        . conn-emacs-state-prompt)
-                ("<escape>" . conn-view-state)
-                ("t"        . conn-change)
-                ("'"        . conn-quoted-insert-overwrite)
-                ("<f7>"     . conn-emacs-state)
-                ("<f8>"     . conn-pop-state)
-                ("<f9>"     . conn-dot-state)
-                ("="        . conn-dot-state)))
+  :transitions (define-keymap
+                 "f"        'conn-emacs-state
+                 "F"        'conn-emacs-state-prompt
+                 "<escape>" 'conn-view-state
+                 "t"        'conn-change
+                 "'"        'conn-quoted-insert-overwrite
+                 "<f7>"     'conn-emacs-state
+                 "<f8>"     'conn-pop-state
+                 "<f9>"     'conn-dot-state
+                 "="        'conn-dot-state))
 
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
@@ -1414,13 +1413,14 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :ephemeral-marks t
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
-  :transitions (("<escape>" . conn-view-state)
-                ("<f7>"     . conn-emacs-state)
-                ("<f8>"     . conn-state)
-                ("<f9>"     . conn-pop-state)
-                ("f"        . conn-emacs-state)
-                ("F"        . conn-emacs-state-prompt)
-                ("Q"        . conn-dot-quit))
+  :transitions (define-keymap
+                 "<escape>" 'conn-view-state
+                 "<f7>"     'conn-emacs-state
+                 "<f8>"     'conn-state
+                 "<f9>"     'conn-pop-state
+                 "f"        'conn-emacs-state
+                 "F"        'conn-emacs-state-prompt
+                 "Q"        'conn-dot-quit)
   (if conn-dot-state
       (progn
         (setq conn--dot-undo-ring nil)
@@ -1445,14 +1445,15 @@ state."
   :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
   :buffer-face ((t :inherit conn-view-state-buffer-face))
   :keymap (define-keymap :suppress t)
-  :transitions (("f"        . conn-emacs-state)
-                ("F"        . conn-emacs-state-prompt)
-                ("E"        . conn-emacs-state-eol)
-                ("A"        . conn-emacs-state-eol)
-                ("="        . conn-dot-state)
-                ("<f8>"     . conn-state)
-                ("<f9>"     . conn-dot-state)
-                ("<escape>" . conn-pop-state)))
+  :transitions (define-keymap
+                 "f"        'conn-emacs-state
+                 "F"        'conn-emacs-state-prompt
+                 "E"        'conn-emacs-state-eol
+                 "A"        'conn-emacs-state-eol
+                 "="        'conn-dot-state
+                 "<f8>"     'conn-state
+                 "<f9>"     'conn-dot-state
+                 "<escape>" 'conn-pop-state))
 (put 'conn-org-tree-edit-state :conn-hide-mark t)
 
 
