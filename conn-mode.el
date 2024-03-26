@@ -3280,24 +3280,24 @@ With any other prefix argument select buffers with `completing-read-multiple'."
                                 'face 'minibuffer-prompt))
       (call-interactively #'quoted-insert))))
 
-(defun conn-emacs-state-open-line-above ()
-  (interactive)
-  (move-beginning-of-line 1)
-  (open-line 1)
+(defun conn-emacs-state-open-line-above (&optional arg)
+  (interactive "p")
+  (move-beginning-of-line arg)
+  (open-line arg)
   (indent-according-to-mode)
   (save-excursion
     (forward-line 1)
     (indent-according-to-mode))
   (conn-emacs-state))
 
-(defun conn-emacs-state-open-line ()
-  (interactive)
-  (move-end-of-line 1)
+(defun conn-emacs-state-open-line (&optional arg)
+  (interactive "p")
+  (move-end-of-line arg)
   (newline-and-indent)
   (conn-emacs-state))
 
-(defun conn-emacs-state-overwrite ()
-  (interactive)
+(defun conn-emacs-state-overwrite (&optional arg)
+  (interactive "P")
   (let ((hook (make-symbol "emacs-state-overwrite-hook")))
     (conn-emacs-state)
     (fset hook (lambda ()
@@ -3305,9 +3305,11 @@ With any other prefix argument select buffers with `completing-read-multiple'."
                    (overwrite-mode -1)
                    (remove-hook 'conn-transition-hook hook))))
     (add-hook 'conn-transition-hook hook)
-    (overwrite-mode 1)))
+    (if arg
+        (binary-overwrite-mode 1)
+      (overwrite-mode 1))))
 
-(defun conn-emacs-state-prompt ()
+(defun conn-emacs-state-prompt (&optional arg)
   "Transition to `conn-emacs-state'.
 
 If ARG is non-negative open a new line below point and enter insert state.
@@ -3315,7 +3317,7 @@ If ARG is non-negative open a new line below point and enter insert state.
 If ARG is negative open a new line above point and enter insert state.
 
 If arg is \\[universal-argument] enter `conn-emacs-state' in `overwrite-mode'."
-  (interactive)
+  (interactive "P")
   (pcase-exhaustive
       (car (read-multiple-choice
             "Enter emacs state how?"
@@ -3325,11 +3327,11 @@ If arg is \\[universal-argument] enter `conn-emacs-state' in `overwrite-mode'."
               (?l "end of line")
               (?o "overwrite mode"))
             nil nil nil))
-    (?o (conn-emacs-state-overwrite))
-    (?k (conn-emacs-state-open-line))
-    (?i (conn-emacs-state-open-line-above))
-    (?j (conn-emacs-state-bol))
-    (?l (conn-emacs-state-eol))))
+    (?o (conn-emacs-state-overwrite arg))
+    (?k (conn-emacs-state-open-line arg))
+    (?i (conn-emacs-state-open-line-above arg))
+    (?j (conn-emacs-state-bol arg))
+    (?l (conn-emacs-state-eol arg))))
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
