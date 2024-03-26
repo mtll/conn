@@ -3163,10 +3163,10 @@ there's a region, all lines that region covers will be duplicated."
 (defun conn-region-dispatch (&optional reverse)
   (interactive "P")
   (if rectangle-mark-mode-map
-      (unwind-protect
-          (save-mark-and-excursion
-            (conn--dispatch-on-regions (region-bounds) :reverse reverse))
-        (rectangle-mark-mode 1))
+      (progn
+        (save-mark-and-excursion
+          (conn--dispatch-on-regions (region-bounds) :reverse reverse))
+        (deactivate-mark t))
     (conn--dispatch-on-regions (region-bounds) :reverse reverse)))
 
 (defun conn--read-macro-for-dispatch ()
@@ -3180,25 +3180,26 @@ there's a region, all lines that region covers will be duplicated."
     (?l last-kbd-macro)
     (?r (get-register (register-read-with-preview "Register: ")))))
 
-(defun conn-region-dispatch-macro (&optional register reverse)
+(defun conn-region-dispatch-macro (&optional macro reverse)
   (interactive
    (list (conn--read-macro-for-dispatch)
          current-prefix-arg))
-  (unless (or (null register)
-              (stringp register)
-              (vectorp register)
-              (kmacro-p register))
+  (unless (or (null macro)
+              (stringp macro)
+              (vectorp macro)
+              (kmacro-p macro))
     (user-error "Register is not a keyboard macro"))
   (if rectangle-mark-mode-map
-      (unwind-protect
-          (save-mark-and-excursion
-            (conn--dispatch-on-regions (region-bounds)
-                                       :reverse reverse
-                                       :macro macro))
-        (rectangle-mark-mode 1))
+      (progn
+        (save-mark-and-excursion
+          (conn--dispatch-on-regions (region-bounds)
+                                     :reverse reverse
+                                     :macro macro))
+        (deactivate-mark t))
     (conn--dispatch-on-regions (region-bounds)
                                :reverse reverse
-                               :macro macro)))
+                               :macro macro))
+  (deactivate-mark))
 
 (defun conn--read-buffers-for-dispatch ()
   (pcase-exhaustive
