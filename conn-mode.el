@@ -3154,11 +3154,10 @@ there's a region, all lines that region covers will be duplicated."
 (defun conn-region-dispatch (&optional reverse)
   (interactive "P")
   (if rectangle-mark-mode-map
-      (let ((mark (conn--create-marker (mark t))))
-        (unwind-protect
-            (conn--dispatch-on-regions (region-bounds) :reverse reverse)
-          (conn--push-ephemeral-mark mark)
-          (rectangle-mark-mode 1)))
+      (unwind-protect
+          (save-mark-and-excursion
+            (conn--dispatch-on-regions (region-bounds) :reverse reverse))
+        (rectangle-mark-mode 1))
     (conn--dispatch-on-regions (region-bounds) :reverse reverse)))
 
 (defun conn--read-macro-for-dispatch ()
@@ -3181,12 +3180,16 @@ there's a region, all lines that region covers will be duplicated."
               (vectorp register)
               (kmacro-p register))
     (user-error "Register is not a keyboard macro"))
-  (let ((rect rectangle-mark-mode))
-    (unwind-protect
-        (conn--dispatch-on-regions (region-bounds)
-                                   :reverse reverse
-                                   :macro register)
-      (when rect (rectangle-mark-mode 1)))))
+  (if rectangle-mark-mode-map
+      (unwind-protect
+          (save-mark-and-excursion
+            (conn--dispatch-on-regions (region-bounds)
+                                       :reverse reverse
+                                       :macro macro))
+        (rectangle-mark-mode 1))
+    (conn--dispatch-on-regions (region-bounds)
+                               :reverse reverse
+                               :macro macro)))
 
 (defun conn--read-buffers-for-dispatch ()
   (pcase-exhaustive
