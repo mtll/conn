@@ -260,15 +260,33 @@ See `conn--dispatch-on-regions'.")
 
 ;;;; Utilities
 
-(defun conn--derived-mode-property (property &optional buffer)
-  "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
-If BUFFER is nil check `current-buffer'."
-  (let ((mode (buffer-local-value 'major-mode (or buffer (current-buffer))))
-        result)
-    (while (and mode (not result))
-      (setq result (get mode property)
-            mode (get mode 'derived-mode-parent)))
-    result))
+(eval-and-compile
+  (defun conn--thread-1 (needle first &rest forms)
+    (if (car forms)
+        `((setq ,needle ,first)
+          ,@(apply #'conn--thread-1 needle forms))
+      (list first)))
+
+  (defmacro conn--thread (needle form &rest forms)
+    (declare (indent 2))
+    (if forms
+        `(let ((,needle ,form))
+           ,@(apply #'conn--thread-1 needle forms))
+      form))
+
+  (defun conn--stringify (&rest symbols-or-strings)
+    "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
+    (conn--thread needle
+      (lambda (e)
+        (cl-etypecase e
+          (string e)
+          (symbol (symbol-name e))))
+      (mapcar needle symbols-or-strings)
+      (apply #'concat needle)))
+
+  (defun conn--symbolicate (&rest symbols-or-strings)
+    "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
+    (intern (apply #'conn--stringify symbols-or-strings))))
 
 ;; From repeat-mode
 (defun conn--command-property (property)
@@ -351,34 +369,6 @@ Uses `read-regexp' to read the regexp."
 (defun conn--end-of-region-or-restriction ()
   (if (use-region-p) (region-end) (point-max)))
 
-(eval-and-compile
-  (defun conn--thread-1 (needle first &rest forms)
-    (if (car forms)
-        `((setq ,needle ,first)
-          ,@(apply #'conn--thread-1 needle forms))
-      (list first)))
-
-  (defmacro conn--thread (needle form &rest forms)
-    (declare (indent 2))
-    (if forms
-        `(let ((,needle ,form))
-           ,@(apply #'conn--thread-1 needle forms))
-      form))
-
-  (defun conn--stringify (&rest symbols-or-strings)
-    "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (conn--thread needle
-      (lambda (e)
-        (cl-etypecase e
-          (string e)
-          (symbol (symbol-name e))))
-      (mapcar needle symbols-or-strings)
-      (apply #'concat needle)))
-
-  (defun conn--symbolicate (&rest symbols-or-strings)
-    "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (intern (apply #'conn--stringify symbols-or-strings))))
-
 (defun conn--create-marker (pos &optional buffer)
   "Create marker at POS in BUFFER."
   (let ((marker (make-marker)))
@@ -418,6 +408,17 @@ Uses `read-regexp' to read the regexp."
            ,(macroexp-progn body)
          (funcall ,saved-state)
          (setq conn-previous-state ,saved-previous-state)))))
+
+(defun conn--derived-mode-property (property &optional buffer)
+  "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
+If BUFFER is nil check `current-buffer'."
+  (let* ((modes (conn--thread mode 'major-mode
+                  (buffer-local-value mode (or buffer (current-buffer)))
+                  (derived-mode-all-parents mode)))
+         result)
+    (while (and modes (not result))
+      (setq result (get (pop modes) property)))
+    result))
 
 
 ;;;; Mark
