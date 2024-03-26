@@ -1314,7 +1314,8 @@ BODY contains code to be executed each time the transition function is executed.
                   (conn--update-mode-line-indicator))
                 ,@body
                 (run-hooks 'conn-transition-hook)
-                (force-mode-line-update)))))))
+                (unless executing-kbd-macro
+                  (force-mode-line-update))))))))
 
 
 ;;;; State Definitions
