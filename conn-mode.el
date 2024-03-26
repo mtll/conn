@@ -727,11 +727,13 @@ If REVERSE is non-nil execute macro on regions from last to first.
                      (conn-state))
                    (goto-char beg)
                    (conn--push-ephemeral-mark end)
+                   (set-marker beg nil)
+                   (set-marker end nil)
                    t)
                   (_ nil))))
-    (advice-add #'kmacro-loop-setup-function :before-while sym)
-    (if-let ((before (plist-get rest :before))) (when before (funcall before)))
     (deactivate-mark t)
+    (if-let ((before (plist-get rest :before))) (when before (funcall before)))
+    (advice-add #'kmacro-loop-setup-function :before-while sym)
     (unwind-protect
         (conn-with-saved-state
           (pcase conn-this-dispatch-macro
