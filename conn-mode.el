@@ -3618,7 +3618,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-z"              'conn-dots-dispatch
   "{"                'conn-first-dot
   "}"                'conn-last-dot
-  "|"                'conn-split-region-on-regexp
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
