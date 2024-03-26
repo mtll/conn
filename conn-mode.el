@@ -2999,13 +2999,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (delete-overlay ov))))
 
 (defun conn--uniquify-tab-name (name)
-  (let ((tabs (seq-filter (lambda (tab-name)
-                            (string-match (concat (regexp-quote name)
-                                                  "\\( <[0-9]+>\\)?")
-                                          tab-name))
-                          (mapcar (lambda (tab-name)
-                                    (alist-get 'name tab-name))
-                                  (funcall tab-bar-tabs-function (selected-frame))))))
+  (let ((tabs (seq-filter
+               (lambda (tab-name)
+                 (string-match (concat (regexp-quote name)
+                                       "\\( <[0-9]+>\\)?")
+                               tab-name))
+               (mapcar (lambda (tab-name)
+                         (alist-get 'name tab-name))
+                       (funcall tab-bar-tabs-function (selected-frame))))))
     (if tabs (concat name " <" (number-to-string (length tabs)) ">") name)))
 
 (defun conn-tab-bar-new-named-tab (&optional name)
@@ -3115,8 +3116,8 @@ there's a region, all lines that region covers will be duplicated."
         (dolist (ov overlays)
           (delete-overlay ov))))))
 
-(defun conn-swap-window-buffers ()
-  (interactive)
+(defun conn-swap-window-buffers (&optional no-select)
+  (interactive "P")
   (let* ((win1 (selected-window))
          (buf1 (window-buffer win1))
          (other-windows (remove win1 (window-list nil 'no-mini))))
@@ -3126,7 +3127,12 @@ there's a region, all lines that region covers will be duplicated."
                     (buf2 (window-buffer win2)))
            (set-window-buffer win2 buf1)
            (set-window-buffer win1 buf2)
-           (select-window win2))))))
+           (unless no-select
+             (select-window win2)))))))
+
+(defun conn-swap-window-buffers-no-select ()
+  (interactive)
+  (conn-swap-window-buffers t))
 
 (defun conn-other-window (&optional swap)
   (interactive "P")
