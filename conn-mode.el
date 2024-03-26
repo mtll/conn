@@ -657,24 +657,29 @@ into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
   "Begin a macro dispatch on REGIONS.
 
 REGIONS should be a list of elements of the form
-(MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations in
-the current buffer.
+(MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations
+in the current buffer.
 
-MACRO specifies a keyboard macro to use instead of recording a new one.
+MACRO specifies a keyboard macro to use instead of recording a new
+one.
 
-APPEND will append the recorded keyboard macro to the last keyboard macro.
-Has no effect if MACRO is specified.
+APPEND will append the recorded keyboard macro to the last keyboard
+macro.  Has no effect if MACRO is specified.
 
-BEFORE should be a function that will be called with the markers bounding
-the region to be acted upon.  If BEFORE is specified it is expected to
-put the buffer into the desired conn state for dispatch.
+LOOP-FN should be a function that will be called with the markers
+bounding the region to be acted upon.  If LOOP-FN is specified it is
+expected to put the buffer into the desired conn state before each
+keyboard macro is run.
+
+BEFORE will be called once per buffer before anything else has been
+done in that buffer.
 
 AFTER will be called once per buffer after all macros have finished
 running in that buffer.
 
 If REVERSE is non-nil execute macro on regions from last to first.
 
-\(fn REGIONS &key BEFORE REVERSE MACRO APPEND)"
+\(fn REGIONS &key LOOP-FN BEFORE AFTER REVERSE MACRO APPEND)"
   (when conn-macro-dispatch-p
     (user-error "Recursive call to macro dispatch"))
   (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
@@ -709,21 +714,22 @@ If REVERSE is non-nil execute macro on regions from last to first.
 (defun conn--dispatch-in-buffer (buffer regions &rest rest)
   "Begin a macro dispatch on REGIONS in BUFFER.
 
-\(fn BUFFER REGIONS &key BEFORE MACRO REVERSE APPEND)"
+\(fn BUFFER REGIONS &key LOOP-FN BEFORE AFTER MACRO REVERSE APPEND)"
   (pop-to-buffer-same-window buffer)
-  (let ((loop-fn (make-symbol "conn--kmacro-loop-fn"))
-        (before (plist-get rest :before)))
-    (fset loop-fn (lambda ()
-                    (pcase (pop regions)
-                      ((and `(,beg . ,end) region)
-                       (if before
-                           (funcall before region)
-                         (conn-state))
-                       (goto-char beg)
-                       (conn--push-ephemeral-mark end)
-                       t)
-                      (_ nil))))
-    (advice-add #'kmacro-loop-setup-function :before-while loop-fn)
+  (let ((sym (make-symbol "conn--kmacro-loop-fn"))
+        (loop-fn (plist-get rest :loop-fn)))
+    (fset sym (lambda ()
+                (pcase (pop regions)
+                  ((and `(,beg . ,end) region)
+                   (if loop-fn
+                       (funcall loop-fn region)
+                     (conn-state))
+                   (goto-char beg)
+                   (conn--push-ephemeral-mark end)
+                   t)
+                  (_ nil))))
+    (advice-add #'kmacro-loop-setup-function :before-while sym)
+    (if-let ((before (plist-get rest :before))) (when before (funcall before)))
     (deactivate-mark t)
     (unwind-protect
         (conn-with-saved-state
@@ -733,7 +739,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
             ((and (pred identity) macro)
              (kmacro-call-macro 0 nil nil macro))
             ('nil
-             (funcall loop-fn)
+             (funcall sym)
              (pulse-momentary-highlight-region (region-beginning)
                                                (region-end)
                                                'conn-dot-face)
@@ -745,7 +751,7 @@ If REVERSE is non-nil execute macro on regions from last to first.
                  (kmacro-end-macro 0)
                  (setf conn-this-dispatch-macro (kmacro-ring-head)))))))
       (if-let ((after (plist-get rest :after))) (funcall after))
-      (advice-remove 'kmacro-loop-setup-function loop-fn))))
+      (advice-remove 'kmacro-loop-setup-function sym))))
 
 
 ;;;; Dots
@@ -907,12 +913,12 @@ If BUFFER is nil use current buffer."
   "Perform macro dispatch on all dots in BUFFERS.
 
 \(fn BUFFERS &key BEFORE AFTER)"
-  (let* ((before (plist-get rest :before))
+  (let* ((before (plist-get rest :loop-fn))
          (after (plist-get rest :after))
          (conn-dot-macro-dispatch-p t)
          (first-iter t)
          regions dots)
-    (setf rest (plist-put rest :before
+    (setf rest (plist-put rest :loop-fn
                           (lambda (next-region)
                             (conn--delete-dot
                              (conn--dot-before-point (cdr next-region)))
@@ -1571,7 +1577,7 @@ If STATE is nil make COMMAND always repeat."
   (interactive (list (conn--read-buffers-for-dispatch)
                      current-prefix-arg))
   (conn--dot-macro-dispatch buffers
-                            :before (lambda (_) (conn-emacs-state))
+                            :loop-fn (lambda (_) (conn-emacs-state))
                             :macro (kmacro conn-yank-keys)
                             :reverse reverse))
 
