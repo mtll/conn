@@ -3744,6 +3744,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "."   'isearch-forward
   "/"   'undo-only
   ";"   'execute-extended-command
+  ":"   'execute-extended-command-for-buffer
   "<"   'conn-backward-line
   ">"   'forward-line
   "?"   'undo-redo
@@ -3789,6 +3790,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   ","       'isearch-forward
   "."       'isearch-forward
   ";"       'execute-extended-command
+  ":"       'execute-extended-command-for-buffer
   "a"       'switch-to-buffer
   "g"       'conn-M-g-keys
   "i"       'conn-scroll-down
@@ -3812,6 +3814,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "."   'point-to-register
   "/"   'undo-only
   ";"   'execute-extended-command
+  ":"   'execute-extended-command-for-buffer
   "*"   'conn-org-tree-edit-insert-heading
   "<"   'org-promote-subtree
   ">"   'org-demote-subtree
