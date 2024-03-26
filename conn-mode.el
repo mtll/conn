@@ -1164,7 +1164,7 @@ Buffers are strings matched using `buffer-match-p'."
       (symbol (put var :conn-default-state state))
       (string (push (cons var state) conn-buffer-default-state-alist)))))
 
-(defmacro define-conn-state (name doc &rest body)
+(defmacro conn-define-state (name doc &rest body)
   "Define a conn state NAME.
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.  DOC is required.
@@ -1333,7 +1333,7 @@ BODY contains code to be executed each time the transition function is executed.
 
 ;;;; State Definitions
 
-(define-conn-state conn-emacs-state
+(conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
 bind anything except transition commands.
@@ -1350,7 +1350,7 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
                 ("<f8>"     . conn-state)
                 ("<f9>"     . conn-dot-state)))
 
-(define-conn-state conn-view-state
+(conn-define-state conn-view-state
   "Activate `conn-view-state' in the current buffer.
 A `conn-mode' state for viewing and navigating buffers.
 
@@ -1378,7 +1378,7 @@ from view state.  See `conn-view-state-map' for commands bound by view state."
     (setq-local conn-view-state--start-marker nil)))
 (put 'conn-view-state :conn-hide-mark t)
 
-(define-conn-state conn-state
+(conn-define-state conn-state
   "Activate `conn-state' in the current buffer.
 A `conn-mode' state for editing text.
 
@@ -1402,7 +1402,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
 
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
-(define-conn-state conn-dot-state
+(conn-define-state conn-dot-state
   "Activate `conn-dot-state' in the current buffer.
 A `conn-mode' state for dispatching keyboard macros on buffer regions.
 
@@ -1432,7 +1432,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
     (setq conn--dot-undo-ring nil)
     (remove-hook 'post-command-hook #'conn--dot-post-command-hook t)))
 
-(define-conn-state conn-org-tree-edit-state
+(conn-define-state conn-org-tree-edit-state
   "Activate `conn-org-tree-edit-state' in the current buffer.
 A `conn-mode' state for structural editing of `org-mode' buffers.
 
