@@ -3390,6 +3390,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
  :commands '(forward-word backward-word))
 
 (conn-define-thing
+ 'sexp (conn-sequential-thing-handler 'sexp)
+ :commands '(forward-sexp backward-sexp))
+
+(conn-define-thing
  'whitespace (conn-individual-thing-handler 'whitespace)
  :commands '(forward-whitespace conn-backward-whitespace))
 
