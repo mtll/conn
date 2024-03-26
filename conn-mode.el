@@ -1360,9 +1360,8 @@ from view state.  See `conn-view-state-map' for commands bound by view state."
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :ephemeral-marks nil
   :keymap (define-keymap :suppress t)
-  :transitions (("f"        . conn-emacs-state-command)
-                ("E"        . conn-emacs-state-eol)
-                ("A"        . conn-emacs-state-eol)
+  :transitions (("f"        . conn-emacs-state)
+                ("F"        . conn-emacs-state-prompt)
                 ("="        . conn-dot-state)
                 ("<f8>"     . conn-state)
                 ("<f9>"     . conn-dot-state)
@@ -1388,13 +1387,12 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :ephemeral-marks t
   :buffer-face ((t :inherit default :background "#f7eee1"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
-  :transitions (("f"        . conn-emacs-state-command)
+  :transitions (("f"        . conn-emacs-state)
+                ("F"        . conn-emacs-state-prompt)
                 ("<escape>" . conn-view-state)
                 ("t"        . conn-change)
                 ("'"        . conn-quoted-insert-overwrite)
-                ("E"        . conn-emacs-state-eol)
-                ("A"        . conn-emacs-state-bol)
-                ("<f7>"     . conn-emacs-state-command)
+                ("<f7>"     . conn-emacs-state)
                 ("<f8>"     . conn-pop-state)
                 ("<f9>"     . conn-dot-state)
                 ("="        . conn-dot-state)))
@@ -1417,9 +1415,8 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
                 ("<f7>"     . conn-emacs-state)
                 ("<f8>"     . conn-state)
                 ("<f9>"     . conn-pop-state)
-                ("f"        . conn-emacs-state-command)
-                ("E"        . conn-emacs-state-eol)
-                ("A"        . conn-emacs-state-bol)
+                ("f"        . conn-emacs-state)
+                ("F"        . conn-emacs-state-prompt)
                 ("Q"        . conn-dot-quit))
   (if conn-dot-state
       (progn
@@ -1445,7 +1442,8 @@ state."
   :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
   :buffer-face ((t :inherit conn-view-state-buffer-face))
   :keymap (define-keymap :suppress t)
-  :transitions (("f"        . conn-emacs-state-command)
+  :transitions (("f"        . conn-emacs-state)
+                ("F"        . conn-emacs-state-prompt)
                 ("E"        . conn-emacs-state-eol)
                 ("A"        . conn-emacs-state-eol)
                 ("="        . conn-dot-state)
@@ -3279,7 +3277,34 @@ With any other prefix argument select buffers with `completing-read-multiple'."
                                 'face 'minibuffer-prompt))
       (call-interactively #'quoted-insert))))
 
-(defun conn-emacs-state-command (&optional arg)
+(defun conn-emacs-state-open-line-above ()
+  (interactive)
+  (move-beginning-of-line 1)
+  (open-line 1)
+  (indent-according-to-mode)
+  (save-excursion
+    (forward-line 1)
+    (indent-according-to-mode))
+  (conn-emacs-state))
+
+(defun conn-emacs-state-open-line ()
+  (interactive)
+  (move-end-of-line 1)
+  (newline-and-indent)
+  (conn-emacs-state))
+
+(defun conn-emacs-state-overwrite ()
+  (interactive)
+  (let ((hook (make-symbol "emacs-state-overwrite-hook")))
+    (conn-emacs-state)
+    (fset hook (lambda ()
+                 (unless (eq conn-current-state 'conn-emacs-state)
+                   (overwrite-mode -1)
+                   (remove-hook 'conn-transition-hook hook))))
+    (add-hook 'conn-transition-hook hook)
+    (overwrite-mode 1)))
+
+(defun conn-emacs-state-prompt ()
   "Transition to `conn-emacs-state'.
 
 If ARG is non-negative open a new line below point and enter insert state.
@@ -3287,31 +3312,21 @@ If ARG is non-negative open a new line below point and enter insert state.
 If ARG is negative open a new line above point and enter insert state.
 
 If arg is \\[universal-argument] enter `conn-emacs-state' in `overwrite-mode'."
-  (interactive "P")
-  (pcase arg
-    ('nil
-     (conn-emacs-state))
-    ('(4)
-     (let ((hook (make-symbol "emacs-state-overwrite-hook")))
-       (conn-emacs-state)
-       (fset hook (lambda ()
-                    (unless (eq conn-current-state 'conn-emacs-state)
-                      (overwrite-mode -1)
-                      (remove-hook 'conn-transition-hook hook))))
-       (add-hook 'conn-transition-hook hook)
-       (overwrite-mode 1)))
-    ((guard (>= (prefix-numeric-value arg) 0))
-     (move-end-of-line 1)
-     (newline-and-indent)
-     (conn-emacs-state))
-    (_
-     (move-beginning-of-line 1)
-     (open-line 1)
-     (indent-according-to-mode)
-     (save-excursion
-       (forward-line 1)
-       (indent-according-to-mode))
-     (conn-emacs-state))))
+  (interactive)
+  (pcase-exhaustive
+      (car (read-multiple-choice
+            "Enter emacs state how?"
+            '((?k "open line below")
+              (?i "open line above")
+              (?j "beginning of line")
+              (?l "end of line")
+              (?o "overwrite mode"))
+            nil nil nil))
+    (?o (conn-emacs-state-overwrite))
+    (?k (conn-emacs-state-open-line))
+    (?i (conn-emacs-state-open-line-above))
+    (?j (conn-emacs-state-bol))
+    (?l (conn-emacs-state-eol))))
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
