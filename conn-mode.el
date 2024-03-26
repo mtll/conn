@@ -3749,9 +3749,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   ">"   'forward-line
   "?"   'undo-redo
   "`"   'conn-other-window
+  "A"   'conn-C-x-t-keys
   "a"   'switch-to-buffer
-  "c"   'conn-C-c-keys
   "C"   'conn-copy-region
+  "c"   'conn-C-c-keys
   "D"   'conn-dot-region
   "g"   'conn-M-g-keys
   "I"   'backward-paragraph
