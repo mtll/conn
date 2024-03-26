@@ -3151,10 +3151,13 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-region-dispatch (&optional reverse)
   (interactive "P")
-  (let ((rect rectangle-mark-mode))
-    (unwind-protect
-        (conn--dispatch-on-regions (region-bounds) :reverse reverse)
-      (when rect (rectangle-mark-mode 1)))))
+  (if rectangle-mark-mode-map
+      (let ((mark (conn--create-marker (mark t))))
+        (unwind-protect
+            (conn--dispatch-on-regions (region-bounds) :reverse reverse)
+          (conn--push-ephemeral-mark mark)
+          (rectangle-mark-mode 1)))
+    (conn--dispatch-on-regions (region-bounds) :reverse reverse)))
 
 (defun conn--read-macro-for-dispatch ()
   (pcase
