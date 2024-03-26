@@ -162,19 +162,29 @@ THING BEG and END are bound in BODY."
   (defvar embark-keymap-alist)
 
   (defun conn-dispatch-grep-candidates (cands)
-    (conn--dispatch-on-regions
-     (mapcar (lambda (cand)
-               (let ((marker (car (consult--grep-position cand))))
-                 (cons marker marker)))
-             cands)))
+    (conn--thread regions
+        (mapcar (lambda (cand)
+                  (let ((marker (car (consult--grep-position cand))))
+                    (cons marker marker)))
+                cands)
+      (conn--region-loop-fn regions 'conn-state)
+      (conn--dispatch-multi-buffer regions)
+      (conn--dispatch-save-window-configuration regions)
+      (conn--dispatch-save-state regions)
+      (conn-macro-dispatch regions)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
-    (conn--dispatch-on-regions
-     (mapcar (lambda (cand)
-               (let ((marker (car (consult--get-location cand))))
-                 (cons marker marker)))
-             cands)))
+    (conn--thread regions
+        (mapcar (lambda (cand)
+                  (let ((marker (car (consult--get-location cand))))
+                    (cons marker marker)))
+                cands)
+      (conn--region-loop-fn regions 'conn-state)
+      (conn--dispatch-single-buffer regions)
+      (conn--dispatch-save-window-configuration regions)
+      (conn--dispatch-save-state regions)
+      (conn-macro-dispatch regions)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map

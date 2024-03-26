@@ -231,7 +231,8 @@ Each element may be either a symbol or a list of the form
 
 See `conn--dispatch-on-regions'.")
 
-(defvar conn-this-dispatch-macro nil)
+(defvar conn--dispatch-aborted nil)
+
 (defvar-local conn--dot-undoing nil)
 (defvar-local conn--dot-undo-ring nil)
 (defvar-local conn--dot-undone nil)
@@ -285,6 +286,13 @@ See `conn--dispatch-on-regions'.")
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (intern (apply #'conn--stringify symbols-or-strings))))
+
+(defmacro conn--save-window-configuration (&rest body)
+  (let ((wind (gensym "window-conf")))
+    `(let ((,wind (current-window-configuration)))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (set-window-configuration ,wind)))))
 
 ;; From repeat-mode
 (defun conn--command-property (property)
@@ -536,7 +544,8 @@ of the movement command unless `use-region-p'."
 For the meaning of MSG and ACTIVATE see `push-mark'."
   (let ((global-mark-ring nil))
     (push-mark location (not msg) activate))
-  (setq conn--ephemeral-mark t))
+  (setq conn--ephemeral-mark t)
+  nil)
 
 (defun conn--update-cursor (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
@@ -634,129 +643,161 @@ to determine if mark cursor should be hidden in buffer."
 
 ;;;; Macro Dispatch
 
-(defun conn--canonicalize-regions (regions &optional reverse)
-  "Transform REGIONS into canonical form for `conn--dispatch-on-regions'.
+(defun conn--dispatch-multi-buffer (loop-fn &optional init finalize)
+  (let ((dispatch-undo-handles nil))
+    (lambda (&optional state)
+      (when (eq state :finalize)
+        (if conn--dispatch-aborted
+            (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
+              (cancel-change-group handle)
+              (when finalize
+                (with-current-buffer buffer (funcall finalize))))
+          (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
+            (accept-change-group handle)
+            (undo-amalgamate-change-group handle)
+            (when finalize
+              (with-current-buffer buffer (funcall finalize))))))
+      (pcase (funcall loop-fn state)
+        ((and `(,beg . ,end)
+              (let buffer (marker-buffer beg))
+              ret)
+         (cond ((not (eq buffer (marker-buffer end)))
+                :abort)
+               ((not (eq buffer (current-buffer)))
+                (pop-to-buffer-same-window buffer)
+                (if (and (not (eq buffer (window-buffer (selected-window))))
+                         (eq (current-buffer) buffer))
+                    :abort
+                  ret))
+               (t
+                (unless (alist-get (current-buffer) dispatch-undo-handles)
+                  (setf (alist-get (current-buffer) dispatch-undo-handles)
+                        (prepare-change-group (current-buffer)))
+                  (when init (funcall init)))
+                ret)))
+        (ret ret)))))
 
-Transform a flat list of elements of the form (MARKER-OR-INT . MARKER-OR-INT)
-into an alist with elements (BUFFER ((MARKER . MARKER) ...))."
-  (conn--thread needle
-      (pcase-lambda (`(,beg . ,end))
-        (cons (if (integerp beg) (conn--create-marker beg) beg)
-              (if (integerp end) (conn--create-marker end) end)))
-    (mapcar needle regions)
-    (seq-group-by (pcase-lambda (`(,beg . ,_))
-                    (marker-buffer beg))
-                  needle)
-    (mapcar (pcase-lambda (`(,key . ,val))
-              (cons key (sort val (lambda (a b)
-                                    (xor reverse (< (car a) (car b)))))))
-            needle)))
+(defun conn--dispatch-single-buffer (loop-fn &optional init finalize)
+  (let ((handle nil))
+    (lambda (&optional state)
+      (cond ((eq state :finalize)
+             (if conn--dispatch-aborted
+                 (cancel-change-group handle)
+               (accept-change-group handle)
+               (undo-amalgamate-change-group handle))
+             (funcall finalize))
+            ((not handle)
+             (setq handle (prepare-change-group))
+             (when init (funcall init))))
+      (funcall loop-fn state))))
 
-(defun conn--dispatch-on-regions (regions &rest rest)
-  "Begin a macro dispatch on REGIONS.
+(defun conn--dispatch-save-window-configuration (loop-fn)
+  (let (wind)
+    (lambda (&optional state)
+      (unless wind (setq wind (current-window-configuration)))
+      (when (eq state :finalize)
+        (set-window-configuration wind))
+      (funcall loop-fn state))))
 
-REGIONS should be a list of elements of the form
-(MARKER-OR-INT . MARKER-OR-INT).  Integers are treated as locations
-in the current buffer.
+(defun conn--dispatch-save-state (loop-fn)
+  (let ((buffer-states nil))
+    (lambda (&optional state)
+      (pcase state
+        (:finalize
+         (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
+           (with-current-buffer buf
+             (funcall state)
+             (setq conn-previous-state prev-state)))
+         (funcall loop-fn state))
+        (_
+         (unless (alist-get (current-buffer) buffer-states)
+           (setf (alist-get (current-buffer) buffer-states)
+                 (list conn-current-state conn-previous-state)))
+         (funcall loop-fn state))))))
 
-MACRO specifies a keyboard macro to use instead of recording a new
-one.
-
-APPEND will append the recorded keyboard macro to the last keyboard
-macro.  Has no effect if MACRO is specified.
-
-LOOP-FN should be a function that will be called with the markers
-bounding the region to be acted upon.  If LOOP-FN is specified it is
-expected to put the buffer into the desired conn state before each
-keyboard macro is run.
-
-BEFORE will be called once per buffer before anything else has been
-done in that buffer.
-
-AFTER will be called once per buffer after all macros have finished
-running in that buffer.
-
-If REVERSE is non-nil execute macro on regions from last to first.
-
-\(fn REGIONS &key LOOP-FN BEFORE AFTER REVERSE MACRO APPEND)"
-  (when conn-macro-dispatch-p
-    (user-error "Recursive call to macro dispatch"))
-  (let ((regions (conn--canonicalize-regions regions (plist-get rest :reverse)))
-        (conn-macro-dispatch-p t)
-        (conn-this-dispatch-macro (plist-get rest :macro))
-        (wind (current-window-configuration))
-        (undo-outer-limit nil)
-        (undo-limit most-positive-fixnum)
-        (undo-strong-limit most-positive-fixnum)
-        (success nil)
-        (handles nil))
-    (unwind-protect
-        (progn
-          (unless regions (user-error "No regions for dispatch"))
-          (pcase-dolist (`(,buffer . ,rs) regions)
-            (push (prepare-change-group buffer) handles)
-            (apply 'conn--dispatch-in-buffer buffer rs rest)
-            (set-window-configuration wind))
-          (setq success t)
-          (kmacro-to-register conn-last-dispatch-macro-register))
-      (if (not success)
-          (mapc #'cancel-change-group handles)
-        (dolist (handle handles)
-          (accept-change-group handle)
-          (undo-amalgamate-change-group handle)))
-      (pcase-dolist (`(,_ . ,rs) regions)
-        (pcase-dolist (`(,beg . ,end) rs)
+(defun conn--region-loop-fn (regions init-fn)
+  (lambda (&optional state)
+    (if (eq state :finalize)
+        (pcase-dolist (`(,beg . ,end) regions)
           (set-marker beg nil)
-          (set-marker end nil)))
-      (set-window-configuration wind))))
+          (set-marker end nil))
+      (pcase (pop regions)
+        (`(,beg . ,end)
+         (funcall init-fn)
+         (when (eq state :record)
+           (pulse-momentary-highlight-region beg end 'conn-dot-face))
+         (cons beg end))
+        (_ nil)))))
 
-(defun conn--dispatch-in-buffer (buffer regions &rest rest)
-  "Begin a macro dispatch on REGIONS in BUFFER.
+(defun conn--dot-loop-fn (dots init-fn)
+  (let (primed new-dots)
+    (lambda (&optional state)
+      (if (eq state :finalize)
+          (progn
+            (if (null dots)
+                (pcase-dolist (`(,buffer . ,dots) new-dots)
+                  (with-current-buffer buffer
+                    (apply 'conn--create-dots dots)))
+              (dolist (dot dots)
+                (conn--delete-dot dot)))
+            (pcase-dolist (`(,_ . ,dots) new-dots)
+              (pcase-dolist (`(,beg . ,end) dots)
+                (set-marker beg nil)
+                (set-marker end nil))))
+        (if primed
+            (push (cons (conn--create-marker (region-beginning))
+                        (conn--create-marker (region-end)))
+                  (alist-get (current-buffer) new-dots))
+          (setq primed t))
+        (when-let ((dot (pop dots))
+                   (beg (conn--create-marker (overlay-start dot)
+                                             (overlay-buffer dot)))
+                   (end (conn--create-marker (overlay-end dot)
+                                             (overlay-buffer dot))))
+          (conn--delete-dot dot)
+          (funcall init-fn)
+          (when (eq state :record)
+            (pulse-momentary-highlight-region beg end 'conn-dot-face))
+          (cons beg end))))))
 
-\(fn BUFFER REGIONS &key LOOP-FN BEFORE AFTER MACRO REVERSE APPEND)"
-  (pop-to-buffer-same-window buffer)
-  (let ((sym (make-symbol "conn--kmacro-loop-fn"))
-        (loop-fn (plist-get rest :loop-fn)))
-    (fset sym (lambda ()
-                (pcase (pop regions)
-                  ((and `(,beg . ,end) region)
-                   (if loop-fn
-                       (funcall loop-fn region)
-                     (conn-state))
+(defun conn-macro-dispatch (loop-fn &optional kmacro append)
+  (let* ((undo-outer-limit nil)
+         (undo-limit most-positive-fixnum)
+         (undo-strong-limit most-positive-fixnum)
+         (conn-macro-dispatch-p t)
+         (conn--dispatch-aborted nil)
+         (sym (make-symbol "conn--kmacro-loop-fn")))
+    (fset sym (lambda (&optional state)
+                (pcase (funcall loop-fn state)
+                  ((and (pred symbolp) err)
+                   (setq conn--dispatch-aborted err)
+                   nil)
+                  (`(,beg . ,end)
                    (goto-char beg)
                    (conn--push-ephemeral-mark end)
-                   (set-marker beg nil)
-                   (set-marker end nil)
-                   t)
-                  (_ nil))))
-    (deactivate-mark t)
-    (if-let ((before (plist-get rest :before))) (when before (funcall before)))
+                   t))))
     (advice-add #'kmacro-loop-setup-function :before-while sym)
     (unwind-protect
-        (conn-with-saved-state
-          (pcase conn-this-dispatch-macro
-            ((and (pred kmacro-p) kmacro)
-             (funcall kmacro 0))
-            ((and (pred identity) macro)
-             (kmacro-call-macro 0 nil nil macro))
-            ('nil
-             (funcall sym)
-             (pulse-momentary-highlight-region (region-beginning)
-                                               (region-end)
-                                               'conn-dot-face)
-             (kmacro-start-macro (plist-get rest :append))
-             (unwind-protect
-                 (recursive-edit)
-               (if (not defining-kbd-macro)
-                   (user-error "Not defining keyboard macro")
-                 (kmacro-end-macro 0)
-                 ;; This is much faster but probably
-                 ;; isn't reasonable to do in general.
-                 ;; (combine-change-calls (point-min) (point-max)
-                 ;;   (kmacro-end-macro 0))
-                 (setf conn-this-dispatch-macro (kmacro-ring-head)))))))
-      (if-let ((after (plist-get rest :after))) (funcall after))
-      (advice-remove 'kmacro-loop-setup-function sym))))
+        (pcase kmacro
+          ((pred kmacro-p)
+           (funcall kmacro 0))
+          ((pred identity)
+           (kmacro-call-macro 0 nil nil kmacro))
+          ('nil
+           (deactivate-mark t)
+           (pcase (funcall loop-fn :record)
+             (`(,beg . ,end)
+              (goto-char beg)
+              (conn--push-ephemeral-mark end))
+             (_ (error "loop-fn unknown return")))
+           (kmacro-start-macro append)
+           (unwind-protect
+               (recursive-edit)
+             (if (not defining-kbd-macro)
+                 (user-error "Not defining keyboard macro")
+               (kmacro-end-macro 0)))))
+      (advice-remove 'kmacro-loop-setup-function sym)
+      (funcall loop-fn :finalize))))
 
 
 ;;;; Dots
@@ -801,10 +842,10 @@ If REVERSE is non-nil execute macro on regions from last to first.
 
 ;;;;; Dot Functions
 
-(defun conn--sorted-overlays (typep &optional predicate start end)
+(defun conn--sorted-overlays (typep &optional predicate start end buffer)
   "Get all dots between START and END sorted by starting position."
   (unless predicate (setq predicate #'<))
-  (let ((overlays (conn--all-overlays typep start end)))
+  (let ((overlays (conn--all-overlays typep start end buffer)))
     (pcase predicate
       ('< overlays)
       ('> (nreverse overlays))
@@ -879,11 +920,12 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 (defun conn--remove-dots (&optional start end)
   (mapc #'conn--delete-dot (conn--all-overlays #'conn-dotp start end)))
 
-(defun conn--all-overlays (predicate &optional start end)
+(defun conn--all-overlays (predicate &optional start end buffer)
   "Get all overlays between START and END satisfying PREDICATE."
-  (seq-filter predicate
-              (overlays-in (or start (conn--beginning-of-region-or-restriction))
-                           (or end (conn--end-of-region-or-restriction)))))
+  (with-current-buffer (or buffer (current-buffer))
+    (seq-filter predicate
+                (overlays-in (or start (conn--beginning-of-region-or-restriction))
+                             (or end (conn--end-of-region-or-restriction))))))
 
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
@@ -913,44 +955,6 @@ If BUFFER is nil use current buffer."
                     (/= (point) (point-max)))
           (goto-char (next-overlay-change (point))))
         result))))
-
-(defun conn--dot-macro-dispatch (buffers &rest rest)
-  "Perform macro dispatch on all dots in BUFFERS.
-
-\(fn BUFFERS &key BEFORE AFTER)"
-  (let* ((before (plist-get rest :loop-fn))
-         (after (plist-get rest :after))
-         (conn-dot-macro-dispatch-p t)
-         (first-iter t)
-         regions dots)
-    (setf rest (plist-put rest :loop-fn
-                          (lambda (next-region)
-                            (conn--delete-dot
-                             (conn--dot-before-point (cdr next-region)))
-                            (if first-iter
-                                (setq first-iter nil)
-                              (push (cons (conn--create-marker (region-beginning))
-                                          (conn--create-marker (region-end)))
-                                    dots))
-                            (if before
-                                (funcall before next-region)
-                              (conn-state))))
-          rest (plist-put rest :after
-                          (lambda ()
-                            (apply #'conn--create-dots
-                                   (cons (cons (region-beginning) (region-end)) dots))
-                            (pcase-dolist (`(,m1 . ,m2) dots)
-                              (set-marker m1 nil)
-                              (set-marker m2 nil))
-                            (setq dots nil)
-                            (if after (funcall after)))))
-    (dolist (buf buffers)
-      (with-current-buffer buf
-        (dolist (ov (conn--all-overlays #'conn-dotp))
-          (push (cons (conn--create-marker (overlay-start ov))
-                      (conn--create-marker (overlay-end ov)))
-                regions))))
-    (apply #'conn--dispatch-on-regions regions rest)))
 
 
 ;;;; Advice
@@ -1579,13 +1583,10 @@ If STATE is nil make COMMAND always repeat."
 
 ;;;;; Dot Commands
 
-(defun conn-yank-to-dots (buffers &optional reverse)
-  (interactive (list (conn--read-buffers-for-dispatch)
-                     current-prefix-arg))
-  (conn--dot-macro-dispatch buffers
-                            :loop-fn (lambda (_) (conn-emacs-state))
-                            :macro (kmacro conn-yank-keys)
-                            :reverse reverse))
+(defun conn-yank-to-dots (&optional arg)
+  (interactive "P")
+  (save-mark-and-excursion
+    (conn-dots-dispatch arg (kmacro conn-yank-keys) 'conn-emacs-state)))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
@@ -2152,14 +2153,29 @@ THING is something with a forward-op as defined by thingatpt."
 
 (defun conn-isearch-dispatch (&optional reverse)
   (interactive "P")
-  (let ((matches
-         (if (or (not (boundp 'multi-isearch-buffer-list))
-                 (not multi-isearch-buffer-list))
-             (conn--isearch-matches-in-buffer (current-buffer))
-           (mapcan 'conn--isearch-matches-in-buffer
-                   multi-isearch-buffer-list))))
-    (isearch-exit)
-    (conn--dispatch-on-regions matches :reverse reverse)))
+  (if (or (not (boundp 'multi-isearch-buffer-list))
+          (not multi-isearch-buffer-list))
+      (conn--thread regions
+          (prog1
+              (conn--isearch-matches-in-buffer (current-buffer))
+            (isearch-exit))
+        (if reverse (nreverse regions) regions)
+        (conn--region-loop-fn regions 'conn-state)
+        (conn--dispatch-single-buffer regions nil conn-current-state)
+        (conn--dispatch-save-window-configuration regions)
+        (conn--dispatch-save-state regions)
+        (conn-macro-dispatch regions))
+    (conn--thread regions
+        (prog1
+            (mapcan 'conn--isearch-matches-in-buffer
+                    multi-isearch-buffer-list)
+          (isearch-exit))
+      (if reverse (nreverse regions) regions)
+      (conn--region-loop-fn regions 'conn-state)
+      (conn--dispatch-multi-buffer regions nil conn-current-state)
+      (conn--dispatch-save-window-configuration regions)
+      (conn--dispatch-save-state regions)
+      (conn-macro-dispatch regions))))
 
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
@@ -2311,7 +2327,13 @@ between `point-min' and `point-max'."
             (push (cons (prop-match-beginning match)
                         (prop-match-end match))
                   regions)))))
-    (conn--dispatch-on-regions regions :reverse reverse)))
+    (conn--thread regions
+        (if reverse (nreverse regions) regions)
+      (conn--region-loop-fn regions 'conn-state)
+      (conn--dispatch-single-buffer regions nil conn-current-state)
+      (conn--dispatch-save-window-configuration regions)
+      (conn--dispatch-save-state regions)
+      (conn-macro-dispatch regions))))
 
 (defun conn-last-macro-dispatch-to-register (register)
   "Set REGISTER to last dot macro."
@@ -2325,9 +2347,12 @@ With prefix arg of 0 dispatch the contents of
 for a dot register to use for dispatch."
   (interactive)
   (when-let ((mark (mark t)))
-    (conn--dispatch-on-regions (list (cons (point) (point))
-                                     (cons mark mark))
-                               :reverse (> (point) mark))))
+    (conn--thread reg
+        (list (cons (point) (point))
+              (cons mark mark))
+      (conn--region-loop-fn reg conn-current-state)
+      (conn--dispatch-single-buffer reg)
+      (conn-macro-dispatch reg))))
 
 (defvar-keymap conn-scroll-repeat-map
   :repeat t
@@ -3163,12 +3188,23 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-region-dispatch (&optional reverse)
   (interactive "P")
-  (if rectangle-mark-mode-map
-      (progn
-        (save-mark-and-excursion
-          (conn--dispatch-on-regions (region-bounds) :reverse reverse))
-        (deactivate-mark t))
-    (conn--dispatch-on-regions (region-bounds) :reverse reverse)))
+  (let ((loop-fn
+         (conn--thread regions
+             (mapcar (pcase-lambda (`(,beg . ,end))
+                       (cons (conn--create-marker beg)
+                             (conn--create-marker end)))
+                     (region-bounds))
+           (if reverse (nreverse regions) regions)
+           (conn--region-loop-fn regions 'conn-state)
+           (conn--dispatch-single-buffer regions nil conn-current-state)
+           (conn--dispatch-save-window-configuration regions)
+           (conn--dispatch-save-state regions))))
+    (if rectangle-mark-mode-map
+        (progn
+          (save-mark-and-excursion
+            (conn-macro-dispatch loop-fn))
+          (deactivate-mark t))
+      (conn-macro-dispatch loop-fn))))
 
 (defun conn--read-macro-for-dispatch ()
   (pcase
@@ -3190,17 +3226,23 @@ there's a region, all lines that region covers will be duplicated."
               (vectorp macro)
               (kmacro-p macro))
     (user-error "Register is not a keyboard macro"))
-  (if rectangle-mark-mode-map
-      (progn
-        (save-mark-and-excursion
-          (conn--dispatch-on-regions (region-bounds)
-                                     :reverse reverse
-                                     :macro macro))
-        (deactivate-mark t))
-    (conn--dispatch-on-regions (region-bounds)
-                               :reverse reverse
-                               :macro macro))
-  (deactivate-mark))
+  (let ((loop-fn
+         (conn--thread regions
+             (mapcar (pcase-lambda (`(,beg . ,end))
+                       (cons (conn--create-marker beg)
+                             (conn--create-marker end)))
+                     (region-bounds))
+           (if reverse (nreverse regions) regions)
+           (conn--region-loop-fn regions 'conn-state)
+           (conn--dispatch-single-buffer regions nil conn-current-state)
+           (conn--dispatch-save-window-configuration regions)
+           (conn--dispatch-save-state regions))))
+    (if rectangle-mark-mode-map
+        (progn
+          (save-mark-and-excursion
+            (conn-macro-dispatch loop-fn macro))
+          (deactivate-mark t))
+      (conn-macro-dispatch loop-fn macro))))
 
 (defun conn--read-buffers-for-dispatch ()
   (pcase-exhaustive
@@ -3208,12 +3250,11 @@ there's a region, all lines that region covers will be duplicated."
             "Dispatch on multiple buffers?"
             '((?o "one by one" "dispatch on buffers read one by one")
               (?r "matcing regexp" "dispatch on buffers matching regexp"))
-            nil nil (and (not use-short-answers)
-                         (not (use-dialog-box-p)))))
+            nil nil nil))
     (?o (conn-read-dot-buffers))
     (?r (conn-read-matching-dot-buffers))))
 
-(defun conn-dots-dispatch (&optional reverse)
+(defun conn-dots-dispatch (&optional arg macro init-fn)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
@@ -3221,9 +3262,31 @@ With prefix argument \\[universal-argument] ask for a regexp and operate
 on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive "P")
-  (conn--dot-macro-dispatch (list (current-buffer)) :reverse reverse))
+  (let (single)
+    (conn--thread dots
+        (pcase arg
+          ('-
+           (conn--sorted-overlays #'conn-dotp '>))
+          ('nil
+           (setq single t)
+           (conn--sorted-overlays #'conn-dotp '<))
+          ((guard (>= (prefix-numeric-value arg) 0))
+           (mapcan (lambda (buffer)
+                     (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
+                   (conn--read-buffers-for-dispatch)))
+          (_
+           (mapcan (lambda (buffer)
+                     (conn--sorted-overlays #'conn-dotp '> nil nil buffer))
+                   (conn--read-buffers-for-dispatch))))
+      (conn--dot-loop-fn dots (or init-fn 'conn-state))
+      (if single
+          (conn--dispatch-single-buffer dots nil conn-current-state)
+        (conn--dispatch-multi-buffer dots nil conn-current-state))
+      (conn--dispatch-save-window-configuration dots)
+      (conn--dispatch-save-state dots)
+      (conn-macro-dispatch dots macro))))
 
-(defun conn-dots-dispatch-macro (register &optional reverse)
+(defun conn-dots-dispatch-macro (macro &optional arg)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
 Interactively buffers defaults to current buffer.
@@ -3232,45 +3295,12 @@ on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive (list (conn--read-macro-for-dispatch)
                      current-prefix-arg))
-  (unless (or (null register)
-              (stringp register)
-              (vectorp register)
-              (kmacro-p register))
+  (unless (or (null macro)
+              (stringp macro)
+              (vectorp macro)
+              (kmacro-p macro))
     (user-error "Resiter is not a keyboard macro"))
-  (conn--dot-macro-dispatch (list (current-buffer))
-                            :reverse reverse
-                            :macro register))
-
-(defun conn-dots-dispatch-prompt (buffers &optional reverse)
-  "Begin recording dot macro for BUFFERS, initially in conn-state.
-
-Interactively buffers defaults to current buffer.
-With prefix argument \\[universal-argument] ask for a regexp and operate
-on all buffers matching regexp.
-With any other prefix argument select buffers with `completing-read-multiple'."
-  (interactive
-   (list (conn--read-buffers-for-dispatch) current-prefix-arg))
-  (conn--dot-macro-dispatch buffers :reverse reverse))
-
-(defun conn-dots-dispatch-macro-prompt (buffers register &optional reverse)
-  "Begin recording dot macro for BUFFERS, initially in conn-state.
-
-Interactively buffers defaults to current buffer.
-With prefix argument \\[universal-argument] ask for a regexp and operate
-on all buffers matching regexp.
-With any other prefix argument select buffers with `completing-read-multiple'."
-  (interactive
-   (list (conn--read-buffers-for-dispatch)
-         (conn--read-macro-for-dispatch)
-         current-prefix-arg))
-  (unless (or (null register)
-              (stringp register)
-              (vectorp register)
-              (kmacro-p register))
-    (user-error "Resiter is not a keyboard macro"))
-  (conn--dot-macro-dispatch buffers
-                            :reverse reverse
-                            :macro register))
+  (conn-dots-dispatch arg macro))
 
 (defun conn-isearch-dots-dispatch ()
   (interactive)
@@ -3673,8 +3703,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
-  "!"                'conn-dots-dispatch-prompt
-  "@"                'conn-dots-dispatch-macro-prompt
+  ;; "!"                'conn-dots-dispatch
+  ;; "@"                'conn-dots-dispatch-macro
   "|"                'conn-remove-dots-outside-region
   "\\"               'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
