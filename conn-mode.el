@@ -3638,6 +3638,10 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "u"   'conn-transpose-words-backward)
 
 (define-keymap
+  :keymap conn-emacs-state-map
+  "C-z"  'conn-region-dispatch)
+
+(define-keymap
   :keymap conn-dot-state-map
   "M-<down-mouse-1>" 'conn-dot-at-click
   "M-/"              'conn-dot-undo
@@ -3654,8 +3658,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
-  "("                'conn-dots-dispatch-prompt
-  ")"                'conn-dots-dispatch-macro-prompt
+  "!"                'conn-dots-dispatch-prompt
+  "@"                'conn-dots-dispatch-macro-prompt
   "|"                'conn-remove-dots-outside-region
   "\\"               'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
@@ -3673,10 +3677,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "Y"                'conn-yank-to-dots)
 
 (define-keymap
-  :keymap conn-emacs-state-map
-  "C-z"  'conn-region-dispatch)
-
-(define-keymap
   :keymap conn-state-map
   "C-y"  'conn-yank-replace
   "C-z"  'conn-region-dispatch
@@ -3684,9 +3684,8 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "#"    'conn-query-replace-region
   "$"    'ispell-word
   "%"    'conn-query-replace-regexp-region
-  "("    'conn-region-dispatch
-  ")"    'conn-region-dispatch-macro
-  "*"    'calc-dispatch
+  "!"    'conn-region-dispatch
+  "@"    'conn-region-dispatch-macro
   "["    'conn-kill-prepend-region
   "\""   'conn-insert-pair
   "\\"   'indent-region
@@ -3714,7 +3713,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C--" 'shrink-window-if-larger-than-buffer
   "C-=" 'balance-windows
   "SPC" 'conn-set-mark-command
-  "!"   'kmacro-start-macro-or-insert-counter
   "+"   'conn-set-register-seperator
   ","   'isearch-backward
   "."   'isearch-forward
@@ -3723,7 +3721,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "<"   'conn-backward-line
   ">"   'forward-line
   "?"   'undo-redo
-  "@"   'kmacro-end-or-call-macro
   "`"   'conn-other-window
   "a"   'switch-to-buffer
   "B"   'conn-C-x-t-keys
@@ -3791,6 +3788,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "."   'point-to-register
   "/"   'undo-only
   ";"   'execute-extended-command
+  "*"   'conn-org-tree-edit-insert-heading
   "<"   'org-promote-subtree
   ">"   'org-demote-subtree
   "?"   'undo-redo
@@ -3800,16 +3798,17 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "B"   'conn-C-x-t-keys
   "c"   'conn-C-c-keys
   "g"   'conn-M-g-keys
-  "i"   'org-backward-heading-same-level
+  "i"   'org-backward-element
   "I"   'org-metaup
   "J"   'org-metaleft
   "j"   'org-previous-visible-heading
-  "k"   'org-forward-heading-same-level
+  "k"   'org-forward-element
   "K"   'org-metadown
   "L"   'org-metaright
   "l"   'org-next-visible-heading
-  "m"   'org-mark-subtree
-  "n"   'conn-org-tree-edit-insert-heading
+  "M"   'org-mark-subtree
+  "m"   'org-backward-element
+  "n"   'org-forward-element
   "N"   'org-toggle-narrow-to-subtree
   "O"   'org-next-block
   "p"   'conn-register-load
@@ -3817,7 +3816,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "s"   'conn-M-s-keys
   "t"   'org-todo
   "U"   'org-previous-block
-  "u"   'outline-up-heading
+  "u"   'org-up-element
   "w"   'org-refile
   "x"   'conn-C-x-keys
   "z"   'conn-exchange-mark-command)
@@ -4035,15 +4034,29 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
    :forward-op 'org-forward-sentence
    :commands '(org-forward-sentence org-backward-sentence))
 
+  (conn-define-thing
+   'org-element (conn-individual-thing-handler 'org-element)
+   :beg-op 'org-backward-element
+   :end-op 'org-forward-element
+   :commands '(org-forward-element
+               org-backward-element
+               org-next-visible-heading
+               org-previous-visible-heading
+               org-up-element))
+
   (keymap-set org-mode-map "<remap> <conn-view-state>" 'conn-org-tree-edit-state)
 
-  (dolist (state '(conn-state conn-dot-state))
-    (define-keymap
-      :keymap (conn-get-mode-map state 'org-mode)
-      "<remap> <forward-paragraph>" 'org-forward-paragraph
-      "<remap> <backward-paragraph>" 'org-backward-paragraph
-      "<remap> <forward-sentence>" 'org-forward-sentence
-      "<remap> <backward-sentence>" 'org-backward-sentence)))
+  (define-keymap
+    :keymap (conn-get-mode-map conn-state 'org-mode)
+    "^" 'org-up-element
+    ")" 'org-next-visible-heading
+    "(" 'org-previous-visible-heading
+    "K" 'org-forward-paragraph
+    "I" 'org-backward-paragraph
+    "U" 'org-forward-sentence
+    "O" 'org-backward-sentence
+    "N" 'org-backward-element
+    "M" 'org-forward-element))
 
 (with-eval-after-load 'polymode
   (defvar polymode-move-these-vars-from-old-buffer)
