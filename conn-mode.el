@@ -3716,16 +3716,28 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (define-keymap
   :keymap conn-common-map
-  "C-0" 'delete-window
   "C-1" 'delete-other-windows
   "C-2" 'split-window-below
   "C-3" 'split-window-right
   "C-4" 'conn-C-x-4-keys
   "C-5" 'conn-C-x-5-keys
+  "C-6" 'conn-C-x-t-keys
   "C-7" 'delete-other-windows-vertically
   "C-8" 'conn-swap-window-buffers
+  "C-9" 'conn-swap-window-buffers-no-select
+  "C-0" 'delete-window
   "C--" 'shrink-window-if-larger-than-buffer
   "C-=" 'balance-windows
+  ;; "M-1" nil
+  ;; "M-2" nil
+  ;; "M-3" nil
+  ;; "M-4" nil
+  ;; "M-5" nil
+  ;; "M-6" nil
+  ;; "M-7" nil
+  ;; "M-8" nil
+  ;; "M-9" nil
+  "M-0" 'delete-other-windows-vertically
   "SPC" 'conn-set-mark-command
   "+"   'conn-set-register-seperator
   ","   'isearch-backward
@@ -3737,7 +3749,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "?"   'undo-redo
   "`"   'conn-other-window
   "a"   'switch-to-buffer
-  "B"   'conn-C-x-t-keys
   "c"   'conn-C-c-keys
   "C"   'conn-copy-region
   "D"   'conn-dot-region
@@ -3779,7 +3790,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "."       'isearch-forward
   ";"       'execute-extended-command
   "a"       'switch-to-buffer
-  "B"       'conn-C-x-t-keys
   "g"       'conn-M-g-keys
   "i"       'conn-scroll-down
   "j"       'backward-page
@@ -3809,7 +3819,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "^"   'org-sort
   "_"   'org-columns
   "a"   'switch-to-buffer
-  "B"   'conn-C-x-t-keys
   "c"   'conn-C-c-keys
   "g"   'conn-M-g-keys
   "i"   'org-backward-element
