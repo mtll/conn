@@ -488,8 +488,8 @@ THING is always returned.
 (conn-define-thing-handler conn-sequential-thing-handler (thing)
   "Return a continuous mark handler for THING.
 If one has already been created return it, otherwise create a new one.
-Continuous handlers will mark all THINGs when moving over multiple THINGs
-at once unless `use-region-p'."
+Continuous handlers will mark all THINGs when moving over multiple
+THINGs at once unless `use-region-p'."
   (lambda (beg)
     (unless (or (use-region-p)
                 (= (point) beg)
@@ -506,8 +506,8 @@ at once unless `use-region-p'."
 (conn-define-thing-handler conn-individual-thing-handler (thing)
   "Return a discrete mark handler for THING.
 If one has already been created return it, otherwise create a new one.
-Discrete handlers will only mark the last THING when moving over multiple
-THINGs at once unless `use-region-p'."
+Discrete handlers will only mark the last THING when moving over
+multiple THINGs at once unless `use-region-p'."
   (lambda (_)
     (unless (use-region-p)
       (pcase (bounds-of-thing-at-point thing)
@@ -749,6 +749,10 @@ If REVERSE is non-nil execute macro on regions from last to first.
                (if (not defining-kbd-macro)
                    (user-error "Not defining keyboard macro")
                  (kmacro-end-macro 0)
+                 ;; This is much faster but probably
+                 ;; isn't reasonable to do in general.
+                 ;; (combine-change-calls (point-min) (point-max)
+                 ;;   (kmacro-end-macro 0))
                  (setf conn-this-dispatch-macro (kmacro-ring-head)))))))
       (if-let ((after (plist-get rest :after))) (funcall after))
       (advice-remove 'kmacro-loop-setup-function sym))))
@@ -3685,7 +3689,9 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   "C-3" 'split-window-right
   "C-4" 'conn-C-x-4-keys
   "C-5" 'conn-C-x-5-keys
+  "C-7" 'delete-other-windows-vertically
   "C-8" 'conn-swap-window-buffers
+  "C--" 'shrink-window-if-larger-than-buffer
   "C-=" 'balance-windows
   "SPC" 'conn-set-mark-command
   "!"   'kmacro-start-macro-or-insert-counter
