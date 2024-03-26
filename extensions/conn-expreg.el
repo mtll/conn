@@ -40,13 +40,6 @@ current state is in `conn-expreg-always-use-region-states'."
   :type 'boolean
   :group 'conn-expreg)
 
-(define-keymap
-  :keymap conn-common-map
-  "b" 'expreg-expand)
-
-(defvar-keymap conn-expreg-repeat-map
-  "B" 'expreg-contract)
-
 (defun conn--expreg-advice (fn &rest args)
   (let ((always-use-region
          (seq-find #'identity conn-expreg-always-use-region-states))

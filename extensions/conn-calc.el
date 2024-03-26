@@ -32,6 +32,7 @@
       (with-current-buffer buffer
         (set state t)))))
 
+;;;###autoload (autoload 'conn-calc-shim "conn-calc" nil t)
 (conn-define-extension conn-calc-shim
   "Change the cursor color when a repeat map is active."
   (if conn-calc-shim

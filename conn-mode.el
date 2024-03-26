@@ -4001,26 +4001,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (completion-in-region-mode -1))
   (add-hook 'conn-transition-hook 'conn--exit-completion))
 
-(with-eval-after-load 'isearch+
-  (require 'conn-isearch+))
-
-(with-eval-after-load 'avy
-  (require 'conn-avy))
-
-(with-eval-after-load 'expand-region
-  (require 'conn-expand-region))
-
-(with-eval-after-load 'embark
-  (require 'conn-embark)
-  (declare-function conn-complete-keys-prefix-help-command "conn-embark")
-  (conn-complete-keys-prefix-help-command t))
-
-(with-eval-after-load 'consult
-  (require 'conn-consult))
-
-(with-eval-after-load 'calc
-  (require 'conn-calc))
-
 (with-eval-after-load 'org
   (defvar org-mode-map)
 
@@ -4107,7 +4087,4 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
     (when-let ((bounds (bounds-of-thing-at-point thing)))
       (let ((zz-add-zone-anyway-p t))
         (narrow-to-region (car bounds) (cdr bounds))))))
-
-(with-eval-after-load 'expreg
-  (require 'conn-expreg))
 ;;; conn-mode.el ends here

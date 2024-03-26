@@ -159,9 +159,8 @@ THING BEG and END are bound in BODY."
 
 (with-eval-after-load 'embark
   (defvar embark-multitarget-actions)
-  (defvar embark-consult-grep-map)
-  (defvar embark-consult-location-map)
-  
+  (defvar embark-keymap-alist)
+
   (defun conn-dispatch-grep-candidates (cands)
     (conn--dispatch-on-regions
      (mapcar (lambda (cand)
@@ -169,7 +168,6 @@ THING BEG and END are bound in BODY."
                  (cons marker marker)))
              cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
-  (keymap-set embark-consult-grep-map "C-z" 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
     (conn--dispatch-on-regions
@@ -178,8 +176,22 @@ THING BEG and END are bound in BODY."
                  (cons marker marker)))
              cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
-  (keymap-set embark-consult-location-map "C-z" 'conn-dispatch-location-candidates)
 
-  (keymap-set embark-consult-location-map "D" 'conn-dot-consult-location-candidate)
-  (keymap-set embark-consult-grep-map "D" 'conn-dot-consult-grep-candidate))
+  (defvar-keymap conn-embark-consult-location-map
+    "C-z" 'conn-dispatch-location-candidates
+    "D"   'conn-dot-consult-location-candidate)
+  (if (alist-get 'consult-location embark-keymap-alist)
+      (push 'embark-consult-location-map
+            (alist-get 'consult-location embark-keymap-alist))
+    (setf (alist-get 'consult-location embark-keymap-alist)
+          (list 'conn-embark-consult-location-map 'embark-general-map)))
+
+  (defvar-keymap conn-embark-consult-grep-map
+    "C-z" 'conn-dispatch-grep-candidates
+    "D"   'conn-dot-consult-grep-candidate)
+  (if (alist-get 'consult-grep embark-keymap-alist)
+      (push 'embark-consult-grep-map
+            (alist-get 'consult-grep embark-keymap-alist))
+    (setf (alist-get 'consult-grep embark-keymap-alist)
+          (list 'conn-embark-consult-location-map 'embark-general-map))))
 ;;; conn-consult.el ends here
