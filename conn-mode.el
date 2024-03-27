@@ -254,6 +254,8 @@ See `conn--dispatch-on-regions'.")
 
 (defvar-local conn-view-state--start-marker nil)
 
+(defvar conn--goto-char-last-char nil)
+
 ;;;;; Command Histories
 
 (defvar conn-thing-history nil)
@@ -2499,8 +2501,6 @@ Interactively `region-beginning' and `region-end'."
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content))
 
-(defvar conn--goto-char-last-char nil)
-
 (defvar-keymap conn-goto-char-backward-repeat-map
   "j" 'conn-goto-char-backward)
 
@@ -2509,8 +2509,8 @@ Interactively `region-beginning' and `region-end'."
 If `current-prefix-arg' is 1 prompt for CHAR and search backward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
 of CHAR up to `window-end'.
-
-Not for use in lisp code."
+This command should only be called interactively."
+  (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4)) (read-char "Char: ")))
                      (prefix-numeric-value current-prefix-arg)))
@@ -2541,8 +2541,8 @@ Not for use in lisp code."
 If `current-prefix-arg' is 1 prompt for CHAR and search forward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
 of CHAR up to `window-end'.
-
-Not for use in lisp code."
+This command should only be called interactively."
+  (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4)) (read-char "Char: ")))
                      (prefix-numeric-value current-prefix-arg)))
@@ -2708,7 +2708,6 @@ downcase -> Capitalize -> UPCASE -> downcase."
 
 (defun conn-kill-append-region (beg end &optional register)
   "Kill region from BEG to END and append it to most recent kill.
-
 Optionally if REGISTER is specified append kill to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively."
@@ -2727,7 +2726,6 @@ interactively."
 
 (defun conn-kill-prepend-region (beg end &optional register)
   "Kill region from BEG to END and prepend it to most recent kill.
-
 Optionally if REGISTER is specified prepend kill to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively."
