@@ -139,6 +139,11 @@ Defines default STATE for buffers matching REGEXP."
   "Face for dots."
   :group 'conn-dots)
 
+(defface conn-pulse-face
+  '((t (:background "red3")))
+  "Face for dispatch pulse."
+  :group 'conn-mode)
+
 ;; Isearch uses a priority of 1001 for
 ;; its lazy highlighting, we want to be
 ;; less than that by default.
@@ -719,7 +724,7 @@ to determine if mark cursor should be hidden in buffer."
       ((and `(,beg . ,end)
             (guard (eq state :record))
             ret)
-       (pulse-momentary-highlight-region beg end 'conn-dot-face)
+       (pulse-momentary-highlight-region beg end 'conn-pulse-face)
        ret)
       (ret ret))))
 
