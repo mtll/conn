@@ -730,8 +730,11 @@ to determine if mark cursor should be hidden in buffer."
       (if (eq state :finalize)
           (progn
             (if dots
-                (dolist (dot old-dots)
-                  (conn--create-dots dot))
+                (progn
+                  (dolist (dot old-dots)
+                    (conn--create-dots dot))
+                  (dolist (dot dots)
+                    (overlay-put dot 'evaporate t)))
               (pcase-dolist (`(,buffer . ,dots) new-dots)
                 (with-current-buffer buffer
                   (apply 'conn--create-dots dots))))
