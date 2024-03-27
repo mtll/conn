@@ -860,7 +860,10 @@ to determine if mark cursor should be hidden in buffer."
     (when (overlay-get ov 'conn-overlay)
       (delete-overlay ov))))
 
-(defun conn--dot-post-command-hook ()
+(defun conn--dot-after-change-function (&rest _)
+  (setq conn--dot-undo-ring nil))
+
+(defun conn--dot-post-command ()
   (when conn--dot-this-undo
     (setq conn--dot-undone nil)
     (push conn--dot-this-undo conn--dot-undo-ring)
@@ -1435,9 +1438,11 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
          (lambda (dot)
            (push `(create ,(overlay-start dot) . ,(overlay-end dot))
                  conn--dot-this-undo)))
-        (add-hook 'post-command-hook #'conn--dot-post-command-hook t t))
+        (add-hook 'post-command-hook #'conn--dot-post-command t t)
+        (add-hook 'after-change-functions #'conn--dot-after-change-function t t))
     (setq conn--dot-undo-ring nil)
-    (remove-hook 'post-command-hook #'conn--dot-post-command-hook t)))
+    (remove-hook 'after-change-functions #'conn--dot-after-change-function t)
+    (remove-hook 'post-command-hook #'conn--dot-post-command t)))
 
 (conn-define-state conn-org-tree-edit-state
   "Activate `conn-org-tree-edit-state' in the current buffer.
@@ -3289,29 +3294,29 @@ on all buffers matching regexp.
 With any other prefix argument select buffers with `completing-read-multiple'."
   (interactive "P")
   (let (single)
-    (conn--thread dots
-        (pcase arg
-          ('-
-           (conn--sorted-overlays #'conn-dotp '>))
-          ('nil
-           (setq single t)
-           (conn--sorted-overlays #'conn-dotp '<))
-          ((guard (>= (prefix-numeric-value arg) 0))
-           (mapcan (lambda (buffer)
-                     (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
-                   (conn--read-buffers-for-dispatch)))
-          (_
-           (mapcan (lambda (buffer)
-                     (conn--sorted-overlays #'conn-dotp '> nil nil buffer))
-                   (conn--read-buffers-for-dispatch))))
-      (conn--dot-iterator dots)
-      (if single
-          (conn--dispatch-single-buffer dots)
-        (conn--dispatch-multi-buffer dots nil))
-      (conn--dispatch-save-state dots 'conn-state)
-      (conn--dispatch-save-window-configuration dots)
-      (conn--pulse-on-record dots)
-      (conn-macro-dispatch dots macro))))
+    (save-window-excursion
+      (conn--thread dots
+          (pcase arg
+            ('-
+             (conn--sorted-overlays #'conn-dotp '>))
+            ('nil
+             (setq single t)
+             (conn--sorted-overlays #'conn-dotp '<))
+            ((guard (>= (prefix-numeric-value arg) 0))
+             (mapcan (lambda (buffer)
+                       (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
+                     (conn--read-buffers-for-dispatch)))
+            (_
+             (mapcan (lambda (buffer)
+                       (conn--sorted-overlays #'conn-dotp '> nil nil buffer))
+                     (conn--read-buffers-for-dispatch))))
+        (conn--dot-iterator dots)
+        (if single
+            (conn--dispatch-single-buffer dots)
+          (conn--dispatch-multi-buffer dots nil))
+        (conn--dispatch-with-state dots (or init-fn 'conn-state))
+        (conn--pulse-on-record dots)
+        (conn-macro-dispatch dots macro)))))
 
 (defun conn-dots-dispatch-macro (macro &optional arg)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
