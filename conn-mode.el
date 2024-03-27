@@ -644,7 +644,7 @@ to determine if mark cursor should be hidden in buffer."
 
 ;;;; Macro Dispatch
 
-(defun conn--dispatch-multi-buffer (loop-fn &optional init finalize)
+(defun conn--dispatch-multi-buffer (iterator &optional init finalize)
   (let ((dispatch-undo-handles nil))
     (lambda (&optional state)
       (when (eq state :finalize)
@@ -658,7 +658,7 @@ to determine if mark cursor should be hidden in buffer."
             (undo-amalgamate-change-group handle)
             (when finalize
               (with-current-buffer buffer (funcall finalize))))))
-      (pcase (funcall loop-fn state)
+      (pcase (funcall iterator state)
         ((and `(,beg . ,end)
               (let buffer (marker-buffer beg))
               ret)
@@ -678,7 +678,7 @@ to determine if mark cursor should be hidden in buffer."
                 ret)))
         (ret ret)))))
 
-(defun conn--dispatch-single-buffer (loop-fn &optional init finalize)
+(defun conn--dispatch-single-buffer (iterator &optional init finalize)
   (let ((handle nil))
     (lambda (&optional state)
       (cond ((eq state :finalize)
@@ -690,28 +690,28 @@ to determine if mark cursor should be hidden in buffer."
             ((not handle)
              (setq handle (prepare-change-group))
              (when init (funcall init))))
-      (funcall loop-fn state))))
+      (funcall iterator state))))
 
-(defun conn--dispatch-save-window-configuration (loop-fn)
+(defun conn--dispatch-save-window-configuration (iterator)
   (let (wind)
     (lambda (&optional state)
       (unless wind (setq wind (current-window-configuration)))
       (when (eq state :finalize)
         (set-window-configuration wind))
-      (funcall loop-fn state))))
+      (funcall iterator state))))
 
-(defun conn--dispatch-save-state (loop-fn)
+(defun conn--dispatch-save-state (iterator)
   (let ((buffer-states nil))
     (lambda (&optional state)
       (pcase state
         (:finalize
-         (funcall loop-fn state)
+         (funcall iterator state)
          (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
            (when state
              (with-current-buffer buf
                (funcall state)
                (setq conn-previous-state prev-state)))))
-        ((let ret (funcall loop-fn state))
+        ((let ret (funcall iterator state))
          (pcase ret
            ((and `(,beg . ,_)
                  (let buffer (marker-buffer beg)))
@@ -720,7 +720,7 @@ to determine if mark cursor should be hidden in buffer."
                     (list conn-current-state conn-previous-state)))))
          ret)))))
 
-(defun conn--region-loop-fn (regions init-fn)
+(defun conn--region-iterator (regions init-fn)
   (lambda (&optional state)
     (if (eq state :finalize)
         (pcase-dolist (`(,beg . ,end) regions)
@@ -732,9 +732,9 @@ to determine if mark cursor should be hidden in buffer."
          (cons beg end))
         (_ nil)))))
 
-(defun conn--pulse-on-record (loop-fn)
+(defun conn--pulse-on-record (iterator)
   (lambda (&optional state)
-    (pcase (funcall loop-fn state)
+    (pcase (funcall iterator state)
       ((and `(,beg . ,end)
             (guard (eq state :record))
             ret)
@@ -742,7 +742,7 @@ to determine if mark cursor should be hidden in buffer."
        ret)
       (ret ret))))
 
-(defun conn--dot-loop-fn (dots init-fn)
+(defun conn--dot-iterator (dots init-fn)
   (let (primed new-dots)
     (dolist (dot dots)
       (overlay-put dot 'evaporate nil))
@@ -773,15 +773,15 @@ to determine if mark cursor should be hidden in buffer."
           (funcall init-fn)
           (cons beg end))))))
 
-(defun conn-macro-dispatch (loop-fn &optional kmacro append)
+(defun conn-macro-dispatch (iterator &optional kmacro append)
   (let* ((undo-outer-limit nil)
          (undo-limit most-positive-fixnum)
          (undo-strong-limit most-positive-fixnum)
          (conn-macro-dispatch-p t)
          (conn--dispatch-aborted nil)
-         (sym (make-symbol "conn--kmacro-loop-fn")))
+         (sym (make-symbol "conn--kmacro-iterator")))
     (fset sym (lambda (&optional state)
-                (pcase (funcall loop-fn state)
+                (pcase (funcall iterator state)
                   ((and (pred symbolp) err)
                    (setq conn--dispatch-aborted err)
                    nil)
@@ -791,26 +791,29 @@ to determine if mark cursor should be hidden in buffer."
                    t))))
     (advice-add #'kmacro-loop-setup-function :before-while sym)
     (unwind-protect
-        (pcase kmacro
-          ((pred kmacro-p)
-           (funcall kmacro 0))
-          ((pred identity)
-           (kmacro-call-macro 0 nil nil kmacro))
-          ('nil
-           (deactivate-mark t)
-           (pcase (funcall loop-fn :record)
-             (`(,beg . ,end)
-              (goto-char beg)
-              (conn--push-ephemeral-mark end))
-             (_ (error "loop-fn unknown return")))
-           (kmacro-start-macro append)
-           (unwind-protect
-               (recursive-edit)
-             (if (not defining-kbd-macro)
-                 (user-error "Not defining keyboard macro")
-               (kmacro-end-macro 0)))))
+        (condition-case err
+            (pcase kmacro
+              ((pred kmacro-p)
+               (funcall kmacro 0))
+              ((pred identity)
+               (kmacro-call-macro 0 nil nil kmacro))
+              ('nil
+               (deactivate-mark t)
+               (pcase (funcall iterator :record)
+                 (`(,beg . ,end)
+                  (goto-char beg)
+                  (conn--push-ephemeral-mark end))
+                 (_ (error "iterator unknown return")))
+               (kmacro-start-macro append)
+               (unwind-protect
+                   (recursive-edit)
+                 (if (not defining-kbd-macro)
+                     (user-error "Not defining keyboard macro")
+                   (kmacro-end-macro 0)))))
+          (t (setq conn--dispatch-aborted err)
+             (signal (car err) (cdr err))))
       (advice-remove 'kmacro-loop-setup-function sym)
-      (funcall loop-fn :finalize))))
+      (funcall iterator :finalize))))
 
 
 ;;;; Dots
@@ -2164,33 +2167,31 @@ THING is something with a forward-op as defined by thingatpt."
                   matches))))
       matches)))
 
-(defun conn-isearch-dispatch (&optional reverse)
-  (interactive "P")
+(defun conn-isearch-dispatch ()
+  (interactive)
   (if (or (not (boundp 'multi-isearch-buffer-list))
           (not multi-isearch-buffer-list))
-      (conn--thread regions
-          (prog1
-              (conn--isearch-matches-in-buffer (current-buffer))
-            (isearch-exit))
-        (if reverse (nreverse regions) regions)
-        (conn--region-loop-fn regions 'conn-state)
-        (conn--dispatch-single-buffer regions nil conn-current-state)
-        (conn--dispatch-save-window-configuration regions)
-        (conn--dispatch-save-state regions)
-        (conn--pulse-on-record regions)
-        (conn-macro-dispatch regions))
-    (conn--thread regions
+      (thread-first
         (prog1
-            (mapcan 'conn--isearch-matches-in-buffer
-                    multi-isearch-buffer-list)
+            (nreverse (conn--isearch-matches-in-buffer (current-buffer)))
           (isearch-exit))
-      (if reverse (nreverse regions) regions)
-      (conn--region-loop-fn regions 'conn-state)
-      (conn--dispatch-multi-buffer regions nil conn-current-state)
-      (conn--dispatch-save-window-configuration regions)
-      (conn--dispatch-save-state regions)
-      (conn--pulse-on-record regions)
-      (conn-macro-dispatch regions))))
+        (conn--region-iterator 'conn-state)
+        (conn--dispatch-single-buffer nil conn-current-state)
+        (conn--dispatch-save-window-configuration)
+        (conn--dispatch-save-state)
+        (conn--pulse-on-record)
+        (conn-macro-dispatch))
+    (thread-first
+      (prog1
+          (nreverse (mapcan 'conn--isearch-matches-in-buffer
+                            multi-isearch-buffer-list))
+        (isearch-exit))
+      (conn--region-iterator 'conn-state)
+      (conn--dispatch-multi-buffer nil conn-current-state)
+      (conn--dispatch-save-window-configuration)
+      (conn--dispatch-save-state)
+      (conn--pulse-on-record)
+      (conn-macro-dispatch))))
 
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
@@ -2344,7 +2345,7 @@ between `point-min' and `point-max'."
                   regions)))))
     (conn--thread regions
         (if reverse (nreverse regions) regions)
-      (conn--region-loop-fn regions 'conn-state)
+      (conn--region-iterator regions 'conn-state)
       (conn--dispatch-single-buffer regions nil conn-current-state)
       (conn--dispatch-save-window-configuration regions)
       (conn--dispatch-save-state regions)
@@ -2362,13 +2363,15 @@ With prefix arg of 0 dispatch the contents of
 `conn-last-dispatch-macro-register'.  With any other prefix arg prompt
 for a dot register to use for dispatch."
   (interactive)
-  (thread-first
-    (list (cons (point-marker) (point-marker))
-          (cons (conn--create-marker (mark t))
-                (conn--create-marker (mark t))))
-    (conn--region-loop-fn conn-current-state)
-    (conn--dispatch-single-buffer)
-    (conn-macro-dispatch)))
+  (save-mark-and-excursion
+    (thread-first
+      (list (cons (point-marker) (point-marker))
+            (cons (conn--create-marker (mark t))
+                  (conn--create-marker (mark t))))
+      (conn--region-iterator conn-current-state)
+      (conn--dispatch-single-buffer)
+      (conn--dispatch-save-state)
+      (conn-macro-dispatch))))
 
 (defvar-keymap conn-scroll-repeat-map
   :repeat t
@@ -3204,14 +3207,14 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-region-dispatch (&optional reverse)
   (interactive "P")
-  (let ((loop-fn
+  (let ((iterator
          (conn--thread regions
              (mapcar (pcase-lambda (`(,beg . ,end))
                        (cons (conn--create-marker beg)
                              (conn--create-marker end)))
                      (region-bounds))
            (if reverse (nreverse regions) regions)
-           (conn--region-loop-fn regions 'conn-state)
+           (conn--region-iterator regions 'conn-state)
            (conn--dispatch-single-buffer regions nil conn-current-state)
            (conn--dispatch-save-window-configuration regions)
            (conn--pulse-on-record regions)
@@ -3219,9 +3222,9 @@ there's a region, all lines that region covers will be duplicated."
     (if rectangle-mark-mode-map
         (progn
           (save-mark-and-excursion
-            (conn-macro-dispatch loop-fn))
+            (conn-macro-dispatch iterator))
           (deactivate-mark t))
-      (conn-macro-dispatch loop-fn))))
+      (conn-macro-dispatch iterator))))
 
 (defun conn--read-macro-for-dispatch ()
   (pcase
@@ -3243,14 +3246,14 @@ there's a region, all lines that region covers will be duplicated."
               (vectorp macro)
               (kmacro-p macro))
     (user-error "Register is not a keyboard macro"))
-  (let ((loop-fn
+  (let ((iterator
          (conn--thread regions
              (mapcar (pcase-lambda (`(,beg . ,end))
                        (cons (conn--create-marker beg)
                              (conn--create-marker end)))
                      (region-bounds))
            (if reverse (nreverse regions) regions)
-           (conn--region-loop-fn regions 'conn-state)
+           (conn--region-iterator regions 'conn-state)
            (conn--dispatch-single-buffer regions nil conn-current-state)
            (conn--dispatch-save-window-configuration regions)
            (conn--dispatch-save-state regions)
@@ -3258,9 +3261,9 @@ there's a region, all lines that region covers will be duplicated."
     (if rectangle-mark-mode-map
         (progn
           (save-mark-and-excursion
-            (conn-macro-dispatch loop-fn macro))
+            (conn-macro-dispatch iterator macro))
           (deactivate-mark t))
-      (conn-macro-dispatch loop-fn macro))))
+      (conn-macro-dispatch iterator macro))))
 
 (defun conn--read-buffers-for-dispatch ()
   (pcase-exhaustive
@@ -3296,7 +3299,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
            (mapcan (lambda (buffer)
                      (conn--sorted-overlays #'conn-dotp '> nil nil buffer))
                    (conn--read-buffers-for-dispatch))))
-      (conn--dot-loop-fn dots (or init-fn 'conn-state))
+      (conn--dot-iterator dots (or init-fn 'conn-state))
       (if single
           (conn--dispatch-single-buffer dots nil conn-current-state)
         (conn--dispatch-multi-buffer dots nil conn-current-state))
