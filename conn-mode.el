@@ -2327,25 +2327,25 @@ Interactively PARTIAL-MATCH is the prefix argument."
         (:append (lambda () (insert from)))
       (call-interactively #'query-replace-regexp))))
 
-(defun conn-dispatch-text-property (start end &optional reverse)
-  "Dot each region between START and END with text property PROP equal to VAL.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)
-                     current-prefix-arg))
-  (let* ((prop (intern (completing-read
-                        "Property: "
-                        (cl-loop for prop in (text-properties-at (point))
-                                 by #'cddr
-                                 collect prop)
-                        nil t)))
-         (vals (mapcar (lambda (s) (cons (message "%s" s) s))
-                       (ensure-list (get-text-property (point) prop))))
-         (val (alist-get (completing-read "Value: " vals) vals
-                         nil nil #'string=))
-         regions)
+(defun conn-dispatch-text-property (start end prop value &optional reverse)
+  "Dispatch on text with text property PROP with value VALUE.
+When called interatively the choices for PROP and VALUE are extracted
+from the text properties at point."
+  (interactive
+   (let* ((start (conn--beginning-of-region-or-restriction))
+          (end (conn--end-of-region-or-restriction))
+          (prop (intern (completing-read
+                         "Property: "
+                         (cl-loop for prop in (text-properties-at (point))
+                                  by #'cddr
+                                  collect prop)
+                         nil t)))
+          (vals (mapcar (lambda (s) (cons (message "%s" s) s))
+                        (ensure-list (get-text-property (point) prop))))
+          (val (alist-get (completing-read "Value: " vals) vals
+                          nil nil #'string=)))
+     (list start end prop val current-prefix-arg)))
+  (let* (regions)
     (save-excursion
       (with-restriction
           start end
