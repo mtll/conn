@@ -2149,6 +2149,22 @@ THING is something with a forward-op as defined by thingatpt."
                                 (point))))
         (conn--create-dots (bounds-of-thing-at-point thing))))))
 
+(defun conn-shell-command-on-dots (command arg)
+  (interactive
+   (list (read-shell-command "Shell command on region: ")
+         current-prefix-arg))
+  (save-mark-and-excursion
+    (dolist (dot (conn--all-overlays #'conn-dotp))
+      (let ((beg (overlay-start dot))
+            (end (overlay-end dot)))
+        (shell-command-on-region beg end
+                                 command arg arg
+                                 shell-command-default-error-buffer
+                                 t nil)
+        (conn-exchange-mark-command)
+        (when (and (looking-back "\n" 1) arg)
+          (delete-char 1))))))
+
 ;;;;; Isearch commands
 
 (defun conn--isearch-matches-in-buffer (&optional buffer)
