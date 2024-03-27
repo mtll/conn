@@ -382,27 +382,6 @@ Uses `read-regexp' to read the regexp."
     (set-marker marker pos buffer)
     marker))
 
-;; From meow
-(defmacro conn--as-merged-undo (&rest body)
-  "Execute BODY as a single undo unit."
-  (declare (indent defun))
-  (let ((handle (gensym "change-group-handle"))
-        (success (gensym "change-group-success")))
-    `(let ((,handle (prepare-change-group))
-           (undo-outer-limit nil)
-           (undo-limit most-positive-fixnum)
-           (undo-strong-limit most-positive-fixnum)
-           (,success nil))
-       (unwind-protect
-           (prog2
-               (activate-change-group ,handle)
-               ,(macroexp-progn body)
-             (setq ,success t))
-         (if (not ,success)
-             (cancel-change-group ,handle)
-           (accept-change-group ,handle)
-           (undo-amalgamate-change-group ,handle))))))
-
 (defmacro conn-with-saved-state (&rest body)
   "Execute BODY preserving current conn state and previous state values"
   (declare (indent defun))
