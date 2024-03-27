@@ -194,8 +194,8 @@ THING BEG and END are bound in BODY."
     "C-z" 'conn-dispatch-location-candidates
     "D"   'conn-dot-consult-location-candidate)
   (if (alist-get 'consult-location embark-keymap-alist)
-      (push 'embark-consult-location-map
-            (alist-get 'consult-location embark-keymap-alist))
+      (cl-pushnew 'embark-consult-location-map
+                  (alist-get 'consult-location embark-keymap-alist))
     (setf (alist-get 'consult-location embark-keymap-alist)
           (list 'conn-embark-consult-location-map 'embark-general-map)))
 
@@ -203,8 +203,8 @@ THING BEG and END are bound in BODY."
     "C-z" 'conn-dispatch-grep-candidates
     "D"   'conn-dot-consult-grep-candidate)
   (if (alist-get 'consult-grep embark-keymap-alist)
-      (push 'embark-consult-grep-map
-            (alist-get 'consult-grep embark-keymap-alist))
+      (cl-pushnew 'embark-consult-grep-map
+                  (alist-get 'consult-grep embark-keymap-alist))
     (setf (alist-get 'consult-grep embark-keymap-alist)
-          (list 'conn-embark-consult-location-map 'embark-general-map))))
+          (list 'conn-embark-consult-grep-map 'embark-general-map))))
 ;;; conn-consult.el ends here
