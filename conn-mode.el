@@ -39,6 +39,7 @@
 (require 'seq)
 (require 'tab-bar)
 (require 'thingatpt)
+(require 'sort)
 (eval-when-compile
   (require 'subr-x)
   (require 'cl-lib))
@@ -1589,6 +1590,26 @@ If STATE is nil make COMMAND always repeat."
   (interactive "P")
   (save-mark-and-excursion
     (conn-dots-dispatch arg (kbd conn-yank-keys) 'conn-emacs-state)))
+
+(defun conn-sort-dots ()
+  (interactive)
+  (let* ((sort-lists (mapcar (lambda (dot)
+                               (let ((key (cons (overlay-start dot)
+                                                (overlay-end dot))))
+                                 (cons key key)))
+                             (conn--sorted-overlays #'conn-dotp '>)))
+         (old (reverse sort-lists))
+	 (case-fold-search sort-fold-case))
+    (when sort-lists
+      (setq sort-lists
+	    (sort sort-lists
+                  (lambda (a b)
+		    (> 0 (compare-buffer-substrings
+			  nil (car (car a)) (cdr (car a))
+			  nil (car (car b)) (cdr (car b)))))))
+      (with-buffer-unmodified-if-unchanged
+	(sort-reorder-buffer sort-lists old))
+      (conn--remove-dots))))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
