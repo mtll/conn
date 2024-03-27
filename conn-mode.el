@@ -147,10 +147,15 @@ Defines default STATE for buffers matching REGEXP."
 ;; Isearch uses a priority of 1001 for
 ;; its lazy highlighting, we want to be
 ;; less than that by default.
-(defcustom conn-overlay-priority 1000
+(defcustom conn-dot-overlay-priority 1000
   "Priority of dot overlays."
   :type 'integer
   :group 'conn-dots)
+
+(defcustom conn-mark-overlay-priority 2000
+  "Priority of mark overlay."
+  :type 'integer
+  :group 'conn-mode)
 
 (defcustom conn-last-dispatch-macro-register ?z
   "Register used for the last dot macro."
@@ -557,7 +562,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (overlay-put conn--mark-cursor 'conn-overlay t)
         (overlay-put conn--mark-cursor 'face 'conn-mark-face)
         (overlay-put conn--mark-cursor 'type 'conn--mark-cursor)
-        (overlay-put conn--mark-cursor 'priority conn-overlay-priority))
+        (overlay-put conn--mark-cursor 'priority conn-mark-overlay-priority))
        (t
         (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
         (overlay-put conn--mark-cursor 'after-string
@@ -916,7 +921,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
         (mapc #'conn--delete-dot overlaps)
         (overlay-put overlay 'conn-overlay t)
         (overlay-put overlay 'dot t)
-        (overlay-put overlay 'priority conn-overlay-priority)
+        (overlay-put overlay 'priority conn-dot-overlay-priority)
         (overlay-put overlay 'face 'conn-dot-face)
         (unless (or conn--dot-undoing
                     conn-macro-dispatch-p)
