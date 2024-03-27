@@ -158,11 +158,6 @@ Defines default STATE for buffers matching REGEXP."
   :type 'integer
   :group 'conn-mode)
 
-(defcustom conn-last-dispatch-macro-register ?z
-  "Register used for the last dot macro."
-  :type 'character
-  :group 'conn-dots)
-
 (defface conn-mark-face
   '((default (:background "gray65")))
   "Face for mark."
@@ -2369,16 +2364,8 @@ between `point-min' and `point-max'."
         (conn--pulse-on-record regions)
         (conn-macro-dispatch regions)))))
 
-(defun conn-last-macro-dispatch-to-register (register)
-  "Set REGISTER to last dot macro."
-  (interactive (list (register-read-with-preview "register: ")))
-  (set-register register (get-register conn-last-dispatch-macro-register)))
-
 (defun conn-macro-at-point-and-mark ()
-  "Dispatch dot macro at point and mark.
-With prefix arg of 0 dispatch the contents of
-`conn-last-dispatch-macro-register'.  With any other prefix arg prompt
-for a dot register to use for dispatch."
+  "Dispatch dot macro at point and mark."
   (interactive)
   (save-mark-and-excursion
     (thread-first
