@@ -681,15 +681,7 @@ to determine if mark cursor should be hidden in buffer."
              (when init (funcall init))))
       (funcall iterator state))))
 
-(defun conn--dispatch-save-window-configuration (iterator)
-  (let (wind)
-    (lambda (&optional state)
-      (unless wind (setq wind (current-window-configuration)))
-      (when (eq state :finalize)
-        (set-window-configuration wind))
-      (funcall iterator state))))
-
-(defun conn--dispatch-save-state (iterator transition)
+(defun conn--dispatch-with-state (iterator transition)
   (let ((buffer-states nil))
     (lambda (&optional state)
       (pcase state
@@ -2163,29 +2155,28 @@ THING is something with a forward-op as defined by thingatpt."
 
 (defun conn-isearch-dispatch ()
   (interactive)
-  (if (or (not (boundp 'multi-isearch-buffer-list))
-          (not multi-isearch-buffer-list))
+  (save-window-excursion
+    (if (or (not (boundp 'multi-isearch-buffer-list))
+            (not multi-isearch-buffer-list))
+        (thread-first
+          (prog1
+              (nreverse (conn--isearch-matches-in-buffer (current-buffer)))
+            (isearch-exit))
+          (conn--region-iterator)
+          (conn--dispatch-single-buffer)
+          (conn--dispatch-with-state 'conn-state)
+          (conn--pulse-on-record)
+          (conn-macro-dispatch))
       (thread-first
         (prog1
-            (nreverse (conn--isearch-matches-in-buffer (current-buffer)))
+            (nreverse (mapcan 'conn--isearch-matches-in-buffer
+                              multi-isearch-buffer-list))
           (isearch-exit))
         (conn--region-iterator)
-        (conn--dispatch-single-buffer)
-        (conn--dispatch-save-state 'conn-state)
-        (conn--dispatch-save-window-configuration)
+        (conn--dispatch-multi-buffer nil conn-current-state)
+        (conn--dispatch-with-state 'conn-state)
         (conn--pulse-on-record)
-        (conn-macro-dispatch))
-    (thread-first
-      (prog1
-          (nreverse (mapcan 'conn--isearch-matches-in-buffer
-                            multi-isearch-buffer-list))
-        (isearch-exit))
-      (conn--region-iterator)
-      (conn--dispatch-multi-buffer nil conn-current-state)
-      (conn--dispatch-save-state 'conn-state)
-      (conn--dispatch-save-window-configuration)
-      (conn--pulse-on-record)
-      (conn-macro-dispatch))))
+        (conn-macro-dispatch)))))
 
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
@@ -2337,14 +2328,14 @@ between `point-min' and `point-max'."
             (push (cons (prop-match-beginning match)
                         (prop-match-end match))
                   regions)))))
-    (conn--thread regions
-        (if reverse (nreverse regions) regions)
-      (conn--region-iterator regions)
-      (conn--dispatch-single-buffer regions nil)
-      (conn--dispatch-save-state regions 'conn-state)
-      (conn--dispatch-save-window-configuration regions)
-      (conn--pulse-on-record regions)
-      (conn-macro-dispatch regions))))
+    (save-window-excursion
+      (conn--thread regions
+          (if reverse (nreverse regions) regions)
+        (conn--region-iterator regions)
+        (conn--dispatch-single-buffer regions nil)
+        (conn--dispatch-with-state regions 'conn-state)
+        (conn--pulse-on-record regions)
+        (conn-macro-dispatch regions)))))
 
 (defun conn-last-macro-dispatch-to-register (register)
   "Set REGISTER to last dot macro."
@@ -2364,7 +2355,7 @@ for a dot register to use for dispatch."
                   (conn--create-marker (mark t))))
       (conn--region-iterator)
       (conn--dispatch-single-buffer)
-      (conn--dispatch-save-state conn-current-state)
+      (conn--dispatch-with-state conn-current-state)
       (conn-macro-dispatch))))
 
 (defvar-keymap conn-scroll-repeat-map
@@ -3210,7 +3201,7 @@ there's a region, all lines that region covers will be duplicated."
            (if reverse (nreverse regions) regions)
            (conn--region-iterator regions)
            (conn--dispatch-single-buffer regions)
-           (conn--dispatch-save-state regions conn-current-state)
+           (conn--dispatch-with-state regions conn-current-state)
            (conn--pulse-on-record regions))))
     (if rectangle-mark-mode-map
         (progn
@@ -3248,15 +3239,15 @@ there's a region, all lines that region covers will be duplicated."
            (if reverse (nreverse regions) regions)
            (conn--region-iterator regions)
            (conn--dispatch-single-buffer regions)
-           (conn--dispatch-save-state regions conn-current-state)
-           (conn--dispatch-save-window-configuration regions)
+           (conn--dispatch-with-state regions conn-current-state)
            (conn--pulse-on-record regions))))
-    (if rectangle-mark-mode-map
-        (progn
-          (save-mark-and-excursion
-            (conn-macro-dispatch iterator macro))
-          (deactivate-mark t))
-      (conn-macro-dispatch iterator macro))))
+    (save-window-excursion
+      (if rectangle-mark-mode-map
+          (progn
+            (save-mark-and-excursion
+              (conn-macro-dispatch iterator macro))
+            (deactivate-mark t))
+        (conn-macro-dispatch iterator macro)))))
 
 (defun conn--read-buffers-for-dispatch ()
   (pcase-exhaustive
