@@ -3338,11 +3338,13 @@ With any other prefix argument select buffers with `completing-read-multiple'."
   (conn-dots-dispatch arg macro))
 
 (defun conn-isearch-dots-dispatch ()
+  "Exit isearch mode and `conn-dots-dispatch'."
   (interactive)
   (isearch-done)
   (call-interactively 'conn-dots-dispatch))
 
 (defun conn-isearch-dots-dispatch-macro ()
+  "Exit isearch mode and `conn-dots-dispatch-macro'."
   (interactive)
   (isearch-done)
   (call-interactively 'conn-dots-dispatch-macro))
@@ -3357,6 +3359,9 @@ With any other prefix argument select buffers with `completing-read-multiple'."
       (call-interactively #'quoted-insert))))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
+  "Open line above and enter `conn-emacs-state'.
+
+If ARG is non-nil move up ARG lines before opening line."
   (interactive "p")
   (move-beginning-of-line arg)
   (open-line arg)
@@ -3367,12 +3372,18 @@ With any other prefix argument select buffers with `completing-read-multiple'."
   (conn-emacs-state))
 
 (defun conn-emacs-state-open-line (&optional arg)
+  "Open line and enter `conn-emacs-state'.
+
+If ARG is non-nil move down ARG lines before opening line."
   (interactive "p")
   (move-end-of-line arg)
   (newline-and-indent)
   (conn-emacs-state))
 
 (defun conn-emacs-state-overwrite (&optional arg)
+  "Enter emacs state in `overwrite-mode'.
+`overwrite-mode' will be turned off when when emacs state is exited.
+If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
   (let ((hook (make-symbol "emacs-state-overwrite-hook")))
     (conn-emacs-state)
@@ -3386,13 +3397,8 @@ With any other prefix argument select buffers with `completing-read-multiple'."
       (overwrite-mode 1))))
 
 (defun conn-emacs-state-prompt (&optional arg)
-  "Transition to `conn-emacs-state'.
-
-If ARG is non-negative open a new line below point and enter insert state.
-
-If ARG is negative open a new line above point and enter insert state.
-
-If arg is \\[universal-argument] enter `conn-emacs-state' in `overwrite-mode'."
+  "Transition to `conn-emacs-state', prompting for how to do so.
+ARG will be passed to the transition function that is chosen."
   (interactive "P")
   (pcase-exhaustive
       (car (read-multiple-choice
@@ -3411,9 +3417,8 @@ If arg is \\[universal-argument] enter `conn-emacs-state' in `overwrite-mode'."
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
-
-If KILL is non-nil add region to the `kill-ring'.
-When in `rectangle-mark-mode' defer to `string-rectangle'."
+If KILL is non-nil add region to the `kill-ring'.  When in
+`rectangle-mark-mode' defer to `string-rectangle'."
   (interactive (list (region-beginning)
                      (region-end)
                      current-prefix-arg))
