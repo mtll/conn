@@ -599,10 +599,6 @@ to determine if mark cursor should be hidden in buffer."
       (funcall conn-this-thing-handler conn-this-thing-start))))
 (put 'conn--mark-post-command-hook 'permanent-local-hook t)
 
-(defun conn--buffer-bounds ()
-  (cons (point-min) (point-max)))
-(put 'buffer 'bounds-of-thing-at-point 'conn--buffer-bounds)
-
 (defun conn-unpop-to-mark-command ()
   "`pop-mark' and and add it to the conn unpop ring."
   (interactive)
@@ -3466,6 +3462,7 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
 
 (conn-define-thing
  'buffer (conn-individual-thing-handler 'buffer)
+ :bounds-op (lambda () (cons (point-min) (point-max)))
  :commands '(end-of-buffer beginning-of-buffer))
 
 (conn-define-thing
