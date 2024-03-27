@@ -2577,9 +2577,9 @@ Not for use in lisp code."
   (cond ((not (active-minibuffer-window))
          (user-error "Minibuffer is not active"))
         ((eq (selected-window) (active-minibuffer-window))
-         (other-window 1)
-         (setq this-command 'other-window)
-         (message "Switched to %s" (current-buffer)))
+         (when-let ((win (minibuffer-selected-window)))
+           (select-window win)
+           (message "Switched to %s" (current-buffer))))
         (t
          (select-window (active-minibuffer-window))
          (message "Switched to *MINIBUFFER*"))))
