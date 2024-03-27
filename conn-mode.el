@@ -1853,15 +1853,6 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
   (when (called-interactively-p 'interactive)
     (message "Region skipped backward")))
 
-(defun conn-dot-thing (thing)
-  "Transpose things at point and mark."
-  (interactive (list (intern
-                      (completing-read
-                       (format "Thing: ")
-                       (conn--things 'conn--defined-thing-p) nil nil nil
-                       'conn-thing-history))))
-  (conn--create-dots (bounds-of-thing-at-point thing)))
-
 (defun conn-add-dots-matching-literal (string &optional start end refine)
   "Dot all occurrences of STRING in region from START to END.
 If REFINE is non-nil only dot occurrences in dots.
@@ -3597,7 +3588,6 @@ When in `rectangle-mark-mode' defer to `string-rectangle'."
   :prefix 'conn-dot-this-map
   :doc "Dot this map."
   "p" 'conn-dot-text-property
-  "t" 'conn-dot-thing
   "o" 'conn-dot-word-at-point
   "m" 'conn-dot-sexp-at-point
   "w" 'conn-remove-dot-backward
