@@ -40,6 +40,7 @@
 (require 'tab-bar)
 (require 'thingatpt)
 (eval-when-compile
+  (require 'subr-x)
   (require 'cl-lib))
 
 
@@ -685,7 +686,7 @@ to determine if mark cursor should be hidden in buffer."
                  (cancel-change-group handle)
                (accept-change-group handle)
                (undo-amalgamate-change-group handle))
-             (funcall finalize))
+             (when finalize (funcall finalize)))
             ((not handle)
              (setq handle (prepare-change-group))
              (when init (funcall init))))
@@ -704,16 +705,20 @@ to determine if mark cursor should be hidden in buffer."
     (lambda (&optional state)
       (pcase state
         (:finalize
+         (funcall loop-fn state)
          (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
-           (with-current-buffer buf
-             (funcall state)
-             (setq conn-previous-state prev-state)))
-         (funcall loop-fn state))
-        (_
-         (unless (alist-get (current-buffer) buffer-states)
-           (setf (alist-get (current-buffer) buffer-states)
-                 (list conn-current-state conn-previous-state)))
-         (funcall loop-fn state))))))
+           (when state
+             (with-current-buffer buf
+               (funcall state)
+               (setq conn-previous-state prev-state)))))
+        ((let ret (funcall loop-fn state))
+         (pcase ret
+           ((and `(,beg . ,_)
+                 (let buffer (marker-buffer beg)))
+            (unless (alist-get buffer buffer-states)
+              (setf (alist-get buffer buffer-states)
+                    (list conn-current-state conn-previous-state)))))
+         ret)))))
 
 (defun conn--region-loop-fn (regions init-fn)
   (lambda (&optional state)
@@ -724,13 +729,23 @@ to determine if mark cursor should be hidden in buffer."
       (pcase (pop regions)
         (`(,beg . ,end)
          (funcall init-fn)
-         (when (eq state :record)
-           (pulse-momentary-highlight-region beg end 'conn-dot-face))
          (cons beg end))
         (_ nil)))))
 
+(defun conn--pulse-on-record (loop-fn)
+  (lambda (&optional state)
+    (pcase (funcall loop-fn state)
+      ((and `(,beg . ,end)
+            (guard (eq state :record))
+            ret)
+       (pulse-momentary-highlight-region beg end 'conn-dot-face)
+       ret)
+      (ret ret))))
+
 (defun conn--dot-loop-fn (dots init-fn)
   (let (primed new-dots)
+    (dolist (dot dots)
+      (overlay-put dot 'evaporate nil))
     (lambda (&optional state)
       (if (eq state :finalize)
           (progn
@@ -756,8 +771,6 @@ to determine if mark cursor should be hidden in buffer."
                                              (overlay-buffer dot))))
           (conn--delete-dot dot)
           (funcall init-fn)
-          (when (eq state :record)
-            (pulse-momentary-highlight-region beg end 'conn-dot-face))
           (cons beg end))))))
 
 (defun conn-macro-dispatch (loop-fn &optional kmacro append)
@@ -1586,7 +1599,7 @@ If STATE is nil make COMMAND always repeat."
 (defun conn-yank-to-dots (&optional arg)
   (interactive "P")
   (save-mark-and-excursion
-    (conn-dots-dispatch arg (kmacro conn-yank-keys) 'conn-emacs-state)))
+    (conn-dots-dispatch arg (kbd conn-yank-keys) 'conn-emacs-state)))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
@@ -2164,6 +2177,7 @@ THING is something with a forward-op as defined by thingatpt."
         (conn--dispatch-single-buffer regions nil conn-current-state)
         (conn--dispatch-save-window-configuration regions)
         (conn--dispatch-save-state regions)
+        (conn--pulse-on-record regions)
         (conn-macro-dispatch regions))
     (conn--thread regions
         (prog1
@@ -2175,6 +2189,7 @@ THING is something with a forward-op as defined by thingatpt."
       (conn--dispatch-multi-buffer regions nil conn-current-state)
       (conn--dispatch-save-window-configuration regions)
       (conn--dispatch-save-state regions)
+      (conn--pulse-on-record regions)
       (conn-macro-dispatch regions))))
 
 (defun conn-isearch-in-dot-p (beg end)
@@ -2333,6 +2348,7 @@ between `point-min' and `point-max'."
       (conn--dispatch-single-buffer regions nil conn-current-state)
       (conn--dispatch-save-window-configuration regions)
       (conn--dispatch-save-state regions)
+      (conn--pulse-on-record regions)
       (conn-macro-dispatch regions))))
 
 (defun conn-last-macro-dispatch-to-register (register)
@@ -2346,13 +2362,13 @@ With prefix arg of 0 dispatch the contents of
 `conn-last-dispatch-macro-register'.  With any other prefix arg prompt
 for a dot register to use for dispatch."
   (interactive)
-  (when-let ((mark (mark t)))
-    (conn--thread reg
-        (list (cons (point) (point))
-              (cons mark mark))
-      (conn--region-loop-fn reg conn-current-state)
-      (conn--dispatch-single-buffer reg)
-      (conn-macro-dispatch reg))))
+  (thread-first
+    (list (cons (point-marker) (point-marker))
+          (cons (conn--create-marker (mark t))
+                (conn--create-marker (mark t))))
+    (conn--region-loop-fn conn-current-state)
+    (conn--dispatch-single-buffer)
+    (conn-macro-dispatch)))
 
 (defvar-keymap conn-scroll-repeat-map
   :repeat t
@@ -3198,6 +3214,7 @@ there's a region, all lines that region covers will be duplicated."
            (conn--region-loop-fn regions 'conn-state)
            (conn--dispatch-single-buffer regions nil conn-current-state)
            (conn--dispatch-save-window-configuration regions)
+           (conn--pulse-on-record regions)
            (conn--dispatch-save-state regions))))
     (if rectangle-mark-mode-map
         (progn
@@ -3236,7 +3253,8 @@ there's a region, all lines that region covers will be duplicated."
            (conn--region-loop-fn regions 'conn-state)
            (conn--dispatch-single-buffer regions nil conn-current-state)
            (conn--dispatch-save-window-configuration regions)
-           (conn--dispatch-save-state regions))))
+           (conn--dispatch-save-state regions)
+           (conn--pulse-on-record regions))))
     (if rectangle-mark-mode-map
         (progn
           (save-mark-and-excursion
@@ -3284,6 +3302,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
         (conn--dispatch-multi-buffer dots nil conn-current-state))
       (conn--dispatch-save-window-configuration dots)
       (conn--dispatch-save-state dots)
+      (conn--pulse-on-record dots)
       (conn-macro-dispatch dots macro))))
 
 (defun conn-dots-dispatch-macro (macro &optional arg)
