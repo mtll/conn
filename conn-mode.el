@@ -2355,7 +2355,7 @@ from the text properties at point."
           start end
         (goto-char (point-min))
         (let (match)
-          (while (setq match (text-property-search-forward prop val t))
+          (while (setq match (text-property-search-forward prop value t))
             (push (cons (prop-match-beginning match)
                         (prop-match-end match))
                   regions)))))
