@@ -841,6 +841,25 @@ to determine if mark cursor should be hidden in buffer."
 
 ;;;;; Dot Functions
 
+(defmacro conn-with-dots-as-text-properties (&rest body)
+  `(unwind-protect
+       (progn
+         (conn--for-each-dot
+          (lambda (dot)
+            (let ((beg (overlay-start dot))
+                  (end (overlay-end dot)))
+              (delete-overlay dot)
+              (put-text-property beg end 'conn-dot-text t))))
+         ,(macroexp-progn body))
+     (save-excursion
+       (goto-char (point-min))
+       (let (dots match)
+         (while (setq match (text-property-search-forward 'conn-dot-text))
+           (push (cons (prop-match-beginning match)
+                       (prop-match-end match))
+                 dots))
+         (apply #'conn--create-dots dots)))))
+
 (defun conn--sorted-overlays (typep &optional predicate start end buffer)
   "Get all dots between START and END sorted by starting position."
   (unless predicate (setq predicate #'<))
@@ -1602,15 +1621,15 @@ If STATE is nil make COMMAND always repeat."
          (old (reverse sort-lists))
 	 (case-fold-search sort-fold-case))
     (when sort-lists
-      (setq sort-lists
-	    (sort sort-lists
-                  (lambda (a b)
-		    (> 0 (compare-buffer-substrings
-			  nil (car (car a)) (cdr (car a))
-			  nil (car (car b)) (cdr (car b)))))))
-      (with-buffer-unmodified-if-unchanged
-	(sort-reorder-buffer sort-lists old))
-      (conn--remove-dots))))
+      (conn-with-dots-as-text-properties
+       (setq sort-lists
+	     (sort sort-lists
+                   (lambda (a b)
+		     (> 0 (compare-buffer-substrings
+			   nil (car (car a)) (cdr (car a))
+			   nil (car (car b)) (cdr (car b)))))))
+       (with-buffer-unmodified-if-unchanged
+	 (sort-reorder-buffer sort-lists old))))))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
@@ -2202,7 +2221,7 @@ THING is something with a forward-op as defined by thingatpt."
                               multi-isearch-buffer-list))
           (isearch-exit))
         (conn--region-iterator)
-        (conn--dispatch-multi-buffer nil conn-current-state)
+        (conn--dispatch-multi-buffer)
         (conn--dispatch-with-state 'conn-state)
         (conn--pulse-on-record)
         (conn-macro-dispatch)))))
@@ -3306,7 +3325,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
         (conn--dot-iterator dots)
         (if single
             (conn--dispatch-single-buffer dots)
-          (conn--dispatch-multi-buffer dots nil))
+          (conn--dispatch-multi-buffer dots))
         (conn--dispatch-with-state dots (or init-fn 'conn-state))
         (conn--pulse-on-record dots)
         (conn-macro-dispatch dots macro)))))
