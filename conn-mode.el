@@ -762,7 +762,8 @@ to determine if mark cursor should be hidden in buffer."
          (undo-strong-limit most-positive-fixnum)
          (conn-macro-dispatch-p t)
          (conn--dispatch-aborted nil)
-         (sym (make-symbol "conn--kmacro-iterator")))
+         (sym (make-symbol "conn--kmacro-iterator"))
+         (start (point)))
     (fset sym (lambda (&optional state)
                 (pcase (funcall iterator state)
                   ((and (pred symbolp) err)
@@ -794,7 +795,11 @@ to determine if mark cursor should be hidden in buffer."
                      (user-error "Not defining keyboard macro")
                    (kmacro-end-macro 0)))))
           (t (setq conn--dispatch-aborted err)
-             (signal (car err) (cdr err))))
+             (signal (car err) (cdr err)))
+          (:success
+           (let ((mark (mark t)))
+             (push-mark start t nil)
+             (conn--push-ephemeral-mark mark))))
       (advice-remove 'kmacro-loop-setup-function sym)
       (funcall iterator :finalize))))
 
