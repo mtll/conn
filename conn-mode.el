@@ -2289,42 +2289,44 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
-(defun conn-minibuffer-yank-region ()
-  (interactive)
-  (let ((region)
-        (win (selected-window)))
-    (other-window 1)
-    (with-current-buffer (window-buffer (selected-window))
-      (setq region (buffer-substring-no-properties
-                    (region-beginning) (region-end))))
-    (select-window win)
+(defun conn-minibuffer-yank-region (beg end)
+  "Yank region from `minibuffer-selected-window' into minibuffer.
+Interactively defaults to the region in buffer."
+  (interactive (list (region-beginning) (region-end)))
+  (let (region)
+    (with-minibuffer-selected-window
+      (setq region (buffer-substring-no-properties beg end)))
     (insert region)))
 
 (defun conn-toggle-sort-fold-case ()
+  "Toggle the value of `sort-fold-case'."
   (interactive)
   (message "Sort fold case: %s"
-           (setq-local sort-fold-case (not sort-fold-case))))
+           (setq sort-fold-case (not sort-fold-case))))
 
 (defun conn-query-replace-region (start end)
+  "Run `query-replace' with the region as initial contents."
   (interactive (list (region-beginning)
                      (region-end)))
-  (let* ((from (buffer-substring-no-properties start end)))
-    (unless (or (not (called-interactively-p 'interactive))
-                (eq (point) start))
-      (conn-exchange-mark-command))
+  (save-excursion
+    (unless (eq (point) start)
+      (goto-char start))
     (minibuffer-with-setup-hook
-        (:append (lambda () (insert from)))
+        (:append (lambda ()
+                   (conn-minibuffer-yank-region start end)))
       (call-interactively #'query-replace))))
 
 (defun conn-query-replace-regexp-region (start end)
+  "Run `query-replace-regexp' with the region as initial contents.
+Also ensure point is at START before running `query-replace-regexp'."
   (interactive (list (region-beginning)
                      (region-end)))
-  (let* ((from (buffer-substring-no-properties start end)))
-    (unless (or (not (called-interactively-p 'interactive))
-                (eq (point) start))
-      (conn-exchange-mark-command))
+  (save-excursion
+    (unless (eq (point) start)
+      (goto-char start))
     (minibuffer-with-setup-hook
-        (:append (lambda () (insert from)))
+        (:append (lambda ()
+                   (conn-minibuffer-yank-region start end)))
       (call-interactively #'query-replace-regexp))))
 
 (defun conn-dispatch-text-property (start end prop value &optional reverse)
