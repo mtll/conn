@@ -1424,7 +1424,7 @@ from view state.  See `conn-view-state-map' for commands bound by view state."
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-menu
+                 "v"        'conn-emacs-state-menu
                  "="        'conn-dot-state
                  "<f8>"     'conn-state
                  "<f9>"     'conn-dot-state
@@ -1454,8 +1454,13 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "f"        'conn-emacs-state
                  "<escape>" 'conn-view-state
                  "t"        'conn-change
-                 "v"        'conn-emacs-state-menu
-                 "'"        'conn-quoted-insert-overwrite
+                 "v i"      'conn-emacs-state-open-line-above
+                 "v k"      'conn-emacs-state-open-line
+                 "v l"      'conn-emacs-state-eol
+                 "v j"      'conn-emacs-state-bol
+                 "v o"      'conn-emacs-state-overwrite
+                 "v u"      'conn-emacs-state-overwrite-binary
+                 "v v"      'conn-quoted-insert-overwrite
                  "<f7>"     'conn-emacs-state
                  "<f8>"     'conn-pop-state
                  "<f9>"     'conn-dot-state
@@ -1481,7 +1486,13 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
                  "<f8>"     'conn-state
                  "<f9>"     'conn-pop-state
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-menu
+                 "v i"      'conn-emacs-state-open-line-above
+                 "v k"      'conn-emacs-state-open-line
+                 "v l"      'conn-emacs-state-eol
+                 "v j"      'conn-emacs-state-bol
+                 "v o"      'conn-emacs-state-overwrite
+                 "v u"      'conn-emacs-state-overwrite-binary
+                 "v v"      'conn-quoted-insert-overwrite
                  "Q"        'conn-dot-quit)
   (if conn-dot-state
       (progn
@@ -3441,6 +3452,10 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
         (binary-overwrite-mode 1)
       (overwrite-mode 1))))
 
+(defun conn-emacs-state-overwrite-binary ()
+  (interactive)
+  (conn-emacs-state-overwrite 1))
+
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
 If KILL is non-nil add region to the `kill-ring'.  When in
@@ -3716,18 +3731,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn--pulse-on-record dots)
         (conn-macro-dispatch dots macro)))))
 
-(transient-define-prefix conn-emacs-state-menu ()
-  "Emacs state menu"
-  ["Enter Emacs state how?"
-   [("u" "Overwrite" (lambda ()
-                       (interactive)
-                       (conn-emacs-state-overwrite t)))
-    ("j" "← BOL" conn-emacs-state-bol)]
-   [("i" "↑ Open line above" conn-emacs-state-open-line-above)
-    ("k" "↓ Open line below" conn-emacs-state-open-line)]
-   [("o" "Binary Overwrite" conn-emacs-state-overwrite)
-    ("l" "→ EOL" conn-emacs-state-eol)]])
-
 
 ;;;; Keymaps
 
@@ -3990,7 +3993,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c"    'conn-C-c-keys
   "d"    'conn-delete-char-keys
   "q"    'conn-misc-edit-map
-  ;; "Q"    'kill-buffer-and-window
   "r"    'conn-region-map
   "w"    'conn-kill-region
   "y"    'conn-yank-keys
@@ -4052,7 +4054,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "s"     'conn-M-s-keys
   "U"     'backward-sentence
   "u"     'backward-word
-  ;; "v"     'conn-toggle-mark-command
   "V"     'narrow-to-region
   "W"     'widen
   "x"     'conn-C-x-keys
