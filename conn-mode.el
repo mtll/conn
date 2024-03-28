@@ -27,6 +27,7 @@
 
 ;;;; Requires
 
+(require 'transient)
 (require 'compat)
 (require 'pulse)
 (require 'face-remap)
@@ -165,7 +166,8 @@ Defines default STATE for buffers matching REGEXP."
 
 (defface conn-window-prompt-face
   '((t (:height 5.0 :foreground "#d00000")))
-  "Face for conn window prompt overlay.")
+  "Face for conn window prompt overlay."
+  :group conn-mode)
 
 (defcustom conn-repeating-cursor-color
   "#a60000"
@@ -181,7 +183,8 @@ Defines default STATE for buffers matching REGEXP."
 
 (defcustom conn-other-window-prompt-threshold 4
   "Number of windows before conn-other-window prompts for window."
-  :type 'integer)
+  :type 'integer
+  :group conn-mode)
 
 ;;;;; Internal Vars
 
@@ -238,7 +241,7 @@ Each element may be either a symbol or a list of the form
 
 See `conn--dispatch-on-regions'.")
 
-(defvar conn--dispatch-aborted nil)
+(defvar conn--dispatch-error nil)
 
 (defvar-local conn--dot-undoing nil)
 (defvar-local conn--dot-undo-ring nil)
@@ -392,7 +395,7 @@ Uses `read-regexp' to read the regexp."
 
 (defmacro conn-with-saved-state (&rest body)
   "Execute BODY preserving current conn state and previous state values"
-  (declare (indent defun))
+  (declare (indent 0))
   (let ((saved-state (gensym "saved-state"))
         (saved-previous-state (gensym "saved-previous-state")))
     `(let ((,saved-state conn-current-state)
@@ -631,7 +634,7 @@ to determine if mark cursor should be hidden in buffer."
   (let ((dispatch-undo-handles nil))
     (lambda (&optional state)
       (when (eq state :finalize)
-        (if conn--dispatch-aborted
+        (if conn--dispatch-error
             (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
               (cancel-change-group handle)
               (when finalize
@@ -646,17 +649,18 @@ to determine if mark cursor should be hidden in buffer."
               (let buffer (marker-buffer beg))
               ret)
          (cond ((not (eq buffer (marker-buffer end)))
-                :abort)
+                (error "Markers point to different buffers"))
                ((not (eq buffer (current-buffer)))
                 (pop-to-buffer-same-window buffer)
                 (if (and (not (eq buffer (window-buffer (selected-window))))
                          (eq (current-buffer) buffer))
-                    :abort
+                    (error "Could not switch to buffer %s" buffer)
                   ret))
                (t
                 (unless (alist-get (current-buffer) dispatch-undo-handles)
-                  (setf (alist-get (current-buffer) dispatch-undo-handles)
-                        (prepare-change-group (current-buffer)))
+                  (let ((handle (setf (alist-get (current-buffer) dispatch-undo-handles)
+                                      (prepare-change-group))))
+                    (activate-change-group handle))
                   (when init (funcall init)))
                 ret)))
         (ret ret)))))
@@ -665,13 +669,14 @@ to determine if mark cursor should be hidden in buffer."
   (let ((handle nil))
     (lambda (&optional state)
       (cond ((eq state :finalize)
-             (if conn--dispatch-aborted
+             (if conn--dispatch-error
                  (cancel-change-group handle)
                (accept-change-group handle)
                (undo-amalgamate-change-group handle))
              (when finalize (funcall finalize)))
             ((not handle)
              (setq handle (prepare-change-group))
+             (activate-change-group handle)
              (when init (funcall init))))
       (funcall iterator state))))
 
@@ -761,14 +766,11 @@ to determine if mark cursor should be hidden in buffer."
          (undo-limit most-positive-fixnum)
          (undo-strong-limit most-positive-fixnum)
          (conn-macro-dispatch-p t)
-         (conn--dispatch-aborted nil)
+         (conn--dispatch-error nil)
          (sym (make-symbol "conn--kmacro-iterator"))
          (start (point)))
     (fset sym (lambda (&optional state)
                 (pcase (funcall iterator state)
-                  ((and (pred symbolp) err)
-                   (setq conn--dispatch-aborted err)
-                   nil)
                   (`(,beg . ,end)
                    (goto-char beg)
                    (conn--push-ephemeral-mark end)
@@ -794,7 +796,7 @@ to determine if mark cursor should be hidden in buffer."
                  (if (not defining-kbd-macro)
                      (user-error "Not defining keyboard macro")
                    (kmacro-end-macro 0)))))
-          (t (setq conn--dispatch-aborted err)
+          (t (setq conn--dispatch-error err)
              (signal (car err) (cdr err)))
           (:success
            (let ((mark (mark t)))
@@ -847,6 +849,7 @@ to determine if mark cursor should be hidden in buffer."
 ;;;;; Dot Functions
 
 (defmacro conn-with-dots-as-text-properties (&rest body)
+  (declare (indent 0))
   `(unwind-protect
        (progn
          (conn--for-each-dot
