@@ -57,6 +57,8 @@
 (defvar conn-local-mode)
 (defvar conn-view-state)
 (defvar conn-modes)
+(defvar-keymap conn-local-map)
+(defvar-keymap conn-global-map)
 
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
@@ -1076,17 +1078,16 @@ If BUFFER is nil use current buffer."
     (keymap-lookup nil binding t)))
 
 (defsubst conn--update-aux-map-p ()
-  (not (or defining-kbd-macro
-           executing-kbd-macro
-           (and (= conn--define-key-local-tick conn--define-key-tick)
-                (equal conn--prev-local-minor-modes
-                       local-minor-modes)
-                (equal conn--prev-global-minor-modes
-                       global-minor-modes)))))
+  (not (and (= conn--define-key-local-tick conn--define-key-tick)
+            (equal conn--prev-local-minor-modes
+                   local-minor-modes)
+            (equal conn--prev-global-minor-modes
+                   global-minor-modes))))
 
 (defun conn--setup-aux-maps (&optional force)
   "Setup conn aux maps for state in BUFFER."
-  (when (or force (conn--update-aux-map-p))
+  (when (or (and force (not executing-kbd-macro))
+            (conn--update-aux-map-p))
     (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
                          (make-sparse-keymap))))
       (dolist (remapping conn--aux-bindings)
@@ -1374,11 +1375,11 @@ BODY contains code to be executed each time the transition function is executed.
                   (when conn-state-buffer-colors
                     (buffer-face-set ',buffer-face-name))
                   (conn--activate-input-method)
-                  (conn--setup-aux-maps t)
                   (setq conn--local-mode-maps
                         (alist-get conn-current-state conn--mode-maps))
                   (conn--update-cursor)
-                  (conn--update-mode-line-indicator))
+                  (conn--update-mode-line-indicator)
+                  (conn--setup-aux-maps t))
                 ,@body
                 (run-hooks 'conn-transition-hook)
                 (unless executing-kbd-macro
@@ -4137,11 +4138,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "?" 'tab-bar-history-forward
   "-" 'conn-window-resize-map)
 
-(defvar-keymap conn-local-map
+(define-keymap
+  :keymap conn-local-map
   "C-v"     'conn-scroll-up
   "M-v"     'conn-scroll-down)
 
-(defvar-keymap conn-global-map
+(define-keymap
+  :keymap conn-global-map
   "<pause>" 'conn-toggle-minibuffer-focus
   "C-S-w"   'delete-region
   "C-x /"   'tab-bar-history-back
