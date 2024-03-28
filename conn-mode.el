@@ -56,7 +56,6 @@
 (defvar conn-mode nil)
 (defvar conn-local-mode)
 (defvar conn-view-state)
-(defvar conn--aux-timer nil)
 (defvar conn-modes)
 
 (defvar conn--mark-cursor-timer nil
@@ -101,19 +100,6 @@
                  (run-with-idle-timer
                   val t #'conn--mark-cursor-timer-func))))
   :group 'conn-marks)
-
-(defcustom conn-aux-map-update-delay 0.5
-  "Update delay for aux-map remappings."
-  :type '(number :tag "seconds")
-  :set (lambda (sym val)
-         (set sym val)
-         (when conn-mode
-           (when conn--aux-timer
-             (cancel-timer conn--aux-timer))
-           (setq conn--aux-timer
-                 (run-with-idle-timer
-                  val t #'conn--aux-map-timer-func))))
-  :group 'conn-states)
 
 (defcustom conn-lighter " Conn"
   "Modeline lighter for conn-mode."
@@ -258,6 +244,11 @@ See `conn--dispatch-on-regions'.")
 (defvar-local conn-view-state--start-marker nil)
 
 (defvar conn--goto-char-last-char nil)
+
+(defvar conn--define-key-tick 0)
+(defvar-local conn--define-key-local-tick 0)
+(defvar conn--prev-global-minor-modes nil)
+(defvar-local conn--prev-local-minor-modes nil)
 
 ;;;;; Command Histories
 
@@ -1015,6 +1006,9 @@ If BUFFER is nil use current buffer."
 
 ;;;; Advice
 
+(defun conn--define-key-advice (&rest _)
+  (setq conn--define-key-tick (1+ conn--define-key-tick)))
+
 (defun conn--pop-to-mark-command-ad (&rest _)
   (unless (or (null (mark t))
               (= (point) (mark)))
@@ -1042,12 +1036,14 @@ If BUFFER is nil use current buffer."
   (if conn-mode
       (progn
         (advice-add 'push-mark :around #'conn--push-mark-ad)
+        (advice-add 'define-key :after #'conn--define-key-advice)
         (advice-add 'save-mark-and-excursion--save
                     :before #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore
                     :after #'conn--restore-ephemeral-mark-ad)
         (advice-add 'pop-to-mark-command :before 'conn--pop-to-mark-command-ad))
     (advice-remove 'push-mark #'conn--push-mark-ad)
+    (advice-remove 'define-key #'conn--define-key-advice)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)
     (advice-remove 'pop-to-mark-command 'conn--pop-to-mark-command-ad)))
@@ -1065,7 +1061,7 @@ If BUFFER is nil use current buffer."
                         (make-sparse-keymap)))
               key command))
 
-(defun conn--lookup-binding (binding)
+(defsubst conn--lookup-binding (binding)
   (let ((emulation-mode-map-alists (seq-difference
                                     emulation-mode-map-alists
                                     '(conn--transition-maps
@@ -1079,20 +1075,28 @@ If BUFFER is nil use current buffer."
         (conn-local-mode nil))
     (keymap-lookup nil binding t)))
 
-(defun conn--aux-map-timer-func ()
-  (conn--setup-aux-maps (window-buffer (selected-window))))
+(defsubst conn--update-aux-map-p ()
+  (not (or defining-kbd-macro
+           executing-kbd-macro
+           (and (= conn--define-key-local-tick conn--define-key-tick)
+                (equal conn--prev-local-minor-modes
+                       local-minor-modes)
+                (equal conn--prev-global-minor-modes
+                       global-minor-modes)))))
 
-(defun conn--setup-aux-maps (&optional buffer)
+(defun conn--setup-aux-maps (&optional force)
   "Setup conn aux maps for state in BUFFER."
-  (unless (or defining-kbd-macro executing-kbd-macro)
-    (with-current-buffer (or buffer (current-buffer))
-      (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                           (make-sparse-keymap))))
-        (dolist (remapping conn--aux-bindings)
-          (when-let ((to-keys (where-is-internal remapping))
-                     (def (conn--lookup-binding (symbol-value remapping))))
-            (dolist (key to-keys)
-              (define-key aux-map key def))))))))
+  (when (or force (conn--update-aux-map-p))
+    (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
+                         (make-sparse-keymap))))
+      (dolist (remapping conn--aux-bindings)
+        (when-let ((to-keys (where-is-internal remapping nil nil t t))
+                   (def (conn--lookup-binding (symbol-value remapping))))
+          (dolist (key to-keys)
+            (define-key aux-map key def)))))
+    (setq conn--prev-local-minor-modes (seq-copy local-minor-modes)
+          conn--prev-global-minor-modes (seq-copy global-minor-modes)
+          conn--define-key-local-tick conn--define-key-tick)))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
@@ -1108,10 +1112,7 @@ C-x, M-s and M-g into various state maps."
          "Set this variable to change `" name "''s remapping.\n"
          "The key sequence must satisfy `key-valid-p'.")
        :type 'string
-       :group 'conn-key-remappings
-       :set (lambda (sym val)
-              (set sym val)
-              (conn--setup-aux-maps)))
+       :group 'conn-key-remappings)
 
      (defun ,name ()
        ,(conn--stringify
@@ -1373,7 +1374,7 @@ BODY contains code to be executed each time the transition function is executed.
                   (when conn-state-buffer-colors
                     (buffer-face-set ',buffer-face-name))
                   (conn--activate-input-method)
-                  (conn--setup-aux-maps)
+                  (conn--setup-aux-maps t)
                   (setq conn--local-mode-maps
                         (alist-get conn-current-state conn--mode-maps))
                   (conn--update-cursor)
@@ -4011,6 +4012,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
   "M-0"   'delete-other-windows-vertically
+  "M-1"   'quit-window
   "C-M-0" 'kill-buffer-and-window
   "C-SPC" 'conn-set-mark-command
   "SPC"   'conn-toggle-mark-command
@@ -4189,13 +4191,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                             conn--local-mode-maps
                             conn--transition-maps)
                           emulation-mode-map-alists #'eq))
-    (define-keymap :keymap undo-repeat-map "u" 'undo))
-  (when (timerp conn--aux-timer)
-    (cancel-timer conn--aux-timer))
-  (setq conn--aux-timer
-        (when conn-mode
-          (run-with-idle-timer
-           conn-aux-map-update-delay t #'conn--aux-map-timer-func))))
+    (define-keymap :keymap undo-repeat-map "u" 'undo)))
 
 
 ;;;; Mode Definition
@@ -4235,7 +4231,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
-        (setq conn--input-method current-input-method)
+        (add-hook 'post-command-hook 'conn--setup-aux-maps nil t)
+        (setq conn--input-method current-input-method
+              conn--prev-local-minor-modes nil)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
     (without-restriction
@@ -4256,7 +4254,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-    (remove-hook 'clone-indirect-buffer-hook 'conn--delete-mark-cursor t)))
+    (remove-hook 'clone-indirect-buffer-hook 'conn--delete-mark-cursor t)
+    (remove-hook 'post-command-hook 'conn--setup-aux-maps t)))
 
 (defun conn--initialize-buffer ()
   "Initialize conn STATE in BUFFER."
