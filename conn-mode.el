@@ -3546,19 +3546,21 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (if z "..." ""))))
 
 (defun conn--kmacro-ring-format ()
-  (concat
-   (propertize "Kmacro Ring:  " 'face 'bold)
-   (propertize (conn--kmacro-display last-kbd-macro 30) 'face 'transient-value)
-   (if (kmacro-ring-empty-p)
-       ""
-     (concat " | "
-             (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 30)
-                         'face 'transient-value)))))
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Ring:  " 'face 'bold)
+     (propertize (conn--kmacro-display last-kbd-macro 30) 'face 'transient-value)
+     (if (kmacro-ring-empty-p)
+         ""
+       (concat " | "
+               (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 30)
+                           'face 'transient-value))))))
 
 (defun conn--kmacro-counter-format ()
-  (concat
-   (propertize "Kmacro Counter:  " 'face 'bold)
-   (propertize (format "%s" kmacro-counter) 'face 'transient-value)))
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Counter:  " 'face 'bold)
+     (propertize (format "%s" kmacro-counter) 'face 'transient-value))))
 
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
