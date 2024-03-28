@@ -3406,9 +3406,10 @@ With any other prefix argument select buffers with `completing-read-multiple'."
 
 If ARG is non-nil move up ARG lines before opening line."
   (interactive "p")
+  (forward-line (- (1- arg)))
   (move-beginning-of-line nil)
   (insert "\n")
-  (previous-line)
+  (forward-line -1)
   ;; FIXME: see crux smart open line
   (indent-according-to-mode)
   (conn-emacs-state))
@@ -3531,7 +3532,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transient Menus
 
-(defun conn--kmacro-display (macro &optional trunc descr empty)
+(defun conn--kmacro-display (macro &optional trunc)
   (let* ((x 60)
          (m (format-kbd-macro macro))
          (l (length m))
@@ -3547,12 +3548,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn--kmacro-ring-format ()
   (concat
    (propertize "Kmacro Ring:  " 'face 'bold)
-   (propertize (conn--kmacro-display last-kbd-macro 30 "") 'face 'transient-value)
+   (propertize (conn--kmacro-display last-kbd-macro 30) 'face 'transient-value)
    (if (kmacro-ring-empty-p)
        ""
      (concat " | "
-             (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring))
-                                               30 "")
+             (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 30)
                          'face 'transient-value)))))
 
 (defun conn--kmacro-counter-format ()
