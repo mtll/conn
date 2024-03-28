@@ -3531,10 +3531,98 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transient Menus
 
-(transient-define-infix conn--case-fold-infix ()
+(transient-define-infix conn--kmacro-set-counter-infix ()
   :class 'transient-lisp-variable
-  :variable 'char-fol
-  :reader (lambda (&rest _) (not sort-fold-case)))
+  :variable 'kmacro-counter
+  :reader (lambda (&rest _)
+            (call-interactively 'kmacro-set-counter)))
+
+(transient-define-infix conn--kmacro-add-counter-infix ()
+  :class 'transient-lisp-variable
+  :variable 'kmacro-counter
+  :reader (lambda (&rest _)
+            (call-interactively 'kmacro-add-counter)))
+
+(defun conn--kmacro-display (macro &optional trunc descr empty)
+  (let* ((x 60)
+         (m (format-kbd-macro macro))
+         (l (length m))
+         (z (and trunc (> l x))))
+    (format "%s%s%s"
+            (if (= kmacro-counter 0)
+                ""
+              (format "[%s] "
+                      (format kmacro-counter-format-start kmacro-counter)))
+            (if z (substring m 0 (1- x)) m)
+            (if z "..." ""))))
+
+(defun conn--kmacro-ring-format ()
+  (concat
+   (propertize "Kmacro Ring:  " 'face 'bold)
+   (propertize (conn--kmacro-display last-kbd-macro 30 "") 'face 'transient-value)
+   (if (kmacro-ring-empty-p)
+       ""
+     (concat " | "
+             (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring))
+                                               30 "")
+                         'face 'transient-value)))))
+
+(defun conn--in-kbd-macro-p ()
+  (or defining-kbd-macro executing-kbd-macro))
+
+(transient-define-prefix conn-kmacro-menu ()
+  [["Counter:"
+    ("i" "Insert Counter" kmacro-insert-counter)
+    ("s" "Set Counter" conn--kmacro-set-counter-infix :transient t)
+    ("a" "Add to Counter" conn--kmacro-add-counter-infix :transient t)
+    ("f" "Set Format" kmacro-set-format
+     :transient t
+     :if-not conn--in-kbd-macro-p)]
+   [:description
+    conn--kmacro-ring-format
+    :if-not conn--in-kbd-macro-p
+    ("n" "Cycle Next" kmacro-cycle-ring-next :transient t)
+    ("p" "Cycle Previous" kmacro-cycle-ring-previous :transient t)
+    ("~" "Swap Ring" kmacro-swap-ring :transient t)
+    ("w" "Pop Ring" kmacro-delete-ring-head :transient t)]]
+  ["Commands:"
+   :if-not conn--in-kbd-macro-p
+   [("c" "Call Macro" kmacro-call-macro)
+    ("r" "Record Macro" kmacro-start-macro)
+    ("e" "Edit Macro" kmacro-edit-macro)]
+   [("d" "Name Last Macro" kmacro-name-last-macro)
+    ("l" "Edit Macro Lossage" kmacro-edit-lossage)
+    ("r" "Apply Macro on Lines" apply-macro-to-region-lines)]]
+  ["Commands:"
+   :if conn--in-kbd-macro-p
+   ("q" "Query" kbd-macro-query :if conn--in-kbd-macro-p)
+   ("r" "Stop Recording Macro" kmacro-end-macro :if conn--in-kbd-macro-p)
+   ("d" "Redisplay" kmacro-redisplay :if conn--in-kbd-macro-p)])
+
+(transient-define-infix conn--set-fill-column-infix ()
+  :class 'transient-lisp-variable
+  :variable 'fill-column
+  :reader (lambda (&rest _) (call-interactively 'set-fill-column)))
+
+(transient-define-infix conn--set-fill-prefix-infix ()
+  :class 'transient-lisp-variable
+  :variable 'fill-prefix
+  :reader (lambda (&rest _) (call-interactively 'set-fill-prefix)))
+
+(transient-define-infix conn--auto-fill-infix ()
+  :class 'transient-lisp-variable
+  :variable 'auto-fill-function
+  :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
+
+(transient-define-prefix conn-fill-menu ()
+  [["Fill:"
+    ("r" "Region" fill-region)
+    ("i" "Paragraph" fill-paragraph)
+    ("k" "Region as Paragraph" fill-region-as-paragraph)]
+   ["Options:"
+    ("c" "Column" conn--set-fill-column-infix)
+    ("p" "Prefix" conn--set-fill-prefix-infix)
+    ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
 
 (transient-define-infix conn--case-fold-infix ()
   :class 'transient-lisp-variable
@@ -3570,17 +3658,16 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :init-value (lambda (obj) (oset obj value nil)))
 
 (transient-define-prefix conn-dots-dispatch-menu (macro buffers)
-  [["Reverse Order: " (conn--reverse-switch)]
-   ["Dispatch Buffers Read With: "
-     ("b" "" conn--read-buffer-infix
-      :unsavable t
-      :always-read t)]]
-  [["Do Dispatch"
+  [["Execute Dispatch:"
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
-   ["Dispatch Previous Macro: "
-     ("k" "" conn--dispatch-macro-infix
-      :unsavable t
-      :always-read t)]])
+   ["Options: "
+    (conn--reverse-switch)
+    ("k" "Macro" conn--dispatch-macro-infix
+     :unsavable t
+     :always-read t)
+    ("b" "Read Buffers" conn--read-buffer-infix
+     :unsavable t
+     :always-read t)]])
 
 (transient-define-suffix conn--dot-dispatch-suffix ()
   :transient 'transient--do-exit
@@ -3619,22 +3706,17 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn--pulse-on-record dots)
         (conn-macro-dispatch dots macro)))))
 
-(transient-define-prefix conn-emacs-ovwt-prefix ()
-  "Emacs state menu"
-  [:description "Which Overwrite Mode:"
-                [("m" "Overwrite Mode" conn-emacs-state-overwrite)
-                 ("b" "Overwrite Binary Mode" conn-emacs-state-bol)]])
-
 (transient-define-prefix conn-emacs-state-menu ()
   "Emacs state menu"
-  ;; :transient-non-suffix
-  [:description "Enter Emacs state how?"
-                [("u" "Change" conn-change)
-                 ("j" "← BOL" conn-emacs-state-bol)]
-                [("i" "↑ Open line above" conn-emacs-state-open-line-above)
-                 ("k" "↓ Open line below" conn-emacs-state-open-line)]
-                [("o" "Overwrite Mode" conn-emacs-ovwt-prefix)
-                 ("l" "→ EOL" conn-emacs-state-eol)]])
+  ["Enter Emacs state how?"
+   [("u" "Overwrite" (lambda ()
+                       (interactive)
+                       (conn-emacs-state-overwrite t)))
+    ("j" "← BOL" conn-emacs-state-bol)]
+   [("i" "↑ Open line above" conn-emacs-state-open-line-above)
+    ("k" "↓ Open line below" conn-emacs-state-open-line)]
+   [("o" "Binary Overwrite" conn-emacs-state-overwrite)
+    ("l" "→ EOL" conn-emacs-state-eol)]])
 
 
 ;;;; Keymaps
@@ -3821,7 +3903,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "TAB" 'indent-rigidly
   "q"   'indent-for-tab-command
   "RET" 'whitespace-cleanup
-  "F"   'fill-paragraph
+  "f"   'conn-fill-menu
   "N"   'conn-transpose-paragraphs-backward
   "M"   'transpose-paragraphs
   "r"   'query-replace
@@ -3835,11 +3917,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ","   'conn-transpose-chars-backward
   "k"   'transpose-lines
   "."   'transpose-chars
+  "SPC"   'conn-transpose-region-and-dot
   "m"   'transpose-sexps
   "n"   'conn-transpose-sexps-backward
   "T"   'conn-narrow-to-thing
   "o"   'transpose-words
-  "SPC" 'transpose-regions
   "u"   'conn-transpose-words-backward)
 
 (define-keymap
@@ -3864,21 +3946,21 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
   "!"                'conn-dots-dispatch
-  "@"                'conn-dots-dispatch-macro
+  "@"                'conn-dots-dispatch-menu
   "|"                'conn-remove-dots-outside-region
   "\\"               'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
   "c"                'conn-split-dots-on-regexp
   "C"                'conn-split-region-on-regexp
-  "d"                'conn-dots-dispatch
+  "d"                'conn-dots-dispatch-menu
   "E"                'conn-dot-point
   "e"                'conn-dot-region
   "q"                'conn-dot-this-map
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
   "w"                'conn-remove-dot
-  "y"                'conn-dots-dispatch-menu
+  ;; "y"                'conn-dots-dispatch-menu
   "Y"                'conn-yank-to-dots)
 
 (define-keymap
@@ -4058,6 +4140,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-x n <" 'conn-narrow-to-beginning-of-buffer
   "C-x n >" 'conn-narrow-to-end-of-buffer
   "C-x n t" 'conn-narrow-to-thing
+  "C-x m"   'conn-kmacro-menu
   "C-x r"   conn-ctl-x-r-map
   "C-x t D" 'conn-tab-bar-duplicate-and-name-tab
   "C-x t N" 'conn-tab-bar-new-named-tab
