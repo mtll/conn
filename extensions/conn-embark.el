@@ -269,7 +269,7 @@ will navigate up out of a keymap."
         (setf
          conn-embark-alt-symbol-map     (define-keymap conn-embark-alt-key 'xref-find-references)
          conn-embark-alt-expression-map (define-keymap conn-embark-alt-key 'comment-region)
-         conn-embark-alt-defun-map      (define-keymap conn-embark-alt-key 'comment-region)
+         conn-embark-alt-defun-map      (define-keymap conn-embark-alt-key 'comment-defun)
          conn-embark-alt-heading-map    (define-keymap conn-embark-alt-key 'narrow-to-heading)
          conn-embark-alt-identifier-map (define-keymap conn-embark-alt-key 'describe-symbol))
         (pcase-dolist (`(,map . ,thing) '((conn-embark-alt-expression-map . expression)
