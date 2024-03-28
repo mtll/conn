@@ -848,25 +848,51 @@ to determine if mark cursor should be hidden in buffer."
 
 ;;;;; Dot Functions
 
-(defmacro conn-with-dots-as-text-properties (&rest body)
-  (declare (indent 0))
-  `(unwind-protect
-       (progn
-         (conn--for-each-dot
-          (lambda (dot)
-            (let ((beg (overlay-start dot))
-                  (end (overlay-end dot)))
-              (delete-overlay dot)
-              (put-text-property beg end 'conn-dot-text t))))
-         ,(macroexp-progn body))
-     (save-excursion
-       (goto-char (point-min))
-       (let (dots match)
-         (while (setq match (text-property-search-forward 'conn-dot-text))
-           (push (cons (prop-match-beginning match)
-                       (prop-match-end match))
-                 dots))
-         (apply #'conn--create-dots dots)))))
+(defun conn--propertize-dot-candidates (dots)
+  (mapcar
+   (lambda (dot)
+     (with-current-buffer (overlay-buffer dot)
+       (let* ((beg (overlay-start dot))
+              (end (overlay-end dot))
+              (str (substring (buffer-substring beg end)
+                              0 (min 120 (- end beg)))))
+         (add-text-properties 0 1 `(conn-dot-cand ,dot) str)
+         (cons str dot))))
+   dots))
+
+(defun conn--dot-cand-annotation-function (cand)
+  (format "            Dot in buffer: %s"
+          (overlay-buffer (get-text-property 0 'conn-dot-cand cand))))
+
+(defun conn--completing-read-dot (dots)
+  (let ((table (conn--propertize-dot-candidates dots)))
+    (alist-get (completing-read "Dots: " table nil t)
+               table nil nil 'string=)))
+
+(defun conn--text-property-to-dots ()
+  (goto-char (point-min))
+  (let (dots match)
+    (while (setq match (text-property-search-forward 'conn-dot-text))
+      (push (cons (prop-match-beginning match)
+                  (prop-match-end match))
+            dots))
+    (apply #'conn--create-dots dots))
+  (remove-text-properties (point-min) (point-max) '(conn-dot-text nil)))
+
+(defun conn--dot-to-text-property (dot)
+  (let ((beg (overlay-start dot))
+        (end (overlay-end dot)))
+    (conn--delete-dot dot)
+    (put-text-property beg end 'conn-dot-text t)))
+
+(defmacro conn-with-dots-as-text-properties (dots &rest body)
+  (declare (indent 1))
+  `(save-mark-and-excursion
+     (unwind-protect
+         (progn
+           (mapc 'conn--dot-to-text-property ,(ensure-list dots))
+           ,(macroexp-progn body))
+       (conn--text-property-to-dots))))
 
 (defun conn--sorted-overlays (typep &optional predicate start end buffer)
   "Get all dots between START and END sorted by starting position."
@@ -1631,6 +1657,7 @@ If STATE is nil make COMMAND always repeat."
          (case-fold-search sort-fold-case))
     (when sort-lists
       (conn-with-dots-as-text-properties
+          (conn--all-overlays #'conn-dotp)
         (setq sort-lists
               (sort sort-lists
                     (lambda (a b)
