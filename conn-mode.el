@@ -939,6 +939,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
              (overlay (make-overlay start end nil nil t)))
         (mapc #'conn--delete-dot overlaps)
         (overlay-put overlay 'conn-overlay t)
+        (overlay-put overlay 'evaporate t)
         (overlay-put overlay 'dot t)
         (overlay-put overlay 'priority conn-dot-overlay-priority)
         (overlay-put overlay 'face 'conn-dot-face)
