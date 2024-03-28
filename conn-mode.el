@@ -3531,18 +3531,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transient Menus
 
-(transient-define-infix conn--kmacro-set-counter-infix ()
-  :class 'transient-lisp-variable
-  :variable 'kmacro-counter
-  :reader (lambda (&rest _)
-            (call-interactively 'kmacro-set-counter)))
-
-(transient-define-infix conn--kmacro-add-counter-infix ()
-  :class 'transient-lisp-variable
-  :variable 'kmacro-counter
-  :reader (lambda (&rest _)
-            (call-interactively 'kmacro-add-counter)))
-
 (defun conn--kmacro-display (macro &optional trunc descr empty)
   (let* ((x 60)
          (m (format-kbd-macro macro))
@@ -3567,24 +3555,35 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                                                30 "")
                          'face 'transient-value)))))
 
+(defun conn--kmacro-counter-format ()
+  (concat
+   (propertize "Kmacro Counter:  " 'face 'bold)
+   (propertize (format "%s" kmacro-counter) 'face 'transient-value)))
+
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
 
+(transient-define-infix conn--set-counter-format-infix ()
+  :class 'transient-lisp-variable
+  :set-value (lambda (_ format) (kmacro-set-format format))
+  :variable 'kmacro-counter-format
+  :reader (lambda (&rest _)
+            (read-string "Macro Counter Format: ")))
+
 (transient-define-prefix conn-kmacro-menu ()
-  [["Counter:"
+  [[:description
+    conn--kmacro-counter-format
     ("i" "Insert Counter" kmacro-insert-counter)
-    ("s" "Set Counter" conn--kmacro-set-counter-infix :transient t)
-    ("a" "Add to Counter" conn--kmacro-add-counter-infix :transient t)
-    ("f" "Set Format" kmacro-set-format
-     :transient t
-     :if-not conn--in-kbd-macro-p)]
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]
    [:description
     conn--kmacro-ring-format
     :if-not conn--in-kbd-macro-p
     ("n" "Cycle Next" kmacro-cycle-ring-next :transient t)
     ("p" "Cycle Previous" kmacro-cycle-ring-previous :transient t)
-    ("~" "Swap Ring" kmacro-swap-ring :transient t)
-    ("w" "Pop Ring" kmacro-delete-ring-head :transient t)]]
+    ("~" "Swap" kmacro-swap-ring :transient t)
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   ["Commands:"
    :if-not conn--in-kbd-macro-p
    [("c" "Call Macro" kmacro-call-macro)
@@ -3602,15 +3601,22 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-infix conn--set-fill-column-infix ()
   :class 'transient-lisp-variable
   :variable 'fill-column
-  :reader (lambda (&rest _) (call-interactively 'set-fill-column)))
+  :set-value (lambda (_ val) (set-fill-column val))
+  :reader (lambda (&rest _)
+            (read-number (format "Change fill-column from %s to: " fill-column)
+                         (current-column))))
 
 (transient-define-infix conn--set-fill-prefix-infix ()
   :class 'transient-lisp-variable
+  :set-value #'ignore
   :variable 'fill-prefix
-  :reader (lambda (&rest _) (call-interactively 'set-fill-prefix)))
+  :reader (lambda (&rest _)
+            (set-fill-prefix)
+            (substring-no-properties fill-prefix)))
 
 (transient-define-infix conn--auto-fill-infix ()
   :class 'transient-lisp-variable
+  :set-value #'ignore
   :variable 'auto-fill-function
   :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
 
@@ -3627,7 +3633,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-infix conn--case-fold-infix ()
   :class 'transient-lisp-variable
   :variable 'sort-fold-case
-  :reader (lambda (&rest _) (not sort-fold-case)))
+  :reader (lambda (&rest _)
+            (not sort-fold-case)))
 
 (transient-define-prefix conn-sort-menu ()
   [["Sort Region: "
