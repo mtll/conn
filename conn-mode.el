@@ -1395,7 +1395,7 @@ from view state.  See `conn-view-state-map' for commands bound by view state."
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-prompt
+                 "F"        'conn-emacs-state-menu
                  "="        'conn-dot-state
                  "<f8>"     'conn-state
                  "<f9>"     'conn-dot-state
@@ -1423,9 +1423,9 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-prompt
                  "<escape>" 'conn-view-state
                  "t"        'conn-change
+                 "v"        'conn-emacs-state-menu
                  "'"        'conn-quoted-insert-overwrite
                  "<f7>"     'conn-emacs-state
                  "<f8>"     'conn-pop-state
@@ -1452,7 +1452,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
                  "<f8>"     'conn-state
                  "<f9>"     'conn-pop-state
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-prompt
+                 "F"        'conn-emacs-state-menu
                  "Q"        'conn-dot-quit)
   (if conn-dot-state
       (progn
@@ -1482,7 +1482,7 @@ state."
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-prompt
+                 "F"        'conn-emacs-state-menu
                  "E"        'conn-emacs-state-eol
                  "A"        'conn-emacs-state-eol
                  "="        'conn-dot-state
@@ -1627,17 +1627,17 @@ If STATE is nil make COMMAND always repeat."
                                  (cons key key)))
                              (conn--sorted-overlays #'conn-dotp '>)))
          (old (reverse sort-lists))
-	 (case-fold-search sort-fold-case))
+         (case-fold-search sort-fold-case))
     (when sort-lists
       (conn-with-dots-as-text-properties
-       (setq sort-lists
-	     (sort sort-lists
-                   (lambda (a b)
-		     (> 0 (compare-buffer-substrings
-			   nil (car (car a)) (cdr (car a))
-			   nil (car (car b)) (cdr (car b)))))))
-       (with-buffer-unmodified-if-unchanged
-	 (sort-reorder-buffer sort-lists old))))))
+        (setq sort-lists
+              (sort sort-lists
+                    (lambda (a b)
+                      (> 0 (compare-buffer-substrings
+                            nil (car (car a)) (cdr (car a))
+                            nil (car (car b)) (cdr (car b)))))))
+        (with-buffer-unmodified-if-unchanged
+          (sort-reorder-buffer sort-lists old))))))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
@@ -3338,22 +3338,6 @@ With any other prefix argument select buffers with `completing-read-multiple'."
         (conn--pulse-on-record dots)
         (conn-macro-dispatch dots macro)))))
 
-(defun conn-dots-dispatch-macro (macro &optional arg)
-  "Begin recording dot macro for BUFFERS, initially in conn-state.
-
-Interactively buffers defaults to current buffer.
-With prefix argument \\[universal-argument] ask for a regexp and operate
-on all buffers matching regexp.
-With any other prefix argument select buffers with `completing-read-multiple'."
-  (interactive (list (conn--read-macro-for-dispatch)
-                     current-prefix-arg))
-  (unless (or (null macro)
-              (stringp macro)
-              (vectorp macro)
-              (kmacro-p macro))
-    (user-error "Resiter is not a keyboard macro"))
-  (conn-dots-dispatch arg macro))
-
 (defun conn-isearch-dots-dispatch ()
   "Exit isearch mode and `conn-dots-dispatch'."
   (interactive)
@@ -3364,7 +3348,7 @@ With any other prefix argument select buffers with `completing-read-multiple'."
   "Exit isearch mode and `conn-dots-dispatch-macro'."
   (interactive)
   (isearch-done)
-  (call-interactively 'conn-dots-dispatch-macro))
+  (call-interactively 'conn-dots-dispatch-menu))
 
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
@@ -3380,12 +3364,11 @@ With any other prefix argument select buffers with `completing-read-multiple'."
 
 If ARG is non-nil move up ARG lines before opening line."
   (interactive "p")
-  (move-beginning-of-line arg)
-  (open-line arg)
+  (move-beginning-of-line nil)
+  (insert "\n")
+  (previous-line)
+  ;; FIXME: see crux smart open line
   (indent-according-to-mode)
-  (save-excursion
-    (forward-line 1)
-    (indent-according-to-mode))
   (conn-emacs-state))
 
 (defun conn-emacs-state-open-line (&optional arg)
@@ -3412,25 +3395,6 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
     (if arg
         (binary-overwrite-mode 1)
       (overwrite-mode 1))))
-
-(defun conn-emacs-state-prompt (&optional arg)
-  "Transition to `conn-emacs-state', prompting for how to do so.
-ARG will be passed to the transition function that is chosen."
-  (interactive "P")
-  (pcase-exhaustive
-      (car (read-multiple-choice
-            "Enter emacs state how?"
-            '((?k "open line below")
-              (?i "open line above")
-              (?j "beginning of line")
-              (?l "end of line")
-              (?o "overwrite mode"))
-            nil nil nil))
-    (?o (conn-emacs-state-overwrite arg))
-    (?k (conn-emacs-state-open-line arg))
-    (?i (conn-emacs-state-open-line-above arg))
-    (?j (conn-emacs-state-bol arg))
-    (?l (conn-emacs-state-eol arg))))
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
@@ -3523,6 +3487,114 @@ If KILL is non-nil add region to the `kill-ring'.  When in
              conn-end-of-inner-line))
 
 
+;;;; Transient Menus
+
+(transient-define-infix conn--case-fold-infix ()
+  :class 'transient-lisp-variable
+  :variable 'char-fol
+  :reader (lambda (&rest _) (not sort-fold-case)))
+
+(transient-define-infix conn--case-fold-infix ()
+  :class 'transient-lisp-variable
+  :variable 'sort-fold-case
+  :reader (lambda (&rest _) (not sort-fold-case)))
+
+(transient-define-prefix conn-sort-menu ()
+  [["Sort Region: "
+    ("a" "sort pages" sort-pages)
+    ("c" "sort columns" sort-columns)
+    ("l" "sort lines" sort-lines)]
+   [("f" "case fold" conn--case-fold-infix)
+    ("n" "sort numeric fields" sort-numeric-fields)
+    ("p" "sort paragraphs" sort-paragraphs)
+    ("r" "sort regexp fields" sort-regexp-fields)]])
+
+(transient-define-argument conn--read-buffer-infix ()
+  :class 'transient-switches
+  :argument-format "%s"
+  :argument-regexp "\\(\\(completing-read-multiple\\|matching-regexp\\)\\)"
+  :choices '("completing-read-multiple" "buffers-matching-regexp"))
+
+(transient-define-argument conn--dispatch-macro-infix ()
+  :class 'transient-switches
+  :argument-format "%s"
+  :argument-regexp "\\(\\(last-kbd-macro\\|register-read-with-preview\\)\\)"
+  :choices '("last-kbd-macro" "register-read-with-preview"))
+
+(transient-define-infix conn--reverse-switch ()
+  :argument "t"
+  :shortarg "r"
+  :description "Reverse"
+  :init-value (lambda (obj) (oset obj value nil)))
+
+(transient-define-prefix conn-dots-dispatch-menu (macro buffers)
+  [["Reverse Order: " (conn--reverse-switch)]
+   ["Dispatch Buffers Read With: "
+     ("b" "" conn--read-buffer-infix
+      :unsavable t
+      :always-read t)]]
+  [["Do Dispatch"
+    ("d" "Dispatch" conn--dot-dispatch-suffix)]
+   ["Dispatch Previous Macro: "
+     ("k" "" conn--dispatch-macro-infix
+      :unsavable t
+      :always-read t)]])
+
+(transient-define-suffix conn--dot-dispatch-suffix ()
+  :transient 'transient--do-exit
+  (interactive)
+  (let* ((multi-buffer t)
+         (args (transient-args (oref transient-current-prefix command)))
+         (dots (cond ((member "completing-read-multiple" args)
+                      (mapcan (lambda (buffer)
+                                (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
+                              (conn-read-dot-buffers)))
+                     ((member "buffers-matching-regexp" args)
+                      (mapcan (lambda (buffer)
+                                (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
+                              (conn-read-matching-dot-buffers)))
+                     (t (setq multi-buffer nil)
+                        (conn--sorted-overlays #'conn-dotp '<))))
+         (macro (cond ((member "register-read-with-preview" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Resiter is not a keyboard macro"))
+    (when (member "t" args)
+      (setq dots (nreverse dots)))
+    (save-window-excursion
+      (conn--thread dots
+          dots
+        (conn--dot-iterator dots)
+        (if multi-buffer
+            (conn--dispatch-multi-buffer dots)
+          (conn--dispatch-single-buffer dots))
+        (conn--dispatch-with-state dots 'conn-state)
+        (conn--pulse-on-record dots)
+        (conn-macro-dispatch dots macro)))))
+
+(transient-define-prefix conn-emacs-ovwt-prefix ()
+  "Emacs state menu"
+  [:description "Which Overwrite Mode:"
+                [("m" "Overwrite Mode" conn-emacs-state-overwrite)
+                 ("b" "Overwrite Binary Mode" conn-emacs-state-bol)]])
+
+(transient-define-prefix conn-emacs-state-menu ()
+  "Emacs state menu"
+  ;; :transient-non-suffix
+  [:description "Enter Emacs state how?"
+                [("u" "Change" conn-change)
+                 ("j" "← BOL" conn-emacs-state-bol)]
+                [("i" "↑ Open line above" conn-emacs-state-open-line-above)
+                 ("k" "↓ Open line below" conn-emacs-state-open-line)]
+                [("o" "Overwrite Mode" conn-emacs-ovwt-prefix)
+                 ("l" "→ EOL" conn-emacs-state-eol)]])
+
+
 ;;;; Keymaps
 
 (defvar-keymap reb-navigation-repeat-map
@@ -3560,17 +3632,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "." 'isearch-repeat-forward
   "," 'isearch-repeat-backward)
 
-(defvar-keymap conn-sort-region-map
-  :prefix 'conn-sort-region-map
-  "u" 'conn-toggle-sort-fold-case
-  "a" 'sort-pages
-  "c" 'sort-columns
-  "l" 'sort-lines
-  "n" 'sort-numeric-fields
-  "p" 'sort-paragraphs
-  "r" 'sort-regexp-fields)
-(put 'conn-toggle-sort-fold-case 'repeat-map 'conn-sort-region-map)
-
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
   "DEL" 'conn-delete-pair
@@ -3599,7 +3660,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "o"   'conn-occur-region
   "p"   'conn-change-pair
   "r"   'conn-query-replace-region
-  "s"   'conn-sort-region-map
+  "s"   'conn-sort-menu
   "u"   'conn-insert-pair
   "v"   'vc-region-history
   "w"   'delete-region
@@ -3651,8 +3712,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-S"        'conn-isearch-split-dots
   "M-("        'conn-isearch-dots-dispatch
   "M-D"        'conn-isearch-dots-dispatch
-  "M-)"        'conn-isearch-dots-dispatch-macro
-  "M-M"        'conn-isearch-dots-dispatch-macro
+  "M-)"        'conn-isearch-dots-dispatch-menu
+  "M-M"        'conn-isearch-dots-dispatch-menu
   "C-z"        'conn-isearch-dispatch)
 
 (define-keymap
@@ -3760,8 +3821,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "#"                'conn-add-dots-matching-regexp
   "$"                'conn-add-dots-matching-literal
   "%"                'conn-query-remove-dots
-  ;; "!"                'conn-dots-dispatch
-  ;; "@"                'conn-dots-dispatch-macro
+  "!"                'conn-dots-dispatch
+  "@"                'conn-dots-dispatch-macro
   "|"                'conn-remove-dots-outside-region
   "\\"               'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
@@ -3775,7 +3836,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
   "w"                'conn-remove-dot
-  "y"                'conn-dots-dispatch-macro
+  "y"                'conn-dots-dispatch-menu
   "Y"                'conn-yank-to-dots)
 
 (define-keymap
@@ -3795,7 +3856,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c"    'conn-C-c-keys
   "d"    'conn-delete-char-keys
   "q"    'conn-misc-edit-map
-  "Q"    'kill-buffer-and-window
+  ;; "Q"    'kill-buffer-and-window
   "r"    'conn-region-map
   "w"    'conn-kill-region
   "y"    'conn-yank-keys
@@ -3804,69 +3865,63 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap conn-common-map
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-4" 'conn-C-x-4-keys
-  "C-5" 'conn-C-x-5-keys
-  "C-6" 'conn-C-x-t-keys
-  "C-7" 'delete-other-windows-vertically
-  "C-8" 'conn-swap-window-buffers
-  "C-9" 'conn-swap-window-buffers-no-select
-  "C-0" 'delete-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-=" 'balance-windows
-  ;; "M-1" nil
-  ;; "M-2" nil
-  ;; "M-3" nil
-  ;; "M-4" nil
-  ;; "M-5" nil
-  ;; "M-6" nil
-  ;; "M-7" nil
-  ;; "M-8" nil
-  ;; "M-9" nil
-  "M-0" 'delete-other-windows-vertically
-  "SPC" 'conn-set-mark-command
-  "+"   'conn-set-register-seperator
-  ","   'isearch-backward
-  "."   'isearch-forward
-  "/"   'undo-only
-  ";"   'execute-extended-command
-  ":"   'execute-extended-command-for-buffer
-  "<"   'conn-backward-line
-  ">"   'forward-line
-  "?"   'undo-redo
-  "`"   'conn-other-window
-  "A"   'conn-C-x-t-keys
-  "a"   'switch-to-buffer
-  "C"   'conn-copy-region
-  "c"   'conn-C-c-keys
-  "D"   'conn-dot-region
-  "g"   'conn-M-g-keys
-  "I"   'backward-paragraph
-  "i"   'previous-line
-  "J"   'conn-beginning-of-inner-line
-  "j"   'conn-goto-char-backward
-  "K"   'forward-paragraph
-  "k"   'next-line
-  "L"   'conn-end-of-inner-line
-  "l"   'conn-goto-char-forward
-  "M"   'end-of-defun
-  "m"   'forward-sexp
-  "n"   'backward-sexp
-  "N"   'beginning-of-defun
-  "O"   'forward-sentence
-  "o"   'forward-word
-  "p"   'conn-register-load
-  "R"   'indent-relative
-  "s"   'conn-M-s-keys
-  "U"   'backward-sentence
-  "u"   'backward-word
-  "v"   'conn-toggle-mark-command
-  "V"   'narrow-to-region
-  "W"   'widen
-  "x"   'conn-C-x-keys
-  "z"   'conn-exchange-mark-command)
+  "C-1"   'delete-other-windows
+  "C-2"   'split-window-below
+  "C-3"   'split-window-right
+  "C-4"   'conn-C-x-4-keys
+  "C-5"   'conn-C-x-5-keys
+  "C-6"   'conn-C-x-t-keys
+  "C-7"   'delete-other-windows-vertically
+  "C-8"   'conn-swap-window-buffers
+  "C-9"   'conn-swap-window-buffers-no-select
+  "C-0"   'delete-window
+  "C-0"   'delete-window
+  "C--"   'shrink-window-if-larger-than-buffer
+  "C-="   'balance-windows
+  "M-0"   'delete-other-windows-vertically
+  "C-M-0" 'kill-buffer-and-window
+  "C-SPC" 'conn-set-mark-command
+  "SPC"   'conn-toggle-mark-command
+  "+"     'conn-set-register-seperator
+  ","     'isearch-backward
+  "."     'isearch-forward
+  "/"     'undo-only
+  ";"     'execute-extended-command
+  ":"     'execute-extended-command-for-buffer
+  "<"     'conn-backward-line
+  ">"     'forward-line
+  "?"     'undo-redo
+  "`"     'conn-other-window
+  "A"     'conn-C-x-t-keys
+  "a"     'switch-to-buffer
+  "C"     'conn-copy-region
+  "c"     'conn-C-c-keys
+  "D"     'conn-dot-region
+  "g"     'conn-M-g-keys
+  "I"     'backward-paragraph
+  "i"     'previous-line
+  "J"     'conn-beginning-of-inner-line
+  "j"     'conn-goto-char-backward
+  "K"     'forward-paragraph
+  "k"     'next-line
+  "L"     'conn-end-of-inner-line
+  "l"     'conn-goto-char-forward
+  "M"     'end-of-defun
+  "m"     'forward-sexp
+  "n"     'backward-sexp
+  "N"     'beginning-of-defun
+  "O"     'forward-sentence
+  "o"     'forward-word
+  "p"     'conn-register-load
+  "R"     'indent-relative
+  "s"     'conn-M-s-keys
+  "U"     'backward-sentence
+  "u"     'backward-word
+  ;; "v"     'conn-toggle-mark-command
+  "V"     'narrow-to-region
+  "W"     'widen
+  "x"     'conn-C-x-keys
+  "z"     'conn-exchange-mark-command)
 
 (define-keymap
   :keymap conn-view-state-map
