@@ -1641,6 +1641,20 @@ If STATE is nil make COMMAND always repeat."
 
 ;;;;; Dot Commands
 
+(defun conn-transpose-region-and-dot (dot)
+  (interactive
+   (let ((dots (conn--all-overlays #'conn-dotp)))
+     (cond
+      ((null dots)
+       (user-error "No dots active"))
+      ((length= dots 1)
+       dots)
+      (t (list (conn--completing-read-dot dots))))))
+  (let ((beg (conn--create-marker (overlay-start dot)))
+        (end (overlay-end dot)))
+    (conn-with-dots-as-text-properties (list dot)
+      (transpose-regions (region-beginning) (region-end) beg end))))
+
 (defun conn-yank-to-dots (&optional arg)
   (interactive "P")
   (save-mark-and-excursion
