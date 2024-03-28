@@ -3533,27 +3533,26 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;; Transient Menus
 
 (defun conn--kmacro-display (macro &optional trunc)
-  (let* ((x 60)
-         (m (format-kbd-macro macro))
+  (let* ((m (format-kbd-macro macro))
          (l (length m))
-         (z (and trunc (> l x))))
+         (z (and trunc (> l trunc))))
     (format "%s%s%s"
             (if (= kmacro-counter 0)
                 ""
               (format "[%s] "
                       (format kmacro-counter-format-start kmacro-counter)))
-            (if z (substring m 0 (1- x)) m)
+            (if z (substring m 0 (1- trunc)) m)
             (if z "..." ""))))
 
 (defun conn--kmacro-ring-format ()
   (with-temp-message ""
     (concat
      (propertize "Kmacro Ring:  " 'face 'bold)
-     (propertize (conn--kmacro-display last-kbd-macro 30) 'face 'transient-value)
+     (propertize (conn--kmacro-display last-kbd-macro 20) 'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
-       (concat " | "
-               (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 30)
+       (concat " "
+               (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 20)
                            'face 'transient-value))))))
 
 (defun conn--kmacro-counter-format ()
@@ -3582,8 +3581,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    [:description
     conn--kmacro-ring-format
     :if-not conn--in-kbd-macro-p
-    ("n" "Cycle Next" kmacro-cycle-ring-next :transient t)
-    ("p" "Cycle Previous" kmacro-cycle-ring-previous :transient t)
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   ["Commands:"
@@ -3593,7 +3592,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("e" "Edit Macro" kmacro-edit-macro)]
    [("d" "Name Last Macro" kmacro-name-last-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
-    ("r" "Apply Macro on Lines" apply-macro-to-region-lines)]]
+    ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]]
   ["Commands:"
    :if conn--in-kbd-macro-p
    ("q" "Query" kbd-macro-query :if conn--in-kbd-macro-p)
