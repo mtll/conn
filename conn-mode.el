@@ -90,6 +90,12 @@
   :prefix "conn-"
   :group 'conn-mode)
 
+(defcustom conn-mark-map-prefix-key "b"
+  "Prefix for conn mark thing map.
+Must be a string that satisfies `key-valid-p'."
+  :group 'conn-mode
+  :type 'string)
+
 (defcustom conn-mark-update-delay 0.1
   "Update delay for mark cursor display."
   :type '(number :tag "seconds")
@@ -252,6 +258,9 @@ See `conn--dispatch-on-regions'.")
 (defvar conn--prev-global-minor-modes nil)
 (defvar-local conn--prev-local-minor-modes nil)
 
+(defvar-keymap conn-mark-thing-map
+  :prefix 'conn-mark-thing-map)
+
 ;;;;; Command Histories
 
 (defvar conn-thing-history nil)
@@ -413,7 +422,41 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Mark
 
-(defun conn-define-thing (thing handler &rest rest)
+(defun conn--thing-expander-command (thing)
+  (let ((name (conn--symbolicate "conn-" thing "-expand")))
+    (fset name
+          (lambda (N)
+            (interactive "p")
+            (let ((beg (region-beginning))
+                  (end (region-end)))
+              (if (= (point) end)
+                  (progn
+                    (forward-thing thing N)
+                    (save-excursion
+                      (conn-exchange-mark-command)
+                      (forward-thing thing (- N))
+                      (conn--push-ephemeral-mark)))
+                (progn
+                  (save-excursion
+                    (conn-exchange-mark-command)
+                    (forward-thing thing N)
+                    (conn--push-ephemeral-mark))
+                  (forward-thing thing (- N)))))))
+    (put name :conn-repeat-command t)
+    name))
+
+(defun conn--thing-bounds-command (thing)
+  (let ((name (conn--symbolicate "conn-mark-" thing)))
+    (fset name
+          (lambda ()
+            (interactive)
+            (pcase (bounds-of-thing-at-point thing)
+              (`(,beg . ,end)
+               (goto-char beg)
+               (conn--push-ephemeral-mark end)))))
+    name))
+
+(defun conn-define-thing (thing &rest rest)
   "Define a new thing.
 
 \(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS)"
@@ -430,14 +473,34 @@ If BUFFER is nil check `current-buffer'."
            thing :forward-op :bounds-op :beg-op :end-op))
   (when-let ((forward (plist-get rest :forward-op)))
     (put thing 'forward-op forward))
+  (when-let ((_ (get thing 'forward-op))
+             (binding (plist-get rest :expand-key)))
+    (if-let ((modes (plist-get rest :modes)))
+        (dolist (mode modes)
+          (dolist (state (plist-get rest :states))
+            (keymap-set (conn-get-mode-map state mode)
+                        (concat conn-mark-map-prefix-key " " binding)
+                        (conn--thing-expander-command thing))))
+      (keymap-set conn-mark-thing-map binding
+                  (conn--thing-expander-command thing))))
   (when-let ((beg (plist-get rest :beg-op)))
     (put thing 'beginning-op beg))
   (when-let ((end (plist-get rest :end-op)))
     (put thing 'end-op end))
   (when-let ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
-  (when-let ((commands (plist-get rest :commands)))
-    (conn-set-mark-handler commands handler)))
+  (when-let ((commands (plist-get rest :commands))
+             (handler (plist-get rest :handler)))
+    (conn-set-mark-handler commands handler))
+  (when-let ((binding (plist-get rest :mark-key)))
+    (if-let ((modes (plist-get rest :modes)))
+        (dolist (mode modes)
+          (dolist (state (plist-get rest :states))
+            (keymap-set (conn-get-mode-map state mode)
+                        (concat conn-mark-map-prefix-key " " binding)
+                        (conn--thing-bounds-command thing))))
+      (keymap-set conn-mark-thing-map binding
+                  (conn--thing-bounds-command thing)))))
 
 (defmacro conn-define-thing-handler (name args &rest rest)
   "Define a thing movement command mark handler constructor.
@@ -3493,53 +3556,85 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
 
 (conn-define-thing
- 'dot (conn-individual-thing-handler 'dot)
+ 'dot
+ :handler (conn-individual-thing-handler 'dot)
+ :expand-key "."
  :beg-op (lambda () (conn-previous-dot 1))
  :end-op (lambda () (conn-next-dot 1))
  :commands '(conn-next-dot conn-previous-dot))
 
 (conn-define-thing
- 'word (conn-sequential-thing-handler 'word)
+ 'word
+ :handler (conn-sequential-thing-handler 'word)
+ :expand-key "o"
+ :forward-op 'forward-word
  :commands '(forward-word backward-word))
 
 (conn-define-thing
- 'sexp (conn-sequential-thing-handler 'sexp)
+ 'sexp
+ :handler (conn-sequential-thing-handler 'sexp)
+ :expand-key "m"
+ :forward-op 'forward-sexp
  :commands '(forward-sexp backward-sexp))
 
 (conn-define-thing
- 'whitespace (conn-individual-thing-handler 'whitespace)
+ 'whitespace
+ :handler (conn-individual-thing-handler 'whitespace)
+ :expand-key "S-SPC"
+ :mark-key "SPC"
+ :forward-op 'forward-whitespace
  :commands '(forward-whitespace conn-backward-whitespace))
 
 (conn-define-thing
- 'sentence (conn-sequential-thing-handler 'sentence)
+ 'sentence
+ :handler (conn-sequential-thing-handler 'sentence)
+ :expand-key "{"
  :commands '(forward-sentence backward-sentence))
 
 (conn-define-thing
- 'paragraph (conn-sequential-thing-handler 'paragraph)
+ 'paragraph
+ :handler (conn-sequential-thing-handler 'paragraph)
+ :expand-key "K"
+ :forward-op 'forward-paragraph
  :commands '(forward-paragraph backward-paragraph))
 
 (conn-define-thing
- 'defun (conn-sequential-thing-handler 'defun)
+ 'defun
+ :handler (conn-sequential-thing-handler 'defun)
  :commands '(end-of-defun beginning-of-defun))
 
 (conn-define-thing
- 'buffer (conn-individual-thing-handler 'buffer)
+ 'buffer
+ :handler (conn-individual-thing-handler 'buffer)
  :bounds-op (lambda () (cons (point-min) (point-max)))
  :commands '(end-of-buffer beginning-of-buffer))
 
 (conn-define-thing
- 'line (conn-sequential-thing-handler 'line)
+ 'line
+ :handler (conn-sequential-thing-handler 'line)
+ :expand-key ">"
+ :forward-op (lambda (N)
+               (cond ((> N 0)
+                      (forward-line N))
+                     ((< N 0)
+                      (let ((pt (point)))
+                        (beginning-of-line)
+                        (if (= pt (point))
+                            (forward-line N)
+                          (forward-line (1+ N)))))))
  :commands '(forward-line conn-backward-line))
 
 (conn-define-thing
- 'outer-line (conn-individual-thing-handler 'outer-line)
+ 'outer-line
+ :handler (conn-individual-thing-handler 'outer-line)
  :beg-op (lambda () (move-beginning-of-line nil))
  :end-op (lambda () (move-end-of-line nil))
  :commands '(move-beginning-of-line
              move-end-of-line))
 
 (conn-define-thing
- 'inner-line (conn-individual-thing-handler 'inner-line)
+ 'inner-line
+ :handler (conn-individual-thing-handler 'inner-line)
  :beg-op 'back-to-indentation
  :end-op 'conn--end-of-inner-line-1
  :commands '(back-to-indentation
@@ -3687,12 +3782,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
    ["Options: "
     (conn--reverse-switch)
-    ("k" "Macro" conn--dispatch-macro-infix
-     :unsavable t
-     :always-read t)
-    ("b" "Read Buffers" conn--read-buffer-infix
-     :unsavable t
-     :always-read t)]])
+    ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
 
 (transient-define-suffix conn--dot-dispatch-suffix ()
   :transient 'transient--do-exit
@@ -3943,38 +4034,37 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap conn-dot-state-map
-  "M-<down-mouse-1>" 'conn-dot-at-click
-  "M-/"              'conn-dot-undo
-  "<tab>"            'conn-remove-all-dots
-  "<return>"         'conn-dot-lines
-  "<backspace>"      'conn-kill-to-dots
-  "M-?"              'conn-dot-redo
-  "TAB"              'conn-remove-all-dots
-  "C-n"              'conn-next-dot
-  "C-p"              'conn-previous-dot
-  "C-z"              'conn-dots-dispatch
-  "{"                'conn-first-dot
-  "}"                'conn-last-dot
-  "#"                'conn-add-dots-matching-regexp
-  "$"                'conn-add-dots-matching-literal
-  "%"                'conn-query-remove-dots
-  "!"                'conn-dots-dispatch
-  "@"                'conn-dots-dispatch-menu
-  "|"                'conn-remove-dots-outside-region
-  "\\"               'conn-dot-trim-regexp
-  "["                'conn-remove-dots-before
-  "]"                'conn-remove-dots-after
-  "c"                'conn-split-dots-on-regexp
-  "C"                'conn-split-region-on-regexp
-  "d"                'conn-dots-dispatch-menu
-  "E"                'conn-dot-point
-  "e"                'conn-dot-region
-  "q"                'conn-dot-this-map
-  "r"                conn-dot-region-map
-  "t"                'conn-dot-all-things-in-region
-  "w"                'conn-remove-dot
-  ;; "y"                'conn-dots-dispatch-menu
-  "Y"                'conn-yank-to-dots)
+  "M-/"         'conn-dot-undo
+  "<tab>"       'conn-remove-all-dots
+  "<return>"    'conn-dot-lines
+  "<backspace>" 'conn-kill-to-dots
+  "M-?"         'conn-dot-redo
+  "TAB"         'conn-remove-all-dots
+  "C-n"         'conn-next-dot
+  "C-p"         'conn-previous-dot
+  "C-z"         'conn-dots-dispatch
+  "{"           'conn-first-dot
+  "}"           'conn-last-dot
+  "#"           'conn-add-dots-matching-regexp
+  "$"           'conn-add-dots-matching-literal
+  "%"           'conn-query-remove-dots
+  "!"           'conn-dots-dispatch
+  "@"           'conn-dots-dispatch-menu
+  "|"           'conn-remove-dots-outside-region
+  "\\"          'conn-dot-trim-regexp
+  "["           'conn-remove-dots-before
+  "]"           'conn-remove-dots-after
+  "c"           'conn-split-dots-on-regexp
+  "C"           'conn-split-region-on-regexp
+  "d"           'conn-dots-dispatch-menu
+  "E"           'conn-dot-point
+  "e"           'conn-dot-region
+  "q"           'conn-dot-this-map
+  "r"           conn-dot-region-map
+  "t"           'conn-dot-all-things-in-region
+  "w"           'conn-remove-dot
+  ;; "y"        'conn-dots-dispatch-menu
+  "Y"           'conn-yank-to-dots)
 
 (define-keymap
   :keymap conn-state-map
@@ -4031,6 +4121,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "`"     'conn-other-window
   "A"     'conn-C-x-t-keys
   "a"     'switch-to-buffer
+  "b"     'conn-mark-thing-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "D"     'conn-dot-region
@@ -4311,17 +4402,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (defvar org-mode-map)
 
   (conn-define-thing
-   'org-paragraph (conn-sequential-thing-handler 'org-paragraph)
+   'org-paragraph
+   :handler (conn-sequential-thing-handler 'org-paragraph)
    :forward-op 'org-forward-paragraph
    :commands '(org-forward-paragraph org-backward-paragraph))
 
   (conn-define-thing
-   'org-sentence (conn-sequential-thing-handler 'org-sentence)
+   'org-sentence
+   :handler (conn-sequential-thing-handler 'org-sentence)
    :forward-op 'org-forward-sentence
    :commands '(org-forward-sentence org-backward-sentence))
 
   (conn-define-thing
-   'org-element (conn-individual-thing-handler 'org-element)
+   'org-element
+   :handler (conn-individual-thing-handler 'org-element)
    :beg-op 'org-backward-element
    :end-op 'org-forward-element
    :commands '(org-forward-element
@@ -4373,7 +4467,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       "U" 'paredit-backward-up))
 
   (conn-define-thing
-   'paredit-sexp (conn-sequential-thing-handler 'paredit-sexp)
+   'paredit-sexp
+   :handler (conn-sequential-thing-handler 'paredit-sexp)
    :forward-op 'paredit-forward
    :commands '(paredit-forward
                paredit-backward

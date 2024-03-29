@@ -24,171 +24,123 @@
 (require 'conn-mode)
 (require 'evil-textobj-tree-sitter)
 
-(put 'inner-function 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "function.inner")))
+(defvar conn--ts-modes '(c++-ts-mode
+                         rustic-mode
+                         c-ts-mode
+                         csharp-ts-mode
+                         elixir-ts-mode
+                         elm-ts-mode
+                         go-ts-mode
+                         haskell-ts-mode
+                         html-ts-mode
+                         java-ts-mode
+                         javascript-ts-mode
+                         js-ts-mode
+                         julia-ts-mode
+                         php-ts-mode
+                         prisma-ts-mode
+                         python-ts-mode
+                         ruby-ts-mode
+                         rust-ts-mode
+                         bash-ts-mode
+                         typescript-ts-mode))
 
-(put 'inner-loop 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "loop.inner")))
+(conn-define-thing
+ 'inner-function
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "f"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "function.inner")))
 
-(put 'inner-conditional 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "conditional.inner")))
+(conn-define-thing
+ 'inner-loop
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "p"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "loop.inner")))
 
-(put 'inner-assignment 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "assignment.inner")))
+(conn-define-thing
+ 'inner-conditional
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "i"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "conditional.inner")))
 
-(put 'inner-class 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "class.inner")))
+(conn-define-thing
+ 'inner-assignment
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "a"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "assignment.inner")))
 
-(put 'inner-comment 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "comment.inner")))
+(conn-define-thing
+ 'inner-class
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "c"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "class.inner")))
 
-(put 'inner-parameter 'bounds-of-thing-at-point
-     (lambda ()
-       (evil-textobj-tree-sitter--thing-at-point-bounds "parameter.inner")))
+(conn-define-thing
+ 'inner-comment
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key ";"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "comment.inner")))
 
-(defun conn-mark-inner-parameter ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-parameter)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'inner-parameter
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "p"
+ :bounds-op (lambda ()
+              (evil-textobj-tree-sitter--thing-at-point-bounds "parameter.inner")))
 
-(defun conn-mark-inner-function ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-function)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'function
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "F")
 
-(defun conn-mark-inner-loop ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-loop)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'loop
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "P")
 
-(defun conn-mark-inner-conditional ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-conditional)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'conditional
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "I")
 
-(defun conn-mark-inner-assignment ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-assignment)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'assignment
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "A")
 
-(defun conn-mark-inner-class ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-class)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'class
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "C")
 
-(defun conn-mark-inner-comment ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'inner-comment)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-thing
+ 'comment
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key ":")
 
-(defun conn-mark-parameter ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'parameter)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defun conn-mark-function ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'function)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defun conn-mark-loop ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'loop)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defun conn-mark-conditional ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'conditional)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defun conn-mark-assignment ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'assignment)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defun conn-mark-class ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'class)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defun conn-mark-comment ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'comment)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(defvar-keymap conn-mark-map
-  "e p" 'conn-mark-parameter
-  "e f" 'conn-mark-function
-  "e l" 'conn-mark-loop
-  "e i" 'conn-mark-conditional
-  "e a" 'conn-mark-assignment
-  "e c" 'conn-mark-class
-  "e ;" 'conn-mark-comment
-  "w p" 'conn-mark-inner-parameter
-  "w f" 'conn-mark-inner-function
-  "w l" 'conn-mark-inner-loop
-  "w i" 'conn-mark-inner-conditional
-  "w a" 'conn-mark-inner-assignment
-  "w c" 'conn-mark-inner-class
-  "w ;" 'conn-mark-inner-comment)
-
-(dolist (major-mode '(c++-ts-mode
-                      rustic-mode
-                      c-ts-mode
-                      csharp-ts-mode
-                      elixir-ts-mode
-                      elm-ts-mode
-                      go-ts-mode
-                      haskell-ts-mode
-                      html-ts-mode
-                      java-ts-mode
-                      javascript-ts-mode
-                      js-ts-mode
-                      julia-ts-mode
-                      php-ts-mode
-                      prisma-ts-mode
-                      python-ts-mode
-                      ruby-ts-mode
-                      rust-ts-mode
-                      bash-ts-mode
-                      typescript-ts-mode))
-  (dolist (state '(conn-state conn-dot-state))
-    (define-keymap
-      :keymap (conn-get-mode-map state major-mode)
-      "b" conn-mark-map)))
+(conn-define-thing
+ 'parameter
+ :states '(conn-state conn-dot-state)
+ :modes conn--ts-modes
+ :mark-key "P")
 
 (provide 'conn-evil-treesit-obj)
