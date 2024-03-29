@@ -258,6 +258,8 @@ See `conn--dispatch-on-regions'.")
 (defvar conn--prev-global-minor-modes nil)
 (defvar-local conn--prev-local-minor-modes nil)
 
+(defvar-local conn--aux-map-timer nil)
+
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
 
@@ -1149,18 +1151,26 @@ If BUFFER is nil use current buffer."
 
 (defun conn--setup-aux-maps (&optional force)
   "Setup conn aux maps for state in BUFFER."
-  (when (or (and force (not executing-kbd-macro))
-            (conn--update-aux-map-p))
-    (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                         (make-sparse-keymap))))
-      (dolist (remapping conn--aux-bindings)
-        (when-let ((to-keys (where-is-internal remapping nil nil t t))
-                   (def (conn--lookup-binding (symbol-value remapping))))
-          (dolist (key to-keys)
-            (define-key aux-map key def)))))
-    (setq conn--prev-local-minor-modes (seq-copy local-minor-modes)
-          conn--prev-global-minor-modes (seq-copy global-minor-modes)
-          conn--define-key-local-tick conn--define-key-tick)))
+  (when (and (not conn--aux-map-timer)
+             (or (and force (not executing-kbd-macro))
+                 (conn--update-aux-map-p)))
+    (setq conn--aux-map-timer
+          (run-with-timer
+           0.05 nil
+           (lambda (buffer)
+             (with-current-buffer buffer
+               (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
+                                    (make-sparse-keymap))))
+                 (dolist (remapping conn--aux-bindings)
+                   (when-let ((to-keys (where-is-internal remapping nil nil t t))
+                              (def (conn--lookup-binding (symbol-value remapping))))
+                     (dolist (key to-keys)
+                       (define-key aux-map key def)))))
+               (setq conn--prev-local-minor-modes (seq-copy local-minor-modes)
+                     conn--prev-global-minor-modes (seq-copy global-minor-modes)
+                     conn--define-key-local-tick conn--define-key-tick))
+             (setq conn--aux-map-timer nil))
+           (current-buffer)))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
@@ -3621,7 +3631,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn--kmacro-counter-format ()
   (with-temp-message ""
     (concat
-     (propertize "Kmacro Counter:  " 'face 'bold)
+     (propertize "Kmacro Counter: " 'face 'bold)
      (propertize (format "%s" kmacro-counter) 'face 'transient-value))))
 
 (defun conn--in-kbd-macro-p ()
@@ -3778,14 +3788,17 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
    ["Options:"
     (conn--reverse-switch)
-    ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("m" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
 
 (transient-define-suffix conn--region-dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args (oref transient-current-prefix command)))
-         (regions (region-bounds))
+         (regions (mapcar (pcase-lambda (`(,beg . ,end))
+                            (cons (conn--create-marker beg)
+                                  (conn--create-marker end)))
+                          (region-bounds)))
          (macro (cond ((member "register-read-with-preview" args)
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
@@ -3798,7 +3811,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (when (member "t" args)
       (setq regions (nreverse regions)))
     (save-window-excursion
-      (thread-first 
+      (thread-first
         (conn--region-iterator regions)
         (conn--dispatch-single-buffer)
         (conn--dispatch-with-state 'conn-state)
@@ -3819,7 +3832,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    [:description
     conn--dispatch-options-format
     (conn--reverse-switch)
-    ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)]])
+    ("m" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)]])
 
 
 ;;;; Keymaps
