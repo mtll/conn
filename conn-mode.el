@@ -3374,55 +3374,6 @@ there's a region, all lines that region covers will be duplicated."
           (deactivate-mark t))
       (conn-macro-dispatch iterator))))
 
-(defun conn--read-macro-for-dispatch ()
-  (pcase
-      (car (read-multiple-choice
-            "Dispatch what?"
-            '((?l "last-kbd-macro" "dispatch last-kbd-macro")
-              (?r "register" "dispatch a kmacro register"))
-            nil nil (and (not use-short-answers)
-                         (not (use-dialog-box-p)))))
-    (?l last-kbd-macro)
-    (?r (get-register (register-read-with-preview "Register: ")))))
-
-(defun conn-region-dispatch-macro (&optional macro reverse)
-  (interactive
-   (list (conn--read-macro-for-dispatch)
-         current-prefix-arg))
-  (unless (or (null macro)
-              (stringp macro)
-              (vectorp macro)
-              (kmacro-p macro))
-    (user-error "Register is not a keyboard macro"))
-  (let ((iterator
-         (conn--thread regions
-             (mapcar (pcase-lambda (`(,beg . ,end))
-                       (cons (conn--create-marker beg)
-                             (conn--create-marker end)))
-                     (region-bounds))
-           (if reverse (nreverse regions) regions)
-           (conn--region-iterator regions)
-           (conn--dispatch-single-buffer regions)
-           (conn--dispatch-with-state regions conn-current-state)
-           (conn--pulse-on-record regions))))
-    (save-window-excursion
-      (if rectangle-mark-mode-map
-          (progn
-            (save-mark-and-excursion
-              (conn-macro-dispatch iterator macro))
-            (deactivate-mark t))
-        (conn-macro-dispatch iterator macro)))))
-
-(defun conn--read-buffers-for-dispatch ()
-  (pcase-exhaustive
-      (car (read-multiple-choice
-            "Dispatch on multiple buffers?"
-            '((?o "one by one" "dispatch on buffers read one by one")
-              (?r "matcing regexp" "dispatch on buffers matching regexp"))
-            nil nil nil))
-    (?o (conn-read-dot-buffers))
-    (?r (conn-read-matching-dot-buffers))))
-
 (defun conn-dots-dispatch (&optional arg macro init-fn)
   "Begin recording dot macro for BUFFERS, initially in conn-state.
 
@@ -3784,15 +3735,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (propertize (format "%d" count)
                         'face 'transient-value))))
 
-(transient-define-prefix conn-dots-dispatch-menu (macro buffers)
-  [[:description
-    conn--dot-dispatch-title
-    ("d" "Dispatch" conn--dot-dispatch-suffix)]
-   ["Options:"
-    (conn--reverse-switch)
-    ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
-
 (transient-define-suffix conn--dot-dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
@@ -3829,6 +3771,55 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn--dispatch-with-state dots 'conn-state)
         (conn--pulse-on-record dots)
         (conn-macro-dispatch dots macro)))))
+
+(transient-define-prefix conn-dots-dispatch-menu (macro buffers)
+  [[:description
+    conn--dot-dispatch-title
+    ("d" "Dispatch" conn--dot-dispatch-suffix)]
+   ["Options:"
+    (conn--reverse-switch)
+    ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
+
+(transient-define-suffix conn--region-dispatch-suffix ()
+  :transient 'transient--do-exit
+  (interactive)
+  (let* ((args (transient-args (oref transient-current-prefix command)))
+         (regions (region-bounds))
+         (macro (cond ((member "register-read-with-preview" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Resiter is not a keyboard macro"))
+    (when (member "t" args)
+      (setq regions (nreverse regions)))
+    (save-window-excursion
+      (thread-first 
+        (conn--region-iterator regions)
+        (conn--dispatch-single-buffer)
+        (conn--dispatch-with-state 'conn-state)
+        (conn--pulse-on-record)
+        (conn-macro-dispatch macro)))))
+
+(defun conn--dispatch-options-format ()
+  (concat
+   (propertize "Last KBD Macro: " 'face 'bold)
+   (propertize (if last-kbd-macro
+                   (conn--kmacro-display last-kbd-macro 20)
+                 "nil")
+               'face 'transient-value)))
+
+(transient-define-prefix conn-region-dispatch-menu (macro)
+  [["Dispatch: "
+    ("d" "Dispatch" conn--dot-dispatch-suffix)]
+   [:description
+    conn--dispatch-options-format
+    (conn--reverse-switch)
+    ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)]])
 
 
 ;;;; Keymaps
@@ -4082,8 +4073,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "#"    'conn-query-replace-region
   "$"    'ispell-word
   "%"    'conn-query-replace-regexp-region
-  "!"    'conn-region-dispatch
-  "@"    'conn-region-dispatch-macro
+  "*"    'conn-region-dispatch-menu
   "["    'conn-kill-prepend-region
   "\""   'conn-insert-pair
   "\\"   'indent-region
@@ -4104,16 +4094,16 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-3"   'split-window-right
   "C-4"   'conn-C-x-4-keys
   "C-5"   'conn-C-x-5-keys
-  "C-6"   'conn-C-x-t-keys
-  "C-7"   'delete-other-windows-vertically
+  "C-6"   'tab-switch
+  "C-7"   'conn-C-x-t-keys
   "C-8"   'conn-swap-window-buffers
   "C-9"   'conn-swap-window-buffers-no-select
   "C-0"   'delete-window
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
-  "M-0"   'delete-other-windows-vertically
-  "M-1"   'quit-window
+  "M-0"   'quit-window
+  "M-1"   'delete-other-windows-vertically
   "C-M-0" 'kill-buffer-and-window
   "C-SPC" 'conn-set-mark-command
   "SPC"   'conn-toggle-mark-command
