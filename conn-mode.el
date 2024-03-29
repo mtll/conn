@@ -3777,10 +3777,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :description "Reverse"
   :init-value (lambda (obj) (oset obj value nil)))
 
+(defun conn--dot-dispatch-title ()
+  (let ((count 0))
+    (conn--for-each-dot (lambda (_) (cl-incf count)))
+    (concat (propertize "Dispatch on Dots: " 'face 'bold)
+            (propertize (format "%d" count)
+                        'face 'transient-value))))
+
 (transient-define-prefix conn-dots-dispatch-menu (macro buffers)
-  [["Execute Dispatch:"
+  [[:description
+    conn--dot-dispatch-title
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
-   ["Options: "
+   ["Options:"
     (conn--reverse-switch)
     ("k" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
