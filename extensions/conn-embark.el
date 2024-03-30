@@ -42,6 +42,13 @@
   :type 'string
   :group 'conn-embark)
 
+(defcustom conn-complete-keys-toggle-display-keys
+  "M-j"
+  "Keys bound in `conn-complete-keys' to toggle between tree and flat display.
+Value must satisfy `key-valid-p'."
+  :type 'string
+  :group 'conn-embark)
+
 (defun conn-complete-keys--get-bindings (prefix map)
   (let ((prefix-map (if (= 0 (seq-length prefix))
                         map
@@ -117,13 +124,6 @@ If NESTED is non-nil subkeymaps are not flattened."
      (seq-mapcat #'conn--active-maps maps))
     ((and (pred boundp) (pred symbol-value))
      (conn--active-maps (cdr maps)))))
-
-(defcustom conn-complete-keys-toggle-display-keys
-  "M-j"
-  "Keys bound in `conn-complete-keys' to toggle between tree and flat display.
-Value must satisfy `key-valid-p'."
-  :type 'string
-  :group 'conn-embark)
 
 ;;;###autoload
 (defun conn-complete-keys (prefix map)
@@ -205,6 +205,19 @@ will navigate up out of a keymap."
         ((and `(,_ ,_ ,cmd ,key . ,_)
               (guard (keymapp cmd)))
          (setq prefix (vconcat prefix key)))))))
+
+;;;###autoload
+(defun conn-complete-conn-keys ()
+  (interactive)
+  (conn-complete-keys
+   "" (make-composed-keymap
+       (conn--active-maps (list conn--transition-maps
+                                conn--local-mode-maps
+                                conn--major-mode-maps
+                                conn--local-maps
+                                conn--aux-maps
+                                conn--state-maps
+                                conn-global-map)))))
 
 (defvar conn-complete-keys--prefix-cmd-backup nil)
 
@@ -288,7 +301,8 @@ will navigate up out of a keymap."
       (setf (alist-get thing embark-keymap-alist)
             (remq map (alist-get thing embark-keymap-alist))))))
 
-(keymap-set conn-global-map "M-S-<iso-lefttab>" 'conn-complete-keys)
+(keymap-set conn-global-map "M-S-<iso-lefttab>"   'conn-complete-keys)
+(keymap-set conn-global-map "C-M-S-<iso-lefttab>" 'conn-complete-conn-keys)
 
 (setf (alist-get 'conn-replace-region-substring embark-target-injection-hooks)
       (list #'embark--ignore-target))
