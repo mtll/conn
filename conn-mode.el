@@ -4483,4 +4483,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (when-let ((bounds (bounds-of-thing-at-point thing)))
       (let ((zz-add-zone-anyway-p t))
         (narrow-to-region (car bounds) (cdr bounds))))))
+
+(with-eval-after-load 'edebug
+  (defun conn--edebug-toggle-emacs-state ()
+    (if edebug-mode
+        (conn-emacs-state)
+      (conn-pop-state)))
+  (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 ;;; conn-mode.el ends here
