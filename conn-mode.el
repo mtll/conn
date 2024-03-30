@@ -2441,7 +2441,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
              (not conn--ephemeral-mark)
              (/= (or location (point)) (mark t)))
     (let ((old (nth mark-ring-max (symbol-value ring)))
-          (history-delete-duplicates t))
+          (history-delete-duplicates nil))
       (add-to-history ring (copy-marker (mark-marker)) mark-ring-max)
       (when (and old (not (memq old (symbol-value ring))))
         (set-marker old nil))))
