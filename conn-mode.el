@@ -2873,10 +2873,11 @@ interactively."
 Optionally if REGISTER is specified prepend kill to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (when current-prefix-arg
-                       (register-read-with-preview "Prepend kill to register: "))))
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (when current-prefix-arg
+           (register-read-with-preview "Prepend kill to register: "))))
   (if register
       (prepend-to-register register beg end t)
     (kill-append (pcase (alist-get register-separator register-alist)
@@ -2887,11 +2888,12 @@ interactively."
 
 (defun conn-mark-thing (thing)
   "Mark THING at point."
-  (interactive (list (intern
-                      (completing-read
-                       (format "Thing: ")
-                       (conn--things 'conn--defined-thing-p) nil nil nil
-                       'conn-thing-history))))
+  (interactive
+   (list (intern
+          (completing-read
+           (format "Thing: ")
+           (conn--things 'conn--defined-thing-p)
+           nil nil nil 'conn-thing-history))))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (goto-char (cdr bounds))
     (conn--push-ephemeral-mark (car bounds))
@@ -2899,11 +2901,12 @@ interactively."
 
 (defun conn-narrow-to-thing (thing)
   "Narrow to THING at point."
-  (interactive (list (intern
-                      (completing-read
-                       (format "Thing: ")
-                       (conn--things 'conn--defined-thing-p) nil nil nil
-                       'conn-thing-history))))
+  (interactive
+   (list (intern
+          (completing-read
+           (format "Thing: ")
+           (conn--things 'conn--defined-thing-p)
+           nil nil nil 'conn-thing-history))))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (narrow-to-region (car bounds) (cdr bounds))))
 
@@ -3311,32 +3314,28 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-swap-window-buffers (&optional no-select)
   (interactive "P")
-  (let* ((win1 (selected-window))
-         (buf1 (window-buffer win1))
-         (other-windows (remove win1 (window-list nil 'no-mini))))
-    (pcase (length other-windows)
-      (0)
-      (_ (when-let ((win2 (conn--prompt-for-window other-windows))
-                    (buf2 (window-buffer win2)))
-           (set-window-buffer win2 buf1)
-           (set-window-buffer win1 buf2)
-           (unless no-select
-             (select-window win2)))))))
+  (when-let ((win1 (selected-window))
+             (buf1 (window-buffer win1))
+             (other-windows (remove win1 (window-list nil 'no-mini)))
+             (win2 (conn--prompt-for-window other-windows))
+             (buf2 (window-buffer win2)))
+    (set-window-buffer win2 buf1)
+    (set-window-buffer win1 buf2)
+    (unless no-select
+      (select-window win2))))
 
-(defun conn-swap-window-buffers-no-select ()
+(defun conn-yank-window-buffer ()
   (interactive)
   (conn-swap-window-buffers t))
 
-(defun conn-other-window (&optional swap)
-  (interactive "P")
-  (if swap
-      (conn-swap-window-buffers)
-    (if-let ((other-windows (remove (selected-window) (window-list nil 'no-mini)))
-             (_ (not (length< other-windows conn-other-window-prompt-threshold)))
-             (win (conn--prompt-for-window
-                   (remove (selected-window) (window-list nil 'no-mini)))))
-        (select-window win)
-      (other-window 1))))
+(defun conn-other-window ()
+  (interactive)
+  (if-let ((other-windows (remove (selected-window) (window-list nil 'no-mini)))
+           (_ (not (length< other-windows conn-other-window-prompt-threshold)))
+           (win (conn--prompt-for-window
+                 (remove (selected-window) (window-list nil 'no-mini)))))
+      (select-window win)
+    (other-window 1)))
 
 ;;;;; Transition Functions
 
@@ -4076,7 +4075,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-6"   'tab-switch
   "C-7"   'conn-C-x-t-keys
   "C-8"   'conn-swap-window-buffers
-  "C-9"   'conn-swap-window-buffers-no-select
+  "C-9"   'conn-yank-window-buffer
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
