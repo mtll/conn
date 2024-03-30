@@ -422,6 +422,7 @@ If BUFFER is nil check `current-buffer'."
     (fset name
           (lambda (N)
             (interactive "p")
+            (activate-mark)
             (let ((end (region-end)))
               (if (= (point) end)
                   (progn
@@ -539,7 +540,7 @@ If one has already been created return it, otherwise create a new one.
 Continuous handlers will mark all THINGs when moving over multiple
 THINGs at once unless `use-region-p'."
   (lambda (beg)
-    (unless (or (use-region-p)
+    (unless (or (region-active-p)
                 (= (point) beg)
                 (= 0 (prefix-numeric-value current-prefix-arg)))
       (let* ((dir (cl-signum (- (point) beg)))
