@@ -38,7 +38,6 @@
 (require 'hi-lock)
 (require 'kmacro)
 (require 'seq)
-(require 'tab-bar)
 (require 'thingatpt)
 (require 'sort)
 (eval-when-compile
@@ -3236,33 +3235,6 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (exchange-point-and-mark (not mark-active)))
       (delete-overlay ov))))
 
-(defun conn--uniquify-tab-name (name)
-  (let ((tabs (seq-filter
-               (lambda (tab-name)
-                 (string-match (concat (regexp-quote name)
-                                       "\\( <[0-9]+>\\)?")
-                               tab-name))
-               (mapcar (lambda (tab-name)
-                         (alist-get 'name tab-name))
-                       (funcall tab-bar-tabs-function (selected-frame))))))
-    (if tabs (concat name " <" (number-to-string (length tabs)) ">") name)))
-
-(defun conn-tab-bar-new-named-tab (&optional name)
-  (interactive
-   (list (when current-prefix-arg
-           (conn--uniquify-tab-name (read-from-minibuffer "Tab name: ")))))
-  (tab-bar-new-tab-to)
-  (when name (tab-rename name)))
-
-(defun conn-tab-bar-duplicate-and-name-tab (&optional name)
-  (interactive
-   (list (when current-prefix-arg
-           (conn--uniquify-tab-name (read-from-minibuffer "Tab name: ")))))
-  (let ((tab-bar-new-tab-choice 'clone)
-        (tab-bar-new-tab-group t))
-    (tab-bar-new-tab-to)
-    (when name (tab-rename name))))
-
 (defun conn--duplicate-region-1 (beg end)
   (let* ((region (buffer-substring-no-properties beg end))
          (multiline (seq-contains-p region ?\n))
@@ -4264,8 +4236,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-x n t" 'conn-narrow-to-thing
   "C-x m"   'conn-kmacro-menu
   "C-x r"   conn-ctl-x-r-map
-  "C-x t D" 'conn-tab-bar-duplicate-and-name-tab
-  "C-x t N" 'conn-tab-bar-new-named-tab
   "C-x t s" 'tab-switch
   "M-RET"   'conn-open-line-and-indent
   "M-O"     'conn-pop-to-mark-command
