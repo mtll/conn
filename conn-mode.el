@@ -1176,33 +1176,43 @@ C-x, M-s and M-g into various state maps."
        :type 'string
        :group 'conn-key-remappings)
 
-     (defun ,name ()
+     (defun ,name (&optional interactive-p)
        ,(conn--stringify
          "Conn remapping command.\n"
          "Conn will remap this command to the value of `" name "'.\n"
          "If this function is called interactively it will `user-error'.\n"
          "If called from Emacs lisp it will `call-interactively'\n "
          "the binding of the key sequence in `" name "'.")
-       (interactive)
+       (interactive "p")
        (pcase (keymap--menu-item-binding (conn--lookup-in-conn-keymaps ,name))
          ((and (pred commandp) cmd)
-          (call-interactively cmd))
+          (if interactive-p (call-interactively cmd) cmd))
          (_ (error "Key not bound to a command %s." ,name))))
 
      (cl-pushnew ',name conn--aux-bindings)))
 
-(conn-define-remapping-command conn-C-x-keys             "C-x")
-(conn-define-remapping-command conn-C-c-keys             "C-c")
-(conn-define-remapping-command conn-M-s-keys             "M-s")
-(conn-define-remapping-command conn-M-g-keys             "M-g")
-(conn-define-remapping-command conn-C-x-t-keys           "C-x t")
-(conn-define-remapping-command conn-C-x-4-keys           "C-x 4")
-(conn-define-remapping-command conn-C-x-5-keys           "C-x 5")
-(conn-define-remapping-command conn-delete-char-keys     "C-d")
-(conn-define-remapping-command conn-yank-keys            "C-y")
-(conn-define-remapping-command conn-kill-region-keys     "C-w")
-(conn-define-remapping-command conn-backward-delete-keys "DEL")
-(conn-define-remapping-command conn-delete-region-keys   "C-S-w")
+(conn-define-remapping-command conn-C-x-keys                "C-x")
+(conn-define-remapping-command conn-C-c-keys                "C-c")
+(conn-define-remapping-command conn-M-s-keys                "M-s")
+(conn-define-remapping-command conn-M-g-keys                "M-g")
+(conn-define-remapping-command conn-C-x-t-keys              "C-x t")
+(conn-define-remapping-command conn-C-x-4-keys              "C-x 4")
+(conn-define-remapping-command conn-C-x-5-keys              "C-x 5")
+(conn-define-remapping-command conn-delete-char-keys        "C-d")
+(conn-define-remapping-command conn-yank-keys               "C-y")
+(conn-define-remapping-command conn-kill-region-keys        "C-w")
+(conn-define-remapping-command conn-backward-delete-keys    "DEL")
+(conn-define-remapping-command conn-delete-region-keys      "C-S-w")
+(conn-define-remapping-command conn-forward-sexp-keys       "C-M-f")
+(conn-define-remapping-command conn-backward-sexp-keys      "C-M-b")
+(conn-define-remapping-command conn-forward-word-keys       "M-f")
+(conn-define-remapping-command conn-backward-word-keys      "M-b")
+(conn-define-remapping-command conn-forward-paragraph-keys  "M-}")
+(conn-define-remapping-command conn-backward-paragraph-keys "M-{")
+(conn-define-remapping-command conn-forward-sentence-keys   "M-e")
+(conn-define-remapping-command conn-backward-sentence-keys  "M-a")
+(conn-define-remapping-command conn-beginning-of-defun-keys "C-M-a")
+(conn-define-remapping-command conn-end-of-defun-keys       "C-M-e")
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
@@ -3075,7 +3085,7 @@ of deleting it."
                      (region-end)
                      current-prefix-arg))
   (goto-char end)
-  (conn-yank-keys)
+  (funcall (conn-yank-keys))
   (if arg
       (kill-region start end)
     (delete-region start end)))
@@ -3185,9 +3195,11 @@ the region instead of killing it.
 If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
-         (conn-backward-delete-keys))
+         (funcall (conn-backward-delete-keys) arg))
         ((consp arg)
-         (conn-delete-region-keys))
+         (funcall (conn-delete-region-keys)
+                  (region-beginning)
+                  (region-end)))
         ((numberp arg)
          (conn--thread needle
            (concat "Kill "
@@ -3195,7 +3207,9 @@ If ARG is a numeric prefix argument kill region to a register."
                    "to register:")
            (register-read-with-preview needle)
            (copy-to-register needle nil nil t t)))
-        (t (conn-kill-region-keys))))
+        (t (funcall (conn-kill-region-keys)
+                    (region-beginning)
+                    (region-end)))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
@@ -3486,10 +3500,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (rectangle-mark-mode
          (call-interactively #'string-rectangle))
         (kill
-         (conn-kill-region-keys)
+         (funcall (conn-kill-region-keys) start end)
          (conn-emacs-state))
         (t
-         (conn-delete-region-keys)
+         (funcall (conn-delete-region-keys) start end)
          (conn-emacs-state))))
 
 (defun conn-emacs-state-eol (&optional N)
@@ -4127,25 +4141,25 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c"     'conn-C-c-keys
   "D"     'conn-dot-region
   "g"     'conn-M-g-keys
-  "I"     'backward-paragraph
+  "I"     'conn-backward-paragraph-keys
   "i"     'previous-line
   "J"     'conn-beginning-of-inner-line
   "j"     'conn-goto-char-backward
-  "K"     'forward-paragraph
+  "K"     'conn-forward-paragraph-keys
   "k"     'next-line
   "L"     'conn-end-of-inner-line
   "l"     'conn-goto-char-forward
-  "M"     'end-of-defun
-  "m"     'forward-sexp
-  "N"     'beginning-of-defun
-  "n"     'backward-sexp
-  "O"     'forward-sentence
-  "o"     'forward-word
+  "M"     'conn-end-of-defun-keys
+  "m"     'conn-forward-sexp-keys
+  "N"     'conn-beginning-of-defun-keys
+  "n"     'conn-backward-sexp-keys
+  "O"     'conn-forward-sentence-keys
+  "o"     'conn-forward-word-keys
   "p"     'conn-register-load
   "R"     'indent-relative
   "s"     'conn-M-s-keys
-  "U"     'backward-sentence
-  "u"     'backward-word
+  "U"     'conn-backward-sentence-keys
+  "u"     'conn-backward-word-keys
   "V"     'narrow-to-region
   "v"     'conn-toggle-mark-command
   "W"     'widen
@@ -4426,12 +4440,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "^" 'org-up-element
     ")" 'org-next-visible-heading
     "(" 'org-previous-visible-heading
-    "K" 'org-forward-paragraph
-    "I" 'org-backward-paragraph
-    "U" 'org-forward-sentence
-    "O" 'org-backward-sentence
-    "N" 'org-backward-element
-    "M" 'org-forward-element))
+    "N" 'org-backward-paragraph
+    "M" 'org-forward-paragraph))
 
 (with-eval-after-load 'polymode
   (defvar polymode-move-these-vars-from-old-buffer)
@@ -4456,8 +4466,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
-      "<remap> <forward-sexp>" 'paredit-forward
-      "<remap> <backward-sexp>" 'paredit-backward
       "O" 'paredit-forward-up
       "U" 'paredit-backward-up))
 
@@ -4485,6 +4493,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (narrow-to-region (car bounds) (cdr bounds))))))
 
 (with-eval-after-load 'edebug
+  (defvar edebug-mode)
   (defun conn--edebug-toggle-emacs-state ()
     (if edebug-mode
         (conn-emacs-state)
