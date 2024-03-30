@@ -2436,12 +2436,12 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
-(defun conn--maybe-push-mark-delete-duplicate (ring &optional location)
+(defun conn--maybe-push-mark (ring &optional location)
   (when (and (mark t)
              (not conn--ephemeral-mark)
              (/= (or location (point)) (mark t)))
     (let ((old (nth mark-ring-max (symbol-value ring)))
-          (history-delete-duplicates nil))
+          (history-delete-duplicates t))
       (add-to-history ring (copy-marker (mark-marker)) mark-ring-max)
       (when (and old (not (memq old (symbol-value ring))))
         (set-marker old nil))))
@@ -2452,9 +2452,10 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive)
   (if (null (mark t))
       (user-error "No mark set in this buffer")
-    (when mark-ring
-      (conn--maybe-push-mark-delete-duplicate 'mark-ring)
-      (conn--maybe-push-mark-delete-duplicate 'conn--unpop-ring (car mark-ring))
+    (if (null mark-ring)
+        (user-error "No marks to pop")
+      (conn--maybe-push-mark 'mark-ring)
+      (conn--maybe-push-mark 'conn--unpop-ring (car mark-ring))
       (set-marker (car mark-ring) nil)
       (pop mark-ring)
       (goto-char (mark t)))
@@ -2464,9 +2465,10 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive)
   (if (null (mark t))
       (user-error "No mark set in this buffer")
-    (when conn--unpop-ring
-      (conn--maybe-push-mark-delete-duplicate 'conn--unpop-ring)
-      (conn--maybe-push-mark-delete-duplicate 'mark-ring (car conn--unpop-ring))
+    (if (null conn--unpop-ring)
+        (user-error "No marks to unpop")
+      (conn--maybe-push-mark 'conn--unpop-ring)
+      (conn--maybe-push-mark 'mark-ring (car conn--unpop-ring))
       (set-marker (car conn--unpop-ring) nil)
       (pop conn--unpop-ring)
       (goto-char (mark t)))
