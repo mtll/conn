@@ -1213,6 +1213,8 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-backward-sentence-keys  "M-a")
 (conn-define-remapping-command conn-beginning-of-defun-keys "C-M-a")
 (conn-define-remapping-command conn-end-of-defun-keys       "C-M-e")
+(conn-define-remapping-command conn-next-line-keys          "C-n")
+(conn-define-remapping-command conn-previous-line-keys      "C-p")
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
@@ -4097,6 +4099,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "\""   'conn-insert-pair
   "\\"   'indent-region
   "]"    'conn-kill-append-region
+  "'"    'other-window-prefix
   "c"    'conn-C-c-keys
   "d"    'conn-delete-char-keys
   "q"    'conn-misc-edit-map
@@ -4142,11 +4145,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "D"     'conn-dot-region
   "g"     'conn-M-g-keys
   "I"     'conn-backward-paragraph-keys
-  "i"     'previous-line
+  "i"     'conn-previous-line-keys
   "J"     'conn-beginning-of-inner-line
   "j"     'conn-goto-char-backward
   "K"     'conn-forward-paragraph-keys
-  "k"     'next-line
+  "k"     'conn-next-line-keys
   "L"     'conn-end-of-inner-line
   "l"     'conn-goto-char-forward
   "M"     'conn-end-of-defun-keys
