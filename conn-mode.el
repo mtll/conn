@@ -197,8 +197,13 @@ Each element may be either a symbol or a list of the form
 (defvar-local conn-previous-state nil
   "Previous conn state for buffer.")
 
-(defvar conn-this-thing-handler nil)
-(defvar conn-this-thing-start nil)
+(defvar conn-this-thing-handler nil
+  "Mark handler for current command.
+Commands can set this variable if they need to change their handler
+dynamically.")
+
+(defvar conn-this-thing-start nil
+  "Start position for current mark movement command.")
 
 ;; Keymaps
 (defvar conn--state-maps nil)
@@ -216,6 +221,8 @@ Each element may be either a symbol or a list of the form
 (defvar conn-dot-macro-dispatch-p nil
   "Non-nil during dot macro dispatch.")
 
+;; FIXME: This seems to still contain markers for the base buffer
+;;        when a buffer is cloned with clone-indirect-buffer.
 (defvar-local conn--unpop-ring nil)
 
 (defvar conn--saved-ephemeral-marks nil)
@@ -584,8 +591,7 @@ of the movement command unless `use-region-p'."
   "Push a mark at LOCATION that will not be added to `mark-ring'.
 
 For the meaning of MSG and ACTIVATE see `push-mark'."
-  (let ((global-mark-ring nil))
-    (push-mark location (not msg) activate))
+  (push-mark location (not msg) activate)
   (setq conn--ephemeral-mark t)
   nil)
 
@@ -636,29 +642,17 @@ to determine if mark cursor should be hidden in buffer."
   (put mode-or-state :conn-hide-mark nil))
 
 (defun conn--mark-pre-command-hook ()
-  (if-let ((_ (memq conn-current-state conn-ephemeral-mark-states))
-           (handler (conn--command-property :conn-mark-handler)))
-      (setq conn-this-thing-handler handler
-            conn-this-thing-start (point))
-    (setq conn-this-thing-handler nil
-          conn-this-thing-start nil)))
+  (when-let ((_ (memq conn-current-state conn-ephemeral-mark-states))
+             (handler (conn--command-property :conn-mark-handler)))
+    (setq conn-this-thing-handler handler
+          conn-this-thing-start (point))))
 
 (defun conn--mark-post-command-hook ()
   (with-demoted-errors "error marking thing: %s"
     (when conn-this-thing-handler
-      (funcall conn-this-thing-handler conn-this-thing-start))))
-
-(defun conn-unpop-to-mark-command ()
-  "`pop-mark' and and add it to the conn unpop ring."
-  (interactive)
-  (if (null conn--unpop-ring)
-      (user-error "No markers to unpop")
-    (when (= (point) (car conn--unpop-ring))
-      (push-mark (point) t nil)
-      (set-marker (pop conn--unpop-ring) nil))
-    (goto-char (marker-position (car conn--unpop-ring)))
-    (push-mark (point) t nil)
-    (set-marker (pop conn--unpop-ring) nil)))
+      (funcall conn-this-thing-handler conn-this-thing-start)))
+  (setq conn-this-thing-handler nil
+        conn-this-thing-start nil))
 
 (defun conn--setup-mark ()
   (when conn--mark-cursor-timer
@@ -934,7 +928,7 @@ to determine if mark cursor should be hidden in buffer."
     (conn--delete-dot dot)
     (put-text-property beg end 'conn-dot-text t)))
 
-(defmacro conn-with-dots-as-text-properties (dots &rest body)
+(defmacro conn--with-dots-as-text-properties (dots &rest body)
   (declare (indent 1))
   `(save-mark-and-excursion
      (unwind-protect
@@ -1126,7 +1120,7 @@ If BUFFER is nil use current buffer."
                                        conn--state-maps))))
      ,(macroexp-progn body)))
 
-(defsubst conn--lookup-binding (binding)
+(defsubst conn--lookup-in-conn-keymaps (binding)
   (conn--without-state-maps
     (keymap-lookup nil binding t)))
 
@@ -1161,7 +1155,7 @@ If BUFFER is nil use current buffer."
                          (make-sparse-keymap))))
       (dolist (remapping conn--aux-bindings)
         (when-let ((to-keys (conn--command-keys remapping))
-                   (def (conn--lookup-binding (symbol-value remapping))))
+                   (def (conn--lookup-in-conn-keymaps (symbol-value remapping))))
           (dolist (key to-keys)
             (define-key aux-map key def)))))
     (setq conn--previous-active-maps (conn--active-non-conn-maps))))
@@ -1190,7 +1184,7 @@ C-x, M-s and M-g into various state maps."
          "If called from Emacs lisp it will `call-interactively'\n "
          "the binding of the key sequence in `" name "'.")
        (interactive)
-       (pcase (keymap--menu-item-binding (conn--lookup-binding ,name))
+       (pcase (keymap--menu-item-binding (conn--lookup-in-conn-keymaps ,name))
          ((and (pred commandp) cmd)
           (call-interactively cmd))
          (_ (error "Key not bound to a command %s." ,name))))
@@ -1209,11 +1203,6 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-kill-region-keys     "C-w")
 (conn-define-remapping-command conn-backward-delete-keys "DEL")
 (conn-define-remapping-command conn-delete-region-keys   "C-S-w")
-
-(defun conn-previous-state ()
-  "Transition to previous conn state."
-  (interactive)
-  (funcall conn-previous-state))
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
@@ -1728,7 +1717,7 @@ If STATE is nil make COMMAND always repeat."
       (t (list (conn--completing-read-dot dots))))))
   (let ((beg (conn--create-marker (overlay-start dot)))
         (end (overlay-end dot)))
-    (conn-with-dots-as-text-properties (list dot)
+    (conn--with-dots-as-text-properties (list dot)
       (transpose-regions (region-beginning) (region-end) beg end))))
 
 (defun conn-yank-to-dots ()
@@ -1746,7 +1735,7 @@ If STATE is nil make COMMAND always repeat."
          (old (reverse sort-lists))
          (case-fold-search sort-fold-case))
     (when sort-lists
-      (conn-with-dots-as-text-properties
+      (conn--with-dots-as-text-properties
           (conn--all-overlays #'conn-dotp)
         (setq sort-lists
               (sort sort-lists
@@ -2435,6 +2424,42 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (conn-isearch-split-dots t))
 
 ;;;;; Editing Commands
+
+(defun conn--maybe-push-mark-delete-duplicate (ring &optional location)
+  (when (and (mark t)
+             (not conn--ephemeral-mark)
+             (/= (or location (point)) (mark t)))
+    (let ((old (nth mark-ring-max (symbol-value ring)))
+          (history-delete-duplicates t))
+      (add-to-history ring (copy-marker (mark-marker)) mark-ring-max)
+      (when (and old (not (memq old (symbol-value ring))))
+        (set-marker old nil))))
+  (set-marker (mark-marker) (or location (point)) (current-buffer))
+  (setq conn--ephemeral-mark nil))
+
+(defun conn-pop-to-mark-command ()
+  (interactive)
+  (if (null (mark t))
+      (user-error "No mark set in this buffer")
+    (when mark-ring
+      (conn--maybe-push-mark-delete-duplicate 'mark-ring)
+      (conn--maybe-push-mark-delete-duplicate 'conn--unpop-ring (car mark-ring))
+      (set-marker (car mark-ring) nil)
+      (pop mark-ring)
+      (goto-char (mark t)))
+    (deactivate-mark)))
+
+(defun conn-unpop-to-mark-command ()
+  (interactive)
+  (if (null (mark t))
+      (user-error "No mark set in this buffer")
+    (when conn--unpop-ring
+      (conn--maybe-push-mark-delete-duplicate 'conn--unpop-ring)
+      (conn--maybe-push-mark-delete-duplicate 'mark-ring (car conn--unpop-ring))
+      (set-marker (car conn--unpop-ring) nil)
+      (pop conn--unpop-ring)
+      (goto-char (mark t)))
+    (deactivate-mark)))
 
 (defun conn-minibuffer-yank-region (beg end)
   "Yank region from `minibuffer-selected-window' into minibuffer.
@@ -3981,32 +4006,33 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-misc-edit-map
   :prefix 'conn-misc-edit-map
-  "y"   'yank-rectangle
   "DEL" 'kill-whole-line
-  ";"   'comment-line
-  "TAB" 'indent-rigidly
-  "q"   'indent-for-tab-command
   "RET" 'whitespace-cleanup
-  "f"   'conn-fill-menu
-  "N"   'conn-transpose-paragraphs-backward
-  "M"   'transpose-paragraphs
-  "r"   'query-replace
-  "x"   'query-replace-regexp
+  "SPC" 'conn-transpose-region-and-dot
+  "TAB" 'indent-rigidly
+  ","   'conn-transpose-chars-backward
+  "."   'transpose-chars
+  ";"   'comment-line
   "b"   'regexp-builder
-  "v"   'conn-mark-thing
+  "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
+  "f"   'conn-fill-menu
+  "i"   'conn-transpose-lines-backward
   "j"   'join-line
   "J"   'join-line
-  "i"   'conn-transpose-lines-backward
-  ","   'conn-transpose-chars-backward
   "k"   'transpose-lines
-  "."   'transpose-chars
-  "SPC"   'conn-transpose-region-and-dot
+  "M"   'transpose-paragraphs
   "m"   'transpose-sexps
+  "N"   'conn-transpose-paragraphs-backward
   "n"   'conn-transpose-sexps-backward
-  "T"   'conn-narrow-to-thing
   "o"   'transpose-words
-  "u"   'conn-transpose-words-backward)
+  "q"   'indent-for-tab-command
+  "r"   'query-replace
+  "T"   'conn-narrow-to-thing
+  "u"   'conn-transpose-words-backward
+  "v"   'conn-mark-thing
+  "x"   'query-replace-regexp
+  "y"   'yank-rectangle)
 
 (define-keymap
   :keymap conn-emacs-state-map
@@ -4225,7 +4251,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-x t N" 'conn-tab-bar-new-named-tab
   "C-x t s" 'tab-switch
   "M-RET"   'conn-open-line-and-indent
-  "M-O"     'pop-to-mark-command
+  "M-O"     'conn-pop-to-mark-command
   "M-U"     'conn-unpop-to-mark-command)
 
 (defun conn--setup-keymaps ()
