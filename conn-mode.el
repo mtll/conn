@@ -4336,9 +4336,16 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
+(defvar conn-enable-in-buffer-hook nil
+  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
+Each function is run without any arguments and if any of them return nil
+`conn-local-mode' will not be enabled in the buffer, otherwise
+`conn-local-mode' will be enabled.")
+
 (defun conn--initialize-buffer ()
   "Initialize conn STATE in BUFFER."
-  (conn-local-mode 1))
+  (when (run-hook-with-args-until-failure 'conn-enable-in-buffer-hook)
+    (conn-local-mode 1)))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
