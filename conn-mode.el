@@ -3323,23 +3323,25 @@ there's a region, all lines that region covers will be duplicated."
       overlay)))
 
 (defun conn--prompt-for-window (windows)
-  (if (length= windows 1)
-      (car windows)
-    (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
-                                     windows))
-          num)
-      (unwind-protect
-          (progn
-            (if (length> windows 10)
-                (while (and (not (setq num (read-number "Window: ")))
+  (when (setq windows (seq-remove (lambda (win) (window-dedicated-p win))
+                                  windows))
+    (if (length= windows 1)
+        (car windows)
+      (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
+                                       windows))
+            num)
+        (unwind-protect
+            (progn
+              (if (length> windows 10)
+                  (while (and (not (setq num (read-number "Window: ")))
+                              (>= num 0)
+                              (length> windows num)))
+                (while (and (not (setq num (- (read-char "Window: ") ?0)))
                             (>= num 0)
-                            (length> windows num)))
-              (while (and (not (setq num (- (read-char "Window: ") ?0)))
-                          (>= num 0)
-                          (length> windows num))))
-            (nth num windows))
-        (dolist (ov overlays)
-          (delete-overlay ov))))))
+                            (length> windows num))))
+              (nth num windows))
+          (dolist (ov overlays)
+            (delete-overlay ov)))))))
 
 (defun conn-swap-window-buffers (&optional no-select)
   (interactive "P")
