@@ -87,12 +87,6 @@
   :prefix "conn-"
   :group 'conn-mode)
 
-(defcustom conn-mark-map-prefix-key "b"
-  "Prefix for conn mark thing map.
-Must be a string that satisfies `key-valid-p'."
-  :group 'conn-mode
-  :type 'string)
-
 (defcustom conn-mark-update-delay 0.1
   "Update delay for mark cursor display."
   :type '(number :tag "seconds")
@@ -444,6 +438,7 @@ If BUFFER is nil check `current-buffer'."
                     (conn--push-ephemeral-mark))
                   (forward-thing thing (- N)))))))
     (put name :conn-repeat-command t)
+    (put name 'definition-name 'conn-define-thing)
     name))
 
 (defun conn--thing-bounds-command (thing)
@@ -455,12 +450,13 @@ If BUFFER is nil check `current-buffer'."
               (`(,beg . ,end)
                (goto-char beg)
                (conn--push-ephemeral-mark end)))))
+    (put name 'definition-name 'conn-define-thing)
     name))
 
 (defun conn-define-thing (thing &rest rest)
   "Define a new thing.
 
-\(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS)"
+\(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS MODES MARK-KEY EXPAND-KEY)"
   (unless (or (intern-soft (format "forward-%s" thing))
               (get thing 'forward-op)
               (memq :forward-op rest)
@@ -476,12 +472,11 @@ If BUFFER is nil check `current-buffer'."
     (put thing 'forward-op forward))
   (when-let ((_ (get thing 'forward-op))
              (binding (plist-get rest :expand-key)))
-    (if-let ((modes (plist-get rest :modes)))
+    (if-let ((modes (ensure-list (plist-get rest :modes))))
         (dolist (mode modes)
-          (dolist (state (plist-get rest :states))
-            (keymap-set (conn-get-mode-map state mode)
-                        (concat conn-mark-map-prefix-key " " binding)
-                        (conn--thing-expander-command thing))))
+          (setf (alist-get binding (get mode :conn-mode-things)
+                           nil nil #'equal)
+                (conn--thing-expander-command thing)))
       (keymap-set conn-mark-thing-map binding
                   (conn--thing-expander-command thing))))
   (when-let ((beg (plist-get rest :beg-op)))
@@ -494,12 +489,11 @@ If BUFFER is nil check `current-buffer'."
              (handler (plist-get rest :handler)))
     (conn-set-mark-handler commands handler))
   (when-let ((binding (plist-get rest :mark-key)))
-    (if-let ((modes (plist-get rest :modes)))
+    (if-let ((modes (ensure-list (plist-get rest :modes))))
         (dolist (mode modes)
-          (dolist (state (plist-get rest :states))
-            (keymap-set (conn-get-mode-map state mode)
-                        (concat conn-mark-map-prefix-key " " binding)
-                        (conn--thing-bounds-command thing))))
+          (setf (alist-get binding (get mode :conn-mode-things)
+                           nil nil #'equal)
+                (conn--thing-bounds-command thing)))
       (keymap-set conn-mark-thing-map binding
                   (conn--thing-bounds-command thing)))))
 
@@ -1119,6 +1113,22 @@ If BUFFER is nil use current buffer."
                                        conn--state-maps))))
      ,(macroexp-progn body)))
 
+(defsubst conn--modes-mark-map ()
+  (let ((selectors)
+        (keymap))
+    (dolist (minor-mode local-minor-modes)
+      (setq selectors (nconc (get minor-mode :conn-mode-things)
+                             selectors)))
+    (dolist (major-mode (derived-mode-all-parents major-mode))
+      (setq selectors (nconc (get major-mode :conn-mode-things)
+                             selectors)))
+    (when selectors
+      (setq keymap (make-sparse-keymap)
+            selectors (nreverse selectors))
+      (pcase-dolist (`(,binding . ,command) selectors)
+        (keymap-set keymap binding command))
+      keymap)))
+
 (defsubst conn--lookup-in-conn-keymaps (binding)
   (conn--without-state-maps
     (keymap-lookup nil binding t)))
@@ -1156,7 +1166,10 @@ If BUFFER is nil use current buffer."
         (when-let ((to-keys (conn--command-keys remapping))
                    (def (conn--lookup-in-conn-keymaps (symbol-value remapping))))
           (dolist (key to-keys)
-            (define-key aux-map key def)))))
+            (define-key aux-map key def))))
+      (when-let ((selectors (conn--modes-mark-map)))
+        (dolist (key (conn--command-keys 'conn-mark-thing-map))
+          (define-key aux-map key selectors))))
     (setq conn--previous-active-maps (conn--active-non-conn-maps))))
 
 (defmacro conn-define-remapping-command (name from-keys)

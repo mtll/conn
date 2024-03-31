@@ -47,7 +47,6 @@
 
 (conn-define-thing
  'inner-function
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key "f"
  :bounds-op (lambda ()
@@ -55,7 +54,6 @@
 
 (conn-define-thing
  'inner-loop
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key "p"
  :bounds-op (lambda ()
@@ -63,7 +61,6 @@
 
 (conn-define-thing
  'inner-conditional
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key "i"
  :bounds-op (lambda ()
@@ -71,7 +68,6 @@
 
 (conn-define-thing
  'inner-assignment
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key "a"
  :bounds-op (lambda ()
@@ -79,7 +75,6 @@
 
 (conn-define-thing
  'inner-class
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key "c"
  :bounds-op (lambda ()
@@ -87,7 +82,6 @@
 
 (conn-define-thing
  'inner-comment
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key ";"
  :bounds-op (lambda ()
@@ -95,52 +89,17 @@
 
 (conn-define-thing
  'inner-parameter
- :states '(conn-state conn-dot-state)
  :modes conn--ts-modes
  :mark-key "p"
  :bounds-op (lambda ()
               (evil-textobj-tree-sitter--thing-at-point-bounds "parameter.inner")))
 
-(conn-define-thing
- 'function
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key "F")
-
-(conn-define-thing
- 'loop
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key "P")
-
-(conn-define-thing
- 'conditional
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key "I")
-
-(conn-define-thing
- 'assignment
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key "A")
-
-(conn-define-thing
- 'class
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key "C")
-
-(conn-define-thing
- 'comment
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key ":")
-
-(conn-define-thing
- 'parameter
- :states '(conn-state conn-dot-state)
- :modes conn--ts-modes
- :mark-key "P")
+(conn-define-thing 'function    :modes conn--ts-modes :mark-key "F")
+(conn-define-thing 'loop        :modes conn--ts-modes :mark-key "P")
+(conn-define-thing 'conditional :modes conn--ts-modes :mark-key "I")
+(conn-define-thing 'assignment  :modes conn--ts-modes :mark-key "A")
+(conn-define-thing 'class       :modes conn--ts-modes :mark-key "C")
+(conn-define-thing 'comment     :modes conn--ts-modes :mark-key ":")
+(conn-define-thing 'parameter   :modes conn--ts-modes :mark-key "P")
 
 (provide 'conn-evil-treesit-obj)
