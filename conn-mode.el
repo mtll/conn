@@ -4010,8 +4010,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ";"   'comment-line
   "b"   'regexp-builder
   "c"   'clone-indirect-buffer
-  "d"   'conn-fill-menu
-  "f"   'duplicate-dwim
+  "d"   'duplicate-dwim
+  "f"   'conn-fill-menu
   "i"   'conn-transpose-lines-backward
   "j"   'join-line
   "J"   'join-line
@@ -4080,7 +4080,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "'"     'other-window-prefix
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
-  "e"     'conn-misc-edit-map
+  "q"     'conn-misc-edit-map
   "r"     'conn-region-map
   "w"     'conn-kill-region
   "y"     'conn-yank-keys

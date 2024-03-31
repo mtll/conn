@@ -266,7 +266,7 @@ will navigate up out of a keymap."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'conn-embark-dwim-keys)
-  "q" 'embark-dwim
+  "e" 'embark-dwim
   "h" 'embark-alt-dwim)
 
 (defvar conn-embark-alt-expression-map)
