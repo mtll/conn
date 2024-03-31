@@ -256,6 +256,12 @@ See `conn--dispatch-on-regions'.")
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
 
+(defvar conn-enable-in-buffer-hook nil
+  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
+Each function is run without any arguments and if any of them return nil
+`conn-local-mode' will not be enabled in the buffer, otherwise
+`conn-local-mode' will be enabled.")
+
 ;;;;; Command Histories
 
 (defvar conn-thing-history nil)
@@ -1155,10 +1161,11 @@ If BUFFER is nil use current buffer."
         (push key keys)))
     keys))
 
-(defun conn--update-aux-map ()
+(defun conn--update-aux-map (&optional force)
   (when (and conn-local-mode
-             (not (equal conn--previous-active-maps
-                         (conn--active-non-conn-maps))))
+             (or (not (equal conn--previous-active-maps
+                             (conn--active-non-conn-maps)))
+                 force))
     (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
                          (make-sparse-keymap))))
       (dolist (remapping conn--aux-bindings)
@@ -1480,10 +1487,8 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :buffer-face ((t :inherit default))
   :ephemeral-marks t
   :transitions (define-keymap
-                 "<escape>" 'conn-view-state
-                 "<f7>"     'conn-pop-state
-                 "<f8>"     'conn-state
-                 "<f9>"     'conn-dot-state))
+                 "<escape>" 'conn-state
+                 "C-z"      'conn-region-dispatch))
 
 (conn-define-state conn-view-state
   "Activate `conn-view-state' in the current buffer.
@@ -1500,12 +1505,8 @@ from view state.  See `conn-view-state-map' for commands bound by view state."
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "f"        'conn-emacs-state
-                 "="        'conn-dot-state
-                 "<f8>"     'conn-state
-                 "<f9>"     'conn-dot-state
-                 "<escape>" 'conn-pop-state
-                 "w"        'conn-view-state-quit
-                 "c"        'conn-state)
+                 "<escape>" 'conn-state
+                 "w"        'conn-view-state-quit)
   (if conn-view-state
       (progn
         (setq-local conn-view-state--start-marker (point-marker)))
@@ -1527,26 +1528,17 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "f"        'conn-emacs-state
-                 "<escape>" 'conn-view-state
+                 "<escape>" 'conn-dot-state
+                 "\\"       'conn-region-dispatch
                  "t"        'conn-change
-                 "<tab> i"  'conn-emacs-state-open-line-above
-                 "<tab> k"  'conn-emacs-state-open-line
-                 "<tab> l"  'conn-emacs-state-eol
-                 "<tab> j"  'conn-emacs-state-bol
-                 "<tab> o"  'conn-emacs-state-overwrite
-                 "<tab> u"  'conn-emacs-state-overwrite-binary
-                 "<tab> v"  'conn-quoted-insert-overwrite
-                 "TAB i"    'conn-emacs-state-open-line-above
-                 "TAB k"    'conn-emacs-state-open-line
-                 "TAB l"    'conn-emacs-state-eol
-                 "TAB j"    'conn-emacs-state-bol
-                 "TAB o"    'conn-emacs-state-overwrite
-                 "TAB u"    'conn-emacs-state-overwrite-binary
-                 "TAB v"    'conn-quoted-insert-overwrite
-                 "<f7>"     'conn-emacs-state
-                 "<f8>"     'conn-pop-state
-                 "<f9>"     'conn-dot-state
-                 "="        'conn-dot-state))
+                 "F i"      'conn-emacs-state-open-line-above
+                 "F k"      'conn-emacs-state-open-line
+                 "F l"      'conn-emacs-state-eol
+                 "F j"      'conn-emacs-state-bol
+                 "F o"      'conn-emacs-state-overwrite
+                 "F u"      'conn-emacs-state-overwrite-binary
+                 "F v"      'conn-quoted-insert-overwrite
+                 "*"        'conn-region-dispatch-menu))
 
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
@@ -1563,10 +1555,9 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
-                 "<escape>" 'conn-view-state
-                 "<f7>"     'conn-emacs-state
-                 "<f8>"     'conn-state
-                 "<f9>"     'conn-pop-state
+                 "<escape>" 'conn-state
+                 "*"        'conn-dots-dispatch-menu
+                 "\\"       'conn-dots-dispatch
                  "f"        'conn-emacs-state
                  "Q"        'conn-dot-quit)
   (if conn-dot-state
@@ -1600,10 +1591,7 @@ state."
                  "F"        'conn-emacs-state-menu
                  "E"        'conn-emacs-state-eol
                  "A"        'conn-emacs-state-eol
-                 "="        'conn-dot-state
-                 "<f8>"     'conn-state
-                 "<f9>"     'conn-dot-state
-                 "<escape>" 'conn-pop-state))
+                 "\\"       'conn-state))
 (put 'conn-org-tree-edit-state :conn-hide-mark t)
 
 
@@ -3902,8 +3890,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "s"   'conn-sort-menu
   "u"   'conn-insert-pair
   "v"   'vc-region-history
-  "w"   'delete-region
-  "x"   'conn-query-replace-regexp-region)
+  "w"   'conn-query-replace-regexp-region)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -4021,8 +4008,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ";"   'comment-line
   "b"   'regexp-builder
   "c"   'clone-indirect-buffer
-  "d"   'duplicate-dwim
-  "f"   'conn-fill-menu
+  "d"   'conn-fill-menu
+  "f"   'duplicate-dwim
   "i"   'conn-transpose-lines-backward
   "j"   'join-line
   "J"   'join-line
@@ -4035,14 +4022,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "q"   'indent-for-tab-command
   "r"   'query-replace
   "T"   'conn-narrow-to-thing
+  "w"   'query-replace-regexp
   "u"   'conn-transpose-words-backward
   "v"   'conn-mark-thing
-  "x"   'query-replace-regexp
   "y"   'yank-rectangle)
-
-(define-keymap
-  :keymap conn-emacs-state-map
-  "C-z"  'conn-region-dispatch)
 
 (define-keymap
   :keymap conn-dot-state-map
@@ -4061,7 +4044,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "!"           'conn-dots-dispatch
   "@"           'conn-dots-dispatch-menu
   "|"           'conn-remove-dots-outside-region
-  "\\"          'conn-dot-trim-regexp
+  "="          'conn-dot-trim-regexp
   "["           'conn-remove-dots-before
   "]"           'conn-remove-dots-after
   "c"           'conn-split-dots-on-regexp
@@ -4078,27 +4061,29 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap conn-state-map
-  "C-y"  'conn-yank-replace
-  "C-z"  'conn-region-dispatch
-  "M-y"  'conn-completing-yank-replace
-  "#"    'conn-query-replace-region
-  "$"    'ispell-word
-  "%"    'conn-query-replace-regexp-region
-  "&"    'conn-region-dispatch-menu
-  "*"    'calc-dispatch
-  "["    'conn-kill-prepend-region
-  "\""   'conn-insert-pair
-  "\\"   'indent-region
-  "]"    'conn-kill-append-region
-  "'"    'other-window-prefix
-  "c"    'conn-C-c-keys
-  "d"    'conn-delete-char-keys
-  "q"    'conn-misc-edit-map
-  "r"    'conn-region-map
-  "w"    'conn-kill-region
-  "y"    'conn-yank-keys
-  "Y"    'yank-from-kill-ring
-  "|"    'shell-command-on-region)
+  "C-y"   'conn-yank-replace
+  "C-z"   'conn-region-dispatch
+  "M-y"   'conn-completing-yank-replace
+  "="     'indent-relative
+  "#"     'conn-query-replace-region
+  "$"     'ispell-word
+  "%"     'conn-query-replace-regexp-region
+  "&"     'conn-region-dispatch-menu
+  "*"     'calc-dispatch
+  "["     'conn-kill-prepend-region
+  "\""    'conn-insert-pair
+  "TAB"   'indent-region
+  "<tab>" 'indent-region
+  "]"     'conn-kill-append-region
+  "'"     'other-window-prefix
+  "c"     'conn-C-c-keys
+  "d"     'conn-delete-char-keys
+  "e"     'conn-misc-edit-map
+  "r"     'conn-region-map
+  "w"     'conn-kill-region
+  "y"     'conn-yank-keys
+  "Y"     'yank-from-kill-ring
+  "|"     'shell-command-on-region)
 
 (define-keymap
   :keymap conn-common-map
@@ -4353,12 +4338,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
-(defvar conn-enable-in-buffer-hook nil
-  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
-Each function is run without any arguments and if any of them return nil
-`conn-local-mode' will not be enabled in the buffer, otherwise
-`conn-local-mode' will be enabled.")
-
 (defun conn--initialize-buffer ()
   "Initialize conn STATE in BUFFER."
   (when (run-hook-with-args-until-failure 'conn-enable-in-buffer-hook)
@@ -4378,7 +4357,6 @@ Each function is run without any arguments and if any of them return nil
                     slime-xref-mode
                     calc-mode
                     calc-trail-mode
-                    view-mode
                     special-mode)
                t)
   (progn
@@ -4408,6 +4386,8 @@ Each function is run without any arguments and if any of them return nil
 
 (with-eval-after-load 'org
   (defvar org-mode-map)
+  (declare-function org-backward-sentence "org")
+  (declare-function org-forward-sentence "org")
 
   (conn-define-thing
    'org-paragraph
