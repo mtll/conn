@@ -636,15 +636,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--mark-cursor-timer-func ()
   (walk-windows #'conn--mark-cursor-timer-func-1 nil 'visible))
 
-(defun conn-hide-mark-cursor (mode-or-state &optional predicate)
-  "Hide mark cursor in buffers with in MODE-OR-STATE.
+(defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
+  "Hide mark cursor in buffers with in MMODE-OR-STATE.
 If PREDICATE is non-nil it is a function that will be called
-to determine if mark cursor should be hidden in buffer."
-  (put mode-or-state :conn-hide-mark (or predicate t)))
+to determine if mark cursor should be hidden in buffer.
+If MMODE-OR-STATE is a mode it must be a major mode."
+  (put mmode-or-state :conn-hide-mark (or predicate t)))
 
-(defun conn-show-mark-cursor (mode-or-state)
-  "Show mark cursor in MODE-OR-STATE."
-  (put mode-or-state :conn-hide-mark nil))
+(defun conn-show-mark-cursor (mmode-or-state)
+  "Show mark cursor in MMODE-OR-STATE.
+If MMODE-OR-STATE is a mode it must be a major mode."
+  (put mmode-or-state :conn-hide-mark nil))
 
 (defun conn--mark-pre-command-hook ()
   (when-let ((_ (memq conn-current-state conn-ephemeral-mark-states))
@@ -3545,6 +3547,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
 
 (conn-define-thing
+ 'page
+ :handler (conn-individual-thing-handler 'page)
+ :mark-key "}"
+ :forward-op 'forward-page
+ :commands '(forward-page backward-page))
+
+(conn-define-thing
  'dot
  :handler (conn-individual-thing-handler 'dot)
  :expand-key "."
@@ -4113,6 +4122,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "%"     'conn-query-replace-regexp-region
   "&"     'conn-region-dispatch-menu
   "*"     'calc-dispatch
+  ")"     'forward-page
+  "("     'backward-page
   "["     'conn-kill-prepend-region
   "\""    'conn-insert-pair
   "TAB"   'indent-region
