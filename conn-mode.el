@@ -427,6 +427,9 @@ If BUFFER is nil check `current-buffer'."
   (let ((name (conn--symbolicate "conn-" thing "-expand")))
     (fset name
           (lambda (N)
+            (conn--stringify
+             "Expand region by " thing " at both ends.\n"
+             "Activates the mark if it isn't already active.")
             (interactive "p")
             (activate-mark)
             (let ((end (region-end)))
@@ -451,6 +454,7 @@ If BUFFER is nil check `current-buffer'."
   (let ((name (conn--symbolicate "conn-mark-" thing)))
     (fset name
           (lambda ()
+            (conn--stringify "Mark the " thing " at point.")
             (interactive)
             (pcase (bounds-of-thing-at-point thing)
               (`(,beg . ,end)
@@ -1227,20 +1231,24 @@ C-x, M-s and M-g into various state maps."
   `(progn
      (defcustom ,name
        ,from-keys
-       ,(conn--stringify
-         "Key sequence for `" name "' to remap.\n"
-         "Set this variable to change `" name "''s remapping.\n"
-         "The key sequence must satisfy `key-valid-p'.")
+       ,(string-fill
+         (conn--stringify
+          "Key sequence for `" name "' to remap.\n"
+          "Set this variable to change `" name "''s remapping.  "
+          "The key sequence must satisfy `key-valid-p'.")
+         70)
        :type 'string
        :group 'conn-key-remappings)
 
      (defun ,name (&optional interactive-p)
-       ,(conn--stringify
-         "Conn remapping command.\n"
-         "Conn will remap this command to the value of `" name "'.\n"
-         "If this function is called interactively it will `user-error'.\n"
-         "If called from Emacs lisp it will `call-interactively'\n "
-         "the binding of the key sequence in `" name "'.")
+       ,(string-fill
+         (conn--stringify
+          "Conn remapping command.  "
+          "Conn will remap this command to the value of `" name "'.  "
+          "If this function is called interactively it will `user-error'.  "
+          "If called from Emacs lisp it will `call-interactively' "
+          "the binding of the key sequence in `" name "'.")
+         70)
        (interactive "p")
        (pcase (keymap--menu-item-binding (conn--lookup-in-conn-keymaps ,name))
          ((and (pred commandp) cmd)
@@ -1413,15 +1421,10 @@ BODY contains code to be executed each time the transition function is executed.
          ,(conn--stringify "Keymap active in `" name "'."))
 
        (defvar ,transition-map-name ,transitions
-         ,(with-temp-buffer
-            (insert (conn--stringify
-                     "Keymap for commands that transition from `"
-                     name "' to other states."))
-            (goto-char (point-min))
-            (let ((fill-column 70)
-                  (adaptive-fill-mode nil))
-              (fill-region (point-min) (point-max)))
-            (buffer-string)))
+         ,(string-fill (conn--stringify
+                        "Keymap for commands that transition from `"
+                        name "' to other states.")
+                       70))
 
        (defface ,lighter-face-name
          ',lighter-face
