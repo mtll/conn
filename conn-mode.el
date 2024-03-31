@@ -1152,10 +1152,7 @@ If BUFFER is nil use current buffer."
           (push map maps))))
     maps))
 
-(defsubst conn--active-non-conn-maps ()
-  (conn--without-state-maps (current-active-maps)))
-
-(defsubst conn--command-keys (cmd)
+(defun conn--command-keys (cmd)
   (let ((keymaps (conn--active-conn-maps))
         keys)
     (dolist (key (where-is-internal cmd keymaps nil t))
@@ -1163,22 +1160,63 @@ If BUFFER is nil use current buffer."
         (push key keys)))
     keys))
 
+(defsubst conn--remapped-key-defs ()
+  (let ((remapped))
+    (dolist (sym conn--aux-bindings)
+      (push (keymap-lookup nil (symbol-value sym)) remapped))
+    (nreverse remapped)))
+
 (defun conn--update-aux-map (&optional force)
-  (when (and conn-local-mode
-             (or (not (equal conn--previous-active-maps
-                             (conn--active-non-conn-maps)))
-                 force))
-    (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                         (make-sparse-keymap))))
-      (dolist (remapping conn--aux-bindings)
-        (when-let ((to-keys (conn--command-keys remapping))
-                   (def (conn--lookup-in-conn-keymaps (symbol-value remapping))))
-          (dolist (key to-keys)
-            (define-key aux-map key def))))
-      (when-let ((selectors (conn--modes-mark-map)))
-        (dolist (key (conn--command-keys 'conn-mark-thing-map))
-          (define-key aux-map key selectors))))
-    (setq conn--previous-active-maps (conn--active-non-conn-maps))))
+  ;; We try to avoid completely regenerating the aux map as best we can.
+  ;; It is an expensive operation that shouldn't be done often and this
+  ;; function lives in the post-command-hook.
+  (let ((next-active-maps (list conn--aux-bindings (current-active-maps))))
+    (when (and conn-local-mode
+               (or (and (not (equal (car conn--previous-active-maps)
+                                    (car next-active-maps)))
+                        ;; We need to generate the remapped
+                        ;; key definitions in this path too.
+                        (setcdr (cdr next-active-maps)
+                                (conn--remapped-key-defs)))
+                   (and
+                    ;; Has the value of (current-active-maps) changed?
+                    (not (equal (cadr conn--previous-active-maps)
+                                (cadr next-active-maps)))
+                    ;; If so has the value of any of our
+                    ;; remapped key definitions changed?
+                    (not (equal (cddr conn--previous-active-maps)
+                                (setcdr (cdr next-active-maps)
+                                        (conn--remapped-key-defs)))))
+                   force))
+      ;; If our key remappings haven't changed we can scan down the
+      ;; current and previous lists of remapping key definitions
+      ;; and only do the expensive conn--command-keys operation if
+      ;; the definition has changed since the last time we updated.
+      (if (equal (car conn--previous-active-maps)
+                 (car next-active-maps))
+          (let ((sentinals conn--aux-bindings)
+                (aux-map (alist-get conn-current-state conn--aux-maps))
+                (previous (cddr conn--previous-active-maps))
+                (next (cddr next-active-maps)))
+            (while next
+              (unless (equal (car next) (car previous))
+                (dolist (key (conn--command-keys (car sentinals)))
+                  (define-key aux-map key (car next))))
+              (pop sentinals)
+              (pop next)
+              (pop previous)))
+        ;; The key remappings have changed, give up and regenerate the aux map.
+        (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
+                             (make-sparse-keymap))))
+          (dolist (remapping conn--aux-bindings)
+            (when-let ((to-keys (conn--command-keys remapping))
+                       (def (conn--lookup-in-conn-keymaps (symbol-value remapping))))
+              (dolist (key to-keys)
+                (define-key aux-map key def))))
+          (when-let ((selectors (conn--modes-mark-map)))
+            (dolist (key (conn--command-keys 'conn-mark-thing-map))
+              (define-key aux-map key selectors)))))
+      (setq conn--previous-active-maps next-active-maps))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
