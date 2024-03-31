@@ -40,8 +40,8 @@
 (require 'seq)
 (require 'thingatpt)
 (require 'sort)
+(require 'subr-x)
 (eval-when-compile
-  (require 'subr-x)
   (require 'cl-lib))
 
 
@@ -423,50 +423,47 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Mark
 
-(defun conn--thing-expander-command (thing)
+(defmacro conn--thing-expander-command (thing)
   (let ((name (conn--symbolicate "conn-" thing "-expand")))
-    (fset name
-          (lambda (N)
-            (conn--stringify
-             "Expand region by " thing " at both ends.\n"
-             "Activates the mark if it isn't already active.")
-            (interactive "p")
-            (activate-mark)
-            (let ((end (region-end)))
-              (if (= (point) end)
-                  (progn
-                    (forward-thing thing N)
-                    (save-excursion
-                      (conn-exchange-mark-command)
-                      (forward-thing thing (- N))
-                      (conn--push-ephemeral-mark)))
-                (progn
-                  (save-excursion
-                    (conn-exchange-mark-command)
-                    (forward-thing thing N)
-                    (conn--push-ephemeral-mark))
-                  (forward-thing thing (- N)))))))
-    (put name :conn-repeat-command t)
-    (put name 'definition-name 'conn-define-thing)
-    name))
+    `(progn
+       (defun ,name (N)
+         (interactive "p")
+         (activate-mark)
+         (let ((end (region-end)))
+           (if (= (point) end)
+               (progn
+                 (forward-thing ',thing N)
+                 (save-excursion
+                   (conn-exchange-mark-command)
+                   (forward-thing ',thing (- N))
+                   (conn--push-ephemeral-mark)))
+             (progn
+               (save-excursion
+                 (conn-exchange-mark-command)
+                 (forward-thing ',thing N)
+                 (conn--push-ephemeral-mark))
+               (forward-thing ',thing (- N))))))
+      (put ',name :conn-repeat-command t)
+      (put ',name 'definition-name 'conn-define-thing)
+      ',name)))
 
-(defun conn--thing-bounds-command (thing)
+(defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
-    (fset name
-          (lambda ()
-            (conn--stringify "Mark the " thing " at point.")
-            (interactive)
-            (pcase (bounds-of-thing-at-point thing)
-              (`(,beg . ,end)
-               (goto-char beg)
-               (conn--push-ephemeral-mark end)))))
-    (put name 'definition-name 'conn-define-thing)
-    name))
+    `(progn
+       (defun ,name ()
+           (interactive)
+         (pcase (bounds-of-thing-at-point ',thing)
+           (`(,beg . ,end)
+            (goto-char beg)
+            (conn--push-ephemeral-mark end))))
+       (put ',name 'definition-name 'conn-define-thing)
+       ',name)))
 
-(defun conn-define-thing (thing &rest rest)
+(defmacro conn-define-thing (thing &rest rest)
   "Define a new thing.
 
 \(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS MODES MARK-KEY EXPAND-KEY)"
+  (declare (indent 1))
   (unless (or (intern-soft (format "forward-%s" thing))
               (get thing 'forward-op)
               (memq :forward-op rest)
@@ -478,36 +475,46 @@ If BUFFER is nil check `current-buffer'."
                        (memq :end-op rest))))
     (error "%s definition requires at least one of: %s, %s, or (%s and %s)"
            thing :forward-op :bounds-op :beg-op :end-op))
-  (when-let ((forward (plist-get rest :forward-op)))
-    (put thing 'forward-op forward))
-  (when-let ((_ (get thing 'forward-op))
-             (binding (plist-get rest :expand-key)))
-    (if-let ((modes (ensure-list (plist-get rest :modes))))
-        (dolist (mode modes)
-          (setf (alist-get binding (get (intern (symbol-name mode))
-                                        :conn-mode-things)
-                           nil nil #'equal)
-                (conn--thing-expander-command thing)))
-      (keymap-set conn-mark-thing-map binding
-                  (conn--thing-expander-command thing))))
-  (when-let ((beg (plist-get rest :beg-op)))
-    (put thing 'beginning-op beg))
-  (when-let ((end (plist-get rest :end-op)))
-    (put thing 'end-op end))
-  (when-let ((bounds (plist-get rest :bounds-op)))
-    (put thing 'bounds-of-thing-at-point bounds))
-  (when-let ((commands (plist-get rest :commands))
-             (handler (plist-get rest :handler)))
-    (conn-set-mark-handler commands handler))
-  (when-let ((binding (plist-get rest :mark-key)))
-    (if-let ((modes (ensure-list (plist-get rest :modes))))
-        (dolist (mode modes)
-          (setf (alist-get binding (get (intern (symbol-name mode))
-                                        :conn-mode-things)
-                           nil nil #'equal)
-                (conn--thing-bounds-command thing)))
-      (keymap-set conn-mark-thing-map binding
-                  (conn--thing-bounds-command thing)))))
+  (macroexp-progn
+   (nconc
+    `((intern ,(symbol-name thing)))
+    (when-let ((forward (plist-get rest :forward-op)))
+      `((put ',thing 'forward-op ,forward)))
+    (when-let ((beg (plist-get rest :beg-op)))
+      `((put ',thing 'beginning-op ,beg)))
+    (when-let ((end (plist-get rest :end-op)))
+      `((put ',thing 'end-op ,end)))
+    (when-let ((bounds (plist-get rest :bounds-op)))
+      `((put ',thing 'bounds-of-thing-at-point ,bounds)))
+    (when-let ((commands (plist-get rest :commands))
+               (handler (plist-get rest :handler)))
+      `((conn-set-mark-handler ,commands ,handler)))
+    (when-let ((binding (plist-get rest :mark-key)))
+      (if-let ((modes (ensure-list (plist-get rest :modes))))
+          (let ((forms))
+            (dolist (mode modes)
+              (push
+               `(setf (alist-get ,binding (get ',mode :conn-mode-things)
+                                 nil nil #'equal)
+                      (conn--thing-bounds-command ,thing))
+               forms))
+            forms)
+        `((keymap-set conn-mark-thing-map ,binding
+                      (conn--thing-bounds-command ,thing)))))
+    (when-let ((_ (or (get thing 'forward-op)
+                      (plist-get rest :forward-op)))
+               (binding (plist-get rest :expand-key)))
+      (if-let ((modes (ensure-list (plist-get rest :modes))))
+          (let ((forms))
+            (dolist (mode ',modes)
+              (push
+               `(setf (alist-get ,binding (get ',mode :conn-mode-things)
+                                 nil nil #'equal)
+                      (conn--thing-expander-command ,thing))
+               forms))
+            forms)
+        `((keymap-set conn-mark-thing-map ,binding
+                      (conn--thing-expander-command ,thing))))))))
 
 (defmacro conn-define-thing-handler (name args &rest rest)
   "Define a thing movement command mark handler constructor.
@@ -3546,100 +3553,87 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
 
-(conn-define-thing
- 'page
- :handler (conn-individual-thing-handler 'page)
- :mark-key "}"
- :forward-op 'forward-page
- :commands '(forward-page backward-page))
+(conn-define-thing page
+  :handler (conn-individual-thing-handler 'page)
+  :forward-op 'forward-page
+  :commands '(forward-page backward-page))
 
-(conn-define-thing
- 'dot
- :handler (conn-individual-thing-handler 'dot)
- :expand-key "."
- :beg-op (lambda () (conn-previous-dot 1))
- :end-op (lambda () (conn-next-dot 1))
- :commands '(conn-next-dot conn-previous-dot))
+(conn-define-thing dot
+  :handler (conn-individual-thing-handler 'dot)
+  :expand-key "."
+  :beg-op (lambda () (conn-previous-dot 1))
+  :end-op (lambda () (conn-next-dot 1))
+  :commands '(conn-next-dot conn-previous-dot))
 
-(conn-define-thing
- 'word
- :handler (conn-sequential-thing-handler 'word)
- :expand-key "o"
- :forward-op 'forward-word
- :commands '(forward-word backward-word))
+(conn-define-thing word
+  :handler (conn-sequential-thing-handler 'word)
+  :expand-key "o"
+  :forward-op 'forward-word
+  :commands '(forward-word backward-word))
 
-(conn-define-thing
- 'sexp
- :handler (conn-sequential-thing-handler 'sexp)
- :expand-key "m"
- :forward-op 'forward-sexp
- :commands '(forward-sexp backward-sexp))
+(conn-define-thing sexp
+  :handler (conn-sequential-thing-handler 'sexp)
+  :expand-key "m"
+  :forward-op 'forward-sexp
+  :commands '(forward-sexp backward-sexp))
 
-(conn-define-thing
- 'whitespace
- :handler (conn-individual-thing-handler 'whitespace)
- :expand-key "S-SPC"
- :mark-key "SPC"
- :forward-op 'forward-whitespace
- :commands '(forward-whitespace conn-backward-whitespace))
+(conn-define-thing whitespace
+  :handler (conn-individual-thing-handler 'whitespace)
+  :expand-key "S-SPC"
+  :mark-key "SPC"
+  :forward-op 'forward-whitespace
+  :commands '(forward-whitespace conn-backward-whitespace))
 
-(conn-define-thing
- 'sentence
- :handler (conn-sequential-thing-handler 'sentence)
- :forward-op 'forward-sentence
- :expand-key "{"
- :commands '(forward-sentence backward-sentence))
+(conn-define-thing sentence
+  :handler (conn-sequential-thing-handler 'sentence)
+  :forward-op 'forward-sentence
+  :expand-key "{"
+  :commands '(forward-sentence backward-sentence))
 
-(conn-define-thing
- 'paragraph
- :handler (conn-sequential-thing-handler 'paragraph)
- :expand-key "K"
- :forward-op 'forward-paragraph
- :commands '(forward-paragraph backward-paragraph))
+(conn-define-thing paragraph
+  :handler (conn-sequential-thing-handler 'paragraph)
+  :expand-key "K"
+  :forward-op 'forward-paragraph
+  :commands '(forward-paragraph backward-paragraph))
 
-(conn-define-thing
- 'defun
- :handler (conn-sequential-thing-handler 'defun)
- :expand-key "M"
- :commands '(end-of-defun beginning-of-defun))
+(conn-define-thing defun
+  :handler (conn-sequential-thing-handler 'defun)
+  :expand-key "M"
+  :commands '(end-of-defun beginning-of-defun))
 
-(conn-define-thing
- 'buffer
- :handler (conn-individual-thing-handler 'buffer)
- :bounds-op (lambda () (cons (point-min) (point-max)))
- :commands '(end-of-buffer beginning-of-buffer))
+(conn-define-thing buffer
+  :handler (conn-individual-thing-handler 'buffer)
+  :bounds-op (lambda () (cons (point-min) (point-max)))
+  :commands '(end-of-buffer beginning-of-buffer))
 
-(conn-define-thing
- 'line
- :handler (conn-sequential-thing-handler 'line)
- :expand-key ">"
- :forward-op (lambda (N)
-               (cond ((> N 0)
-                      (forward-line N))
-                     ((< N 0)
-                      (let ((pt (point)))
-                        (beginning-of-line)
-                        (if (= pt (point))
-                            (forward-line N)
-                          (forward-line (1+ N)))))))
- :commands '(forward-line conn-backward-line))
+(conn-define-thing line
+  :handler (conn-sequential-thing-handler 'line)
+  :expand-key ">"
+  :forward-op (lambda (N)
+                (cond ((> N 0)
+                       (forward-line N))
+                      ((< N 0)
+                       (let ((pt (point)))
+                         (beginning-of-line)
+                         (if (= pt (point))
+                             (forward-line N)
+                           (forward-line (1+ N)))))))
+  :commands '(forward-line conn-backward-line))
 
-(conn-define-thing
- 'outer-line
- :handler (conn-individual-thing-handler 'outer-line)
- :beg-op (lambda () (move-beginning-of-line nil))
- :end-op (lambda () (move-end-of-line nil))
- :commands '(move-beginning-of-line
-             move-end-of-line))
+(conn-define-thing outer-line
+  :handler (conn-individual-thing-handler 'outer-line)
+  :beg-op (lambda () (move-beginning-of-line nil))
+  :end-op (lambda () (move-end-of-line nil))
+  :commands '(move-beginning-of-line
+              move-end-of-line))
 
-(conn-define-thing
- 'inner-line
- :handler (conn-individual-thing-handler 'inner-line)
- :beg-op 'back-to-indentation
- :end-op 'conn--end-of-inner-line-1
- :commands '(back-to-indentation
-             conn-beginning-of-inner-line
-             conn-end-of-inner-line))
+(conn-define-thing inner-line
+  :handler (conn-individual-thing-handler 'inner-line)
+  :beg-op 'back-to-indentation
+  :end-op 'conn--end-of-inner-line-1
+  :commands '(back-to-indentation
+              conn-beginning-of-inner-line
+              conn-end-of-inner-line))
 
 
 ;;;; Transient Menus
@@ -4443,16 +4437,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (declare-function org-backward-sentence "org")
   (declare-function org-forward-sentence "org")
 
-  (conn-define-thing
-   'org-paragraph
+  (conn-define-thing org-paragraph
    :handler (conn-sequential-thing-handler 'org-paragraph)
    :forward-op 'org-forward-paragraph
    :commands '(org-forward-paragraph org-backward-paragraph)
    :expand-key "I"
    :modes 'org-mode)
 
-  (conn-define-thing
-   'org-sentence
+  (conn-define-thing org-sentence
    :handler (conn-sequential-thing-handler 'org-sentence)
    :forward-op (lambda (arg)
                  (if (>= arg 0)
@@ -4462,8 +4454,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    :expand-key "{"
    :modes 'org-mode)
 
-  (conn-define-thing
-   'org-element
+  (conn-define-thing org-element
    :handler (conn-individual-thing-handler 'org-element)
    :expand-key "K"
    :beg-op 'org-backward-element
@@ -4511,8 +4502,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       "O" 'paredit-forward-up
       "U" 'paredit-backward-up))
 
-  (conn-define-thing
-   'paredit-sexp
+  (conn-define-thing paredit-sexp
    :handler (conn-sequential-thing-handler 'paredit-sexp)
    :forward-op 'paredit-forward
    :expand-key "m"
