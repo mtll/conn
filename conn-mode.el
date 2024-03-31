@@ -1116,12 +1116,11 @@ If BUFFER is nil use current buffer."
 (defsubst conn--modes-mark-map ()
   (let ((selectors)
         (keymap))
-    (dolist (minor-mode local-minor-modes)
-      (setq selectors (nconc (get minor-mode :conn-mode-things)
+    (dolist (mode local-minor-modes)
+      (setq selectors (nconc (get mode :conn-mode-things)
                              selectors)))
-    (dolist (major-mode (derived-mode-all-parents major-mode))
-      (setq selectors (nconc (get major-mode :conn-mode-things)
-                             selectors)))
+    (dolist (mode (derived-mode-all-parents major-mode))
+      (setq selectors (nconc (get mode :conn-mode-things) selectors)))
     (when selectors
       (setq keymap (make-sparse-keymap)
             selectors (nreverse selectors))
@@ -3547,6 +3546,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (conn-define-thing
  'sentence
  :handler (conn-sequential-thing-handler 'sentence)
+ :forward-op 'forward-sentence
  :expand-key "{"
  :commands '(forward-sentence backward-sentence))
 
@@ -3560,6 +3560,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (conn-define-thing
  'defun
  :handler (conn-sequential-thing-handler 'defun)
+ :expand-key "M"
  :commands '(end-of-defun beginning-of-defun))
 
 (conn-define-thing
@@ -4083,7 +4084,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "#"    'conn-query-replace-region
   "$"    'ispell-word
   "%"    'conn-query-replace-regexp-region
-  "*"    'conn-region-dispatch-menu
+  "&"    'conn-region-dispatch-menu
+  "*"    'calc-dispatch
   "["    'conn-kill-prepend-region
   "\""   'conn-insert-pair
   "\\"   'indent-region
@@ -4411,24 +4413,33 @@ Each function is run without any arguments and if any of them return nil
    'org-paragraph
    :handler (conn-sequential-thing-handler 'org-paragraph)
    :forward-op 'org-forward-paragraph
-   :commands '(org-forward-paragraph org-backward-paragraph))
+   :commands '(org-forward-paragraph org-backward-paragraph)
+   :expand-key "I"
+   :modes 'org-mode)
 
   (conn-define-thing
    'org-sentence
    :handler (conn-sequential-thing-handler 'org-sentence)
-   :forward-op 'org-forward-sentence
-   :commands '(org-forward-sentence org-backward-sentence))
+   :forward-op (lambda (arg)
+                 (if (>= arg 0)
+                     (org-forward-sentence arg)
+                   (org-backward-sentence (abs arg))))
+   :commands '(org-forward-sentence org-backward-sentence)
+   :expand-key "{"
+   :modes 'org-mode)
 
   (conn-define-thing
    'org-element
    :handler (conn-individual-thing-handler 'org-element)
+   :expand-key "K"
    :beg-op 'org-backward-element
    :end-op 'org-forward-element
    :commands '(org-forward-element
                org-backward-element
                org-next-visible-heading
                org-previous-visible-heading
-               org-up-element))
+               org-up-element)
+   :modes 'org-mode)
 
   (keymap-set org-mode-map "<remap> <conn-view-state>" 'conn-org-tree-edit-state)
 
@@ -4470,6 +4481,8 @@ Each function is run without any arguments and if any of them return nil
    'paredit-sexp
    :handler (conn-sequential-thing-handler 'paredit-sexp)
    :forward-op 'paredit-forward
+   :expand-key "m"
+   :modes 'paredit-mode
    :commands '(paredit-forward
                paredit-backward
                paredit-forward-up
