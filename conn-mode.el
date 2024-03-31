@@ -1582,15 +1582,14 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "f"        'conn-emacs-state
                  "<escape>" 'conn-dot-state
                  "\\"       'conn-region-dispatch
+                 "|"        'conn-region-dispatch-menu
                  "t"        'conn-change
                  "F i"      'conn-emacs-state-open-line-above
                  "F k"      'conn-emacs-state-open-line
                  "F l"      'conn-emacs-state-eol
                  "F j"      'conn-emacs-state-bol
                  "F o"      'conn-emacs-state-overwrite
-                 "F u"      'conn-emacs-state-overwrite-binary
-                 "F v"      'conn-quoted-insert-overwrite
-                 "*"        'conn-region-dispatch-menu))
+                 "F u"      'conn-emacs-state-overwrite-binary))
 
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
@@ -1608,8 +1607,8 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "<escape>" 'conn-state
-                 "*"        'conn-dots-dispatch-menu
                  "\\"       'conn-dots-dispatch
+                 "|"        'conn-dots-dispatch-menu
                  "f"        'conn-emacs-state
                  "Q"        'conn-dot-quit)
   (if conn-dot-state
@@ -1639,11 +1638,14 @@ state."
   :buffer-face ((t :inherit conn-view-state-buffer-face))
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
+                 "<escape>" 'conn-state
                  "f"        'conn-emacs-state
-                 "F"        'conn-emacs-state-menu
-                 "E"        'conn-emacs-state-eol
-                 "A"        'conn-emacs-state-eol
-                 "\\"       'conn-state))
+                 "F i"      'conn-emacs-state-open-line-above
+                 "F k"      'conn-emacs-state-open-line
+                 "F l"      'conn-emacs-state-eol
+                 "F j"      'conn-emacs-state-bol
+                 "F o"      'conn-emacs-state-overwrite
+                 "F u"      'conn-emacs-state-overwrite-binary))
 (put 'conn-org-tree-edit-state :conn-hide-mark t)
 
 
@@ -3914,6 +3916,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ","   'conn-isearch-region-backward
   "."   'conn-isearch-region-forward
   ";"   'comment-or-uncomment-region
+  "|"   'shell-command-on-region
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -4130,8 +4133,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "r"     'conn-region-map
   "w"     'conn-kill-region
   "y"     'conn-yank-keys
-  "Y"     'yank-from-kill-ring
-  "|"     'shell-command-on-region)
+  "Y"     'yank-from-kill-ring)
 
 (define-keymap
   :keymap conn-common-map
