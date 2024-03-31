@@ -480,7 +480,8 @@ If BUFFER is nil check `current-buffer'."
              (binding (plist-get rest :expand-key)))
     (if-let ((modes (ensure-list (plist-get rest :modes))))
         (dolist (mode modes)
-          (setf (alist-get binding (get mode :conn-mode-things)
+          (setf (alist-get binding (get (intern (symbol-name mode))
+                                        :conn-mode-things)
                            nil nil #'equal)
                 (conn--thing-expander-command thing)))
       (keymap-set conn-mark-thing-map binding
@@ -497,7 +498,8 @@ If BUFFER is nil check `current-buffer'."
   (when-let ((binding (plist-get rest :mark-key)))
     (if-let ((modes (ensure-list (plist-get rest :modes))))
         (dolist (mode modes)
-          (setf (alist-get binding (get mode :conn-mode-things)
+          (setf (alist-get binding (get (intern (symbol-name mode))
+                                        :conn-mode-things)
                            nil nil #'equal)
                 (conn--thing-bounds-command thing)))
       (keymap-set conn-mark-thing-map binding
