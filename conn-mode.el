@@ -1181,9 +1181,12 @@ If BUFFER is nil use current buffer."
   ;; We try to avoid completely regenerating the aux map as best we can.
   ;; It is an expensive operation that shouldn't be done often and this
   ;; function lives in the post-command-hook.
-  (let ((next-active-maps (list conn--aux-bindings (current-active-maps))))
+  (let ((next-active-maps (list conn--aux-bindings (current-active-maps)))
+        (prev-active-maps (alist-get conn-current-state conn--previous-active-maps))
+        (aux-map (alist-get conn-current-state conn--aux-maps)))
     (when (and conn-local-mode
-               (or (and (not (equal (car conn--previous-active-maps)
+               (not conn-emacs-state)
+               (or (and (not (equal (car prev-active-maps)
                                     (car next-active-maps)))
                         ;; We need to generate the remapped
                         ;; key definitions in this path too.
@@ -1191,11 +1194,11 @@ If BUFFER is nil use current buffer."
                                 (conn--remapped-key-defs)))
                    (and
                     ;; Has the value of (current-active-maps) changed?
-                    (not (equal (cadr conn--previous-active-maps)
+                    (not (equal (cadr prev-active-maps)
                                 (cadr next-active-maps)))
                     ;; If so has the value of any of our
                     ;; remapped key definitions changed?
-                    (not (equal (cddr conn--previous-active-maps)
+                    (not (equal (cddr prev-active-maps)
                                 (setcdr (cdr next-active-maps)
                                         (conn--remapped-key-defs)))))
                    force))
@@ -1203,11 +1206,10 @@ If BUFFER is nil use current buffer."
       ;; current and previous lists of remapping key definitions
       ;; and only do the expensive conn--command-keys operation if
       ;; the definition has changed since the last time we updated.
-      (if (equal (car conn--previous-active-maps)
-                 (car next-active-maps))
+      (if (and (equal (car prev-active-maps) (car next-active-maps))
+               aux-map)
           (let ((sentinals conn--aux-bindings)
-                (aux-map (alist-get conn-current-state conn--aux-maps))
-                (previous (cddr conn--previous-active-maps))
+                (previous (cddr prev-active-maps))
                 (next (cddr next-active-maps)))
             (while next
               (unless (equal (car next) (car previous))
@@ -1227,7 +1229,8 @@ If BUFFER is nil use current buffer."
           (when-let ((selectors (conn--modes-mark-map)))
             (dolist (key (conn--command-keys 'conn-mark-thing-map))
               (define-key aux-map key selectors)))))
-      (setq conn--previous-active-maps next-active-maps))))
+      (setf (alist-get conn-current-state conn--previous-active-maps)
+            next-active-maps))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
