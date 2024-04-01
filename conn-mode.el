@@ -3917,7 +3917,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
-  "`" 'other-window)
+  "`" 'conn-other-window)
 
 (defvar-keymap conn-isearch-repeat-map
   :repeat t
@@ -4095,35 +4095,36 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap conn-dot-state-map
-  "M-/"         'conn-dot-undo
-  "<return>"    'conn-dot-lines
-  "<backspace>" 'conn-kill-to-dots
-  "M-?"         'conn-dot-redo
-  "C-n"         'conn-next-dot
-  "C-p"         'conn-previous-dot
-  "C-z"         'conn-dots-dispatch
-  "{"           'conn-first-dot
-  "}"           'conn-last-dot
-  "#"           'conn-add-dots-matching-regexp
-  "$"           'conn-add-dots-matching-literal
-  "%"           'conn-query-remove-dots
-  "!"           'conn-dots-dispatch
-  "@"           'conn-dots-dispatch-menu
-  "|"           'conn-remove-dots-outside-region
-  "="          'conn-dot-trim-regexp
-  "["           'conn-remove-dots-before
-  "]"           'conn-remove-dots-after
-  "c"           'conn-split-dots-on-regexp
-  "C"           'conn-split-region-on-regexp
-  "d"           'conn-dots-dispatch-menu
-  "E"           'conn-dot-point
-  "e"           'conn-dot-region
-  "q"           'conn-dot-this-map
-  "r"           conn-dot-region-map
-  "t"           'conn-dot-all-things-in-region
-  "w"           'conn-remove-dot
-  "Y"           'conn-yank-to-dots
-  "y"           'conn-remove-all-dots)
+  "M-<down-mouse-1>" 'conn-dot-at-click
+  "M-/"              'conn-dot-undo
+  "<return>"         'conn-dot-lines
+  "<backspace>"      'conn-kill-to-dots
+  "M-?"              'conn-dot-redo
+  "C-n"              'conn-next-dot
+  "C-p"              'conn-previous-dot
+  "C-z"              'conn-dots-dispatch
+  "{"                'conn-first-dot
+  "}"                'conn-last-dot
+  "#"                'conn-add-dots-matching-regexp
+  "$"                'conn-add-dots-matching-literal
+  "%"                'conn-query-remove-dots
+  "!"                'conn-dots-dispatch
+  "@"                'conn-dots-dispatch-menu
+  "|"                'conn-remove-dots-outside-region
+  "="                'conn-dot-trim-regexp
+  "["                'conn-remove-dots-before
+  "]"                'conn-remove-dots-after
+  "c"                'conn-split-dots-on-regexp
+  "C"                'conn-split-region-on-regexp
+  "d"                'conn-dots-dispatch-menu
+  "E"                'conn-dot-point
+  "e"                'conn-dot-region
+  "q"                'conn-dot-this-map
+  "r"                conn-dot-region-map
+  "t"                'conn-dot-all-things-in-region
+  "w"                'conn-remove-dot
+  "Y"                'conn-yank-to-dots
+  "y"                'conn-remove-all-dots)
 
 (define-keymap
   :keymap conn-state-map
@@ -4297,6 +4298,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-v"     'conn-scroll-down)
 
 (defvar-keymap conn-global-map
+  "C-`"     'conn-other-window
   "<pause>" 'conn-toggle-minibuffer-focus
   "C-S-w"   'delete-region
   "C-x /"   'tab-bar-history-back
