@@ -45,54 +45,54 @@
                          bash-ts-mode
                          typescript-ts-mode))
 
-(conn-define-thing inner-function
+(conn-register-thing inner-function
   :modes conn--ts-modes
   :mark-key "f"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "function.inner")))
 
-(conn-define-thing inner-loop
+(conn-register-thing inner-loop
   :modes conn--ts-modes
   :mark-key "p"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "loop.inner")))
 
-(conn-define-thing inner-conditional
+(conn-register-thing inner-conditional
   :modes conn--ts-modes
   :mark-key "i"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "conditional.inner")))
 
-(conn-define-thing inner-assignment
+(conn-register-thing inner-assignment
   :modes conn--ts-modes
   :mark-key "a"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "assignment.inner")))
 
-(conn-define-thing inner-class
+(conn-register-thing inner-class
   :modes conn--ts-modes
   :mark-key "c"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "class.inner")))
 
-(conn-define-thing inner-comment
+(conn-register-thing inner-comment
   :modes conn--ts-modes
   :mark-key ";"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "comment.inner")))
 
-(conn-define-thing inner-parameter
+(conn-register-thing inner-parameter
   :modes conn--ts-modes
   :mark-key "p"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "parameter.inner")))
 
-(conn-define-thing function    :modes conn--ts-modes :mark-key "F")
-(conn-define-thing loop        :modes conn--ts-modes :mark-key "P")
-(conn-define-thing conditional :modes conn--ts-modes :mark-key "I")
-(conn-define-thing assignment  :modes conn--ts-modes :mark-key "A")
-(conn-define-thing class       :modes conn--ts-modes :mark-key "C")
-(conn-define-thing comment     :modes conn--ts-modes :mark-key ":")
-(conn-define-thing parameter   :modes conn--ts-modes :mark-key "P")
+(conn-register-thing function    :modes conn--ts-modes :mark-key "F")
+(conn-register-thing loop        :modes conn--ts-modes :mark-key "P")
+(conn-register-thing conditional :modes conn--ts-modes :mark-key "I")
+(conn-register-thing assignment  :modes conn--ts-modes :mark-key "A")
+(conn-register-thing class       :modes conn--ts-modes :mark-key "C")
+(conn-register-thing comment     :modes conn--ts-modes :mark-key ":")
+(conn-register-thing parameter   :modes conn--ts-modes :mark-key "P")
 
 (provide 'conn-evil-treesit-obj)
