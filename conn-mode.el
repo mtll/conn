@@ -1859,7 +1859,7 @@ With a numerical prefix argument read buffers using `completing-read'."
                           (lambda (a1 _a2)
                             (eq (car a1) 'create))))
       (pcase action
-        (`(create ,beg . ,_end)
+        (`(create ,beg . ,end)
          (let ((dot (or (conn--dot-after-point beg)
                         (error "Dot undo ring corrupted"))))
            (conn--delete-dot dot))
@@ -1873,8 +1873,8 @@ With a numerical prefix argument read buffers using `completing-read'."
          (let ((dot (or (conn--dot-after-point to-beg)
                         (error "Dot undo ring corrupted"))))
            (conn--move-dot dot from-beg from-end))
-         (goto-char beg)
-         (conn--push-ephemeral-mark end))))
+         (goto-char from-beg)
+         (conn--push-ephemeral-mark from-end))))
     (when (called-interactively-p 'interactive)
       (message "Dots undone"))))
 
@@ -1894,7 +1894,7 @@ With a numerical prefix argument read buffers using `completing-read'."
          (conn--create-dots (cons beg end))
          (goto-char beg)
          (conn--push-ephemeral-mark end))
-        (`(delete ,beg . ,_end)
+        (`(delete ,beg . ,end)
          (let ((dot (or (conn--dot-after-point beg)
                         (error "Dot undo ring corrupted"))))
            (conn--delete-dot dot))
@@ -1904,8 +1904,8 @@ With a numerical prefix argument read buffers using `completing-read'."
          (let ((dot (or (conn--dot-after-point from-beg)
                         (error "Dot undo ring corrupted"))))
            (conn--move-dot dot to-beg to-end))
-         (goto-char beg)
-         (conn--push-ephemeral-mark end))))
+         (goto-char to-beg)
+         (conn--push-ephemeral-mark to-end))))
     (when (called-interactively-p 'interactive)
       (message "Dots redone"))))
 
@@ -4186,7 +4186,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "b"     'conn-mark-thing-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
-  "D"     'conn-dot-region
+  ;; "D"     nil
   "g"     'conn-M-g-keys
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
@@ -4203,7 +4203,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O"     'conn-forward-sentence-keys
   "o"     'conn-forward-word-keys
   "p"     'conn-register-load
-  "R"     'indent-relative
+  "R"     'conn-dot-region
   "s"     'conn-M-s-keys
   "U"     'conn-backward-sentence-keys
   "u"     'conn-backward-word-keys
