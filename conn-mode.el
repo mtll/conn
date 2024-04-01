@@ -214,8 +214,6 @@ dynamically.")
 (defvar conn-dot-macro-dispatch-p nil
   "Non-nil during dot macro dispatch.")
 
-;; FIXME: This seems to still contain markers for the base buffer
-;;        when a buffer is cloned with clone-indirect-buffer.
 (defvar-local conn--unpop-ring nil)
 
 (defvar conn--saved-ephemeral-marks nil)
@@ -444,7 +442,7 @@ If BUFFER is nil check `current-buffer'."
                  (conn--push-ephemeral-mark))
                (forward-thing ',thing (- N))))))
       (put ',name :conn-repeat-command t)
-      (put ',name 'definition-name 'conn-define-thing)
+      (put ',name 'definition-name 'conn-register-thing)
       ',name)))
 
 (defmacro conn--thing-bounds-command (thing)
@@ -456,10 +454,10 @@ If BUFFER is nil check `current-buffer'."
            (`(,beg . ,end)
             (goto-char beg)
             (conn--push-ephemeral-mark end))))
-       (put ',name 'definition-name 'conn-define-thing)
+       (put ',name 'definition-name 'conn-register-thing)
        ',name)))
 
-(defmacro conn-define-thing (thing &rest rest)
+(defmacro conn-register-thing (thing &rest rest)
   "Define a new thing.
 
 \(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS MODES MARK-KEY EXPAND-KEY)"
@@ -3555,60 +3553,64 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
 
-(conn-define-thing page
+(conn-register-thing page
   :handler (conn-individual-thing-handler 'page)
   :forward-op 'forward-page
   :commands '(forward-page backward-page))
 
-(conn-define-thing dot
+(conn-register-thing dot
   :handler (conn-individual-thing-handler 'dot)
   :expand-key "."
   :beg-op (lambda () (conn-previous-dot 1))
   :end-op (lambda () (conn-next-dot 1))
   :commands '(conn-next-dot conn-previous-dot))
 
-(conn-define-thing word
+(conn-register-thing word
   :handler (conn-sequential-thing-handler 'word)
   :expand-key "o"
   :forward-op 'forward-word
   :commands '(forward-word backward-word))
 
-(conn-define-thing sexp
+(conn-register-thing sexp
   :handler (conn-sequential-thing-handler 'sexp)
   :expand-key "m"
   :forward-op 'forward-sexp
   :commands '(forward-sexp backward-sexp))
 
-(conn-define-thing whitespace
+(conn-register-thing sexp
+  :handler (conn-individual-thing-handler 'sexp)
+  :commands '(up-list backward-up-list))
+
+(conn-register-thing whitespace
   :handler (conn-individual-thing-handler 'whitespace)
   :expand-key "S-SPC"
   :mark-key "SPC"
   :forward-op 'forward-whitespace
   :commands '(forward-whitespace conn-backward-whitespace))
 
-(conn-define-thing sentence
+(conn-register-thing sentence
   :handler (conn-sequential-thing-handler 'sentence)
   :forward-op 'forward-sentence
   :expand-key "{"
   :commands '(forward-sentence backward-sentence))
 
-(conn-define-thing paragraph
+(conn-register-thing paragraph
   :handler (conn-sequential-thing-handler 'paragraph)
   :expand-key "K"
   :forward-op 'forward-paragraph
   :commands '(forward-paragraph backward-paragraph))
 
-(conn-define-thing defun
+(conn-register-thing defun
   :handler (conn-sequential-thing-handler 'defun)
   :expand-key "M"
   :commands '(end-of-defun beginning-of-defun))
 
-(conn-define-thing buffer
+(conn-register-thing buffer
   :handler (conn-individual-thing-handler 'buffer)
   :bounds-op (lambda () (cons (point-min) (point-max)))
   :commands '(end-of-buffer beginning-of-buffer))
 
-(conn-define-thing line
+(conn-register-thing line
   :handler (conn-sequential-thing-handler 'line)
   :expand-key ">"
   :forward-op (lambda (N)
@@ -3622,14 +3624,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                            (forward-line (1+ N)))))))
   :commands '(forward-line conn-backward-line))
 
-(conn-define-thing outer-line
+(conn-register-thing outer-line
   :handler (conn-individual-thing-handler 'outer-line)
   :beg-op (lambda () (move-beginning-of-line nil))
   :end-op (lambda () (move-end-of-line nil))
   :commands '(move-beginning-of-line
               move-end-of-line))
 
-(conn-define-thing inner-line
+(conn-register-thing inner-line
   :handler (conn-individual-thing-handler 'inner-line)
   :beg-op 'back-to-indentation
   :end-op 'conn--end-of-inner-line-1
@@ -4119,8 +4121,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "%"     'conn-query-replace-regexp-region
   "&"     'conn-region-dispatch-menu
   "*"     'calc-dispatch
-  ")"     'forward-page
-  "("     'backward-page
+  ")"     'up-list
+  "("     'backward-up-list
   "["     'conn-kill-prepend-region
   "\""    'conn-insert-pair
   "TAB"   'indent-region
@@ -4439,14 +4441,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (declare-function org-backward-sentence "org")
   (declare-function org-forward-sentence "org")
 
-  (conn-define-thing org-paragraph
+  (conn-register-thing org-paragraph
    :handler (conn-sequential-thing-handler 'org-paragraph)
    :forward-op 'org-forward-paragraph
    :commands '(org-forward-paragraph org-backward-paragraph)
    :expand-key "I"
    :modes 'org-mode)
 
-  (conn-define-thing org-sentence
+  (conn-register-thing org-sentence
    :handler (conn-sequential-thing-handler 'org-sentence)
    :forward-op (lambda (arg)
                  (if (>= arg 0)
@@ -4456,7 +4458,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    :expand-key "{"
    :modes 'org-mode)
 
-  (conn-define-thing org-element
+  (conn-register-thing org-element
    :handler (conn-individual-thing-handler 'org-element)
    :expand-key "K"
    :beg-op 'org-backward-element
@@ -4501,18 +4503,22 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
-      "O" 'paredit-forward-up
-      "U" 'paredit-backward-up))
+      ")" 'paredit-forward-up
+      "(" 'paredit-backward-up))
 
-  (conn-define-thing paredit-sexp
-   :handler (conn-sequential-thing-handler 'paredit-sexp)
-   :forward-op 'paredit-forward
-   :expand-key "m"
-   :modes 'paredit-mode
-   :commands '(paredit-forward
-               paredit-backward
-               paredit-forward-up
-               paredit-backward-up)))
+  (conn-register-thing paredit-sexp
+    :handler (conn-sequential-thing-handler 'paredit-sexp)
+    :forward-op 'paredit-forward
+    :expand-key "m"
+    :modes 'paredit-mode
+    :commands '(paredit-forward
+                paredit-backward
+                paredit-forward-up
+                paredit-backward-up))
+
+  (conn-register-thing sexp
+    :handler (conn-individual-thing-handler 'paredit-sexp)
+    :commands '(paredit-forward-up paredit-backward-up)))
 
 (with-eval-after-load 'zones
   (defvar zz-add-zone-anyway-p)
