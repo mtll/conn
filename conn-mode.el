@@ -443,7 +443,6 @@ If BUFFER is nil check `current-buffer'."
                  (conn--push-ephemeral-mark))
                (forward-thing ',thing (- N))))))
       (put ',name :conn-repeat-command t)
-      (put ',name 'definition-name 'conn-register-thing)
       ',name)))
 
 (defmacro conn--thing-bounds-command (thing)
@@ -455,7 +454,6 @@ If BUFFER is nil check `current-buffer'."
            (`(,beg . ,end)
             (goto-char beg)
             (conn--push-ephemeral-mark end))))
-       (put ',name 'definition-name 'conn-register-thing)
        ',name)))
 
 (defmacro conn-register-thing (thing &rest rest)
@@ -916,10 +914,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (cons str dot))))
    dots))
 
-(defun conn--dot-cand-annotation-function (cand)
-  (format "            Dot in buffer: %s"
-          (overlay-buffer (get-text-property 0 'conn-dot-cand cand))))
-
 (defun conn--completing-read-dot (dots)
   (let ((table (conn--propertize-dot-candidates dots)))
     (alist-get (completing-read "Dots: " table nil t)
@@ -1098,11 +1092,11 @@ If BUFFER is nil use current buffer."
   (if conn-mode
       (progn
         (advice-add 'push-mark :around #'conn--push-mark-ad)
-        (advice-add 'save-mark-and-excursion--save
-                    :before #'conn--save-ephemeral-mark-ad)
-        (advice-add 'save-mark-and-excursion--restore
-                    :after #'conn--restore-ephemeral-mark-ad)
-        (advice-add 'pop-to-mark-command :before 'conn--pop-to-mark-command-ad))
+        (advice-add 'save-mark-and-excursion--save :before
+                    #'conn--save-ephemeral-mark-ad)
+        (advice-add 'save-mark-and-excursion--restore :after
+                    #'conn--restore-ephemeral-mark-ad)
+        (advice-add 'pop-to-mark-command :before #'conn--pop-to-mark-command-ad))
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)
@@ -1124,7 +1118,7 @@ If BUFFER is nil use current buffer."
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defsubst conn--modes-mark-map ()
+(defun conn--modes-mark-map ()
   (let ((selectors)
         (keymap))
     (dolist (mode local-minor-modes)
@@ -2473,14 +2467,14 @@ Interactively PARTIAL-MATCH is the prefix argument."
       (goto-char (mark t)))
     (deactivate-mark)))
 
-(defun conn-minibuffer-yank-region (beg end)
+(defun conn-minibuffer-yank-region (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer.
 Interactively defaults to the region in buffer."
-  (interactive (list (region-beginning) (region-end)))
-  (let (region)
-    (with-minibuffer-selected-window
-      (setq region (buffer-substring-no-properties beg end)))
-    (insert region)))
+  (interactive (list (when current-prefix-arg 'regexp-quote)))
+  (insert (with-minibuffer-selected-window
+            (funcall (or quote-function 'identity)
+                     (buffer-substring-no-properties
+                      (region-beginning) (region-end))))))
 
 (defun conn-toggle-sort-fold-case ()
   "Toggle the value of `sort-fold-case'."
@@ -2492,12 +2486,11 @@ Interactively defaults to the region in buffer."
   "Run `query-replace' with the region as initial contents."
   (interactive (list (region-beginning)
                      (region-end)))
-  (save-excursion
+  (save-mark-and-excursion
     (unless (eq (point) start)
-      (goto-char start))
+      (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
-        (:append (lambda ()
-                   (conn-minibuffer-yank-region start end)))
+        (:append (lambda () (conn-minibuffer-yank-region)))
       (call-interactively #'query-replace))))
 
 (defun conn-query-replace-regexp-region (start end)
@@ -2505,12 +2498,11 @@ Interactively defaults to the region in buffer."
 Also ensure point is at START before running `query-replace-regexp'."
   (interactive (list (region-beginning)
                      (region-end)))
-  (save-excursion
+  (save-mark-and-excursion
     (unless (eq (point) start)
-      (goto-char start))
+      (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
-        (:append (lambda ()
-                   (conn-minibuffer-yank-region start end)))
+        (:append (lambda () (conn-minibuffer-yank-region 'regexp-quote)))
       (call-interactively #'query-replace-regexp))))
 
 (defun conn-dispatch-text-property (start end prop value &optional reverse)
