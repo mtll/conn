@@ -759,21 +759,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (funcall transition)
          ret)))))
 
-(defun conn--dispatch-in-state (iterator transition)
-  (lambda (&optional state)
-    (if (eq state :finalize)
-        (funcall iterator state)
-      (pcase (funcall iterator state)
-        ('nil nil)
-        (ret (funcall transition) ret)))))
-
-(defun conn--region-iterator (regions)
+(defun conn--region-iterator (regions &optional at-end)
   (lambda (&optional state)
     (if (eq state :finalize)
         (pcase-dolist (`(,beg . ,end) regions)
           (set-marker beg nil)
           (set-marker end nil))
-      (pop regions))))
+      (if at-end
+          (pcase (pop regions)
+            (`(,beg . ,end) (cons end beg)))
+        (pop regions)))))
 
 (defun conn--pulse-on-record (iterator)
   (lambda (&optional state)
@@ -786,18 +781,24 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (ret ret))))
 
 (defun conn--dot-iterator (dots)
+  (dolist (dot dots)
+    (overlay-put dot 'evaporate nil))
+  (lambda (&optional state)
+    (if (eq state :finalize)
+        (when dots
+          (dolist (dot dots)
+            (overlay-put dot 'evaporate t)))
+      (pop dots))))
+
+(defun conn--dispatch-relocate-dots (iterator)
   (let (primed new-dots old-dots)
-    (dolist (dot dots)
-      (overlay-put dot 'evaporate nil))
     (lambda (&optional state)
       (if (eq state :finalize)
           (progn
-            (if dots
-                (progn
-                  (dolist (dot old-dots)
-                    (conn--create-dots dot))
-                  (dolist (dot dots)
-                    (overlay-put dot 'evaporate t)))
+            (if conn--dispatch-error
+                (pcase-dolist (`(,buffer . ,dots) old-dots)
+                  (with-current-buffer buffer
+                    (apply 'conn--create-dots dots)))
               (pcase-dolist (`(,buffer . ,dots) new-dots)
                 (with-current-buffer buffer
                   (apply 'conn--create-dots dots))))
@@ -805,22 +806,45 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (pcase-dolist (`(,beg . ,end) dots)
                 (set-marker beg nil)
                 (set-marker end nil)))
-            (pcase-dolist (`(,beg . ,end) old-dots)
-              (set-marker beg nil)
-              (set-marker end nil)))
+            (pcase-dolist (`(,_ . ,dots) old-dots)
+              (pcase-dolist (`(,beg . ,end) dots)
+                (set-marker beg nil)
+                (set-marker end nil)))
+            (funcall iterator state))
         (if primed
-            (push (cons (conn--create-marker (region-beginning))
-                        (conn--create-marker (region-end)))
+            (push (cons (conn--create-marker (region-beginning)
+                                             (current-buffer))
+                        (conn--create-marker (region-end)
+                                             (current-buffer)))
                   (alist-get (current-buffer) new-dots))
           (setq primed t))
-        (when-let ((dot (pop dots))
-                   (beg (conn--create-marker (overlay-start dot)
-                                             (overlay-buffer dot)))
-                   (end (conn--create-marker (overlay-end dot)
-                                             (overlay-buffer dot))))
-          (push (cons beg end) old-dots)
-          (conn--delete-dot dot)
-          (cons beg end))))))
+        (pcase (funcall iterator state)
+          ((and (pred conn-dotp) dot)
+           (let ((beg (conn--create-marker (overlay-start dot)
+                                           (overlay-buffer dot)))
+                 (end (conn--create-marker (overlay-end dot)
+                                           (overlay-buffer dot))))
+             (push (cons beg end) (alist-get (overlay-buffer dot) old-dots))
+             (conn--delete-dot dot)
+             (cons (copy-marker beg) (copy-marker end))))
+          (ret ret))))))
+
+(defun conn--dispatch-stationary-dots (iterator)
+  (lambda (&optional state)
+    (pcase (funcall iterator state)
+      ((and (pred conn-dotp) dot)
+       (let ((beg (conn--create-marker (overlay-start dot)
+                                       (overlay-buffer dot)))
+             (end (conn--create-marker (overlay-end dot)
+                                       (overlay-buffer dot))))
+         (cons beg end)))
+      (ret ret))))
+
+(defun conn--dispatch-at-end (iterator)
+  (lambda (&optional state)
+    (pcase (funcall iterator state)
+      (`(,beg . ,end) (cons end beg))
+      (ret ret))))
 
 (defun conn-macro-dispatch (iterator &optional kmacro append)
   (let* ((undo-outer-limit nil)
@@ -834,7 +858,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (pcase (funcall iterator state)
                   (`(,beg . ,end)
                    (goto-char beg)
+                   (when (markerp beg) (set-marker beg nil))
                    (conn--push-ephemeral-mark end)
+                   (when (markerp end) (set-marker end nil))
                    t))))
     (advice-add #'kmacro-loop-setup-function :before-while sym)
     (unwind-protect
@@ -1042,7 +1068,8 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
-  (overlay-get overlay 'dot))
+  (when (overlayp overlay)
+    (overlay-get overlay 'dot)))
 
 (defun conn--clear-dots-in-buffers (buffers)
   "Delete all dots in BUFFERS."
@@ -1711,6 +1738,9 @@ If STATE is nil make COMMAND always repeat."
 ;;;;; Dot Commands
 
 (defun conn-transpose-region-and-dot (dot)
+  "Tranpose region and DOT.
+When called interactively and there are multiple dots in the current
+buffers completing read DOT."
   (interactive
    (let ((dots (conn--all-overlays #'conn-dotp)))
      (cond
@@ -1724,10 +1754,29 @@ If STATE is nil make COMMAND always repeat."
     (conn--with-dots-as-text-properties (list dot)
       (transpose-regions (region-beginning) (region-end) beg end))))
 
-(defun conn-yank-to-dots ()
-  (interactive)
+(defun conn-yank-to-dots (&optional at-end)
+  "Yank from `kill-ring' at the front of each dot.
+If AT-END is non-nil yank at the end of each dot instead."
+  (interactive "P")
   (save-mark-and-excursion
-    (conn-dots-dispatch (kbd conn-yank-keys) 'conn-emacs-state)))
+    (if at-end
+        (thread-first
+          (conn--sorted-overlays #'conn-dotp '<)
+          (conn--dot-iterator)
+          (conn--dispatch-stationary-dots)
+          (conn--dispatch-at-end)
+          (conn--dispatch-single-buffer)
+          (conn--dispatch-with-state 'conn-emacs-state)
+          (conn--pulse-on-record)
+          (conn-macro-dispatch conn-yank-keys))
+      (thread-first
+        (conn--sorted-overlays #'conn-dotp '<)
+        (conn--dot-iterator)
+        (conn--dispatch-stationary-dots)
+        (conn--dispatch-single-buffer)
+        (conn--dispatch-with-state 'conn-emacs-state)
+        (conn--pulse-on-record)
+        (conn-macro-dispatch conn-yank-keys)))))
 
 (defun conn-sort-dots ()
   (interactive)
@@ -3398,6 +3447,7 @@ there's a region, all lines that region covers will be duplicated."
     (thread-first
       (conn--sorted-overlays #'conn-dotp '<)
       (conn--dot-iterator)
+      (conn--dispatch-relocate-dots)
       (conn--dispatch-single-buffer)
       (conn--dispatch-with-state (or init-fn 'conn-state))
       (conn--pulse-on-record)
@@ -3761,6 +3811,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--thread dots
           dots
         (conn--dot-iterator dots)
+        (conn--dispatch-relocate-dots)
         (if multi-buffer
             (conn--dispatch-multi-buffer dots)
           (conn--dispatch-single-buffer dots))
