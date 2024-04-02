@@ -1504,9 +1504,7 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :cursor box
   :buffer-face ((t :inherit default))
   :ephemeral-marks t
-  :transitions (define-keymap
-                 "<escape>" 'conn-state
-                 "C-z"      'conn-region-dispatch))
+  :transitions (define-keymap "<escape>" 'conn-state))
 
 (conn-define-state conn-view-state
   "Activate `conn-view-state' in the current buffer.
@@ -3893,8 +3891,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "<remap> <kmacro-end-macro>"                'exit-recursive-edit
     "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
     "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
-    "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit
-    "C-z"                                       'exit-recursive-edit))
+    "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit))
 
 (dolist (state '(conn-state conn-emacs-state conn-dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
@@ -3992,8 +3989,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-("        'conn-isearch-dots-dispatch
   "M-D"        'conn-isearch-dots-dispatch
   "M-)"        'conn-isearch-dots-dispatch-menu
-  "M-M"        'conn-isearch-dots-dispatch-menu
-  "C-z"        'conn-isearch-dispatch)
+  "M-M"        'conn-isearch-dots-dispatch-menu)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'compilation-mode)
@@ -4089,7 +4085,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-?"              'conn-dot-redo
   "C-n"              'conn-next-dot
   "C-p"              'conn-previous-dot
-  "C-z"              'conn-dots-dispatch
   "{"                'conn-first-dot
   "}"                'conn-last-dot
   "#"                'conn-add-dots-matching-regexp
@@ -4116,7 +4111,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (define-keymap
   :keymap conn-state-map
   "C-y"   'conn-yank-replace
-  "C-z"   'conn-region-dispatch
   "M-y"   'conn-completing-yank-replace
   "="     'indent-relative
   "$"     'ispell-word
