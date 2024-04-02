@@ -3189,11 +3189,9 @@ the region instead of killing it.
 If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
-         (funcall (conn-backward-delete-keys) arg))
+         (call-interactively (conn-backward-delete-keys)))
         ((consp arg)
-         (funcall (conn-delete-region-keys)
-                  (region-beginning)
-                  (region-end)))
+         (call-interactively (conn-delete-region-keys)))
         ((numberp arg)
          (conn--thread needle
            (concat "Kill "
@@ -3201,9 +3199,7 @@ If ARG is a numeric prefix argument kill region to a register."
                    "to register:")
            (register-read-with-preview needle)
            (copy-to-register needle nil nil t t)))
-        (t (funcall (conn-kill-region-keys)
-                    (region-beginning)
-                    (region-end)))))
+        (t (call-interactively (conn-kill-region-keys)))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
