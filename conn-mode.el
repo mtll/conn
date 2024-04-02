@@ -3382,7 +3382,7 @@ there's a region, all lines that region covers will be duplicated."
           (dolist (ov overlays)
             (delete-overlay ov)))))))
 
-(defun conn-swap-window-buffers (&optional no-select)
+(defun conn-swap-windows (&optional no-select)
   (interactive "P")
   (when-let ((win1 (selected-window))
              (buf1 (window-buffer win1))
@@ -3394,9 +3394,9 @@ there's a region, all lines that region covers will be duplicated."
     (unless no-select
       (select-window win2))))
 
-(defun conn-yank-window-buffer ()
+(defun conn-swap-buffers ()
   (interactive)
-  (conn-swap-window-buffers t))
+  (conn-swap-windows t))
 
 (defun conn-other-window ()
   (interactive)
@@ -3876,7 +3876,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Keymaps
 
-(defvar-keymap reb-navigation-repeat-map
+(defvar-keymap conn-tab-repeat-map
+  :repeat t
+  "~" 'tab-next
+  "`" 'tab-previous)
+
+(defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
   "C-s" 'reb-next-match
   "C-r" 'reb-prev-match)
@@ -4140,8 +4145,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-5"   'conn-C-x-5-keys
   "C-6"   'tab-switch
   "C-7"   'conn-C-x-t-keys
-  "C-8"   'conn-swap-window-buffers
-  "C-9"   'conn-yank-window-buffer
+  "C-8"   'conn-swap-windows
+  "C-9"   'conn-swap-buffers
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
@@ -4159,6 +4164,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ">"     'forward-line
   "?"     'undo-redo
   "`"     'conn-other-window
+  "~"     'tab-next
   "a"     'switch-to-buffer
   "b"     'conn-mark-thing-map
   "C"     'conn-copy-region
