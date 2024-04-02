@@ -260,6 +260,8 @@ See `conn--dispatch-on-regions'.")
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
 
+(defvar conn--define-key-tick 0)
+
 (defvar conn-enable-in-buffer-hook nil
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
 Each function is run without any arguments and if any of them return nil
@@ -1070,6 +1072,9 @@ If BUFFER is nil use current buffer."
 
 ;;;; Advice
 
+(defun conn--define-key-advice (&rest _)
+  (cl-incf conn--define-key-tick))
+
 (defun conn--pop-to-mark-command-ad (&rest _)
   (unless (or (null (mark t))
               (= (point) (mark)))
@@ -1096,12 +1101,14 @@ If BUFFER is nil use current buffer."
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
+        (advice-add 'define-key :after #'conn--define-key-advice)
         (advice-add 'push-mark :around #'conn--push-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad)
         (advice-add 'pop-to-mark-command :before #'conn--pop-to-mark-command-ad))
+    (advice-remove 'define-key #'conn--define-key-advice)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)
@@ -1140,27 +1147,27 @@ If BUFFER is nil use current buffer."
 
 (defun conn--update-aux-map (&optional force)
   (when conn-current-state
-    (pcase-let ((`(,prev-active . ,prev-remappings)
+    (pcase-let ((`(,prev-active ,prev-tick . ,prev-remappings)
                  (alist-get conn-current-state conn--previous-active-maps))
-                (aux-map (or (alist-get conn-current-state conn--aux-maps)
-                             (setf (alist-get conn-current-state conn--aux-maps)
-                                   (make-sparse-keymap))))
                 (active (current-active-maps))
                 (state-map (alist-get conn-current-state conn--state-maps)))
       (unless (or conn-emacs-state
                   (and (not force)
+                       (eq conn--define-key-tick prev-tick)
                        (equal prev-remappings conn--aux-bindings)
                        (equal active prev-active)))
-        (conn--without-conn-maps
-          (dolist (sentinal conn--aux-bindings)
-            (when-let ((def (keymap-lookup nil (symbol-value sentinal))))
-              (dolist (key (where-is-internal sentinal (list state-map) nil t))
-                (define-key aux-map key def)))))
-        (let ((mark-map (conn--modes-mark-map)))
-          (dolist (key (where-is-internal 'conn-mark-thing-map (list state-map) nil t t))
-            (define-key aux-map key mark-map)))
-        (setf (alist-get conn-current-state conn--previous-active-maps)
-              (cons active conn--aux-bindings))))))
+        (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
+                             (make-sparse-keymap))))
+          (conn--without-conn-maps
+            (dolist (sentinal conn--aux-bindings)
+              (when-let ((def (key-binding (symbol-value sentinal) t)))
+                (dolist (key (where-is-internal sentinal (list state-map) nil t))
+                  (define-key aux-map key def)))))
+          (let ((mark-map (conn--modes-mark-map)))
+            (dolist (key (where-is-internal 'conn-mark-thing-map (list state-map) nil t t))
+              (define-key aux-map key mark-map)))
+          (setf (alist-get conn-current-state conn--previous-active-maps)
+                (cons active (cons conn--define-key-tick conn--aux-bindings))))))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
@@ -1170,7 +1177,7 @@ result of FROM-KEYS.  For example conn uses this to map C-c,
 C-x, M-s and M-g into various state maps."
   `(progn
      (defcustom ,name
-       ,from-keys
+       (key-parse ,from-keys)
        ,(string-fill
          (conn--stringify
           "Key sequence for `" name "' to remap.\n"
@@ -1191,7 +1198,7 @@ C-x, M-s and M-g into various state maps."
          70)
        (interactive "p")
        (pcase (keymap--menu-item-binding (conn--without-conn-maps
-                                           (keymap-lookup nil ,name t)))
+                                           (key-binding ,name t)))
          ((and (pred commandp) cmd)
           (if interactive-p (call-interactively cmd) cmd))
          (_ (error "Key not bound to a command %s." ,name))))
@@ -2472,11 +2479,12 @@ Interactively PARTIAL-MATCH is the prefix argument."
       (goto-char (mark t)))
     (deactivate-mark)))
 
-(defun conn-minibuffer-yank-region (&optional quote-function)
+(defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer.
 Interactively defaults to the region in buffer."
-  (interactive (list (when current-prefix-arg
-                       conn-completion-region-quote-function)))
+  (interactive (list (pcase current-prefix-arg
+                       ('(4) 'conn-completion-region-quote-function)
+                       (_ 'regexp-quote))))
   (insert (with-minibuffer-selected-window
             (funcall (or quote-function 'identity)
                      (buffer-substring-no-properties
@@ -2495,7 +2503,7 @@ Interactively defaults to the region in buffer."
     (unless (eq (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
-        (:append (lambda () (conn-minibuffer-yank-region)))
+        (:append (lambda () (conn-yank-region-to-minibuffer)))
       (call-interactively #'query-replace))))
 
 (defun conn-query-replace-regexp-region ()
@@ -2506,7 +2514,7 @@ Also ensure point is at START before running `query-replace-regexp'."
     (unless (eq (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
-        (:append (lambda () (conn-minibuffer-yank-region 'regexp-quote)))
+        (:append (lambda () (conn-yank-region-to-minibuffer 'regexp-quote)))
       (call-interactively #'query-replace-regexp))))
 
 (defun conn-dispatch-text-property (start end prop value &optional reverse)
@@ -4056,10 +4064,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-z"   'conn-region-dispatch
   "M-y"   'conn-completing-yank-replace
   "="     'indent-relative
-  "#"     'conn-query-replace-region
   "$"     'ispell-word
-  "%"     'conn-query-replace-regexp-region
-  "&"     'conn-region-dispatch-menu
   "*"     'calc-dispatch
   ")"     'up-list
   "("     'backward-up-list
@@ -4105,12 +4110,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ">"     'forward-line
   "?"     'undo-redo
   "`"     'conn-other-window
-  "A"     'conn-C-x-t-keys
   "a"     'switch-to-buffer
   "b"     'conn-mark-thing-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
-  ;; "D"     nil
   "g"     'conn-M-g-keys
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
@@ -4359,13 +4362,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (conn--setup-extensions)
     (if conn-mode
         (progn
-          (keymap-set minibuffer-mode-map "C-M-y" 'conn-minibuffer-yank-region)
+          (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
           (put 'isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
-                'conn-minibuffer-yank-region)
+                'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
       (when (eq 'conn-isearch-repeat-map (get 'isearch-forward-symbol-at-point 'repeat-map))
         (put 'isearch-forward-symbol-at-point 'repeat-map nil))
