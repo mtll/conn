@@ -1260,9 +1260,22 @@ C-x, M-s and M-g into various state maps."
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
-  (pcase-dolist (`(,state . ,maps) conn--mode-maps)
-    (when-let ((map (alist-get major-mode maps)))
-      (push (cons state map) conn--major-mode-maps))))
+  (if (get major-mode :conn-inhibit-inherit-maps)
+      (pcase-dolist (`(,state . ,maps) conn--mode-maps)
+        (let ((map (or (alist-get major-mode maps)
+                       (setf (alist-get major-mode maps)
+                             (make-sparse-keymap)))))
+          (push (cons state map) conn--major-mode-maps)))
+    (let ((mmodes (reverse (derived-mode-all-parents major-mode))))
+      (pcase-dolist (`(,state . ,maps) conn--mode-maps)
+        (dolist (mode mmodes)
+          (let ((map (or (alist-get mode maps)
+                         (setf (alist-get mode maps)
+                               (make-sparse-keymap)))))
+            (push (cons state map) conn--major-mode-maps)))))))
+
+(defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
+  (put mode :conn-inhibit-inherit-maps inhibit-inherit-maps))
 
 (defun conn-get-transition-map (state)
   "Get transition map for STATE."
@@ -4477,7 +4490,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (keymap-set org-mode-map "<remap> <conn-view-state>" 'conn-org-tree-edit-state)
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-state 'org-mode)
+    :keymap (conn-get-mode-map 'conn-state 'org-mode)
     "^" 'org-up-element
     ")" 'org-next-visible-heading
     "(" 'org-previous-visible-heading
