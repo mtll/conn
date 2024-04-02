@@ -1173,16 +1173,17 @@ If BUFFER is nil use current buffer."
       keymap)))
 
 (defun conn--update-aux-map (&optional force)
-  (when conn-current-state
+  (when (and conn-local-mode
+             conn-current-state
+             (not conn-emacs-state))
     (pcase-let ((`(,prev-active ,prev-tick . ,prev-remappings)
                  (alist-get conn-current-state conn--previous-active-maps))
                 (active (current-active-maps))
                 (state-map (alist-get conn-current-state conn--state-maps)))
-      (unless (or conn-emacs-state
-                  (and (not force)
-                       (eq conn--define-key-tick prev-tick)
-                       (equal prev-remappings conn--aux-bindings)
-                       (equal active prev-active)))
+      (unless (and (not force)
+                   (eq conn--define-key-tick prev-tick)
+                   (equal prev-remappings conn--aux-bindings)
+                   (equal active prev-active))
         (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
                              (make-sparse-keymap))))
           (conn--without-conn-maps
@@ -4361,7 +4362,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
-        (add-hook 'post-command-hook #'conn--update-aux-map nil t)
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer))
@@ -4385,7 +4385,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor t)
-    (remove-hook 'post-command-hook #'conn--update-aux-map t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
@@ -4421,6 +4420,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (put 'isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
+          (add-hook 'post-command-hook #'conn--update-aux-map)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
@@ -4428,6 +4428,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (when (eq 'conn-isearch-repeat-map (get 'isearch-forward-symbol-at-point 'repeat-map))
         (put 'isearch-forward-symbol-at-point 'repeat-map nil))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
+      (remove-hook 'post-command-hook #'conn--update-aux-map)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor))))
 
 (provide 'conn-mode)
