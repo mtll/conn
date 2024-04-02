@@ -31,11 +31,6 @@
   :prefix "conn-"
   :group 'conn-mode)
 
-(defcustom conn-consult-region-quote-function 'regexp-quote
-  "Function used to quote region strings for consult search functions."
-  :group 'conn-consult
-  :type 'symbol)
-
 (defmacro conn--each-thing (thing beg end &rest body)
   "Iterate over each THING in buffer.
 
@@ -117,7 +112,7 @@ THING BEG and END are bound in BODY."
       (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
 
 (defun conn--yank-region-for-consult (beg end)
-  (funcall conn-consult-region-quote-function
+  (funcall conn-completion-region-quote-function
            (buffer-substring-no-properties beg end)))
 
 ;;;###autoload

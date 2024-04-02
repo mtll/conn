@@ -172,6 +172,11 @@ Defines default STATE for buffers matching REGEXP."
   :type 'integer
   :group conn-mode)
 
+(defcustom conn-completion-region-quote-function 'regexp-quote
+  "Function used to quote region strings for consult search functions."
+  :group 'conn-mode
+  :type 'symbol)
+
 ;;;;; Internal Vars
 
 (defvar conn-states nil)
@@ -2470,7 +2475,8 @@ Interactively PARTIAL-MATCH is the prefix argument."
 (defun conn-minibuffer-yank-region (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer.
 Interactively defaults to the region in buffer."
-  (interactive (list (when current-prefix-arg 'regexp-quote)))
+  (interactive (list (when current-prefix-arg
+                       conn-completion-region-quote-function)))
   (insert (with-minibuffer-selected-window
             (funcall (or quote-function 'identity)
                      (buffer-substring-no-properties
@@ -3112,7 +3118,8 @@ of deleting it."
                              (point)))
                    (use-region-p)))
       (goto-char (line-end-position))
-      (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
+      (setq conn-this-thing-handler
+            (conn-individual-thing-handler 'outer-line)))))
 
 (defun conn-beginning-of-inner-line (&optional N)
   "Go to first non-whitespace character in line."
@@ -3127,7 +3134,8 @@ of deleting it."
                              (point)))
                    (use-region-p)))
       (goto-char (line-beginning-position))
-      (setq conn-this-thing-handler (conn-individual-thing-handler 'outer-line)))))
+      (setq conn-this-thing-handler
+            (conn-individual-thing-handler 'outer-line)))))
 
 (defun conn-xref-definition-prompt ()
   "`xref-find-definitions' but always prompt."
@@ -3814,8 +3822,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s" 'reb-next-match
   "C-r" 'reb-prev-match)
 
-(keymap-set minibuffer-mode-map "M-Y" 'conn-minibuffer-yank-region)
-
 (dolist (state conn-states)
   (define-keymap
     :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
@@ -4355,10 +4361,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (conn--setup-extensions)
     (if conn-mode
         (progn
+          (keymap-set minibuffer-mode-map "C-M-y" 'conn-minibuffer-yank-region)
           (put 'isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor))
+      (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
+                'conn-minibuffer-yank-region)
+        (keymap-unset minibuffer-mode-map "C-M-y"))
       (when (eq 'conn-isearch-repeat-map (get 'isearch-forward-symbol-at-point 'repeat-map))
         (put 'isearch-forward-symbol-at-point 'repeat-map nil))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
