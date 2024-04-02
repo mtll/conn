@@ -27,10 +27,6 @@
   (require 'cl-lib)
   (require 'subr-x))
 
-(defgroup conn-consult
-  :prefix "conn-"
-  :group 'conn-mode)
-
 (defmacro conn--each-thing (thing beg end &rest body)
   "Iterate over each THING in buffer.
 
