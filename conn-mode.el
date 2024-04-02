@@ -2488,24 +2488,22 @@ Interactively defaults to the region in buffer."
   (message "Sort fold case: %s"
            (setq sort-fold-case (not sort-fold-case))))
 
-(defun conn-query-replace-region (start end)
+(defun conn-query-replace-region ()
   "Run `query-replace' with the region as initial contents."
-  (interactive (list (region-beginning)
-                     (region-end)))
+  (interactive)
   (save-mark-and-excursion
-    (unless (eq (point) start)
+    (unless (eq (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
         (:append (lambda () (conn-minibuffer-yank-region)))
       (call-interactively #'query-replace))))
 
-(defun conn-query-replace-regexp-region (start end)
+(defun conn-query-replace-regexp-region ()
   "Run `query-replace-regexp' with the region as initial contents.
 Also ensure point is at START before running `query-replace-regexp'."
-  (interactive (list (region-beginning)
-                     (region-end)))
+  (interactive)
   (save-mark-and-excursion
-    (unless (eq (point) start)
+    (unless (eq (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
         (:append (lambda () (conn-minibuffer-yank-region 'regexp-quote)))
