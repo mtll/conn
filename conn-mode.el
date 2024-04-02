@@ -1504,7 +1504,7 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :indicator " E "
   :cursor box
   :buffer-face ((t :inherit default))
-  :ephemeral-marks t
+  :ephemeral-marks nil
   :transitions (define-keymap "<escape>" 'conn-state))
 
 (conn-define-state conn-view-state
