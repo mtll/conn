@@ -1779,6 +1779,8 @@ If AT-END is non-nil yank at the end of each dot instead."
         (conn-macro-dispatch conn-yank-keys)))))
 
 (defun conn-sort-dots ()
+  "Sort all dots in the current buffer by the text they contain.
+Obeys `sort-case-fold'."
   (interactive)
   (let* ((sort-lists (mapcar (lambda (dot)
                                (let ((key (cons (overlay-start dot)
@@ -1968,6 +1970,7 @@ If region is active remove all dots in region."
   (deactivate-mark))
 
 (defun conn-dot-word-at-point ()
+  "Dot the word at point."
   (interactive)
   (pcase (bounds-of-thing-at-point 'word)
     (`(,beg . ,end)
@@ -1975,6 +1978,7 @@ If region is active remove all dots in region."
       (concat "\\b" (regexp-quote (buffer-substring beg end)) "\\b")))))
 
 (defun conn-dot-sexp-at-point ()
+  "Dot the s-expression at point."
   (interactive)
   (pcase (bounds-of-thing-at-point 'sexp)
     (`(,beg . ,end)
@@ -3811,7 +3815,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--thread dots
           dots
         (conn--dot-iterator dots)
-        (conn--dispatch-relocate-dots)
+        (conn--dispatch-relocate-dots dots)
         (if multi-buffer
             (conn--dispatch-multi-buffer dots)
           (conn--dispatch-single-buffer dots))
@@ -4046,8 +4050,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :repeat t
   "J" 'join-line)
 
-(defvar-keymap conn-misc-edit-map
-  :prefix 'conn-misc-edit-map
+(defvar-keymap conn-edit-map
+  :prefix 'conn-edit-map
   "DEL" 'kill-whole-line
   "RET" 'whitespace-cleanup
   "SPC" 'conn-transpose-region-and-dot
@@ -4127,7 +4131,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "'"     'other-window-prefix
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
-  "q"     'conn-misc-edit-map
+  "q"     'conn-edit-map
   "r"     'conn-region-map
   "w"     'conn-kill-region
   "y"     'conn-yank-keys
