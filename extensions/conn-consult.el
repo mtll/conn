@@ -27,6 +27,15 @@
   (require 'cl-lib)
   (require 'subr-x))
 
+(defgroup conn-consult
+  :prefix "conn-"
+  :group 'conn-mode)
+
+(defcustom conn-consult-region-quote-function 'regexp-quote
+  "Function used to quote region strings for consult search functions."
+  :group 'conn-consult
+  :type 'symbol)
+
 (defmacro conn--each-thing (thing beg end &rest body)
   "Iterate over each THING in buffer.
 
@@ -107,41 +116,45 @@ THING BEG and END are bound in BODY."
       (unless (bolp) (beginning-of-line))
       (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
 
+(defun conn--yank-region-for-consult (beg end)
+  (funcall conn-consult-region-quote-function
+           (buffer-substring-no-properties beg end)))
+
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-ripgrep nil (buffer-substring-no-properties beg end)))
+  (consult-ripgrep nil (conn--yank-region-for-consult beg end)))
 
 ;;;###autoload
 (defun conn-consult-line-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-line (buffer-substring-no-properties beg end)))
+  (consult-line (conn--yank-region-for-consult beg end)))
 
 ;;;###autoload
 (defun conn-consult-line-multi-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-line-multi nil (buffer-substring-no-properties beg end)))
+  (consult-line-multi nil (conn--yank-region-for-consult beg end)))
 
 ;;;###autoload
 (defun conn-consult-locate-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-locate (buffer-substring-no-properties beg end)))
+  (consult-locate (conn--yank-region-for-consult beg end)))
 
 ;;;###autoload
 (defun conn-consult-git-grep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-git-grep nil (buffer-substring-no-properties beg end)))
+  (consult-git-grep nil (conn--yank-region-for-consult beg end)))
 
 ;;;###autoload
 (defun conn-consult-find-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-find nil (buffer-substring-no-properties beg end)))
+  (consult-find nil (conn--yank-region-for-consult beg end)))
 
 ;;;###autoload
 (defvar-keymap conn-consult-region-search-map
