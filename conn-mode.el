@@ -308,6 +308,19 @@ Each function is run without any arguments and if any of them return nil
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (intern (apply #'conn--stringify symbols-or-strings))))
 
+(defmacro conn--without-conn-maps (&rest body)
+  (declare (indent 0))
+  `(let ((emulation-mode-map-alists (seq-difference
+                                     emulation-mode-map-alists
+                                     '(conn--transition-maps
+                                       conn--local-mode-maps
+                                       conn--major-mode-maps
+                                       conn--local-maps
+                                       conn--aux-maps
+                                       conn--state-maps)
+                                     #'eq)))
+     ,(macroexp-progn body)))
+
 (defmacro conn--save-window-configuration (&rest body)
   (let ((wind (gensym "window-conf")))
     `(let ((,wind (current-window-configuration)))
@@ -1100,7 +1113,7 @@ If BUFFER is nil use current buffer."
 ;;;; Advice
 
 (defun conn--define-key-advice (keymap key &rest _)
-  (when (and (memq keymap (current-active-maps))
+  (when (and (memq keymap (conn--without-conn-maps (current-active-maps)))
              (member (if (stringp key) (key-parse key) key)
                      (mapcar #'symbol-value conn--aux-bindings)))
     (cl-incf conn--define-key-tick)))
@@ -1147,19 +1160,6 @@ If BUFFER is nil use current buffer."
 
 ;;;; State Functionality
 
-(defmacro conn--without-conn-maps (&rest body)
-  (declare (indent 0))
-  `(let ((emulation-mode-map-alists (seq-difference
-                                     emulation-mode-map-alists
-                                     '(conn--transition-maps
-                                       conn--local-mode-maps
-                                       conn--major-mode-maps
-                                       conn--local-maps
-                                       conn--aux-maps
-                                       conn--state-maps)
-                                     #'eq)))
-     ,(macroexp-progn body)))
-
 (defun conn--modes-mark-map ()
   (let ((selectors)
         (keymap))
@@ -1181,7 +1181,7 @@ If BUFFER is nil use current buffer."
              (not conn-emacs-state))
     (pcase-let ((`(,prev-active ,prev-tick . ,prev-remappings)
                  (alist-get conn-current-state conn--previous-active-maps))
-                (active (current-active-maps))
+                (active (conn--without-conn-maps (current-active-maps)))
                 (state-map (alist-get conn-current-state conn--state-maps)))
       (unless (and (not force)
                    (eq conn--define-key-tick prev-tick)
