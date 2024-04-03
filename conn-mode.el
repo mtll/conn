@@ -2358,13 +2358,12 @@ THING is something with a forward-op as defined by thingatpt."
       (goto-char (point-min))
       (when-let ((bounds (bounds-of-thing-at-point thing)))
         (conn--create-dots bounds))
-      (forward-thing thing)
-      (let ((bounds (bounds-of-thing-at-point thing)))
-        (while (and bounds
-                    (/= (point) (point-max))
+      (let (bounds)
+        (while (and (/= (point) (point-max))
                     (/= (point) (progn
                                   (forward-thing thing)
-                                  (point))))
+                                  (point)))
+                    (setq bounds (bounds-of-thing-at-point thing)))
           (conn--create-dots bounds)
           (setq bounds (bounds-of-thing-at-point thing)))))))
 
