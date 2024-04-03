@@ -105,11 +105,6 @@
   :type '(choice string (const nil))
   :group 'conn-states)
 
-(defcustom conn-state-buffer-colors nil
-  "Indicate state using buffer faces."
-  :type 'boolean
-  :group 'conn-states)
-
 (defcustom conn-default-state 'conn-emacs-state
   "Default conn state for new buffers."
   :type 'symbol
@@ -145,7 +140,7 @@ Defines default STATE for buffers matching REGEXP."
   :group 'conn-mode)
 
 (defface conn-mark-face
-  '((default (:background "gray65")))
+  '((t (:background "#dfa0f0" :foreground "#000000")))
   "Face for mark."
   :group 'conn-marks)
 
@@ -435,6 +430,124 @@ If BUFFER is nil check `current-buffer'."
     (while (and modes (not result))
       (setq result (get (pop modes) property)))
     result))
+
+
+;;;; Extensions
+
+(defvar conn--extensions nil)
+
+(defun conn--setup-extensions ()
+  "Run when `conn-mode' is turned on or off to turn shims on or off."
+  (run-hook-with-args 'conn--extensions conn-mode))
+
+(defmacro conn-define-extension (name &rest body)
+  "Define a conn conn extension.
+
+\(fn NAME [DOCSTRING] &rest body)"
+  (declare (indent 1))
+  (let (doc)
+    (when (stringp (car body))
+      (setq doc (pop body)))
+    `(progn
+       (defvar ,name nil)
+
+       (defun ,name (enable)
+         ,(or doc "")
+         (interactive (list (not ,name)))
+         (when (xor enable ,name)
+           (let ((fn (get ',name :conn-feature-function)))
+             (when conn-mode (funcall fn enable))
+             (if enable
+                 (progn
+                   (when (called-interactively-p 'interactive)
+                     (message ,(conn--stringify name " enabled.")))
+                   (add-hook 'conn--extensions fn))
+               (when (called-interactively-p 'interactive)
+                 (message ,(conn--stringify name " disabled.")))
+               (remove-hook 'conn--extensions fn)))))
+
+       (when-let ((body-fn (get ',name :conn-feature-function)))
+         (funcall body-fn nil)
+         (remove-hook 'conn--extensions body-fn)
+         (put ',name :conn-feature-function nil))
+
+       (let ((body-sym (make-symbol ,(conn--stringify name "-body-fn"))))
+         (fset body-sym (lambda (enable)
+                          (setq ,name (when enable t))
+                          ,@body))
+         (put ',name :conn-feature-function body-sym))
+
+       ',name)))
+
+;;;;; Repeat Extension
+
+(defun conn--repeat-get-map-ad ()
+  (when-let (repeat-mode
+             (prop (repeat--command-property :conn-repeat-command))
+             (m (or (eq prop t)
+                    (eq prop conn-current-state))))
+    (define-keymap (single-key-description last-command-event) this-command)))
+
+(defun conn-set-repeat-command (command &optional state)
+  "Make COMMAND repeatable in STATE with whatever key called it.
+
+If STATE is nil make COMMAND always repeat."
+  (put command :conn-repeat-command (or state t)))
+
+(defun conn-unset-repeat-command (command)
+  "Remove repeat property from COMMAND."
+  (put command :conn-repeat-command nil))
+
+(mapc #'conn-set-repeat-command
+      '(transpose-words
+        transpose-sexps
+        transpose-chars
+        transpose-lines
+        transpose-paragraphs
+        conn-transpose-words-backward
+        conn-transpose-sexps-backward
+        conn-transpose-chars-backward
+        conn-transpose-lines-backward
+        conn-transpose-paragraphs-backward
+        conn-set-window-dedicated
+        previous-error
+        next-error
+        pop-global-mark
+        conn-region-case-dwim
+        conn-remove-dot-backward
+        conn-remove-dot-forward
+        duplicate-line
+        duplicate-dwim
+        conn-duplicate-region
+        conn-delete-pair
+        bury-buffer
+        conn-duplicate-region
+        conn-duplicate-and-comment-region
+        conn-other-window))
+
+(conn-define-extension conn-repeatable-commands
+  (if conn-repeatable-commands
+      (advice-add 'repeat-get-map :after-until 'conn--repeat-get-map-ad)
+    (advice-remove 'repeat-get-map 'conn--repeat-get-map-ad)))
+
+(let (original-cursor-color)
+  (defun conn--repeat-cursor-message-ad (map)
+    (when (and map (not original-cursor-color))
+      (setq original-cursor-color (face-background 'cursor)))
+    (modify-all-frames-parameters
+     `((cursor-color . ,(if map
+                            conn-repeating-cursor-color
+                          original-cursor-color))))
+    (unless map (setq original-cursor-color nil))))
+
+(conn-define-extension conn-repeat-cursor
+  "Change the cursor color when a repeat map is active."
+  (if conn-repeat-cursor
+      (add-function :after repeat-echo-function 'conn--repeat-cursor-message-ad)
+    (remove-function repeat-echo-function 'conn--repeat-cursor-message-ad)))
+
+(conn-repeatable-commands t)
+(conn-repeat-cursor t)
 
 
 ;;;; Mark
@@ -1157,6 +1270,8 @@ If BUFFER is nil use current buffer."
 
 ;;;; State Functionality
 
+;;;;; Remapping Functions
+
 (defun conn--modes-mark-map ()
   (let ((selectors)
         (keymap))
@@ -1256,6 +1371,36 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-end-of-defun-keys       "C-M-e")
 (conn-define-remapping-command conn-next-line-keys          "C-n")
 (conn-define-remapping-command conn-previous-line-keys      "C-p")
+
+;;;;; Buffer Color Mode
+
+(define-minor-mode conn--buffer-color-local-mode
+  "Local mode for indicating conn-state with buffer background color."
+  :keymap nil
+  :lighter ""
+  (if conn--buffer-color-local-mode
+      (progn
+        (buffer-face-mode 1)
+        (when-let ((face (get conn-current-state :conn-buffer-face)))
+          (buffer-face-set face)))
+    (buffer-face-mode -1)))
+
+(defun conn--buffer-color-mode-on ()
+  (conn--buffer-color-local-mode 1))
+
+(define-globalized-minor-mode conn--buffer-color-mode
+  conn--buffer-color-local-mode
+  conn--buffer-color-mode-on
+  "Indicate state using buffer faces."
+  :global t
+  :group conn-mode)
+
+(conn-define-extension conn-buffer-colors
+  (if conn-buffer-colors
+      (conn--buffer-color-mode 1)
+    (conn--buffer-color-mode -1)))
+
+;;;;; Conn-Define-State Macro
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
@@ -1367,7 +1512,7 @@ transition map.  It is of the form ((KEY . TRANSITION-FUNCTION) ...).
 while in state NAME.
 
 :BUFFER-FACE is the default face for the buffer while in state NAME.
-only has an effect when `conn-state-buffer-colors' is non-nil.
+only has an effect when `conn-buffer-colors' is non-nil.
 
 BODY contains code to be executed each time the transition function is executed.
 
@@ -1457,6 +1602,7 @@ BODY contains code to be executed each time the transition function is executed.
        (put ',name :conn-suppress-input-method ,suppress-input-method)
        (put ',name :conn-cursor-type ',cursor-name)
        (put ',name :conn-indicator ',indicator-name)
+       (put ',name :conn-buffer-face ',buffer-face-name)
 
        (cl-pushnew ',name conn-states)
        (push (cons ',name ,map-name) conn--state-maps)
@@ -1477,16 +1623,14 @@ BODY contains code to be executed each time the transition function is executed.
                     (progn
                       (setq ,name nil)
                       (setq conn-current-state nil)
-                      (setq conn-previous-state ',name)
-                      (when conn-state-buffer-colors
-                        (buffer-face-set 'default)))
+                      (setq conn-previous-state ',name))
                   (setq conn-current-state ',name)
                   (setq ,name t)
                   (when conn-lighter
                     (setq-local conn-lighter
                                 (propertize conn-lighter
                                             'face ',lighter-face-name)))
-                  (when conn-state-buffer-colors
+                  (when conn--buffer-color-local-mode
                     (buffer-face-set ',buffer-face-name))
                   (conn--activate-input-method)
                   (setq conn--local-mode-maps (alist-get conn-current-state
@@ -1599,124 +1743,6 @@ state."
                  "F o"      'conn-emacs-state-overwrite
                  "F u"      'conn-emacs-state-overwrite-binary))
 (put 'conn-org-tree-edit-state :conn-hide-mark t)
-
-
-;;;; Extensions
-
-(defvar conn--extensions nil)
-
-(defun conn--setup-extensions ()
-  "Run when `conn-mode' is turned on or off to turn shims on or off."
-  (run-hook-with-args 'conn--extensions conn-mode))
-
-(defmacro conn-define-extension (name &rest body)
-  "Define a conn conn extension.
-
-\(fn NAME [DOCSTRING] &rest body)"
-  (declare (indent 1))
-  (let (doc)
-    (when (stringp (car body))
-      (setq doc (pop body)))
-    `(progn
-       (defvar ,name nil)
-
-       (defun ,name (enable)
-         ,(or doc "")
-         (interactive (list (not ,name)))
-         (when (xor enable ,name)
-           (let ((fn (get ',name :conn-feature-function)))
-             (when conn-mode (funcall fn enable))
-             (if enable
-                 (progn
-                   (when (called-interactively-p 'interactive)
-                     (message ,(conn--stringify name " enabled.")))
-                   (add-hook 'conn--extensions fn))
-               (when (called-interactively-p 'interactive)
-                 (message ,(conn--stringify name " disabled.")))
-               (remove-hook 'conn--extensions fn)))))
-
-       (when-let ((body-fn (get ',name :conn-feature-function)))
-         (funcall body-fn nil)
-         (remove-hook 'conn--extensions body-fn)
-         (put ',name :conn-feature-function nil))
-
-       (let ((body-sym (make-symbol ,(conn--stringify name "-body-fn"))))
-         (fset body-sym (lambda (enable)
-                          (setq ,name (when enable t))
-                          ,@body))
-         (put ',name :conn-feature-function body-sym))
-
-       ',name)))
-
-;;;;; Repeat Extension
-
-(defun conn--repeat-get-map-ad ()
-  (when-let (repeat-mode
-             (prop (repeat--command-property :conn-repeat-command))
-             (m (or (eq prop t)
-                    (eq prop conn-current-state))))
-    (define-keymap (single-key-description last-command-event) this-command)))
-
-(defun conn-set-repeat-command (command &optional state)
-  "Make COMMAND repeatable in STATE with whatever key called it.
-
-If STATE is nil make COMMAND always repeat."
-  (put command :conn-repeat-command (or state t)))
-
-(defun conn-unset-repeat-command (command)
-  "Remove repeat property from COMMAND."
-  (put command :conn-repeat-command nil))
-
-(mapc #'conn-set-repeat-command
-      '(transpose-words
-        transpose-sexps
-        transpose-chars
-        transpose-lines
-        transpose-paragraphs
-        conn-transpose-words-backward
-        conn-transpose-sexps-backward
-        conn-transpose-chars-backward
-        conn-transpose-lines-backward
-        conn-transpose-paragraphs-backward
-        conn-set-window-dedicated
-        previous-error
-        next-error
-        pop-global-mark
-        conn-region-case-dwim
-        conn-remove-dot-backward
-        conn-remove-dot-forward
-        duplicate-line
-        duplicate-dwim
-        conn-duplicate-region
-        conn-delete-pair
-        bury-buffer
-        conn-duplicate-region
-        conn-duplicate-and-comment-region
-        conn-other-window))
-
-(conn-define-extension conn-repeatable-commands
-  (if conn-repeatable-commands
-      (advice-add 'repeat-get-map :after-until 'conn--repeat-get-map-ad)
-    (advice-remove 'repeat-get-map 'conn--repeat-get-map-ad)))
-
-(let (original-cursor-color)
-  (defun conn--repeat-cursor-message-ad (map)
-    (when (and map (not original-cursor-color))
-      (setq original-cursor-color (face-background 'cursor)))
-    (modify-all-frames-parameters
-     `((cursor-color . ,(if map
-                            conn-repeating-cursor-color
-                          original-cursor-color))))
-    (unless map (setq original-cursor-color nil))))
-
-(conn-define-extension conn-repeat-cursor
-  "Change the cursor color when a repeat map is active."
-  (if conn-repeat-cursor
-      (add-function :after repeat-echo-function 'conn--repeat-cursor-message-ad)
-    (remove-function repeat-echo-function 'conn--repeat-cursor-message-ad)))
-
-(conn-repeatable-commands t)
-(conn-repeat-cursor t)
 
 
 ;;;; Commands
@@ -2159,7 +2185,6 @@ between `point-min' and `point-max'."
 
 (defun conn--previous-dot-1 ()
   "Perform one iteration for `conn-previous-dot-end'."
-  (interactive)
   (let* ((pt (previous-overlay-change (point)))
          (ov (conn--dot-after-point pt)))
     (while (and (or (not ov)
@@ -4028,7 +4053,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "o" 'conn-camel-case-region
   "l" 'conn-capital-snake-case-region
   "j" 'conn-snake-case-region
-  "h" 'conn-region-case-dwim)
+  "u" 'conn-region-case-dwim)
 
 (defvar-keymap conn-join-line-repeat-map
   :repeat t
@@ -4325,6 +4350,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--remove-dots))
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
+    (when conn-buffer-colors
+      (buffer-face-mode -1))
     (setq conn-current-state nil)
     (conn--delete-mark-cursor)
     (setq-local mode-line-format
