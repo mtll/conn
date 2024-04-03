@@ -613,9 +613,14 @@ If STATE is nil make COMMAND always repeat."
       `((put ',thing 'end-op ,end)))
     (when-let ((bounds (plist-get rest :bounds-op)))
       `((put ',thing 'bounds-of-thing-at-point ,bounds)))
-    (when-let ((commands (plist-get rest :commands))
-               (handler (plist-get rest :handler)))
-      `((conn-set-mark-handler ,commands ,handler)))
+    (when-let ((commands (plist-get rest :commands)))
+      (let ((cmds (gensym "commands")))
+        `((let ((,cmds ,commands))
+            ,@(nconc
+               `((dolist (cmd ,cmds)
+                   (put cmd :conn-command-thing ',thing)))
+               (when-let ((handler (plist-get rest :handler)))
+                 `((conn-set-mark-handler ,cmds ,handler))))))))
     (when-let ((binding (plist-get rest :mark-key)))
       (if-let ((modes (ensure-list (plist-get rest :modes))))
           (let ((forms))
@@ -2348,20 +2353,29 @@ between `point-min' and `point-max'."
 
 THING is something with a forward-op as defined by thingatpt."
   (interactive
-   (let ((things (conn--things 'conn--movement-thing-p)))
-     (list (intern (completing-read "Thing: " things nil t nil
-                                    'conn-thing-history)))))
+   (list (with-temp-message ""
+           (conn--thread key
+               (read-key-sequence "Movement Command:")
+             (key-description key)
+             (keymap-lookup nil key)
+             (get key :conn-command-thing)))))
+  (unless thing (error "Unknown thing command"))
+  (save-excursion (forward-thing thing))
   (save-excursion
     (with-restriction
         (region-beginning) (region-end)
       (goto-char (point-min))
+      (when-let ((bounds (bounds-of-thing-at-point thing)))
+        (conn--create-dots bounds))
       (forward-thing thing)
-      (conn--create-dots (bounds-of-thing-at-point thing))
-      (while (and (/= (point) (point-max))
-                  (/= (point) (progn
-                                (forward-thing thing)
-                                (point))))
-        (conn--create-dots (bounds-of-thing-at-point thing))))))
+      (let ((bounds (bounds-of-thing-at-point thing)))
+        (while (and bounds
+                    (/= (point) (point-max))
+                    (/= (point) (progn
+                                  (forward-thing thing)
+                                  (point))))
+          (conn--create-dots bounds)
+          (setq bounds (bounds-of-thing-at-point thing)))))))
 
 (defun conn-shell-command-on-dots (command arg)
   (interactive
@@ -4072,6 +4086,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-menu
+  "I"   'copy-from-above-command
   "i"   'conn-transpose-lines-backward
   "j"   'join-line
   "J"   'join-line
