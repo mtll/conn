@@ -1099,8 +1099,11 @@ If BUFFER is nil use current buffer."
 
 ;;;; Advice
 
-(defun conn--define-key-advice (&rest _)
-  (cl-incf conn--define-key-tick))
+(defun conn--define-key-advice (keymap key &rest _)
+  (when (and (memq keymap (current-active-maps))
+             (member (if (stringp key) (key-parse key) key)
+                     (mapcar #'symbol-value conn--aux-bindings)))
+    (cl-incf conn--define-key-tick)))
 
 (defun conn--pop-to-mark-command-ad (&rest _)
   (unless (or (null (mark t))
@@ -1285,7 +1288,6 @@ C-x, M-s and M-g into various state maps."
 
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
-
 If one does not exists assign a new sparse keymap for MODE
 in STATE and return it."
   (or (alist-get mode (alist-get state conn--mode-maps))
