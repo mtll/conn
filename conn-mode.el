@@ -53,7 +53,6 @@
 ;; vars so we need to declare them up here.
 (defvar conn-mode nil)
 (defvar conn-local-mode)
-(defvar conn-view-state)
 (defvar conn-modes)
 (defvar conn-local-map)
 (defvar conn-global-map)
@@ -250,8 +249,6 @@ See `conn--dispatch-on-regions'.")
 (defvar conn--repat-check-key-prev-val)
 
 (defvar conn--aux-bindings nil)
-
-(defvar-local conn-view-state--start-marker nil)
 
 (defvar conn--goto-char-last-char nil)
 
@@ -1521,30 +1518,6 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :ephemeral-marks nil
   :transitions (define-keymap "<escape>" 'conn-state))
 
-(conn-define-state conn-view-state
-  "Activate `conn-view-state' in the current buffer.
-A `conn-mode' state for viewing and navigating buffers.
-
-See `conn-view-state-transition-map' for keybindings to enter other states
-from view state.  See `conn-view-state-map' for commands bound by view state."
-  :lighter-face ((t (:background "#f5c5ff" :box (:line-width 2 :color "#2d242f"))))
-  :suppress-input-method t
-  :cursor box
-  :indicator " V "
-  :buffer-face ((t :inherit default :background "#fff6ff"))
-  :ephemeral-marks nil
-  :keymap (define-keymap :suppress t)
-  :transitions (define-keymap
-                 "f"        'conn-emacs-state
-                 "<escape>" 'conn-state
-                 "w"        'conn-view-state-quit)
-  (if conn-view-state
-      (progn
-        (setq-local conn-view-state--start-marker (point-marker)))
-    (set-marker conn-view-state--start-marker nil)
-    (setq-local conn-view-state--start-marker nil)))
-(put 'conn-view-state :conn-hide-mark t)
-
 (conn-define-state conn-state
   "Activate `conn-state' in the current buffer.
 A `conn-mode' state for editing text.
@@ -1611,10 +1584,10 @@ See `conn-org-tree-edit-state-transition-map' for keybindings to enter
 other states from org-tree-edit state.  See
 `conn-org-tree-edit-state-map' for commands bound by org-tree-edit
 state."
-  :lighter-face ((t :inherit conn-view-state-lighter-face))
+  :lighter-face ((t (:background "#f5c5ff" :box (:line-width 2 :color "#2d242f"))))
+  :buffer-face ((t :inherit default :background "#fff6ff"))
   :suppress-input-method t
   :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
-  :buffer-face ((t :inherit conn-view-state-buffer-face))
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "<escape>" 'conn-state
@@ -3428,13 +3401,6 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Transition Functions
 
-(defun conn-view-state-quit ()
-  "Pop state and goto point where conn-view-state was entered."
-  (interactive)
-  (when conn-view-state--start-marker
-    (goto-char conn-view-state--start-marker))
-  (conn-pop-state))
-
 (defun conn-dot-quit ()
   "Pop state and clear all dots."
   (interactive)
@@ -4213,33 +4179,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "z"     'conn-exchange-mark-command)
 
 (define-keymap
-  :keymap conn-view-state-map
-  "<down>"  'conn-scroll-up
-  "<left>"  'backward-page
-  "<right>" 'forward-page
-  "<up>"    'conn-scroll-down
-  "DEL"     'conn-scroll-down
-  "SPC"     'conn-scroll-up
-  ","       'isearch-forward
-  "."       'isearch-forward
-  ";"       'execute-extended-command
-  ":"       'execute-extended-command-for-buffer
-  "a"       'switch-to-buffer
-  "g"       'conn-M-g-keys
-  "i"       'conn-scroll-down
-  "j"       'backward-page
-  "k"       'conn-scroll-up
-  "l"       'forward-page
-  "m"       'mark-page
-  "n"       'point-to-register
-  "p"       'conn-register-load
-  "Q"       'kill-buffer-and-window
-  "q"       'quit-window
-  "s"       'conn-M-s-keys
-  "x"       'conn-C-x-keys
-  "z"       'conn-exchange-mark-command)
-
-(define-keymap
   :keymap conn-org-tree-edit-state-map
   "SPC" 'conn-scroll-up
   "DEL" 'conn-scroll-down
@@ -4490,7 +4429,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                org-up-element)
    :modes 'org-mode)
 
-  (keymap-set org-mode-map "<remap> <conn-view-state>" 'conn-org-tree-edit-state)
+  (keymap-set (conn-get-mode-map 'conn-state 'org-mode)
+              "T" 'conn-org-tree-edit-state)
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'org-mode)
