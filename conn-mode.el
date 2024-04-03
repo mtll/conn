@@ -3570,6 +3570,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (conn-register-thing page
   :handler (conn-individual-thing-handler 'page)
+  :mark-key "p"
   :forward-op 'forward-page
   :commands '(forward-page backward-page))
 
