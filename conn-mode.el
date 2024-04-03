@@ -1379,31 +1379,22 @@ C-x, M-s and M-g into various state maps."
 
 ;;;;; Buffer Color Mode
 
-(define-minor-mode conn--buffer-color-local-mode
-  "Local mode for indicating conn-state with buffer background color."
-  :keymap nil
-  :lighter ""
-  (if conn--buffer-color-local-mode
+(defun conn--buffer-color-setup ()
+  (if conn-local-mode
       (progn
         (buffer-face-mode 1)
-        (when-let ((face (get conn-current-state :conn-buffer-face)))
-          (buffer-face-set face)))
+        (if-let ((face (get conn-current-state :conn-buffer-face)))
+            (buffer-face-set face)
+          (buffer-face-set 'default)))
     (buffer-face-mode -1)))
 
-(defun conn--buffer-color-mode-on ()
-  (conn--buffer-color-local-mode 1))
-
-(define-globalized-minor-mode conn--buffer-color-mode
-  conn--buffer-color-local-mode
-  conn--buffer-color-mode-on
-  "Indicate state using buffer faces."
-  :global t
-  :group conn-mode)
-
 (conn-define-extension conn-buffer-colors
+  (dolist (buf (buffer-list))
+    (with-current-buffer buf
+      (conn--buffer-color-setup)))
   (if conn-buffer-colors
-      (conn--buffer-color-mode 1)
-    (conn--buffer-color-mode -1)))
+      (add-hook 'conn-local-mode #'conn--buffer-color-setup)
+    (remove-hook 'conn-local-mode #'conn--buffer-color-setup)))
 
 ;;;;; Conn-Define-State Macro
 
@@ -1635,7 +1626,7 @@ BODY contains code to be executed each time the transition function is executed.
                     (setq-local conn-lighter
                                 (propertize conn-lighter
                                             'face ',lighter-face-name)))
-                  (when conn--buffer-color-local-mode
+                  (when conn-buffer-colors
                     (buffer-face-set ',buffer-face-name))
                   (conn--activate-input-method)
                   (setq conn--local-mode-maps (alist-get conn-current-state
@@ -4365,8 +4356,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--remove-dots))
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
-    (when conn-buffer-colors
-      (buffer-face-mode -1))
     (setq conn-current-state nil)
     (conn--delete-mark-cursor)
     (setq-local mode-line-format
