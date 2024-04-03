@@ -297,10 +297,10 @@ Each function is run without any arguments and if any of them return nil
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (conn--thread needle
-      (lambda (e)
-        (cl-etypecase e
-          (string e)
-          (symbol (symbol-name e))))
+        (lambda (e)
+          (cl-etypecase e
+            (string e)
+            (symbol (symbol-name e))))
       (mapcar needle symbols-or-strings)
       (apply #'concat needle)))
 
@@ -462,14 +462,14 @@ If BUFFER is nil check `current-buffer'."
                  (forward-thing ',thing N)
                  (conn--push-ephemeral-mark))
                (forward-thing ',thing (- N))))))
-      (put ',name :conn-repeat-command t)
-      ',name)))
+       (put ',name :conn-repeat-command t)
+       ',name)))
 
 (defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
     `(progn
        (defun ,name ()
-           (interactive)
+         (interactive)
          (pcase (bounds-of-thing-at-point ',thing)
            (`(,beg . ,end)
             (goto-char beg)
@@ -1228,8 +1228,7 @@ C-x, M-s and M-g into various state maps."
           "the binding of the key sequence in `" name "'.")
          70)
        (interactive "p")
-       (pcase (keymap--menu-item-binding (conn--without-conn-maps
-                                           (key-binding ,name t)))
+       (pcase (conn--without-conn-maps (key-binding ,name t))
          ((and (pred commandp) cmd)
           (if interactive-p (call-interactively cmd) cmd))
          (_ (error "Key not bound to a command %s." ,name))))
