@@ -2844,11 +2844,13 @@ Handles rectangular regions."
       (if (null rectangle-mark-mode)
           (with-restriction
               (region-beginning) (region-end)
+            (goto-char (point-min))
             (funcall transform-func))
         (apply-on-rectangle
          (lambda (start-col end-col)
            (with-restriction
                (+ (point) start-col) (+ (point) end-col)
+             (goto-char (point-min))
              (funcall transform-func)))
          (region-beginning) (region-end))))))
 
@@ -2956,6 +2958,8 @@ downcase -> Capitalize -> UPCASE -> downcase."
      (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
        (replace-match "" nil nil))
      (downcase-region (point-min) (1+ (point-min)))
+     (while (re-search-forward "[-_]+" nil t)
+       (replace-match "" nil nil))
      (current-buffer))))
 
 (defun conn-kill-append-region (beg end &optional register)
@@ -4053,14 +4057,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-region-case-map
   :prefix 'conn-region-case-map
-  "-" 'conn-kebab-case-region
-  "c" 'capitalize-region
-  "d" 'downcase-region
-  "u" 'upcase-region
-  "o" 'conn-capital-case-region
-  "a" 'conn-camel-case-region
-  "S" 'conn-capital-snake-case-region
-  "s" 'conn-snake-case-region)
+  "k" 'conn-kebab-case-region
+  "i" 'conn-capital-case-region
+  "o" 'conn-camel-case-region
+  "l" 'conn-capital-snake-case-region
+  "j" 'conn-snake-case-region
+  "h" 'conn-region-case-dwim)
 
 (defvar-keymap conn-join-line-repeat-map
   :repeat t
