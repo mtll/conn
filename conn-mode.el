@@ -1380,15 +1380,17 @@ C-x, M-s and M-g into various state maps."
 ;;;;; Buffer Color Mode
 
 (defun conn--buffer-color-setup ()
-  (if conn-local-mode
+  (if conn-buffer-colors
       (progn
         (buffer-face-mode 1)
         (if-let ((face (get conn-current-state :conn-buffer-face)))
             (buffer-face-set face)
           (buffer-face-set 'default)))
+    (buffer-face-set 'default)
     (buffer-face-mode -1)))
 
 (conn-define-extension conn-buffer-colors
+  "Buffer background face for states."
   (dolist (buf (buffer-list))
     (with-current-buffer buf
       (conn--buffer-color-setup)))
@@ -3960,7 +3962,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "s"   'conn-sort-menu
   "u"   'conn-insert-pair
   "v"   'vc-region-history
-  "w"   'conn-query-replace-regexp-region)
+  "w"   'conn-query-replace-regexp-region
+  "y"   'yank-rectangle)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -4093,7 +4096,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "w"   'query-replace-regexp
   "u"   'conn-transpose-words-backward
   "v"   'conn-mark-thing
-  "y"   'yank-rectangle)
+  "y"   'yank-in-context)
 
 (define-keymap
   :keymap conn-dot-state-map
