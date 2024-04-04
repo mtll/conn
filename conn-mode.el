@@ -2404,28 +2404,28 @@ THING is something with a forward-op as defined by thingatpt."
 
 (defun conn-isearch-dispatch ()
   (interactive)
-  (save-window-excursion
-    (if (or (not (boundp 'multi-isearch-buffer-list))
-            (not multi-isearch-buffer-list))
-        (thread-first
-          (prog1
-              (nreverse (conn--isearch-matches-in-buffer (current-buffer)))
-            (isearch-exit))
-          (conn--region-iterator)
-          (conn--dispatch-single-buffer)
-          (conn--dispatch-with-state 'conn-state)
-          (conn--pulse-on-record)
-          (conn-macro-dispatch))
-      (thread-first
-        (prog1
-            (nreverse (mapcan 'conn--isearch-matches-in-buffer
-                              multi-isearch-buffer-list))
-          (isearch-exit))
-        (conn--region-iterator)
-        (conn--dispatch-multi-buffer)
-        (conn--dispatch-with-state 'conn-state)
-        (conn--pulse-on-record)
-        (conn-macro-dispatch)))))
+  (if (or (not (boundp 'multi-isearch-buffer-list))
+          (not multi-isearch-buffer-list))
+      (let ((regions (nreverse (conn--isearch-matches-in-buffer (current-buffer)))))
+        (isearch-exit)
+        (save-mark-and-excursion
+          (thread-first
+            (conn--region-iterator regions)
+            (conn--dispatch-single-buffer)
+            (conn--dispatch-with-state 'conn-state)
+            (conn--pulse-on-record)
+            (conn-macro-dispatch))))
+    (let ((regions (mapcan 'conn--isearch-matches-in-buffer
+                           multi-isearch-buffer-list)))
+      (isearch-exit)
+      (save-mark-and-excursion
+        (save-window-excursion
+          (thread-first
+            (conn--region-iterator regions)
+            (conn--dispatch-multi-buffer)
+            (conn--dispatch-with-state 'conn-state)
+            (conn--pulse-on-record)
+            (conn-macro-dispatch)))))))
 
 (defun conn-isearch-in-dot-p (beg end)
   (when-let ((ov (conn--dot-after-point beg)))
@@ -3033,11 +3033,11 @@ interactively."
                        "	")
     (`(,front ,back . nil) (cons front back))
     (`(,str) (conn--thread needle
-               (lambda (char)
-                 (pcase (alist-get char insert-pair-alist)
-                   (`(,close . nil) (list char close))
-                   (`(,open ,close) (list open close))
-                   (_               (list char char))))
+                 (lambda (char)
+                   (pcase (alist-get char insert-pair-alist)
+                     (`(,close . nil) (list char close))
+                     (`(,open ,close) (list open close))
+                     (_               (list char char))))
                (seq-map needle str)
                (apply #'seq-mapn 'string needle)
                (cons (car needle) (nreverse (cadr needle)))))
@@ -3282,9 +3282,9 @@ If ARG is a numeric prefix argument kill region to a register."
          (call-interactively (conn-delete-region-keys)))
         ((numberp arg)
          (conn--thread needle
-           (concat "Kill "
-                   (if rectangle-mark-mode "Rectangle " " ")
-                   "to register:")
+             (concat "Kill "
+                     (if rectangle-mark-mode "Rectangle " " ")
+                     "to register:")
            (register-read-with-preview needle)
            (copy-to-register needle nil nil t t)))
         (t (call-interactively (conn-kill-region-keys)))))
@@ -4005,6 +4005,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (define-keymap
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
+  "M-|"        'conn-isearch-dispatch
   "M-E"        'conn-isearch-add-dots
   "M-R"        'conn-isearch-refine-dots
   "M-W"        'conn-isearch-remove-dots
@@ -4183,6 +4184,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "`"     'conn-other-window
   "~"     'tab-next
   "a"     'switch-to-buffer
+  "A"     'ibuffer
   "b"     'conn-mark-thing-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
