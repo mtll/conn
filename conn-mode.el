@@ -3719,7 +3719,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    :if-not conn--in-kbd-macro-p
    [("c" "Call Macro" kmacro-call-macro)
     ("r" "Record Macro" kmacro-start-macro)
-    ("e" "Edit Macro" kmacro-edit-macro)]
+    ("e" "Edit Macro" kmacro-edit-macro)
+    ("!" "Kmacro to Register" kmacro-to-register)]
    [("d" "Name Last Macro" kmacro-name-last-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
     ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]]
@@ -4205,6 +4206,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "n"     'conn-backward-sexp-keys
   "O"     'conn-forward-sentence-keys
   "o"     'conn-forward-word-keys
+  "P"     'point-to-register
   "p"     'conn-register-load
   "R"     'conn-dot-region
   "s"     'conn-M-s-keys
