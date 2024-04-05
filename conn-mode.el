@@ -252,7 +252,7 @@ See `conn--dispatch-on-regions'.")
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
 
-(defvar conn--define-key-tick 0)
+(defvar conn--aux-update-flag nil)
 
 (defvar conn-enable-in-buffer-hook nil
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
@@ -1231,7 +1231,7 @@ If BUFFER is nil use current buffer."
   (when (and (memq keymap (conn--without-conn-maps (current-active-maps)))
              (member (if (stringp key) (key-parse key) key)
                      (mapcar #'symbol-value conn--aux-bindings)))
-    (cl-incf conn--define-key-tick)))
+    (setq conn--aux-update-flag t)))
 
 (defun conn--pop-to-mark-command-ad (&rest _)
   (unless (or (null (mark t))
@@ -1296,16 +1296,17 @@ If BUFFER is nil use current buffer."
   (when (and conn-local-mode
              conn-current-state
              (not conn-emacs-state))
-    (pcase-let ((`(,prev-active ,prev-tick . ,prev-remappings)
+    (pcase-let ((`(,prev-active . ,prev-remappings)
                  (alist-get conn-current-state conn--previous-active-maps))
                 (active (conn--without-conn-maps (current-active-maps)))
-                (state-map (alist-get conn-current-state conn--state-maps)))
+                (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
       (unless (and (not force)
-                   (eq conn--define-key-tick prev-tick)
-                   (equal prev-remappings conn--aux-bindings)
+                   (not conn--aux-update-flag)
+                   (equal prev-remappings current-remappings)
                    (equal active prev-active))
         (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                             (make-sparse-keymap))))
+                             (make-sparse-keymap)))
+              (state-map (alist-get conn-current-state conn--state-maps)))
           (conn--without-conn-maps
             (dolist (sentinal conn--aux-bindings)
               (when-let ((def (key-binding (symbol-value sentinal) t)))
@@ -1314,8 +1315,9 @@ If BUFFER is nil use current buffer."
           (let ((mark-map (conn--modes-mark-map)))
             (dolist (key (where-is-internal 'conn-mark-thing-map (list state-map) nil t t))
               (define-key aux-map key mark-map)))
-          (setf (alist-get conn-current-state conn--previous-active-maps)
-                (cons active (cons conn--define-key-tick conn--aux-bindings))))))))
+          (setf conn--aux-update-flag nil
+                (alist-get conn-current-state conn--previous-active-maps)
+                (cons active current-remappings)))))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
