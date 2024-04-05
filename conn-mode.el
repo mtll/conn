@@ -3997,13 +3997,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar-keymap conn-dot-region-repeat-map
   :repeat t
   "j" 'conn-dot-region-backward
-  "k" 'conn-dot-region-forward
-  "u" 'conn-dot-skip-backward
-  "i" 'conn-dot-skip-forward)
+  "l" 'conn-dot-region-forward
+  "J" 'conn-dot-skip-backward
+  "L" 'conn-dot-skip-forward)
 
 (defvar-keymap conn-dot-region-map
   :parent conn-region-map
-  "k" 'conn-dot-region-forward
+  "l" 'conn-dot-region-forward
   "j" 'conn-dot-region-backward
   "e" 'conn-add-dots-matching-region
   "a" 'conn-dot-all-things-in-region)
