@@ -514,8 +514,6 @@ If STATE is nil make COMMAND always repeat."
         next-error
         pop-global-mark
         conn-region-case-dwim
-        conn-remove-dot-backward
-        conn-remove-dot-forward
         duplicate-line
         duplicate-dwim
         conn-duplicate-region
@@ -1098,12 +1096,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defmacro conn--with-dots-as-text-properties (dots &rest body)
   (declare (indent 1))
-  `(save-mark-and-excursion
-     (unwind-protect
-         (progn
-           (mapc 'conn--dot-to-text-property ,(ensure-list dots))
-           ,(macroexp-progn body))
-       (conn--text-property-to-dots))))
+  `(unwind-protect
+       (progn
+         (mapc 'conn--dot-to-text-property ,(ensure-list dots))
+         ,(macroexp-progn body))
+     (conn--text-property-to-dots)))
 
 (defun conn--sorted-overlays (typep &optional predicate start end buffer)
   "Get all dots between START and END sorted by starting position."
@@ -1192,7 +1189,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
   (with-current-buffer (or buffer (current-buffer))
     (seq-filter predicate
                 (overlays-in (or start (conn--beginning-of-region-or-restriction))
-                             (or end (conn--end-of-region-or-restriction))))))
+                             (or end   (conn--end-of-region-or-restriction))))))
 
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
@@ -1380,6 +1377,8 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-previous-line-keys      "C-p")
 
 ;;;;; Buffer Color Mode
+
+(defvar conn-buffer-colors)
 
 (defun conn--buffer-color-setup ()
   (if conn-buffer-colors
@@ -1763,8 +1762,9 @@ buffers completing read DOT."
       (t (list (conn--completing-read-dot dots))))))
   (let ((beg (conn--create-marker (overlay-start dot)))
         (end (overlay-end dot)))
-    (conn--with-dots-as-text-properties (list dot)
-      (transpose-regions (region-beginning) (region-end) beg end))))
+    (save-mark-and-excursion
+      (conn--with-dots-as-text-properties (list dot)
+        (transpose-regions (region-beginning) (region-end) beg end)))))
 
 (defun conn-yank-to-dots (&optional at-end)
   "Yank from `kill-ring' at the front of each dot.
@@ -1802,16 +1802,17 @@ Obeys `sort-case-fold'."
          (old (reverse sort-lists))
          (case-fold-search sort-fold-case))
     (when sort-lists
-      (conn--with-dots-as-text-properties
-          (conn--all-overlays #'conn-dotp)
-        (setq sort-lists
-              (sort sort-lists
-                    (lambda (a b)
-                      (> 0 (compare-buffer-substrings
-                            nil (car (car a)) (cdr (car a))
-                            nil (car (car b)) (cdr (car b)))))))
-        (with-buffer-unmodified-if-unchanged
-          (sort-reorder-buffer sort-lists old))))))
+      (save-mark-and-excursion
+        (conn--with-dots-as-text-properties
+            (conn--all-overlays #'conn-dotp)
+          (setq sort-lists
+                (sort sort-lists
+                      (lambda (a b)
+                        (> 0 (compare-buffer-substrings
+                              nil (car (car a)) (cdr (car a))
+                              nil (car (car b)) (cdr (car b)))))))
+          (with-buffer-unmodified-if-unchanged
+            (sort-reorder-buffer sort-lists old)))))))
 
 (defun conn-remove-dot ()
   "Remove dot at point.
@@ -1949,14 +1950,16 @@ If region is active remove all dots in region."
     (let ((dot (or (conn--dot-before-point (point))
                    (when (conn--previous-dot-1)
                      (conn--next-dot-1)))))
-      (while (and (> arg 0) dot)
+      (while (and (> arg 1) dot)
         (conn--delete-dot dot)
         (setq dot (or (conn--dot-before-point (point))
                       (when (conn--previous-dot-1)
                         (conn--next-dot-1)))
               arg (1- arg)))
       (when dot
-        (conn--push-ephemeral-mark (overlay-start dot))))))
+        (goto-char (overlay-start dot))
+        (conn--push-ephemeral-mark (overlay-end dot))
+        (conn--delete-dot dot)))))
 
 (defun conn-remove-dot-forward (arg)
   "Remove nearest dot within the range `point' to `point-max'."
@@ -1964,16 +1967,16 @@ If region is active remove all dots in region."
   (let ((dot (or (conn--dot-after-point (point))
                  (when (conn--next-dot-1)
                    (conn--previous-dot-1)))))
-    (while (and (> arg 0) dot)
+    (while (and (> arg 1) dot)
       (conn--delete-dot dot)
       (setq dot (or (conn--dot-after-point (point))
                     (when (conn--next-dot-1)
                       (conn--previous-dot-1)))
             arg (1- arg)))
     (when dot
-      (conn--push-ephemeral-mark (overlay-start dot))))
-  (when (called-interactively-p 'interactive)
-    (message "Region removed forward")))
+      (goto-char (overlay-end dot))
+      (conn--push-ephemeral-mark (overlay-start dot))
+      (conn--delete-dot dot))))
 
 (defun conn-dot-region (bounds)
   "Dot current region."
@@ -4109,8 +4112,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "<return>"         'conn-dot-lines
   "<backspace>"      'conn-kill-to-dots
   "M-?"              'conn-dot-redo
-  "C-n"              'conn-next-dot
   "C-p"              'conn-previous-dot
+  "C-n"              'conn-next-dot
+  "C-M-p"            'conn-first-dot
+  "C-M-n"            'conn-last-dot
   "{"                'conn-first-dot
   "}"                'conn-last-dot
   "#"                'conn-add-dots-matching-regexp
@@ -4118,19 +4123,19 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "%"                'conn-query-remove-dots
   "!"                'conn-dots-dispatch
   "@"                'conn-dots-dispatch-menu
-  "|"                'conn-remove-dots-outside-region
+  "_"                'conn-remove-dots-outside-region
   "="                'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
   "c"                'conn-split-dots-on-regexp
   "C"                'conn-split-region-on-regexp
-  "d"                'conn-dots-dispatch-menu
+  "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
   "e"                'conn-dot-region
   "q"                'conn-dot-this-map
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
-  "w"                'conn-remove-dot
+  "w"                'conn-remove-dot-backward
   "Y"                'conn-yank-to-dots
   "y"                'conn-remove-all-dots)
 
@@ -4173,6 +4178,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-="   'balance-windows
   "M-0"   'quit-window
   "M-1"   'delete-other-windows-vertically
+  "M-9"   'tear-off-window
   "C-M-0" 'kill-buffer-and-window
   "SPC"   'conn-set-mark-command
   "+"     'conn-set-register-seperator
@@ -4402,6 +4408,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                     slime-xref-mode
                     calc-mode
                     calc-trail-mode
+                    calc-keypad-mode
                     special-mode)
                t)
   (progn

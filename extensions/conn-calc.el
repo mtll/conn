@@ -24,13 +24,15 @@
 
 (defun conn--calc-dispatch-ad (fn &rest args)
   "Disable all conn states during `calc-dispatch'."
-  (let ((buffer (current-buffer))
-        (state conn-current-state))
-    (set state nil)
-    (unwind-protect
-        (apply fn args)
-      (with-current-buffer buffer
-        (set state t)))))
+  (if (not conn-local-mode)
+      (apply fn args)
+    (let ((buffer (current-buffer))
+          (state conn-current-state))
+      (set state nil)
+      (unwind-protect
+          (apply fn args)
+        (with-current-buffer buffer
+          (set state t))))))
 
 ;;;###autoload (autoload 'conn-calc-shim "conn-calc" nil t)
 (conn-define-extension conn-calc-shim
