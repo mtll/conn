@@ -3506,6 +3506,10 @@ there's a region, all lines that region covers will be duplicated."
             (delete-overlay ov)))))))
 
 (defun conn-swap-windows (&optional no-select)
+  "Swap selected window and another window.
+If NO-SELECT is non-nil the window containing the buffer in the other
+window will be selected at the end of this command.  Otherwise the
+selected window will be the window containing the current buffer."
   (interactive "P")
   (when-let ((win1 (selected-window))
              (buf1 (window-buffer win1))
@@ -3518,10 +3522,15 @@ there's a region, all lines that region covers will be duplicated."
       (select-window win2))))
 
 (defun conn-swap-buffers ()
+  "Swap the buffers of the selected window and another window."
   (interactive)
   (conn-swap-windows t))
 
 (defun conn-other-window ()
+  "Select other window.
+When the number of windows is greater than or equal to
+`conn-other-window-prompt-threshold' prompt for the window to select.
+Otherwise behave like `other-window'."
   (interactive)
   (if-let ((other-windows (remove (selected-window) (window-list nil 'no-mini)))
            (_ (not (length< other-windows conn-other-window-prompt-threshold)))
@@ -3531,6 +3540,7 @@ there's a region, all lines that region covers will be duplicated."
     (other-window 1)))
 
 (defun conn-buffer-to-other-window ()
+  "Send buffer in selected window to another window and `bury-buffer'."
   (interactive)
   (when-let ((win (thread-last
                     (window-list nil 'no-mini)
@@ -3541,8 +3551,9 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-other-place-prefix (&optional arg)
   "One of `other-window-prefix', `other-tab-prefix' or `other-frame-prefix'.
-If ARG is nil `other-window-prefix',if ARG is \\[universal-argument]
-`other-frame-prefix',if ARG is anything else `other-tab-prefix'."
+If ARG is nil `other-window-prefix',
+if ARG is \\[universal-argument] `other-frame-prefix',
+if ARG is anything else `other-tab-prefix'."
   (interactive "P")
   (pcase arg
     ('(4) (other-frame-prefix))
