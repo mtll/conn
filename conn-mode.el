@@ -456,6 +456,17 @@ If BUFFER is nil check `current-buffer'."
       (setq result (get (pop modes) property)))
     result))
 
+(defun conn--narrow-indirect (beg end)
+  (let* ((name (format "%s@%s:%s - %s"
+                       (buffer-name (current-buffer))
+                       (line-number-at-pos beg)
+                       (line-number-at-pos end)
+                       (substring (buffer-substring-no-properties beg end) 0 20)))
+         (buffer (clone-indirect-buffer-other-window name nil)))
+    (pop-to-buffer buffer)
+    (narrow-to-region beg end)
+    (deactivate-mark)))
+
 
 ;;;; Extensions
 
@@ -2428,17 +2439,25 @@ between `point-min' and `point-max'."
   (when (called-interactively-p 'interactive)
     (message "Dots before point removed")))
 
+(defun conn--read-thing-command ()
+  (with-temp-message ""
+    (let ((key (conn--thread key
+                   (read-key-sequence "Movement Command:")
+                 (key-description key)
+                 (keymap-lookup nil key))))
+      (while (not (get key :conn-command-thing))
+        (when (eq 'keyboard-quit key) (keyboard-quit))
+        (setq key (conn--thread key
+                      (read-key-sequence "Not a valid movement command\nMovement Command:")
+                    (key-description key)
+                    (keymap-lookup nil key))))
+      (get key :conn-command-thing))))
+
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
 
 THING is something with a forward-op as defined by thingatpt."
-  (interactive
-   (list (with-temp-message ""
-           (conn--thread key
-               (read-key-sequence "Movement Command:")
-             (key-description key)
-             (keymap-lookup nil key)
-             (get key :conn-command-thing)))))
+  (interactive (list (conn--read-thing-command)))
   (unless thing (error "Unknown thing command"))
   (save-excursion (forward-thing thing))
   (save-excursion
@@ -3112,12 +3131,7 @@ interactively."
 
 (defun conn-mark-thing (thing)
   "Mark THING at point."
-  (interactive
-   (list (intern
-          (completing-read
-           (format "Thing: ")
-           (conn--things 'conn--defined-thing-p)
-           nil nil nil 'conn-thing-history))))
+  (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (goto-char (cdr bounds))
     (conn--push-ephemeral-mark (car bounds))
@@ -3125,20 +3139,31 @@ interactively."
 
 (defun conn-narrow-to-thing (thing)
   "Narrow to THING at point."
-  (interactive
-   (list (intern
-          (completing-read
-           (format "Thing: ")
-           (conn--things 'conn--defined-thing-p)
-           nil nil nil 'conn-thing-history))))
+  (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (narrow-to-region (car bounds) (cdr bounds))))
+
+(defun conn-narrow-indirect-to-thing (thing)
+  "Narrow to THING at point."
+  (interactive (list (conn--read-thing-command)))
+  (when-let ((bounds (bounds-of-thing-at-point thing)))
+    (conn--narrow-indirect (car bounds) (cdr bounds))))
 
 (defun conn-narrow-to-visible ()
   "Narrow buffer to the visible portion of the selected window."
   (interactive)
   (narrow-to-region (window-start) (window-end))
   (message "Narrowed to visible region"))
+
+(defun conn-narrow-indirect-to-visible ()
+  "Narrow buffer to the visible portion of the selected window."
+  (interactive)
+  (conn--narrow-indirect (window-start) (window-end))
+  (message "Narrowed to visible region"))
+
+(defun conn-narrow-indirect-to-region (beg end)
+  (interactive (list (region-beginning) (region-end)))
+  (conn--narrow-indirect beg end))
 
 (defun conn--read-pair ()
   (pcase (string-split (minibuffer-with-setup-hook
@@ -4109,6 +4134,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "I"   'indent-rigidly
   "j"   'conn-join-lines
   "m"   'conn-macro-at-point-and-mark
+  "N"   'conn-narrow-indirect-to-region
   "n"   'narrow-to-region
   "o"   'conn-occur-region
   "p"   'conn-change-pair
@@ -4250,8 +4276,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "r"   'query-replace
   "w"   'query-replace-regexp
   "u"   'conn-transpose-words-backward
-  "V"   'conn-narrow-to-visible
-  "v"   'conn-narrow-to-thing
+  "V"   'conn-narrow-indirect-to-visible
+  "v"   'conn-narrow-to-visible
+  "T"   'conn-narrow-indirect-to-thing
+  "t"   'conn-narrow-to-thing
   "y"   'yank-in-context)
 
 (define-keymap
@@ -4686,11 +4714,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ;; Make this command add narrowings to izone var
   (defun conn-narrow-to-thing (thing)
     "Narrow to THING at point."
-    (interactive (list (intern
-                        (completing-read
-                         (format "Thing: ")
-                         (conn--things 'conn--defined-thing-p) nil nil nil
-                         'conn-thing-history))))
+    (interactive (list (conn--read-thing-command)))
     (when-let ((bounds (bounds-of-thing-at-point thing)))
       (let ((zz-add-zone-anyway-p t))
         (narrow-to-region (car bounds) (cdr bounds))))))
