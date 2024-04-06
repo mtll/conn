@@ -55,7 +55,7 @@
 (defvar conn-local-mode)
 (defvar conn-modes)
 (defvar conn-local-map)
-(defvar conn-global-map)
+(defvar-keymap conn-global-map)
 (defvar conn-emacs-state)
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
@@ -4407,9 +4407,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-v"     'conn-scroll-up
   "M-v"     'conn-scroll-down)
 
-(defvar-keymap conn-global-map
+(define-keymap
+  :keymap conn-global-map
   "C-`"     'conn-other-window
-  "C-t"     'tab-bar-new-tab
   "<pause>" 'conn-toggle-minibuffer-focus
   "C-S-w"   'delete-region
   "C-x /"   'tab-bar-history-back
@@ -4420,6 +4420,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-x n t" 'conn-narrow-to-thing
   "C-x m"   'conn-kmacro-menu
   "C-x r"   conn-ctl-x-r-map
+  "C-x t j" 'conn-register-load
   "C-x t s" 'tab-switch
   "C-x r a" 'conn-tab-to-register
   "C-x t a" 'conn-tab-to-register
