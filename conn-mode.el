@@ -1765,6 +1765,39 @@ state."
 
 ;;;; Commands
 
+;;;;; Tab Registers
+
+(cl-defstruct (conn-tab-register (:constructor conn--make-tab-register (cookie)))
+  (cookie nil :read-only t))
+
+(defun conn--get-tab-by-cookie (cookie)
+  (seq-find (lambda (tab)
+              (eq cookie (alist-get 'conn-tab-cookie tab)))
+            (funcall tab-bar-tabs-function)))
+
+(defun conn-make-tab-register ()
+  (let* ((tabs (funcall tab-bar-tabs-function))
+         (current-tab (tab-bar--current-tab-find tabs)))
+    (conn--make-tab-register
+     (or (alist-get 'conn-tab-cookie current-tab)
+         (setf (alist-get 'conn-tab-cookie (cdr current-tab))
+               (gensym "conn-tab-cookie"))))))
+
+(cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
+  (when-let ((tab (conn--get-tab-by-cookie (conn-tab-register-cookie val))))
+    (tab-bar-switch-to-tab (alist-get 'name tab))))
+
+(cl-defmethod register-val-describe ((val conn-tab-register) _arg)
+  (princ (format "Tab:\n   %s"
+                 (thread-last
+                   (conn-tab-register-cookie val)
+                   (conn--get-tab-by-cookie)
+                   (alist-get 'name)))))
+
+(defun conn-tab-to-register (register)
+  (interactive (list (register-read-with-preview "Tab to register: ")))
+  (set-register register (conn-make-tab-register)))
+
 ;;;;; Dot Commands
 
 (defun conn-transpose-region-and-dot (dot)
@@ -3918,11 +3951,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Keymaps
 
-(defvar-keymap conn-tab-repeat-map
-  :repeat t
-  "~" 'tab-next
-  "`" 'tab-previous)
-
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
   "C-s" 'reb-next-match
@@ -4188,10 +4216,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-3"   'split-window-right
   "C-4"   'conn-C-x-4-keys
   "C-5"   'conn-C-x-5-keys
-  "C-6"   'tab-switch
-  "C-7"   'conn-C-x-t-keys
-  "C-8"   'conn-swap-windows
-  "C-9"   'conn-swap-buffers
+  "C-6"   'conn-swap-buffers
+  "C-7"   'conn-swap-windows
+  "C-8"   'conn-tab-to-register
+  "C-9"   'tab-switch
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
@@ -4210,7 +4238,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ">"     'forward-line
   "?"     'undo-redo
   "`"     'conn-other-window
-  "~"     'tab-next
+  "~"     'tab-switch
   "a"     'switch-to-buffer
   "A"     'ibuffer
   "b"     'conn-mark-thing-map
@@ -4302,6 +4330,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-global-map
   "C-`"     'conn-other-window
+  "C-t"     'tab-bar-new-tab
   "<pause>" 'conn-toggle-minibuffer-focus
   "C-S-w"   'delete-region
   "C-x /"   'tab-bar-history-back
