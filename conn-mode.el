@@ -172,6 +172,11 @@ Defines default STATE for buffers matching REGEXP."
   :type 'symbol)
 
 (defcustom conn-region-case-style-actions
+  '(conn-kebab-case-region
+    conn-capital-snake-case-region
+    conn-snake-case-region
+    conn-capital-case-region
+    conn-camel-case-region)
   "List of actions cycled through by `conn-region-case-style-cycle'.
 Supported values are:
 `conn-kebab-case-region'
@@ -179,11 +184,6 @@ Supported values are:
 `conn-snake-case-region'
 `conn-capital-case-region'
 `conn-camel-case-region'."
-  '(conn-kebab-case-region
-    conn-capital-snake-case-region
-    conn-snake-case-region
-    conn-capital-case-region
-    conn-camel-case-region)
   :group 'conn-mode
   :type '(repeat symbol))
 
@@ -2711,11 +2711,6 @@ from the text properties at point."
       (conn--dispatch-with-state conn-current-state)
       (conn-macro-dispatch))))
 
-(defvar-keymap conn-scroll-repeat-map
-  :repeat t
-  "SPC" 'conn-scroll-up
-  "DEL" 'conn-scroll-down)
-
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position."
   (interactive "P")
@@ -2958,8 +2953,16 @@ Repeated calls cycle through the actions in
         (put this-command :conn-cycle-state
              (append (cdr cycle) (list (car cycle))))
         (funcall (car cycle)))
-    (put this-command :conn-cycle-state conn-region-case-style-actions)
-    (funcall (car conn-region-case-style-actions))))
+    (put this-command :conn-cycle-state
+         (append (cdr conn-region-case-style-actions)
+                 (list (car conn-region-case-style-actions))))
+    (funcall (car conn-region-case-style-actions))
+    (let ((region (buffer-substring-no-properties (region-beginning)
+                                                  (region-end)))
+          (cycle (get this-command :conn-cycle-state)))
+      (put this-command :conn-cycle-state
+           (append (cdr cycle) (list (car cycle))))
+      (funcall (car cycle)))))
 
 (defun conn-kebab-case-region ()
   "Transform region text to capital-snake-case."
@@ -3980,6 +3983,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 
 ;;;; Keymaps
+
+(defvar-keymap conn-scroll-repeat-map
+  :repeat t
+  "SPC" 'conn-scroll-up
+  "DEL" 'conn-scroll-down)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
