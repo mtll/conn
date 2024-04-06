@@ -1787,10 +1787,11 @@ state."
 (cl-defstruct (conn-tab-register (:constructor conn--make-tab-register (cookie)))
   (cookie nil :read-only t))
 
-(defun conn--get-tab-by-cookie (cookie)
-  (seq-find (lambda (tab)
-              (eq cookie (alist-get 'conn-tab-cookie tab)))
-            (funcall tab-bar-tabs-function)))
+(defun conn--get-tab-index-by-cookie (cookie)
+  (seq-position (funcall tab-bar-tabs-function)
+                cookie
+                (lambda (tab c)
+                  (eq c (alist-get 'conn-tab-cookie tab)))))
 
 (defun conn-make-tab-register ()
   (let* ((tabs (funcall tab-bar-tabs-function))
@@ -1801,15 +1802,18 @@ state."
                (gensym "conn-tab-cookie"))))))
 
 (cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
-  (when-let ((tab (conn--get-tab-by-cookie (conn-tab-register-cookie val))))
-    (tab-bar-switch-to-tab (alist-get 'name tab))))
+  (when-let ((index (conn--get-tab-index-by-cookie
+                     (conn-tab-register-cookie val))))
+    (tab-bar-select-tab (1+ index))))
 
 (cl-defmethod register-val-describe ((val conn-tab-register) _arg)
   (princ (format "Tab:\n   %s"
-                 (thread-last
-                   (conn-tab-register-cookie val)
-                   (conn--get-tab-by-cookie)
-                   (alist-get 'name)))))
+                 (when-let ((index (conn--get-tab-index-by-cookie
+                                    (conn-tab-register-cookie val))))
+                   (conn--thread needle
+                       index
+                     (nth needle (funcall tab-bar-tabs-function))
+                     (alist-get 'name needle))))))
 
 (defun conn-tab-to-register (register)
   (interactive (list (register-read-with-preview "Tab to register: ")))
