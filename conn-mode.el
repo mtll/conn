@@ -3385,6 +3385,12 @@ for the meaning of prefix ARG."
      (unless (string-search "access aborted" (error-message-string err))
        (insert-register reg (not arg))))))
 
+(defun conn-kill-whole-line (&optional arg)
+  (interactive "P")
+  (cond (arg (kill-whole-line arg))
+        ((and (bolp) (eolp)) (kill-whole-line 1))
+        (t (kill-whole-line 0))))
+
 (defun conn-unset-register (register)
   "Reset REGISTER value."
   (interactive (list (register-read-with-preview "Clear register: ")))
@@ -4463,24 +4469,29 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap conn-global-map
-  "C-`"     'conn-other-window
-  "<pause>" 'conn-toggle-minibuffer-focus
-  "C-S-w"   'delete-region
-  "C-x /"   'tab-bar-history-back
-  "C-x 4"   conn-c-x-4-map
-  "C-x ?"   'tab-bar-history-forward
-  "C-x n <" 'conn-narrow-to-beginning-of-buffer
-  "C-x n >" 'conn-narrow-to-end-of-buffer
-  "C-x n t" 'conn-narrow-to-thing
-  "C-x m"   'conn-kmacro-menu
-  "C-x r"   conn-ctl-x-r-map
-  "C-x t j" 'conn-register-load
-  "C-x t s" 'tab-switch
-  "C-x r a" 'conn-tab-to-register
-  "C-x t a" 'conn-tab-to-register
-  "M-RET"   'conn-open-line-and-indent
-  "M-O"     'conn-pop-to-mark-command
-  "M-U"     'conn-unpop-to-mark-command)
+  "C-<backspace>" 'conn-kill-whole-line
+  "C-`"           'conn-other-window
+  "<pause>"       'conn-toggle-minibuffer-focus
+  "C-S-w"         'delete-region
+  "C-x /"         'tab-bar-history-back
+  "C-x 4"         conn-c-x-4-map
+  "C-x ?"         'tab-bar-history-forward
+  "C-x n <"       'conn-narrow-to-beginning-of-buffer
+  "C-x n >"       'conn-narrow-to-end-of-buffer
+  "C-x n t"       'conn-narrow-to-thing
+  "C-x n T"       'conn-narrow-indirect-to-thing
+  "C-x n v"       'conn-narrow-to-visible
+  "C-x n V"       'conn-narrow-indirect-to-visible
+  "C-x n N"       'conn-narrow-indirect-to-region
+  "C-x m"         'conn-kmacro-menu
+  "C-x r"         conn-ctl-x-r-map
+  "C-x t j"       'conn-register-load
+  "C-x t s"       'tab-switch
+  "C-x r a"       'conn-tab-to-register
+  "C-x t a"       'conn-tab-to-register
+  "M-RET"         'conn-open-line-and-indent
+  "M-O"           'conn-pop-to-mark-command
+  "M-U"           'conn-unpop-to-mark-command)
 
 (defun conn--setup-keymaps ()
   (if conn-mode
