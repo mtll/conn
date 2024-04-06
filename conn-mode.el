@@ -3120,6 +3120,11 @@ interactively."
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (narrow-to-region (car bounds) (cdr bounds))))
 
+(defun conn-narrow-to-visible ()
+  (interactive)
+  (narrow-to-region (window-start) (window-end))
+  (message "Narrowed to visible region"))
+
 (defun conn--read-pair ()
   (pcase (string-split (minibuffer-with-setup-hook
                            (lambda () (electric-pair-mode -1))
@@ -4193,6 +4198,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "w"   'query-replace-regexp
   "u"   'conn-transpose-words-backward
   "v"   'conn-mark-thing
+  "V"   'conn-narrow-to-visible
   "y"   'yank-in-context)
 
 (define-keymap
@@ -4219,6 +4225,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "]"                'conn-remove-dots-after
   "c"                'conn-split-dots-on-regexp
   "C"                'conn-split-region-on-regexp
+  "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
   "e"                'conn-dot-region
@@ -4226,8 +4233,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
   "w"                'conn-remove-dot-backward
-  "Y"                'conn-yank-to-dots
-  "y"                'conn-remove-all-dots)
+  "y"                'conn-yank-to-dots)
 
 (define-keymap
   :keymap conn-state-map
