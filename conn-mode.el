@@ -3529,6 +3529,15 @@ there's a region, all lines that region covers will be duplicated."
       (select-window win)
     (other-window 1)))
 
+(defun conn-buffer-to-other-window ()
+  (interactive)
+  (when-let ((win (thread-last
+                    (window-list nil 'no-mini)
+                    (remove (selected-window))
+                    (conn--prompt-for-window))))
+    (set-window-buffer win (current-buffer))
+    (bury-buffer)))
+
 ;;;;; Transition Functions
 
 (defun conn-dot-quit ()
@@ -4287,7 +4296,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ">"     'forward-line
   "?"     'undo-redo
   "`"     'conn-other-window
-  "~"     'tab-switch
+  "~"     'conn-buffer-to-other-window
   "a"     'switch-to-buffer
   "A"     'ibuffer
   "b"     'conn-mark-thing-map
