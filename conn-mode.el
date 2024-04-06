@@ -607,6 +607,7 @@ If STATE is nil make COMMAND always repeat."
                  (forward-thing ',thing N)
                  (conn--push-ephemeral-mark))
                (forward-thing ',thing (- N))))))
+       (put ',name :conn-command-thing ',thing)
        (put ',name :conn-repeat-command t)
        ',name)))
 
@@ -619,6 +620,7 @@ If STATE is nil make COMMAND always repeat."
            (`(,beg . ,end)
             (goto-char beg)
             (conn--push-ephemeral-mark end))))
+       (put ',name :conn-command-thing ',thing)
        ',name)))
 
 (defmacro conn-register-thing (thing &rest rest)
