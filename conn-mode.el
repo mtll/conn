@@ -55,10 +55,15 @@
 (defvar conn-local-mode)
 (defvar conn-modes)
 (defvar conn-local-map)
-(defvar-keymap conn-global-map)
 (defvar conn-emacs-state)
+
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
+
+(defvar-keymap conn-global-map
+  :doc "`conn-mode' keymap which is always active.
+This keymap is active even in buffers which do not have
+`conn-local-mode' turned on.")
 
 ;;;;; Customizable Variables
 
@@ -225,8 +230,6 @@ dynamically.")
 
 (defvar conn--prev-mark-even-if-inactive nil)
 
-(defvar conn-isearch-recursive-edit-p nil)
-
 (defvar conn-dot-macro-dispatch-p nil
   "Non-nil during dot macro dispatch.")
 
@@ -283,12 +286,13 @@ Each function is run without any arguments and if any of them return nil
 
 ;;;;; Command Histories
 
-(defvar conn-thing-history nil)
+(defvar conn-thing-history nil
+  "History list for conn thing commands.")
 
 (defvar conn--seperator-history nil
   "History var for `conn-set-register-seperator'.")
 
-(defvar-local conn-mode-line-indicator "")
+(defvar-local conn--mode-line-indicator "")
 
 
 ;;;; Utilities
@@ -1045,10 +1049,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Dot Registers
 
-(cl-defstruct (conn-dot-register (:constructor %conn-make-dot-register (data)))
+(cl-defstruct (conn-dot-register (:constructor %conn--make-dot-register (data)))
   (data nil :read-only t))
 
-(defun conn-make-dot-register ()
+(defun conn--make-dot-register ()
   (let ((buffers (mapcar #'get-buffer (conn-read-dot-buffers)))
         dots curr)
     (dolist (buf buffers)
@@ -1060,7 +1064,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (conn--create-marker (overlay-end dot) buf))
                  (cdr curr)))))
       (push curr dots))
-    (%conn-make-dot-register dots)))
+    (%conn--make-dot-register dots)))
 
 (cl-defmethod register-val-jump-to ((val conn-dot-register) _arg)
   (pcase-dolist (`(,buf . ,dots) (conn-dot-register-data val))
@@ -1079,7 +1083,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn-dot-state-to-register (register)
   "Store current dots in REGISTER."
   (interactive (list (register-read-with-preview "Dot state to register: ")))
-  (set-register register (conn-make-dot-register)))
+  (set-register register (conn--make-dot-register)))
 
 ;;;;; Dot Functions
 
@@ -1455,6 +1459,10 @@ C-x, M-s and M-g into various state maps."
             (push (cons state map) conn--major-mode-maps)))))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
+  "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
+If INHIBIT-INHERIT-MAPS is non-nil then any maps defined using
+`conn-get-mode-map' for parents of MODE will not be made active
+when MODE is."
   (put mode :conn-inhibit-inherit-maps inhibit-inherit-maps))
 
 (defun conn-get-transition-map (state)
@@ -1785,7 +1793,7 @@ state."
 
 ;;;;; Tab Registers
 
-(cl-defstruct (conn-tab-register (:constructor conn--make-tab-register (cookie)))
+(cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie)))
   (cookie nil :read-only t))
 
 (defun conn--get-tab-index-by-cookie (cookie)
@@ -1794,10 +1802,10 @@ state."
                 (lambda (tab c)
                   (eq c (alist-get 'conn-tab-cookie tab)))))
 
-(defun conn-make-tab-register ()
+(defun conn--make-tab-register ()
   (let* ((tabs (funcall tab-bar-tabs-function))
          (current-tab (tab-bar--current-tab-find tabs)))
-    (conn--make-tab-register
+    (%conn--make-tab-register
      (or (alist-get 'conn-tab-cookie current-tab)
          (setf (alist-get 'conn-tab-cookie (cdr current-tab))
                (gensym "conn-tab-cookie"))))))
@@ -1818,7 +1826,7 @@ state."
 
 (defun conn-tab-to-register (register)
   (interactive (list (register-read-with-preview "Tab to register: ")))
-  (set-register register (conn-make-tab-register)))
+  (set-register register (conn--make-tab-register)))
 
 ;;;;; Dot Commands
 
@@ -2449,6 +2457,7 @@ THING is something with a forward-op as defined by thingatpt."
           (setq bounds (bounds-of-thing-at-point thing)))))))
 
 (defun conn-shell-command-on-dots (command arg)
+  "Run `shell-command-on-region' on each dot."
   (interactive
    (list (read-shell-command "Shell command on dots: ")
          current-prefix-arg))
@@ -2482,6 +2491,7 @@ THING is something with a forward-op as defined by thingatpt."
       matches)))
 
 (defun conn-isearch-dispatch ()
+  "Macro dispatch on isearch matches."
   (interactive)
   (if (or (not (boundp 'multi-isearch-buffer-list))
           (not multi-isearch-buffer-list))
@@ -2507,10 +2517,13 @@ THING is something with a forward-op as defined by thingatpt."
             (conn-macro-dispatch)))))))
 
 (defun conn-isearch-in-dot-p (beg end)
+  "Whether or not region from BEG to END is entirely within a dot.
+Meant to be used as `isearch-filter-predicate'."
   (when-let ((ov (conn--dot-after-point beg)))
     (>= (overlay-end ov) end)))
 
 (defun conn-isearch-not-in-dot-p (beg end)
+  "Inverse of `conn-isearch-in-dot-p'."
   (not (conn-isearch-in-dot-p beg end)))
 
 (defun conn-isearch-in-dot-toggle ()
@@ -3122,6 +3135,7 @@ interactively."
     (narrow-to-region (car bounds) (cdr bounds))))
 
 (defun conn-narrow-to-visible ()
+  "Narrow buffer to the visible portion of the selected window."
   (interactive)
   (narrow-to-region (window-start) (window-end))
   (message "Narrowed to visible region"))
@@ -3569,6 +3583,8 @@ if ARG is anything else `other-tab-prefix'."
   (conn-pop-state))
 
 (defun conn-region-dispatch (&optional reverse)
+  "Macro dispatch on active region.
+If REVERSE is non-nil dispatch from last to first region."
   (interactive "P")
   (let ((iterator
          (conn--thread regions
@@ -3661,6 +3677,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
       (overwrite-mode 1))))
 
 (defun conn-emacs-state-overwrite-binary ()
+  "Enter emacs state in `binary-overwrite-mode'."
   (interactive)
   (conn-emacs-state-overwrite 1))
 
@@ -3830,6 +3847,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (read-string "Macro Counter Format: ")))
 
 (transient-define-prefix conn-kmacro-menu ()
+  "Transient menu for kmacro functions."
   [[:description
     conn--kmacro-counter-format
     ("i" "Insert Counter" kmacro-insert-counter)
@@ -3881,6 +3899,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
 
 (transient-define-prefix conn-fill-menu ()
+  "Transient menu for fill functions."
   [["Fill:"
     ("r" "Region" fill-region)
     ("i" "Paragraph" fill-paragraph)
@@ -3897,6 +3916,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (not sort-fold-case)))
 
 (transient-define-prefix conn-sort-menu ()
+  "Transient menu for buffer sorting functions."
   [["Sort Region: "
     ("a" "sort pages" sort-pages)
     ("c" "sort columns" sort-columns)
@@ -3970,6 +3990,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn-macro-dispatch dots macro)))))
 
 (transient-define-prefix conn-dots-dispatch-menu (macro buffers)
+  "Transient menu for macro dispatch on dots."
   [[:description
     conn--dot-dispatch-title
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
@@ -4014,6 +4035,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                'face 'transient-value)))
 
 (transient-define-prefix conn-region-dispatch-menu (macro)
+  "Transient menu for macro dispatch on regions."
   [["Dispatch: "
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
    [:description
@@ -4026,6 +4048,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-scroll-repeat-map
   :repeat t
+  :doc "Repeat map for conn window scroll commands."
   "SPC" 'conn-scroll-up
   "DEL" 'conn-scroll-down)
 
@@ -4404,6 +4427,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "-" 'conn-window-resize-map)
 
 (defvar-keymap conn-local-map
+  :doc "Keymap for `conn-local-mode'."
   "C-v"     'conn-scroll-up
   "M-v"     'conn-scroll-down)
 
@@ -4460,7 +4484,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defun conn--update-mode-line-indicator ()
   "Update conn mode-line indicator."
-  (setq conn-mode-line-indicator
+  (setq conn--mode-line-indicator
         (or (get conn-current-state :conn-indicator) "")))
 
 (define-minor-mode conn-mode-line-indicator-mode
@@ -4480,7 +4504,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (unless (seq-contains-p (flatten-tree mode-line-format)
                                 'conn-mode-line-indicator-mode
                                 #'eq)
-          (push '(conn-mode-line-indicator-mode (:eval conn-mode-line-indicator))
+          (push '(conn-mode-line-indicator-mode (:eval conn--mode-line-indicator))
                 mode-line-format))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
