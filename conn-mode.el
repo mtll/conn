@@ -171,6 +171,22 @@ Defines default STATE for buffers matching REGEXP."
   :group 'conn-mode
   :type 'symbol)
 
+(defcustom conn-region-case-style-actions
+  "List of actions cycled through by `conn-region-case-style-cycle'.
+Supported values are:
+`conn-kebab-case-region'
+`conn-capital-snake-case-region'
+`conn-snake-case-region'
+`conn-capital-case-region'
+`conn-camel-case-region'."
+  '(conn-kebab-case-region
+    conn-capital-snake-case-region
+    conn-snake-case-region
+    conn-capital-case-region
+    conn-camel-case-region)
+  :group 'conn-mode
+  :type '(repeat symbol))
+
 ;;;;; Internal Vars
 
 (defvar conn-states nil)
@@ -513,6 +529,7 @@ If STATE is nil make COMMAND always repeat."
         conn-transpose-chars-backward
         conn-transpose-lines-backward
         conn-transpose-paragraphs-backward
+        conn-region-case-style-cycle
         conn-set-window-dedicated
         previous-error
         next-error
@@ -2931,6 +2948,19 @@ downcase -> Capitalize -> UPCASE -> downcase."
              (t (downcase-region (point-min) (point-max)))))
      (current-buffer))))
 
+(defun conn-region-case-style-cycle ()
+  "Change case style of region in a smart way.
+Repeated calls cycle through the actions in
+`conn-region-case-style-actions'."
+  (interactive)
+  (if (eq this-command last-command)
+      (let ((cycle (get this-command :conn-cycle-state)))
+        (put this-command :conn-cycle-state
+             (append (cdr cycle) (list (car cycle))))
+        (funcall (car cycle)))
+    (put this-command :conn-cycle-state conn-region-case-style-actions)
+    (funcall (car conn-region-case-style-actions))))
+
 (defun conn-kebab-case-region ()
   "Transform region text to capital-snake-case."
   (interactive)
@@ -4110,6 +4140,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-region-case-map
   :prefix 'conn-region-case-map
+  "m" 'conn-region-case-style-cycle
   "k" 'conn-kebab-case-region
   "i" 'conn-capital-case-region
   "o" 'conn-camel-case-region
