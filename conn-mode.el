@@ -247,12 +247,16 @@ See `conn--dispatch-on-regions'.")
 
 (defvar conn--goto-char-last-char nil)
 
-(defvar-local conn--previous-active-maps nil)
-
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
 
 (defvar conn--aux-update-flag nil)
+
+(defvar-local conn--aux-map-history nil)
+
+(defvar conn--aux-map-history-size 8)
+
+(defvar conn--last-remapping nil)
 
 (defvar conn-enable-in-buffer-hook nil
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
@@ -1289,32 +1293,47 @@ If BUFFER is nil use current buffer."
         (keymap-set keymap binding command))
       keymap)))
 
+(defun conn--generate-aux-map ()
+  (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
+                       (make-sparse-keymap)))
+        (state-map (alist-get conn-current-state conn--state-maps)))
+    (conn--without-conn-maps
+      (dolist (sentinal conn--aux-bindings)
+        (when-let ((def (key-binding (symbol-value sentinal) t)))
+          (dolist (key (where-is-internal sentinal (list state-map) nil t))
+            (define-key aux-map key def)))))
+    (let ((mark-map (conn--modes-mark-map)))
+      (dolist (key (where-is-internal 'conn-mark-thing-map (list state-map) nil t t))
+        (define-key aux-map key mark-map)))
+    aux-map))
+
 (defun conn--update-aux-map (&optional force)
   (when (and conn-local-mode
              conn-current-state
              (not conn-emacs-state))
-    (pcase-let ((`(,prev-active . ,prev-remappings)
-                 (alist-get conn-current-state conn--previous-active-maps))
-                (active (conn--without-conn-maps (current-active-maps)))
+    (pcase-let ((active (conn--without-conn-maps (current-active-maps)))
                 (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
-      (unless (and (not force)
-                   (not conn--aux-update-flag)
-                   (equal prev-remappings current-remappings)
-                   (equal active prev-active))
-        (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                             (make-sparse-keymap)))
-              (state-map (alist-get conn-current-state conn--state-maps)))
-          (conn--without-conn-maps
-            (dolist (sentinal conn--aux-bindings)
-              (when-let ((def (key-binding (symbol-value sentinal) t)))
-                (dolist (key (where-is-internal sentinal (list state-map) nil t))
-                  (define-key aux-map key def)))))
-          (let ((mark-map (conn--modes-mark-map)))
-            (dolist (key (where-is-internal 'conn-mark-thing-map (list state-map) nil t t))
-              (define-key aux-map key mark-map)))
-          (setf conn--aux-update-flag nil
-                (alist-get conn-current-state conn--previous-active-maps)
-                (cons active current-remappings)))))))
+      (cond
+       ((or conn--aux-update-flag
+            (not (equal conn--last-remapping current-remappings))
+            force)
+        (let ((aux-map (conn--generate-aux-map))
+              (key (cons conn-current-state active)))
+          (setf (alist-get conn-current-state conn--aux-maps) aux-map
+                conn--aux-map-history (list (cons key aux-map)))))
+       (t
+        (let* ((key (cons conn-current-state active))
+               (aux-map (or (alist-get key conn--aux-map-history nil nil #'equal)
+                            (conn--generate-aux-map)))
+               (new (cons key aux-map)))
+          (setf (alist-get conn-current-state conn--aux-maps) aux-map
+                conn--aux-map-history (conn--thread needle
+                                          conn--aux-map-history
+                                        (delete new needle)
+                                        (cons new needle)
+                                        (seq-take needle 8))))))
+      (setq conn--aux-update-flag nil
+            conn--last-remapping current-remappings))))
 
 (defmacro conn-define-remapping-command (name from-keys)
   "Define a command NAME that remaps to FROM-KEYS.
