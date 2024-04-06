@@ -264,7 +264,8 @@ See `conn--dispatch-on-regions'.")
 (defvar conn--goto-char-last-char nil)
 
 (defvar-keymap conn-mark-thing-map
-  :prefix 'conn-mark-thing-map)
+  :prefix 'conn-mark-thing-map
+  "`" 'conn-mark-thing)
 
 (defvar conn--aux-update-flag nil)
 
@@ -4203,11 +4204,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "o"   'transpose-words
   "q"   'indent-for-tab-command
   "r"   'query-replace
-  "T"   'conn-narrow-to-thing
   "w"   'query-replace-regexp
   "u"   'conn-transpose-words-backward
-  "v"   'conn-mark-thing
   "V"   'conn-narrow-to-visible
+  "v"   'conn-narrow-to-thing
   "y"   'yank-in-context)
 
 (define-keymap
