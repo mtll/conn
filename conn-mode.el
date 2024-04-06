@@ -691,7 +691,7 @@ THING is always returned.
   "Return a continuous mark handler for THING.
 If one has already been created return it, otherwise create a new one.
 Continuous handlers will mark all THINGs when moving over multiple
-THINGs at once unless `use-region-p'."
+THINGs at once unless `region-active-p'."
   (lambda (beg)
     (unless (or (region-active-p)
                 (= (point) beg)
@@ -709,9 +709,9 @@ THINGs at once unless `use-region-p'."
   "Return a discrete mark handler for THING.
 If one has already been created return it, otherwise create a new one.
 Discrete handlers will only mark the last THING when moving over
-multiple THINGs at once unless `use-region-p'."
+multiple THINGs at once unless `region-active-p'."
   (lambda (_)
-    (unless (use-region-p)
+    (unless (region-active-p)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
          (conn--push-ephemeral-mark (if (= (point) end) beg end)))
@@ -720,8 +720,8 @@ multiple THINGs at once unless `use-region-p'."
 (defun conn-jump-handler (beg)
   "Mark trail handler.
 The mark trail handler pushes an ephemeral mark at the starting point
-of the movement command unless `use-region-p'."
-  (unless (or (use-region-p)
+of the movement command unless `region-active-p'."
+  (unless (or (region-active-p)
               (eq beg (point)))
     (conn--push-ephemeral-mark beg)))
 
@@ -3125,7 +3125,7 @@ With a prefix ARG activate `rectangle-mark-mode'."
   (cond ((eq arg '-)
          (conn-dot-region (region-bounds)))
         (arg
-         (if (use-region-p)
+         (if (region-active-p)
              (rectangle-mark-mode 'toggle)
            (activate-mark)
            (rectangle-mark-mode)))
@@ -3137,7 +3137,7 @@ With a prefix ARG activate `rectangle-mark-mode'."
   (cond (arg
          (rectangle-mark-mode 'toggle))
         ((eq last-command 'conn-set-mark-command)
-         (if (use-region-p)
+         (if (region-active-p)
              (progn
                (deactivate-mark)
                (message "Mark deactivated"))
@@ -3220,7 +3220,7 @@ of deleting it."
                (or (= mark (save-excursion
                              (back-to-indentation)
                              (point)))
-                   (use-region-p)))
+                   (region-active-p)))
       (goto-char (line-end-position))
       (setq conn-this-thing-handler
             (conn-individual-thing-handler 'outer-line)))))
@@ -3236,7 +3236,7 @@ of deleting it."
                (or (= mark (save-excursion
                              (conn--end-of-inner-line-1)
                              (point)))
-                   (use-region-p)))
+                   (region-active-p)))
       (goto-char (line-beginning-position))
       (setq conn-this-thing-handler
             (conn-individual-thing-handler 'outer-line)))))
