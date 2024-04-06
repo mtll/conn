@@ -4421,6 +4421,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-x m"   'conn-kmacro-menu
   "C-x r"   conn-ctl-x-r-map
   "C-x t s" 'tab-switch
+  "C-x r a" 'conn-tab-to-register
+  "C-x t a" 'conn-tab-to-register
   "M-RET"   'conn-open-line-and-indent
   "M-O"     'conn-pop-to-mark-command
   "M-U"     'conn-unpop-to-mark-command)
