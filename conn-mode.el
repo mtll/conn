@@ -3539,6 +3539,16 @@ there's a region, all lines that region covers will be duplicated."
     (set-window-buffer win (current-buffer))
     (bury-buffer)))
 
+(defun conn-other-place-prefix (&optional arg)
+  "One of `other-window-prefix', `other-tab-prefix' or `other-frame-prefix'.
+If ARG is nil `other-window-prefix',if ARG is \\[universal-argument]
+`other-frame-prefix',if ARG is anything else `other-tab-prefix'."
+  (interactive "P")
+  (pcase arg
+    ('(4) (other-frame-prefix))
+    ('nil (other-window-prefix))
+    (_    (other-tab-prefix))))
+
 ;;;;; Transition Functions
 
 (defun conn-dot-quit ()
@@ -4258,7 +4268,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "TAB"   'indent-region
   "<tab>" 'indent-region
   "]"     'conn-kill-append-region
-  "'"     'other-window-prefix
+  "'"     'conn-other-place-prefix
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
   "q"     'conn-edit-map
