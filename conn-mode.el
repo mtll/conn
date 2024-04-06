@@ -522,7 +522,7 @@ If BUFFER is nil check `current-buffer'."
              (prop (repeat--command-property :conn-repeat-command))
              (m (or (eq prop t)
                     (eq prop conn-current-state))))
-    (define-keymap (single-key-description last-command-event) this-command)))
+    (define-keymap (single-key-description last-command-event) 'repeat)))
 
 (defun conn-set-repeat-command (command &optional state)
   "Make COMMAND repeatable in STATE with whatever key called it.
@@ -558,7 +558,8 @@ If STATE is nil make COMMAND always repeat."
         bury-buffer
         conn-duplicate-region
         conn-duplicate-and-comment-region
-        conn-other-window))
+        conn-other-window
+        conn-kill-whole-line))
 
 (conn-define-extension conn-repeatable-commands
   (if conn-repeatable-commands
@@ -2902,7 +2903,7 @@ This command should only be called interactively."
 
 (defun conn-goto-char-forward (char arg)
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-If `current-prefix-arg' is 1 prompt for CHAR and search forward for nearest
+If `current-prefix-arg' is 1 prompt for CHAR search and forward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
 of CHAR up to `window-end'.
 This command should only be called interactively."
@@ -3387,8 +3388,8 @@ for the meaning of prefix ARG."
 
 (defun conn-kill-whole-line (&optional arg)
   (interactive "P")
-  (cond (arg (kill-whole-line arg))
-        ((and (bolp) (eolp)) (kill-whole-line 1))
+  (cond (arg (kill-whole-line (prefix-numeric-value arg)))
+        ((and (bolp) (eolp)) (delete-line))
         (t (kill-whole-line 0))))
 
 (defun conn-unset-register (register)
@@ -4361,9 +4362,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
-  "M-0"   'quit-window
-  "M-1"   'delete-other-windows-vertically
-  "M-9"   'tear-off-window
+  "M-0"   'tab-close
+  "M-1"   'quit-window
+  "M-2"   'delete-other-windows-vertically
+  "M-8"   'tear-off-window
+  "M-9"   'tab-detach
   "C-M-0" 'kill-buffer-and-window
   "SPC"   'conn-set-mark-command
   "+"     'conn-set-register-seperator
