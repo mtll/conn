@@ -3440,9 +3440,9 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-switch-to-buffer-or-tab (&optional tab)
   (interactive "P")
-  (if tab
-      (call-interactively (conn-switch-tab-keys))
-    (call-interactively (conn-switch-buffer-keys))))
+  (let ((command (if tab (conn-switch-tab-keys) (conn-switch-buffer-keys))))
+    (setq this-command command)
+    (call-interactively command)))
 
 ;;;;; Window Commands
 
@@ -3532,6 +3532,150 @@ if ARG is anything else `other-tab-prefix'."
     ('(4) (other-frame-prefix))
     ('nil (other-window-prefix))
     (_    (other-tab-prefix))))
+
+;;;;;; Wincontrol Mode
+
+;; A simple version of hyperbole's hycontrol-windows
+
+(defvar conn--wincontrol-arg 1)
+(defvar conn--wincontrol-quit nil)
+(defvar-keymap conn-wincontrol-map :suppress 'nodigits)
+
+(defvar conn--wincontrol-menu-string
+  (concat
+   (propertize "q" 'face 'transient-key) ": quit; "
+   (propertize "i j k l" 'face 'transient-key) ": move to win; "
+   (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; Prefix ARG: "
+   (propertize "%d" 'face 'transient-value) "; "
+   (propertize "." 'face 'transient-key) ": reset ARG"
+   "\n"
+   (propertize "b u x t" 'face 'transient-key) ": bury/unbury/swap/throw buffer; "
+   (propertize "d D y" 'face 'transient-key) ": delete win/other win/buf and win; "
+   (propertize "o" 'face 'transient-key) ": tear off; "
+   "\n"
+   (propertize "SPC DEL" 'face 'transient-key) ": scroll; "
+   (propertize "v r" 'face 'transient-key) ": split vertical/right; "
+   (propertize "= +" 'face 'transient-key) ": balance/maximize; "
+   (propertize "/ ?" 'face 'transient-key) ": undo/redo"
+   "\n"
+   (propertize "J L" 'face 'transient-key) ": tab next/prev; "
+   (propertize "I U K" 'face 'transient-key) ": tab new/duplicate/close; "
+   (propertize "P O" 'face 'transient-key) ": tab to register/tear off"))
+
+(define-minor-mode conn-wincontrol-mode
+  "Minor mode for window control."
+  :global t
+  :lighter " WinC"
+  (if conn-wincontrol-mode
+      (conn--wincontrol-setup)
+    (conn--wincontrol-exit)))
+
+(defun conn--wincontrol-pre-command ()
+  (when (null conn--wincontrol-arg)
+    (setq conn--wincontrol-arg 1))
+  (setq prefix-arg conn--wincontrol-arg))
+
+(defun conn--wincontrol-post-command ()
+  (if (not (zerop (minibuffer-depth)))
+      (conn-wincontrol-mode -1)
+    (let ((message-log-max nil)
+          (resize-mini-windows t))
+      (message conn--wincontrol-menu-string conn--wincontrol-arg))))
+
+(defun conn--wincontrol-setup ()
+  (add-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (setq conn--wincontrol-arg 1
+        conn--wincontrol-quit (set-transient-map
+                               conn-wincontrol-map
+                               (lambda () conn-wincontrol-mode))))
+
+(defun conn--wincontrol-exit ()
+  (setq prefix-arg nil)
+  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
+
+(defun conn-wincontrol-off ()
+  (interactive)
+  (conn-wincontrol-mode -1)
+  (when (functionp conn--wincontrol-quit)
+    (funcall conn--wincontrol-quit)))
+
+(defun conn-wincontrol-digit-argument (N)
+  (setq this-command 'conn-wincontrol-digit-argument
+        conn--wincontrol-arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
+                                (* 10 conn--wincontrol-arg))))
+
+(defun conn-wincontrol-invert-argument ()
+  (interactive)
+  (setq conn--wincontrol-arg (- conn--wincontrol-arg)))
+
+(defun conn-wincontrol-digit-argument-reset ()
+  (interactive)
+  (setq conn--wincontrol-arg 0))
+
+(define-keymap
+  :keymap conn-wincontrol-map
+  "q"   'conn-wincontrol-off
+  "C-g" 'conn-wincontrol-off
+
+  "0" (lambda () (interactive) (conn-wincontrol-digit-argument 0))
+  "1" (lambda () (interactive) (conn-wincontrol-digit-argument 1))
+  "2" (lambda () (interactive) (conn-wincontrol-digit-argument 2))
+  "3" (lambda () (interactive) (conn-wincontrol-digit-argument 3))
+  "4" (lambda () (interactive) (conn-wincontrol-digit-argument 4))
+  "5" (lambda () (interactive) (conn-wincontrol-digit-argument 5))
+  "6" (lambda () (interactive) (conn-wincontrol-digit-argument 6))
+  "7" (lambda () (interactive) (conn-wincontrol-digit-argument 7))
+  "8" (lambda () (interactive) (conn-wincontrol-digit-argument 8))
+  "9" (lambda () (interactive) (conn-wincontrol-digit-argument 9))
+  "-" 'conn-wincontrol-invert-argument
+  "." 'conn-wincontrol-digit-argument-reset
+
+  "w" (lambda () (interactive) (enlarge-window-horizontally conn--wincontrol-arg))
+  "n" (lambda () (interactive) (shrink-window-horizontally conn--wincontrol-arg))
+  "h" (lambda () (interactive) (enlarge-window conn--wincontrol-arg))
+  "s" (lambda () (interactive) (shrink-window conn--wincontrol-arg))
+
+  "i" (lambda () (interactive) (windmove-up))
+  "j" (lambda () (interactive) (windmove-left))
+  "k" (lambda () (interactive) (windmove-down))
+  "l" (lambda () (interactive) (windmove-right))
+
+  "b" 'bury-buffer
+  "u" 'unbury-buffer
+  "x" (lambda () (interactive) (conn-swap-windows))
+  "t" 'conn-buffer-to-other-window
+
+  "d" 'delete-window
+  "D" 'delete-other-windows
+  "y" 'kill-buffer-and-window
+
+  "o" 'tear-off-window
+
+  "DEL" (lambda (arg) (interactive "p") (let ((next-screen-context-lines arg)) (conn-scroll-down)))
+  "SPC" (lambda (arg) (interactive "p") (let ((next-screen-context-lines arg)) (conn-scroll-up)))
+
+  "v" (lambda () (interactive) (split-window-vertically))
+  "r" (lambda () (interactive) (split-window-horizontally))
+
+  "z" 'text-scale-decrease
+  "Z" 'text-scale-increase
+
+  "=" 'balance-windows
+  "+" 'maximize-window
+
+  "/" 'tab-bar-history-back
+  "?" 'tab-bar-history-forward
+
+  "J" (lambda () (interactive) (tab-previous conn--wincontrol-arg))
+  "L" (lambda () (interactive) (tab-next conn--wincontrol-arg))
+
+  "I" (lambda () (interactive) (tab-new))
+  "P" 'conn-tab-to-register
+  "U" (lambda () (interactive) (tab-duplicate))
+  "O" (lambda () (interactive) (tab-detach))
+  "K" (lambda () (interactive) (tab-close)))
 
 ;;;;; Transition Functions
 
@@ -4295,6 +4439,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "?"     'undo-redo
   "`"     'conn-other-window
   "~"     'conn-buffer-to-other-window
+  "a"     'conn-wincontrol-mode
   "b"     'conn-switch-to-buffer-or-tab
   "B"     'ibuffer
   "C"     'conn-copy-region
