@@ -264,10 +264,10 @@ will navigate up out of a keymap."
                      (embark--quit-p action)))
     (user-error "No target found.")))
 
-;; (define-keymap
-;;   :keymap (conn-get-mode-map 'conn-state 'conn-embark-dwim-keys)
-;;   "e" 'embark-dwim
-;;   "h" 'embark-alt-dwim)
+;;;###autoload
+(defun conn-embark-dwim-either (&optional arg)
+  (interactive "P")
+  (if arg (conn-embark-alt-dwim) (embark-dwim)))
 
 (defvar conn-embark-alt-expression-map)
 (defvar conn-embark-alt-symbol-map)
