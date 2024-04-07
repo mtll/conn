@@ -4216,7 +4216,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "RET" 'whitespace-cleanup
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
-  "."   'transpose-chars
   ";"   'comment-line
   "b"   'regexp-builder
   "c"   'clone-indirect-buffer
@@ -4227,6 +4226,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "j"   'join-line
   "K"   'transpose-paragraphs
   "k"   'transpose-lines
+  "l"   'transpose-chars
   "m"   'transpose-sexps
   "o"   'transpose-words
   "q"   'indent-for-tab-command
