@@ -457,12 +457,12 @@ If BUFFER is nil check `current-buffer'."
     result))
 
 (defun conn--narrow-indirect (beg end)
-  (let* ((name (format "%s@%s:%s - %s"
-                       (buffer-name (current-buffer))
-                       (line-number-at-pos beg)
-                       (line-number-at-pos end)
-                       (substring (buffer-substring-no-properties beg end) 0 20)))
-         (buffer (clone-indirect-buffer-other-window name nil)))
+  (let* ((line-beg (line-number-at-pos beg))
+         (linenum  (- (line-number-at-pos end) line-beg))
+         (name     (format "%s@%s+%s - %s"
+                           (buffer-name (current-buffer)) line-beg linenum
+                           (substring (string-trim (buffer-substring-no-properties beg end)) 0 20)))
+         (buffer   (clone-indirect-buffer-other-window name nil)))
     (pop-to-buffer buffer)
     (narrow-to-region beg end)
     (deactivate-mark)))
@@ -2785,10 +2785,20 @@ With arg N, insert N newlines."
   (interactive)
   (narrow-to-region (point) (point-max)))
 
+(defun conn-narrow-to-end-of-buffer-indirect ()
+  "Narrow to the region between `point' and `point-max'."
+  (interactive)
+  (conn--narrow-indirect (point) (point-max)))
+
 (defun conn-narrow-to-beginning-of-buffer ()
   "Narrow to the region between `point-min' and `point'."
   (interactive)
   (narrow-to-region (point-min) (point)))
+
+(defun conn-narrow-to-beginning-of-buffer-indirect ()
+  "Narrow to the region between `point-min' and `point'."
+  (interactive)
+  (conn--narrow-indirect (point-min) (point)))
 
 (defun conn-isearch-backward-symbol-at-point ()
   "Isearch backward for symbol at point."
@@ -2997,9 +3007,7 @@ Repeated calls cycle through the actions in
          (append (cdr conn-region-case-style-actions)
                  (list (car conn-region-case-style-actions))))
     (funcall (car conn-region-case-style-actions))
-    (let ((region (buffer-substring-no-properties (region-beginning)
-                                                  (region-end)))
-          (cycle (get this-command :conn-cycle-state)))
+    (let ((cycle (get this-command :conn-cycle-state)))
       (put this-command :conn-cycle-state
            (append (cdr cycle) (list (car cycle))))
       (funcall (car cycle)))))
@@ -4479,7 +4487,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-x /"         'tab-bar-history-back
   "C-x 4"         conn-c-x-4-map
   "C-x ?"         'tab-bar-history-forward
+  "C-x n M-<"     'conn-narrow-to-beginning-of-buffer-indirect
   "C-x n <"       'conn-narrow-to-beginning-of-buffer
+  "C-x n M->"     'conn-narrow-to-end-of-buffer-indirect
   "C-x n >"       'conn-narrow-to-end-of-buffer
   "C-x n t"       'conn-narrow-to-thing
   "C-x n T"       'conn-narrow-indirect-to-thing
