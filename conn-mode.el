@@ -3539,7 +3539,13 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-arg 1)
 (defvar conn--wincontrol-quit nil)
+(defvar conn--previous-scroll-conservatively)
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
+
+(defcustom conn-wincontrol-arg-limit 1000
+  "Limit for prefix arg in `conn-wincontrol-mode'."
+  :group 'conn-mode
+  :type 'integer)
 
 (defvar conn--wincontrol-menu-string
   (concat
@@ -3585,21 +3591,25 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-setup ()
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (setq conn--wincontrol-arg 1
+  (setq conn--previous-scroll-conservatively scroll-conservatively
+        scroll-conservatively 100
+        conn--wincontrol-arg  1
         conn--wincontrol-quit (set-transient-map
                                conn-wincontrol-map
                                (lambda () conn-wincontrol-mode))))
 
 (defun conn--wincontrol-exit ()
+  (setq scroll-conservatively conn--previous-scroll-conservatively)
   (when (functionp conn--wincontrol-quit)
     (funcall conn--wincontrol-quit))
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
 
 (defun conn-wincontrol-digit-argument (N)
-  (setq this-command 'conn-wincontrol-digit-argument
-        conn--wincontrol-arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
-                                (* 10 conn--wincontrol-arg))))
+  (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
+                (* 10 conn--wincontrol-arg))))
+    (setq conn--wincontrol-arg (if (> arg conn-wincontrol-arg-limit) N arg)
+          this-command         'conn-wincontrol-digit-argument)))
 
 (defun conn-wincontrol-invert-argument ()
   (interactive)
@@ -4416,13 +4426,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-6"   'conn-swap-buffers
   "C-7"   'conn-swap-windows
   "C-8"   'conn-tab-to-register
-  "C-9"   'tab-switch
+  "C-9"   'tab-close
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
-  "M-0"   'tab-close
-  "M-1"   'quit-window
-  "M-2"   'delete-other-windows-vertically
+  "M-0"   'quit-window
+  "M-1"   'delete-other-windows-vertically
   "M-8"   'tear-off-window
   "M-9"   'tab-detach
   "C-M-0" 'kill-buffer-and-window
