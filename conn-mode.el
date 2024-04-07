@@ -3555,18 +3555,20 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; "
    (propertize "i j k l" 'face 'transient-key) ": win move"
    "\n"
-   (propertize "b u x t" 'face 'transient-key) ": bury/unbury/swap/throw buffer; "
-   (propertize "d D y" 'face 'transient-key) ": delete win/other win/buf and win; "
-   (propertize "o" 'face 'transient-key) ": tear off"
+   (propertize "b u x t" 'face 'transient-key) ": un/bury/swap/throw buf; "
+   (propertize "d D g G" 'face 'transient-key) ": delete win/other/buf/buf and win; "
+   (propertize "o c" 'face 'transient-key) ": tear off/clone"
    "\n"
-   (propertize "SPC DEL" 'face 'transient-key) ": scroll win; "
-   (propertize "v r" 'face 'transient-key) ": split vertical/right; "
-   (propertize "= +" 'face 'transient-key) ": balance/maximize; "
-   (propertize "/ ?" 'face 'transient-key) ": win undo/redo"
+   (propertize "m M" 'face 'transient-key) ": wins/tab store; "
+   (propertize "SPC DEL" 'face 'transient-key) ": scroll; "
+   (propertize "v r" 'face 'transient-key) ": split vert/right; "
+   (propertize "= +" 'face 'transient-key) ": balance/max; "
+   (propertize "/ ?" 'face 'transient-key) ": undo/redo"
    "\n"
+   (propertize "p" 'face 'transient-key) ": load; "
    (propertize "J L" 'face 'transient-key) ": tab next/prev; "
-   (propertize "I U K" 'face 'transient-key) ": tab new/duplicate/close; "
-   (propertize "P O" 'face 'transient-key) ": tab to register/tear off; "
+   (propertize "N Y K" 'face 'transient-key) ": tab new/duplicate/close; "
+   (propertize "M O" 'face 'transient-key) ": tab to register/tear off; "
    (propertize "q" 'face 'transient-key) ": quit"))
 
 (define-minor-mode conn-wincontrol-mode
@@ -3612,8 +3614,8 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn-wincontrol-digit-argument (N)
   (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
                 (* 10 conn--wincontrol-arg))))
-    (setq conn--wincontrol-arg (if (> arg conn-wincontrol-arg-limit) N arg)
-          this-command         'conn-wincontrol-digit-argument)))
+    (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
+          this-command 'conn-wincontrol-digit-argument)))
 
 (defun conn-wincontrol-invert-argument ()
   (interactive)
@@ -3662,18 +3664,29 @@ if ARG is anything else `other-tab-prefix'."
 
   "d" 'delete-window
   "D" 'delete-other-windows
-  "y" 'kill-buffer-and-window
+  "g" 'kill-current-buffer
+  "G" 'kill-buffer-and-window
 
   "o" 'tear-off-window
+  "c" (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
 
-  "DEL" (lambda (arg) (interactive "p") (let ((next-screen-context-lines arg)) (conn-scroll-down)))
-  "SPC" (lambda (arg) (interactive "p") (let ((next-screen-context-lines arg)) (conn-scroll-up)))
+  "DEL" (lambda (arg)
+          (interactive "p")
+          (let ((next-screen-context-lines arg))
+            (conn-scroll-down)))
+  "SPC" (lambda (arg)
+          (interactive "p")
+          (let ((next-screen-context-lines arg))
+            (conn-scroll-up)))
 
   "v" (lambda () (interactive) (split-window-vertically))
   "r" (lambda () (interactive) (split-window-horizontally))
 
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase
+
+  "m" 'window-configuration-to-register
+  "p" 'conn-register-load
 
   "=" 'balance-windows
   "+" 'maximize-window
@@ -3684,9 +3697,9 @@ if ARG is anything else `other-tab-prefix'."
   "J" (lambda () (interactive) (tab-previous conn--wincontrol-arg))
   "L" (lambda () (interactive) (tab-next conn--wincontrol-arg))
 
-  "I" (lambda () (interactive) (tab-new))
-  "P" 'conn-tab-to-register
-  "U" (lambda () (interactive) (tab-duplicate))
+  "N" (lambda () (interactive) (tab-new))
+  "M" 'conn-tab-to-register
+  "Y" (lambda () (interactive) (tab-duplicate))
   "O" (lambda () (interactive) (tab-detach))
   "K" (lambda () (interactive) (tab-close)))
 
