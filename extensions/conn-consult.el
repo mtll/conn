@@ -93,6 +93,16 @@ THING BEG and END are bound in BODY."
                        (prog1 isearch-string (isearch-done))))
      :state (consult--location-state candidates))))
 
+(defun conn-clone-indirect-buffer-location-candidate (cand)
+  ;; Embark runs with inside a with-selected-window form
+  ;; so we use a timer to get around it.
+  (run-with-timer
+   0 nil (lambda (marker)
+           (with-current-buffer (marker-buffer marker)
+             (clone-indirect-buffer nil t)
+             (goto-char marker)))
+   (car (consult--get-location cand))))
+
 (defun conn-dot-consult-location-candidate (cand)
   (let ((marker (car (consult--get-location cand))))
     (with-current-buffer (marker-buffer marker)
@@ -198,7 +208,8 @@ THING BEG and END are bound in BODY."
 
   (defvar-keymap conn-embark-consult-location-map
     "C-z" 'conn-dispatch-location-candidates
-    "D"   'conn-dot-consult-location-candidate)
+    "D"   'conn-dot-consult-location-candidate
+    "c"   'conn-clone-buffer-location-candidate)
   (if (alist-get 'consult-location embark-keymap-alist)
       (cl-pushnew 'embark-consult-location-map
                   (alist-get 'consult-location embark-keymap-alist))
