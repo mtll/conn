@@ -515,56 +515,7 @@ If BUFFER is nil check `current-buffer'."
 
        ',name)))
 
-;;;;; Repeat Extension
-
-(defun conn--repeat-get-map-ad ()
-  (when-let (repeat-mode
-             (prop (repeat--command-property :conn-repeat-command))
-             (m (or (eq prop t)
-                    (eq prop conn-current-state))))
-    (define-keymap (single-key-description last-command-event) 'repeat)))
-
-(defun conn-set-repeat-command (command &optional state)
-  "Make COMMAND repeatable in STATE with whatever key called it.
-
-If STATE is nil make COMMAND always repeat."
-  (put command :conn-repeat-command (or state t)))
-
-(defun conn-unset-repeat-command (command)
-  "Remove repeat property from COMMAND."
-  (put command :conn-repeat-command nil))
-
-(mapc #'conn-set-repeat-command
-      '(transpose-words
-        transpose-sexps
-        transpose-chars
-        transpose-lines
-        transpose-paragraphs
-        conn-transpose-words-backward
-        conn-transpose-sexps-backward
-        conn-transpose-chars-backward
-        conn-transpose-lines-backward
-        conn-transpose-paragraphs-backward
-        conn-region-case-style-cycle
-        conn-set-window-dedicated
-        previous-error
-        next-error
-        pop-global-mark
-        conn-region-case-dwim
-        duplicate-line
-        duplicate-dwim
-        conn-duplicate-region
-        conn-delete-pair
-        bury-buffer
-        conn-duplicate-region
-        conn-duplicate-and-comment-region
-        conn-other-window
-        conn-kill-whole-line))
-
-(conn-define-extension conn-repeatable-commands
-  (if conn-repeatable-commands
-      (advice-add 'repeat-get-map :after-until 'conn--repeat-get-map-ad)
-    (advice-remove 'repeat-get-map 'conn--repeat-get-map-ad)))
+;;;;; Repeat Cursor Extension
 
 (let (original-cursor-color)
   (defun conn--repeat-cursor-message-ad (map)
@@ -582,7 +533,6 @@ If STATE is nil make COMMAND always repeat."
       (add-function :after repeat-echo-function 'conn--repeat-cursor-message-ad)
     (remove-function repeat-echo-function 'conn--repeat-cursor-message-ad)))
 
-(conn-repeatable-commands t)
 (conn-repeat-cursor t)
 
 
@@ -609,7 +559,6 @@ If STATE is nil make COMMAND always repeat."
                  (conn--push-ephemeral-mark))
                (forward-thing ',thing (- N))))))
        (put ',name :conn-command-thing ',thing)
-       (put ',name :conn-repeat-command t)
        ',name)))
 
 (defmacro conn--thing-bounds-command (thing)
@@ -3512,20 +3461,20 @@ there's a region, all lines that region covers will be duplicated."
     (comment-region (region-beginning)
                     (region-end))))
 
-(cl-macrolet
-    ((transpose-backward (&body fns)
-       (macroexp-progn
-        (seq-map
-         (lambda (command)
-           `(defun ,(conn--symbolicate "conn-" command "-backward") (arg)
-              (interactive "*p")
-              (funcall-interactively #',command (- arg))))
-         fns))))
-  (transpose-backward transpose-words
-                      transpose-sexps
-                      transpose-lines
-                      transpose-paragraphs
-                      transpose-chars))
+;; (cl-macrolet
+;;     ((transpose-backward (&body fns)
+;;        (macroexp-progn
+;;         (seq-map
+;;          (lambda (command)
+;;            `(defun ,(conn--symbolicate "conn-" command "-backward") (arg)
+;;               (interactive "*p")
+;;               (funcall-interactively #',command (- arg))))
+;;          fns))))
+;;   (transpose-backward transpose-words
+;;                       transpose-sexps
+;;                       transpose-lines
+;;                       transpose-paragraphs
+;;                       transpose-chars))
 
 ;;;;; Window Commands
 
@@ -4262,41 +4211,31 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "j" 'conn-snake-case-region
   "u" 'conn-region-case-dwim)
 
-(defvar-keymap conn-join-line-repeat-map
-  :repeat t
-  "J" 'join-line)
-
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
-  "DEL" 'kill-whole-line
   "RET" 'whitespace-cleanup
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
-  ","   'conn-transpose-chars-backward
   "."   'transpose-chars
   ";"   'comment-line
   "b"   'regexp-builder
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-menu
+  "h"   'conn-mark-thing-map
   "I"   'copy-from-above-command
-  "i"   'conn-transpose-lines-backward
   "j"   'join-line
-  "J"   'join-line
+  "K"   'transpose-paragraphs
   "k"   'transpose-lines
-  "M"   'transpose-paragraphs
   "m"   'transpose-sexps
-  "N"   'conn-transpose-paragraphs-backward
-  "n"   'conn-transpose-sexps-backward
   "o"   'transpose-words
   "q"   'indent-for-tab-command
   "r"   'query-replace
   "w"   'query-replace-regexp
-  "u"   'conn-transpose-words-backward
   "V"   'conn-narrow-indirect-to-visible
   "v"   'conn-narrow-to-visible
-  "T"   'conn-narrow-indirect-to-thing
-  "t"   'conn-narrow-to-thing
+  "N"   'conn-narrow-indirect-to-thing
+  "n"   'conn-narrow-to-thing
   "y"   'yank-in-context)
 
 (define-keymap
@@ -4390,10 +4329,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "~"     'conn-buffer-to-other-window
   "a"     'switch-to-buffer
   "A"     'ibuffer
-  "b"     'conn-mark-thing-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "g"     'conn-M-g-keys
+  "h"     'repeat
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
   "J"     'conn-beginning-of-inner-line
