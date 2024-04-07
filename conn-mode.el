@@ -29,16 +29,12 @@
 
 (require 'transient)
 (require 'compat)
-(require 'pulse)
-(require 'face-remap)
+(require 'thingatpt)
 (require 'rect)
-(require 'elec-pair)
 (require 'isearch)
 (require 'repeat)
 (require 'hi-lock)
 (require 'kmacro)
-(require 'seq)
-(require 'thingatpt)
 (require 'sort)
 (require 'subr-x)
 (eval-when-compile
@@ -410,16 +406,6 @@ Uses `read-regexp' to read the regexp."
       (setq types (delete typ types)))
     (sort types #'string-lessp)))
 
-(defun conn--minimize (fn list)
-  (let ((d (funcall fn (car list)))
-        (result (car list)))
-    (dolist (e (cdr list))
-      (let ((d2 (funcall fn e)))
-        (when (< d2 d)
-          (setq d d2
-                result e))))
-    result))
-
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
 
@@ -431,19 +417,6 @@ Uses `read-regexp' to read the regexp."
   (let ((marker (make-marker)))
     (set-marker marker pos buffer)
     marker))
-
-(defmacro conn-with-saved-state (&rest body)
-  "Execute BODY preserving current conn state and previous state values"
-  (declare (indent 0))
-  (let ((saved-state (gensym "saved-state"))
-        (saved-previous-state (gensym "saved-previous-state")))
-    `(let ((,saved-state conn-current-state)
-           (,saved-previous-state conn-previous-state)
-           (conn-previous-state conn-previous-state))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (funcall ,saved-state)
-         (setq conn-previous-state ,saved-previous-state)))))
 
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
@@ -3127,7 +3100,9 @@ interactively."
 
 (defun conn--read-pair ()
   (pcase (string-split (minibuffer-with-setup-hook
-                           (lambda () (electric-pair-mode -1))
+                           (lambda ()
+                             (when (boundp 'electric-pair-mode)
+                               (electric-pair-mode -1)))
                          (read-string "Pair: " nil 'conn-pair-history))
                        "	")
     (`(,front ,back . nil) (cons front back))
