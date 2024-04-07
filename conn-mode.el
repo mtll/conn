@@ -3549,24 +3549,24 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-menu-string
   (concat
-   (propertize "q" 'face 'transient-key) ": quit; "
    (propertize "i j k l" 'face 'transient-key) ": move to win; "
-   (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; Prefix ARG: "
+   (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; prefix arg: "
    (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'transient-key) ": reset ARG"
+   (propertize "." 'face 'transient-key) ": reset arg"
    "\n"
    (propertize "b u x t" 'face 'transient-key) ": bury/unbury/swap/throw buffer; "
    (propertize "d D y" 'face 'transient-key) ": delete win/other win/buf and win; "
    (propertize "o" 'face 'transient-key) ": tear off; "
    "\n"
-   (propertize "SPC DEL" 'face 'transient-key) ": scroll; "
+   (propertize "SPC DEL" 'face 'transient-key) ": scroll win; "
    (propertize "v r" 'face 'transient-key) ": split vertical/right; "
    (propertize "= +" 'face 'transient-key) ": balance/maximize; "
-   (propertize "/ ?" 'face 'transient-key) ": undo/redo"
+   (propertize "/ ?" 'face 'transient-key) ": win undo/redo"
    "\n"
    (propertize "J L" 'face 'transient-key) ": tab next/prev; "
    (propertize "I U K" 'face 'transient-key) ": tab new/duplicate/close; "
-   (propertize "P O" 'face 'transient-key) ": tab to register/tear off"))
+   (propertize "P O" 'face 'transient-key) ": tab to register/tear off; "
+   (propertize "q" 'face 'transient-key) ": quit"))
 
 (define-minor-mode conn-wincontrol-mode
   "Minor mode for window control."
@@ -3579,7 +3579,10 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-pre-command ()
   (when (null conn--wincontrol-arg)
     (setq conn--wincontrol-arg 1))
-  (setq prefix-arg conn--wincontrol-arg))
+  (setq prefix-arg conn--wincontrol-arg)
+  (let ((message-log-max nil)
+        (resize-mini-windows t))
+    (message "")))
 
 (defun conn--wincontrol-post-command ()
   (if (not (zerop (minibuffer-depth)))
