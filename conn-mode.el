@@ -1293,7 +1293,7 @@ If BUFFER is nil use current buffer."
       (setq conn--aux-update-flag nil
             conn--last-remapping current-remappings))))
 
-(defmacro conn-define-remapping-command (name from-keys)
+(defmacro conn-define-remapping-command (name from-keys &optional aux-map-omit)
   "Define a command NAME that remaps to FROM-KEYS.
 
 Placing NAME in a keymap will cause conn to remap it to the
@@ -1326,20 +1326,22 @@ C-x, M-s and M-g into various state maps."
           (if interactive-p (call-interactively cmd) cmd))
          (_ (error "Key not bound to a command %s." ,name))))
 
-     (cl-pushnew ',name conn--aux-bindings)))
+     ,(unless aux-map-omit
+        `(cl-pushnew ',name conn--aux-bindings))))
 
 (conn-define-remapping-command conn-C-x-keys                "C-x")
 (conn-define-remapping-command conn-C-c-keys                "C-c")
 (conn-define-remapping-command conn-M-s-keys                "M-s")
 (conn-define-remapping-command conn-M-g-keys                "M-g")
-(conn-define-remapping-command conn-C-x-t-keys              "C-x t")
 (conn-define-remapping-command conn-C-x-4-keys              "C-x 4")
 (conn-define-remapping-command conn-C-x-5-keys              "C-x 5")
+(conn-define-remapping-command conn-switch-buffer-keys      "C-x b" t)
+(conn-define-remapping-command conn-switch-tab-keys         "C-x t s" t)
 (conn-define-remapping-command conn-delete-char-keys        "C-d")
 (conn-define-remapping-command conn-yank-keys               "C-y")
 (conn-define-remapping-command conn-kill-region-keys        "C-w")
 (conn-define-remapping-command conn-backward-delete-keys    "DEL")
-(conn-define-remapping-command conn-delete-region-keys      "C-S-w")
+(conn-define-remapping-command conn-delete-region-keys      "C-S-w" t)
 (conn-define-remapping-command conn-forward-sexp-keys       "C-M-f")
 (conn-define-remapping-command conn-backward-sexp-keys      "C-M-b")
 (conn-define-remapping-command conn-forward-word-keys       "M-f")
@@ -3436,20 +3438,11 @@ there's a region, all lines that region covers will be duplicated."
     (comment-region (region-beginning)
                     (region-end))))
 
-;; (cl-macrolet
-;;     ((transpose-backward (&body fns)
-;;        (macroexp-progn
-;;         (seq-map
-;;          (lambda (command)
-;;            `(defun ,(conn--symbolicate "conn-" command "-backward") (arg)
-;;               (interactive "*p")
-;;               (funcall-interactively #',command (- arg))))
-;;          fns))))
-;;   (transpose-backward transpose-words
-;;                       transpose-sexps
-;;                       transpose-lines
-;;                       transpose-paragraphs
-;;                       transpose-chars))
+(defun conn-switch-to-buffer-or-tab (&optional tab)
+  (interactive "P")
+  (if tab
+      (call-interactively (conn-switch-tab-keys))
+    (call-interactively (conn-switch-buffer-keys))))
 
 ;;;;; Window Commands
 
@@ -4302,8 +4295,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "?"     'undo-redo
   "`"     'conn-other-window
   "~"     'conn-buffer-to-other-window
-  "a"     'switch-to-buffer
-  "A"     'ibuffer
+  "b"     'conn-switch-to-buffer-or-tab
+  "B"     'ibuffer
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "g"     'conn-M-g-keys
