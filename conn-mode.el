@@ -3547,16 +3547,17 @@ if ARG is anything else `other-tab-prefix'."
   :group 'conn-mode
   :type 'integer)
 
-(defvar conn--wincontrol-menu-string
+(defvar conn--wincontrol-format-string
   (concat
-   (propertize "i j k l" 'face 'transient-key) ": move to win; "
-   (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; prefix arg: "
-   (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'transient-key) ": reset arg"
+   (propertize "WinControl: " 'face 'bold)
+   "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
+   (propertize "." 'face 'transient-key) ": reset; "
+   (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; "
+   (propertize "i j k l" 'face 'transient-key) ": win move"
    "\n"
    (propertize "b u x t" 'face 'transient-key) ": bury/unbury/swap/throw buffer; "
    (propertize "d D y" 'face 'transient-key) ": delete win/other win/buf and win; "
-   (propertize "o" 'face 'transient-key) ": tear off; "
+   (propertize "o" 'face 'transient-key) ": tear off"
    "\n"
    (propertize "SPC DEL" 'face 'transient-key) ": scroll win; "
    (propertize "v r" 'face 'transient-key) ": split vertical/right; "
@@ -3582,14 +3583,14 @@ if ARG is anything else `other-tab-prefix'."
   (setq prefix-arg conn--wincontrol-arg)
   (let ((message-log-max nil)
         (resize-mini-windows t))
-    (message "")))
+    (message nil)))
 
 (defun conn--wincontrol-post-command ()
   (if (not (zerop (minibuffer-depth)))
       (conn-wincontrol-mode -1)
     (let ((message-log-max nil)
           (resize-mini-windows t))
-      (message conn--wincontrol-menu-string conn--wincontrol-arg))))
+      (message conn--wincontrol-format-string conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup ()
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
