@@ -3591,15 +3591,10 @@ if ARG is anything else `other-tab-prefix'."
                                (lambda () conn-wincontrol-mode))))
 
 (defun conn--wincontrol-exit ()
-  (setq prefix-arg nil)
+  (when (functionp conn--wincontrol-quit)
+    (funcall conn--wincontrol-quit))
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
-
-(defun conn-wincontrol-off ()
-  (interactive)
-  (conn-wincontrol-mode -1)
-  (when (functionp conn--wincontrol-quit)
-    (funcall conn--wincontrol-quit)))
 
 (defun conn-wincontrol-digit-argument (N)
   (setq this-command 'conn-wincontrol-digit-argument
@@ -3613,6 +3608,10 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn-wincontrol-digit-argument-reset ()
   (interactive)
   (setq conn--wincontrol-arg 0))
+
+(defun conn-wincontrol-off ()
+  (interactive)
+  (conn-wincontrol-mode -1))
 
 (define-keymap
   :keymap conn-wincontrol-map
