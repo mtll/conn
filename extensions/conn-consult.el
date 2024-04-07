@@ -93,30 +93,6 @@ THING BEG and END are bound in BODY."
                        (prog1 isearch-string (isearch-done))))
      :state (consult--location-state candidates))))
 
-(defun conn-clone-indirect-buffer-location-candidate (cand)
-  ;; Embark runs with inside a with-selected-window form
-  ;; so we use a timer to get around it.
-  (run-with-timer
-   0 nil (lambda (marker)
-           (with-current-buffer (marker-buffer marker)
-             (clone-indirect-buffer nil t)
-             (goto-char marker)))
-   (car (consult--get-location cand))))
-
-(defun conn-dot-consult-location-candidate (cand)
-  (let ((marker (car (consult--get-location cand))))
-    (with-current-buffer (marker-buffer marker)
-      (goto-char marker)
-      (unless (bolp) (beginning-of-line))
-      (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
-
-(defun conn-dot-consult-grep-candidate (cand)
-  (let ((marker (car (consult--grep-position cand))))
-    (with-current-buffer (marker-buffer marker)
-      (goto-char marker)
-      (unless (bolp) (beginning-of-line))
-      (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
-
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
@@ -177,6 +153,28 @@ THING BEG and END are bound in BODY."
 (provide 'conn-consult)
 
 (with-eval-after-load 'embark
+  (defun conn-clone-indirect-buffer-location-candidate (cand)
+    ;; Embark runs with inside a with-selected-window form
+    ;; so we use a timer to get around it.
+    (run-with-timer
+     0 nil (lambda (marker)
+             (clone-indirect-buffer nil t)
+             (goto-char marker))
+     (car (consult--get-location cand))))
+
+  (defun conn-dot-consult-location-candidate (cand)
+    (let ((marker (car (consult--get-location cand))))
+      (goto-char marker)
+      (unless (bolp) (beginning-of-line))
+      (conn--create-dots (cons (point) (progn (end-of-line) (point))))))
+
+  (defun conn-dot-consult-grep-candidate (cand)
+    (let ((marker (car (consult--grep-position cand))))
+      (with-current-buffer (marker-buffer marker)
+        (goto-char marker)
+        (unless (bolp) (beginning-of-line))
+        (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
+
   (defvar embark-multitarget-actions)
   (defvar embark-keymap-alist)
 
@@ -209,19 +207,14 @@ THING BEG and END are bound in BODY."
   (defvar-keymap conn-embark-consult-location-map
     "C-z" 'conn-dispatch-location-candidates
     "D"   'conn-dot-consult-location-candidate
-    "c"   'conn-clone-buffer-location-candidate)
-  (if (alist-get 'consult-location embark-keymap-alist)
-      (cl-pushnew 'embark-consult-location-map
-                  (alist-get 'consult-location embark-keymap-alist))
-    (setf (alist-get 'consult-location embark-keymap-alist)
-          (list 'conn-embark-consult-location-map 'embark-general-map)))
+    "c"   '("clone-indirect-buffer" .
+            conn-clone-indirect-buffer-location-candidate))
+  (cl-pushnew 'conn-embark-consult-location-map
+              (alist-get 'consult-location embark-keymap-alist))
 
   (defvar-keymap conn-embark-consult-grep-map
     "C-z" 'conn-dispatch-grep-candidates
     "D"   'conn-dot-consult-grep-candidate)
-  (if (alist-get 'consult-grep embark-keymap-alist)
-      (cl-pushnew 'embark-consult-grep-map
-                  (alist-get 'consult-grep embark-keymap-alist))
-    (setf (alist-get 'consult-grep embark-keymap-alist)
-          (list 'conn-embark-consult-grep-map 'embark-general-map))))
+  (cl-pushnew 'conn-embark-consult-grep-map
+              (alist-get 'consult-grep embark-keymap-alist)))
 ;;; conn-consult.el ends here
