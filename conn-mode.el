@@ -3555,6 +3555,8 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--previous-scroll-conservatively)
 
+(defvar conn--wincontrol-mode-line-prev-background)
+
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
 
 (defcustom conn-wincontrol-display-verbose-help t
@@ -3566,6 +3568,12 @@ if ARG is anything else `other-tab-prefix'."
   "Limit for prefix arg in `conn-wincontrol-mode'."
   :group 'conn-mode
   :type 'integer)
+
+(defcustom conn-wincontrol-mode-line-hl-color
+  "#bbefe5"
+  "Color for mode-line background in `conn-wincontrol-mode'."
+  :group 'conn-mode
+  :type 'color)
 
 (defvar conn--wincontrol-format-string
   (concat
@@ -3628,17 +3636,20 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-setup ()
   (add-hook 'post-command-hook 'conn--wincontrol-post-command -90)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 90)
-  (setq conn--previous-scroll-conservatively scroll-conservatively
+  (setq conn--wincontrol-mode-line-prev-background (face-attribute 'mode-line :background)
+        conn--previous-scroll-conservatively scroll-conservatively
         scroll-conservatively 100
         conn--wincontrol-arg  1
         conn--wincontrol-quit (set-transient-map
                                conn-wincontrol-map
-                               (lambda () conn-wincontrol-mode))))
+                               (lambda () conn-wincontrol-mode)))
+  (set-face-attribute 'mode-line nil :background conn-wincontrol-mode-line-hl-color))
 
 (defun conn--wincontrol-exit ()
   (setq scroll-conservatively conn--previous-scroll-conservatively)
   (when (functionp conn--wincontrol-quit)
     (funcall conn--wincontrol-quit))
+  (set-face-attribute 'mode-line nil :background conn--wincontrol-mode-line-prev-background)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
 
