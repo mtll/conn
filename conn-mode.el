@@ -3360,8 +3360,6 @@ If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
          (call-interactively (conn-backward-delete-keys)))
-        ((consp arg)
-         (call-interactively (conn-delete-region-keys)))
         ((numberp arg)
          (conn--thread needle
              (concat "Kill "
@@ -3542,6 +3540,11 @@ if ARG is anything else `other-tab-prefix'."
 (defvar conn--previous-scroll-conservatively)
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
 
+(defcustom conn-wincontrol-display-help t
+  "Print detailed help string in minibuffer in `conn-wincontrol-mode'."
+  :group 'conn-mode
+  :type 'boolean)
+
 (defcustom conn-wincontrol-arg-limit 1000
   "Limit for prefix arg in `conn-wincontrol-mode'."
   :group 'conn-mode
@@ -3571,6 +3574,11 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "M O" 'face 'transient-key) ": tab to register/tear off; "
    (propertize "q" 'face 'transient-key) ": quit"))
 
+(defvar conn--wincontrol-simple-format-string
+  (concat
+   (propertize "WinControl: " 'face 'bold)
+   "prefix arg: " (propertize "%d" 'face 'transient-value)))
+
 (define-minor-mode conn-wincontrol-mode
   "Minor mode for window control."
   :global t
@@ -3592,11 +3600,14 @@ if ARG is anything else `other-tab-prefix'."
       (conn-wincontrol-mode -1)
     (let ((message-log-max nil)
           (resize-mini-windows t))
-      (message conn--wincontrol-format-string conn--wincontrol-arg))))
+      (message (if conn-wincontrol-display-help
+                   conn--wincontrol-format-string
+                 conn--wincontrol-simple-format-string)
+               conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup ()
-  (add-hook 'post-command-hook 'conn--wincontrol-post-command)
-  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (add-hook 'post-command-hook 'conn--wincontrol-post-command -90)
+  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 90)
   (setq conn--previous-scroll-conservatively scroll-conservatively
         scroll-conservatively 100
         conn--wincontrol-arg  1
@@ -4215,14 +4226,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
-  "DEL" 'conn-delete-pair
-  "TAB" 'fill-region
+  "DEL" 'conn-delete-region-keys
   "$"   'ispell-region
   "*"   'calc-grab-region
   ","   'conn-isearch-region-backward
   "."   'conn-isearch-region-forward
   ";"   'comment-or-uncomment-region
   "|"   'shell-command-on-region
+  "["   'conn-delete-pair
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
