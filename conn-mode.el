@@ -2882,21 +2882,20 @@ This command should only be called interactively."
         (setq conn--goto-char-last-char nil)
         (put this-command 'repeat-map nil)
         (forward-char arg))
-    (let ((rep nil))
-      (when string
-        (setq conn--goto-char-last-char string)
-        (put this-command 'repeat-map 'conn-goto-char-forward-repeat-map))
-      (with-restriction
-          (window-start)
-          (window-end)
-        (when-let ((pos (or (save-excursion
-                              (forward-char)
-                              (and (search-forward conn--goto-char-last-char nil t)
-                                   (match-beginning 0)))
-                            (put this-command 'repeat-map nil)
-                            (user-error "\"%s\" not found." conn--goto-char-last-char))))
-          (when string (push-mark nil t))
-          (goto-char pos))))))
+    (when string
+      (setq conn--goto-char-last-char string)
+      (put this-command 'repeat-map 'conn-goto-char-forward-repeat-map))
+    (with-restriction
+        (window-start)
+        (window-end)
+      (when-let ((pos (or (save-excursion
+                            (forward-char)
+                            (and (search-forward conn--goto-char-last-char nil t)
+                                 (match-beginning 0)))
+                          (put this-command 'repeat-map nil)
+                          (user-error "\"%s\" not found." conn--goto-char-last-char))))
+        (when string (push-mark nil t))
+        (goto-char pos)))))
 
 (defun conn-pop-state ()
   "Return to previous state."
