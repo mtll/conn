@@ -3573,28 +3573,30 @@ if ARG is anything else `other-tab-prefix'."
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
    (propertize "." 'face 'transient-key) ": reset; "
    (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; "
-   (propertize "i j k l" 'face 'transient-key) ": win move"
+   (propertize "C-h" 'face 'transient-key) ": hide help; "
+   (propertize "q" 'face 'transient-key) ": quit"
    "\n"
+   (propertize "i j k l" 'face 'transient-key) ": move; "
    (propertize "b u x t" 'face 'transient-key) ": un/bury/swap/throw buf; "
    (propertize "d D g G" 'face 'transient-key) ": delete win/other/buf/buf and win; "
-   (propertize "o c" 'face 'transient-key) ": tear off/clone"
    "\n"
    (propertize "m M" 'face 'transient-key) ": wins/tab store; "
+   (propertize "p" 'face 'transient-key) ": load; "
    (propertize "SPC DEL" 'face 'transient-key) ": scroll; "
    (propertize "v r" 'face 'transient-key) ": split vert/right; "
    (propertize "= +" 'face 'transient-key) ": balance/max; "
    (propertize "/ ?" 'face 'transient-key) ": undo/redo"
    "\n"
-   (propertize "p" 'face 'transient-key) ": load; "
+   (propertize "o c" 'face 'transient-key) ": tear off/clone; "
    (propertize "J L" 'face 'transient-key) ": tab next/prev; "
    (propertize "N Y K" 'face 'transient-key) ": tab new/duplicate/close; "
-   (propertize "M O" 'face 'transient-key) ": tab to register/tear off; "
-   (propertize "q" 'face 'transient-key) ": quit"))
+   (propertize "M O" 'face 'transient-key) ": tab to register/tear off"))
 
 (defvar conn--wincontrol-simple-format-string
   (concat
    (propertize "WinControl: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
+   (propertize "C-h" 'face 'transient-key) ": show help; "
    (propertize "q" 'face 'transient-key) ": quit"))
 
 (define-minor-mode conn-wincontrol-mode
@@ -3658,10 +3660,17 @@ if ARG is anything else `other-tab-prefix'."
   (interactive)
   (conn-wincontrol-mode -1))
 
+(defun conn-wincontrol-toggle-help ()
+  (interactive)
+  (setq conn-wincontrol-display-verbose-help
+        (not conn-wincontrol-display-verbose-help)))
+
 (define-keymap
   :keymap conn-wincontrol-map
   "q"   'conn-wincontrol-off
   "C-g" 'conn-wincontrol-off
+
+  "C-h" 'conn-wincontrol-toggle-help
 
   "0" (lambda () (interactive) (conn-wincontrol-digit-argument 0))
   "1" (lambda () (interactive) (conn-wincontrol-digit-argument 1))
