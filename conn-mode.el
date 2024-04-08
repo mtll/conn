@@ -274,6 +274,8 @@ See `conn--dispatch-on-regions'.")
 
 (defvar conn--last-remapping nil)
 
+(defvar conn--read-string-timout 0.5)
+
 (defvar conn-enable-in-buffer-hook nil
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
 Each function is run without any arguments and if any of them return nil
@@ -2800,10 +2802,35 @@ Interactively `region-beginning' and `region-end'."
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content))
 
+(defun conn--read-string-preview-overlays (string &optional dir)
+  (let (ovs)
+    (save-excursion
+      (with-restriction
+          (if (eq dir 'forward)  (point) (window-start))
+          (if (eq dir 'backward) (point) (window-end))
+        (goto-char (point-max))
+        (while (search-backward string nil t)
+          (push (make-overlay (point) (+ (point) (length string)))
+                ovs)
+          (overlay-put (car ovs) 'face 'isearch))))
+    ovs))
+
+(defun conn--read-string-with-timeout (timeout &optional dir)
+  (let ((string (char-to-string (read-char "char 0: " t)))
+        next-char
+        overlays)
+    (unwind-protect
+        (while (setq next-char (read-char (format "char (%s):" string) t timeout))
+          (setq string (concat string (char-to-string next-char)))
+          (mapc #'delete-overlay overlays)
+          (setq overlays (conn--read-string-preview-overlays string dir)))
+      (mapc #'delete-overlay overlays))
+    string))
+
 (defvar-keymap conn-goto-char-backward-repeat-map
   "j" 'conn-goto-char-backward)
 
-(defun conn-goto-char-backward (char arg)
+(defun conn-goto-char-backward (string arg)
   "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for CHAR and search backward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
@@ -2811,31 +2838,33 @@ of CHAR up to `window-end'.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4)) (read-char "Char: ")))
+                       ((or '1 '(4)) (conn--read-string-with-timeout
+                                      conn--read-string-timout 'backward)))
                      (prefix-numeric-value current-prefix-arg)))
-  (if (and (null char)
+  (if (and (null string)
            (not (and (eq last-command 'conn-goto-char-backward)
                      conn--goto-char-last-char)))
       (progn
         (setq conn--goto-char-last-char nil)
         (put this-command 'repeat-map nil)
         (backward-char arg))
-    (when char
-      (setq conn--goto-char-last-char (if (stringp char) char (string char)))
+    (when string
+      (setq conn--goto-char-last-char string)
       (put this-command 'repeat-map 'conn-goto-char-backward-repeat-map))
-    (when-let ((pos (or (save-excursion
-                          (backward-char)
-                          (search-backward conn--goto-char-last-char (window-start) t))
-                        (progn
+    (with-restriction (window-start) (window-end)
+      (when-let ((pos (or (save-excursion
+                            (backward-char)
+                            (and (search-backward conn--goto-char-last-char nil t)
+                                 (match-beginning 0)))
                           (put this-command 'repeat-map nil)
-                          (user-error "%s character not found."
-                                      conn--goto-char-last-char)))))
-      (goto-char pos))))
+                          (user-error "\"%s\" not found." conn--goto-char-last-char))))
+        (when string (push-mark nil t))
+        (goto-char pos)))))
 
 (defvar-keymap conn-goto-char-forward-repeat-map
   "l" 'conn-goto-char-forward)
 
-(defun conn-goto-char-forward (char arg)
+(defun conn-goto-char-forward (string arg)
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for CHAR search and forward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
@@ -2843,26 +2872,31 @@ of CHAR up to `window-end'.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4)) (read-char "Char: ")))
+                       ((or '1 '(4)) (conn--read-string-with-timeout
+                                      conn--read-string-timout 'forward)))
                      (prefix-numeric-value current-prefix-arg)))
-  (if (and (null char)
+  (if (and (null string)
            (not (and (eq last-command 'conn-goto-char-forward)
                      conn--goto-char-last-char)))
       (progn
         (setq conn--goto-char-last-char nil)
         (put this-command 'repeat-map nil)
         (forward-char arg))
-    (when char
-      (setq conn--goto-char-last-char (if (stringp char) char (string char)))
-      (put this-command 'repeat-map 'conn-goto-char-forward-repeat-map))
-    (when-let ((pos (or (save-excursion
-                          (forward-char)
-                          (search-forward conn--goto-char-last-char (window-end) t))
-                        (progn
-                          (put this-command 'repeat-map nil)
-                          (user-error "%s character not found."
-                                      conn--goto-char-last-char)))))
-      (goto-char pos))))
+    (let ((rep nil))
+      (when string
+        (setq conn--goto-char-last-char string)
+        (put this-command 'repeat-map 'conn-goto-char-forward-repeat-map))
+      (with-restriction
+          (window-start)
+          (window-end)
+        (when-let ((pos (or (save-excursion
+                              (forward-char)
+                              (and (search-forward conn--goto-char-last-char nil t)
+                                   (match-beginning 0)))
+                            (put this-command 'repeat-map nil)
+                            (user-error "\"%s\" not found." conn--goto-char-last-char))))
+          (when string (push-mark nil t))
+          (goto-char pos))))))
 
 (defun conn-pop-state ()
   "Return to previous state."
@@ -3536,11 +3570,14 @@ if ARG is anything else `other-tab-prefix'."
 ;; A simple version of hyperbole's hycontrol-windows
 
 (defvar conn--wincontrol-arg 1)
+
 (defvar conn--wincontrol-quit nil)
+
 (defvar conn--previous-scroll-conservatively)
+
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
 
-(defcustom conn-wincontrol-display-help t
+(defcustom conn-wincontrol-display-verbose-help t
   "Print detailed help string in minibuffer in `conn-wincontrol-mode'."
   :group 'conn-mode
   :type 'boolean)
@@ -3577,7 +3614,8 @@ if ARG is anything else `other-tab-prefix'."
 (defvar conn--wincontrol-simple-format-string
   (concat
    (propertize "WinControl: " 'face 'bold)
-   "prefix arg: " (propertize "%d" 'face 'transient-value)))
+   "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
+   (propertize "q" 'face 'transient-key) ": quit"))
 
 (define-minor-mode conn-wincontrol-mode
   "Minor mode for window control."
@@ -3600,7 +3638,7 @@ if ARG is anything else `other-tab-prefix'."
       (conn-wincontrol-mode -1)
     (let ((message-log-max nil)
           (resize-mini-windows t))
-      (message (if conn-wincontrol-display-help
+      (message (if conn-wincontrol-display-verbose-help
                    conn--wincontrol-format-string
                  conn--wincontrol-simple-format-string)
                conn--wincontrol-arg))))
