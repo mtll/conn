@@ -238,6 +238,8 @@ dynamically.")
 (defvar-local conn--mark-cursor nil
   "`mark' cursor overlay.")
 (put 'conn--mark-cursor 'permanent-local t)
+(put 'conn--mark-cursor 'face 'conn-mark-face)
+(put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 
 (defvar-local conn--handle-mark nil)
 
@@ -281,6 +283,11 @@ See `conn--dispatch-on-regions'.")
 Each function is run without any arguments and if any of them return nil
 `conn-local-mode' will not be enabled in the buffer, otherwise
 `conn-local-mode' will be enabled.")
+
+(put 'conn--dot 'evaporate t)
+(put 'conn--dot 'priority conn-dot-overlay-priority)
+(put 'conn--dot 'face 'conn-dot-face)
+(put 'conn--dot 'evaporate t)
 
 ;;;;; Command Histories
 
@@ -691,7 +698,7 @@ of the movement command unless `region-active-p'."
     (put cmd :conn-mark-handler handler)))
 
 (defun conn--mark-cursor-p (ov)
-  (eq (overlay-get ov 'type) 'conn--mark-cursor))
+  (eq (overlay-get ov 'category) 'conn--mark-cursor))
 
 (defun conn--push-ephemeral-mark (&optional location msg activate)
   "Push a mark at LOCATION that will not be added to `mark-ring'.
@@ -723,10 +730,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
        ((null (mark t)))
        ((null conn--mark-cursor)
         (setq conn--mark-cursor (make-overlay (mark t) (1+ (mark t)) nil t nil))
-        (overlay-put conn--mark-cursor 'conn-overlay t)
-        (overlay-put conn--mark-cursor 'face 'conn-mark-face)
-        (overlay-put conn--mark-cursor 'type 'conn--mark-cursor)
-        (overlay-put conn--mark-cursor 'priority conn-mark-overlay-priority))
+        (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
        (t
         (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
         (overlay-put conn--mark-cursor 'after-string
@@ -1077,9 +1081,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--clear-overlays ()
   "Delete all conn overlays."
-  (dolist (ov (flatten-tree (overlay-lists)))
-    (when (overlay-get ov 'conn-overlay)
-      (delete-overlay ov))))
+  (mapc #'delete-overlay
+        (conn--all-overlays (lambda (ov)
+                              (memq (overlay-get ov 'category)
+                                    '(conn--dot conn--mark-cursor))))))
 
 (defun conn--dot-after-change-function (&rest _)
   (setq conn--dot-undo-ring nil))
@@ -1136,11 +1141,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
              (end (apply #'max end (mapcar #'overlay-end overlaps)))
              (overlay (make-overlay start end nil nil t)))
         (mapc #'conn--delete-dot overlaps)
-        (overlay-put overlay 'conn-overlay t)
-        (overlay-put overlay 'evaporate t)
-        (overlay-put overlay 'dot t)
-        (overlay-put overlay 'priority conn-dot-overlay-priority)
-        (overlay-put overlay 'face 'conn-dot-face)
+        (overlay-put overlay 'category 'conn--dot)
         (unless (or conn--dot-undoing
                     conn-macro-dispatch-p)
           (push `(create ,start . ,end) conn--dot-this-undo))))))
@@ -1158,7 +1159,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
   (when (overlayp overlay)
-    (overlay-get overlay 'dot)))
+    (eq (overlay-get overlay 'category) 'conn--dot)))
 
 (defun conn--clear-dots-in-buffers (buffers)
   "Delete all dots in BUFFERS."
@@ -4698,7 +4699,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
     (setq conn-current-state nil)
-    (conn--delete-mark-cursor)
+    (conn--clear-overlays)
     (setq-local mode-line-format
                 (assq-delete-all
                  'conn-mode-line-indicator-mode
