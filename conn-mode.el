@@ -2683,8 +2683,6 @@ from the text properties at point."
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
     (scroll-down arg)))
-(put 'conn-scroll-down 'repeat-check-key 'no)
-(put 'conn-scroll-down 'repeat-map 'conn-scroll-repeat-map)
 
 (defun conn-scroll-up (&optional arg)
   "`scroll-up-command' leaving point at the same relative window position."
@@ -2692,8 +2690,6 @@ from the text properties at point."
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
     (scroll-up arg)))
-(put 'conn-scroll-up 'repeat-check-key 'no)
-(put 'conn-scroll-up 'repeat-map 'conn-scroll-repeat-map)
 
 (defun conn-open-line-and-indent (N)
   "Insert a newline, leave point before it and indent the new line.
@@ -3634,8 +3630,8 @@ if ARG is anything else `other-tab-prefix'."
                conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup ()
-  (add-hook 'post-command-hook 'conn--wincontrol-post-command -90)
-  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command 90)
+  (add-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq conn--wincontrol-mode-line-prev-background (face-attribute 'mode-line :background)
         conn--previous-scroll-conservatively scroll-conservatively
         scroll-conservatively 100
@@ -3643,13 +3639,15 @@ if ARG is anything else `other-tab-prefix'."
         conn--wincontrol-quit (set-transient-map
                                conn-wincontrol-map
                                (lambda () conn-wincontrol-mode)))
-  (set-face-attribute 'mode-line nil :background conn-wincontrol-mode-line-hl-color))
+  (set-face-attribute 'mode-line nil
+                      :background conn-wincontrol-mode-line-hl-color))
 
 (defun conn--wincontrol-exit ()
   (setq scroll-conservatively conn--previous-scroll-conservatively)
   (when (functionp conn--wincontrol-quit)
     (funcall conn--wincontrol-quit))
-  (set-face-attribute 'mode-line nil :background conn--wincontrol-mode-line-prev-background)
+  (set-face-attribute 'mode-line nil :background
+                      conn--wincontrol-mode-line-prev-background)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
 
@@ -4223,12 +4221,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 
 ;;;; Keymaps
-
-(defvar-keymap conn-scroll-repeat-map
-  :repeat t
-  :doc "Repeat map for conn window scroll commands."
-  "SPC" 'conn-scroll-up
-  "DEL" 'conn-scroll-down)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
