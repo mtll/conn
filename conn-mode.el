@@ -3556,6 +3556,8 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
 
+(defvar conn--wincontrol-display-verbose-help)
+
 (defcustom conn-wincontrol-display-verbose-help t
   "Print detailed help string in minibuffer in `conn-wincontrol-mode'."
   :group 'conn-mode
@@ -3566,9 +3568,8 @@ if ARG is anything else `other-tab-prefix'."
   :group 'conn-mode
   :type 'integer)
 
-(defcustom conn-wincontrol-mode-line-hl-color
-  "#bbefe5"
-  "Color for mode-line background in `conn-wincontrol-mode'."
+(defcustom conn-wincontrol-mode-line-hl-color "#bbefe5"
+  "Mode-line highlight color for `conn-wincontrol-mode'."
   :group 'conn-mode
   :type 'color)
 
@@ -3625,7 +3626,7 @@ if ARG is anything else `other-tab-prefix'."
       (conn-wincontrol-mode -1)
     (let ((message-log-max nil)
           (resize-mini-windows t))
-      (message (if conn-wincontrol-display-verbose-help
+      (message (if conn--wincontrol-display-verbose-help
                    conn--wincontrol-format-string
                  conn--wincontrol-simple-format-string)
                conn--wincontrol-arg))))
@@ -3635,6 +3636,7 @@ if ARG is anything else `other-tab-prefix'."
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq conn--wincontrol-mode-line-prev-background (face-attribute 'mode-line :background)
         conn--previous-scroll-conservatively scroll-conservatively
+        conn--wincontrol-display-verbose-help conn-wincontrol-display-verbose-help
         scroll-conservatively 100
         conn--wincontrol-arg  1
         conn--wincontrol-quit (set-transient-map
@@ -3672,8 +3674,8 @@ if ARG is anything else `other-tab-prefix'."
 
 (defun conn-wincontrol-toggle-help ()
   (interactive)
-  (setq conn-wincontrol-display-verbose-help
-        (not conn-wincontrol-display-verbose-help)))
+  (setq conn--wincontrol-display-verbose-help
+        (not conn--wincontrol-display-verbose-help)))
 
 (define-keymap
   :keymap conn-wincontrol-map
