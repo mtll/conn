@@ -2824,13 +2824,11 @@ Interactively `region-beginning' and `region-end'."
           (setq string (concat string (char-to-string next-char)))
           (mapc #'delete-overlay overlays)
           (setq overlays (conn--read-string-preview-overlays string dir)))
-      (mapc #'delete-overlay overlays))
+      (mapc #'delete-overlay overlays)
+      (message nil))
     string))
 
-(defvar-keymap conn-goto-char-backward-repeat-map
-  "j" 'conn-goto-char-backward)
-
-(defun conn-goto-char-backward (string arg)
+(defun conn-backward-char (string arg)
   "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for CHAR and search backward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
@@ -2838,33 +2836,24 @@ of CHAR up to `window-end'.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4)) (conn--read-string-with-timeout
-                                      conn--read-string-timout 'backward)))
+                       ((or '1 '(4))
+                        (conn--read-string-with-timeout
+                         conn--read-string-timout 'backward)))
                      (prefix-numeric-value current-prefix-arg)))
-  (if (and (null string)
-           (not (and (eq last-command 'conn-goto-char-backward)
-                     conn--goto-char-last-char)))
-      (progn
-        (setq conn--goto-char-last-char nil)
-        (put this-command 'repeat-map nil)
-        (backward-char arg))
-    (when string
-      (setq conn--goto-char-last-char string)
-      (put this-command 'repeat-map 'conn-goto-char-backward-repeat-map))
+  (if (null string)
+      (backward-char arg)
+    (setq this-command 'conn-goto-char-backward)
     (with-restriction (window-start) (window-end)
       (when-let ((pos (or (save-excursion
                             (backward-char)
-                            (and (search-backward conn--goto-char-last-char nil t)
+                            (and (search-backward string nil t)
                                  (match-beginning 0)))
-                          (put this-command 'repeat-map nil)
-                          (user-error "\"%s\" not found." conn--goto-char-last-char))))
-        (when string (push-mark nil t))
+                          (user-error "\"%s\" not found." string))))
+        (unless (eq this-command last-command)
+          (push-mark nil t))
         (goto-char pos)))))
 
-(defvar-keymap conn-goto-char-forward-repeat-map
-  "l" 'conn-goto-char-forward)
-
-(defun conn-goto-char-forward (string arg)
+(defun conn-forward-char (string arg)
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for CHAR search and forward for nearest
 occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
@@ -2872,29 +2861,21 @@ of CHAR up to `window-end'.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4)) (conn--read-string-with-timeout
-                                      conn--read-string-timout 'forward)))
+                       ((or '1 '(4))
+                        (conn--read-string-with-timeout
+                         conn--read-string-timout 'forward)))
                      (prefix-numeric-value current-prefix-arg)))
-  (if (and (null string)
-           (not (and (eq last-command 'conn-goto-char-forward)
-                     conn--goto-char-last-char)))
-      (progn
-        (setq conn--goto-char-last-char nil)
-        (put this-command 'repeat-map nil)
-        (forward-char arg))
-    (when string
-      (setq conn--goto-char-last-char string)
-      (put this-command 'repeat-map 'conn-goto-char-forward-repeat-map))
-    (with-restriction
-        (window-start)
-        (window-end)
+  (if (null string)
+      (forward-char arg)
+    (setq this-command 'conn-goto-char-forward)
+    (with-restriction (window-start) (window-end)
       (when-let ((pos (or (save-excursion
                             (forward-char)
-                            (and (search-forward conn--goto-char-last-char nil t)
+                            (and (search-forward string nil t)
                                  (match-beginning 0)))
-                          (put this-command 'repeat-map nil)
-                          (user-error "\"%s\" not found." conn--goto-char-last-char))))
-        (when string (push-mark nil t))
+                          (user-error "\"%s\" not found." string))))
+        (unless (eq this-command last-command)
+          (push-mark nil t))
         (goto-char pos)))))
 
 (defun conn-pop-state ()
@@ -4522,11 +4503,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
   "J"     'conn-beginning-of-inner-line
-  "j"     'conn-goto-char-backward
+  "j"     'conn-backward-char
   "K"     'conn-forward-paragraph-keys
   "k"     'conn-next-line-keys
   "L"     'conn-end-of-inner-line
-  "l"     'conn-goto-char-forward
+  "l"     'conn-forward-char
   "M"     'conn-end-of-defun-keys
   "m"     'conn-forward-sexp-keys
   "N"     'conn-beginning-of-defun-keys
@@ -4832,7 +4813,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (with-eval-after-load 'eldoc
   (eldoc-add-command 'conn-end-of-inner-line
                      'conn-beginning-of-inner-line
+                     'conn-backward-char
                      'conn-goto-char-backward
+                     'conn-forward-char
                      'conn-goto-char-forward
                      'paredit-forward
                      'paredit-forward-up
