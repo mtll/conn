@@ -3798,6 +3798,10 @@ if ARG is anything else `other-tab-prefix'."
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
 
+(defun conn-wincontrol ()
+  (interactive)
+  (conn-wincontrol-mode 1))
+
 (defun conn--wincontrol-pre-command ()
   (when (null conn--wincontrol-arg)
     (setq conn--wincontrol-arg 1))
@@ -4671,7 +4675,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "?"     'undo-redo
   "`"     'conn-other-window
   "~"     'conn-buffer-to-other-window
-  "a"     'conn-wincontrol-mode
+  "a"     'conn-wincontrol
   "b"     'conn-switch-to-buffer-or-tab
   "B"     'ibuffer
   "C"     'conn-copy-region
