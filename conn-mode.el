@@ -1684,7 +1684,7 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :lighter-face ((t (:background "#cae1ff" :box (:line-width 2 :color "#355687"))))
   :indicator " E "
   :cursor box
-  :cursor-color "#5d74aa"
+  :cursor-color "#00517d"
   :buffer-face ((t :inherit default))
   :ephemeral-marks nil
   :transitions (define-keymap "<escape>" 'conn-state))
@@ -1726,7 +1726,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :suppress-input-method t
   :indicator " D "
   :ephemeral-marks t
-  :cursor-color "#54aa61"
+  :cursor-color "#267d00"
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
@@ -1759,7 +1759,7 @@ state."
   :lighter-face ((t (:background "#f5c5ff" :box (:line-width 2 :color "#2d242f"))))
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :suppress-input-method t
-  :cursor-color "#aa5a99"
+  :cursor-color "#7d0077"
   :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
