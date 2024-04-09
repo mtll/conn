@@ -943,7 +943,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (`(,beg . ,end) (cons end beg))
       (ret ret))))
 
-(defun conn-macro-dispatch (iterator &optional kmacro append)
+(defun conn--macro-dispatch (iterator &optional kmacro append)
   (let* ((undo-outer-limit nil)
          (undo-limit most-positive-fixnum)
          (undo-strong-limit most-positive-fixnum)
@@ -1684,7 +1684,6 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :lighter-face ((t (:background "#cae1ff" :box (:line-width 2 :color "#355687"))))
   :indicator " E "
   :cursor box
-  :cursor-color "#00517d"
   :buffer-face ((t :inherit default))
   :ephemeral-marks nil
   :transitions (define-keymap "<escape>" 'conn-state))
@@ -1698,6 +1697,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :lighter-face ((t (:background "#f3bdbd" :box (:line-width 2 :color "#7a1a1a"))))
   :suppress-input-method t
   :indicator " C "
+  :cursor-color "#7d0002"
   :ephemeral-marks t
   :buffer-face ((t :inherit default :background "#f7eee1"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
@@ -1847,7 +1847,7 @@ If AT-END is non-nil yank at the end of each dot instead."
           (conn--dispatch-single-buffer)
           (conn--dispatch-with-state 'conn-emacs-state)
           (conn--pulse-on-record)
-          (conn-macro-dispatch conn-yank-keys))
+          (conn--macro-dispatch conn-yank-keys))
       (thread-first
         (conn--sorted-overlays #'conn-dotp '<)
         (conn--dot-iterator)
@@ -1855,7 +1855,7 @@ If AT-END is non-nil yank at the end of each dot instead."
         (conn--dispatch-single-buffer)
         (conn--dispatch-with-state 'conn-emacs-state)
         (conn--pulse-on-record)
-        (conn-macro-dispatch conn-yank-keys)))))
+        (conn--macro-dispatch conn-yank-keys)))))
 
 (defun conn-sort-dots ()
   "Sort all dots in the current buffer by the text they contain.
@@ -2496,7 +2496,7 @@ THING is something with a forward-op as defined by thingatpt."
             (conn--dispatch-single-buffer)
             (conn--dispatch-with-state 'conn-state)
             (conn--pulse-on-record)
-            (conn-macro-dispatch))))
+            (conn--macro-dispatch))))
     (let ((regions (mapcan 'conn--isearch-matches-in-buffer
                            multi-isearch-buffer-list)))
       (isearch-exit)
@@ -2507,7 +2507,7 @@ THING is something with a forward-op as defined by thingatpt."
             (conn--dispatch-multi-buffer)
             (conn--dispatch-with-state 'conn-state)
             (conn--pulse-on-record)
-            (conn-macro-dispatch)))))))
+            (conn--macro-dispatch)))))))
 
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
@@ -2707,7 +2707,7 @@ from the text properties at point."
         (conn--dispatch-single-buffer regions nil)
         (conn--dispatch-with-state regions 'conn-state)
         (conn--pulse-on-record regions)
-        (conn-macro-dispatch regions)))))
+        (conn--macro-dispatch regions)))))
 
 (defun conn-macro-at-point-and-mark ()
   "Dispatch dot macro at point and mark."
@@ -2720,7 +2720,7 @@ from the text properties at point."
       (conn--region-iterator)
       (conn--dispatch-single-buffer)
       (conn--dispatch-with-state conn-current-state)
-      (conn-macro-dispatch))))
+      (conn--macro-dispatch))))
 
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position."
@@ -3941,9 +3941,9 @@ If REVERSE is non-nil dispatch from last to first region."
     (if rectangle-mark-mode-map
         (progn
           (save-mark-and-excursion
-            (conn-macro-dispatch iterator))
+            (conn--macro-dispatch iterator))
           (deactivate-mark t))
-      (conn-macro-dispatch iterator))))
+      (conn--macro-dispatch iterator))))
 
 (defun conn-dots-dispatch (&optional macro init-fn)
   "Begin recording dot macro for current buffer, initially in conn-state."
@@ -3956,7 +3956,7 @@ If REVERSE is non-nil dispatch from last to first region."
       (conn--dispatch-single-buffer)
       (conn--dispatch-with-state (or init-fn 'conn-state))
       (conn--pulse-on-record)
-      (conn-macro-dispatch macro))))
+      (conn--macro-dispatch macro))))
 
 (defun conn-isearch-dots-dispatch ()
   "Exit isearch mode and `conn-dots-dispatch'."
@@ -4328,7 +4328,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (conn--dispatch-single-buffer dots))
         (conn--dispatch-with-state dots 'conn-state)
         (conn--pulse-on-record dots)
-        (conn-macro-dispatch dots macro)))))
+        (conn--macro-dispatch dots macro)))))
 
 (transient-define-prefix conn-dots-dispatch-menu (macro buffers)
   "Transient menu for macro dispatch on dots."
@@ -4365,7 +4365,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn--dispatch-single-buffer)
         (conn--dispatch-with-state 'conn-state)
         (conn--pulse-on-record)
-        (conn-macro-dispatch macro)))))
+        (conn--macro-dispatch macro)))))
 
 (defun conn--dispatch-options-format ()
   (concat

@@ -188,7 +188,7 @@ THING BEG and END are bound in BODY."
         (conn--region-iterator)
         (conn--dispatch-multi-buffer)
         (conn--dispatch-with-state 'conn-state)
-        (conn-macro-dispatch))))
+        (conn--macro-dispatch))))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
@@ -201,7 +201,7 @@ THING BEG and END are bound in BODY."
         (conn--region-iterator)
         (conn--dispatch-single-buffer)
         (conn--dispatch-with-state 'conn-state)
-        (conn-macro-dispatch))))
+        (conn--macro-dispatch))))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
