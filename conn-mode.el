@@ -188,6 +188,11 @@ Supported values are:
   :group 'conn-mode
   :type '(repeat symbol))
 
+(defcustom conn-read-pair-split-string "	"
+  "String on which to split `conn-insert-pair' brackets."
+  :group 'conn-mode
+  :type 'string)
+
 ;;;;; Internal Vars
 
 (defvar conn-states nil)
@@ -2830,9 +2835,9 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-backward-char (string arg)
   "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-If `current-prefix-arg' is 1 prompt for CHAR and search backward for nearest
-occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
-of CHAR up to `window-end'.
+If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
+occurrence of STRING.  STRING will finish reading after
+`conn--read-string-timout' seconds.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
@@ -2855,9 +2860,9 @@ This command should only be called interactively."
 
 (defun conn-forward-char (string arg)
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-If `current-prefix-arg' is 1 prompt for CHAR search and forward for nearest
-occurrence of CHAR.  Repeated calls will then repeatedly jump to occurrences
-of CHAR up to `window-end'.
+If `current-prefix-arg' is 1 prompt for STRING and search forward for nearest
+occurrence of STRING.  STRING will finish reading after
+`conn--read-string-timout' seconds.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
@@ -2879,7 +2884,7 @@ This command should only be called interactively."
         (goto-char pos)))))
 
 (defun conn-pop-state ()
-  "Return to previous state."
+  "Transition to the previous state."
   (interactive)
   (when conn-previous-state
     (funcall conn-previous-state)))
@@ -3087,7 +3092,8 @@ interactively."
     (activate-mark t)))
 
 (defun conn-narrow-to-thing (thing)
-  "Narrow to THING at point."
+  "Narrow indirect buffer to THING at point.
+See `clone-indirect-buffer' for meaning of indirect buffer."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (narrow-to-region (car bounds) (cdr bounds))))
@@ -3105,12 +3111,15 @@ interactively."
   (message "Narrowed to visible region"))
 
 (defun conn-narrow-indirect-to-visible ()
-  "Narrow buffer to the visible portion of the selected window."
+  "Narrow indirect buffer to the visible portion of the selected window.
+See `clone-indirect-buffer'."
   (interactive)
   (conn--narrow-indirect (window-start) (window-end))
   (message "Narrowed to visible region"))
 
 (defun conn-narrow-indirect-to-region (beg end)
+  "Narrow to region from BEG to END in an indirect buffer in another window.
+See `clone-indirect-buffer' for meaning of indirect buffer."
   (interactive (list (region-beginning) (region-end)))
   (conn--narrow-indirect beg end))
 
@@ -3120,7 +3129,7 @@ interactively."
                              (when (boundp 'electric-pair-mode)
                                (electric-pair-mode -1)))
                          (read-string "Pair: " nil 'conn-pair-history))
-                       "	")
+                       conn-read-pair-split-string)
     (`(,front ,back . nil) (cons front back))
     (`(,str) (conn--thread needle
                  (lambda (char)
@@ -3134,8 +3143,11 @@ interactively."
     (_ (user-error "Unknown pair format."))))
 
 (defun conn-insert-pair (brackets beg end)
-  "Insert STRING at BEG and END.
-
+  "Insert BRACKETS at BEG and END.
+Brackets are matched using `insert-pair-alist'.  If BRACKETS contains
+`conn-read-pair-split-string' then split BRACKETS on
+`conn-read-pair-split-string' and use the first part as the beginning
+brackets and the second part as the end brackets.
 When called interactively inserts STRING at `point' and `mark'."
   (interactive (list (conn--read-pair)
                      (region-beginning)
@@ -3148,7 +3160,7 @@ When called interactively inserts STRING at `point' and `mark'."
       (insert open))))
 
 (defun conn-change-pair (brackets arg)
-  "Call `delete-pair' with ARG and then call `insert-pair' with STRING."
+  "Call `conn-delete-pair' with ARG then call `conn-insert-pair' with STRING."
   (interactive (list (conn--read-pair) current-prefix-arg))
   (conn-delete-pair (or arg 1))
   (conn-insert-pair brackets
@@ -3185,12 +3197,9 @@ When called interactively inserts STRING at `point' and `mark'."
 
 (defun conn-toggle-mark-command (&optional arg)
   "Toggle `mark-active'.
-
 With a prefix ARG activate `rectangle-mark-mode'."
   (interactive "P")
-  (cond ((eq arg '-)
-         (conn-dot-region (region-bounds)))
-        (arg
+  (cond (arg
          (if (region-active-p)
              (rectangle-mark-mode 'toggle)
            (activate-mark)
@@ -3199,6 +3208,9 @@ With a prefix ARG activate `rectangle-mark-mode'."
         (t (activate-mark))))
 
 (defun conn-set-mark-command (&optional arg)
+  "Toggle `mark-active' and push ephemeral mark at point.
+With a prefix ARG activate `rectangle-mark-mode'.
+Immediately repeating this command pushes a mark."
   (interactive "P")
   (cond (arg
          (rectangle-mark-mode 'toggle))
@@ -3206,11 +3218,13 @@ With a prefix ARG activate `rectangle-mark-mode'."
          (if (region-active-p)
              (progn
                (deactivate-mark)
-               (message "Mark deactivated"))
+               (push-mark-command nil t)
+               (message "Mark pushed and deactivated"))
            (activate-mark)
            (message "Mark activated")))
         (t
-         (push-mark-command nil))))
+         (conn--push-ephemeral-mark)
+         (activate-mark))))
 
 (defun conn-exchange-mark-command (&optional arg)
   "`exchange-mark-and-point' avoiding activating the mark.
@@ -3277,6 +3291,8 @@ of deleting it."
   (when (bolp) (skip-chars-forward " \t" (line-end-position))))
 
 (defun conn-end-of-inner-line (&optional N)
+  "Go to point after the last non-whitespace and non-comment character in line.
+Immediately repeating this command goes to the point at end of line proper."
   (interactive "P")
   (let ((point (point))
         (mark (mark t)))
@@ -3292,7 +3308,9 @@ of deleting it."
             (conn-individual-thing-handler 'outer-line)))))
 
 (defun conn-beginning-of-inner-line (&optional N)
-  "Go to first non-whitespace character in line."
+  "Go to first non-whitespace character in line.
+Immediately repeating this command goes to the point at beginning
+of line proper."
   (interactive "P")
   (let ((point (point))
         (mark (mark t)))
@@ -3335,13 +3353,15 @@ for the meaning of prefix ARG."
        (insert-register reg (not arg))))))
 
 (defun conn-kill-whole-line (&optional arg)
+  "Kill current line but exclude the trailing newline.
+With prefix ARG, kill that many lines starting from the current line."
   (interactive "P")
   (cond (arg (kill-whole-line (prefix-numeric-value arg)))
         ((and (bolp) (eolp)) (delete-line))
         (t (kill-whole-line 0))))
 
 (defun conn-unset-register (register)
-  "Reset REGISTER value."
+  "Unset REGISTER."
   (interactive (list (register-read-with-preview "Clear register: ")))
   (set-register register nil))
 
@@ -3424,7 +3444,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (conn--push-ephemeral-mark (+ (point) (length region)))))
 
 (defun conn-duplicate-region (beg end &optional arg)
-  "Duplicates the current region ARG times."
+  "Duplicates the current region ARG times.
+Attempts to intelligently insert separating whitespace between
+regions."
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
@@ -3451,6 +3473,8 @@ there's a region, all lines that region covers will be duplicated."
                     (region-end))))
 
 (defun conn-switch-to-buffer-or-tab (&optional tab)
+  "Calls `conn-switch-buffer-keys'.
+With a prefix ARG calls `conn-switch-tab-keys'."
   (interactive "P")
   (let ((command (if tab (conn-switch-tab-keys) (conn-switch-buffer-keys))))
     (setq this-command command)
@@ -3592,22 +3616,22 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-window-format
   (concat
-   (propertize "Win Control: " 'face 'bold)
-   "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'help-key-binding) ": reset; "
+   (propertize "Win Control: " 'face 'bold)       "prefix arg: "
+   (propertize "%d" 'face 'transient-value)       "; "
+   (propertize "." 'face 'help-key-binding)       ": reset; "
    (propertize "h s w n" 'face 'help-key-binding) ": heighten/shorten/widen/narrow; "
-   (propertize "C-h" 'face 'help-key-binding) ": help; "
-   (propertize "q" 'face 'help-key-binding) ": quit"
+   (propertize "H" 'face 'help-key-binding)       ": help; "
+   (propertize "q" 'face 'help-key-binding)       ": quit"
    "\n"
    (propertize "i j k l" 'face 'help-key-binding) ": move; "
    (propertize "SPC DEL" 'face 'help-key-binding) ": scroll; "
-   (propertize "u U" 'face 'help-key-binding) ": un/bury; "
-   (propertize "d D" 'face 'help-key-binding) ": delete win/other; "
-   (propertize "x t" 'face 'help-key-binding) ": swap/throw buf"
+   (propertize "u U" 'face 'help-key-binding)     ": un/bury; "
+   (propertize "d D" 'face 'help-key-binding)     ": delete win/other; "
+   (propertize "x t" 'face 'help-key-binding)     ": swap/throw buf"
    "\n"
-   (propertize "m" 'face 'help-key-binding) ": store; "
-   (propertize "p" 'face 'help-key-binding) ": load; "
-   (propertize "c" 'face 'help-key-binding) ": clone; "
+   (propertize "m" 'face 'help-key-binding)   ": store; "
+   (propertize "p" 'face 'help-key-binding)   ": load; "
+   (propertize "c" 'face 'help-key-binding)   ": clone; "
    (propertize "v r" 'face 'help-key-binding) ": split vert/right; "
    (propertize "z Z" 'face 'help-key-binding) ": zoom; "
    (propertize "= +" 'face 'help-key-binding) ": balance/max; "
@@ -3615,34 +3639,34 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-tab-and-frame-format
   (concat
-   (propertize "Tab+Frame Control: " 'face 'bold)
-   "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'help-key-binding) ": reset; "
-   (propertize "f" 'face 'help-key-binding) ": fullscreen; "
-   (propertize "C-h" 'face 'help-key-binding) ": help; "
-   (propertize "q" 'face 'help-key-binding) ": quit"
+   (propertize "Tab+Frame Control: " 'face 'bold) "prefix arg: "
+   (propertize "%d" 'face 'transient-value)       "; "
+   (propertize "." 'face 'help-key-binding)       ": reset; "
+   (propertize "f" 'face 'help-key-binding)       ": fullscreen; "
+   (propertize "H" 'face 'help-key-binding)       ": help; "
+   (propertize "q" 'face 'help-key-binding)       ": quit"
    "\n"
-   (propertize "J L" 'face 'help-key-binding) ": tab next/prev; "
+   (propertize "J L" 'face 'help-key-binding)       ": tab next/prev; "
    (propertize "C-t g M-d" 'face 'help-key-binding) ": tab new/duplicate/close; "
-   (propertize "o O" 'face 'help-key-binding) ": tear off win/tab"
+   (propertize "o O" 'face 'help-key-binding)       ": tear off win/tab"
    "\n"
-   (propertize "e" 'face 'help-key-binding) ": tab store; "
+   (propertize "e" 'face 'help-key-binding)         ": tab store; "
    (propertize "C-d C-M-d" 'face 'help-key-binding) ": delete frame/other; "
-   (propertize "C-/" 'face 'help-key-binding) ": undelete; "
-   (propertize "C-c" 'face 'help-key-binding) ": clone"))
+   (propertize "C-/" 'face 'help-key-binding)       ": undelete; "
+   (propertize "C-c" 'face 'help-key-binding)       ": clone"))
 
 (defvar conn--wincontrol-simple-format
   (concat
-   (propertize "Win Control: " 'face 'bold)
-   "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "C-h" 'face 'help-key-binding) ": help; "
+   (propertize "Win Control: " 'face 'bold) "prefix arg: "
+   (propertize "%d" 'face 'transient-value) "; "
+   (propertize "H" 'face 'help-key-binding) ": help; "
    (propertize "q" 'face 'help-key-binding) ": quit"))
 
 (defvar-keymap conn-wincontrol-map
   :suppress 'nodigits
   "q"   'conn-wincontrol-off
   "C-g" 'conn-wincontrol-off
-  "C-h" 'conn-wincontrol-toggle-help
+  "H" 'conn-wincontrol-toggle-help
 
   "0" (lambda () (interactive) (conn-wincontrol-digit-argument 0))
   "1" (lambda () (interactive) (conn-wincontrol-digit-argument 1))
@@ -3667,6 +3691,11 @@ if ARG is anything else `other-tab-prefix'."
   "k" (lambda () (interactive) (windmove-down))
   "l" (lambda () (interactive) (windmove-right))
 
+  "<up>"    (lambda () (interactive) (windmove-up))
+  "<left>"  (lambda () (interactive) (windmove-left))
+  "<down>"  (lambda () (interactive) (windmove-down))
+  "<right>" (lambda () (interactive) (windmove-right))
+
   "u" 'bury-buffer
   "U" 'unbury-buffer
 
@@ -3686,14 +3715,15 @@ if ARG is anything else `other-tab-prefix'."
   "c"   (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
   "C-c" 'clone-frame
 
-  "DEL" (lambda (arg)
-          (interactive "p")
-          (let ((next-screen-context-lines arg))
-            (conn-scroll-down)))
-  "SPC" (lambda (arg)
-          (interactive "p")
-          (let ((next-screen-context-lines arg))
-            (conn-scroll-up)))
+  "DEL"     'conn-wincontrol-scroll-down
+  "M-TAB"   'conn-wincontrol-scroll-down
+  "M-<tab>" 'conn-wincontrol-scroll-down
+  "<prior>" 'conn-wincontrol-scroll-down
+
+  "SPC"    'conn-wincontrol-scroll-up
+  "TAB"    'conn-wincontrol-scroll-up
+  "<tab>"  'conn-wincontrol-scroll-up
+  "<next>" 'conn-wincontrol-scroll-up
 
   "v" (lambda () (interactive) (split-window-vertically))
   "r" (lambda () (interactive) (split-window-horizontally))
@@ -3722,10 +3752,10 @@ if ARG is anything else `other-tab-prefix'."
   "M-d" (lambda () (interactive) (tab-close)))
 
 (defvar conn--wincontrol-map-alist
-  (list (cons 'conn-wincontrol-mode conn-wincontrol-map)))
+  `((conn-wincontrol-mode . ,conn-wincontrol-map)))
 
 (define-minor-mode conn-wincontrol-mode
-  "Minor mode for window control."
+  "Global minor mode for window control."
   :global t
   :lighter " WinC"
   (if conn-wincontrol-mode
@@ -3776,8 +3806,8 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-exit ()
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
-        emulation-mode-map-alists
-        (delq 'conn--wincontrol-map-alist emulation-mode-map-alists))
+        emulation-mode-map-alists (delq 'conn--wincontrol-map-alist
+                                        emulation-mode-map-alists))
   (set-face-attribute 'mode-line nil :background
                       conn--wincontrol-prev-background)
   (remove-hook 'isearch-mode-hook 'conn--wincontrol-toggle-in-isearch)
@@ -3807,30 +3837,47 @@ if ARG is anything else `other-tab-prefix'."
   (conn-wincontrol-mode -1))
 
 (defun conn-wincontrol-digit-argument (N)
+  "Append digit N to wincontrol prefix arg."
   (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
                 (* 10 conn--wincontrol-arg))))
     (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
           this-command 'conn-wincontrol-digit-argument)))
 
 (defun conn-wincontrol-invert-argument ()
+  "Invert wincontrol prefix arg."
   (interactive)
   (setq conn--wincontrol-arg (- conn--wincontrol-arg)))
 
 (defun conn-wincontrol-digit-argument-reset ()
+  "Reset wincontrol prefix arg to 0."
   (interactive)
   (setq conn--wincontrol-arg 0))
 
 (defun conn-wincontrol-off ()
+  "Exit `conn-wincontrol-mode'."
   (interactive)
   (conn-wincontrol-mode -1))
 
 (defun conn-wincontrol-toggle-help ()
+  "Cycle to the next `conn-wincontrol-mode' help message."
   (interactive)
   (setq conn--wincontrol-help-format
         (pcase conn--wincontrol-help-format
           ('frame  nil)
           ('window 'frame)
           (_       'window))))
+
+(defun conn-wincontrol-scroll-down (arg)
+  "Scroll down with ARG `next-screen-context-lines'."
+  (interactive "p")
+  (let ((next-screen-context-lines arg))
+    (conn-scroll-down)))
+
+(defun conn-wincontrol-scroll-up (arg)
+  "Scroll down with ARG `next-screen-context-lines'."
+  (interactive "p")
+  (let ((next-screen-context-lines arg))
+    (conn-scroll-up)))
 
 ;;;;; Transition Functions
 
@@ -4273,7 +4320,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (stringp macro)
                 (vectorp macro)
                 (kmacro-p macro))
-      (user-error "Resiter is not a keyboard macro"))
+      (user-error "Register is not a keyboard macro"))
     (when (member "t" args)
       (setq regions (nreverse regions)))
     (save-window-excursion
@@ -4452,6 +4499,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
+  "r DEL" 'delete-rectangle
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
@@ -4737,12 +4785,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;; Mode Definition
 
 (defun conn--update-mode-line-indicator ()
-  "Update conn mode-line indicator."
+  "Update Conn mode-line indicator."
   (setq conn--mode-line-indicator
         (or (get conn-current-state :conn-indicator) "")))
 
 (define-minor-mode conn-mode-line-indicator-mode
-  "Display conn state indicator at the beginning of the mode line."
+  "Display Conn state indicator at the beginning of the mode line."
   :group 'conn-mode
   :global t)
 
