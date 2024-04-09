@@ -1081,10 +1081,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--clear-overlays ()
   "Delete all conn overlays."
-  (mapc #'delete-overlay
-        (conn--all-overlays (lambda (ov)
-                              (memq (overlay-get ov 'category)
-                                    '(conn--dot conn--mark-cursor))))))
+  (save-restriction
+    (widen)
+    (mapc #'delete-overlay
+          (conn--all-overlays
+           (lambda (ov)
+             (memq (overlay-get ov 'category)
+                   '(conn--dot conn--mark-cursor)))))))
 
 (defun conn--dot-after-change-function (&rest _)
   (setq conn--dot-undo-ring nil))
@@ -3568,6 +3571,8 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-help-format)
 
+(defvar conn--wincontrol-prev-eldoc-msg-fn)
+
 (defcustom conn-wincontrol-initial-help 'window
   "Initial help message printed during `conn-wincontrol-mode'."
   :group 'conn-mode
@@ -3618,11 +3623,11 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "q" 'face 'help-key-binding) ": quit"
    "\n"
    (propertize "J L" 'face 'help-key-binding) ": tab next/prev; "
-   (propertize "N Y K" 'face 'help-key-binding) ": tab new/duplicate/close; "
+   (propertize "C-t g M-d" 'face 'help-key-binding) ": tab new/duplicate/close; "
    (propertize "o O" 'face 'help-key-binding) ": tear off win/tab"
    "\n"
-   (propertize "M" 'face 'help-key-binding) ": tab store; "
-   (propertize "C-d M-d" 'face 'help-key-binding) ": delete frame/other; "
+   (propertize "e" 'face 'help-key-binding) ": tab store; "
+   (propertize "C-d C-M-d" 'face 'help-key-binding) ": delete frame/other; "
    (propertize "C-/" 'face 'help-key-binding) ": undelete; "
    (propertize "C-c" 'face 'help-key-binding) ": clone"))
 
@@ -3632,15 +3637,6 @@ if ARG is anything else `other-tab-prefix'."
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
    (propertize "C-h" 'face 'help-key-binding) ": help; "
    (propertize "q" 'face 'help-key-binding) ": quit"))
-
-(define-minor-mode conn-wincontrol-mode
-  "Minor mode for window control."
-  :global t
-  :lighter " WinC"
-  (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-  (if conn-wincontrol-mode
-      (conn--wincontrol-setup)
-    (conn--wincontrol-exit)))
 
 (defvar-keymap conn-wincontrol-map
   :suppress 'nodigits
@@ -3681,10 +3677,10 @@ if ARG is anything else `other-tab-prefix'."
   "x" (lambda () (interactive) (conn-swap-windows))
   "t" 'conn-buffer-to-other-window
 
-  "d"   'delete-window
-  "C-d" 'delete-frame
-  "D"   'delete-other-windows
-  "M-d" 'delete-other-frames
+  "d"     'delete-window
+  "C-d"   'delete-frame
+  "D"     'delete-other-windows
+  "C-M-d" 'delete-other-frames
 
   "o"   'tear-off-window
   "c"   (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
@@ -3719,11 +3715,22 @@ if ARG is anything else `other-tab-prefix'."
   "J" (lambda () (interactive) (tab-previous conn--wincontrol-arg))
   "L" (lambda () (interactive) (tab-next conn--wincontrol-arg))
 
-  "N" (lambda () (interactive) (tab-new))
-  "M" 'conn-tab-to-register
-  "Y" (lambda () (interactive) (tab-duplicate))
-  "O" (lambda () (interactive) (tab-detach))
-  "K" (lambda () (interactive) (tab-close)))
+  "C-t" (lambda () (interactive) (tab-new))
+  "e"   'conn-tab-to-register
+  "g"   (lambda () (interactive) (tab-duplicate))
+  "O"   (lambda () (interactive) (tab-detach))
+  "M-d" (lambda () (interactive) (tab-close)))
+
+(defvar conn--wincontrol-map-alist
+  (list (cons 'conn-wincontrol-mode conn-wincontrol-map)))
+
+(define-minor-mode conn-wincontrol-mode
+  "Minor mode for window control."
+  :global t
+  :lighter " WinC"
+  (if conn-wincontrol-mode
+      (conn--wincontrol-setup)
+    (conn--wincontrol-exit)))
 
 (defun conn--wincontrol-pre-command ()
   (when (null conn--wincontrol-arg)
@@ -3734,47 +3741,70 @@ if ARG is anything else `other-tab-prefix'."
     (message nil)))
 
 (defun conn--wincontrol-post-command ()
-  (if (not (zerop (minibuffer-depth)))
-      (progn
-        (conn-wincontrol-mode -1)
-        (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
-    (let ((message-log-max nil)
-          (resize-mini-windows t))
-      (message (pcase conn--wincontrol-help-format
-                 ('frame  conn--wincontrol-tab-and-frame-format)
-                 ('window conn--wincontrol-window-format)
-                 (_       conn--wincontrol-simple-format))
-               conn--wincontrol-arg))))
+  (if (zerop (minibuffer-depth))
+      (conn--wincontrol-message)
+    (conn-wincontrol-mode -1)
+    (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)))
+
+(defun conn--wincontrol-message ()
+  (let ((message-log-max nil)
+        (resize-mini-windows t))
+    (message (pcase conn--wincontrol-help-format
+               ('frame  conn--wincontrol-tab-and-frame-format)
+               ('window conn--wincontrol-window-format)
+               (_       conn--wincontrol-simple-format))
+             conn--wincontrol-arg)))
 
 (defun conn--wincontrol-setup ()
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (add-hook 'isearch-mode-hook 'conn--wincontrol-toggle-in-isearch)
+  (add-hook 'transient-setup-buffer-hook 'conn--wincontrol-toggle-in-transient)
   (setq conn--wincontrol-prev-background (face-attribute 'mode-line :background)
         conn--previous-scroll-conservatively scroll-conservatively
         conn--wincontrol-help-format conn-wincontrol-initial-help
+        conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
+        eldoc-message-function #'ignore
         scroll-conservatively 100
-        inhibit-quit t
         conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
-                                   conn-wincontrol-arg-limit)
-        conn--wincontrol-quit (set-transient-map
-                               conn-wincontrol-map
-                               (lambda () conn-wincontrol-mode)))
+                                   conn-wincontrol-arg-limit))
+  (cl-pushnew 'conn--wincontrol-map-alist emulation-mode-map-alists)
   (set-face-attribute 'mode-line nil
-                      :background conn-wincontrol-mode-line-hl-color))
+                      :background conn-wincontrol-mode-line-hl-color)
+  (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
   (setq scroll-conservatively conn--previous-scroll-conservatively
-        inhibit-quit nil)
-  (when (functionp conn--wincontrol-quit)
-    (funcall conn--wincontrol-quit))
+        eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
+        emulation-mode-map-alists
+        (delq 'conn--wincontrol-map-alist emulation-mode-map-alists))
   (set-face-attribute 'mode-line nil :background
                       conn--wincontrol-prev-background)
+  (remove-hook 'isearch-mode-hook 'conn--wincontrol-toggle-in-isearch)
+  (remove-hook 'transient-setup-buffer-hook 'conn--wincontrol-toggle-in-transient)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
+    (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (conn-wincontrol-mode 1)))
+
+(defun conn--wincontrol-toggle-in-transient ()
+  (let ((sym (make-symbol "transient-exit-hook-fn")))
+    (fset sym (lambda ()
+                (remove-hook 'transient-exit-hook sym)
+                (conn-wincontrol-mode 1)))
+    (add-hook 'transient-exit-hook sym))
+  (conn-wincontrol-mode -1))
+
+(defun conn--wincontrol-toggle-in-isearch ()
+  (let ((sym (make-symbol "isearch-exit-hook-fn")))
+    (fset sym (lambda ()
+                (remove-hook 'isearch-mode-end-hook sym)
+                (conn-wincontrol-mode 1)))
+    (add-hook 'isearch-mode-end-hook sym))
+  (conn-wincontrol-mode -1))
 
 (defun conn-wincontrol-digit-argument (N)
   (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
@@ -3801,8 +3831,6 @@ if ARG is anything else `other-tab-prefix'."
           ('frame  nil)
           ('window 'frame)
           (_       'window))))
-
-(add-hook 'isearch-mode-hook 'conn-wincontrol-off)
 
 ;;;;; Transition Functions
 
