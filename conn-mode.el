@@ -3466,6 +3466,11 @@ there's a region, all lines that region covers will be duplicated."
                                'face 'conn-window-prompt-face))
       overlay)))
 
+(defun conn--all-visible-windows ()
+  (let (wins)
+    (walk-windows (lambda (win) (push win wins)) 'nomini 'visible)
+    wins))
+
 (defun conn--prompt-for-window (windows)
   (when (setq windows (seq-remove (lambda (win) (window-dedicated-p win))
                                   windows))
@@ -3495,30 +3500,37 @@ selected window will be the window containing the current buffer."
   (interactive "P")
   (when-let ((win1 (selected-window))
              (buf1 (window-buffer win1))
-             (other-windows (remove win1 (window-list nil 'no-mini)))
+             (other-windows (remove win1 (conn--all-visible-windows)))
              (win2 (conn--prompt-for-window other-windows))
              (buf2 (window-buffer win2)))
     (set-window-buffer win2 buf1)
     (set-window-buffer win1 buf2)
     (unless no-select
-      (select-window win2))))
+      (select-window win2)
+      (select-frame-set-input-focus (window-frame win2)))))
 
 (defun conn-swap-buffers ()
   "Swap the buffers of the selected window and another window."
   (interactive)
   (conn-swap-windows t))
 
-(defun conn-other-window ()
+(defun conn-other-window (&optional all-frames)
   "Select other window.
 When the number of windows is greater than or equal to
 `conn-other-window-prompt-threshold' prompt for the window to select.
 Otherwise behave like `other-window'."
-  (interactive)
-  (if-let ((other-windows (remove (selected-window) (window-list nil 'no-mini)))
-           (_ (not (length< other-windows conn-other-window-prompt-threshold)))
-           (win (conn--prompt-for-window
-                 (remove (selected-window) (window-list nil 'no-mini)))))
-      (select-window win)
+  (interactive "P")
+  (if-let ((other-windows (remove (selected-window)
+                                  (if all-frames
+                                      (conn--all-visible-windows)
+                                    (window-list nil 'no-mini))))
+           (_ (or all-frames
+                  (not (length< other-windows
+                                conn-other-window-prompt-threshold))))
+           (win (conn--prompt-for-window other-windows)))
+      (progn
+        (select-frame-set-input-focus (window-frame win))
+        (select-window win))
     (other-window 1)))
 
 (defun conn-buffer-to-other-window ()
