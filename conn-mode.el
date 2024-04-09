@@ -3556,12 +3556,14 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
 
-(defvar conn--wincontrol-display-verbose-help)
+(defvar conn--wincontrol-help-format)
 
-(defcustom conn-wincontrol-display-verbose-help t
-  "Print detailed help string in minibuffer in `conn-wincontrol-mode'."
+(defcustom conn-wincontrol-initial-help 'window
+  "Initial help message printed during `conn-wincontrol-mode'."
   :group 'conn-mode
-  :type 'boolean)
+  :type '(choice (const :tag "Window" window)
+                 (const :tag "Frame" frame)
+                 (const :tag "Short" nil)))
 
 (defcustom conn-wincontrol-arg-limit 1000
   "Limit for prefix arg in `conn-wincontrol-mode'."
@@ -3573,34 +3575,47 @@ if ARG is anything else `other-tab-prefix'."
   :group 'conn-mode
   :type 'color)
 
-(defvar conn--wincontrol-format-string
+(defvar conn--wincontrol-window-format
   (concat
-   (propertize "WinControl: " 'face 'bold)
+   (propertize "Win Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
    (propertize "." 'face 'transient-key) ": reset; "
    (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; "
-   (propertize "C-h" 'face 'transient-key) ": hide help; "
+   (propertize "C-h" 'face 'transient-key) ": help; "
    (propertize "q" 'face 'transient-key) ": quit"
    "\n"
    (propertize "i j k l" 'face 'transient-key) ": move; "
    (propertize "b u x t" 'face 'transient-key) ": un/bury/swap/throw buf; "
    (propertize "d D g G" 'face 'transient-key) ": delete win/other/buf/buf and win; "
+   (propertize "c" 'face 'transient-key) ": clone"
    "\n"
-   (propertize "m M" 'face 'transient-key) ": wins/tab store; "
+   (propertize "m" 'face 'transient-key) ": store; "
    (propertize "p" 'face 'transient-key) ": load; "
    (propertize "SPC DEL" 'face 'transient-key) ": scroll; "
    (propertize "v r" 'face 'transient-key) ": split vert/right; "
    (propertize "= +" 'face 'transient-key) ": balance/max; "
-   (propertize "/ ?" 'face 'transient-key) ": undo/redo"
+   (propertize "/ ?" 'face 'transient-key) ": undo/redo"))
+
+(defvar conn--wincontrol-tab-and-frame-format
+  (concat
+   (propertize "Tab+Frame Control: " 'face 'bold)
+   "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
+   (propertize "." 'face 'transient-key) ": reset; "
+   (propertize "C-h" 'face 'transient-key) ": help; "
+   (propertize "q" 'face 'transient-key) ": quit"
    "\n"
-   (propertize "o c" 'face 'transient-key) ": tear off/clone; "
    (propertize "J L" 'face 'transient-key) ": tab next/prev; "
    (propertize "N Y K" 'face 'transient-key) ": tab new/duplicate/close; "
-   (propertize "M O" 'face 'transient-key) ": tab to register/tear off"))
+   (propertize "M O" 'face 'transient-key) ": tab store/tear off"
+   "\n"
+   (propertize "o" 'face 'transient-key) ": tear off win; "
+   (propertize "C-d M-d" 'face 'transient-key) ": delete frame/other; "
+   (propertize "C-/" 'face 'transient-key) ": undelete; "
+   (propertize "C-c" 'face 'transient-key) ": clone"))
 
-(defvar conn--wincontrol-simple-format-string
+(defvar conn--wincontrol-simple-format
   (concat
-   (propertize "WinControl: " 'face 'bold)
+   (propertize "Win Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
    (propertize "C-h" 'face 'transient-key) ": show help; "
    (propertize "q" 'face 'transient-key) ": quit"))
@@ -3626,9 +3641,10 @@ if ARG is anything else `other-tab-prefix'."
       (conn-wincontrol-mode -1)
     (let ((message-log-max nil)
           (resize-mini-windows t))
-      (message (if conn--wincontrol-display-verbose-help
-                   conn--wincontrol-format-string
-                 conn--wincontrol-simple-format-string)
+      (message (pcase conn--wincontrol-help-format
+                 ('frame  conn--wincontrol-tab-and-frame-format)
+                 ('window conn--wincontrol-window-format)
+                 (_       conn--wincontrol-simple-format))
                conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup ()
@@ -3636,7 +3652,7 @@ if ARG is anything else `other-tab-prefix'."
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq conn--wincontrol-mode-line-prev-background (face-attribute 'mode-line :background)
         conn--previous-scroll-conservatively scroll-conservatively
-        conn--wincontrol-display-verbose-help conn-wincontrol-display-verbose-help
+        conn--wincontrol-help-format conn-wincontrol-initial-help
         scroll-conservatively 100
         conn--wincontrol-arg  1
         conn--wincontrol-quit (set-transient-map
@@ -3674,8 +3690,11 @@ if ARG is anything else `other-tab-prefix'."
 
 (defun conn-wincontrol-toggle-help ()
   (interactive)
-  (setq conn--wincontrol-display-verbose-help
-        (not conn--wincontrol-display-verbose-help)))
+  (setq conn--wincontrol-help-format
+        (pcase conn--wincontrol-help-format
+          ('frame nil)
+          ('window 'frame)
+          (_ 'window))))
 
 (define-keymap
   :keymap conn-wincontrol-map
@@ -3712,13 +3731,16 @@ if ARG is anything else `other-tab-prefix'."
   "x" (lambda () (interactive) (conn-swap-windows))
   "t" 'conn-buffer-to-other-window
 
-  "d" 'delete-window
-  "D" 'delete-other-windows
-  "g" 'kill-current-buffer
-  "G" 'kill-buffer-and-window
+  "d"   'delete-window
+  "C-d" 'delete-frame
+  "D"   'delete-other-windows
+  "M-d" 'delete-other-frames
+  "g"   'kill-current-buffer
+  "G"   'kill-buffer-and-window
 
-  "o" 'tear-off-window
-  "c" (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
+  "o"   'tear-off-window
+  "c"   (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
+  "C-c" 'clone-frame
 
   "DEL" (lambda (arg)
           (interactive "p")
@@ -3740,9 +3762,11 @@ if ARG is anything else `other-tab-prefix'."
 
   "=" 'balance-windows
   "+" 'maximize-window
+  "f" 'toggle-frame-fullscreen
 
-  "/" 'tab-bar-history-back
-  "?" 'tab-bar-history-forward
+  "/"   'tab-bar-history-back
+  "?"   'tab-bar-history-forward
+  "C-/" 'undelete-frame
 
   "J" (lambda () (interactive) (tab-previous conn--wincontrol-arg))
   "L" (lambda () (interactive) (tab-next conn--wincontrol-arg))
