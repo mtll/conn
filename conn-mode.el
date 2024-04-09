@@ -3566,8 +3566,6 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-prev-background)
 
-(defvar-keymap conn-wincontrol-map :suppress 'nodigits)
-
 (defvar conn--wincontrol-help-format)
 
 (defcustom conn-wincontrol-initial-help 'window
@@ -3597,14 +3595,16 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "q" 'face 'help-key-binding) ": quit"
    "\n"
    (propertize "i j k l" 'face 'help-key-binding) ": move; "
-   (propertize "b u x t" 'face 'help-key-binding) ": un/bury/swap/throw buf; "
-   (propertize "d D g G" 'face 'help-key-binding) ": delete win/other/buf/buf and win; "
-   (propertize "c" 'face 'help-key-binding) ": clone"
+   (propertize "SPC DEL" 'face 'help-key-binding) ": scroll; "
+   (propertize "u U" 'face 'help-key-binding) ": un/bury; "
+   (propertize "d D" 'face 'help-key-binding) ": delete win/other; "
+   (propertize "x t" 'face 'help-key-binding) ": swap/throw buf"
    "\n"
    (propertize "m" 'face 'help-key-binding) ": store; "
    (propertize "p" 'face 'help-key-binding) ": load; "
-   (propertize "SPC DEL" 'face 'help-key-binding) ": scroll; "
+   (propertize "c" 'face 'help-key-binding) ": clone; "
    (propertize "v r" 'face 'help-key-binding) ": split vert/right; "
+   (propertize "z Z" 'face 'help-key-binding) ": zoom; "
    (propertize "= +" 'face 'help-key-binding) ": balance/max; "
    (propertize "/ ?" 'face 'help-key-binding) ": undo/redo"))
 
@@ -3613,14 +3613,15 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "Tab+Frame Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
    (propertize "." 'face 'help-key-binding) ": reset; "
+   (propertize "f" 'face 'help-key-binding) ": fullscreen; "
    (propertize "C-h" 'face 'help-key-binding) ": help; "
    (propertize "q" 'face 'help-key-binding) ": quit"
    "\n"
    (propertize "J L" 'face 'help-key-binding) ": tab next/prev; "
    (propertize "N Y K" 'face 'help-key-binding) ": tab new/duplicate/close; "
-   (propertize "M O" 'face 'help-key-binding) ": tab store/tear off"
+   (propertize "o O" 'face 'help-key-binding) ": tear off win/tab"
    "\n"
-   (propertize "o" 'face 'help-key-binding) ": tear off win; "
+   (propertize "M" 'face 'help-key-binding) ": tab store; "
    (propertize "C-d M-d" 'face 'help-key-binding) ": delete frame/other; "
    (propertize "C-/" 'face 'help-key-binding) ": undelete; "
    (propertize "C-c" 'face 'help-key-binding) ": clone"))
@@ -3629,90 +3630,20 @@ if ARG is anything else `other-tab-prefix'."
   (concat
    (propertize "Win Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "C-h" 'face 'help-key-binding) ": show help; "
+   (propertize "C-h" 'face 'help-key-binding) ": help; "
    (propertize "q" 'face 'help-key-binding) ": quit"))
 
 (define-minor-mode conn-wincontrol-mode
   "Minor mode for window control."
   :global t
   :lighter " WinC"
+  (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
 
-(defun conn--wincontrol-pre-command ()
-  (when (null conn--wincontrol-arg)
-    (setq conn--wincontrol-arg 1))
-  (setq prefix-arg conn--wincontrol-arg)
-  (let ((message-log-max nil)
-        (resize-mini-windows t))
-    (message nil)))
-
-(defun conn--wincontrol-post-command ()
-  (if (not (zerop (minibuffer-depth)))
-      (conn-wincontrol-mode -1)
-    (let ((message-log-max nil)
-          (resize-mini-windows t))
-      (message (pcase conn--wincontrol-help-format
-                 ('frame  conn--wincontrol-tab-and-frame-format)
-                 ('window conn--wincontrol-window-format)
-                 (_       conn--wincontrol-simple-format))
-               conn--wincontrol-arg))))
-
-(defun conn--wincontrol-setup ()
-  (add-hook 'post-command-hook 'conn--wincontrol-post-command)
-  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (setq conn--wincontrol-prev-background (face-attribute 'mode-line :background)
-        conn--previous-scroll-conservatively scroll-conservatively
-        conn--wincontrol-help-format conn-wincontrol-initial-help
-        scroll-conservatively 100
-        inhibit-quit t
-        conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
-                                   conn-wincontrol-arg-limit)
-        conn--wincontrol-quit (set-transient-map
-                               conn-wincontrol-map
-                               (lambda () conn-wincontrol-mode)))
-  (set-face-attribute 'mode-line nil
-                      :background conn-wincontrol-mode-line-hl-color))
-
-(defun conn--wincontrol-exit ()
-  (setq scroll-conservatively conn--previous-scroll-conservatively
-        inhibit-quit nil)
-  (when (functionp conn--wincontrol-quit)
-    (funcall conn--wincontrol-quit))
-  (set-face-attribute 'mode-line nil :background
-                      conn--wincontrol-prev-background)
-  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
-  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
-
-(defun conn-wincontrol-digit-argument (N)
-  (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
-                (* 10 conn--wincontrol-arg))))
-    (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
-          this-command 'conn-wincontrol-digit-argument)))
-
-(defun conn-wincontrol-invert-argument ()
-  (interactive)
-  (setq conn--wincontrol-arg (- conn--wincontrol-arg)))
-
-(defun conn-wincontrol-digit-argument-reset ()
-  (interactive)
-  (setq conn--wincontrol-arg 0))
-
-(defun conn-wincontrol-off ()
-  (interactive)
-  (conn-wincontrol-mode -1))
-
-(defun conn-wincontrol-toggle-help ()
-  (interactive)
-  (setq conn--wincontrol-help-format
-        (pcase conn--wincontrol-help-format
-          ('frame nil)
-          ('window 'frame)
-          (_ 'window))))
-
-(define-keymap
-  :keymap conn-wincontrol-map
+(defvar-keymap conn-wincontrol-map
+  :suppress 'nodigits
   "q"   'conn-wincontrol-off
   "C-g" 'conn-wincontrol-off
   "C-h" 'conn-wincontrol-toggle-help
@@ -3740,8 +3671,13 @@ if ARG is anything else `other-tab-prefix'."
   "k" (lambda () (interactive) (windmove-down))
   "l" (lambda () (interactive) (windmove-right))
 
-  "b" 'bury-buffer
-  "u" 'unbury-buffer
+  "u" 'bury-buffer
+  "U" 'unbury-buffer
+
+  "b" (lambda ()
+        (interactive)
+        (conn-switch-to-buffer-or-tab (not (= conn--wincontrol-arg 1))))
+
   "x" (lambda () (interactive) (conn-swap-windows))
   "t" 'conn-buffer-to-other-window
 
@@ -3749,8 +3685,6 @@ if ARG is anything else `other-tab-prefix'."
   "C-d" 'delete-frame
   "D"   'delete-other-windows
   "M-d" 'delete-other-frames
-  "g"   'kill-current-buffer
-  "G"   'kill-buffer-and-window
 
   "o"   'tear-off-window
   "c"   (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
@@ -3790,6 +3724,85 @@ if ARG is anything else `other-tab-prefix'."
   "Y" (lambda () (interactive) (tab-duplicate))
   "O" (lambda () (interactive) (tab-detach))
   "K" (lambda () (interactive) (tab-close)))
+
+(defun conn--wincontrol-pre-command ()
+  (when (null conn--wincontrol-arg)
+    (setq conn--wincontrol-arg 1))
+  (setq prefix-arg conn--wincontrol-arg)
+  (let ((message-log-max nil)
+        (resize-mini-windows t))
+    (message nil)))
+
+(defun conn--wincontrol-post-command ()
+  (if (not (zerop (minibuffer-depth)))
+      (progn
+        (conn-wincontrol-mode -1)
+        (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
+    (let ((message-log-max nil)
+          (resize-mini-windows t))
+      (message (pcase conn--wincontrol-help-format
+                 ('frame  conn--wincontrol-tab-and-frame-format)
+                 ('window conn--wincontrol-window-format)
+                 (_       conn--wincontrol-simple-format))
+               conn--wincontrol-arg))))
+
+(defun conn--wincontrol-setup ()
+  (add-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (setq conn--wincontrol-prev-background (face-attribute 'mode-line :background)
+        conn--previous-scroll-conservatively scroll-conservatively
+        conn--wincontrol-help-format conn-wincontrol-initial-help
+        scroll-conservatively 100
+        inhibit-quit t
+        conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
+                                   conn-wincontrol-arg-limit)
+        conn--wincontrol-quit (set-transient-map
+                               conn-wincontrol-map
+                               (lambda () conn-wincontrol-mode)))
+  (set-face-attribute 'mode-line nil
+                      :background conn-wincontrol-mode-line-hl-color))
+
+(defun conn--wincontrol-exit ()
+  (setq scroll-conservatively conn--previous-scroll-conservatively
+        inhibit-quit nil)
+  (when (functionp conn--wincontrol-quit)
+    (funcall conn--wincontrol-quit))
+  (set-face-attribute 'mode-line nil :background
+                      conn--wincontrol-prev-background)
+  (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
+  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
+
+(defun conn--wincontrol-minibuffer-exit ()
+  (when (= (minibuffer-depth) 1)
+    (conn-wincontrol-mode 1)))
+
+(defun conn-wincontrol-digit-argument (N)
+  (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
+                (* 10 conn--wincontrol-arg))))
+    (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
+          this-command 'conn-wincontrol-digit-argument)))
+
+(defun conn-wincontrol-invert-argument ()
+  (interactive)
+  (setq conn--wincontrol-arg (- conn--wincontrol-arg)))
+
+(defun conn-wincontrol-digit-argument-reset ()
+  (interactive)
+  (setq conn--wincontrol-arg 0))
+
+(defun conn-wincontrol-off ()
+  (interactive)
+  (conn-wincontrol-mode -1))
+
+(defun conn-wincontrol-toggle-help ()
+  (interactive)
+  (setq conn--wincontrol-help-format
+        (pcase conn--wincontrol-help-format
+          ('frame  nil)
+          ('window 'frame)
+          (_       'window))))
+
+(add-hook 'isearch-mode-hook 'conn-wincontrol-off)
 
 ;;;;; Transition Functions
 
@@ -4815,33 +4828,33 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (declare-function org-forward-sentence "org")
 
   (conn-register-thing org-paragraph
-   :handler (conn-sequential-thing-handler 'org-paragraph)
-   :forward-op 'org-forward-paragraph
-   :commands '(org-forward-paragraph org-backward-paragraph)
-   :expand-key "I"
-   :modes 'org-mode)
+    :handler (conn-sequential-thing-handler 'org-paragraph)
+    :forward-op 'org-forward-paragraph
+    :commands '(org-forward-paragraph org-backward-paragraph)
+    :expand-key "I"
+    :modes 'org-mode)
 
   (conn-register-thing org-sentence
-   :handler (conn-sequential-thing-handler 'org-sentence)
-   :forward-op (lambda (arg)
-                 (if (>= arg 0)
-                     (org-forward-sentence arg)
-                   (org-backward-sentence (abs arg))))
-   :commands '(org-forward-sentence org-backward-sentence)
-   :expand-key "{"
-   :modes 'org-mode)
+    :handler (conn-sequential-thing-handler 'org-sentence)
+    :forward-op (lambda (arg)
+                  (if (>= arg 0)
+                      (org-forward-sentence arg)
+                    (org-backward-sentence (abs arg))))
+    :commands '(org-forward-sentence org-backward-sentence)
+    :expand-key "{"
+    :modes 'org-mode)
 
   (conn-register-thing org-element
-   :handler (conn-individual-thing-handler 'org-element)
-   :expand-key "K"
-   :beg-op 'org-backward-element
-   :end-op 'org-forward-element
-   :commands '(org-forward-element
-               org-backward-element
-               org-next-visible-heading
-               org-previous-visible-heading
-               org-up-element)
-   :modes 'org-mode)
+    :handler (conn-individual-thing-handler 'org-element)
+    :expand-key "K"
+    :beg-op 'org-backward-element
+    :end-op 'org-forward-element
+    :commands '(org-forward-element
+                org-backward-element
+                org-next-visible-heading
+                org-previous-visible-heading
+                org-up-element)
+    :modes 'org-mode)
 
   (keymap-set (conn-get-mode-map 'conn-state 'org-mode)
               "T" 'conn-org-tree-edit-state)
