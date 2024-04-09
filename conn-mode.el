@@ -464,7 +464,7 @@ If BUFFER is nil check `current-buffer'."
   (run-hook-with-args 'conn--extensions conn-mode))
 
 (defmacro conn-define-extension (name &rest body)
-  "Define a conn conn extension.
+  "Define a Conn extension.
 
 \(fn NAME [DOCSTRING] &rest body)"
   (declare (indent 1))
@@ -519,8 +519,6 @@ If BUFFER is nil check `current-buffer'."
   (if conn-repeat-cursor
       (add-function :after repeat-echo-function 'conn--repeat-cursor-message-ad)
     (remove-function repeat-echo-function 'conn--repeat-cursor-message-ad)))
-
-(conn-repeat-cursor t)
 
 
 ;;;; Mark
@@ -1389,6 +1387,31 @@ C-x, M-s and M-g into various state maps."
       (add-hook 'conn-local-mode #'conn--buffer-color-setup)
     (remove-hook 'conn-local-mode #'conn--buffer-color-setup)))
 
+;;;;; Cursor Color Mode
+
+(defvar conn--default-cursor-color)
+
+(defun conn--cursor-color-setup (&rest _)
+  (let ((state (buffer-local-value 'conn-current-state
+                                   (window-buffer (selected-window)))))
+    (set-frame-parameter
+     nil 'cursor-color (or (symbol-value (get state :conn-cursor-color))
+                           conn--default-cursor-color))))
+
+(conn-define-extension conn-cursor-colors
+  "Cursor background face for states."
+  (if conn-cursor-colors
+      (progn
+        (setq conn--default-cursor-color (frame-parameter nil 'cursor-color))
+        (conn--cursor-color-setup)
+        (add-hook 'conn-transition-hook 'conn--cursor-color-setup)
+        (add-hook 'window-state-change-functions 'conn--cursor-color-setup))
+    (remove-hook 'conn-transition-hook 'conn--cursor-color-setup)
+    (remove-hook 'window-state-change-functions 'conn--cursor-color-setup)
+    (when (boundp 'conn--default-cursor-color)
+      (modify-all-frames-parameters
+       `((cursor-color . ,conn--default-cursor-color))))))
+
 ;;;;; Conn-Define-State Macro
 
 (defun conn--setup-major-mode-maps ()
@@ -1517,6 +1540,7 @@ BODY contains code to be executed each time the transition function is executed.
          (lighter-face-name (conn--symbolicate name "-lighter-face"))
          (indicator-name (conn--symbolicate name "-indicator"))
          (buffer-face-name (conn--symbolicate name "-buffer-face"))
+         (cursor-color-name (conn--symbolicate name "-cursor-color"))
          (enter (gensym "enter"))
          keyw
          lighter-face
@@ -1526,7 +1550,8 @@ BODY contains code to be executed each time the transition function is executed.
          cursor
          (transitions '(make-sparse-keymap))
          (indicator "")
-         buffer-face)
+         buffer-face
+         cursor-color)
     (while (keywordp (setq keyw (car body)))
       (setq body (cdr body))
       (pcase-exhaustive keyw
@@ -1537,7 +1562,8 @@ BODY contains code to be executed each time the transition function is executed.
         (:transitions (setq transitions (pop body)))
         (:indicator (setq indicator (pop body)))
         (:ephemeral-marks (setq ephemeral-marks (pop body)))
-        (:buffer-face (setq buffer-face (pop body)))))
+        (:buffer-face (setq buffer-face (pop body)))
+        (:cursor-color (setq cursor-color (pop body)))))
     `(progn
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
@@ -1584,6 +1610,12 @@ BODY contains code to be executed each time the transition function is executed.
          :risky t
          :group 'conn-states)
 
+       (defcustom ,cursor-color-name
+         ,cursor-color
+         ,(conn--stringify "Color for cursor in `" name "'.")
+         :type '(choice color (const :tag "Default" nil))
+         :group 'conn-states)
+
        (defface ,buffer-face-name
          ',buffer-face
          ,(conn--stringify "Face for `" name "' buffers.")
@@ -1594,6 +1626,7 @@ BODY contains code to be executed each time the transition function is executed.
 
        (put ',name :conn-suppress-input-method ,suppress-input-method)
        (put ',name :conn-cursor-type ',cursor-name)
+       (put ',name :conn-cursor-color ',cursor-color-name)
        (put ',name :conn-indicator ',indicator-name)
        (put ',name :conn-buffer-face ',buffer-face-name)
 
@@ -1651,6 +1684,7 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :lighter-face ((t (:background "#cae1ff" :box (:line-width 2 :color "#355687"))))
   :indicator " E "
   :cursor box
+  :cursor-color "#5d74aa"
   :buffer-face ((t :inherit default))
   :ephemeral-marks nil
   :transitions (define-keymap "<escape>" 'conn-state))
@@ -1692,6 +1726,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :suppress-input-method t
   :indicator " D "
   :ephemeral-marks t
+  :cursor-color "#54aa61"
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
@@ -1724,6 +1759,7 @@ state."
   :lighter-face ((t (:background "#f5c5ff" :box (:line-width 2 :color "#2d242f"))))
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :suppress-input-method t
+  :cursor-color "#aa5a99"
   :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
