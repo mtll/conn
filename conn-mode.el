@@ -3564,7 +3564,7 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--previous-scroll-conservatively)
 
-(defvar conn--wincontrol-mode-line-prev-background)
+(defvar conn--wincontrol-prev-background)
 
 (defvar-keymap conn-wincontrol-map :suppress 'nodigits)
 
@@ -3591,46 +3591,46 @@ if ARG is anything else `other-tab-prefix'."
   (concat
    (propertize "Win Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'transient-key) ": reset; "
-   (propertize "h s w n" 'face 'transient-key) ": heighten/shorten/widen/narrow; "
-   (propertize "C-h" 'face 'transient-key) ": help; "
-   (propertize "q" 'face 'transient-key) ": quit"
+   (propertize "." 'face 'help-key-binding) ": reset; "
+   (propertize "h s w n" 'face 'help-key-binding) ": heighten/shorten/widen/narrow; "
+   (propertize "C-h" 'face 'help-key-binding) ": help; "
+   (propertize "q" 'face 'help-key-binding) ": quit"
    "\n"
-   (propertize "i j k l" 'face 'transient-key) ": move; "
-   (propertize "b u x t" 'face 'transient-key) ": un/bury/swap/throw buf; "
-   (propertize "d D g G" 'face 'transient-key) ": delete win/other/buf/buf and win; "
-   (propertize "c" 'face 'transient-key) ": clone"
+   (propertize "i j k l" 'face 'help-key-binding) ": move; "
+   (propertize "b u x t" 'face 'help-key-binding) ": un/bury/swap/throw buf; "
+   (propertize "d D g G" 'face 'help-key-binding) ": delete win/other/buf/buf and win; "
+   (propertize "c" 'face 'help-key-binding) ": clone"
    "\n"
-   (propertize "m" 'face 'transient-key) ": store; "
-   (propertize "p" 'face 'transient-key) ": load; "
-   (propertize "SPC DEL" 'face 'transient-key) ": scroll; "
-   (propertize "v r" 'face 'transient-key) ": split vert/right; "
-   (propertize "= +" 'face 'transient-key) ": balance/max; "
-   (propertize "/ ?" 'face 'transient-key) ": undo/redo"))
+   (propertize "m" 'face 'help-key-binding) ": store; "
+   (propertize "p" 'face 'help-key-binding) ": load; "
+   (propertize "SPC DEL" 'face 'help-key-binding) ": scroll; "
+   (propertize "v r" 'face 'help-key-binding) ": split vert/right; "
+   (propertize "= +" 'face 'help-key-binding) ": balance/max; "
+   (propertize "/ ?" 'face 'help-key-binding) ": undo/redo"))
 
 (defvar conn--wincontrol-tab-and-frame-format
   (concat
    (propertize "Tab+Frame Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'transient-key) ": reset; "
-   (propertize "C-h" 'face 'transient-key) ": help; "
-   (propertize "q" 'face 'transient-key) ": quit"
+   (propertize "." 'face 'help-key-binding) ": reset; "
+   (propertize "C-h" 'face 'help-key-binding) ": help; "
+   (propertize "q" 'face 'help-key-binding) ": quit"
    "\n"
-   (propertize "J L" 'face 'transient-key) ": tab next/prev; "
-   (propertize "N Y K" 'face 'transient-key) ": tab new/duplicate/close; "
-   (propertize "M O" 'face 'transient-key) ": tab store/tear off"
+   (propertize "J L" 'face 'help-key-binding) ": tab next/prev; "
+   (propertize "N Y K" 'face 'help-key-binding) ": tab new/duplicate/close; "
+   (propertize "M O" 'face 'help-key-binding) ": tab store/tear off"
    "\n"
-   (propertize "o" 'face 'transient-key) ": tear off win; "
-   (propertize "C-d M-d" 'face 'transient-key) ": delete frame/other; "
-   (propertize "C-/" 'face 'transient-key) ": undelete; "
-   (propertize "C-c" 'face 'transient-key) ": clone"))
+   (propertize "o" 'face 'help-key-binding) ": tear off win; "
+   (propertize "C-d M-d" 'face 'help-key-binding) ": delete frame/other; "
+   (propertize "C-/" 'face 'help-key-binding) ": undelete; "
+   (propertize "C-c" 'face 'help-key-binding) ": clone"))
 
 (defvar conn--wincontrol-simple-format
   (concat
    (propertize "Win Control: " 'face 'bold)
    "prefix arg: " (propertize "%d" 'face 'transient-value) "; "
-   (propertize "C-h" 'face 'transient-key) ": show help; "
-   (propertize "q" 'face 'transient-key) ": quit"))
+   (propertize "C-h" 'face 'help-key-binding) ": show help; "
+   (propertize "q" 'face 'help-key-binding) ": quit"))
 
 (define-minor-mode conn-wincontrol-mode
   "Minor mode for window control."
@@ -3662,11 +3662,13 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-setup ()
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (setq conn--wincontrol-mode-line-prev-background (face-attribute 'mode-line :background)
+  (setq conn--wincontrol-prev-background (face-attribute 'mode-line :background)
         conn--previous-scroll-conservatively scroll-conservatively
         conn--wincontrol-help-format conn-wincontrol-initial-help
         scroll-conservatively 100
-        conn--wincontrol-arg  1
+        inhibit-quit t
+        conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
+                                   conn-wincontrol-arg-limit)
         conn--wincontrol-quit (set-transient-map
                                conn-wincontrol-map
                                (lambda () conn-wincontrol-mode)))
@@ -3674,11 +3676,12 @@ if ARG is anything else `other-tab-prefix'."
                       :background conn-wincontrol-mode-line-hl-color))
 
 (defun conn--wincontrol-exit ()
-  (setq scroll-conservatively conn--previous-scroll-conservatively)
+  (setq scroll-conservatively conn--previous-scroll-conservatively
+        inhibit-quit nil)
   (when (functionp conn--wincontrol-quit)
     (funcall conn--wincontrol-quit))
   (set-face-attribute 'mode-line nil :background
-                      conn--wincontrol-mode-line-prev-background)
+                      conn--wincontrol-prev-background)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
 
@@ -3712,7 +3715,6 @@ if ARG is anything else `other-tab-prefix'."
   :keymap conn-wincontrol-map
   "q"   'conn-wincontrol-off
   "C-g" 'conn-wincontrol-off
-
   "C-h" 'conn-wincontrol-toggle-help
 
   "0" (lambda () (interactive) (conn-wincontrol-digit-argument 0))
