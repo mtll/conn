@@ -118,14 +118,30 @@ Defines default STATE for buffers matching REGEXP."
   :group 'conn-states)
 
 (defface conn-dot-face
-  '((t (:background "#ffcddc")))
+  '((default              (:background "#c6ebd9"))
+    (((background dark))  (:background "#449066"))
+    (((background light)) (:background "#c6ebd9")))
   "Face for dots."
   :group 'conn-dots)
 
 (defface conn-pulse-face
-  '((t (:background "red3")))
+  '((default (:inherit conn-dot-face)))
   "Face for dispatch pulse."
   :group 'conn-mode)
+
+(defface conn-mark-face
+  '((default              (:inherit default :background "#dfa0f0"))
+    (((background light)) (:inherit default :background "#dfa0f0"))
+    (((background dark))  (:inherit default :background "#823984")))
+  "Face for mark."
+  :group 'conn-marks)
+
+(defface conn-window-prompt-face
+  '((default              (:height 5.0 :foreground "#d00000"))
+    (((background light)) (:height 5.0 :foreground "#d00000"))
+    (((background dark))  (:height 5.0 :foreground "#7c0000")))
+  "Face for conn window prompt overlay."
+  :group conn-mode)
 
 ;; Isearch uses a priority of 1001 for
 ;; its lazy highlighting, we want to be
@@ -139,16 +155,6 @@ Defines default STATE for buffers matching REGEXP."
   "Priority of mark overlay."
   :type 'integer
   :group 'conn-mode)
-
-(defface conn-mark-face
-  '((t (:background "#dfa0f0" :foreground "#000000")))
-  "Face for mark."
-  :group 'conn-marks)
-
-(defface conn-window-prompt-face
-  '((t (:height 5.0 :foreground "#d00000")))
-  "Face for conn window prompt overlay."
-  :group conn-mode)
 
 (defcustom conn-repeating-cursor-color
   "#a60000"
@@ -1681,7 +1687,9 @@ bind anything except transition commands.
 
 See `conn-emacs-state-transition-map' for keybindings to enter other states
 from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state."
-  :lighter-face ((t (:background "#cae1ff" :box (:line-width 2 :color "#355687"))))
+  :lighter-face ((default              (:inherit mode-line :background "#cae1ff"))
+                 (((background light)) (:inherit mode-line :background "#cae1ff"))
+                 (((background dark))  (:inherit mode-line :background "#49739f")))
   :indicator " E "
   :cursor box
   :buffer-face ((t :inherit default))
@@ -1694,7 +1702,9 @@ A `conn-mode' state for editing text.
 
 See `conn-state-transition-map' for keybindings to enter other states
 from conn state.  See `conn-state-map' for commands bound by conn state."
-  :lighter-face ((t (:background "#f3bdbd" :box (:line-width 2 :color "#7a1a1a"))))
+  :lighter-face ((default              (:inherit mode-line :background "#f3bdbd"))
+                 (((background light)) (:inherit mode-line :background "#f3bdbd"))
+                 (((background dark))  (:inherit mode-line :background "#8c3c3c")))
   :suppress-input-method t
   :indicator " C "
   :cursor-color "#7d0002"
@@ -1724,12 +1734,14 @@ A `conn-mode' state for dispatching keyboard macros on buffer regions.
 
 See `conn-dot-state-transition-map' for keybindings to enter other states
 from dot state.  See `conn-dot-state-map' for commands bound by dot state."
-  :lighter-face ((t (:background "#d1ead5" :box (:line-width 2 :color "#33553d"))))
+  :lighter-face ((default              (:inherit mode-line :background "#d1ead5"))
+                 (((background light)) (:inherit mode-line :background "#d1ead5"))
+                 (((background dark))  (:inherit mode-line :background "#4f7555")))
+  :buffer-face ((t :inherit default :background "#f6fff9"))
   :suppress-input-method t
   :indicator " D "
   :ephemeral-marks t
   :cursor-color "#267d00"
-  :buffer-face ((t :inherit default :background "#f6fff9"))
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "<escape>" 'conn-state
@@ -1758,7 +1770,9 @@ See `conn-org-tree-edit-state-transition-map' for keybindings to enter
 other states from org-tree-edit state.  See
 `conn-org-tree-edit-state-map' for commands bound by org-tree-edit
 state."
-  :lighter-face ((t (:background "#f5c5ff" :box (:line-width 2 :color "#2d242f"))))
+  :lighter-face ((default              (:inherit mode-line :background "#f5c5ff"))
+                 (((background light)) (:inherit mode-line :background "#f5c5ff"))
+                 (((background dark))  (:inherit mode-line :background "#85508c")))
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :suppress-input-method t
   :cursor-color "#7d0077"
