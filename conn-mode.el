@@ -1712,7 +1712,9 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "F l"      'conn-emacs-state-eol
                  "F j"      'conn-emacs-state-bol
                  "F o"      'conn-emacs-state-overwrite
-                 "F u"      'conn-emacs-state-overwrite-binary))
+                 "F u"      'conn-emacs-state-overwrite-binary
+                 "M-TAB"    'conn-emacs-state-and-complete
+                 "M-<tab>"  'conn-emacs-state-and-complete))
 
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
@@ -3794,6 +3796,8 @@ if ARG is anything else `other-tab-prefix'."
   "Global minor mode for window control."
   :global t
   :lighter " WinC"
+  :init-value nil
+  :interactive nil
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
@@ -3920,6 +3924,11 @@ if ARG is anything else `other-tab-prefix'."
     (conn-scroll-up)))
 
 ;;;;; Transition Functions
+
+(defun conn-emacs-state-and-complete ()
+  (interactive)
+  (conn-emacs-state)
+  (completion-at-point))
 
 (defun conn-dot-quit ()
   "Pop state and clear all dots."
@@ -4540,10 +4549,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
   "r DEL" 'delete-rectangle
-  "*" 'calc-grab-rectangle
-  "+" 'calc-grab-sum-down
-  "_" 'calc-grab-sum-across
-  "y" 'yank-rectangle)
+  "*"     'calc-grab-rectangle
+  "+"     'calc-grab-sum-down
+  "_"     'calc-grab-sum-across
+  "y"     'yank-rectangle)
 
 (defvar-keymap conn-tab-bar-history-mode-repeat-map
   :repeat t
@@ -4763,8 +4772,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-local-map
   :doc "Keymap for `conn-local-mode'."
-  "C-v"     'conn-scroll-up
-  "M-v"     'conn-scroll-down)
+  "C-v" 'conn-scroll-up
+  "M-v" 'conn-scroll-down)
 
 (define-keymap
   :keymap conn-global-map
