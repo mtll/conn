@@ -2654,8 +2654,8 @@ Interactively PARTIAL-MATCH is the prefix argument."
   "Yank region from `minibuffer-selected-window' into minibuffer.
 Interactively defaults to the region in buffer."
   (interactive (list (pcase current-prefix-arg
-                       ('(4) 'conn-completion-region-quote-function)
-                       (_ 'regexp-quote))))
+                       ('(4) conn-completion-region-quote-function)
+                       (_    'regexp-quote))))
   (insert (with-minibuffer-selected-window
             (funcall (or quote-function 'identity)
                      (buffer-substring-no-properties
