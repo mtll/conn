@@ -3709,18 +3709,18 @@ if ARG is anything else `other-tab-prefix'."
   :suppress 'nodigits
   "q"   'conn-wincontrol-off
   "C-g" 'conn-wincontrol-off
-  "H" 'conn-wincontrol-toggle-help
+  "H"   'conn-wincontrol-toggle-help
 
-  "0" (lambda () (interactive) (conn-wincontrol-digit-argument 0))
-  "1" (lambda () (interactive) (conn-wincontrol-digit-argument 1))
-  "2" (lambda () (interactive) (conn-wincontrol-digit-argument 2))
-  "3" (lambda () (interactive) (conn-wincontrol-digit-argument 3))
-  "4" (lambda () (interactive) (conn-wincontrol-digit-argument 4))
-  "5" (lambda () (interactive) (conn-wincontrol-digit-argument 5))
-  "6" (lambda () (interactive) (conn-wincontrol-digit-argument 6))
-  "7" (lambda () (interactive) (conn-wincontrol-digit-argument 7))
-  "8" (lambda () (interactive) (conn-wincontrol-digit-argument 8))
-  "9" (lambda () (interactive) (conn-wincontrol-digit-argument 9))
+  "0" 'conn-wincontrol-digit-argument
+  "1" 'conn-wincontrol-digit-argument
+  "2" 'conn-wincontrol-digit-argument
+  "3" 'conn-wincontrol-digit-argument
+  "4" 'conn-wincontrol-digit-argument
+  "5" 'conn-wincontrol-digit-argument
+  "6" 'conn-wincontrol-digit-argument
+  "7" 'conn-wincontrol-digit-argument
+  "8" 'conn-wincontrol-digit-argument
+  "9" 'conn-wincontrol-digit-argument
   "-" 'conn-wincontrol-invert-argument
   "." 'conn-wincontrol-digit-argument-reset
 
@@ -3880,7 +3880,9 @@ if ARG is anything else `other-tab-prefix'."
   (conn-wincontrol-mode -1))
 
 (defun conn-wincontrol-digit-argument (N)
-  "Append digit N to wincontrol prefix arg."
+  "Append N to wincontrol prefix arg.
+When called interactively N is `last-command-event'."
+  (interactive (list (- (logand last-command-event ?\177) ?0)))
   (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
                 (* 10 conn--wincontrol-arg))))
     (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
