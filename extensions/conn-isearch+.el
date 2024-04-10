@@ -58,7 +58,7 @@
   (conn-isearch-in-dot-toggle))
 
 (define-keymap
-  :keymap conn-common-map
+  :keymap conn-dot-state-map
   "M-," 'conn-isearch-backward-in-dots
   "M-." 'conn-isearch-forward-in-dots)
 
