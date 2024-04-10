@@ -3661,11 +3661,6 @@ if ARG is anything else `other-tab-prefix'."
   :group 'conn-mode
   :type 'integer)
 
-(defcustom conn-wincontrol-mode-line-hl-color "#bbefe5"
-  "Mode-line highlight color for `conn-wincontrol-mode'."
-  :group 'conn-mode
-  :type 'color)
-
 (defvar conn--wincontrol-window-format
   (concat
    (propertize "Win Control: " 'face 'bold)       "prefix arg: "
@@ -3857,8 +3852,7 @@ if ARG is anything else `other-tab-prefix'."
         scroll-conservatively 100
         conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
                                    conn-wincontrol-arg-limit))
-  (set-face-attribute 'mode-line nil
-                      :background conn-wincontrol-mode-line-hl-color)
+  (invert-face 'mode-line)
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
@@ -3867,8 +3861,7 @@ if ARG is anything else `other-tab-prefix'."
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
-  (set-face-attribute 'mode-line nil :background
-                      conn--wincontrol-prev-background))
+  (invert-face 'mode-line))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
