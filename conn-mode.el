@@ -3789,9 +3789,6 @@ if ARG is anything else `other-tab-prefix'."
   "O"   (lambda () (interactive) (tab-detach))
   "M-d" (lambda () (interactive) (tab-close)))
 
-(defvar conn--wincontrol-map-alist
-  `((conn-wincontrol-mode . ,conn-wincontrol-map)))
-
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
   :global t
@@ -3815,10 +3812,15 @@ if ARG is anything else `other-tab-prefix'."
     (message nil)))
 
 (defun conn--wincontrol-post-command ()
-  (if (zerop (minibuffer-depth))
-      (conn--wincontrol-message)
+  (cond
+   ((not (eq conn-wincontrol-map (cadr overriding-terminal-local-map)))
+    ;; Something else is using overriding-terminal-local-map
+    ;; e.g. isearch or transient, turn wincontrol off.
+    (conn-wincontrol-mode -1))
+   ((not (zerop (minibuffer-depth)))
     (conn-wincontrol-mode -1)
-    (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)))
+    (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
+   (t (conn--wincontrol-message))))
 
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
@@ -3830,10 +3832,9 @@ if ARG is anything else `other-tab-prefix'."
              conn--wincontrol-arg)))
 
 (defun conn--wincontrol-setup ()
+  (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (add-hook 'isearch-mode-hook 'conn--wincontrol-toggle-in-isearch)
-  (add-hook 'transient-setup-buffer-hook 'conn--wincontrol-toggle-in-transient)
   (setq conn--wincontrol-prev-background (face-attribute 'mode-line :background)
         conn--previous-scroll-conservatively scroll-conservatively
         conn--wincontrol-help-format conn-wincontrol-initial-help
@@ -3842,22 +3843,18 @@ if ARG is anything else `other-tab-prefix'."
         scroll-conservatively 100
         conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
                                    conn-wincontrol-arg-limit))
-  (cl-pushnew 'conn--wincontrol-map-alist emulation-mode-map-alists)
   (set-face-attribute 'mode-line nil
                       :background conn-wincontrol-mode-line-hl-color)
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
-  (setq scroll-conservatively conn--previous-scroll-conservatively
-        eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
-        emulation-mode-map-alists (delq 'conn--wincontrol-map-alist
-                                        emulation-mode-map-alists))
-  (set-face-attribute 'mode-line nil :background
-                      conn--wincontrol-prev-background)
-  (remove-hook 'isearch-mode-hook 'conn--wincontrol-toggle-in-isearch)
-  (remove-hook 'transient-setup-buffer-hook 'conn--wincontrol-toggle-in-transient)
+  (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
-  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command))
+  (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (setq scroll-conservatively conn--previous-scroll-conservatively
+        eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
+  (set-face-attribute 'mode-line nil :background
+                      conn--wincontrol-prev-background))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
