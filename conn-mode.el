@@ -3724,29 +3724,27 @@ if ARG is anything else `other-tab-prefix'."
   "-" 'conn-wincontrol-invert-argument
   "." 'conn-wincontrol-digit-argument-reset
 
-  "w" (lambda () (interactive) (enlarge-window-horizontally conn--wincontrol-arg))
-  "n" (lambda () (interactive) (shrink-window-horizontally conn--wincontrol-arg))
-  "h" (lambda () (interactive) (enlarge-window conn--wincontrol-arg))
-  "s" (lambda () (interactive) (shrink-window conn--wincontrol-arg))
+  "w" 'conn-woncontrol-widen
+  "n" 'conn-woncontrol-narrow
+  "h" 'conn-woncontrol-heighten
+  "s" 'conn-woncontrol-shorten
 
-  "i" (lambda () (interactive) (windmove-up))
-  "j" (lambda () (interactive) (windmove-left))
-  "k" (lambda () (interactive) (windmove-down))
-  "l" (lambda () (interactive) (windmove-right))
+  "i" 'conn-wincontrol-windmove-up
+  "j" 'conn-wincontrol-windmove-left
+  "k" 'conn-wincontrol-windmove-down
+  "l" 'conn-wincontrol-windmove-right
 
-  "<up>"    (lambda () (interactive) (windmove-up))
-  "<left>"  (lambda () (interactive) (windmove-left))
-  "<down>"  (lambda () (interactive) (windmove-down))
-  "<right>" (lambda () (interactive) (windmove-right))
+  "<up>"    'conn-wincontrol-windmove-up
+  "<left>"  'conn-wincontrol-windmove-left
+  "<down>"  'conn-wincontrol-windmove-down
+  "<right>" 'conn-wincontrol-windmove-right
 
   "u" 'bury-buffer
   "U" 'unbury-buffer
 
-  "b" (lambda ()
-        (interactive)
-        (conn-switch-to-buffer-or-tab (not (= conn--wincontrol-arg 1))))
+  "b" 'conn-wincontrol-switch-buffer-or-tab
 
-  "x" (lambda () (interactive) (conn-swap-windows))
+  "x" 'conn-wincontrol-swap-windows
   "t" 'conn-buffer-to-other-window
 
   "d"     'delete-window
@@ -3755,7 +3753,7 @@ if ARG is anything else `other-tab-prefix'."
   "C-M-d" 'delete-other-frames
 
   "o"   'tear-off-window
-  "c"   (lambda () (interactive) (clone-indirect-buffer-other-window nil t))
+  "c"   'conn-wincontrol-clone-buffer
   "C-c" 'clone-frame
 
   "DEL"     'conn-wincontrol-scroll-down
@@ -3768,8 +3766,8 @@ if ARG is anything else `other-tab-prefix'."
   "<tab>"  'conn-wincontrol-scroll-up
   "<next>" 'conn-wincontrol-scroll-up
 
-  "v" (lambda () (interactive) (split-window-vertically))
-  "r" (lambda () (interactive) (split-window-horizontally))
+  "v" 'conn-wincontrol-split-vertically
+  "r" 'conn-wincontrol-split-right
 
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase
@@ -3785,14 +3783,14 @@ if ARG is anything else `other-tab-prefix'."
   "?"   'tab-bar-history-forward
   "C-/" 'undelete-frame
 
-  "J" (lambda () (interactive) (tab-previous conn--wincontrol-arg))
-  "L" (lambda () (interactive) (tab-next conn--wincontrol-arg))
+  "J" 'tab-previous
+  "L" 'tab-next
 
-  "C-t" (lambda () (interactive) (tab-new))
+  "C-t" 'conn-wincontrol-tab-new
   "e"   'conn-tab-to-register
-  "g"   (lambda () (interactive) (tab-duplicate))
-  "O"   (lambda () (interactive) (tab-detach))
-  "M-d" (lambda () (interactive) (tab-close)))
+  "g"   'conn-wincontrol-tab-duplicate
+  "O"   'conn-wincontrol-tab-detach
+  "M-d" 'conn-wincontrol-tab-close)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
@@ -3805,6 +3803,7 @@ if ARG is anything else `other-tab-prefix'."
     (conn--wincontrol-exit)))
 
 (defun conn-wincontrol ()
+  "Enable `conn-wincontrol-mode'."
   (interactive)
   (conn-wincontrol-mode 1))
 
@@ -3923,6 +3922,99 @@ When called interactively N is `last-command-event'."
   (interactive "p")
   (let ((next-screen-context-lines arg))
     (conn-scroll-up)))
+
+(defun conn-wincontrol-widen ()
+  "`enlarge-window-horizontally' by `wincontrol--prefix-arg' units.."
+  (interactive)
+  (enlarge-window-horizontally conn--wincontrol-arg))
+
+(defun conn-wincontrol-narrow ()
+  "`shrink-window-horizontally' by `wincontrol--prefix-arg' units."
+  (interactive)
+  (shrink-window-horizontally conn--wincontrol-arg))
+
+(defun conn-wincontrol-heighten ()
+  "`enlarge-window' by `wincontrol--prefix-arg' units."
+  (interactive)
+  (enlarge-window conn--wincontrol-arg))
+
+(defun conn-wincontrol-shorten ()
+  "`shrink-window' by `wincontrol--prefix-arg' units."
+  (interactive)
+  (shrink-window conn--wincontrol-arg))
+
+(defun conn-wincontrol-windmove-up ()
+  "`windmove-up'."
+  (interactive)
+  (windmove-up))
+
+(defun conn-wincontrol-windmove-down ()
+  "`windmove-down'."
+  (interactive)
+  (windmove-down))
+
+(defun conn-wincontrol-windmove-right ()
+  "`windmove-right'."
+  (interactive)
+  (windmove-right))
+
+(defun conn-wincontrol-windmove-left ()
+  "`windmove-left'."
+  (interactive)
+  (windmove-left))
+
+(defun conn-wincontrol-swap-windows ()
+  "Prompt for window and swap current window and other window.
+Uses `conn-swap-windows'."
+  (interactive)
+  (conn-swap-windows))
+
+(defun conn-wincontrol-clone-buffer ()
+  "Clone indirect buffer in a new window.
+Uses `clone-indirect-buffer-other-window'."
+  (interactive)
+  (clone-indirect-buffer-other-window nil t))
+
+(defun conn-wincontrol-split-vertically ()
+  "Split window vertically.
+Uses `split-window-vertically'."
+  (interactive)
+  (split-window-vertically))
+
+(defun conn-wincontrol-split-right ()
+  "Split window vertically.
+Uses `split-window-right'."
+  (interactive)
+  (split-window-right))
+
+(defun conn-wincontrol-switch-buffer-or-tab (arg)
+  "If arg is 1 `conn-switch-buffer-keys', else `conn-switch-tab-keys'."
+  (interactive "p")
+  (conn-switch-to-buffer-or-tab (not (= arg 1))))
+
+(defun conn-wincontrol-tab-new ()
+  "Create new tab.
+See `tab-new'."
+  (interactive)
+  (tab-new))
+
+(defun conn-wincontrol-tab-duplicate ()
+  "Duplicate current tab.
+See `tab-duplicate'"
+  (interactive)
+  (tab-duplicate))
+
+(defun conn-wincontrol-tab-detach ()
+  "Move current tab to a new frame.
+See `tab-detach'."
+  (interactive)
+  (tab-detach))
+
+(defun conn-wincontrol-tab-close ()
+  "Close current tab.
+See `tab-close'."
+  (interactive)
+  (tab-close))
 
 ;;;;; Transition Functions
 
