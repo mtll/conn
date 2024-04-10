@@ -3639,11 +3639,7 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-arg 1)
 
-(defvar conn--wincontrol-quit nil)
-
 (defvar conn--previous-scroll-conservatively)
-
-(defvar conn--wincontrol-prev-background)
 
 (defvar conn--wincontrol-help-format)
 
@@ -3844,8 +3840,7 @@ if ARG is anything else `other-tab-prefix'."
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-  (setq conn--wincontrol-prev-background (face-attribute 'mode-line :background)
-        conn--previous-scroll-conservatively scroll-conservatively
+  (setq conn--previous-scroll-conservatively scroll-conservatively
         conn--wincontrol-help-format conn-wincontrol-initial-help
         conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
         eldoc-message-function #'ignore
