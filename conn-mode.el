@@ -3762,10 +3762,10 @@ if ARG is anything else `other-tab-prefix'."
   "-" 'conn-wincontrol-invert-argument
   "." 'conn-wincontrol-digit-argument-reset
 
-  "w" 'conn-woncontrol-widen
-  "n" 'conn-woncontrol-narrow
-  "h" 'conn-woncontrol-heighten
-  "s" 'conn-woncontrol-shorten
+  "w" 'conn-wincontrol-widen
+  "n" 'conn-wincontrol-narrow
+  "h" 'conn-wincontrol-heighten
+  "s" 'conn-wincontrol-shorten
 
   "i" 'conn-wincontrol-windmove-up
   "j" 'conn-wincontrol-windmove-left
