@@ -1637,6 +1637,7 @@ BODY contains code to be executed each time the transition function is executed.
        (put ',name :conn-cursor-face ',cursor-face-name)
        (put ',name :conn-indicator ',indicator-name)
        (put ',name :conn-buffer-face ',buffer-face-name)
+       (put ',name :conn-lighter-face ',lighter-face-name)
 
        (cl-pushnew ',name conn-states)
        (push (cons ',name ,map-name) conn--state-maps)
@@ -3877,6 +3878,9 @@ if ARG is anything else `other-tab-prefix'."
         scroll-conservatively 100
         conn--wincontrol-arg (mod (prefix-numeric-value current-prefix-arg)
                                   conn-wincontrol-arg-limit))
+  (dolist (state conn-states)
+    (set-face-foreground (get state :conn-lighter-face)
+                         (face-foreground 'mode-line)))
   (invert-face 'mode-line)
   (conn--wincontrol-message))
 
@@ -3886,6 +3890,9 @@ if ARG is anything else `other-tab-prefix'."
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
+  (dolist (state conn-states)
+    (set-face-foreground (get state :conn-lighter-face)
+                         'unspecified))
   (invert-face 'mode-line))
 
 (defun conn--wincontrol-minibuffer-exit ()
