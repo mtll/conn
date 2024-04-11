@@ -3668,11 +3668,8 @@ if ARG is anything else `other-tab-prefix'."
 ;; A simple version of hyperbole's hycontrol-windows
 
 (defvar conn--wincontrol-arg 1)
-
 (defvar conn--previous-scroll-conservatively)
-
 (defvar conn--wincontrol-help-format)
-
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
 (defcustom conn-wincontrol-initial-help 'window
@@ -3724,9 +3721,10 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "o O" 'face 'help-key-binding)       ": tear off win/tab"
    "\n"
    (propertize "e" 'face 'help-key-binding)         ": tab store; "
-   (propertize "C-d C-M-d" 'face 'help-key-binding) ": delete frame/other; "
-   (propertize "C-/" 'face 'help-key-binding)       ": undelete; "
-   (propertize "C" 'face 'help-key-binding)         ": clone"))
+   (propertize "M-d C-M-d" 'face 'help-key-binding) ": delete frame/other; "
+   (propertize "M-/" 'face 'help-key-binding)       ": undelete; "
+   (propertize "M-c" 'face 'help-key-binding)       ": clone; "
+   (propertize "M-`" 'face 'help-key-binding)       ": switch"))
 
 (defvar conn--wincontrol-simple-format
   (concat
@@ -3779,13 +3777,15 @@ if ARG is anything else `other-tab-prefix'."
   "t" 'conn-buffer-to-other-window
 
   "d"     'delete-window
-  "C-d"   'delete-frame
+  "M-d"   'delete-frame
   "D"     'delete-other-windows
   "C-M-d" 'delete-other-frames
 
   "o"   'tear-off-window
   "c"   'conn-wincontrol-clone-buffer
   "C"   'clone-frame
+  "M-c"   'clone-frame
+  "M-`" 'other-frame
 
   "DEL"     'conn-wincontrol-scroll-down
   "M-TAB"   'conn-wincontrol-scroll-down
@@ -3813,6 +3813,7 @@ if ARG is anything else `other-tab-prefix'."
   "/"   'tab-bar-history-back
   "?"   'tab-bar-history-forward
   "C-/" 'undelete-frame
+  "M-/" 'undelete-frame
 
   "J" 'tab-previous
   "L" 'tab-next
@@ -3821,7 +3822,7 @@ if ARG is anything else `other-tab-prefix'."
   "e"   'conn-tab-to-register
   "g"   'conn-wincontrol-tab-duplicate
   "O"   'conn-wincontrol-tab-detach
-  "C-W" 'conn-wincontrol-tab-close)
+  "C-w" 'conn-wincontrol-tab-close)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
@@ -4798,6 +4799,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-="   'balance-windows
   "M-0"   'quit-window
   "M-1"   'delete-other-windows-vertically
+  "M-2"   'make-frame-command
   "M-8"   'tear-off-window
   "M-9"   'tab-detach
   "C-M-0" 'kill-buffer-and-window
