@@ -205,6 +205,7 @@ THING BEG and END are bound in BODY."
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
+    :parent embark-general-map
     "C-z" 'conn-dispatch-location-candidates
     "D"   'conn-dot-consult-location-candidate
     "c"   '("clone-indirect-buffer" .
@@ -213,6 +214,7 @@ THING BEG and END are bound in BODY."
               (alist-get 'consult-location embark-keymap-alist))
 
   (defvar-keymap conn-embark-consult-grep-map
+    :parent embark-general-map
     "C-z" 'conn-dispatch-grep-candidates
     "D"   'conn-dot-consult-grep-candidate)
   (cl-pushnew 'conn-embark-consult-grep-map
