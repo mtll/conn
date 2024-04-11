@@ -3686,12 +3686,12 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-window-format
   (concat
-   (propertize "Win Control: " 'face 'bold)       "prefix arg: "
+   (propertize "Window: " 'face 'bold)            "prefix arg: "
    (propertize "%d" 'face 'transient-value)       "; "
    (propertize "." 'face 'help-key-binding)       ": reset; "
-   (propertize "h s w n" 'face 'help-key-binding) ": heighten/shorten/widen/narrow; "
    (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "q" 'face 'help-key-binding)       ": quit"
+   (propertize "q" 'face 'help-key-binding)       ": quit; "
+   (propertize "h s w n" 'face 'help-key-binding) ": heighten/shorten/widen/narrow"
    "\n"
    (propertize "i j k l" 'face 'help-key-binding) ": move; "
    (propertize "SPC DEL" 'face 'help-key-binding) ": scroll; "
@@ -3707,31 +3707,40 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "= +" 'face 'help-key-binding) ": balance/max; "
    (propertize "/ ?" 'face 'help-key-binding) ": undo/redo"))
 
-(defvar conn--wincontrol-tab-and-frame-format
+(defvar conn--wincontrol-tab-format
   (concat
-   (propertize "Tab+Frame Control: " 'face 'bold) "prefix arg: "
+   (propertize "Tab: " 'face 'bold)               "prefix arg: "
    (propertize "%d" 'face 'transient-value)       "; "
    (propertize "." 'face 'help-key-binding)       ": reset; "
-   (propertize "f" 'face 'help-key-binding)       ": fullscreen; "
    (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "q" 'face 'help-key-binding)       ": quit"
+   (propertize "q" 'face 'help-key-binding)       ": quit; "
+   (propertize "e" 'face 'help-key-binding)       ": tab store"
    "\n"
    (propertize "J L" 'face 'help-key-binding)       ": tab next/prev; "
    (propertize "C-t g C-w" 'face 'help-key-binding) ": tab new/duplicate/close; "
-   (propertize "o O" 'face 'help-key-binding)       ": tear off win/tab"
+   (propertize "o O" 'face 'help-key-binding)       ": tear off win/tab"))
+
+(defvar conn--wincontrol-frame-format
+  (concat
+   (propertize "Frame: " 'face 'bold)             "prefix arg: "
+   (propertize "%d" 'face 'transient-value)       "; "
+   (propertize "." 'face 'help-key-binding)       ": reset; "
+   (propertize "H" 'face 'help-key-binding)       ": help; "
+   (propertize "q" 'face 'help-key-binding)       ": quit; "
+   (propertize "f" 'face 'help-key-binding)       ": fullscreen; "
+   (propertize "M-c" 'face 'help-key-binding)     ": clone"
    "\n"
-   (propertize "e" 'face 'help-key-binding)         ": tab store; "
-   (propertize "M-d C-M-d" 'face 'help-key-binding) ": delete frame/other; "
    (propertize "M-/" 'face 'help-key-binding)       ": undelete; "
-   (propertize "M-c" 'face 'help-key-binding)       ": clone; "
-   (propertize "M-`" 'face 'help-key-binding)       ": switch"))
+   (propertize "M-`" 'face 'help-key-binding)       ": switch; "
+   (propertize "M-1 M-2" 'face 'help-key-binding)   ": iconify/create; "
+   (propertize "M-d C-M-d" 'face 'help-key-binding) ": delete frame/other"))
 
 (defvar conn--wincontrol-simple-format
   (concat
    (propertize "Win Control: " 'face 'bold) "prefix arg: "
    (propertize "%d" 'face 'transient-value) "; "
    (propertize "H" 'face 'help-key-binding) ": help; "
-   (propertize "q" 'face 'help-key-binding) ": quit"))
+   (propertize "C-g q a" 'face 'help-key-binding) ": quit"))
 
 (defvar-keymap conn-wincontrol-map
   :suppress 'nodigits
@@ -3784,8 +3793,10 @@ if ARG is anything else `other-tab-prefix'."
   "o"   'tear-off-window
   "c"   'conn-wincontrol-clone-buffer
   "C"   'clone-frame
-  "M-c"   'clone-frame
+  "M-c" 'clone-frame
   "M-`" 'other-frame
+  "M-1" 'iconify-or-deiconify-frame
+  "M-2" 'make-frame-command
 
   "DEL"     'conn-wincontrol-scroll-down
   "M-TAB"   'conn-wincontrol-scroll-down
@@ -3862,7 +3873,8 @@ if ARG is anything else `other-tab-prefix'."
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message (pcase conn--wincontrol-help-format
-               ('frame  conn--wincontrol-tab-and-frame-format)
+               ('tab    conn--wincontrol-tab-format)
+               ('frame  conn--wincontrol-frame-format)
                ('window conn--wincontrol-window-format)
                (_       conn--wincontrol-simple-format))
              conn--wincontrol-arg)))
@@ -3946,7 +3958,8 @@ When called interactively N is `last-command-event'."
   (setq conn--wincontrol-help-format
         (pcase conn--wincontrol-help-format
           ('frame  nil)
-          ('window 'frame)
+          ('tab    'frame)
+          ('window 'tab)
           (_       'window))))
 
 (defun conn-wincontrol-scroll-down (arg)
