@@ -1742,8 +1742,8 @@ A `conn-mode' state for dispatching keyboard macros on buffer regions.
 
 See `conn-dot-state-transition-map' for keybindings to enter other states
 from dot state.  See `conn-dot-state-map' for commands bound by dot state."
-  :lighter-face ((default              (:inherit mode-line :background "#d1ead5"))
-                 (((background light)) (:inherit mode-line :background "#d1ead5"))
+  :lighter-face ((default              (:inherit mode-line :background "#c3eac9"))
+                 (((background light)) (:inherit mode-line :background "#c3eac9"))
                  (((background dark))  (:inherit mode-line :background "#4f7555")))
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :cursor-face ((default              (:background "#267d00"))
