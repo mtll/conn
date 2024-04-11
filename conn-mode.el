@@ -1828,13 +1828,15 @@ state."
     (tab-bar-select-tab (1+ index))))
 
 (cl-defmethod register-val-describe ((val conn-tab-register) _arg)
-  (princ (format "Tab:\n   %s"
+  (princ (format "Tab:  %s"
                  (when-let ((index (conn--get-tab-index-by-cookie
                                     (conn-tab-register-cookie val))))
                    (conn--thread needle
                        index
                      (nth needle (funcall tab-bar-tabs-function))
-                     (alist-get 'name needle))))))
+                     (if (eq (car needle) 'current-tab)
+                         (propertize "*CURRENT TAB*" 'face 'error)
+                       (alist-get 'name needle)))))))
 
 (defun conn-tab-to-register (register)
   (interactive (list (register-read-with-preview "Tab to register: ")))
@@ -2910,7 +2912,6 @@ This command should only be called interactively."
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (backward-char arg)
-    (setq this-command 'conn-goto-string-backward)
     (conn-goto-string-backward string)))
 
 (defun conn-goto-string-backward (string &optional interactive)
@@ -2945,7 +2946,6 @@ This command should only be called interactively."
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (forward-char arg)
-    (setq this-command 'conn-goto-string-forward)
     (conn-goto-string-forward string)))
 
 (defun conn-goto-string-forward (string)
