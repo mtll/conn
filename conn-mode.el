@@ -2915,11 +2915,10 @@ This command should only be called interactively."
       (backward-char arg)
     (conn-goto-string-backward string)))
 
-(defun conn-goto-string-backward (string &optional interactive)
+(defun conn-goto-string-backward (string)
   (interactive
    (list (conn--read-string-with-timeout
-          conn--read-string-timout 'backward)
-         current-prefix-arg))
+          conn--read-string-timout 'backward)))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (backward-char)
@@ -3962,22 +3961,22 @@ When called interactively N is `last-command-event'."
     (conn-scroll-up)))
 
 (defun conn-wincontrol-widen ()
-  "`enlarge-window-horizontally' by `wincontrol--prefix-arg' units.."
+  "`enlarge-window-horizontally' by `conn--wincontrol-arg' units.."
   (interactive)
   (enlarge-window-horizontally conn--wincontrol-arg))
 
 (defun conn-wincontrol-narrow ()
-  "`shrink-window-horizontally' by `wincontrol--prefix-arg' units."
+  "`shrink-window-horizontally' by `conn--wincontrol-arg' units."
   (interactive)
   (shrink-window-horizontally conn--wincontrol-arg))
 
 (defun conn-wincontrol-heighten ()
-  "`enlarge-window' by `wincontrol--prefix-arg' units."
+  "`enlarge-window' by `conn--wincontrol-arg' units."
   (interactive)
   (enlarge-window conn--wincontrol-arg))
 
 (defun conn-wincontrol-shorten ()
-  "`shrink-window' by `wincontrol--prefix-arg' units."
+  "`shrink-window' by `conn--wincontrol-arg' units."
   (interactive)
   (shrink-window conn--wincontrol-arg))
 
@@ -4296,22 +4295,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (let* ((m (format-kbd-macro macro))
          (l (length m))
          (z (and trunc (> l trunc))))
-    (format "%s%s%s"
-            (if (= kmacro-counter 0)
-                ""
-              (format "[%s] "
-                      (format kmacro-counter-format-start kmacro-counter)))
+    (format "%s%s"
             (if z (substring m 0 (1- trunc)) m)
             (if z "..." ""))))
 
 (defun conn--kmacro-ring-format ()
   (with-temp-message ""
     (concat
-     (propertize "Kmacro Ring:  " 'face 'bold)
+     (propertize "Kmacro Ring: " 'face 'bold)
+     (propertize (format "[%s]" kmacro-counter) 'face 'transient-value)
+     " "
      (propertize (conn--kmacro-display last-kbd-macro 20) 'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
-       (concat " "
+       (concat ", "
                (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 20)
                            'face 'transient-value))))))
 
@@ -4319,7 +4316,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (with-temp-message ""
     (concat
      (propertize "Kmacro Counter: " 'face 'bold)
-     (propertize (format "%s" kmacro-counter) 'face 'transient-value))))
+     (propertize (format "%d" (or kmacro-initial-counter-value 0))
+                 'face 'transient-value))))
 
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
