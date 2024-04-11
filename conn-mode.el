@@ -2884,9 +2884,9 @@ Interactively `region-beginning' and `region-end'."
     ovs))
 
 (defun conn--read-string-with-timeout (timeout &optional dir)
-  (let ((string (char-to-string (read-char "char 0: " t)))
-        next-char
-        overlays)
+  (let* ((string (char-to-string (read-char "char 0: " t)))
+         (overlays (conn--read-string-preview-overlays string dir))
+         next-char)
     (unwind-protect
         (while (setq next-char (read-char (format "char (%s):" string) t timeout))
           (setq string (concat string (char-to-string next-char)))
@@ -2910,16 +2910,26 @@ This command should only be called interactively."
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (backward-char arg)
-    (setq this-command 'conn-goto-char-backward)
-    (with-restriction (window-start) (window-end)
-      (when-let ((pos (or (save-excursion
-                            (backward-char)
-                            (and (search-backward string nil t)
-                                 (match-beginning 0)))
-                          (user-error "\"%s\" not found." string))))
-        (unless (eq this-command last-command)
-          (push-mark nil t))
-        (goto-char pos)))))
+    (setq this-command 'conn-goto-string-backward)
+    (conn-goto-string-backward string)))
+
+(defun conn-goto-string-backward (string &optional interactive)
+  (interactive
+   (list (conn--read-string-with-timeout
+          conn--read-string-timout 'backward)
+         current-prefix-arg))
+  (with-restriction (window-start) (window-end)
+    (when-let ((pos (or (save-excursion
+                          (backward-char)
+                          (and (search-backward string nil t)
+                               (match-beginning 0)))
+                        (user-error "\"%s\" not found." string))))
+      (unless (and (eq this-command last-command)
+                   (equal string (get 'conn-goto-string-backward
+                                      :last-string)))
+        (push-mark nil t)
+        (put 'conn-goto-string-backward :last-string string))
+      (goto-char pos))))
 
 (defun conn-forward-char (string arg)
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
@@ -2935,16 +2945,25 @@ This command should only be called interactively."
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (forward-char arg)
-    (setq this-command 'conn-goto-char-forward)
-    (with-restriction (window-start) (window-end)
-      (when-let ((pos (or (save-excursion
-                            (forward-char)
-                            (and (search-forward string nil t)
-                                 (match-beginning 0)))
-                          (user-error "\"%s\" not found." string))))
-        (unless (eq this-command last-command)
-          (push-mark nil t))
-        (goto-char pos)))))
+    (setq this-command 'conn-goto-string-forward)
+    (conn-goto-string-forward string)))
+
+(defun conn-goto-string-forward (string)
+  (interactive
+   (list (conn--read-string-with-timeout
+          conn--read-string-timout 'forward)))
+  (with-restriction (window-start) (window-end)
+    (when-let ((pos (or (save-excursion
+                          (forward-char)
+                          (and (search-forward string nil t)
+                               (match-beginning 0)))
+                        (user-error "\"%s\" not found." string))))
+      (unless (and (eq this-command last-command)
+                   (equal string (get 'conn-goto-string-forward
+                                      :last-string)))
+        (push-mark nil t)
+        (put 'conn-goto-string-forward :last-string string))
+      (goto-char pos))))
 
 (defun conn-pop-state ()
   "Transition to the previous state."
@@ -3701,13 +3720,13 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "q" 'face 'help-key-binding)       ": quit"
    "\n"
    (propertize "J L" 'face 'help-key-binding)       ": tab next/prev; "
-   (propertize "C-t g M-d" 'face 'help-key-binding) ": tab new/duplicate/close; "
+   (propertize "C-t g C-w" 'face 'help-key-binding) ": tab new/duplicate/close; "
    (propertize "o O" 'face 'help-key-binding)       ": tear off win/tab"
    "\n"
    (propertize "e" 'face 'help-key-binding)         ": tab store; "
    (propertize "C-d C-M-d" 'face 'help-key-binding) ": delete frame/other; "
    (propertize "C-/" 'face 'help-key-binding)       ": undelete; "
-   (propertize "C-c" 'face 'help-key-binding)       ": clone"))
+   (propertize "C" 'face 'help-key-binding)         ": clone"))
 
 (defvar conn--wincontrol-simple-format
   (concat
@@ -3720,6 +3739,7 @@ if ARG is anything else `other-tab-prefix'."
   :suppress 'nodigits
   "q"   'conn-wincontrol-off
   "C-g" 'conn-wincontrol-off
+  "a"   'conn-wincontrol-off
   "H"   'conn-wincontrol-toggle-help
 
   "0" 'conn-wincontrol-digit-argument
@@ -3765,7 +3785,7 @@ if ARG is anything else `other-tab-prefix'."
 
   "o"   'tear-off-window
   "c"   'conn-wincontrol-clone-buffer
-  "C-c" 'clone-frame
+  "C"   'clone-frame
 
   "DEL"     'conn-wincontrol-scroll-down
   "M-TAB"   'conn-wincontrol-scroll-down
@@ -3801,7 +3821,7 @@ if ARG is anything else `other-tab-prefix'."
   "e"   'conn-tab-to-register
   "g"   'conn-wincontrol-tab-duplicate
   "O"   'conn-wincontrol-tab-detach
-  "M-d" 'conn-wincontrol-tab-close)
+  "C-W" 'conn-wincontrol-tab-close)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
@@ -3855,8 +3875,8 @@ if ARG is anything else `other-tab-prefix'."
         conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
         eldoc-message-function #'ignore
         scroll-conservatively 100
-        conn--wincontrol-arg  (mod (prefix-numeric-value current-prefix-arg)
-                                   conn-wincontrol-arg-limit))
+        conn--wincontrol-arg (mod (prefix-numeric-value current-prefix-arg)
+                                  conn-wincontrol-arg-limit))
   (invert-face 'mode-line)
   (conn--wincontrol-message))
 
