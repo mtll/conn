@@ -3729,7 +3729,8 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "M-/" 'face 'help-key-binding)       ": undelete; "
    (propertize "M-`" 'face 'help-key-binding)       ": switch; "
    (propertize "M-1 M-2" 'face 'help-key-binding)   ": iconify/create; "
-   (propertize "M-d C-M-d" 'face 'help-key-binding) ": delete frame/other"))
+   (propertize "< >" 'face 'help-key-binding)       ": rot/rev; "
+   (propertize "M-d C-M-d" 'face 'help-key-binding) ": delete/other"))
 
 (defvar conn--wincontrol-simple-format
   (concat
@@ -3829,6 +3830,9 @@ if ARG is anything else `other-tab-prefix'."
   "C"   'conn-wincontrol-tab-duplicate
   "O"   'conn-wincontrol-tab-detach
   "C-w" 'conn-wincontrol-tab-close
+
+  "<" 'conn-wincontrol-reverse
+  ">" 'conn-wincontrol-rotate
 
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
@@ -4073,6 +4077,88 @@ See `tab-detach'."
 See `tab-close'."
   (interactive)
   (tab-close))
+
+(defun conn--wincontrol-split-window-state (state)
+  (let (params windows)
+    (dolist (elem state)
+      (if (memq (car-safe elem) '(vc hc leaf))
+          (push elem windows)
+        (push elem params)))
+    (cons (reverse params) (reverse windows))))
+
+(defun conn--wincontrol-rot-window (state)
+  (when state
+    (pcase-let* ((`(,params . ,windows)
+                  (conn--wincontrol-split-window-state state)))
+      (let* ((width  (alist-get 'normal-width params))
+             (height (alist-get 'normal-height params))
+             (ph     (round (* (alist-get 'pixel-width params)
+                               (/ 1 width)
+                               (/ height 1))))
+             (th     (round (* (alist-get 'total-width params)
+                               (/ 1 width)
+                               (/ height 1))))
+             (pw     (round (* (alist-get 'pixel-height params)
+                               (/ 1 height)
+                               (/ width 1))))
+             (tw     (round (* (alist-get 'total-height params)
+                               (/ 1 height)
+                               (/ width 1)))))
+        (setf (alist-get 'normal-width params)  height
+              (alist-get 'normal-height params) width
+              (alist-get 'pixel-height params) ph
+              (alist-get 'pixel-width params) pw
+              (alist-get 'total-height params) th
+              (alist-get 'total-width params) tw))
+      (append (mapcar (lambda (elem)
+                        (pcase elem
+                          ('vc 'hc)
+                          ('hc 'vc)
+                          (_ elem)))
+                      params)
+              (mapcar 'conn--wincontrol-rot-window windows)))))
+
+(defun conn--wincontrol-rev-window (state)
+  (pcase-let* ((`(,params . ,windows)
+                (conn--wincontrol-split-window-state state)))
+    (when (length> windows 1)
+      (setf (alist-get 'last (cdar windows)) t)
+      (setq windows (reverse windows))
+      (setf (car windows)
+            (assq-delete-all 'last (car windows))))
+    (append params windows)))
+
+(defun conn-wincontrol-reverse (arg)
+  "Reverse windows in ARGth parent window of selected window.
+If ARG is 0 reverse windows in root window."
+  (interactive "p")
+  (let (window)
+    (if (<= arg 0)
+        (setq window (frame-root-window))
+      (while (and (window-parent window)
+                  (> arg 0))
+        (setq window (window-parent window)
+              arg (1- arg))))
+    (thread-first
+      (window-state-get window)
+      (conn--wincontrol-rev-window)
+      (window-state-put window t))))
+
+(defun conn-wincontrol-rotate (arg)
+  "Rotate layout of ARGth parent window of selected window.
+If ARG is 0 rotate root window."
+  (interactive "p")
+  (let (window)
+    (if (<= arg 0)
+        (setq window (frame-root-window))
+      (while (and (window-parent window)
+                  (> arg 0))
+        (setq window (window-parent window)
+              arg (1- arg))))
+    (thread-first
+      (window-state-get window)
+      (conn--wincontrol-rot-window)
+      (window-state-put window))))
 
 ;;;;; Transition Functions
 
@@ -5208,18 +5294,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (declare-function outline-end-of-subtree "outline")
 
   (conn-register-thing heading
-  :handler (conn-individual-thing-handler 'heading)
-  :mark-key "H"
-  :beg-op (lambda ()
-            (unless (looking-at outline-regexp)
-              (outline-up-heading 1)))
-  :end-op (lambda ()
-            (unless (looking-at outline-regexp)
-              (outline-up-heading 1))
-            (outline-end-of-subtree))
-  :commands '(outline-up-heading
-              outline-next-heading
-              outline-previous-heading
-              outline-forward-same-level
-              outline-backward-same-level)))
+    :handler (conn-individual-thing-handler 'heading)
+    :mark-key "H"
+    :beg-op (lambda ()
+              (unless (looking-at outline-regexp)
+                (outline-up-heading 1)))
+    :end-op (lambda ()
+              (unless (looking-at outline-regexp)
+                (outline-up-heading 1))
+              (outline-end-of-subtree))
+    :commands '(outline-up-heading
+                outline-next-heading
+                outline-previous-heading
+                outline-forward-same-level
+                outline-backward-same-level)))
 ;;; conn-mode.el ends here
