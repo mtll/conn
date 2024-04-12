@@ -2440,16 +2440,17 @@ between `point-min' and `point-max'."
 
 (defun conn--read-thing-command ()
   (with-temp-message ""
-    (let ((key (conn--thread key
-                   (read-key-sequence "Movement Command:")
-                 (key-description key)
-                 (keymap-lookup nil key))))
+    (let ((key (thread-last
+                 (read-key-sequence "Movement Command:")
+                 (key-description)
+                 (keymap-lookup nil))))
       (while (not (get key :conn-command-thing))
         (when (eq 'keyboard-quit key) (keyboard-quit))
-        (setq key (conn--thread key
-                      (read-key-sequence "Not a valid movement command\nMovement Command:")
-                    (key-description key)
-                    (keymap-lookup nil key))))
+        (setq key (thread-last
+                    "Not a valid movement command\nMovement Command:"
+                    (read-key-sequence)
+                    (key-description)
+                    (keymap-lookup nil))))
       (get key :conn-command-thing))))
 
 (defun conn-dot-all-things-in-region (thing)
@@ -2728,10 +2729,10 @@ from the text properties at point."
     (save-window-excursion
       (thread-first
         (conn--region-iterator regions reverse)
-        (conn--dispatch-single-buffer regions nil)
-        (conn--dispatch-with-state regions 'conn-state)
-        (conn--pulse-on-record regions)
-        (conn--macro-dispatch regions)))))
+        (conn--dispatch-single-buffer nil)
+        (conn--dispatch-with-state 'conn-state)
+        (conn--pulse-on-record)
+        (conn--macro-dispatch)))))
 
 (defun conn-macro-at-point-and-mark ()
   "Dispatch dot macro at point and mark."
@@ -4096,10 +4097,10 @@ If REVERSE is non-nil dispatch from last to first region."
                      (cons (conn--create-marker beg)
                            (conn--create-marker end)))
                    (region-bounds))
-           (conn--region-iterator regions reverse)
-           (conn--dispatch-single-buffer regions)
-           (conn--dispatch-with-state regions conn-current-state)
-           (conn--pulse-on-record regions))))
+           (conn--region-iterator reverse)
+           (conn--dispatch-single-buffer)
+           (conn--dispatch-with-state conn-current-state)
+           (conn--pulse-on-record))))
     (if rectangle-mark-mode-map
         (progn
           (save-mark-and-excursion
@@ -4219,22 +4220,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;;; Thing Definitions
 
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
-
-(conn-register-thing heading
-  :handler (conn-individual-thing-handler 'heading)
-  :mark-key "H"
-  :beg-op (lambda ()
-            (unless (looking-at outline-regexp)
-              (outline-up-heading 1)))
-  :end-op (lambda ()
-            (unless (looking-at outline-regexp)
-              (outline-up-heading 1))
-            (outline-end-of-subtree))
-  :commands '(outline-up-heading
-              outline-next-heading
-              outline-previous-heading
-              outline-forward-same-level
-              outline-backward-same-level))
 
 (conn-register-thing page
   :handler (conn-individual-thing-handler 'page)
@@ -5217,4 +5202,24 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn-emacs-state)
       (conn-pop-state)))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
+
+(with-eval-after-load 'outline
+  (declare-function outline-up-heading "outline")
+  (declare-function outline-end-of-subtree "outline")
+
+  (conn-register-thing heading
+  :handler (conn-individual-thing-handler 'heading)
+  :mark-key "H"
+  :beg-op (lambda ()
+            (unless (looking-at outline-regexp)
+              (outline-up-heading 1)))
+  :end-op (lambda ()
+            (unless (looking-at outline-regexp)
+              (outline-up-heading 1))
+            (outline-end-of-subtree))
+  :commands '(outline-up-heading
+              outline-next-heading
+              outline-previous-heading
+              outline-forward-same-level
+              outline-backward-same-level)))
 ;;; conn-mode.el ends here
