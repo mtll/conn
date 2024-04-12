@@ -3717,8 +3717,8 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "e" 'face 'help-key-binding)       ": tab store"
    "\n"
    (propertize "J L" 'face 'help-key-binding)       ": tab next/prev; "
-   (propertize "C-t g C-w" 'face 'help-key-binding) ": tab new/duplicate/close; "
-   (propertize "o O" 'face 'help-key-binding)       ": tear off win/tab"))
+   (propertize "C-t C C-w" 'face 'help-key-binding) ": tab new/clone/close; "
+   (propertize "O" 'face 'help-key-binding)         ": tear off tab"))
 
 (defvar conn--wincontrol-frame-format
   (concat
@@ -3728,7 +3728,8 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "H" 'face 'help-key-binding)       ": help; "
    (propertize "q" 'face 'help-key-binding)       ": quit; "
    (propertize "f" 'face 'help-key-binding)       ": fullscreen; "
-   (propertize "M-c" 'face 'help-key-binding)     ": clone"
+   (propertize "M-c" 'face 'help-key-binding)     ": clone; "
+   (propertize "o" 'face 'help-key-binding)       ": tear off"
    "\n"
    (propertize "M-/" 'face 'help-key-binding)       ": undelete; "
    (propertize "M-`" 'face 'help-key-binding)       ": switch; "
@@ -3792,7 +3793,6 @@ if ARG is anything else `other-tab-prefix'."
 
   "o"   'tear-off-window
   "c"   'conn-wincontrol-clone-buffer
-  "C"   'clone-frame
   "M-c" 'clone-frame
   "M-`" 'other-frame
   "M-1" 'iconify-or-deiconify-frame
@@ -3823,7 +3823,6 @@ if ARG is anything else `other-tab-prefix'."
 
   "/"   'tab-bar-history-back
   "?"   'tab-bar-history-forward
-  "C-/" 'undelete-frame
   "M-/" 'undelete-frame
 
   "J" 'tab-previous
@@ -3831,7 +3830,7 @@ if ARG is anything else `other-tab-prefix'."
 
   "C-t" 'conn-wincontrol-tab-new
   "e"   'conn-tab-to-register
-  "g"   'conn-wincontrol-tab-duplicate
+  "C"   'conn-wincontrol-tab-duplicate
   "O"   'conn-wincontrol-tab-detach
   "C-w" 'conn-wincontrol-tab-close)
 
