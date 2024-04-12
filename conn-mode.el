@@ -3817,6 +3817,7 @@ if ARG is anything else `other-tab-prefix'."
   "m" 'window-configuration-to-register
   "p" 'conn-register-load
 
+  "_" 'shrink-window-if-larger-than-buffer
   "=" 'balance-windows
   "+" 'maximize-window
   "f" 'toggle-frame-fullscreen
@@ -3832,7 +3833,19 @@ if ARG is anything else `other-tab-prefix'."
   "e"   'conn-tab-to-register
   "C"   'conn-wincontrol-tab-duplicate
   "O"   'conn-wincontrol-tab-detach
-  "C-w" 'conn-wincontrol-tab-close)
+  "C-w" 'conn-wincontrol-tab-close
+
+  "C-1"   'delete-other-windows
+  "C-2"   'split-window-below
+  "C-3"   'split-window-right
+  "C-4"   'conn-C-x-4-keys
+  "C-5"   'conn-C-x-5-keys
+  "C-6"   'conn-swap-buffers
+  "C-7"   'conn-swap-windows
+  "C-8"   'conn-tab-to-register
+  "C-9"   'tab-close
+  "C-0"   'delete-window
+  "C-M-0" 'kill-buffer-and-window)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
