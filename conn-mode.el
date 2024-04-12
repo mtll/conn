@@ -560,7 +560,8 @@ If BUFFER is nil check `current-buffer'."
          (pcase (bounds-of-thing-at-point ',thing)
            (`(,beg . ,end)
             (goto-char beg)
-            (conn--push-ephemeral-mark end))))
+            (conn--push-ephemeral-mark end)))
+         (activate-mark))
        (put ',name :conn-command-thing ',thing)
        ',name)))
 
@@ -4218,6 +4219,22 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;;; Thing Definitions
 
 (conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
+
+(conn-register-thing heading
+  :handler (conn-individual-thing-handler 'heading)
+  :mark-key "H"
+  :beg-op (lambda ()
+            (unless (looking-at outline-regexp)
+              (outline-up-heading 1)))
+  :end-op (lambda ()
+            (unless (looking-at outline-regexp)
+              (outline-up-heading 1))
+            (outline-end-of-subtree))
+  :commands '(outline-up-heading
+              outline-next-heading
+              outline-previous-heading
+              outline-forward-same-level
+              outline-backward-same-level))
 
 (conn-register-thing page
   :handler (conn-individual-thing-handler 'page)
