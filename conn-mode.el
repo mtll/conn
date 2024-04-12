@@ -3709,12 +3709,12 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-tab-format
   (concat
-   (propertize "Tab: " 'face 'bold)               "prefix arg: "
-   (propertize "%d" 'face 'transient-value)       "; "
-   (propertize "." 'face 'help-key-binding)       ": reset; "
-   (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "q" 'face 'help-key-binding)       ": quit; "
-   (propertize "e" 'face 'help-key-binding)       ": tab store"
+   (propertize "Tab: " 'face 'bold)         "prefix arg: "
+   (propertize "%d" 'face 'transient-value) "; "
+   (propertize "." 'face 'help-key-binding) ": reset; "
+   (propertize "H" 'face 'help-key-binding) ": help; "
+   (propertize "q" 'face 'help-key-binding) ": quit; "
+   (propertize "e" 'face 'help-key-binding) ": tab store"
    "\n"
    (propertize "J L" 'face 'help-key-binding)       ": tab next/prev; "
    (propertize "C-t C C-w" 'face 'help-key-binding) ": tab new/clone/close; "
@@ -3722,14 +3722,14 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-frame-format
   (concat
-   (propertize "Frame: " 'face 'bold)             "prefix arg: "
-   (propertize "%d" 'face 'transient-value)       "; "
-   (propertize "." 'face 'help-key-binding)       ": reset; "
-   (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "q" 'face 'help-key-binding)       ": quit; "
-   (propertize "f" 'face 'help-key-binding)       ": fullscreen; "
-   (propertize "M-c" 'face 'help-key-binding)     ": clone; "
-   (propertize "o" 'face 'help-key-binding)       ": tear off"
+   (propertize "Frame: " 'face 'bold)         "prefix arg: "
+   (propertize "%d" 'face 'transient-value)   "; "
+   (propertize "." 'face 'help-key-binding)   ": reset; "
+   (propertize "H" 'face 'help-key-binding)   ": help; "
+   (propertize "q" 'face 'help-key-binding)   ": quit; "
+   (propertize "f" 'face 'help-key-binding)   ": fullscreen; "
+   (propertize "M-c" 'face 'help-key-binding) ": clone; "
+   (propertize "o" 'face 'help-key-binding)   ": tear off"
    "\n"
    (propertize "M-/" 'face 'help-key-binding)       ": undelete; "
    (propertize "M-`" 'face 'help-key-binding)       ": switch; "
@@ -3738,9 +3738,9 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-simple-format
   (concat
-   (propertize "Win Control: " 'face 'bold) "prefix arg: "
-   (propertize "%d" 'face 'transient-value) "; "
-   (propertize "H" 'face 'help-key-binding) ": help; "
+   (propertize "Win Control: " 'face 'bold)       "prefix arg: "
+   (propertize "%d" 'face 'transient-value)       "; "
+   (propertize "H" 'face 'help-key-binding)       ": help; "
    (propertize "C-g q a" 'face 'help-key-binding) ": quit"))
 
 (defvar-keymap conn-wincontrol-map
@@ -3956,9 +3956,9 @@ When called interactively N is `last-command-event'."
   (interactive)
   (setq conn--wincontrol-help-format
         (pcase conn--wincontrol-help-format
-          ('frame  nil)
-          ('tab    'frame)
           ('window 'tab)
+          ('tab    'frame)
+          ('frame  nil)
           (_       'window))))
 
 (defun conn-wincontrol-scroll-down (arg)
