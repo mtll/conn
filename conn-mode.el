@@ -862,16 +862,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (funcall transition)
          ret)))))
 
-(defun conn--region-iterator (regions &optional at-end)
+(defun conn--region-iterator (regions &optional reverse)
+  (when reverse (setq regions (reverse regions)))
   (lambda (&optional state)
     (if (eq state :finalize)
         (pcase-dolist (`(,beg . ,end) regions)
           (set-marker beg nil)
           (set-marker end nil))
-      (if at-end
-          (pcase (pop regions)
-            (`(,beg . ,end) (cons end beg)))
-        (pop regions)))))
+      (pop regions))))
 
 (defun conn--pulse-on-record (iterator)
   (lambda (&optional state)
@@ -883,7 +881,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
        ret)
       (ret ret))))
 
-(defun conn--dot-iterator (dots)
+(defun conn--dot-iterator (dots &optional reverse)
+  (when reverse (setq dots (reverse dots)))
   (dolist (dot dots)
     (overlay-put dot 'evaporate nil))
   (lambda (&optional state)
@@ -2731,9 +2730,8 @@ from the text properties at point."
                         (prop-match-end match))
                   regions)))))
     (save-window-excursion
-      (conn--thread regions
-          (if reverse (nreverse regions) regions)
-        (conn--region-iterator regions)
+      (thread-first
+        (conn--region-iterator regions reverse)
         (conn--dispatch-single-buffer regions nil)
         (conn--dispatch-with-state regions 'conn-state)
         (conn--pulse-on-record regions)
@@ -4097,13 +4095,12 @@ See `tab-close'."
 If REVERSE is non-nil dispatch from last to first region."
   (interactive "P")
   (let ((iterator
-         (conn--thread regions
-             (mapcar (pcase-lambda (`(,beg . ,end))
-                       (cons (conn--create-marker beg)
-                             (conn--create-marker end)))
-                     (region-bounds))
-           (if reverse (nreverse regions) regions)
-           (conn--region-iterator regions)
+         (thread-first
+           (mapcar (pcase-lambda (`(,beg . ,end))
+                     (cons (conn--create-marker beg)
+                           (conn--create-marker end)))
+                   (region-bounds))
+           (conn--region-iterator regions reverse)
            (conn--dispatch-single-buffer regions)
            (conn--dispatch-with-state regions conn-current-state)
            (conn--pulse-on-record regions))))
@@ -4114,12 +4111,12 @@ If REVERSE is non-nil dispatch from last to first region."
           (deactivate-mark t))
       (conn--macro-dispatch iterator))))
 
-(defun conn-dots-dispatch (&optional macro init-fn)
+(defun conn-dots-dispatch (&optional macro init-fn reverse)
   "Begin recording dot macro for current buffer, initially in conn-state."
-  (interactive)
+  (interactive (list nil nil current-prefix-arg))
   (save-window-excursion
     (thread-first
-      (conn--sorted-overlays #'conn-dotp '<)
+      (conn--sorted-overlays #'conn-dotp (if reverse '> '<))
       (conn--dot-iterator)
       (conn--dispatch-relocate-dots)
       (conn--dispatch-single-buffer)
