@@ -153,6 +153,8 @@ THING BEG and END are bound in BODY."
 (provide 'conn-consult)
 
 (with-eval-after-load 'embark
+  (defvar embark-general-map)
+
   (defun conn-clone-indirect-buffer-location-candidate (cand)
     ;; Embark runs with inside a with-selected-window form
     ;; so we use a timer to get around it.
