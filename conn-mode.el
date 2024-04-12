@@ -4892,11 +4892,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "N"   'org-toggle-narrow-to-subtree
   "O"   'org-next-block
   "p"   'conn-register-load
-  "Q"   'kill-buffer-and-window
   "s"   'conn-M-s-keys
-  "t"   'org-todo
+  "T"   'org-todo
+  "t"   'org-sparse-tree
   "U"   'org-previous-block
   "u"   'org-up-element
+  "W"   'widen
   "w"   'org-refile
   "x"   'conn-C-x-keys
   "z"   'conn-exchange-mark-command)
