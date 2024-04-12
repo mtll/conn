@@ -4090,26 +4090,26 @@ See `tab-close'."
   (when state
     (pcase-let* ((`(,params . ,windows)
                   (conn--wincontrol-split-window-state state)))
-      (let* ((width  (alist-get 'normal-width params))
-             (height (alist-get 'normal-height params))
-             (ph     (round (* (alist-get 'pixel-width params)
-                               (/ 1 width)
-                               (/ height 1))))
-             (th     (round (* (alist-get 'total-width params)
-                               (/ 1 width)
-                               (/ height 1))))
-             (pw     (round (* (alist-get 'pixel-height params)
-                               (/ 1 height)
-                               (/ width 1))))
-             (tw     (round (* (alist-get 'total-height params)
-                               (/ 1 height)
-                               (/ width 1)))))
+      (let* ((width   (alist-get 'normal-width params))
+             (height  (alist-get 'normal-height params))
+             (pheight (round (* (alist-get 'pixel-width params)
+                                (/ 1 width)
+                                (/ height 1))))
+             (theight (round (* (alist-get 'total-width params)
+                                (/ 1 width)
+                                (/ height 1))))
+             (pwidth  (round (* (alist-get 'pixel-height params)
+                                (/ 1 height)
+                                (/ width 1))))
+             (twidth  (round (* (alist-get 'total-height params)
+                                (/ 1 height)
+                                (/ width 1)))))
         (setf (alist-get 'normal-width params)  height
               (alist-get 'normal-height params) width
-              (alist-get 'pixel-height params) ph
-              (alist-get 'pixel-width params) pw
-              (alist-get 'total-height params) th
-              (alist-get 'total-width params) tw))
+              (alist-get 'pixel-height params) pheight
+              (alist-get 'pixel-width params) pwidth
+              (alist-get 'total-height params) theight
+              (alist-get 'total-width params) twidth))
       (append (mapcar (lambda (elem)
                         (pcase elem
                           ('vc 'hc)
@@ -4118,6 +4118,7 @@ See `tab-close'."
                       params)
               (mapcar 'conn--wincontrol-rot-window windows)))))
 
+;; FIXME: vertical columns shrink horizontally when reversed for some reason
 (defun conn--wincontrol-rev-window (state)
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state)))
@@ -4130,7 +4131,7 @@ See `tab-close'."
 
 (defun conn-wincontrol-reverse (arg)
   "Reverse windows in ARGth parent window of selected window.
-If ARG is 0 reverse windows in root window."
+If ARG is <= 0 reverse windows in root window."
   (interactive "p")
   (let (window)
     (if (<= arg 0)
@@ -4142,11 +4143,11 @@ If ARG is 0 reverse windows in root window."
     (thread-first
       (window-state-get window)
       (conn--wincontrol-rev-window)
-      (window-state-put window t))))
+      (window-state-put window))))
 
 (defun conn-wincontrol-rotate (arg)
   "Rotate layout of ARGth parent window of selected window.
-If ARG is 0 rotate root window."
+If ARG is <= 0 rotate root window."
   (interactive "p")
   (let (window)
     (if (<= arg 0)
