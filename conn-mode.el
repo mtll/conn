@@ -2797,7 +2797,6 @@ With arg N, insert N newlines."
   (interactive)
   (funcall-interactively #'isearch-forward-symbol-at-point -1)
   (isearch-repeat-backward))
-(put 'conn-isearch-backward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-command-at-point-and-mark ()
   "Run the next command at both the point and the mark."
@@ -2839,6 +2838,18 @@ Interactively `region-beginning' and `region-end'."
                                     'grep-regexp-history)))
     (occur search-string)))
 
+(defun conn-isearch-backward-thing (thing)
+  (interactive (list (conn--read-thing-command)))
+  (pcase (bounds-of-thing-at-point thing)
+    (`(,beg . ,end) (conn-isearch-region-backward beg end))
+    (_ (user-error "No %s found" thing))))
+
+(defun conn-isearch-forward-thing (thing)
+  (interactive (list (conn--read-thing-command)))
+  (pcase (bounds-of-thing-at-point thing)
+    (`(,beg . ,end) (conn-isearch-region-forward beg end))
+    (_ (user-error "No %s found" thing))))
+
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
 Interactively `region-beginning' and `region-end'."
@@ -2849,7 +2860,6 @@ Interactively `region-beginning' and `region-end'."
    (setq isearch-new-string (buffer-substring-no-properties beg end)
          isearch-new-message (mapconcat 'isearch-text-char-description
                                         isearch-new-string ""))))
-(put 'conn-isearch-region-forward 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-isearch-region-backward (beg end)
   "Isearch backward for region from BEG to END.
@@ -2861,7 +2871,6 @@ Interactively `region-beginning' and `region-end'."
    (setq isearch-new-string (buffer-substring-no-properties beg end)
          isearch-new-message (mapconcat 'isearch-text-char-description
                                         isearch-new-string ""))))
-(put 'conn-isearch-region-backward 'repeat-map 'conn-isearch-repeat-map)
 
 (defun conn-org-tree-edit-insert-heading ()
   (interactive)
@@ -4663,11 +4672,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :repeat t
   "`" 'conn-other-window)
 
-(defvar-keymap conn-isearch-repeat-map
-  :repeat t
-  "." 'isearch-repeat-forward
-  "," 'isearch-repeat-backward)
-
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
   "DEL" 'conn-delete-region-keys
@@ -4811,6 +4815,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
   ";"   'comment-line
+  "."   'conn-isearch-forward-thing
+  ","   'conn-isearch-backward-thing
   "b"   'regexp-builder
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
@@ -5162,7 +5168,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (if conn-mode
         (progn
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
-          (put 'isearch-forward-symbol-at-point 'repeat-map 'conn-isearch-repeat-map)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'post-command-hook #'conn--update-aux-map)
@@ -5170,8 +5175,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
-      (when (eq 'conn-isearch-repeat-map (get 'isearch-forward-symbol-at-point 'repeat-map))
-        (put 'isearch-forward-symbol-at-point 'repeat-map nil))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
       (remove-hook 'post-command-hook #'conn--update-aux-map)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor))))
