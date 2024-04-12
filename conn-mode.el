@@ -1203,7 +1203,7 @@ If BUFFER is nil use current buffer."
 ;;;; Advice
 
 (defun conn--define-key-advice (keymap key &rest _)
-  (when (and (memq keymap (conn--without-conn-maps (current-active-maps t)))
+  (when (and (memq keymap (conn--without-conn-maps (current-active-maps)))
              (member (if (stringp key) (key-parse key) key)
                      (mapcar #'symbol-value conn--aux-bindings)))
     (setq conn--aux-update-flag t)))
@@ -1285,7 +1285,7 @@ If BUFFER is nil use current buffer."
   (when (and conn-local-mode
              conn-current-state
              (not conn-emacs-state))
-    (pcase-let ((active (conn--without-conn-maps (current-active-maps t)))
+    (pcase-let ((active (conn--without-conn-maps (current-active-maps)))
                 (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
       (cond
        ((or conn--aux-update-flag
