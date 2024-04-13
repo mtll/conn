@@ -473,7 +473,7 @@ If BUFFER is nil check `current-buffer'."
   "Define a Conn extension.
 
 \(fn NAME [DOCSTRING] &rest body)"
-  (declare (indent 1))
+  (declare (doc-string 2) (indent 1))
   (let (doc)
     (when (stringp (car body))
       (setq doc (pop body)))
@@ -627,41 +627,41 @@ If BUFFER is nil check `current-buffer'."
         `((keymap-set conn-mark-thing-map ,binding
                       (conn--thing-expander-command ,thing))))))))
 
-(defmacro conn-define-thing-handler (name args &rest rest)
+(defmacro conn-define-thing-handler (name lambda-list &rest rest)
   "Define a thing movement command mark handler constructor.
 
-Defines a constructor function NAME which takes THING as its first
-argument and any number of addition optional ARGS.  The first time
-NAME is called with a unique THING it creates a closure over
-LAMBDA-FORM, assigns it to the function value of an uninterned symbol
+Defines a constructor function NAME which takes LAMBDA-LIST as its
+arguments, the first of which will should be the thing.  The first
+time NAME is called with a unique THING it creates a closure over
+LAMBDA, assigns it to the function value of an uninterned symbol
 and associates that symbol with THING.  The symbol associated with
 THING is always returned.
 
-\(fn NAME (THING &rest ARGS) [DOCSTRING] LAMBDA-FORM)"
-  (declare (indent defun))
+\(fn NAME LAMBDA-LIST [DOCSTRING] LAMBDA)"
+  (declare (doc-string 3) (indent defun))
   (let ((docstring (if (stringp (car rest)) (pop rest) ""))
-        (lambda-form (car rest))
+        (lambda (car rest))
         (sym (gensym "sym"))
         (ts (gensym "tsymbol"))
         (ss (gensym "ssymbol"))
-        (thing (car args)))
+        (thing (car lambda-list)))
     `(progn
        (defvar ,name)
        (if (boundp ',name)
            (conn--thread needle
                (pcase-lambda  (`(,,ts . ,,ss))
                  (let ((,thing ,ts))
-                   (fset ,ss ,lambda-form)
+                   (fset ,ss ,lambda)
                    (cons ,ss ,thing)))
              (mapcar needle ,name)
              (setf ,name needle))
          (setq ,name nil))
 
-       (defun ,name ,args
+       (defun ,name ,lambda-list
          ,docstring
          (or (alist-get ,thing ,name)
              (let ((,sym (make-symbol (conn--stringify ',name "-" ,thing))))
-               (fset ,sym ,lambda-form)
+               (fset ,sym ,lambda)
                (setf (alist-get ,thing ,name) ,sym)))))))
 
 (conn-define-thing-handler conn-sequential-thing-handler (thing)
