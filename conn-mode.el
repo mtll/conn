@@ -3840,7 +3840,7 @@ if ARG is anything else `other-tab-prefix'."
   "O"   'conn-wincontrol-tab-detach
   "C-w" 'conn-wincontrol-tab-close
 
-  "<" 'conn-wincontrol-reverse
+  "<" 'conn-wincontrol-reflect
   ">" 'conn-wincontrol-rotate
 
   "C-1"   'delete-other-windows
@@ -4127,7 +4127,7 @@ See `tab-close'."
                       params)
               (mapcar 'conn--wincontrol-rot-window windows)))))
 
-;; FIXME: vertical columns shrink horizontally when reversed for some reason
+;; FIXME: vertical columns shrink horizontally when reflected for some reason
 (defun conn--wincontrol-rev-window (state)
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state)))
@@ -4138,33 +4138,23 @@ See `tab-close'."
             (assq-delete-all 'last (car windows))))
     (append params windows)))
 
-(defun conn-wincontrol-reverse (arg)
-  "Reverse windows in ARGth parent window of selected window.
-If ARG is <= 0 reverse windows in root window."
+(defun conn-wincontrol-reflect (arg)
+  "Reflect windows in frame root window.
+If ARG is not 1 or 0 reflect windows in selected window parent window."
   (interactive "p")
-  (let (window)
-    (if (<= arg 0)
-        (setq window (frame-root-window))
-      (while (and (window-parent window)
-                  (> arg 0))
-        (setq window (window-parent window)
-              arg (1- arg))))
+  (let ((window (unless (or (= arg 0) (= arg 1))
+                  (window-parent (selected-window)))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-rev-window)
       (window-state-put window))))
 
 (defun conn-wincontrol-rotate (arg)
-  "Rotate layout of ARGth parent window of selected window.
-If ARG is <= 0 rotate root window."
+  "Rotate windows in frame root window.
+If ARG is not 1 or 0 rotate windows in selected window parent window."
   (interactive "p")
-  (let (window)
-    (if (<= arg 0)
-        (setq window (frame-root-window))
-      (while (and (window-parent window)
-                  (> arg 0))
-        (setq window (window-parent window)
-              arg (1- arg))))
+  (let ((window (unless (or (= arg 0) (= arg 1))
+                  (window-parent (selected-window)))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-rot-window)
