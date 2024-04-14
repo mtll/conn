@@ -179,11 +179,11 @@ Defines default STATE for buffers matching REGEXP."
   :type 'symbol)
 
 (defcustom conn-region-case-style-actions
-  '(conn-kebab-case-region
-    conn-capital-snake-case-region
-    conn-snake-case-region
-    conn-capital-case-region
-    conn-camel-case-region)
+  (list 'conn-kebab-case-region
+        'conn-capital-snake-case-region
+        'conn-snake-case-region
+        'conn-capital-case-region
+        'conn-camel-case-region)
   "List of actions cycled through by `conn-region-case-style-cycle'.
 Supported values are:
 `conn-kebab-case-region'
@@ -3703,8 +3703,7 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "d D" 'face 'help-key-binding)     ": delete win/other; "
    (propertize "x t" 'face 'help-key-binding)     ": swap/throw buf"
    "\n"
-   (propertize "m" 'face 'help-key-binding)   ": store; "
-   (propertize "p" 'face 'help-key-binding)   ": load; "
+   (propertize "p P" 'face 'help-key-binding) ": load/store; "
    (propertize "c" 'face 'help-key-binding)   ": clone; "
    (propertize "v r" 'face 'help-key-binding) ": split vert/right; "
    (propertize "z Z" 'face 'help-key-binding) ": zoom; "
@@ -3718,11 +3717,14 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "." 'face 'help-key-binding) ": reset; "
    (propertize "H" 'face 'help-key-binding) ": help; "
    (propertize "q" 'face 'help-key-binding) ": quit; "
-   (propertize "e" 'face 'help-key-binding) ": tab store"
+   (propertize "I" 'face 'help-key-binding) ": win to new tab; "
+   (propertize "m" 'face 'help-key-binding) ": switch"
    "\n"
-   (propertize "J L" 'face 'help-key-binding)       ": tab next/prev; "
-   (propertize "C-t C C-w" 'face 'help-key-binding) ": tab new/clone/close; "
-   (propertize "O" 'face 'help-key-binding)         ": tear off tab"))
+   (propertize "e" 'face 'help-key-binding)     ": store; "
+   (propertize "J L" 'face 'help-key-binding)   ": next/prev; "
+   (propertize "N C K" 'face 'help-key-binding) ": new/clone/kill; "
+   (propertize "G" 'face 'help-key-binding)     ": group; "
+   (propertize "O" 'face 'help-key-binding)     ": tear off"))
 
 (defvar conn--wincontrol-frame-format
   (concat
@@ -3746,7 +3748,7 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "Win Control: " 'face 'bold)       "prefix arg: "
    (propertize "%d" 'face 'transient-value)       "; "
    (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "C-g q a" 'face 'help-key-binding) ": quit"))
+   (propertize "q" 'face 'help-key-binding)       ": quit"))
 
 (defvar-keymap conn-wincontrol-map
   :suppress 'nodigits
@@ -3819,7 +3821,7 @@ if ARG is anything else `other-tab-prefix'."
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase
 
-  "m" 'window-configuration-to-register
+  "P" 'window-configuration-to-register
   "p" 'conn-register-load
 
   "_" 'shrink-window-if-larger-than-buffer
@@ -3834,11 +3836,14 @@ if ARG is anything else `other-tab-prefix'."
   "J" 'tab-previous
   "L" 'tab-next
 
-  "C-t" 'conn-wincontrol-tab-new
-  "e"   'conn-tab-to-register
-  "C"   'conn-wincontrol-tab-duplicate
-  "O"   'conn-wincontrol-tab-detach
-  "C-w" 'conn-wincontrol-tab-close
+  "I" 'tab-bar-move-window-to-tab
+  "N" 'conn-wincontrol-tab-new
+  "e" 'conn-tab-to-register
+  "C" 'conn-wincontrol-tab-duplicate
+  "O" 'conn-wincontrol-tab-detach
+  "K" 'conn-wincontrol-tab-close
+  "G" 'conn-tab-group
+  "m" 'conn-tab-switch
 
   "<" 'conn-wincontrol-reflect
   ">" 'conn-wincontrol-rotate
@@ -4086,6 +4091,16 @@ See `tab-detach'."
 See `tab-close'."
   (interactive)
   (tab-close))
+
+(defun conn-tab-group ()
+  (interactive)
+  (let (current-prefix-arg)
+    (call-interactively 'tab-group)))
+
+(defun conn-tab-switch ()
+  (interactive)
+  (let (current-prefix-arg)
+    (call-interactively 'tab-switch)))
 
 (defun conn--wincontrol-split-window-state (state)
   (let (params windows)
@@ -4902,6 +4917,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-0"   'quit-window
   "M-1"   'delete-other-windows-vertically
   "M-2"   'make-frame-command
+  "M-7"   'kill-this-buffer
   "M-8"   'tear-off-window
   "M-9"   'tab-detach
   "C-M-0" 'kill-buffer-and-window
