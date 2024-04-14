@@ -29,7 +29,10 @@
   :prefix "conn-"
   :group 'conn-mode)
 
-(defcustom embark-alt-default-action-overrides nil
+(defcustom embark-alt-default-action-overrides
+  '((symbol . describe-symbol)
+    (defun . comment-defun)
+    (identifier . xref-find-references))
   "`embark-default-action-overrides' for alternate actions."
   :type '(alist :key-type (choice (symbol :tag "Type")
                                   (cons (symbol :tag "Type")
@@ -268,38 +271,6 @@ will navigate up out of a keymap."
 (defun conn-embark-dwim-either (&optional arg)
   (interactive "P")
   (if arg (conn-embark-alt-dwim) (embark-dwim)))
-
-(defvar conn-embark-alt-expression-map)
-(defvar conn-embark-alt-symbol-map)
-(defvar conn-embark-alt-defun-map)
-(defvar conn-embark-alt-identifier-map)
-(defvar conn-embark-alt-heading-map)
-
-;;;###autoload (autoload 'conn-embark-dwim-keys "conn-embark" nil t)
-(conn-define-extension conn-embark-dwim-keys
-  (if conn-embark-dwim-keys
-      (progn
-        (setf
-         conn-embark-alt-symbol-map     (define-keymap conn-embark-alt-key 'describe-symbol)
-         conn-embark-alt-expression-map (define-keymap conn-embark-alt-key 'comment-region)
-         conn-embark-alt-defun-map      (define-keymap conn-embark-alt-key 'comment-defun)
-         conn-embark-alt-heading-map    (define-keymap conn-embark-alt-key 'narrow-to-heading)
-         conn-embark-alt-identifier-map (define-keymap conn-embark-alt-key 'xref-find-references))
-        (pcase-dolist (`(,map . ,thing) '((conn-embark-alt-expression-map . expression)
-                                          (conn-embark-alt-symbol-map     . symbol)
-                                          (conn-embark-alt-defun-map      . defun)
-                                          (conn-embark-alt-heading-map    . heading)
-                                          (conn-embark-alt-identifier-map . identifier)))
-          (unless (memq map (alist-get thing embark-keymap-alist))
-            (setf (alist-get thing embark-keymap-alist)
-                  (nconc (alist-get thing embark-keymap-alist) (list map))))))
-    (pcase-dolist (`(,map . ,thing) '((conn-embark-alt-expression-map . expression)
-                                      (conn-embark-alt-symbol-map     . symbol)
-                                      (conn-embark-alt-defun-map      . defun)
-                                      (conn-embark-alt-heading-map    . heading)
-                                      (conn-embark-alt-identifier-map . identifier)))
-      (setf (alist-get thing embark-keymap-alist)
-            (remq map (alist-get thing embark-keymap-alist))))))
 
 (keymap-set conn-global-map "M-S-<iso-lefttab>"   'conn-complete-keys)
 (keymap-set conn-global-map "C-M-S-<iso-lefttab>" 'conn-complete-conn-keys)
