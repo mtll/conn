@@ -799,19 +799,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (let ((dispatch-undo-handles nil))
     (lambda (&optional state)
       (when (eq state :finalize)
-        (if conn--dispatch-error
-            (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
+        (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
+          (if conn--dispatch-error
               (cancel-change-group handle)
-              (when finalize
-                (with-current-buffer buffer (funcall finalize))))
-          (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
             (accept-change-group handle)
-            (undo-amalgamate-change-group handle)
-            (when finalize
-              (with-current-buffer buffer (funcall finalize))))))
+            (undo-amalgamate-change-group handle))
+          (when finalize
+            (with-current-buffer buffer (funcall finalize)))))
       (let ((ret (funcall iterator state)))
         (pcase ret
-          ((and `(,beg . ,end) (let buffer (marker-buffer beg)))
+          ((and `(,beg . ,end)
+                (let buffer (marker-buffer beg)))
            (cond ((not (eq buffer (marker-buffer end)))
                   (error "Markers point to different buffers"))
                  ((not (eq buffer (current-buffer)))
@@ -893,21 +891,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (lambda (&optional state)
       (if (eq state :finalize)
           (progn
-            (if conn--dispatch-error
-                (pcase-dolist (`(,buffer . ,dots) old-dots)
-                  (with-current-buffer buffer
-                    (apply 'conn--create-dots dots)))
-              (pcase-dolist (`(,buffer . ,dots) new-dots)
-                (with-current-buffer buffer
-                  (apply 'conn--create-dots dots))))
-            (pcase-dolist (`(,_ . ,dots) new-dots)
-              (pcase-dolist (`(,beg . ,end) dots)
-                (set-marker beg nil)
-                (set-marker end nil)))
-            (pcase-dolist (`(,_ . ,dots) old-dots)
-              (pcase-dolist (`(,beg . ,end) dots)
-                (set-marker beg nil)
-                (set-marker end nil)))
+            (pcase-dolist (`(,buffer . ,dots) (if conn--dispatch-error
+                                                  old-dots
+                                                new-dots))
+              (with-current-buffer buffer
+                (apply 'conn--create-dots dots)))
+            (dolist (list (list new-dots old-dots))
+              (pcase-dolist (`(,_ . ,dots) list)
+                (pcase-dolist (`(,beg . ,end) dots)
+                  (set-marker beg nil)
+                  (set-marker end nil))))
             (funcall iterator state))
         (if primed
             (push (cons (conn--create-marker (region-beginning)
