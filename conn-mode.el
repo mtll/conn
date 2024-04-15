@@ -3584,17 +3584,15 @@ With a prefix ARG calls `conn-switch-tab-keys'."
                                        windows))
             num)
         (unwind-protect
-            (progn
-              (if (length> windows 10)
-                  (while (and (not (setq num (read-number "Window: ")))
-                              (>= num 0)
-                              (length> windows num)))
-                (while (and (not (setq num (- (read-char "Window: ") ?0)))
-                            (>= num 0)
-                            (length> windows num))))
-              (nth num windows))
+            (while (or (not num)
+                       (< num 0)
+                       (length< windows num))
+              (setq num (if (length> windows 10)
+                            (read-number "Window: ")
+                          (- (logand (read-char "Window: ") ?\177) ?0))))
           (dolist (ov overlays)
-            (delete-overlay ov)))))))
+            (delete-overlay ov)))
+        (nth num windows)))))
 
 (defun conn-swap-windows (&optional no-select)
   "Swap selected window and another window.
