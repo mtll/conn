@@ -3603,12 +3603,9 @@ window will be selected at the end of this command.  Otherwise the
 selected window will be the window containing the current buffer."
   (interactive "P")
   (when-let ((win1 (selected-window))
-             (buf1 (window-buffer win1))
-             (other-windows (remove win1 (conn--all-visible-windows)))
-             (win2 (conn--prompt-for-window other-windows))
-             (buf2 (window-buffer win2)))
-    (set-window-buffer win2 buf1)
-    (set-window-buffer win1 buf2)
+             (win2 (conn--prompt-for-window
+                    (remove win1 (conn--all-visible-windows)))))
+    (window-swap-states win1 win2)
     (unless no-select
       (select-window win2)
       (select-frame-set-input-focus (window-frame win2)))))
