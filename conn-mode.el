@@ -3836,8 +3836,8 @@ if ARG is anything else `other-tab-prefix'."
   "G" 'conn-tab-group
   "m" 'conn-tab-switch
 
-  "<" 'conn-wincontrol-reflect
-  ">" 'conn-wincontrol-rotate
+  "<" 'conn-wincontrol-reverse
+  ">" 'conn-wincontrol-reflect
 
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
@@ -4101,69 +4101,70 @@ See `tab-close'."
         (push elem params)))
     (cons (reverse params) (reverse windows))))
 
-(defun conn--wincontrol-rot-window (state)
-  (when state
-    (pcase-let* ((`(,params . ,windows)
-                  (conn--wincontrol-split-window-state state)))
-      (let* ((width   (alist-get 'normal-width params))
-             (height  (alist-get 'normal-height params))
-             (pheight (round (* (alist-get 'pixel-width params)
-                                (/ 1 width)
-                                (/ height 1))))
-             (theight (round (* (alist-get 'total-width params)
-                                (/ 1 width)
-                                (/ height 1))))
-             (pwidth  (round (* (alist-get 'pixel-height params)
-                                (/ 1 height)
-                                (/ width 1))))
-             (twidth  (round (* (alist-get 'total-height params)
-                                (/ 1 height)
-                                (/ width 1)))))
-        (setf (alist-get 'normal-width params)  height
-              (alist-get 'normal-height params) width
-              (alist-get 'pixel-height params) pheight
-              (alist-get 'pixel-width params) pwidth
-              (alist-get 'total-height params) theight
-              (alist-get 'total-width params) twidth))
-      (append (mapcar (lambda (elem)
-                        (pcase elem
-                          ('vc 'hc)
-                          ('hc 'vc)
-                          (_ elem)))
-                      params)
-              (mapcar 'conn--wincontrol-rot-window windows)))))
+(defun conn--wincontrol-reflect-window (state)
+  (pcase-let* ((`(,params . ,windows)
+                (conn--wincontrol-split-window-state state)))
+    (let* ((width   (alist-get 'normal-width params))
+           (height  (alist-get 'normal-height params))
+           (pheight (round (* (alist-get 'pixel-width params)
+                              (/ 1 width)
+                              (/ height 1))))
+           (theight (round (* (alist-get 'total-width params)
+                              (/ 1 width)
+                              (/ height 1))))
+           (pwidth  (round (* (alist-get 'pixel-height params)
+                              (/ 1 height)
+                              (/ width 1))))
+           (twidth  (round (* (alist-get 'total-height params)
+                              (/ 1 height)
+                              (/ width 1)))))
+      (setf (alist-get 'normal-width params)  height
+            (alist-get 'normal-height params) width
+            (alist-get 'pixel-height params) pheight
+            (alist-get 'pixel-width params) pwidth
+            (alist-get 'total-height params) theight
+            (alist-get 'total-width params) twidth))
+    (append (mapcar (lambda (elem)
+                      (pcase elem
+                        ('vc 'hc)
+                        ('hc 'vc)
+                        (_ elem)))
+                    params)
+            (mapcar 'conn--wincontrol-reflect-window windows))))
 
-;; FIXME: vertical columns shrink horizontally when reflected for some reason
-(defun conn--wincontrol-rev-window (state)
+;; FIXME: vertical columns shrink horizontally when reversed for some reason
+(defun conn--wincontrol-reverse-window (state &optional recursive)
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state)))
     (when (length> windows 1)
-      (setf (alist-get 'last (cdar windows)) t)
-      (setq windows (reverse windows))
-      (setf (car windows)
-            (assq-delete-all 'last (car windows))))
-    (append params windows)))
+      (setf (alist-get 'last (cdar windows)) t
+            windows (reverse windows)
+            (car windows) (assq-delete-all 'last (car windows))))
+    (append params (if recursive
+                       (mapcar 'conn--wincontrol-reverse-window windows)
+                     windows))))
 
-(defun conn-wincontrol-reflect (arg)
+(defun conn-wincontrol-reverse (arg)
   "Reflect windows in frame root window.
-If ARG is not 1 or 0 reflect windows in selected window parent window."
+If ARG is not +/-1 or 0 reflect windows in selected window parent window.
+If ARG is negative reverse windows recursively."
   (interactive "p")
-  (let ((window (unless (or (= arg 0) (= arg 1))
+  (let ((window (unless (or (= arg 0) (= (abs arg) 1))
                   (window-parent (selected-window)))))
     (thread-first
       (window-state-get window)
-      (conn--wincontrol-rev-window)
+      (conn--wincontrol-reverse-window (< arg 0))
       (window-state-put window))))
 
-(defun conn-wincontrol-rotate (arg)
+(defun conn-wincontrol-reflect (arg)
   "Rotate windows in frame root window.
-If ARG is not 1 or 0 rotate windows in selected window parent window."
+If ARG is not +/-1 or 0 rotate windows in selected window parent window."
   (interactive "p")
-  (let ((window (unless (or (= arg 0) (= arg 1))
+  (let ((window (unless (or (= arg 0) (= (abs arg) 1))
                   (window-parent (selected-window)))))
     (thread-first
       (window-state-get window)
-      (conn--wincontrol-rot-window)
+      (conn--wincontrol-reflect-window)
       (window-state-put window))))
 
 ;;;;; Transition Functions
