@@ -1257,14 +1257,14 @@ If BUFFER is nil use current buffer."
 (defun conn--generate-aux-map ()
   (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
                        (make-sparse-keymap)))
-        (state-map (alist-get conn-current-state conn--state-maps)))
+        (state-map (list (alist-get conn-current-state conn--state-maps))))
     (conn--without-conn-maps
       (dolist (sentinal conn--aux-bindings)
         (when-let ((def (key-binding (symbol-value sentinal) t)))
-          (dolist (key (where-is-internal sentinal (list state-map) nil t))
+          (dolist (key (where-is-internal sentinal state-map nil t))
             (define-key aux-map key def)))))
     (let ((mark-map (conn--modes-mark-map)))
-      (dolist (key (where-is-internal 'conn-mark-thing-map (list state-map) nil t t))
+      (dolist (key (where-is-internal 'conn-mark-thing-map state-map nil t t))
         (define-key aux-map key mark-map)))
     aux-map))
 
@@ -1338,8 +1338,7 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-M-g-keys                "M-g")
 (conn-define-remapping-command conn-C-x-4-keys              "C-x 4")
 (conn-define-remapping-command conn-C-x-5-keys              "C-x 5")
-(conn-define-remapping-command conn-switch-buffer-keys      "C-x b" t)
-(conn-define-remapping-command conn-switch-tab-keys         "C-x t s" t)
+(conn-define-remapping-command conn-C-x-t-keys              "C-x t")
 (conn-define-remapping-command conn-delete-char-keys        "C-d")
 (conn-define-remapping-command conn-yank-keys               "C-y")
 (conn-define-remapping-command conn-kill-region-keys        "C-w")
@@ -3549,14 +3548,6 @@ there's a region, all lines that region covers will be duplicated."
     (comment-region (region-beginning)
                     (region-end))))
 
-(defun conn-switch-to-buffer-or-tab (&optional tab)
-  "Calls `conn-switch-buffer-keys'.
-With a prefix ARG calls `conn-switch-tab-keys'."
-  (interactive "P")
-  (let ((command (if tab (conn-switch-tab-keys) (conn-switch-buffer-keys))))
-    (setq this-command command)
-    (call-interactively command)))
-
 ;;;;; Window Commands
 
 (defun conn--create-window-prompt-overlay (window id)
@@ -3704,7 +3695,6 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "H" 'face 'help-key-binding) ": help; "
    (propertize "q" 'face 'help-key-binding) ": quit; "
    (propertize "I" 'face 'help-key-binding) ": win to new tab; "
-   (propertize "m" 'face 'help-key-binding) ": switch"
    "\n"
    (propertize "e" 'face 'help-key-binding)     ": store; "
    (propertize "J L" 'face 'help-key-binding)   ": next/prev; "
@@ -3731,120 +3721,98 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-simple-format
   (concat
-   (propertize "Win Control: " 'face 'bold)       "prefix arg: "
-   (propertize "%d" 'face 'transient-value)       "; "
-   (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "q" 'face 'help-key-binding)       ": quit"))
+   (propertize "Win Control: " 'face 'bold) "prefix arg: "
+   (propertize "%d" 'face 'transient-value) "; "
+   (propertize "H" 'face 'help-key-binding) ": help; "
+   (propertize "q" 'face 'help-key-binding) ": quit"))
 
 (defvar-keymap conn-wincontrol-map
   :suppress 'nodigits
-  "q"   'conn-wincontrol-off
-  "C-g" 'conn-wincontrol-off
-  "a"   'conn-wincontrol-off
-  "H"   'conn-wincontrol-toggle-help
-
-  "0" 'conn-wincontrol-digit-argument
-  "1" 'conn-wincontrol-digit-argument
-  "2" 'conn-wincontrol-digit-argument
-  "3" 'conn-wincontrol-digit-argument
-  "4" 'conn-wincontrol-digit-argument
-  "5" 'conn-wincontrol-digit-argument
-  "6" 'conn-wincontrol-digit-argument
-  "7" 'conn-wincontrol-digit-argument
-  "8" 'conn-wincontrol-digit-argument
-  "9" 'conn-wincontrol-digit-argument
-  "-" 'conn-wincontrol-invert-argument
-  "." 'conn-wincontrol-digit-argument-reset
-
-  "w" 'conn-wincontrol-widen
-  "n" 'conn-wincontrol-narrow
-  "h" 'conn-wincontrol-heighten
-  "s" 'conn-wincontrol-shorten
-
-  "i" 'conn-wincontrol-windmove-up
-  "j" 'conn-wincontrol-windmove-left
-  "k" 'conn-wincontrol-windmove-down
-  "l" 'conn-wincontrol-windmove-right
-
-  "<up>"    'conn-wincontrol-windmove-up
-  "<left>"  'conn-wincontrol-windmove-left
+  "C-0"     'delete-window
+  "C-1"     'delete-other-windows
+  "C-2"     'split-window-below
+  "C-3"     'split-window-right
+  "C-4"     'conn-C-x-4-keys
+  "C-5"     'conn-C-x-5-keys
+  "C-6"     'conn-swap-buffers
+  "C-7"     'conn-swap-windows
+  "C-8"     'conn-tab-to-register
+  "C-9"     'tab-close
+  "C-g"     'conn-wincontrol-off
+  "C-M-0"   'kill-buffer-and-window
+  "C-M-d"   'delete-other-frames
+  "M-1"     'iconify-or-deiconify-frame
+  "M-2"     'make-frame-command
+  "M-/"     'undelete-frame
+  "M-`"     'other-frame
+  "M-c"     'clone-frame
+  "M-d"     'delete-frame
+  "+"       'maximize-window
+  "-"       'conn-wincontrol-invert-argument
+  "."       'conn-wincontrol-digit-argument-reset
+  "/"       'tab-bar-history-back
+  "0"       'conn-wincontrol-digit-argument
+  "1"       'conn-wincontrol-digit-argument
+  "2"       'conn-wincontrol-digit-argument
+  "3"       'conn-wincontrol-digit-argument
+  "4"       'conn-wincontrol-digit-argument
+  "5"       'conn-wincontrol-digit-argument
+  "6"       'conn-wincontrol-digit-argument
+  "7"       'conn-wincontrol-digit-argument
+  "8"       'conn-wincontrol-digit-argument
+  "9"       'conn-wincontrol-digit-argument
+  "<"       'conn-wincontrol-reverse
+  ">"       'conn-wincontrol-reflect
+  "="       'balance-windows
+  "?"       'tab-bar-history-forward
+  "_"       'shrink-window-if-larger-than-buffer
   "<down>"  'conn-wincontrol-windmove-down
-  "<right>" 'conn-wincontrol-windmove-right
-
-  "u" 'bury-buffer
-  "U" 'unbury-buffer
-
-  "b" 'conn-wincontrol-switch-buffer-or-tab
-
-  "x" 'conn-wincontrol-swap-windows
-  "t" 'conn-buffer-to-other-window
-
-  "d"     'delete-window
-  "M-d"   'delete-frame
-  "D"     'delete-other-windows
-  "C-M-d" 'delete-other-frames
-
-  "o"   'tear-off-window
-  "c"   'conn-wincontrol-clone-buffer
-  "M-c" 'clone-frame
-  "M-`" 'other-frame
-  "M-1" 'iconify-or-deiconify-frame
-  "M-2" 'make-frame-command
-
-  "DEL"     'conn-wincontrol-scroll-down
-  "M-TAB"   'conn-wincontrol-scroll-down
-  "M-<tab>" 'conn-wincontrol-scroll-down
+  "<left>"  'conn-wincontrol-windmove-left
+  "<next>"  'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-
-  "SPC"    'conn-wincontrol-scroll-up
-  "TAB"    'conn-wincontrol-scroll-up
-  "<tab>"  'conn-wincontrol-scroll-up
-  "<next>" 'conn-wincontrol-scroll-up
-
-  "v" 'conn-wincontrol-split-vertically
-  "r" 'conn-wincontrol-split-right
-
-  "z" 'text-scale-decrease
-  "Z" 'text-scale-increase
-
-  "P" 'window-configuration-to-register
-  "p" 'conn-register-load
-
-  "_" 'shrink-window-if-larger-than-buffer
-  "=" 'balance-windows
-  "+" 'maximize-window
-  "f" 'toggle-frame-fullscreen
-
-  "/"   'tab-bar-history-back
-  "?"   'tab-bar-history-forward
-  "M-/" 'undelete-frame
-
-  "J" 'tab-previous
-  "L" 'tab-next
-
-  "I" 'tab-bar-move-window-to-tab
-  "N" 'conn-wincontrol-tab-new
-  "e" 'conn-tab-to-register
-  "C" 'conn-wincontrol-tab-duplicate
-  "O" 'conn-wincontrol-tab-detach
-  "K" 'conn-wincontrol-tab-close
-  "G" 'conn-tab-group
-  "m" 'conn-tab-switch
-
-  "<" 'conn-wincontrol-reverse
-  ">" 'conn-wincontrol-reflect
-
-  "C-1"   'delete-other-windows
-  "C-2"   'split-window-below
-  "C-3"   'split-window-right
-  "C-4"   'conn-C-x-4-keys
-  "C-5"   'conn-C-x-5-keys
-  "C-6"   'conn-swap-buffers
-  "C-7"   'conn-swap-windows
-  "C-8"   'conn-tab-to-register
-  "C-9"   'tab-close
-  "C-0"   'delete-window
-  "C-M-0" 'kill-buffer-and-window)
+  "<right>" 'conn-wincontrol-windmove-right
+  "<tab>"   'conn-wincontrol-scroll-up
+  "<up>"    'conn-wincontrol-windmove-up
+  "DEL"     'conn-wincontrol-scroll-down
+  "SPC"     'conn-wincontrol-scroll-up
+  "M-<tab>" 'conn-wincontrol-scroll-down
+  "M-TAB"   'conn-wincontrol-scroll-down
+  "TAB"     'conn-wincontrol-scroll-up
+  "a"       'conn-wincontrol-off
+  "c"       'conn-wincontrol-clone-buffer
+  "C"       'tab-bar-duplicate-tab
+  "D"       'delete-other-windows
+  "d"       'delete-window
+  "e"       'conn-tab-to-register
+  "f"       'toggle-frame-fullscreen
+  "G"       'conn-tab-group
+  "H"       'conn-wincontrol-toggle-help
+  "h"       'conn-wincontrol-heighten
+  "i"       'conn-wincontrol-windmove-up
+  "I"       'tab-bar-move-window-to-tab
+  "j"       'conn-wincontrol-windmove-left
+  "J"       'tab-previous
+  "K"       'conn-wincontrol-tab-close
+  "k"       'conn-wincontrol-windmove-down
+  "l"       'conn-wincontrol-windmove-right
+  "L"       'tab-next
+  "n"       'conn-wincontrol-narrow
+  "N"       'tab-bar-new-tab
+  "o"       'tear-off-window
+  "O"       'tab-bar-detach-tab
+  "p"       'conn-register-load
+  "P"       'window-configuration-to-register
+  "q"       'conn-wincontrol-off
+  "r"       'conn-wincontrol-split-right
+  "s"       'conn-wincontrol-shorten
+  "t"       'conn-buffer-to-other-window
+  "u"       'bury-buffer
+  "U"       'unbury-buffer
+  "v"       'conn-wincontrol-split-vertically
+  "w"       'conn-wincontrol-widen
+  "x"       'conn-wincontrol-swap-windows
+  "z"       'text-scale-decrease
+  "Z"       'text-scale-increase)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
@@ -4049,44 +4017,11 @@ Uses `split-window-right'."
   (interactive)
   (split-window-right))
 
-(defun conn-wincontrol-switch-buffer-or-tab (arg)
-  "If arg is 1 `conn-switch-buffer-keys', else `conn-switch-tab-keys'."
-  (interactive "p")
-  (conn-switch-to-buffer-or-tab (not (= arg 1))))
-
-(defun conn-wincontrol-tab-new ()
-  "Create new tab.
-See `tab-new'."
-  (interactive)
-  (tab-new))
-
-(defun conn-wincontrol-tab-duplicate ()
-  "Duplicate current tab.
-See `tab-duplicate'"
-  (interactive)
-  (tab-duplicate))
-
-(defun conn-wincontrol-tab-detach ()
-  "Move current tab to a new frame.
-See `tab-detach'."
-  (interactive)
-  (tab-detach))
-
 (defun conn-wincontrol-tab-close ()
   "Close current tab.
 See `tab-close'."
   (interactive)
-  (tab-close))
-
-(defun conn-tab-group ()
-  (interactive)
-  (let (current-prefix-arg)
-    (call-interactively 'tab-group)))
-
-(defun conn-tab-switch ()
-  (interactive)
-  (let (current-prefix-arg)
-    (call-interactively 'tab-switch)))
+  (tab-bar-close-tab))
 
 (defun conn--wincontrol-split-window-state (state)
   (let (params windows)
@@ -4867,6 +4802,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (define-keymap
   :keymap conn-state-map
+  "C-t"   'conn-C-x-t-keys
   "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
   "="     'indent-relative
@@ -4922,7 +4858,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "`"     'conn-other-window
   "~"     'conn-buffer-to-other-window
   "a"     'conn-wincontrol
-  "b"     'conn-switch-to-buffer-or-tab
+  "b"     'switch-to-buffer
   "B"     'ibuffer
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
@@ -4969,7 +4905,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "?"   'undo-redo
   "^"   'org-sort
   "_"   'org-columns
-  "a"   'switch-to-buffer
+  "b"   'switch-to-buffer
   "c"   'conn-C-c-keys
   "g"   'conn-M-g-keys
   "i"   'org-backward-element
