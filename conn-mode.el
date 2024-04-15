@@ -4070,9 +4070,12 @@ See `tab-close'."
       (setf (alist-get 'last (cdar windows)) t
             windows (reverse windows)
             (car windows) (assq-delete-all 'last (car windows))))
-    (append params (if recursive
-                       (mapcar 'conn--wincontrol-reverse-window windows)
-                     windows))))
+    (append params
+            (if recursive
+                (mapcar (lambda (win)
+                          (conn--wincontrol-reverse-window win t))
+                        windows)
+              windows))))
 
 (defun conn-wincontrol-reverse (arg)
   "Reflect windows in frame root window.
@@ -4483,12 +4486,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (let* ((multi-buffer t)
          (args (transient-args (oref transient-current-prefix command)))
          (dots (cond ((member "completing-read-multiple" args)
-                      (mapcan (lambda (buffer)
-                                (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
+                      (mapcan (apply-partially
+                               'conn--sorted-overlays #'conn-dotp '< nil nil)
                               (conn-read-dot-buffers)))
                      ((member "buffers-matching-regexp" args)
-                      (mapcan (lambda (buffer)
-                                (conn--sorted-overlays #'conn-dotp '< nil nil buffer))
+                      (mapcan (apply-partially
+                               'conn--sorted-overlays #'conn-dotp '< nil nil)
                               (conn-read-matching-dot-buffers)))
                      (t (setq multi-buffer nil)
                         (conn--sorted-overlays #'conn-dotp '<))))
