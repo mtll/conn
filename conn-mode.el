@@ -276,8 +276,7 @@ See `conn--dispatch-on-regions'.")
 (defvar conn--goto-char-last-char nil)
 
 (defvar-keymap conn-mark-thing-map
-  :prefix 'conn-mark-thing-map
-  "`" 'conn-mark-thing)
+  :prefix 'conn-mark-thing-map)
 
 (defvar conn--aux-update-flag nil)
 
@@ -2835,13 +2834,13 @@ Interactively `region-beginning' and `region-end'."
   (interactive (list (conn--read-thing-command)))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-backward beg end))
-    (_ (user-error "No %s found" thing))))
+    (_              (user-error "No %s found" thing))))
 
 (defun conn-isearch-forward-thing (thing)
   (interactive (list (conn--read-thing-command)))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-forward beg end))
-    (_ (user-error "No %s found" thing))))
+    (_              (user-error "No %s found" thing))))
 
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
@@ -3347,11 +3346,10 @@ of deleting it."
   (interactive (list (region-beginning)
                      (region-end)
                      current-prefix-arg))
-  (goto-char end)
-  (funcall (conn-yank-keys))
   (if arg
-      (kill-region start end)
-    (delete-region start end)))
+      (funcall (conn-kill-region-keys) start end)
+    (funcall (conn-delete-region-keys) start end))
+  (funcall (conn-yank-keys)))
 
 (defun conn-isearch-exit-and-mark ()
   "`isearch-exit' and set region to match."
@@ -4819,6 +4817,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-menu
+  "H"   'conn-mark-thing
   "h"   'conn-mark-thing-map
   "I"   'copy-from-above-command
   "j"   'join-line
