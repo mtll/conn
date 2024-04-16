@@ -814,12 +814,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  ((not (eq buffer (current-buffer)))
                   (pop-to-buffer-same-window buffer)
                   (when (not (eq buffer (window-buffer (selected-window))))
-                    (error "Could not pop to buffer %s" buffer)))
-                 ((not (alist-get (current-buffer) dispatch-undo-handles))
-                  (activate-change-group
-                   (setf (alist-get (current-buffer) dispatch-undo-handles)
-                         (prepare-change-group)))
-                  (when init (funcall init))))))
+                    (error "Could not pop to buffer %s" buffer))))
+           (when (not (alist-get (current-buffer) dispatch-undo-handles))
+             (activate-change-group
+              (setf (alist-get (current-buffer) dispatch-undo-handles)
+                    (prepare-change-group)))
+             (when init (funcall init)))))
         ret))))
 
 (defun conn--dispatch-single-buffer (iterator &optional init finalize)
@@ -2506,7 +2506,10 @@ THING is something with a forward-op as defined by thingatpt."
   (interactive)
   (if (or (not (boundp 'multi-isearch-buffer-list))
           (not multi-isearch-buffer-list))
-      (let ((regions (nreverse (conn--isearch-matches-in-buffer (current-buffer)))))
+      (let ((regions (thread-first
+                       (current-buffer)
+                       conn--isearch-matches-in-buffer
+                       nreverse)))
         (isearch-exit)
         (save-mark-and-excursion
           (thread-first
@@ -2515,8 +2518,12 @@ THING is something with a forward-op as defined by thingatpt."
             (conn--dispatch-with-state 'conn-state)
             (conn--pulse-on-record)
             (conn--macro-dispatch))))
-    (let ((regions (mapcan 'conn--isearch-matches-in-buffer
-                           multi-isearch-buffer-list)))
+    (let ((regions (thread-last
+                     (append
+                      (remq (current-buffer) multi-isearch-buffer-list)
+                      (list (current-buffer)))
+                     (mapcan 'conn--isearch-matches-in-buffer)
+                     nreverse)))
       (isearch-exit)
       (save-mark-and-excursion
         (save-window-excursion
