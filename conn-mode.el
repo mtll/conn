@@ -2652,22 +2652,31 @@ Interactively PARTIAL-MATCH is the prefix argument."
       (goto-char (mark t)))
     (deactivate-mark)))
 
-(defun conn-yank-region-to-minibuffer (&optional quote-function)
-  "Yank region from `minibuffer-selected-window' into minibuffer.
-Interactively defaults to the region in buffer."
-  (interactive (list (pcase current-prefix-arg
-                       ('(4) conn-completion-region-quote-function)
-                       (_    'regexp-quote))))
-  (insert (with-minibuffer-selected-window
-            (funcall (or quote-function 'identity)
-                     (buffer-substring-no-properties
-                      (region-beginning) (region-end))))))
-
 (defun conn-toggle-sort-fold-case ()
   "Toggle the value of `sort-fold-case'."
   (interactive)
   (message "Sort fold case: %s"
            (setq sort-fold-case (not sort-fold-case))))
+
+(defvar-local conn-minibuffer-initial-region nil)
+
+(defun conn-yank-region-to-minibuffer-hook ()
+  (setq conn-minibuffer-initial-region
+        (with-minibuffer-selected-window
+          (region-bounds))))
+
+(defun conn-yank-region-to-minibuffer (&optional quote-function)
+  "Yank region from `minibuffer-selected-window' into minibuffer.
+Interactively defaults to the region in buffer."
+  (interactive (list (pcase current-prefix-arg
+                       ('(4) conn-completion-region-quote-function)
+                       ('nil 'identity)
+                       (_    'regexp-quote))))
+  (insert (pcase-exhaustive conn-minibuffer-initial-region
+            (`((,beg . ,end))
+             (with-minibuffer-selected-window
+               (funcall (or quote-function 'identity)
+                        (buffer-substring-no-properties beg end)))))))
 
 (defun conn-query-replace-region ()
   "Run `query-replace' with the region as initial contents."
@@ -2675,8 +2684,7 @@ Interactively defaults to the region in buffer."
   (save-mark-and-excursion
     (unless (eq (point) (region-beginning))
       (conn-exchange-mark-command))
-    (minibuffer-with-setup-hook
-        (:append (lambda () (conn-yank-region-to-minibuffer)))
+    (minibuffer-with-setup-hook 'conn-yank-region-to-minibuffer
       (call-interactively #'query-replace))))
 
 (defun conn-query-replace-regexp-region ()
@@ -2687,7 +2695,7 @@ Also ensure point is at START before running `query-replace-regexp'."
     (unless (eq (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
-        (:append (lambda () (conn-yank-region-to-minibuffer 'regexp-quote)))
+        (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
       (call-interactively #'query-replace-regexp))))
 
 (defun conn-dispatch-text-property (start end prop value &optional reverse)
@@ -5113,13 +5121,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'post-command-hook #'conn--update-aux-map)
-          (add-hook 'window-configuration-change-hook #'conn--update-cursor))
+          (add-hook 'window-configuration-change-hook #'conn--update-cursor)
+          (add-hook 'minibuffer-setup-hook 'conn-yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
       (remove-hook 'post-command-hook #'conn--update-aux-map)
-      (remove-hook 'window-configuration-change-hook #'conn--update-cursor))))
+      (remove-hook 'window-configuration-change-hook #'conn--update-cursor)
+      (remove-hook 'minibuffer-setup-hook 'conn-yank-region-to-minibuffer-hook))))
 
 (provide 'conn-mode)
 
