@@ -1826,6 +1826,7 @@ state."
                        (alist-get 'name needle)))))))
 
 (defun conn-tab-to-register (register)
+  "Store tab in REGISTER."
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-tab-register)))
 
@@ -2830,12 +2831,18 @@ Interactively `region-beginning' and `region-end'."
     (occur search-string)))
 
 (defun conn-isearch-backward-thing (thing)
+  "Isearch forward for THING.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-backward beg end))
     (_              (user-error "No %s found" thing))))
 
 (defun conn-isearch-forward-thing (thing)
+  "Isearch backward for THING.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-forward beg end))
@@ -3727,6 +3734,7 @@ if ARG is anything else `other-tab-prefix'."
    (propertize "q" 'face 'help-key-binding) ": quit"))
 
 (defvar-keymap conn-wincontrol-map
+  :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
   "C-0"     'delete-window
   "C-1"     'delete-other-windows
@@ -4034,8 +4042,8 @@ See `tab-close'."
 (defun conn--wincontrol-reflect-window (state)
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state)))
-    (let* ((width   (alist-get 'normal-width params))
-           (height  (alist-get 'normal-height params))
+    (let* ((height  (alist-get 'normal-height params))
+           (width   (alist-get 'normal-width params))
            (pheight (round (* (alist-get 'pixel-width params)
                               (/ 1 width)
                               (/ height 1))))
@@ -4103,6 +4111,7 @@ If ARG is not +/-1 or 0 rotate windows in selected window parent window."
 ;;;;; Transition Functions
 
 (defun conn-emacs-state-and-complete ()
+  "Enter `conn-emacs-state' and call `completion-at-point'."
   (interactive)
   (conn-emacs-state)
   (completion-at-point))
@@ -4906,8 +4915,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "<"   'org-promote-subtree
   ">"   'org-demote-subtree
   "?"   'undo-redo
-  "^"   'org-sort
-  "_"   'org-columns
+  "q s" 'org-sort
+  "q c" 'org-columns
   "b"   'switch-to-buffer
   "c"   'conn-C-c-keys
   "g"   'conn-M-g-keys
