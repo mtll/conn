@@ -4549,17 +4549,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
    ["Options:"
     (conn--reverse-switch)
-    ("m" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
+    ("s" "Set Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)
+    ("m" "Options" conn-kmacro-menu)]])
 
 (transient-define-suffix conn--region-dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args (oref transient-current-prefix command)))
-         (regions (mapcar (pcase-lambda (`(,beg . ,end))
-                            (cons (conn--create-marker beg)
-                                  (conn--create-marker end)))
-                          (region-bounds)))
          (macro (cond ((member "register-read-with-preview" args)
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
@@ -4569,13 +4566,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (vectorp macro)
                 (kmacro-p macro))
       (user-error "Register is not a keyboard macro"))
-    (when (member "t" args)
-      (setq regions (nreverse regions)))
     (save-window-excursion
       (thread-first
-        (conn--region-iterator regions)
+        (mapcar (pcase-lambda (`(,beg . ,end))
+                  (cons (conn--create-marker beg)
+                        (conn--create-marker end)))
+                (region-bounds))
+        (conn--region-iterator (member "t" args))
         (conn--dispatch-single-buffer)
-        (conn--dispatch-with-state 'conn-state)
+        (conn--dispatch-with-state conn-current-state)
         (conn--pulse-on-record)
         (conn--macro-dispatch macro)))))
 
@@ -4590,11 +4589,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-prefix conn-region-dispatch-menu (macro)
   "Transient menu for macro dispatch on regions."
   [["Dispatch: "
-    ("d" "Dispatch" conn--dot-dispatch-suffix)]
+    ("d" "Dispatch" conn--region-dispatch-suffix)]
    [:description
     conn--dispatch-options-format
     (conn--reverse-switch)
-    ("m" "Macro" conn--dispatch-macro-infix :unsavable t :always-read t)]])
+    ("s" "Set Macro" conn--dispatch-macro-infix
+     :unsavable t :always-read t)
+    ("m" "Options" conn-kmacro-menu)]])
 
 
 ;;;; Keymaps
