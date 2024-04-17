@@ -2718,14 +2718,18 @@ from the text properties at point."
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
-    (scroll-down arg)))
+    (let ((start (window-start)))
+      (scroll-down arg)
+      (pulse-momentary-highlight-one-line start))))
 
 (defun conn-scroll-up (&optional arg)
   "`scroll-up-command' leaving point at the same relative window position."
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
-    (scroll-up arg)))
+    (let ((end (window-end)))
+      (scroll-up arg)
+      (pulse-momentary-highlight-one-line end))))
 
 (defun conn-open-line-and-indent (N)
   "Insert a newline, leave point before it and indent the new line.
