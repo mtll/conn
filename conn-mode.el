@@ -4489,15 +4489,25 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-prefix conn-dots-dispatch-menu (macro buffers)
   "Transient menu for macro dispatch on dots."
   [[:description
+    conn--kmacro-counter-format
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]
+   [:description
+    conn--kmacro-ring-format
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("~" "Swap" kmacro-swap-ring :transient t)
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+  [[:description
     conn--dot-dispatch-title
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
    ["Options:"
     (conn--reverse-switch)
-    ("s" "Set Macro" conn--dispatch-macro-infix
+    ("m" "Set Macro" conn--dispatch-macro-infix
      :unsavable t :always-read t)
     ("b" "Read Buffers" conn--read-buffer-infix
-     :unsavable t :always-read t)
-    ("m" "Options" conn-kmacro-menu)]])
+     :unsavable t :always-read t)]])
 
 (transient-define-suffix conn--region-dispatch-suffix ()
   :transient 'transient--do-exit
@@ -4534,14 +4544,25 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (transient-define-prefix conn-region-dispatch-menu (macro)
   "Transient menu for macro dispatch on regions."
-  [["Dispatch: "
+  [[:description
+    conn--kmacro-counter-format
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]
+   [:description
+    conn--kmacro-ring-format
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("~" "Swap" kmacro-swap-ring :transient t)
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+  [[:description
+    "Dispatch"
     ("d" "Dispatch" conn--region-dispatch-suffix)]
    [:description
-    conn--dispatch-options-format
+    "Dispatch Options"
     (conn--reverse-switch)
-    ("s" "Set Macro" conn--dispatch-macro-infix
-     :unsavable t :always-read t)
-    ("m" "Options" conn-kmacro-menu)]])
+    ("m" "Set Macro" conn--dispatch-macro-infix
+     :unsavable t :always-read t)]])
 
 
 ;;;; Keymaps
