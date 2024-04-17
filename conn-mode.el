@@ -2629,7 +2629,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
 (defun conn-yank-region-to-minibuffer-hook ()
   (setq conn-minibuffer-initial-region
         (with-minibuffer-selected-window
-          (region-bounds))))
+          (ignore-errors (cons (region-beginning) (region-end))))))
 
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer.
@@ -2639,10 +2639,11 @@ Interactively defaults to the region in buffer."
                        ('nil 'identity)
                        (_    'regexp-quote))))
   (insert (pcase-exhaustive conn-minibuffer-initial-region
-            (`((,beg . ,end))
+            (`(,beg . ,end)
              (with-minibuffer-selected-window
                (funcall (or quote-function 'identity)
-                        (buffer-substring-no-properties beg end)))))))
+                        (buffer-substring-no-properties beg end))))
+            (_ (user-error "No region in buffer")))))
 
 (defun conn-query-replace-region ()
   "Run `query-replace' with the region as initial contents."
