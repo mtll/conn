@@ -233,6 +233,31 @@ will navigate up out of a keymap."
     (when (eq prefix-help-command 'conn-complete-keys)
       (setq prefix-help-command conn-complete-keys--prefix-cmd-backup))))
 
+(defun conn-repeat-prefix-help-command (prefix map global)
+  (interactive
+   (let* ((prefix (seq-subseq (this-command-keys-vector) 0 -1)))
+     (list prefix
+           (key-binding prefix 'accept-default)
+           (make-composed-keymap (current-active-maps t)))))
+  (let ((quit-fn #'ignore)
+        (transient-map (make-composed-keymap (list map))))
+    (keymap-set transient-map
+                "C-h" (lambda ()
+                        (interactive)
+                        (funcall quit-fn)
+                        (conn-complete-keys prefix global)
+                        (conn-repeat-prefix-help-command prefix map global)))
+    (setq quit-fn (set-transient-map transient-map t nil t))))
+
+;;;###autoload (autoload 'conn-repeat-keys-prefix-help-command "conn-embark" nil t)
+(conn-define-extension conn-repeat-keys-prefix-help-command
+  (if conn-repeat-keys-prefix-help-command
+      (progn
+        (setq conn-complete-keys--prefix-cmd-backup prefix-help-command)
+        (setq prefix-help-command 'conn-repeat-prefix-help-command))
+    (when (eq prefix-help-command 'conn-repeat-prefix-help-command)
+      (setq prefix-help-command conn-complete-keys--prefix-cmd-backup))))
+
 (defun conn-embark-alt--default-action (type)
   "`embark--default-action' for alt actions"
   (or (alist-get (cons type embark--command) embark-alt-default-action-overrides
