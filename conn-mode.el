@@ -3877,22 +3877,6 @@ if ARG is anything else `other-tab-prefix'."
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (conn-wincontrol-mode 1)))
 
-(defun conn--wincontrol-toggle-in-transient ()
-  (let ((sym (make-symbol "transient-exit-hook-fn")))
-    (fset sym (lambda ()
-                (remove-hook 'transient-exit-hook sym)
-                (conn-wincontrol-mode 1)))
-    (add-hook 'transient-exit-hook sym))
-  (conn-wincontrol-mode -1))
-
-(defun conn--wincontrol-toggle-in-isearch ()
-  (let ((sym (make-symbol "isearch-exit-hook-fn")))
-    (fset sym (lambda ()
-                (remove-hook 'isearch-mode-end-hook sym)
-                (conn-wincontrol-mode 1)))
-    (add-hook 'isearch-mode-end-hook sym))
-  (conn-wincontrol-mode -1))
-
 (defun conn-wincontrol-digit-argument (N)
   "Append N to wincontrol prefix arg.
 When called interactively N is `last-command-event'."
