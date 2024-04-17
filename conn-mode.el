@@ -3719,8 +3719,6 @@ if ARG is anything else `other-tab-prefix'."
   "C-1"     'delete-other-windows
   "C-2"     'split-window-below
   "C-3"     'split-window-right
-  "C-4"     'conn-C-x-4-keys
-  "C-5"     'conn-C-x-5-keys
   "C-6"     'conn-swap-buffers
   "C-7"     'conn-swap-windows
   "C-8"     'conn-tab-to-register
@@ -3766,6 +3764,7 @@ if ARG is anything else `other-tab-prefix'."
   "M-TAB"   'conn-wincontrol-scroll-down
   "TAB"     'conn-wincontrol-scroll-up
   "a"       'conn-wincontrol-off
+  "b"       'switch-to-buffer
   "c"       'conn-wincontrol-clone-buffer
   "C"       'tab-bar-duplicate-tab
   "D"       'delete-other-windows
