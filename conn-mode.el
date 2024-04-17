@@ -328,13 +328,13 @@ Each function is run without any arguments and if any of them return nil
 
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (conn--thread needle
+    (conn--thread @
         (lambda (e)
           (cl-etypecase e
             (string e)
             (symbol (symbol-name e))))
-      (mapcar needle symbols-or-strings)
-      (apply #'concat needle)))
+      (mapcar @ symbols-or-strings)
+      (apply #'concat @)))
 
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
@@ -647,13 +647,13 @@ THING is always returned.
     `(progn
        (defvar ,name)
        (if (boundp ',name)
-           (conn--thread needle
+           (conn--thread @
                (pcase-lambda  (`(,,ts . ,,ss))
                  (let ((,thing ,ts))
                    (fset ,ss ,lambda)
                    (cons ,ss ,thing)))
-             (mapcar needle ,name)
-             (setf ,name needle))
+             (mapcar @ ,name)
+             (setf ,name @))
          (setq ,name nil))
 
        (defun ,name ,lambda-list
@@ -794,7 +794,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;; Macro Dispatch
 
-(defun conn--dispatch-multi-buffer (iterator &optional init finalize)
+(defun conn--dispatch-handle-buffers (iterator &optional init finalize)
   (let ((dispatch-undo-handles nil))
     (lambda (&optional state)
       (when (eq state :finalize)
@@ -821,21 +821,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                     (prepare-change-group)))
              (when init (funcall init)))))
         ret))))
-
-(defun conn--dispatch-single-buffer (iterator &optional init finalize)
-  (let ((handle nil))
-    (lambda (&optional state)
-      (cond ((eq state :finalize)
-             (if conn--dispatch-error
-                 (cancel-change-group handle)
-               (accept-change-group handle)
-               (undo-amalgamate-change-group handle))
-             (when finalize (funcall finalize)))
-            ((not handle)
-             (setq handle (prepare-change-group))
-             (activate-change-group handle)
-             (when init (funcall init))))
-      (funcall iterator state))))
 
 (defun conn--dispatch-with-state (iterator transition)
   (let ((buffer-states nil))
@@ -880,9 +865,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (overlay-put dot 'evaporate nil))
   (lambda (&optional state)
     (if (eq state :finalize)
-        (when dots
-          (dolist (dot dots)
-            (overlay-put dot 'evaporate t)))
+        (dolist (dot dots)
+          (overlay-put dot 'evaporate t))
       (pop dots))))
 
 (defun conn--dispatch-relocate-dots (iterator)
@@ -1067,14 +1051,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          ,(macroexp-progn body))
      (conn--text-property-to-dots)))
 
-(defun conn--sorted-overlays (typep &optional predicate start end buffer)
+(defun conn--sorted-overlays (typep &optional sort-predicate start end buffer)
   "Get all dots between START and END sorted by starting position."
-  (unless predicate (setq predicate #'<))
+  (unless sort-predicate (setq sort-predicate #'<))
   (let ((overlays (conn--all-overlays typep start end buffer)))
-    (pcase predicate
+    (pcase sort-predicate
       ('< overlays)
       ('> (nreverse overlays))
-      (_ (sort overlays predicate)))))
+      (_ (sort overlays sort-predicate)))))
 
 (defun conn--clear-overlays ()
   "Delete all conn overlays."
@@ -1240,11 +1224,9 @@ If BUFFER is nil use current buffer."
 ;;;;; Remapping Functions
 
 (defun conn--modes-mark-map ()
-  (let ((selectors)
-        (keymap))
+  (let (selectors keymap)
     (dolist (mode local-minor-modes)
-      (setq selectors (nconc (get mode :conn-mode-things)
-                             selectors)))
+      (setq selectors (nconc (get mode :conn-mode-things) selectors)))
     (dolist (mode (derived-mode-all-parents major-mode))
       (setq selectors (nconc (get mode :conn-mode-things) selectors)))
     (when selectors
@@ -1272,8 +1254,8 @@ If BUFFER is nil use current buffer."
   (when (and conn-local-mode
              conn-current-state
              (not conn-emacs-state))
-    (pcase-let ((active (conn--without-conn-maps (current-active-maps)))
-                (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
+    (let ((active (conn--without-conn-maps (current-active-maps)))
+          (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
       (cond
        ((or conn--aux-update-flag
             (not (equal conn--last-remapping current-remappings))
@@ -1288,11 +1270,11 @@ If BUFFER is nil use current buffer."
                             (conn--generate-aux-map)))
                (new (cons key aux-map)))
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
-                conn--aux-map-history (conn--thread needle
+                conn--aux-map-history (conn--thread @
                                           conn--aux-map-history
-                                        (delete new needle)
-                                        (cons new needle)
-                                        (seq-take needle 8))))))
+                                        (delete new @)
+                                        (cons new @)
+                                        (seq-take @ 8))))))
       (setq conn--aux-update-flag nil
             conn--last-remapping current-remappings))))
 
@@ -1818,12 +1800,12 @@ state."
   (princ (format "Tab:  %s"
                  (when-let ((index (conn--get-tab-index-by-cookie
                                     (conn-tab-register-cookie val))))
-                   (conn--thread needle
+                   (conn--thread @
                        index
-                     (nth needle (funcall tab-bar-tabs-function))
-                     (if (eq (car needle) 'current-tab)
+                     (nth @ (funcall tab-bar-tabs-function))
+                     (if (eq (car @) 'current-tab)
                          (propertize "*CURRENT TAB*" 'face 'error)
-                       (alist-get 'name needle)))))))
+                       (alist-get 'name @)))))))
 
 (defun conn-tab-to-register (register)
   "Store tab in REGISTER."
@@ -1855,24 +1837,15 @@ buffers completing read DOT."
 If AT-END is non-nil yank at the end of each dot instead."
   (interactive "P")
   (save-mark-and-excursion
-    (if at-end
-        (thread-first
-          (conn--sorted-overlays #'conn-dotp '<)
-          (conn--dot-iterator)
-          (conn--dispatch-stationary-dots)
-          (conn--dispatch-at-end)
-          (conn--dispatch-single-buffer)
-          (conn--dispatch-with-state 'conn-emacs-state)
-          (conn--pulse-on-record)
-          (conn--macro-dispatch conn-yank-keys))
-      (thread-first
-        (conn--sorted-overlays #'conn-dotp '<)
-        (conn--dot-iterator)
-        (conn--dispatch-stationary-dots)
-        (conn--dispatch-single-buffer)
-        (conn--dispatch-with-state 'conn-emacs-state)
-        (conn--pulse-on-record)
-        (conn--macro-dispatch conn-yank-keys)))))
+    (conn--thread @
+      (conn--sorted-overlays #'conn-dotp '<)
+      (conn--dot-iterator @)
+      (conn--dispatch-stationary-dots @)
+      (if at-end (conn--dispatch-at-end @) @)
+      (conn--dispatch-handle-buffers @)
+      (conn--dispatch-with-state @ 'conn-emacs-state)
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ conn-yank-keys))))
 
 (defun conn-sort-dots ()
   "Sort all dots in the current buffer by the text they contain.
@@ -2504,35 +2477,21 @@ THING is something with a forward-op as defined by thingatpt."
 (defun conn-isearch-dispatch ()
   "Macro dispatch on isearch matches."
   (interactive)
-  (if (or (not (boundp 'multi-isearch-buffer-list))
-          (not multi-isearch-buffer-list))
-      (let ((regions (thread-first
-                       (current-buffer)
-                       conn--isearch-matches-in-buffer
-                       nreverse)))
-        (isearch-exit)
-        (save-mark-and-excursion
-          (thread-first
-            (conn--region-iterator regions)
-            (conn--dispatch-single-buffer)
-            (conn--dispatch-with-state 'conn-state)
-            (conn--pulse-on-record)
-            (conn--macro-dispatch))))
-    (let ((regions (thread-last
-                     (append
-                      (remq (current-buffer) multi-isearch-buffer-list)
-                      (list (current-buffer)))
-                     (mapcan 'conn--isearch-matches-in-buffer)
-                     nreverse)))
-      (isearch-exit)
-      (save-mark-and-excursion
-        (save-window-excursion
-          (thread-first
-            (conn--region-iterator regions)
-            (conn--dispatch-multi-buffer)
-            (conn--dispatch-with-state 'conn-state)
-            (conn--pulse-on-record)
-            (conn--macro-dispatch)))))))
+  (thread-first
+    (prog1
+        (if (or (not (boundp 'multi-isearch-buffer-list))
+                (not multi-isearch-buffer-list))
+            (conn--isearch-matches-in-buffer)
+          (mapcan 'conn--isearch-matches-in-buffer
+                  (append
+                   (remq (current-buffer) multi-isearch-buffer-list)
+                   (list (current-buffer)))))
+      (isearch-exit))
+    (conn--region-iterator t)
+    (conn--dispatch-handle-buffers)
+    (conn--dispatch-with-state 'conn-state)
+    (conn--pulse-on-record)
+    (conn--macro-dispatch)))
 
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
@@ -2736,7 +2695,7 @@ from the text properties at point."
     (save-window-excursion
       (thread-first
         (conn--region-iterator regions reverse)
-        (conn--dispatch-single-buffer nil)
+        (conn--dispatch-handle-buffers nil)
         (conn--dispatch-with-state 'conn-state)
         (conn--pulse-on-record)
         (conn--macro-dispatch)))))
@@ -2750,7 +2709,7 @@ from the text properties at point."
             (cons (conn--create-marker (mark t))
                   (conn--create-marker (mark t))))
       (conn--region-iterator)
-      (conn--dispatch-single-buffer)
+      (conn--dispatch-handle-buffers)
       (conn--dispatch-with-state conn-current-state)
       (conn--macro-dispatch))))
 
@@ -3230,15 +3189,15 @@ See `clone-indirect-buffer' for meaning of indirect buffer."
                          (read-string "Pair: " nil 'conn-pair-history))
                        conn-read-pair-split-string)
     (`(,front ,back . nil) (cons front back))
-    (`(,str) (conn--thread needle
+    (`(,str) (conn--thread @
                  (lambda (char)
                    (pcase (alist-get char insert-pair-alist)
                      (`(,close . nil) (list char close))
                      (`(,open ,close) (list open close))
                      (_               (list char char))))
-               (seq-map needle str)
-               (apply #'seq-mapn 'string needle)
-               (cons (car needle) (nreverse (cadr needle)))))
+               (seq-map @ str)
+               (apply #'seq-mapn 'string @)
+               (cons (car @) (nreverse (cadr @)))))
     (_ (user-error "Unknown pair format."))))
 
 (defun conn-insert-pair (brackets beg end)
@@ -3493,12 +3452,12 @@ If ARG is a numeric prefix argument kill region to a register."
   (cond ((= (point) (mark t))
          (call-interactively (conn-backward-delete-keys)))
         ((numberp arg)
-         (conn--thread needle
+         (conn--thread @
              (concat "Kill "
                      (if rectangle-mark-mode "Rectangle " " ")
                      "to register:")
-           (register-read-with-preview needle)
-           (copy-to-register needle nil nil t t)))
+           (register-read-with-preview @)
+           (copy-to-register @ nil nil t t)))
         (t (call-interactively (conn-kill-region-keys)))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
@@ -4148,7 +4107,7 @@ If REVERSE is non-nil dispatch from last to first region."
                            (conn--create-marker end)))
                    (region-bounds))
            (conn--region-iterator reverse)
-           (conn--dispatch-single-buffer)
+           (conn--dispatch-handle-buffers)
            (conn--dispatch-with-state conn-current-state)
            (conn--pulse-on-record))))
     (if rectangle-mark-mode-map
@@ -4163,10 +4122,10 @@ If REVERSE is non-nil dispatch from last to first region."
   (interactive (list nil nil current-prefix-arg))
   (save-window-excursion
     (thread-first
-      (conn--sorted-overlays #'conn-dotp (if reverse '> '<))
-      (conn--dot-iterator)
+      (conn--sorted-overlays #'conn-dotp)
+      (conn--dot-iterator reverse)
       (conn--dispatch-relocate-dots)
-      (conn--dispatch-single-buffer)
+      (conn--dispatch-handle-buffers)
       (conn--dispatch-with-state (or init-fn 'conn-state))
       (conn--pulse-on-record)
       (conn--macro-dispatch macro))))
@@ -4269,8 +4228,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;;; Thing Definitions
 
-(conn-set-mark-handler '(next-line previous-line) 'conn-jump-handler)
-
 (conn-register-thing page
   :handler (conn-individual-thing-handler 'page)
   :mark-key "p"
@@ -4342,6 +4299,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                              (forward-line N)
                            (forward-line (1+ N)))))))
   :commands '(forward-line conn-backward-line))
+
+(conn-register-thing line
+  :handler 'conn-jump-handler
+  :commands '(next-line previous-line))
 
 (conn-register-thing outer-line
   :handler (conn-individual-thing-handler 'outer-line)
@@ -4507,8 +4468,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-suffix conn--dot-dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
-  (let* ((multi-buffer t)
-         (args (transient-args (oref transient-current-prefix command)))
+  (let* ((args (transient-args (oref transient-current-prefix command)))
          (dots (cond ((member "completing-read-multiple" args)
                       (mapcan (apply-partially
                                'conn--sorted-overlays #'conn-dotp '< nil nil)
@@ -4517,8 +4477,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                       (mapcan (apply-partially
                                'conn--sorted-overlays #'conn-dotp '< nil nil)
                               (conn-read-matching-dot-buffers)))
-                     (t (setq multi-buffer nil)
-                        (conn--sorted-overlays #'conn-dotp '<))))
+                     (t (conn--sorted-overlays #'conn-dotp '<))))
          (macro (cond ((member "register-read-with-preview" args)
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
@@ -4531,16 +4490,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (when (member "t" args)
       (setq dots (nreverse dots)))
     (save-window-excursion
-      (conn--thread dots
-          dots
+      (thread-first
         (conn--dot-iterator dots)
-        (conn--dispatch-relocate-dots dots)
-        (if multi-buffer
-            (conn--dispatch-multi-buffer dots)
-          (conn--dispatch-single-buffer dots))
-        (conn--dispatch-with-state dots 'conn-state)
-        (conn--pulse-on-record dots)
-        (conn--macro-dispatch dots macro)))))
+        (conn--dispatch-relocate-dots)
+        (conn--dispatch-handle-buffers)
+        (conn--dispatch-with-state 'conn-state)
+        (conn--pulse-on-record)
+        (conn--macro-dispatch macro)))))
 
 (transient-define-prefix conn-dots-dispatch-menu (macro buffers)
   "Transient menu for macro dispatch on dots."
@@ -4549,8 +4505,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("d" "Dispatch" conn--dot-dispatch-suffix)]
    ["Options:"
     (conn--reverse-switch)
-    ("s" "Set Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("b" "Read Buffers" conn--read-buffer-infix :unsavable t :always-read t)
+    ("s" "Set Macro" conn--dispatch-macro-infix
+     :unsavable t :always-read t)
+    ("b" "Read Buffers" conn--read-buffer-infix
+     :unsavable t :always-read t)
     ("m" "Options" conn-kmacro-menu)]])
 
 (transient-define-suffix conn--region-dispatch-suffix ()
@@ -4573,7 +4531,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                         (conn--create-marker end)))
                 (region-bounds))
         (conn--region-iterator (member "t" args))
-        (conn--dispatch-single-buffer)
+        (conn--dispatch-handle-buffers)
         (conn--dispatch-with-state conn-current-state)
         (conn--pulse-on-record)
         (conn--macro-dispatch macro)))))

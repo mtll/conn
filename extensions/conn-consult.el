@@ -188,22 +188,21 @@ THING BEG and END are bound in BODY."
                     (cons marker marker)))
                 cands)
         (conn--region-iterator)
-        (conn--dispatch-multi-buffer)
+        (conn--dispatch-handle-buffers)
         (conn--dispatch-with-state 'conn-state)
         (conn--macro-dispatch))))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
-    (save-window-excursion
-      (thread-first
-        (mapcar (lambda (cand)
-                  (let ((marker (car (consult--get-location cand))))
-                    (cons marker marker)))
-                cands)
-        (conn--region-iterator)
-        (conn--dispatch-single-buffer)
-        (conn--dispatch-with-state 'conn-state)
-        (conn--macro-dispatch))))
+    (thread-first
+      (mapcar (lambda (cand)
+                (let ((marker (car (consult--get-location cand))))
+                  (cons marker marker)))
+              cands)
+      (conn--region-iterator)
+      (conn--dispatch-handle-buffers)
+      (conn--dispatch-with-state 'conn-state)
+      (conn--macro-dispatch)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
