@@ -830,9 +830,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              (activate-change-group
               (setf (alist-get (current-buffer) dispatch-undo-handles)
                     (prepare-change-group)))
-             (when init (funcall init)))
-           (goto-char beg)
-           (conn--push-ephemeral-mark end)))
+             (when init (funcall init)))))
         ret))))
 
 (defun conn--dispatch-change-region (iterator)
@@ -858,7 +856,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (unless (alist-get (current-buffer) buffer-states)
            (setf (alist-get (current-buffer) buffer-states)
                  (list conn-current-state conn-previous-state)))
-         (when ret (call-interactively transition))
+         (when ret (funcall transition))
          ret)))))
 
 (defun conn--region-iterator (regions &optional reverse)
@@ -923,8 +921,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (let* ((buffer (overlay-buffer dot))
                   (beg (conn--create-marker (overlay-start dot) buffer))
                   (end (conn--create-marker (overlay-end dot) buffer)))
-             (push (cons beg end) (alist-get buffer old-dots))
              (conn--delete-dot dot)
+             (push (cons beg end) (alist-get buffer old-dots))
              (cons (copy-marker beg) (copy-marker end))))
           (ret ret))))))
 
@@ -981,6 +979,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (fset sym (lambda (&optional state)
                 (pcase (funcall iterator state)
                   (`(,beg . ,end)
+                   (goto-char beg)
+                   (conn--push-ephemeral-mark end)
                    (when (markerp beg) (set-marker beg nil))
                    (when (markerp end) (set-marker end nil))
                    t))))
