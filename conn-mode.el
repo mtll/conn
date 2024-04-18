@@ -2757,7 +2757,7 @@ from the text properties at point."
       (progn (beep) (message "End of buffer"))
     (let ((end (window-end)))
       (scroll-up arg)
-      (pulse-momentary-highlight-one-line end))))
+      (pulse-momentary-highlight-one-line (1- end)))))
 
 (defun conn-open-line-and-indent (N)
   "Insert a newline, leave point before it and indent the new line.
@@ -4615,7 +4615,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (isearch-exit))
       (conn--region-iterator @ (member "reverse" args))
       (conn--dispatch-handle-buffers @)
-      (conn--dispatch-with-state @ (or state conn-current-state))
+      (conn--dispatch-with-state @ state)
       (cond ((member "change" args)
              (conn--dispatch-change-region @))
             ((member "at-end" args)
