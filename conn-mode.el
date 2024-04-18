@@ -4767,6 +4767,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :repeat t
   "j" 'conn-dot-region-backward
   "l" 'conn-dot-region-forward
+  "o" 'conn-dot-skip-forward
+  "u" 'conn-dot-skip-backward
   "J" 'conn-dot-skip-backward
   "L" 'conn-dot-skip-forward)
 
@@ -4918,8 +4920,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "'"     'conn-other-place-prefix
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
+  "E"     'conn-dot-region
+  "Q"     'conn-remove-all-dots
   "q"     'conn-edit-map
+  "R"     conn-dot-region-map
   "r"     'conn-region-map
+  "T"     'conn-dot-all-things-in-region
   "w"     'conn-kill-region
   "y"     'conn-yank-keys
   "Y"     'yank-from-kill-ring)
@@ -4980,7 +4986,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "o"     'conn-forward-word-keys
   "P"     'point-to-register
   "p"     'conn-register-load
-  "R"     'conn-dot-region
   "s"     'conn-M-s-keys
   "U"     'conn-backward-sentence-keys
   "u"     'conn-backward-word-keys
