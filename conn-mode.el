@@ -4346,7 +4346,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (with-temp-message ""
     (concat
      (propertize "Kmacro Counter: " 'face 'bold)
-     (propertize (format "%d" (or kmacro-initial-counter-value 0))
+     (propertize (format "%d" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  0))
                  'face 'transient-value))))
 
 (defun conn--in-kbd-macro-p ()
