@@ -479,9 +479,13 @@ If BUFFER is nil check `current-buffer'."
     `(progn
        (defvar ,name nil)
 
-       (defun ,name (enable)
+       (defun ,name (&optional enable)
          ,(or doc "")
          (interactive (list (not ,name)))
+         (cond ((eq enable 'toggle)
+                (setq enable (not ,name)))
+               ((numberp enable)
+                (setq enable (< 0 enable))))
          (when (xor enable ,name)
            (let ((fn (get ',name :conn-feature-function)))
              (when conn-mode (funcall fn enable))
@@ -492,7 +496,8 @@ If BUFFER is nil check `current-buffer'."
                    (add-hook 'conn--extensions fn))
                (when (called-interactively-p 'interactive)
                  (message ,(conn--stringify name " disabled.")))
-               (remove-hook 'conn--extensions fn)))))
+               (remove-hook 'conn--extensions fn))))
+         enable)
 
        (when-let ((body-fn (get ',name :conn-feature-function)))
          (funcall body-fn nil)
