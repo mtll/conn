@@ -4454,8 +4454,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-argument conn--dispatch-state-infix ()
   :class 'transient-switches
   :argument-format "%s"
-  :argument-regexp "\\(\\(conn\\|emacs\\|dot\\)\\)"
-  :choices '("conn" "emacs" "dot"))
+  :argument-regexp "\\(\\(emacs\\|conn\\|dot\\)\\)"
+  :choices '("emacs" "conn" "dot"))
 
 (defun conn--dot-dispatch-title ()
   (let ((count 0))
@@ -4544,7 +4544,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   [[:description
     "Dispatch"
     ("v" "On Regions" conn--dispatch-suffix)
-    ("d" "On Dots" conn--dot-dispatch-suffix)]
+    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
    [""
     ("r" "Reverse" "reverse" :unsavable t)
     ("c" "Change" "change" :unsavable t)
@@ -4602,7 +4602,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
     ("v" "On Matches" conn--isearch-dispatch-suffix)
-    ("d" "On Dots" conn--dot-dispatch-suffix)]
+    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
    [""
     ("r" "Reverse" "reverse" :unsavable t)
     ("c" "Change" "change" :unsavable t)
