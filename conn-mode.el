@@ -4534,14 +4534,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn--pulse-on-record)
         (conn--macro-dispatch macro)))))
 
-(defun conn--dispatch-options-format ()
-  (concat
-   (propertize "Last KBD Macro: " 'face 'bold)
-   (propertize (if last-kbd-macro
-                   (conn--kmacro-display last-kbd-macro 20)
-                 "nil")
-               'face 'transient-value)))
-
 (transient-define-prefix conn-region-dispatch-menu (macro)
   "Transient menu for macro dispatch on regions."
   [[:description
@@ -4558,6 +4550,57 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   [[:description
     "Dispatch"
     ("d" "Dispatch" conn--region-dispatch-suffix)]
+   [:description
+    "Dispatch Options"
+    (conn--reverse-switch)
+    ("m" "Set Macro" conn--dispatch-macro-infix
+     :unsavable t :always-read t)]])
+
+(transient-define-suffix conn--isearch-dispatch-suffix ()
+  :transient 'transient--do-exit
+  (interactive)
+  (let* ((regions (if (or (not (boundp 'multi-isearch-buffer-list))
+                          (not multi-isearch-buffer-list))
+                      (conn--isearch-matches-in-buffer)
+                    (mapcan 'conn--isearch-matches-in-buffer
+                            (append
+                             (remq (current-buffer) multi-isearch-buffer-list)
+                             (list (current-buffer))))))
+         (args (transient-args (oref transient-current-prefix command)))
+         (macro (cond ((member "register-read-with-preview" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Register is not a keyboard macro"))
+    (isearch-exit)
+    (save-window-excursion
+      (thread-first
+        (conn--region-iterator regions (member "t" args))
+        (conn--dispatch-handle-buffers)
+        (conn--dispatch-with-state conn-current-state)
+        (conn--pulse-on-record)
+        (conn--macro-dispatch macro)))))
+
+(transient-define-prefix conn-isearch-dispatch-menu (macro)
+  "Transient menu for macro dispatch on regions."
+  [[:description
+    conn--kmacro-counter-format
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]
+   [:description
+    conn--kmacro-ring-format
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("~" "Swap" kmacro-swap-ring :transient t)
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+  [[:description
+    "Dispatch"
+    ("d" "Dispatch" conn--isearch-dispatch-suffix)]
    [:description
     "Dispatch Options"
     (conn--reverse-switch)
@@ -4670,7 +4713,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (define-keymap
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
-  "M-|"        'conn-isearch-dispatch
+  "M-|"        'conn-isearch-dispatch-menu
   "M-E"        'conn-isearch-add-dots
   "M-R"        'conn-isearch-refine-dots
   "M-W"        'conn-isearch-remove-dots
