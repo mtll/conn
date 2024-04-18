@@ -4365,7 +4365,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("~" "Swap" kmacro-swap-ring :transient t)
-    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]
+   ["Commands:"
+    :if conn--in-kbd-macro-p
+    ("q" "Query" kbd-macro-query :if conn--in-kbd-macro-p)
+    ("r" "Stop Recording Macro" kmacro-end-macro :if conn--in-kbd-macro-p)
+    ("d" "Redisplay" kmacro-redisplay :if conn--in-kbd-macro-p)]]
   ["Commands:"
    :if-not conn--in-kbd-macro-p
    [("c" "Call Macro" kmacro-call-macro)
@@ -4374,12 +4379,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("!" "Kmacro to Register" kmacro-to-register)]
    [("d" "Name Last Macro" kmacro-name-last-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
-    ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]]
-  ["Commands:"
-   :if conn--in-kbd-macro-p
-   ("q" "Query" kbd-macro-query :if conn--in-kbd-macro-p)
-   ("r" "Stop Recording Macro" kmacro-end-macro :if conn--in-kbd-macro-p)
-   ("d" "Redisplay" kmacro-redisplay :if conn--in-kbd-macro-p)])
+    ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]])
 
 (transient-define-infix conn--set-fill-column-infix ()
   :class 'transient-lisp-variable
