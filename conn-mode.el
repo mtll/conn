@@ -4621,11 +4621,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [[:description
     "Dispatch"
-    ("v" "On Regions" conn--dispatch-suffix)
-    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("r" "Reverse" "reverse" :unsavable t)]
+    ("d" "On Regions" conn--dispatch-suffix)
+    ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
+    ("c" "Change" "change" :unsavable t)]
    [""
-    ("c" "Change" "change" :unsavable t)
+    ("r" "Reverse Order" "reverse" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix
@@ -4657,11 +4657,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
-    ("v" "On Matches" conn--isearch-dispatch-suffix)
-    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("r" "Reverse" "reverse" :unsavable t)]
+    ("d" "On Matches" conn--isearch-dispatch-suffix)
+    ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
+    ("c" "Change" "change" :unsavable t)]
    [""
-    ("c" "Change" "change" :unsavable t)
+    ("r" "Reverse Order" "reverse" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix
@@ -4683,10 +4683,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
-    ("v" "On Regions" conn--regions-dispatch-suffix)
-    ("r" "Reverse" "reverse" :unsavable t)]
+    ("d" "On Regions" conn--regions-dispatch-suffix)
+    ("c" "Change" "change" :unsavable t)]
    [""
-    ("c" "Change" "change" :unsavable t)
+    ("r" "Reverse Order" "reverse" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)]]
   (interactive (list nil))
