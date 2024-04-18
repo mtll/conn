@@ -799,6 +799,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;; Macro Dispatch
 
+(defvar conn-macro-dispatch-buffer-start-hook nil)
+(defvar conn-macro-dispatch-buffer-end-hook nil)
+
 (defun conn--dispatch-handle-buffers (iterator &optional init finalize)
   (let ((dispatch-undo-handles nil))
     (lambda (&optional state)
@@ -809,7 +812,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
             (accept-change-group handle)
             (undo-amalgamate-change-group handle))
           (when finalize
-            (with-current-buffer buffer (funcall finalize)))))
+            (with-current-buffer buffer (funcall finalize)))
+          (run-hooks conn-macro-dispatch-buffer-end-hook)))
       (let ((ret (funcall iterator state)))
         (pcase ret
           ((and `(,beg . ,end)
@@ -819,7 +823,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  ((not (eq buffer (current-buffer)))
                   (pop-to-buffer-same-window buffer)
                   (when (not (eq buffer (window-buffer (selected-window))))
-                    (error "Could not pop to buffer %s" buffer))))
+                    (error "Could not pop to buffer %s" buffer))
+                  (run-hooks conn-macro-dispatch-buffer-start-hook)))
            (when (not (alist-get (current-buffer) dispatch-undo-handles))
              (activate-change-group
               (setf (alist-get (current-buffer) dispatch-undo-handles)
