@@ -29,7 +29,7 @@
   :prefix "conn-"
   :group 'conn-mode)
 
-(defcustom embark-alt-default-action-overrides
+(defcustom conn-embark-alt-default-action-overrides
   '((symbol . describe-symbol)
     (defun . comment-defun)
     (identifier . xref-find-references))
@@ -260,10 +260,10 @@ will navigate up out of a keymap."
 
 (defun conn-embark-alt--default-action (type)
   "`embark--default-action' for alt actions"
-  (or (alist-get (cons type embark--command) embark-alt-default-action-overrides
+  (or (alist-get (cons type embark--command) conn-embark-alt-default-action-overrides
                  nil nil #'equal)
-      (alist-get type embark-alt-default-action-overrides)
-      (alist-get t embark-alt-default-action-overrides)
+      (alist-get type conn-embark-alt-default-action-overrides)
+      (alist-get t conn-embark-alt-default-action-overrides)
       (keymap-lookup (embark--raw-action-keymap type) conn-embark-alt-key)))
 
 ;;;###autoload
