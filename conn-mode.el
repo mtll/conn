@@ -1990,35 +1990,25 @@ With a numerical prefix argument read buffers using `completing-read'."
     (when (called-interactively-p 'interactive)
       (message "Dots redone"))))
 
-(defun conn-first-dot (&optional start)
-  "Go to the end of the first dot in buffer.
-If start is non-nil go to the start of last dot instead."
-  (interactive "P")
+(defun conn-first-dot ()
+  "Go to the end of the first dot in buffer."
+  (interactive)
   (when-let ((dot (save-excursion
                     (goto-char (point-min))
-                    (conn--next-dot-1))))
-    (if start
-        (progn
-          (goto-char (overlay-start dot))
-          (conn--push-ephemeral-mark (overlay-end dot)))
-      (goto-char (overlay-end dot))
-      (conn--push-ephemeral-mark (overlay-start dot)))))
+                    (conn--next-dot-1)
+                    (conn--dot-before-point (point)))))
+    (goto-char (overlay-start dot))
+    (conn--push-ephemeral-mark (overlay-end dot))))
 
-(defun conn-last-dot (&optional start)
-  "Go to the end of the last dot in buffer.
-If start is non-nil go to the start of last do instead."
-  (interactive "P")
+(defun conn-last-dot ()
+  "Go to the end of the last dot in buffer."
+  (interactive)
   (when-let ((dot (save-excursion
                     (goto-char (point-max))
                     (conn--previous-dot-1)
-                    (when-let ((ov (conn--dot-after-point (point))))
-                      (goto-char (overlay-end ov))))))
-    (if start
-        (progn
-          (goto-char (overlay-start dot))
-          (conn--push-ephemeral-mark (overlay-end dot)))
-      (goto-char (overlay-end dot))
-      (conn--push-ephemeral-mark (overlay-start dot)))))
+                    (conn--dot-after-point (point)))))
+    (goto-char (overlay-end dot))
+    (conn--push-ephemeral-mark (overlay-start dot))))
 
 (defun conn-remove-dot-backward (arg)
   "Remove nearest dot within the range `point-min' to `point'.
@@ -2062,22 +2052,6 @@ If region is active remove all dots in region."
   (interactive (list (region-bounds)))
   (apply #'conn--create-dots bounds)
   (deactivate-mark))
-
-(defun conn-dot-word-at-point ()
-  "Dot the word at point."
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'word)
-    (`(,beg . ,end)
-     (conn-add-dots-matching-regexp
-      (concat "\\b" (regexp-quote (buffer-substring beg end)) "\\b")))))
-
-(defun conn-dot-sexp-at-point ()
-  "Dot the s-expression at point."
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'sexp)
-    (`(,beg . ,end)
-     (conn-add-dots-matching-regexp
-      (concat "\\_<" (regexp-quote (buffer-substring beg end)) "\\_>")))))
 
 (defun conn-dot-region-forward (start end &optional arg)
   "Dot region and `search-foward' for string matching region.
@@ -2152,7 +2126,11 @@ If REFINE is non-nil only dot occurrences in dots.
 
 When region is active operates within `region-bounds', otherwise operates
 between `point-min' and `point-max'."
-  (interactive (list (read-string "String: ")
+  (interactive (list (read-string "String: " nil
+                                  (ignore-errors
+                                    (list (buffer-substring-no-properties
+                                           (region-beginning)
+                                           (region-end)))))
                      (conn--beginning-of-region-or-restriction)
                      (conn--end-of-region-or-restriction)
                      current-prefix-arg))
@@ -2165,7 +2143,12 @@ region from START to END.
 
 When region is active operates within `region-bounds', otherwise operates
 between `point-min' and `point-max'."
-  (interactive (list (read-regexp "Regexp: ")
+  (interactive (list (read-regexp "Regexp: " nil
+                                  (ignore-errors
+                                    (list (regexp-quote
+                                           (buffer-substring-no-properties
+                                            (region-beginning)
+                                            (region-end))))))
                      (conn--beginning-of-region-or-restriction)
                      (conn--end-of-region-or-restriction)
                      current-prefix-arg))
@@ -4754,14 +4737,35 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
 
-(defvar-keymap conn-dot-this-map
-  :prefix 'conn-dot-this-map
+(defvar-keymap conn-dot-remove-repeat-map
+  :repeat t
+  "DEL" 'conn-remove-dot-backward
+  "d"   'conn-remove-dot-forward)
+
+(defvar-keymap conn-dot-movement-repeat-map
+  :repeat t
+  "l" 'conn-next-dot
+  "j" 'conn-previous-dot)
+
+(defvar-keymap conn-dot-edit-map
+  :prefix 'conn-dot-edit-map
   :doc "Dot this map."
-  "p" 'conn-dot-text-property
-  "o" 'conn-dot-word-at-point
-  "m" 'conn-dot-sexp-at-point
-  "w" 'conn-remove-dot-backward
-  "d" 'conn-remove-dot-forward)
+  "DEL" 'conn-remove-dot-backward
+  "["   'conn-remove-dots-before
+  "]"   'conn-remove-dots-after
+  "{"   'conn-first-dot
+  "}"   'conn-last-dot
+  "l"   'conn-next-dot
+  "j"   'conn-previous-dot
+  "c"   'conn-split-dots-on-regexp
+  "D"   'conn-remove-all-dots
+  "d"   'conn-remove-dot-forward
+  "p"   'conn-dot-text-property
+  "q"   'conn-query-remove-dots
+  "r"   'conn-add-dots-matching-regexp
+  "t"   'conn-dot-trim-regexp
+  "w"   'conn-add-dots-matching-literal
+  "y"   'conn-yank-to-dots)
 
 (defvar-keymap conn-dot-region-repeat-map
   :repeat t
@@ -4776,8 +4780,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :parent conn-region-map
   "l" 'conn-dot-region-forward
   "j" 'conn-dot-region-backward
-  "e" 'conn-add-dots-matching-region
-  "a" 'conn-dot-all-things-in-region)
+  "o" 'conn-remove-dots-outside-region
+  "c" 'conn-split-region-on-regexp)
 
 (define-keymap
   :keymap isearch-mode-map
@@ -4896,7 +4900,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
   "e"                'conn-dot-region
-  "q"                'conn-dot-this-map
+  "q"                'conn-dot-edit-map
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
   "w"                'conn-remove-dot-backward
@@ -4921,7 +4925,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
   "E"     'conn-dot-region
-  "Q"     'conn-remove-all-dots
+  "Q"     'conn-dot-edit-map
   "q"     'conn-edit-map
   "R"     conn-dot-region-map
   "r"     'conn-region-map
