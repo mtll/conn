@@ -2490,18 +2490,17 @@ THING is something with a forward-op as defined by thingatpt."
 
 (defun conn--isearch-matches-in-buffer (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
-    (let ((beg (if isearch-forward (point-min) (point-max)))
-          (end (if isearch-forward (point-max) (point-min)))
-          matches)
+    (let (matches)
       (save-excursion
-        (goto-char beg)
-        (while (isearch-search-string isearch-string end t)
+        (isearch-repeat-forward)
+        (goto-char (point-min))
+        (while (isearch-search-string isearch-string (point-max) t)
           (when (funcall isearch-filter-predicate
                          (match-beginning 0) (match-end 0))
             (push (cons (conn--create-marker (match-beginning 0))
                         (conn--create-marker (match-end 0)))
                   matches))))
-      matches)))
+      (nreverse matches))))
 
 (defun conn-isearch-dispatch (&optional reverse macro init-state)
   "Macro dispatch on isearch matches."
@@ -4468,8 +4467,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-argument conn--dispatch-dot-relocate-infix ()
   :class 'transient-switches
   :argument-format "%s"
-  :argument-regexp "\\(\\(remove\\|stationary\\)\\)"
-  :choices '("remove" "stationary"))
+  :argument-regexp "\\(\\(to-region\\|stationary\\)\\)"
+  :choices '("to-region" "stationary"))
 
 (transient-define-argument conn--dispatch-region-infix ()
   :class 'transient-switches
@@ -4500,7 +4499,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (stringp macro)
                 (vectorp macro)
                 (kmacro-p macro))
-      (user-error "Register is not a keyboard macro"))
+      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (region-bounds)
       (conn--region-iterator @ (member "reverse" args))
@@ -4518,15 +4517,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args (oref transient-current-prefix command)))
-         (dots (cond ((member "CRM" args)
-                      (mapcan (apply-partially
-                               'conn--sorted-overlays #'conn-dotp '< nil nil)
-                              (conn-read-dot-buffers)))
-                     ((member "match-regexp" args)
-                      (mapcan (apply-partially
-                               'conn--sorted-overlays #'conn-dotp '< nil nil)
-                              (conn-read-matching-dot-buffers)))
-                     (t (conn--sorted-overlays #'conn-dotp '<))))
          (macro (cond ((member "register" args)
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
@@ -4534,19 +4524,29 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state)))
-         (relocate (cond ((member "stationary" args) 'conn--dispatch-stationary-dots)
-                         ((member "remove" args) 'conn--dispatch-remove-dots)
-                         (t 'conn--dispatch-relocate-dots))))
+                      (t conn-current-state))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
                 (kmacro-p macro))
-      (user-error "Register is not a keyboard macro"))
+      (user-error "Invalid keyboard macro"))
     (save-window-excursion
       (conn--thread @
-          (conn--dot-iterator dots (member "reverse" args))
-        (funcall relocate @)
+          (cond ((member "CRM" args)
+                 (mapcan (apply-partially 'conn--sorted-overlays
+                                          #'conn-dotp '< nil nil)
+                         (conn-read-dot-buffers)))
+                ((member "match-regexp" args)
+                 (mapcan (apply-partially 'conn--sorted-overlays
+                                          #'conn-dotp '< nil nil)
+                         (conn-read-matching-dot-buffers)))
+                (t (conn--sorted-overlays #'conn-dotp '<)))
+        (conn--dot-iterator @ (member "reverse" args))
+        (cond ((member "stationary" args)
+               (conn--dispatch-stationary-dots @))
+              ((member "to-region" args)
+               (conn--dispatch-relocate-dots @))
+              (t (conn--dispatch-remove-dots @)))
         (conn--dispatch-handle-buffers @)
         (conn--dispatch-with-state @ state)
         (cond ((member "change" args)
@@ -4573,7 +4573,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (stringp macro)
                 (vectorp macro)
                 (kmacro-p macro))
-      (user-error "Register is not a keyboard macro"))
+      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (conn--region-iterator regions (member "t" args))
       (conn--dispatch-handle-buffers @)
@@ -4602,7 +4602,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (stringp macro)
                 (vectorp macro)
                 (kmacro-p macro))
-      (user-error "Register is not a keyboard macro"))
+      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (prog1
             (if (or (not (boundp 'multi-isearch-buffer-list))
@@ -4613,7 +4613,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (remq (current-buffer) multi-isearch-buffer-list)
                        (list (current-buffer)))))
           (isearch-exit))
-      (conn--region-iterator @ (not (member "reverse" args)))
+      (conn--region-iterator @ (member "reverse" args))
       (conn--dispatch-handle-buffers @)
       (conn--dispatch-with-state @ (or state conn-current-state))
       (cond ((member "change" args)
