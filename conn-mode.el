@@ -819,8 +819,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              (activate-change-group
               (setf (alist-get (current-buffer) dispatch-undo-handles)
                     (prepare-change-group)))
-             (when init (funcall init)))))
+             (when init (funcall init)))
+           (goto-char beg)
+           (conn--push-ephemeral-mark end)))
         ret))))
+
+(defun conn--dispatch-change-region (iterator)
+  (lambda (&optional state)
+    (pcase state
+      (:finalize (funcall iterator state))
+      ((let ret (funcall iterator state))
+       (when ret (delete-region (car ret) (cdr ret)))
+       ret))))
 
 (defun conn--dispatch-with-state (iterator transition)
   (let ((buffer-states nil))
@@ -837,7 +847,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (unless (alist-get (current-buffer) buffer-states)
            (setf (alist-get (current-buffer) buffer-states)
                  (list conn-current-state conn-previous-state)))
-         (funcall transition)
+         (when ret (call-interactively transition))
          ret)))))
 
 (defun conn--region-iterator (regions &optional reverse)
@@ -937,9 +947,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (fset sym (lambda (&optional state)
                 (pcase (funcall iterator state)
                   (`(,beg . ,end)
-                   (goto-char beg)
                    (when (markerp beg) (set-marker beg nil))
-                   (conn--push-ephemeral-mark end)
                    (when (markerp end) (set-marker end nil))
                    t))))
     (advice-add #'kmacro-loop-setup-function :before-while sym)
@@ -4434,8 +4442,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-argument conn--read-buffer-infix ()
   :class 'transient-switches
   :argument-format "%s"
-  :argument-regexp "\\(\\(CRM\\|matching-regexp\\)\\)"
-  :choices '("CRM" "matching-regexp"))
+  :argument-regexp "\\(\\(CRM\\|match-regexp\\)\\)"
+  :choices '("CRM" "match-regexp"))
 
 (transient-define-argument conn--dispatch-macro-infix ()
   :class 'transient-switches
@@ -4448,12 +4456,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :argument-format "%s"
   :argument-regexp "\\(\\(conn\\|emacs\\|dot\\)\\)"
   :choices '("conn" "emacs" "dot"))
-
-(transient-define-infix conn--reverse-switch ()
-  :argument "t"
-  :shortarg "r"
-  :description "Reverse"
-  :init-value (lambda (obj) (oset obj value nil)))
 
 (defun conn--dot-dispatch-title ()
   (let ((count 0))
@@ -4470,7 +4472,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                       (mapcan (apply-partially
                                'conn--sorted-overlays #'conn-dotp '< nil nil)
                               (conn-read-dot-buffers)))
-                     ((member "matching-regexp" args)
+                     ((member "match-regexp" args)
                       (mapcan (apply-partially
                                'conn--sorted-overlays #'conn-dotp '< nil nil)
                               (conn-read-matching-dot-buffers)))
@@ -4479,6 +4481,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
+         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4488,7 +4491,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (vectorp macro)
                 (kmacro-p macro))
       (user-error "Register is not a keyboard macro"))
-    (conn-dots-dispatch dots (member "t" args) macro state)))
+    (save-window-excursion
+      (conn--thread @
+        (conn--dot-iterator dots (member "reverse" args))
+        (conn--dispatch-relocate-dots @)
+        (conn--dispatch-handle-buffers @)
+        (if change (conn--dispatch-change-region @) @)
+        (conn--dispatch-with-state @ (or state conn-current-state))
+        (conn--pulse-on-record @)
+        (conn--macro-dispatch @ macro)))))
 
 (transient-define-suffix conn--dispatch-suffix ()
   :transient 'transient--do-exit
@@ -4498,6 +4509,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
+         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4507,7 +4519,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (vectorp macro)
                 (kmacro-p macro))
       (user-error "Register is not a keyboard macro"))
-    (conn-region-dispatch (member "t" args) macro state)))
+    (conn--thread @
+        (region-bounds)
+      (conn--region-iterator @ (member "reverse" args))
+      (conn--dispatch-handle-buffers @)
+      (if change (conn--dispatch-change-region @) @)
+      (conn--dispatch-with-state @ (or state conn-current-state))
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ macro))))
 
 (transient-define-prefix conn-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4527,7 +4546,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("v" "On Regions" conn--dispatch-suffix)
     ("d" "On Dots" conn--dot-dispatch-suffix)]
    [""
-    (conn--reverse-switch)
+    ("r" "Reverse" "reverse" :unsavable t)
+    ("c" "Change" "change" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
@@ -4540,6 +4560,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
+         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4549,7 +4570,22 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (vectorp macro)
                 (kmacro-p macro))
       (user-error "Register is not a keyboard macro"))
-    (conn-isearch-dispatch (member "t" args) macro state)))
+    (conn--thread @
+        (prog1
+            (if (or (not (boundp 'multi-isearch-buffer-list))
+                    (not multi-isearch-buffer-list))
+                (conn--isearch-matches-in-buffer)
+              (mapcan 'conn--isearch-matches-in-buffer
+                      (append
+                       (remq (current-buffer) multi-isearch-buffer-list)
+                       (list (current-buffer)))))
+          (isearch-exit))
+      (conn--region-iterator @ (not (member "reverse" args)))
+      (conn--dispatch-handle-buffers @)
+      (if change (conn--dispatch-change-region @) @)
+      (conn--dispatch-with-state @ (or state conn-current-state))
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ macro))))
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4568,7 +4604,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("v" "On Matches" conn--isearch-dispatch-suffix)
     ("d" "On Dots" conn--dot-dispatch-suffix)]
    [""
-    (conn--reverse-switch)
+    ("r" "Reverse" "reverse" :unsavable t)
+    ("c" "Change" "change" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
@@ -4581,6 +4618,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
+         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4590,12 +4628,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                 (vectorp macro)
                 (kmacro-p macro))
       (user-error "Register is not a keyboard macro"))
-    (thread-first
-      (conn--region-iterator regions (member "t" args))
-      (conn--dispatch-handle-buffers)
-      (conn--dispatch-with-state state)
-      (conn--pulse-on-record)
-      (conn--macro-dispatch macro))))
+    (conn--thread @
+        (conn--region-iterator regions (member "t" args))
+      (conn--dispatch-handle-buffers @)
+      (if change (conn--dispatch-change-region @) @)
+      (conn--dispatch-with-state @ state)
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ macro))))
 
 (transient-define-prefix conn-regions-dispatch-menu (regions)
   "Transient menu for macro dispatch on regions."
@@ -4613,7 +4652,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   [["Dispatch"
     ("v" "On Regions" conn--regions-dispatch-suffix)]
    [""
-    (conn--reverse-switch)
+    ("r" "Reverse" "reverse" :unsavable t)
+    ("c" "Change" "change" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)]]
   (interactive (list nil))
