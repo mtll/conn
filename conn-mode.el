@@ -4139,18 +4139,6 @@ If REVERSE is non-nil dispatch from last to first region."
       (conn--pulse-on-record)
       (conn--macro-dispatch macro))))
 
-(defun conn-isearch-dots-dispatch ()
-  "Exit isearch mode and `conn-dots-dispatch'."
-  (interactive)
-  (isearch-done)
-  (call-interactively 'conn-dots-dispatch))
-
-(defun conn-isearch-dots-dispatch-macro ()
-  "Exit isearch mode and `conn-dots-dispatch-macro'."
-  (interactive)
-  (isearch-done)
-  (call-interactively 'conn-dots-dispatch-menu))
-
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
   (interactive)
