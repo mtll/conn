@@ -4360,7 +4360,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :set-value (lambda (_ format) (kmacro-set-format format))
   :variable 'kmacro-counter-format
   :reader (lambda (&rest _)
-            (read-string "Macro Counter Format: ")))
+            (with-isearch-suspended
+             (read-string "Macro Counter Format: "))))
 
 (transient-define-prefix conn-kmacro-menu ()
   "Transient menu for kmacro functions."
@@ -4379,9 +4380,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]
    ["Commands:"
     :if conn--in-kbd-macro-p
-    ("q" "Query" kbd-macro-query :if conn--in-kbd-macro-p)
-    ("r" "Stop Recording Macro" kmacro-end-macro :if conn--in-kbd-macro-p)
-    ("d" "Redisplay" kmacro-redisplay :if conn--in-kbd-macro-p)]]
+    ("q" "Query" kbd-macro-query)
+    ("r" "Stop Recording Macro" kmacro-end-macro)
+    ("d" "Redisplay" kmacro-redisplay)]]
   ["Commands:"
    :if-not conn--in-kbd-macro-p
    [("c" "Call Macro" kmacro-call-macro)
@@ -4531,29 +4532,31 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
-(transient-define-prefix conn-dispatch-menu ()
-  "Transient menu for macro dispatch on regions."
-  [[:description
-    conn--kmacro-counter-format
-    ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("a" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
-   [:description
-    conn--kmacro-ring-format
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("~" "Swap" kmacro-swap-ring :transient t)
-    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
-  [[:description
-    "Dispatch"
-    ("v" "On Regions" conn--dispatch-suffix)
-    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
-   [""
-    ("r" "Reverse" "reverse" :unsavable t)
-    ("c" "Change" "change" :unsavable t)
-    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
-    ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
+(transient-define-suffix conn--regions-dispatch-suffix (regions)
+  :transient 'transient--do-exit
+  (interactive (list (oref transient-current-prefix scope)))
+  (let* ((args (transient-args (oref transient-current-prefix command)))
+         (macro (cond ((member "register" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro)))
+         (change (member "change" args))
+         (state (cond ((member "conn" args) 'conn-state)
+                      ((member "emacs" args) 'conn-emacs-state)
+                      ((member "dot" args) 'conn-dot-state)
+                      (t conn-current-state))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Register is not a keyboard macro"))
+    (conn--thread @
+        (conn--region-iterator regions (member "t" args))
+      (conn--dispatch-handle-buffers @)
+      (if change (conn--dispatch-change-region @) @)
+      (conn--dispatch-with-state @ state)
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ macro))))
 
 (transient-define-suffix conn--isearch-dispatch-suffix ()
   :transient 'transient--do-exit
@@ -4590,7 +4593,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
-(transient-define-prefix conn-isearch-dispatch-menu ()
+(transient-define-prefix conn-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
   [[:description
     conn--kmacro-counter-format
@@ -4603,41 +4606,51 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
-  [["Dispatch"
-    ("v" "On Matches" conn--isearch-dispatch-suffix)
-    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
+  [[:description
+    "Dispatch"
+    ("v" "On Regions" conn--dispatch-suffix)
+    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
+    ("r" "Reverse" "reverse" :unsavable t)]
    [""
-    ("r" "Reverse" "reverse" :unsavable t)
     ("c" "Change" "change" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
-    ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
+    ("b" "Dot Buffers" conn--read-buffer-infix
+     :unsavable t :if conn--dots-active-p)]])
 
-(transient-define-suffix conn--regions-dispatch-suffix (regions)
-  :transient 'transient--do-exit
-  (interactive (list (oref transient-current-prefix scope)))
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (change (member "change" args))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Register is not a keyboard macro"))
-    (conn--thread @
-        (conn--region-iterator regions (member "t" args))
-      (conn--dispatch-handle-buffers @)
-      (if change (conn--dispatch-change-region @) @)
-      (conn--dispatch-with-state @ state)
-      (conn--pulse-on-record @)
-      (conn--macro-dispatch @ macro))))
+(transient-define-prefix conn-isearch-dispatch-menu ()
+  "Transient menu for macro dispatch on regions."
+  [[:description
+    conn--kmacro-counter-format
+    ("s" "Set Counter"
+     (lambda ()
+       (interactive)
+       (with-isearch-suspended
+        (call-interactively 'kmacro-set-counter)))
+     :transient t)
+    ("a" "Add to Counter"
+     (lambda ()
+       (interactive)
+       (with-isearch-suspended
+        (call-interactively 'kmacro-add-counter)))
+     :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]
+   [:description
+    conn--kmacro-ring-format
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("~" "Swap" kmacro-swap-ring :transient t)
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+  [["Dispatch"
+    ("v" "On Matches" conn--isearch-dispatch-suffix)
+    ("d" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
+    ("r" "Reverse" "reverse" :unsavable t)]
+   [""
+    ("c" "Change" "change" :unsavable t)
+    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
+    ("b" "Dot Buffers" conn--read-buffer-infix
+     :unsavable t :if conn--dots-active-p)]])
 
 (transient-define-prefix conn-regions-dispatch-menu (regions)
   "Transient menu for macro dispatch on regions."
@@ -4653,9 +4666,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
-    ("v" "On Regions" conn--regions-dispatch-suffix)]
+    ("v" "On Regions" conn--regions-dispatch-suffix)
+    ("r" "Reverse" "reverse" :unsavable t)]
    [""
-    ("r" "Reverse" "reverse" :unsavable t)
     ("c" "Change" "change" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)]]
