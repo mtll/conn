@@ -792,7 +792,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--delete-mark-cursor ()
   (save-restriction
     (widen)
-    (dolist (ov (conn--all-overlays 'conn--mark-cursor-p (point-min) (point-max)))
+    (dolist (ov (conn--all-overlays 'conn--mark-cursor-p
+                                    (point-min) (point-max)))
       (delete-overlay ov)))
   (setq conn--mark-cursor nil))
 
@@ -900,9 +901,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (lambda (&optional state)
       (if (eq state :finalize)
           (progn
-            (pcase-dolist (`(,buffer . ,dots) (if conn--dispatch-error
-                                                  old-dots
-                                                new-dots))
+            (pcase-dolist (`(,buffer . ,dots)
+                           (if conn--dispatch-error old-dots new-dots))
               (with-current-buffer buffer
                 (apply 'conn--create-dots dots)))
             (dolist (list (list new-dots old-dots))
@@ -920,11 +920,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (setq primed t))
         (pcase (funcall iterator state)
           ((and (pred conn-dotp) dot)
-           (let ((beg (conn--create-marker (overlay-start dot)
-                                           (overlay-buffer dot)))
-                 (end (conn--create-marker (overlay-end dot)
-                                           (overlay-buffer dot))))
-             (push (cons beg end) (alist-get (overlay-buffer dot) old-dots))
+           (let* ((buffer (overlay-buffer dot))
+                  (beg (conn--create-marker (overlay-start dot) buffer))
+                  (end (conn--create-marker (overlay-end dot) buffer)))
+             (push (cons beg end) (alist-get buffer old-dots))
              (conn--delete-dot dot)
              (cons (copy-marker beg) (copy-marker end))))
           (ret ret))))))
@@ -939,6 +938,31 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                        (overlay-buffer dot))))
          (cons beg end)))
       (ret ret))))
+
+(defun conn--dispatch-remove-dots (iterator)
+  (let (old-dots)
+    (lambda (&optional state)
+      (if (eq state :finalize)
+          (progn
+            (when conn--dispatch-error
+              (pcase-dolist (`(,buffer . ,dots) old-dots)
+                (with-current-buffer buffer
+                  (apply 'conn--create-dots dots)))
+              (pcase-dolist (`(,_ . ,dots) old-dots)
+                (pcase-dolist (`(,beg . ,end) dots)
+                  (set-marker beg nil)
+                  (set-marker end nil)))))
+        (pcase (funcall iterator state)
+          ((and (pred conn-dotp) dot)
+           (let* ((buffer (overlay-buffer dot))
+                  (beg (conn--create-marker (overlay-start dot) buffer))
+                  (end (conn--create-marker (overlay-end dot) buffer)))
+             (conn--delete-dot dot)
+             (push (cons (copy-marker beg)
+                         (copy-marker end))
+                   (alist-get buffer old-dots))
+             (cons beg end)))
+          (ret ret))))))
 
 (defun conn--dispatch-at-end (iterator)
   (lambda (&optional state)
@@ -4442,6 +4466,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :argument-regexp "\\(\\(emacs\\|conn\\|dot\\)\\)"
   :choices '("emacs" "conn" "dot"))
 
+(transient-define-argument conn--dispatch-dot-relocate-infix ()
+  :class 'transient-switches
+  :argument-format "%s"
+  :argument-regexp "\\(\\(remove\\|stationary\\)\\)"
+  :choices '("remove" "stationary"))
+
 (defun conn--dot-dispatch-title ()
   (let ((count 0))
     (conn--for-each-dot (lambda (_) (cl-incf count)))
@@ -4470,7 +4500,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
+                      (t conn-current-state)))
+         (relocate (cond ((member "stationary" args) 'conn--dispatch-stationary-dots)
+                         ((member "remove" args) 'conn--dispatch-remove-dots)
+                         (t 'conn--dispatch-relocate-dots))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
@@ -4478,8 +4511,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (user-error "Register is not a keyboard macro"))
     (save-window-excursion
       (conn--thread @
-        (conn--dot-iterator dots (member "reverse" args))
-        (conn--dispatch-relocate-dots @)
+          (conn--dot-iterator dots (member "reverse" args))
+        (funcall relocate @)
         (conn--dispatch-handle-buffers @)
         (if change (conn--dispatch-change-region @) @)
         (conn--dispatch-with-state @ (or state conn-current-state))
@@ -4597,6 +4630,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix
+     :unsavable t :if conn--dots-active-p)
+    ("l" "Dot Relocate" conn--dispatch-dot-relocate-infix
      :unsavable t :if conn--dots-active-p)]])
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
@@ -4631,6 +4666,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix
+     :unsavable t :if conn--dots-active-p)
+    ("l" "Dot Relocate" conn--dispatch-dot-relocate-infix
      :unsavable t :if conn--dots-active-p)]])
 
 (transient-define-prefix conn-regions-dispatch-menu (regions)
