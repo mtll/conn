@@ -2692,42 +2692,6 @@ Also ensure point is at START before running `query-replace-regexp'."
         (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
       (call-interactively #'query-replace-regexp))))
 
-(defun conn-dispatch-text-property (start end prop value &optional reverse)
-  "Dispatch on text with text property PROP with value VALUE.
-When called interatively the choices for PROP and VALUE are extracted
-from the text properties at point."
-  (interactive
-   (let* ((start (conn--beginning-of-region-or-restriction))
-          (end (conn--end-of-region-or-restriction))
-          (prop (intern (completing-read
-                         "Property: "
-                         (cl-loop for prop in (text-properties-at (point))
-                                  by #'cddr
-                                  collect prop)
-                         nil t)))
-          (vals (mapcar (lambda (s) (cons (message "%s" s) s))
-                        (ensure-list (get-text-property (point) prop))))
-          (val (alist-get (completing-read "Value: " vals) vals
-                          nil nil #'string=)))
-     (list start end prop val current-prefix-arg)))
-  (let* (regions)
-    (save-excursion
-      (with-restriction
-          start end
-        (goto-char (point-min))
-        (let (match)
-          (while (setq match (text-property-search-forward prop value t))
-            (push (cons (prop-match-beginning match)
-                        (prop-match-end match))
-                  regions)))))
-    (save-window-excursion
-      (thread-first
-        (conn--region-iterator regions reverse)
-        (conn--dispatch-handle-buffers nil)
-        (conn--dispatch-with-state 'conn-state)
-        (conn--pulse-on-record)
-        (conn--macro-dispatch)))))
-
 (defun conn-macro-at-point-and-mark ()
   "Dispatch dot macro at point and mark."
   (interactive)
@@ -4624,6 +4588,55 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
+(transient-define-suffix conn--text-property-dispatch-suffix (prop value)
+  :transient 'transient--do-exit
+  (interactive
+   (let* ((prop (intern (completing-read
+                         "Property: "
+                         (cl-loop for prop in (text-properties-at (point))
+                                  by #'cddr
+                                  collect prop)
+                         nil t)))
+          (vals (mapcar (lambda (s) (cons (message "%s" s) s))
+                        (ensure-list (get-text-property (point) prop))))
+          (val (alist-get (completing-read "Value: " vals) vals
+                          nil nil #'string=)))
+     (list prop val)))
+  (let* ((args (transient-args (oref transient-current-prefix command)))
+         (macro (cond ((member "register" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro)))
+         (state (cond ((member "conn" args) 'conn-state)
+                      ((member "emacs" args) 'conn-emacs-state)
+                      ((member "dot" args) 'conn-dot-state)
+                      (t conn-current-state))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Invalid keyboard macro"))
+    (conn--thread @
+        (save-excursion
+          (goto-char (point-min))
+          (let (regions match)
+            (while (setq match (text-property-search-forward
+                                prop value t))
+              (push (cons (prop-match-beginning match)
+                          (prop-match-end match))
+                    regions))
+            regions))
+      (conn--region-iterator @ (not (member "reverse" args)))
+      (conn--dispatch-handle-buffers @)
+      (conn--dispatch-with-state @ state)
+      (cond ((member "change" args)
+             (conn--dispatch-change-region @))
+            ((member "at-end" args)
+             (conn--dispatch-at-end @))
+            (t @))
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ macro))))
+
 (transient-define-prefix conn-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
   [[:description
@@ -4641,6 +4654,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "Dispatch"
     ("d" "On Regions" conn--dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
+    ("t" "On Text Property" conn--text-property-dispatch-suffix)
     ("c" "Region" conn--dispatch-region-infix :unsavable t)]
    [""
     ("r" "Reverse Order" "reverse" :unsavable t)
