@@ -181,33 +181,24 @@ THING BEG and END are bound in BODY."
   (defvar embark-keymap-alist)
 
   (defun conn-dispatch-grep-candidates (cands)
-    (save-window-excursion
-      (thread-first
-        (mapcar (lambda (cand)
-                  (let ((marker (car (consult--grep-position cand))))
-                    (cons marker marker)))
-                cands)
-        (conn--region-iterator)
-        (conn--dispatch-handle-buffers)
-        (conn--dispatch-with-state 'conn-state)
-        (conn--macro-dispatch))))
+    (conn-regions-dispatch-menu
+     (mapcar (lambda (cand)
+               (let ((marker (car (consult--grep-position cand))))
+                 (cons marker marker)))
+             cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
-    (thread-first
-      (mapcar (lambda (cand)
-                (let ((marker (car (consult--get-location cand))))
-                  (cons marker marker)))
-              cands)
-      (conn--region-iterator)
-      (conn--dispatch-handle-buffers)
-      (conn--dispatch-with-state 'conn-state)
-      (conn--macro-dispatch)))
+    (conn-regions-dispatch-menu
+     (mapcar (lambda (cand)
+               (let ((marker (car (consult--get-location cand))))
+                 (cons marker marker)))
+             cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
     :parent embark-general-map
-    "C-z" 'conn-dispatch-location-candidates
+    "\\" 'conn-dispatch-location-candidates
     "D"   'conn-dot-consult-location-candidate
     "c"   '("clone-indirect-buffer" .
             conn-clone-indirect-buffer-location-candidate))
@@ -216,7 +207,7 @@ THING BEG and END are bound in BODY."
 
   (defvar-keymap conn-embark-consult-grep-map
     :parent embark-general-map
-    "C-z" 'conn-dispatch-grep-candidates
+    "\\" 'conn-dispatch-grep-candidates
     "D"   'conn-dot-consult-grep-candidate)
   (cl-pushnew 'conn-embark-consult-grep-map
               (alist-get 'consult-grep embark-keymap-alist)))

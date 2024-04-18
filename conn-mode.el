@@ -841,6 +841,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          ret)))))
 
 (defun conn--region-iterator (regions &optional reverse)
+  (setq regions (mapcar (lambda (region)
+                          (if (markerp (car region))
+                              region
+                            (cons (conn--create-marker (car region))
+                                  (conn--create-marker (cdr region)))))
+                        regions))
   (when reverse (setq regions (reverse regions)))
   (lambda (&optional state)
     (if (eq state :finalize)
@@ -4484,7 +4490,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (user-error "Register is not a keyboard macro"))
     (conn-dots-dispatch dots (member "t" args) macro state)))
 
-(transient-define-suffix conn--region-dispatch-suffix ()
+(transient-define-suffix conn--dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args (oref transient-current-prefix command)))
@@ -4503,7 +4509,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (user-error "Register is not a keyboard macro"))
     (conn-region-dispatch (member "t" args) macro state)))
 
-(transient-define-prefix conn-dispatch-menu (macro buffer)
+(transient-define-prefix conn-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
   [[:description
     conn--kmacro-counter-format
@@ -4518,7 +4524,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [[:description
     "Dispatch"
-    ("v" "Regions" conn--region-dispatch-suffix)
+    ("v" "Regions" conn--dispatch-suffix)
     ("d" "Dots" conn--dot-dispatch-suffix)]
    [:description
     "Dispatch Options"
@@ -4546,7 +4552,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (user-error "Register is not a keyboard macro"))
     (conn-isearch-dispatch (member "t" args) macro state)))
 
-(transient-define-prefix conn-isearch-dispatch-menu (macro buffer)
+(transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
   [[:description
     conn--kmacro-counter-format
@@ -4569,6 +4575,55 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("m" "Kmacro" conn--dispatch-macro-infix :unsavable t :always-read t)
     ("i" "State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
+
+(transient-define-suffix conn--regions-dispatch-suffix (regions)
+  :transient 'transient--do-exit
+  (interactive (list (oref transient-current-prefix scope)))
+  (let* ((args (transient-args (oref transient-current-prefix command)))
+         (macro (cond ((member "register" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro)))
+         (state (cond ((member "conn" args) 'conn-state)
+                      ((member "emacs" args) 'conn-emacs-state)
+                      ((member "dot" args) 'conn-dot-state)
+                      (t conn-current-state))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Register is not a keyboard macro"))
+    (thread-first
+      (conn--region-iterator regions (member "t" args))
+      (conn--dispatch-handle-buffers)
+      (conn--dispatch-with-state state)
+      (conn--pulse-on-record)
+      (conn--macro-dispatch macro))))
+
+(transient-define-prefix conn-regions-dispatch-menu (regions)
+  "Transient menu for macro dispatch on regions."
+  [[:description
+    conn--kmacro-counter-format
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]
+   [:description
+    conn--kmacro-ring-format
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("~" "Swap" kmacro-swap-ring :transient t)
+    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+  [[:description
+    "Dispatch"
+    ("v" "Dispatch" conn--regions-dispatch-suffix)]
+   [:description
+    "Dispatch Options"
+    (conn--reverse-switch)
+    ("m" "Kmacro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("i" "State" conn--dispatch-state-infix :unsavable t :always-read t)]]
+  (interactive (list nil))
+  (unless regions (user-error "No regions"))
+  (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
 
 
 ;;;; Keymaps
