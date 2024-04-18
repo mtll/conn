@@ -947,11 +947,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
             (when conn--dispatch-error
               (pcase-dolist (`(,buffer . ,dots) old-dots)
                 (with-current-buffer buffer
-                  (apply 'conn--create-dots dots)))
-              (pcase-dolist (`(,_ . ,dots) old-dots)
-                (pcase-dolist (`(,beg . ,end) dots)
-                  (set-marker beg nil)
-                  (set-marker end nil)))))
+                  (apply 'conn--create-dots dots))))
+            (pcase-dolist (`(,_ . ,dots) old-dots)
+              (pcase-dolist (`(,beg . ,end) dots)
+                (set-marker beg nil)
+                (set-marker end nil))))
         (pcase (funcall iterator state)
           ((and (pred conn-dotp) dot)
            (let* ((buffer (overlay-buffer dot))
@@ -2543,7 +2543,6 @@ Meant to be used as `isearch-filter-predicate'."
 
 (defun conn--isearch-add-dots-1 (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
-    (conn-dot-state)
     (when (advice-function-member-p #'conn-isearch-in-dot-p
                                     isearch-filter-predicate)
       (conn--remove-dots (point-min) (point-max)))
