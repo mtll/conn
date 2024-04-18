@@ -4524,13 +4524,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [[:description
     "Dispatch"
-    ("v" "Regions" conn--dispatch-suffix)
-    ("d" "Dots" conn--dot-dispatch-suffix)]
-   [:description
-    "Dispatch Options"
+    ("v" "On Regions" conn--dispatch-suffix)
+    ("d" "On Dots" conn--dot-dispatch-suffix)]
+   [""
     (conn--reverse-switch)
-    ("m" "Kmacro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "State" conn--dispatch-state-infix :unsavable t :always-read t)
+    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
 
 (transient-define-suffix conn--isearch-dispatch-suffix ()
@@ -4565,15 +4564,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
-  [[:description
-    "Dispatch"
-    ("v" "Matches" conn--isearch-dispatch-suffix)
-    ("d" "Dots" conn--dot-dispatch-suffix)]
-   [:description
-    "Dispatch Options"
+  [["Dispatch"
+    ("v" "On Matches" conn--isearch-dispatch-suffix)
+    ("d" "On Dots" conn--dot-dispatch-suffix)]
+   [""
     (conn--reverse-switch)
-    ("m" "Kmacro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "State" conn--dispatch-state-infix :unsavable t :always-read t)
+    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
     ("b" "Dot Buffers" conn--read-buffer-infix :unsavable t :always-read t)]])
 
 (transient-define-suffix conn--regions-dispatch-suffix (regions)
@@ -4613,14 +4610,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
-  [[:description
-    "Dispatch"
-    ("v" "Dispatch" conn--regions-dispatch-suffix)]
-   [:description
-    "Dispatch Options"
+  [["Dispatch"
+    ("v" "On Regions" conn--regions-dispatch-suffix)]
+   [""
     (conn--reverse-switch)
-    ("m" "Kmacro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "State" conn--dispatch-state-infix :unsavable t :always-read t)]]
+    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
+    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)]]
   (interactive (list nil))
   (unless regions (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
