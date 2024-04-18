@@ -4471,12 +4471,48 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :argument-regexp "\\(\\(remove\\|stationary\\)\\)"
   :choices '("remove" "stationary"))
 
+(transient-define-argument conn--dispatch-region-infix ()
+  :class 'transient-switches
+  :argument-format "%s"
+  :argument-regexp "\\(\\(change\\|at-end\\)\\)"
+  :choices '("change" "at-end"))
+
 (defun conn--dot-dispatch-title ()
   (let ((count 0))
     (conn--for-each-dot (lambda (_) (cl-incf count)))
     (concat (propertize "Dot Dispatch: " 'face 'bold)
             (propertize (format "%d" count)
                         'face 'transient-value))))
+
+(transient-define-suffix conn--dispatch-suffix ()
+  :transient 'transient--do-exit
+  (interactive)
+  (let* ((args (transient-args (oref transient-current-prefix command)))
+         (macro (cond ((member "register" args)
+                       (register-read-with-preview "Keyboard Macro: "))
+                      ((member "last-kbd-macro" args)
+                       last-kbd-macro)))
+         (state (cond ((member "conn" args) 'conn-state)
+                      ((member "emacs" args) 'conn-emacs-state)
+                      ((member "dot" args) 'conn-dot-state)
+                      (t conn-current-state))))
+    (unless (or (null macro)
+                (stringp macro)
+                (vectorp macro)
+                (kmacro-p macro))
+      (user-error "Register is not a keyboard macro"))
+    (conn--thread @
+        (region-bounds)
+      (conn--region-iterator @ (member "reverse" args))
+      (conn--dispatch-handle-buffers @)
+      (conn--dispatch-with-state @ state)
+      (cond ((member "change" args)
+             (conn--dispatch-change-region @))
+            ((member "at-end" args)
+             (conn--dispatch-at-end @))
+            (t @))
+      (conn--pulse-on-record @)
+      (conn--macro-dispatch @ macro))))
 
 (transient-define-suffix conn--dot-dispatch-suffix ()
   :transient 'transient--do-exit
@@ -4495,7 +4531,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
-         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4513,37 +4548,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (conn--dot-iterator dots (member "reverse" args))
         (funcall relocate @)
         (conn--dispatch-handle-buffers @)
-        (if change (conn--dispatch-change-region @) @)
-        (conn--dispatch-with-state @ (or state conn-current-state))
+        (conn--dispatch-with-state @ state)
+        (cond ((member "change" args)
+               (conn--dispatch-change-region @))
+              ((member "at-end" args)
+               (conn--dispatch-at-end @))
+              (t @))
         (conn--pulse-on-record @)
         (conn--macro-dispatch @ macro)))))
-
-(transient-define-suffix conn--dispatch-suffix ()
-  :transient 'transient--do-exit
-  (interactive)
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (change (member "change" args))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Register is not a keyboard macro"))
-    (conn--thread @
-        (region-bounds)
-      (conn--region-iterator @ (member "reverse" args))
-      (conn--dispatch-handle-buffers @)
-      (if change (conn--dispatch-change-region @) @)
-      (conn--dispatch-with-state @ (or state conn-current-state))
-      (conn--pulse-on-record @)
-      (conn--macro-dispatch @ macro))))
 
 (transient-define-suffix conn--regions-dispatch-suffix (regions)
   :transient 'transient--do-exit
@@ -4553,7 +4565,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
-         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4566,8 +4577,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (conn--thread @
         (conn--region-iterator regions (member "t" args))
       (conn--dispatch-handle-buffers @)
-      (if change (conn--dispatch-change-region @) @)
       (conn--dispatch-with-state @ state)
+      (cond ((member "change" args)
+             (conn--dispatch-change-region @))
+            ((member "at-end" args)
+             (conn--dispatch-at-end @))
+            (t @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4579,7 +4594,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                        (register-read-with-preview "Keyboard Macro: "))
                       ((member "last-kbd-macro" args)
                        last-kbd-macro)))
-         (change (member "change" args))
          (state (cond ((member "conn" args) 'conn-state)
                       ((member "emacs" args) 'conn-emacs-state)
                       ((member "dot" args) 'conn-dot-state)
@@ -4601,8 +4615,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (isearch-exit))
       (conn--region-iterator @ (not (member "reverse" args)))
       (conn--dispatch-handle-buffers @)
-      (if change (conn--dispatch-change-region @) @)
       (conn--dispatch-with-state @ (or state conn-current-state))
+      (cond ((member "change" args)
+             (conn--dispatch-change-region @))
+            ((member "at-end" args)
+             (conn--dispatch-at-end @))
+            (t @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4623,7 +4641,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "Dispatch"
     ("d" "On Regions" conn--dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("c" "Change" "change" :unsavable t)]
+    ("c" "Region" conn--dispatch-region-infix :unsavable t)]
    [""
     ("r" "Reverse Order" "reverse" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
@@ -4659,7 +4677,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   [["Dispatch"
     ("d" "On Matches" conn--isearch-dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("c" "Change" "change" :unsavable t)]
+    ("c" "Region" conn--dispatch-region-infix :unsavable t)]
    [""
     ("r" "Reverse Order" "reverse" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
@@ -4684,7 +4702,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
     ("d" "On Regions" conn--regions-dispatch-suffix)
-    ("c" "Change" "change" :unsavable t)]
+    ("c" "Region" conn--dispatch-region-infix :unsavable t)]
    [""
     ("r" "Reverse Order" "reverse" :unsavable t)
     ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
@@ -4786,6 +4804,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar-keymap conn-dot-edit-map
   :prefix 'conn-dot-edit-map
   :doc "Dot this map."
+  "RET" 'conn-dot-lines
   "DEL" 'conn-remove-dot-backward
   "["   'conn-remove-dots-before
   "]"   'conn-remove-dots-after
