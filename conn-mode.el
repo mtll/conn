@@ -4468,14 +4468,12 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-argument conn--dispatch-dot-read-buffers-infix ()
   :class 'conn-transient-switches
-  :required t
-  :init-value (lambda (obj) (oset obj value "buffers=current"))
-  :description "Dots in Buffers"
+  :description "Read Dot Buffers"
   :key "b"
   :argument "buffers="
   :argument-format "buffers=%s"
-  :argument-regexp "\\(buffers=\\(current\\|CRM\\|match-regexp\\)\\)"
-  :choices '("current" "CRM" "match-regexp")
+  :argument-regexp "\\(buffers=\\(CRM\\|match-regexp\\)\\)"
+  :choices '("CRM" "match-regexp")
   :unsavable t
   :if 'conn--dots-active-p)
 
@@ -4575,11 +4573,6 @@ The last value is \"don't use any of these switches\"."
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
                   ("dot" 'conn-dot-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Invalid keyboard macro"))
     (save-window-excursion
       (conn--thread @
           (pcase (transient-arg-value "buffer=" args)
@@ -4618,11 +4611,6 @@ The last value is \"don't use any of these switches\"."
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
                   ("dot" 'conn-dot-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (conn--region-iterator regions (member "reverse" args))
       (conn--dispatch-handle-buffers @)
@@ -4646,11 +4634,6 @@ The last value is \"don't use any of these switches\"."
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
                   ("dot" 'conn-dot-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (prog1
             (if (or (not (boundp 'multi-isearch-buffer-list))
@@ -4694,11 +4677,6 @@ The last value is \"don't use any of these switches\"."
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
                   ("dot" 'conn-dot-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (save-excursion
           (goto-char (point-min))
