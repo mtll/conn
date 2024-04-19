@@ -2542,25 +2542,6 @@ THING is something with a forward-op as defined by thingatpt."
                   matches))))
       (nreverse matches))))
 
-(defun conn-isearch-dispatch (&optional reverse macro init-state)
-  "Macro dispatch on isearch matches."
-  (interactive)
-  (thread-first
-    (prog1
-        (if (or (not (boundp 'multi-isearch-buffer-list))
-                (not multi-isearch-buffer-list))
-            (conn--isearch-matches-in-buffer)
-          (mapcan 'conn--isearch-matches-in-buffer
-                  (append
-                   (remq (current-buffer) multi-isearch-buffer-list)
-                   (list (current-buffer)))))
-      (isearch-exit))
-    (conn--region-iterator reverse)
-    (conn--dispatch-handle-buffers)
-    (conn--dispatch-with-state (or init-state conn-current-state))
-    (conn--pulse-on-record)
-    (conn--macro-dispatch macro)))
-
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
 Meant to be used as `isearch-filter-predicate'."
@@ -4114,39 +4095,6 @@ If ARG is not +/-1 or 0 rotate windows in selected window parent window."
   (interactive)
   (conn--remove-dots)
   (conn-pop-state))
-
-(defun conn-region-dispatch (&optional reverse macro init-state)
-  "Macro dispatch on active region.
-If REVERSE is non-nil dispatch from last to first region."
-  (interactive "P")
-  (let ((iterator
-         (thread-first
-           (mapcar (pcase-lambda (`(,beg . ,end))
-                     (cons (conn--create-marker beg)
-                           (conn--create-marker end)))
-                   (region-bounds))
-           (conn--region-iterator reverse)
-           (conn--dispatch-handle-buffers)
-           (conn--dispatch-with-state (or init-state conn-current-state))
-           (conn--pulse-on-record))))
-    (if rectangle-mark-mode-map
-        (progn
-          (save-mark-and-excursion
-            (conn--macro-dispatch iterator macro))
-          (deactivate-mark t))
-      (conn--macro-dispatch iterator macro))))
-
-(defun conn-dots-dispatch (dots &optional reverse macro init-state)
-  "Begin recording dot macro for current buffer, initially in conn-state."
-  (interactive (list (conn--sorted-overlays #'conn-dotp) current-prefix-arg nil nil))
-  (save-window-excursion
-    (thread-first
-      (conn--dot-iterator dots reverse)
-      (conn--dispatch-relocate-dots)
-      (conn--dispatch-handle-buffers)
-      (conn--dispatch-with-state (or init-state conn-current-state))
-      (conn--pulse-on-record)
-      (conn--macro-dispatch macro))))
 
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
