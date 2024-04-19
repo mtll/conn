@@ -4691,12 +4691,12 @@ The last value is \"don't use any of these switches\"."
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
     ("t" "On Text Property" conn--text-property-dispatch-suffix)]
    [""
-    ("o" "Reverse Order" "reverse" :unsavable t)
-    (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-dot-relocate-infix)]])
+    (conn--dispatch-dot-relocate-infix)
+    (conn--dispatch-dot-read-buffers-infix)
+    ("o" "Reverse Order" "reverse" :unsavable t)]])
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4725,12 +4725,12 @@ The last value is \"don't use any of these switches\"."
     ("d" "On Matches" conn--isearch-dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
    [""
-    ("o" "Reverse Order" "reverse" :unsavable t)
-    (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-dot-relocate-infix)]])
+    (conn--dispatch-dot-relocate-infix)
+    (conn--dispatch-dot-read-buffers-infix)
+    ("o" "Reverse Order" "reverse" :unsavable t)]])
 
 (transient-define-prefix conn-regions-dispatch-menu (regions)
   "Transient menu for macro dispatch on regions."
@@ -4748,10 +4748,10 @@ The last value is \"don't use any of these switches\"."
   [["Dispatch"
     ("d" "On Regions" conn--regions-dispatch-suffix)]
    [""
-    ("o" "Reverse Order" "reverse" :unsavable t)
     (conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
-    (conn--dispatch-state-infix)]]
+    (conn--dispatch-state-infix)
+    ("o" "Reverse Order" "reverse" :unsavable t)]]
   (interactive (list nil))
   (unless regions (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
