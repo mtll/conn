@@ -4313,8 +4313,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (with-temp-message ""
     (concat
      (propertize "Kmacro Ring: " 'face 'bold)
-     (propertize (format "[%s]" kmacro-counter) 'face 'transient-value)
-     " "
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value)
+     " - "
      (propertize (conn--kmacro-display last-kbd-macro 20) 'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
@@ -4326,9 +4330,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (with-temp-message ""
     (concat
      (propertize "Kmacro Counter: " 'face 'bold)
-     (propertize (format "%s" (if defining-kbd-macro
-                                  kmacro-counter
-                                kmacro-initial-counter-value))
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
                  'face 'transient-value))))
 
 (defun conn--in-kbd-macro-p ()
@@ -4344,24 +4349,17 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (transient-define-prefix conn-kmacro-menu ()
   "Transient menu for kmacro functions."
-  [[:description
-    conn--kmacro-counter-format
-    ("i" "Insert Counter" kmacro-insert-counter)
-    ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("a" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
-   [:description
-    conn--kmacro-ring-format
-    :if-not conn--in-kbd-macro-p
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+  [:description
+   conn--kmacro-ring-format
+   :if-not conn--in-kbd-macro-p
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]
-   ["Commands:"
-    :if conn--in-kbd-macro-p
-    ("q" "Query" kbd-macro-query)
-    ("r" "Stop Recording Macro" kmacro-end-macro)
-    ("d" "Redisplay" kmacro-redisplay)]]
+   [("i" "Insert Counter" kmacro-insert-counter)
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]]
   ["Commands:"
    :if-not conn--in-kbd-macro-p
    [("c" "Call Macro" kmacro-call-macro)
@@ -4369,8 +4367,22 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("e" "Edit Macro" kmacro-edit-macro)
     ("!" "Kmacro to Register" kmacro-to-register)]
    [("d" "Name Last Macro" kmacro-name-last-macro)
+    ("m" "Step Edit Macro" kmacro-step-edit-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
-    ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]])
+    ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]]
+  [:description
+   nil
+   :if conn--in-kbd-macro-p
+   ["Commands:"
+    ("q" "Query" kbd-macro-query)
+    ("r" "Stop Recording Macro" kmacro-end-macro)
+    ("d" "Redisplay" kmacro-redisplay)]
+   [:description
+    conn--kmacro-counter-format
+    ("i" "Insert Counter" kmacro-insert-counter)
+    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]])
 
 (transient-define-infix conn--set-fill-column-infix ()
   :class 'transient-lisp-variable
@@ -4694,22 +4706,19 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-prefix conn-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
-  [[:description
-    conn--kmacro-counter-format
-    ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
-   [:description
-    conn--kmacro-ring-format
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+  [:description
+   conn--kmacro-ring-format
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
-  [[:description
-    "Dispatch"
-    ("d" "On Regions" conn--dispatch-suffix)
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]
+   [("s" "Set Counter" kmacro-set-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]]
+  [:description
+   "Dispatch"
+   [("d" "On Regions" conn--dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
     ("t" "On Text Property" conn--text-property-dispatch-suffix)]
-   [""
-    (conn--dispatch-macro-infix)
+   [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-dots-infix)
@@ -4718,25 +4727,23 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
-  [[:description
-    conn--kmacro-counter-format
-    ("s" "Set Counter"
+  [:description
+   conn--kmacro-ring-format
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]
+   [("s" "Set Counter"
      (lambda ()
        (interactive)
        (with-isearch-suspended
         (call-interactively 'kmacro-set-counter)))
      :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
-   [:description
-    conn--kmacro-ring-format
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
-  [["Dispatch"
-    ("d" "On Matches" conn--isearch-dispatch-suffix)
+    ("f" "Set Format" conn--set-counter-format-infix)]]
+  [:description
+   "Dispatch"
+   [("d" "On Matches" conn--isearch-dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
-   [""
-    (conn--dispatch-macro-infix)
+   [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-dots-infix)
@@ -4745,19 +4752,17 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-prefix conn-regions-dispatch-menu (regions)
   "Transient menu for macro dispatch on regions."
-  [[:description
-    conn--kmacro-counter-format
-    ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
-   [:description
-    conn--kmacro-ring-format
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+  [:description
+   conn--kmacro-ring-format
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
-  [["Dispatch"
-    ("d" "On Regions" conn--regions-dispatch-suffix)]
-   [""
-    (conn--dispatch-macro-infix)
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]
+   [("s" "Set Counter" kmacro-set-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]]
+  [:description
+   "Dispatch"
+   [("d" "On Regions" conn--regions-dispatch-suffix)]
+   [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     ("o" "Reverse Order" "reverse" :unsavable t)]]
