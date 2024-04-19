@@ -4987,16 +4987,16 @@ The last value is \"don't use any of these switches\"."
   "|"                'conn-shell-command-on-dots
   "{"                'conn-first-dot
   "}"                'conn-last-dot
-  "#"                'conn-add-dots-matching-regexp
-  "$"                'conn-add-dots-matching-literal
+  "#"                'conn-split-dots-on-regexp
+  "$"                'conn-split-region-on-regexp
   "%"                'conn-query-remove-dots
   "!"                'conn-dots-dispatch
   "_"                'conn-remove-dots-outside-region
   "="                'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
-  "c"                'conn-split-dots-on-regexp
-  "C"                'conn-split-region-on-regexp
+  "c"                'conn-add-dots-matching-literal
+  "C"                nil
   "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
@@ -5005,7 +5005,7 @@ The last value is \"don't use any of these switches\"."
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
   "w"                'conn-remove-dot-backward
-  "y"                'conn-yank-to-dots)
+  "y"                'conn-add-dots-matching-regexp)
 
 (define-keymap
   :keymap conn-state-map
