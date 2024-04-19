@@ -968,7 +968,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (`(,beg . ,end) (cons end beg))
       (ret ret))))
 
-(defun conn--macro-dispatch (iterator &optional kmacro append)
+(defun conn--macro-dispatch (iterator &optional kmacro-or-append)
   (let* ((undo-outer-limit nil)
          (undo-limit most-positive-fixnum)
          (undo-strong-limit most-positive-fixnum)
@@ -981,18 +981,36 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (`(,beg . ,end)
                    (goto-char beg)
                    (conn--push-ephemeral-mark end)
-                   (when (markerp beg) (set-marker beg nil))
-                   (when (markerp end) (set-marker end nil))
+                   (set-marker beg nil)
+                   (set-marker end nil)
                    t))))
     (advice-add #'kmacro-loop-setup-function :before-while sym)
     (unwind-protect
         (condition-case err
-            (pcase kmacro
+            (pcase-exhaustive kmacro-or-append
               ((pred kmacro-p)
-               (funcall kmacro 0))
-              ((pred identity)
-               (kmacro-call-macro 0 nil nil kmacro))
-              ('nil
+               (funcall kmacro-or-append 0))
+              ((or (pred stringp) (pred vectorp))
+               (kmacro-call-macro 0 nil nil kmacro-or-append))
+              ('step-edit
+               (deactivate-mark t)
+               (pcase (funcall iterator :record)
+                 (`(,beg . ,end)
+                  (goto-char beg)
+                  (conn--push-ephemeral-mark end))
+                 (_ (error "iterator unknown return")))
+               (let ((post-command-hook post-command-hook)
+                     aborted)
+                 (add-hook 'post-command-hook
+                           (lambda ()
+                             (unless (or (not (boundp 'kmacro-step-edit-replace))
+                                         kmacro-step-edit-replace)
+                               (setq aborted t))))
+                 (kmacro-step-edit-macro)
+                 (when aborted (user-error "Keyboard macro edit aborted")))
+               (kmacro-call-macro 0))
+              ((or (and 'append (let append '(4)))
+                   (let append nil))
                (deactivate-mark t)
                (pcase (funcall iterator :record)
                  (`(,beg . ,end)
@@ -4313,10 +4331,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (with-temp-message ""
     (concat
      (propertize "Kmacro Counter: " 'face 'bold)
-     (propertize (format "%d" (or (if defining-kbd-macro
-                                      kmacro-counter
-                                    kmacro-initial-counter-value)
-                                  0))
+     (propertize (format "%s" (if defining-kbd-macro
+                                  kmacro-counter
+                                kmacro-initial-counter-value))
                  'face 'transient-value))))
 
 (defun conn--in-kbd-macro-p ()
@@ -4410,24 +4427,25 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("p" "sort paragraphs" sort-paragraphs)
     ("r" "sort regexp fields" sort-regexp-fields)]])
 
-(defclass conn-transient-required-switches (transient-switches) ()
+(defclass conn-transient-switches (transient-switches)
+  ((required :initarg :required :initform nil))
   "Class used for sets of mutually exclusive command-line switches.
 Does not allow a null value.")
 
-(cl-defmethod transient-infix-read ((obj conn-transient-required-switches))
+(cl-defmethod transient-infix-read ((obj conn-transient-switches))
   "Cycle through the mutually exclusive switches.
 The last value is \"don't use any of these switches\"."
   (let ((choices (mapcar (apply-partially #'format (oref obj argument-format))
                          (oref obj choices))))
     (if-let ((value (oref obj value)))
         (or (cadr (member value choices))
-            (car choices))
+            (when (oref obj required) (car choices)))
       (car choices))))
 
-(cl-defmethod transient-format-value ((obj conn-transient-required-switches))
+(cl-defmethod transient-format-value ((obj conn-transient-switches))
   (with-slots (value argument-format choices) obj
     (format
-     (propertize "[%s]" 'face 'transient-delimiter)
+     (propertize "%s" 'face 'transient-delimiter)
      (mapconcat
       (lambda (choice)
         (propertize choice 'face
@@ -4437,41 +4455,56 @@ The last value is \"don't use any of these switches\"."
       choices
       (propertize "|" 'face 'transient-delimiter)))))
 
+(defun conn--set-macro-ring-head (macro)
+  (interactive
+   (list (get-register (register-read-with-preview "Kmacro: "))))
+  (unless (or (null macro)
+              (stringp macro)
+              (vectorp macro)
+              (kmacro-p macro))
+    (user-error "Invalid keyboard macro"))
+  (kmacro-push-ring macro)
+  (kmacro-swap-ring))
+
 (transient-define-argument conn--dispatch-dot-read-buffers-infix ()
-  :class 'transient-switches
-  :description "Dot Buffers"
+  :class 'conn-transient-switches
+  :required t
+  :init-value (lambda (obj) (oset obj value "buffers=current"))
+  :description "Dots in Buffers"
   :key "b"
   :argument "buffers="
   :argument-format "buffers=%s"
-  :argument-regexp "\\(buffers=\\(CRM\\|match-regexp\\)\\)"
-  :choices '("CRM" "match-regexp")
+  :argument-regexp "\\(buffers=\\(current\\|CRM\\|match-regexp\\)\\)"
+  :choices '("current" "CRM" "match-regexp")
   :unsavable t
   :if 'conn--dots-active-p)
 
-(transient-define-argument conn--dispatch-dot-relocate-infix ()
-  :class 'conn-transient-required-switches
-  :description "Dots Relocate"
-  :key "l"
-  :argument "dot-relocate"
+(transient-define-argument conn--dispatch-dots-infix ()
+  :class 'conn-transient-switches
+  :description "Dots"
+  :key "c"
+  :argument "dots"
   :argument-format "dots=%s"
-  :argument-regexp "\\(dots=\\(remove\\|to-region\\|stay\\)\\)"
-  :choices '("remove" "to-region" "stay")
+  :argument-regexp "\\(dots=\\(remove\\|to-region\\|keep\\)\\)"
+  :choices '("remove" "to-region" "keep")
+  :required t
   :unsavable t
   :if 'conn--dots-active-p
   :init-value (lambda (obj) (oset obj value "dots=remove")))
 
 (transient-define-argument conn--dispatch-macro-infix ()
-  :class 'transient-switches
-  :description "With Macro"
-  :key "m"
-  :argument "macro="
-  :argument-format "macro=%s"
-  :argument-regexp "\\(macro=\\(last-kbd-macro\\|register\\)\\)"
-  :choices '("last-kbd-macro" "register")
+  :class 'conn-transient-switches
+  :description "Last Kmacro"
+  :key "l"
+  :argument "last-kmacro="
+  :argument-format "last-kmacro=%s"
+  :argument-regexp "\\(last-kmacro=\\(apply\\|append\\|step-edit\\)\\)"
+  :choices '("apply" "append" "step-edit")
   :unsavable t)
 
 (transient-define-argument conn--dispatch-state-infix ()
-  :class 'conn-transient-required-switches
+  :class 'conn-transient-switches
+  :required t
   :description "In State"
   :key "i"
   :argument "state="
@@ -4489,40 +4522,35 @@ The last value is \"don't use any of these switches\"."
   :unsavable t)
 
 (transient-define-argument conn--dispatch-region-infix ()
-  :class 'conn-transient-required-switches
+  :class 'conn-transient-switches
+  :required t
   :key "r"
   :description "Region"
   :argument "region="
   :argument-format "region=%s"
-  :argument-regexp "\\(region=\\(at-start\\|change\\|at-end\\)\\)"
-  :choices '("at-start" "at-end" "change")
-  :init-value (lambda (obj)
-                (oset obj value "region=at-start"))
+  :argument-regexp "\\(region=\\(start\\|change\\|end\\)\\)"
+  :choices '("start" "end" "change")
+  :init-value (lambda (obj) (oset obj value "region=start"))
   :unsavable t)
 
 (defun conn--dot-dispatch-title ()
   (let ((count 0))
     (conn--for-each-dot (lambda (_) (cl-incf count)))
     (concat (propertize "Dot Dispatch: " 'face 'bold)
-            (propertize (format "%d" count)
-                        'face 'transient-value))))
+            (propertize (format "%d" count) 'face 'transient-value))))
 
 (transient-define-suffix conn--dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args transient-current-command))
-         (macro (pcase (transient-arg-value "macro=" args)
-                  ("register" (register-read-with-preview "Keyboard Macro: "))
-                  ("last-kbd-macro" last-kbd-macro)))
+         (macro (pcase (transient-arg-value "last-kmacro=" args)
+                  ("apply" last-kbd-macro)
+                  ("append" 'append)
+                  ("step-edit" 'step-edit)))
          (state (pcase-exhaustive (transient-arg-value "state=" args)
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
                   ("dot" 'conn-dot-state))))
-    (unless (or (null macro)
-                (stringp macro)
-                (vectorp macro)
-                (kmacro-p macro))
-      (user-error "Invalid keyboard macro"))
     (conn--thread @
         (region-bounds)
       (conn--region-iterator @ (member "reverse" args))
@@ -4530,8 +4558,8 @@ The last value is \"don't use any of these switches\"."
       (conn--dispatch-with-state @ state)
       (pcase-exhaustive (transient-arg-value "region=" args)
         ("change" (conn--dispatch-change-region @))
-        ("at-end" (conn--dispatch-at-end @))
-        ("at-start" @))
+        ("end" (conn--dispatch-at-end @))
+        ("start" @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4539,9 +4567,10 @@ The last value is \"don't use any of these switches\"."
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args transient-current-command))
-         (macro (pcase (transient-arg-value "macro=" args)
-                  ("register" (register-read-with-preview "Keyboard Macro: "))
-                  ("last-kbd-macro" last-kbd-macro)))
+         (macro (pcase (transient-arg-value "last-kmacro=" args)
+                  ("apply" last-kbd-macro)
+                  ("append" 'append)
+                  ("step-edit" 'step-edit)))
          (state (pcase-exhaustive (transient-arg-value "state=" args)
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
@@ -4565,15 +4594,15 @@ The last value is \"don't use any of these switches\"."
             (_ (conn--sorted-overlays #'conn-dotp '<)))
         (conn--dot-iterator @ (member "reverse" args))
         (pcase-exhaustive (transient-arg-value "dots=" args)
-          ("stay" (conn--dispatch-stationary-dots @))
+          ("keep" (conn--dispatch-stationary-dots @))
           ("to-region" (conn--dispatch-relocate-dots @))
           ("remove" (conn--dispatch-remove-dots @)))
         (conn--dispatch-handle-buffers @)
         (conn--dispatch-with-state @ state)
         (pcase-exhaustive (transient-arg-value "region=" args)
           ("change" (conn--dispatch-change-region @))
-          ("at-end" (conn--dispatch-at-end @))
-          ("at-start" @))
+          ("end" (conn--dispatch-at-end @))
+          ("start" @))
         (conn--pulse-on-record @)
         (conn--macro-dispatch @ macro)))))
 
@@ -4581,9 +4610,10 @@ The last value is \"don't use any of these switches\"."
   :transient 'transient--do-exit
   (interactive (list (oref transient-current-prefix scope)))
   (let* ((args (transient-args transient-current-command))
-         (macro (pcase (transient-arg-value "macro=" args)
-                  ("register" (register-read-with-preview "Keyboard Macro: "))
-                  ("last-kbd-macro" last-kbd-macro)))
+         (macro (pcase (transient-arg-value "last-kmacro=" args)
+                  ("apply" last-kbd-macro)
+                  ("append" 'append)
+                  ("step-edit" 'step-edit)))
          (state (pcase-exhaustive (transient-arg-value "state=" args)
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
@@ -4599,8 +4629,8 @@ The last value is \"don't use any of these switches\"."
       (conn--dispatch-with-state @ state)
       (pcase-exhaustive (transient-arg-value "region=" args)
         ("change" (conn--dispatch-change-region @))
-        ("at-end" (conn--dispatch-at-end @))
-        ("at-start" @))
+        ("end" (conn--dispatch-at-end @))
+        ("start" @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4608,9 +4638,10 @@ The last value is \"don't use any of these switches\"."
   :transient 'transient--do-exit
   (interactive)
   (let* ((args (transient-args transient-current-command))
-         (macro (pcase (transient-arg-value "macro=" args)
-                  ("register" (register-read-with-preview "Keyboard Macro: "))
-                  ("last-kbd-macro" last-kbd-macro)))
+         (macro (pcase (transient-arg-value "last-kmacro=" args)
+                  ("apply" last-kbd-macro)
+                  ("append" 'append)
+                  ("step-edit" 'step-edit)))
          (state (pcase-exhaustive (transient-arg-value "state=" args)
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
@@ -4635,8 +4666,8 @@ The last value is \"don't use any of these switches\"."
       (conn--dispatch-with-state @ state)
       (pcase-exhaustive (transient-arg-value "region=" args)
         ("change" (conn--dispatch-change-region @))
-        ("at-end" (conn--dispatch-at-end @))
-        ("at-start" @))
+        ("end" (conn--dispatch-at-end @))
+        ("start" @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4655,9 +4686,10 @@ The last value is \"don't use any of these switches\"."
                           nil nil #'string=)))
      (list prop val)))
   (let* ((args (transient-args transient-current-command))
-         (macro (pcase (transient-arg-value "macro=" args)
-                  ("register" (register-read-with-preview "Keyboard Macro: "))
-                  ("last-kbd-macro" last-kbd-macro)))
+         (macro (pcase (transient-arg-value "last-kmacro=" args)
+                  ("apply" last-kbd-macro)
+                  ("append" 'append)
+                  ("step-edit" 'step-edit)))
          (state (pcase-exhaustive (transient-arg-value "state=" args)
                   ("conn" 'conn-state)
                   ("emacs" 'conn-emacs-state)
@@ -4682,8 +4714,8 @@ The last value is \"don't use any of these switches\"."
       (conn--dispatch-with-state @ state)
       (pcase-exhaustive (transient-arg-value "region=" args)
         ("change" (conn--dispatch-change-region @))
-        ("at-end" (conn--dispatch-at-end @))
-        ("at-start" @))
+        ("end" (conn--dispatch-at-end @))
+        ("start" @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4692,14 +4724,12 @@ The last value is \"don't use any of these switches\"."
   [[:description
     conn--kmacro-counter-format
     ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("a" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]
    [:description
     conn--kmacro-ring-format
     ("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("~" "Swap" kmacro-swap-ring :transient t)
-    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [[:description
     "Dispatch"
     ("d" "On Regions" conn--dispatch-suffix)
@@ -4709,7 +4739,7 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-dot-relocate-infix)
+    (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     ("o" "Reverse Order" "reverse" :unsavable t)]])
 
@@ -4723,19 +4753,12 @@ The last value is \"don't use any of these switches\"."
        (with-isearch-suspended
         (call-interactively 'kmacro-set-counter)))
      :transient t)
-    ("a" "Add to Counter"
-     (lambda ()
-       (interactive)
-       (with-isearch-suspended
-        (call-interactively 'kmacro-add-counter)))
-     :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]
    [:description
     conn--kmacro-ring-format
     ("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("~" "Swap" kmacro-swap-ring :transient t)
-    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [["Dispatch"
     ("d" "On Matches" conn--isearch-dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
@@ -4743,7 +4766,7 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-dot-relocate-infix)
+    (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     ("o" "Reverse Order" "reverse" :unsavable t)]])
 
@@ -4752,14 +4775,12 @@ The last value is \"don't use any of these switches\"."
   [[:description
     conn--kmacro-counter-format
     ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("a" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]
    [:description
     conn--kmacro-ring-format
     ("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("~" "Swap" kmacro-swap-ring :transient t)
-    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [["Dispatch"
     ("d" "On Regions" conn--regions-dispatch-suffix)]
    [""
@@ -5308,6 +5329,7 @@ The last value is \"don't use any of these switches\"."
                grep-mode
                occur-edit-mode
                eshell-mode
+               edmacro-mode
                (not minibuffer-mode
                     dired-mode
                     slime-xref-mode
