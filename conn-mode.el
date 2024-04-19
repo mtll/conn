@@ -2190,7 +2190,7 @@ If REFINE is non-nil only dot occurrences in dots.
 
 When region is active operates within `region-bounds', otherwise operates
 between `point-min' and `point-max'."
-  (interactive (list (read-string "String: " nil
+  (interactive (list (read-string "String: "
                                   (ignore-errors
                                     (list (buffer-substring-no-properties
                                            (region-beginning)
@@ -2207,12 +2207,13 @@ region from START to END.
 
 When region is active operates within `region-bounds', otherwise operates
 between `point-min' and `point-max'."
-  (interactive (list (read-regexp "Regexp: " nil
-                                  (ignore-errors
-                                    (list (regexp-quote
-                                           (buffer-substring-no-properties
-                                            (region-beginning)
-                                            (region-end))))))
+  (interactive (list (read-regexp "Regexp: "
+                                  (list ""
+                                        (ignore-errors
+                                          (list (regexp-quote
+                                                 (buffer-substring-no-properties
+                                                  (region-beginning)
+                                                  (region-end)))))))
                      (conn--beginning-of-region-or-restriction)
                      (conn--end-of-region-or-restriction)
                      current-prefix-arg))
