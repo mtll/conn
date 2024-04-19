@@ -4346,12 +4346,16 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                                   (format "[%s]" kmacro-counter)))
                  'face 'transient-value)
      " - "
-     (propertize (conn--kmacro-display last-kbd-macro 20) 'face 'transient-value)
+     (propertize (conn--kmacro-display last-kbd-macro 20)
+                 'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
-       (concat ", "
-               (propertize (conn--kmacro-display (kmacro--keys (car kmacro-ring)) 20)
-                           'face 'transient-value))))))
+       (conn--thread @
+           (car kmacro-ring)
+         (kmacro--keys @)
+         (conn--kmacro-display @ 20)
+         (propertize @ 'face 'transient-value)
+         (concat ", " @))))))
 
 (defun conn--kmacro-counter-format ()
   (with-temp-message ""
@@ -4580,6 +4584,8 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-suffix conn--dispatch-suffix (args)
   :transient 'transient--do-exit
+  :key "d"
+  :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread @
       (region-bounds)
@@ -4602,6 +4608,9 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-suffix conn--dot-dispatch-suffix (args)
   :transient 'transient--do-exit
+  :if 'conn--dots-active-p
+  :key "e"
+  :description "On Dots"
   (interactive (list (transient-args transient-current-command)))
   (save-window-excursion
     (conn--thread @
@@ -4635,6 +4644,8 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-suffix conn--regions-dispatch-suffix (regions args)
   :transient 'transient--do-exit
+  :key "d"
+  :description "On Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (conn--thread @
@@ -4657,6 +4668,8 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-suffix conn--isearch-dispatch-suffix (args)
   :transient 'transient--do-exit
+  :key "d"
+  :description "On Matches"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread @
       (prog1
@@ -4687,6 +4700,8 @@ The last value is \"don't use any of these switches\"."
 
 (transient-define-suffix conn--text-property-dispatch-suffix (prop value args)
   :transient 'transient--do-exit
+  :key "t"
+  :description "On Text Prop"
   (interactive
    (let* ((prop (intern (completing-read
                          "Property: "
@@ -4737,9 +4752,9 @@ The last value is \"don't use any of these switches\"."
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [:description
    "Dispatch"
-   [("d" "On Regions" conn--dispatch-suffix)
-    ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("t" "On Text Prop" conn--text-property-dispatch-suffix)]
+   [(conn--dispatch-suffix)
+    (conn--dot-dispatch-suffix)
+    (conn--text-property-dispatch-suffix)]
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
@@ -4763,8 +4778,8 @@ The last value is \"don't use any of these switches\"."
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [:description
    "Dispatch"
-   [("d" "On Matches" conn--isearch-dispatch-suffix)
-    ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
+   [(conn--isearch-dispatch-suffix)
+    (conn--dot-dispatch-suffix)]
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
@@ -4783,7 +4798,7 @@ The last value is \"don't use any of these switches\"."
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [:description
    "Dispatch"
-   [("d" "On Regions" conn--regions-dispatch-suffix)]
+   [(conn--regions-dispatch-suffix)]
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
