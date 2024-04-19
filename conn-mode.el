@@ -4410,35 +4410,80 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("p" "sort paragraphs" sort-paragraphs)
     ("r" "sort regexp fields" sort-regexp-fields)]])
 
-(transient-define-argument conn--read-buffer-infix ()
+(defclass conn-transient-required-switches (transient-switches) ()
+  "Class used for sets of mutually exclusive command-line switches.
+Does not allow a null value.")
+
+(cl-defmethod transient-infix-read ((obj conn-transient-required-switches))
+  "Cycle through the mutually exclusive switches.
+The last value is \"don't use any of these switches\"."
+  (let ((choices (mapcar (apply-partially #'format (oref obj argument-format))
+                         (oref obj choices))))
+    (if-let ((value (oref obj value)))
+        (or (cadr (member value choices))
+            (car choices))
+      (car choices))))
+
+(transient-define-argument conn--dispatch-dot-read-buffers-infix ()
   :class 'transient-switches
+  :description "Dot Buffers"
+  :key "b"
+  :argument "buffers"
   :argument-format "%s"
   :argument-regexp "\\(\\(CRM\\|match-regexp\\)\\)"
-  :choices '("CRM" "match-regexp"))
+  :choices '("CRM" "match-regexp")
+  :unsavable t
+  :if 'conn--dots-active-p)
+
+(transient-define-argument conn--dispatch-dot-relocate-infix ()
+  :class 'conn-transient-required-switches
+  :description "Dot Relocate"
+  :key "l"
+  :argument "dot-relocate"
+  :argument-format "%s"
+  :argument-regexp "\\(\\(remove\\|to-region\\|stationary\\)\\)"
+  :choices '("remove" "to-region" "stationary")
+  :unsavable t
+  :if 'conn--dots-active-p
+  :init-value (lambda (obj) (oset obj value "remove")))
 
 (transient-define-argument conn--dispatch-macro-infix ()
   :class 'transient-switches
+  :description "With Macro"
+  :key "m"
+  :argument "macro"
   :argument-format "%s"
   :argument-regexp "\\(\\(last-kbd-macro\\|register\\)\\)"
-  :choices '("last-kbd-macro" "register"))
+  :choices '("last-kbd-macro" "register")
+  :unsavable t)
 
 (transient-define-argument conn--dispatch-state-infix ()
-  :class 'transient-switches
+  :class 'conn-transient-required-switches
+  :description "In State"
+  :key "i"
+  :argument "state"
   :argument-format "%s"
   :argument-regexp "\\(\\(emacs\\|conn\\|dot\\)\\)"
-  :choices '("emacs" "conn" "dot"))
-
-(transient-define-argument conn--dispatch-dot-relocate-infix ()
-  :class 'transient-switches
-  :argument-format "%s"
-  :argument-regexp "\\(\\(to-region\\|stationary\\)\\)"
-  :choices '("to-region" "stationary"))
+  :choices '("conn" "emacs" "dot")
+  :init-value (lambda (obj)
+                (oset obj value
+                      (pcase conn-current-state
+                        ('conn-state "conn")
+                        ('conn-emacs-state "emacs")
+                        ('conn-dot-state "dot")
+                        (_ "conn"))))
+  :unsavable t)
 
 (transient-define-argument conn--dispatch-region-infix ()
-  :class 'transient-switches
+  :class 'conn-transient-required-switches
+  :key "r"
+  :description "Region"
+  :argument "region"
   :argument-format "%s"
-  :argument-regexp "\\(\\(change\\|at-end\\)\\)"
-  :choices '("change" "at-end"))
+  :argument-regexp "\\(\\(at-start\\|change\\|at-end\\)\\)"
+  :choices '("at-start" "at-end" "change")
+  :init-value (lambda (obj) (oset obj value "at-start"))
+  :unsavable t)
 
 (defun conn--dot-dispatch-title ()
   (let ((count 0))
@@ -4450,15 +4495,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (transient-define-suffix conn--dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
+  (let* ((macro (pcase (transient-arg-value "macro")
+                  ("register" (register-read-with-preview "Keyboard Macro: "))
+                  ("last-kbd-macro" last-kbd-macro)))
+         (state (pcase (transient-arg-value "state")
+                  ("conn" 'conn-state)
+                  ("emacs" 'conn-emacs-state)
+                  ("dot" 'conn-dot-state)
+                  (_ conn-current-state))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
@@ -4469,26 +4513,24 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--region-iterator @ (member "reverse" args))
       (conn--dispatch-handle-buffers @)
       (conn--dispatch-with-state @ state)
-      (cond ((member "change" args)
-             (conn--dispatch-change-region @))
-            ((member "at-end" args)
-             (conn--dispatch-at-end @))
-            (t @))
+      (pcase (transient-arg-value "region")
+        ("change" (conn--dispatch-change-region @))
+        ("at-end" (conn--dispatch-at-end @))
+        (_ @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
 (transient-define-suffix conn--dot-dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
+  (let* ((macro (pcase (transient-arg-value "macro")
+                  ("register" (register-read-with-preview "Keyboard Macro: "))
+                  ("last-kbd-macro" last-kbd-macro)))
+         (state (pcase (transient-arg-value "state")
+                  ("conn" 'conn-state)
+                  ("emacs" 'conn-emacs-state)
+                  ("dot" 'conn-dot-state)
+                  (_ conn-current-state))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
@@ -4496,43 +4538,41 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (user-error "Invalid keyboard macro"))
     (save-window-excursion
       (conn--thread @
-          (cond ((member "CRM" args)
-                 (mapcan (apply-partially 'conn--sorted-overlays
-                                          #'conn-dotp '< nil nil)
-                         (conn-read-dot-buffers)))
-                ((member "match-regexp" args)
-                 (mapcan (apply-partially 'conn--sorted-overlays
-                                          #'conn-dotp '< nil nil)
-                         (conn-read-matching-dot-buffers)))
-                (t (conn--sorted-overlays #'conn-dotp '<)))
+          (pcase (transient-arg-value "dot-buffer")
+            ("CRM"
+             (mapcan (apply-partially 'conn--sorted-overlays
+                                      #'conn-dotp '< nil nil)
+                     (conn-read-dot-buffers)))
+            ("match-regexp"
+             (mapcan (apply-partially 'conn--sorted-overlays
+                                      #'conn-dotp '< nil nil)
+                     (conn-read-matching-dot-buffers)))
+            (_ (conn--sorted-overlays #'conn-dotp '<)))
         (conn--dot-iterator @ (member "reverse" args))
-        (cond ((member "stationary" args)
-               (conn--dispatch-stationary-dots @))
-              ((member "to-region" args)
-               (conn--dispatch-relocate-dots @))
-              (t (conn--dispatch-remove-dots @)))
+        (pcase (transient-arg-value "dot-relocate")
+          ("stationary" (conn--dispatch-stationary-dots @))
+          ("to-region" (conn--dispatch-relocate-dots @))
+          (_ (conn--dispatch-remove-dots @)))
         (conn--dispatch-handle-buffers @)
         (conn--dispatch-with-state @ state)
-        (cond ((member "change" args)
-               (conn--dispatch-change-region @))
-              ((member "at-end" args)
-               (conn--dispatch-at-end @))
-              (t @))
+        (pcase (transient-arg-value "region")
+          ("change" (conn--dispatch-change-region @))
+          ("at-end" (conn--dispatch-at-end @))
+          (_ @))
         (conn--pulse-on-record @)
         (conn--macro-dispatch @ macro)))))
 
 (transient-define-suffix conn--regions-dispatch-suffix (regions)
   :transient 'transient--do-exit
   (interactive (list (oref transient-current-prefix scope)))
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
+  (let* ((macro (pcase (transient-arg-value "macro")
+                  ("register" (register-read-with-preview "Keyboard Macro: "))
+                  ("last-kbd-macro" last-kbd-macro)))
+         (state (pcase (transient-arg-value "state")
+                  ("conn" 'conn-state)
+                  ("emacs" 'conn-emacs-state)
+                  ("dot" 'conn-dot-state)
+                  (_ conn-current-state))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
@@ -4542,26 +4582,24 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (conn--region-iterator regions (member "t" args))
       (conn--dispatch-handle-buffers @)
       (conn--dispatch-with-state @ state)
-      (cond ((member "change" args)
-             (conn--dispatch-change-region @))
-            ((member "at-end" args)
-             (conn--dispatch-at-end @))
-            (t @))
+      (pcase (transient-arg-value "region")
+        ("change" (conn--dispatch-change-region @))
+        ("at-end" (conn--dispatch-at-end @))
+        (_ @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
 (transient-define-suffix conn--isearch-dispatch-suffix ()
   :transient 'transient--do-exit
   (interactive)
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
+  (let* ((macro (pcase (transient-arg-value "macro")
+                  ("register" (register-read-with-preview "Keyboard Macro: "))
+                  ("last-kbd-macro" last-kbd-macro)))
+         (state (pcase (transient-arg-value "state")
+                  ("conn" 'conn-state)
+                  ("emacs" 'conn-emacs-state)
+                  ("dot" 'conn-dot-state)
+                  (_ conn-current-state))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
@@ -4580,11 +4618,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--region-iterator @ (member "reverse" args))
       (conn--dispatch-handle-buffers @)
       (conn--dispatch-with-state @ state)
-      (cond ((member "change" args)
-             (conn--dispatch-change-region @))
-            ((member "at-end" args)
-             (conn--dispatch-at-end @))
-            (t @))
+      (pcase (transient-arg-value "region")
+        ("change" (conn--dispatch-change-region @))
+        ("at-end" (conn--dispatch-at-end @))
+        (_ @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4602,15 +4639,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val)))
-  (let* ((args (transient-args (oref transient-current-prefix command)))
-         (macro (cond ((member "register" args)
-                       (register-read-with-preview "Keyboard Macro: "))
-                      ((member "last-kbd-macro" args)
-                       last-kbd-macro)))
-         (state (cond ((member "conn" args) 'conn-state)
-                      ((member "emacs" args) 'conn-emacs-state)
-                      ((member "dot" args) 'conn-dot-state)
-                      (t conn-current-state))))
+  (let* ((macro (pcase (transient-arg-value "macro")
+                  ("register" (register-read-with-preview "Keyboard Macro: "))
+                  ("last-kbd-macro" last-kbd-macro)))
+         (state (pcase (transient-arg-value "state")
+                  ("conn" 'conn-state)
+                  ("emacs" 'conn-emacs-state)
+                  ("dot" 'conn-dot-state)
+                  (_ conn-current-state))))
     (unless (or (null macro)
                 (stringp macro)
                 (vectorp macro)
@@ -4629,11 +4665,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
       (conn--region-iterator @ (not (member "reverse" args)))
       (conn--dispatch-handle-buffers @)
       (conn--dispatch-with-state @ state)
-      (cond ((member "change" args)
-             (conn--dispatch-change-region @))
-            ((member "at-end" args)
-             (conn--dispatch-at-end @))
-            (t @))
+      (pcase (transient-arg-value "region")
+        ("change" (conn--dispatch-change-region @))
+        ("at-end" (conn--dispatch-at-end @))
+        (_ @))
       (conn--pulse-on-record @)
       (conn--macro-dispatch @ macro))))
 
@@ -4654,16 +4689,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "Dispatch"
     ("d" "On Regions" conn--dispatch-suffix)
     ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("t" "On Text Property" conn--text-property-dispatch-suffix)
-    ("c" "Region" conn--dispatch-region-infix :unsavable t)]
+    ("t" "On Text Property" conn--text-property-dispatch-suffix)]
    [""
-    ("r" "Reverse Order" "reverse" :unsavable t)
-    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
-    ("b" "Dot Buffers" conn--read-buffer-infix
-     :unsavable t :if conn--dots-active-p)
-    ("l" "Dot Relocate" conn--dispatch-dot-relocate-infix
-     :unsavable t :if conn--dots-active-p)]])
+    ("o" "Reverse Order" "reverse" :unsavable t)
+    (conn--dispatch-dot-read-buffers-infix)
+    (conn--dispatch-macro-infix)
+    (conn--dispatch-region-infix)
+    (conn--dispatch-state-infix)
+    (conn--dispatch-dot-relocate-infix)]])
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4690,16 +4723,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
     ("d" "On Matches" conn--isearch-dispatch-suffix)
-    ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)
-    ("c" "Region" conn--dispatch-region-infix :unsavable t)]
+    ("e" "On Dots" conn--dot-dispatch-suffix :if conn--dots-active-p)]
    [""
-    ("r" "Reverse Order" "reverse" :unsavable t)
-    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)
-    ("b" "Dot Buffers" conn--read-buffer-infix
-     :unsavable t :if conn--dots-active-p)
-    ("l" "Dot Relocate" conn--dispatch-dot-relocate-infix
-     :unsavable t :if conn--dots-active-p)]])
+    ("o" "Reverse Order" "reverse" :unsavable t)
+    (conn--dispatch-dot-read-buffers-infix)
+    (conn--dispatch-macro-infix)
+    (conn--dispatch-region-infix)
+    (conn--dispatch-state-infix)
+    (conn--dispatch-dot-relocate-infix)]])
 
 (transient-define-prefix conn-regions-dispatch-menu (regions)
   "Transient menu for macro dispatch on regions."
@@ -4715,12 +4746,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("~" "Swap" kmacro-swap-ring :transient t)
     ("w" "Pop" kmacro-delete-ring-head :transient t)]]
   [["Dispatch"
-    ("d" "On Regions" conn--regions-dispatch-suffix)
-    ("c" "Region" conn--dispatch-region-infix :unsavable t)]
+    ("d" "On Regions" conn--regions-dispatch-suffix)]
    [""
-    ("r" "Reverse Order" "reverse" :unsavable t)
-    ("m" "With Macro" conn--dispatch-macro-infix :unsavable t :always-read t)
-    ("i" "In State" conn--dispatch-state-infix :unsavable t :always-read t)]]
+    ("o" "Reverse Order" "reverse" :unsavable t)
+    (conn--dispatch-macro-infix)
+    (conn--dispatch-region-infix)
+    (conn--dispatch-state-infix)]]
   (interactive (list nil))
   (unless regions (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
@@ -4953,6 +4984,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-n"              'conn-next-dot
   "C-M-p"            'conn-first-dot
   "C-M-n"            'conn-last-dot
+  "|"                'conn-shell-command-on-dots
   "{"                'conn-first-dot
   "}"                'conn-last-dot
   "#"                'conn-add-dots-matching-regexp
@@ -4980,6 +5012,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-t"   'conn-C-x-t-keys
   "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
+  "|"     'shell-command-on-region
   "="     'indent-relative
   "$"     'ispell-word
   "*"     'calc-dispatch
