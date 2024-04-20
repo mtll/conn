@@ -61,7 +61,7 @@
 This keymap is active even in buffers which do not have
 `conn-local-mode' turned on.")
 
-;;;;; Customizable Variables
+;;;;; Custom Variables
 
 (defgroup conn-mode nil
   "Modal keybinding mode."
@@ -199,7 +199,7 @@ Supported values are:
   :group 'conn-mode
   :type 'string)
 
-;;;;; Internal Vars
+;;;;; State Variables
 
 (defvar conn-states nil)
 
@@ -218,6 +218,30 @@ Each element may be either a symbol or a list of the form
 (defvar-local conn-previous-state nil
   "Previous conn state for buffer.")
 
+(defvar conn-enable-in-buffer-hook nil
+  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
+Each function is run without any arguments and if any of them return nil
+`conn-local-mode' will not be enabled in the buffer, otherwise
+`conn-local-mode' will be enabled.")
+
+;;;;;; State Keymaps
+
+(defvar conn--state-maps nil)
+
+(defvar-local conn--aux-maps nil)
+
+(defvar-local conn--local-maps nil)
+
+(defvar-local conn--major-mode-maps nil)
+
+(defvar conn--mode-maps nil)
+
+(defvar-local conn--local-mode-maps nil)
+
+(defvar conn--transition-maps nil)
+
+;;;;; Mark Variables
+
 (defvar conn-this-thing-handler nil
   "Mark handler for current command.
 Commands can set this variable if they need to change their handler
@@ -226,25 +250,15 @@ dynamically.")
 (defvar conn-this-thing-start nil
   "Start position for current mark movement command.")
 
-;; Keymaps
-(defvar conn--state-maps nil)
-(defvar-local conn--aux-maps nil)
-(defvar-local conn--local-maps nil)
-(defvar-local conn--major-mode-maps nil)
-(defvar conn--mode-maps nil)
-(defvar-local conn--local-mode-maps nil)
-(defvar conn--transition-maps nil)
+(defvar conn--prev-mark-even-if-inactive nil
+  "Previous value of `mark-even-if-inactive'.
+Used to restore previous value when `conn-mode' is disabled.")
 
-(defvar conn--prev-mark-even-if-inactive nil)
-
-(defvar conn-dot-macro-dispatch-p nil
-  "Non-nil during dot macro dispatch.")
-
-(defvar-local conn--unpop-ring nil)
-
-(defvar conn--saved-ephemeral-marks nil)
+(defvar-local conn--mark-unpop-ring nil)
 
 (defvar-local conn--ephemeral-mark nil)
+
+(defvar conn--saved-ephemeral-marks nil)
 
 (defvar-local conn--mark-cursor nil
   "`mark' cursor overlay.")
@@ -252,20 +266,20 @@ dynamically.")
 (put 'conn--mark-cursor 'face 'conn-mark-face)
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 
-(defvar conn-macro-dispatch-p nil
-  "Non-nil during macro dispatch.
-
-See `conn--dispatch-on-regions'.")
-
-(defvar conn-dispatch-error nil)
+;;;;; Dot Undo Ring Variables
 
 (defvar-local conn--dot-undoing nil)
+
 (defvar-local conn--dot-undo-ring nil)
+
 (defvar-local conn--dot-undone nil)
+
 (defvar-local conn--dot-this-undo nil)
 
 (defvar conn-dot-undo-ring-max 32
   "Maximum size of the dot undo ring.")
+
+;;;;; Aux Map Variables
 
 (defvar conn--aux-bindings nil)
 
@@ -280,13 +294,7 @@ See `conn--dispatch-on-regions'.")
 
 (defvar conn--last-remapping nil)
 
-(defvar conn--read-string-timout 0.5)
-
-(defvar conn-enable-in-buffer-hook nil
-  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
-Each function is run without any arguments and if any of them return nil
-`conn-local-mode' will not be enabled in the buffer, otherwise
-`conn-local-mode' will be enabled.")
+;;;;; Dot Overlay Properties
 
 (put 'conn--dot 'evaporate t)
 (put 'conn--dot 'priority conn-dot-overlay-priority)
@@ -420,6 +428,98 @@ If BUFFER is nil check `current-buffer'."
     (pop-to-buffer buffer)
     (narrow-to-region beg end)
     (deactivate-mark)))
+
+(defun conn--read-thing-command ()
+  (with-temp-message ""
+    (let ((key (thread-last
+                 (read-key-sequence "Movement Command:")
+                 (key-description)
+                 (keymap-lookup nil))))
+      (while (not (get key :conn-command-thing))
+        (when (eq 'keyboard-quit key) (keyboard-quit))
+        (setq key (thread-last
+                    "Not a valid movement command\nMovement Command:"
+                    (read-key-sequence)
+                    (key-description)
+                    (keymap-lookup nil))))
+      (get key :conn-command-thing))))
+
+(defun conn--isearch-matches-in-buffer (&optional buffer)
+  (with-current-buffer (or buffer (current-buffer))
+    (let (matches)
+      (save-excursion
+        (isearch-repeat-forward)
+        (goto-char (point-min))
+        (while (isearch-search-string isearch-string (point-max) t)
+          (when (funcall isearch-filter-predicate
+                         (match-beginning 0) (match-end 0))
+            (push (cons (conn--create-marker (match-beginning 0))
+                        (conn--create-marker (match-end 0)))
+                  matches))))
+      (nreverse matches))))
+
+(defun conn--read-string-preview-overlays (string &optional dir)
+  (let (ovs)
+    (save-excursion
+      (with-restriction
+          (if (eq dir 'forward)  (point) (window-start))
+          (if (eq dir 'backward) (point) (window-end))
+        (goto-char (point-max))
+        (while (search-backward string nil t)
+          (push (make-overlay (point) (+ (point) (length string)))
+                ovs)
+          (overlay-put (car ovs) 'face 'isearch))))
+    ovs))
+
+(defvar conn--read-string-timout 0.5)
+
+(defun conn--read-string-with-timeout (timeout &optional dir)
+  (let* ((string (char-to-string (read-char "char 0: " t)))
+         (overlays (conn--read-string-preview-overlays string dir))
+         next-char)
+    (unwind-protect
+        (while (setq next-char (read-char (format "char (%s):" string) t timeout))
+          (setq string (concat string (char-to-string next-char)))
+          (mapc #'delete-overlay overlays)
+          (setq overlays (conn--read-string-preview-overlays string dir)))
+      (mapc #'delete-overlay overlays)
+      (message nil))
+    string))
+
+(defun conn--create-window-prompt-overlay (window id)
+  (with-current-buffer (window-buffer window)
+    (let ((overlay (make-overlay (window-start window)
+                                 (window-end window))))
+      (overlay-put overlay 'face 'shadow)
+      (overlay-put overlay 'window window)
+      (overlay-put overlay 'before-string
+                   (propertize (number-to-string id)
+                               'face 'conn-window-prompt-face))
+      overlay)))
+
+(defun conn--all-visible-windows ()
+  (let (wins)
+    (walk-windows (lambda (win) (push win wins)) 'nomini 'visible)
+    wins))
+
+(defun conn--prompt-for-window (windows)
+  (when (setq windows (seq-remove (lambda (win) (window-dedicated-p win))
+                                  windows))
+    (if (length= windows 1)
+        (car windows)
+      (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
+                                       windows))
+            num)
+        (unwind-protect
+            (while (or (not num)
+                       (< num 0)
+                       (length< windows num))
+              (setq num (if (length> windows 10)
+                            (read-number "Window: ")
+                          (- (logand (read-char "Window: ") ?\177) ?0))))
+          (dolist (ov overlays)
+            (delete-overlay ov)))
+        (nth num windows)))))
 
 
 ;;;; Extensions
@@ -760,8 +860,27 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;; Macro Dispatch
 
-(defvar conn-macro-dispatch-buffer-start-hook nil)
-(defvar conn-macro-dispatch-buffer-end-hook nil)
+(defvar conn-macro-dispatch-p nil
+  "Non-nil during macro dispatch.")
+
+(defvar conn-dispatch-error nil
+  "If non-nil contains the error encountered during macro dispatch.")
+
+(defvar conn-macro-dispatch-buffer-start-hook nil
+  "Hook run in each buffer the first time it is encountered during macro dispatch.")
+
+(defvar conn-macro-dispatch-buffer-end-hook nil
+  "Hook run in each buffer encountered after macro dispatch finishes.")
+
+(defvar conn-macro-dispatch-end-hook nil
+  "Hook run after macro dispatch has completed.")
+
+(defvar conn-macro-dispatch-start-hook nil
+  "Hook run before macro dispatch begins.")
+
+(defvar conn-macro-dispatch-iterator-hook nil
+  "Hook run during each iteration of macro dispatch.
+If any function returns a nil value then dispatch it halted.")
 
 (defun conn--dispatch-handle-buffers (iterator &optional init finalize)
   (let ((dispatch-undo-handles nil))
@@ -927,10 +1046,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (`(,beg . ,end) (cons end beg))
       (ret ret))))
 
-(defvar conn-dispatch-end-hook nil)
-(defvar conn-dispatch-start-hook nil)
-(defvar conn-dispatch-iterator-hook nil)
-
 (defmacro conn--define-dispatcher (name arglist &rest body)
   "Define a macro dispatcher.
 The iterator must be the first argument in ARGLIST.
@@ -959,20 +1074,20 @@ The iterator must be the first argument in ARGLIST.
                              (set-marker beg nil)
                              (set-marker end nil)
                              (and (run-hook-with-args-until-failure
-                                   'conn-dispatch-iterator-hook)
+                                   'conn-macro-dispatch-iterator-hook)
                                   t)))))
              (advice-add #'kmacro-loop-setup-function :before-while ,sym)
              (unwind-protect
                  (condition-case err
                      (progn
-                       (run-hooks 'conn-dispatch-start-hook)
+                       (run-hooks 'conn-macro-dispatch-start-hook)
                        ,@body)
                    (t
                     (setq conn-dispatch-error err)
                     (signal (car err) (cdr err))))
                (advice-remove 'kmacro-loop-setup-function ,sym)
                (funcall ,iterator :finalize)
-               (run-hooks 'conn-dispatch-end-hook))))))))
+               (run-hooks 'conn-macro-dispatch-end-hook))))))))
 
 (conn--define-dispatcher conn--macro-dispatch (iterator &optional macro)
   (pcase-exhaustive macro
@@ -1024,44 +1139,6 @@ The iterator must be the first argument in ARGLIST.
 
 
 ;;;; Dots
-
-;;;;; Dot Registers
-
-(cl-defstruct (conn-dot-register (:constructor %conn--make-dot-register (data)))
-  (data nil :read-only t))
-
-(defun conn--make-dot-register ()
-  (let ((buffers (mapcar #'get-buffer (conn-read-dot-buffers)))
-        dots curr)
-    (dolist (buf buffers)
-      (setq curr (list buf))
-      (with-current-buffer buf
-        (conn--for-each-dot
-         (lambda (dot)
-           (push (cons (conn--create-marker (overlay-start dot) buf)
-                       (conn--create-marker (overlay-end dot) buf))
-                 (cdr curr)))))
-      (push curr dots))
-    (%conn--make-dot-register dots)))
-
-(cl-defmethod register-val-jump-to ((val conn-dot-register) _arg)
-  (pcase-dolist (`(,buf . ,dots) (conn-dot-register-data val))
-    (with-current-buffer buf
-      (save-restriction
-        (widen)
-        (conn--remove-dots (point-min) (point-max))
-        (apply #'conn--create-dots dots)))))
-
-(cl-defmethod register-val-describe ((val conn-dot-register) _arg)
-  (princ (format "dot state in buffers:\n   %s"
-                 (mapcar (lambda (buf)
-                           (buffer-name (car buf)))
-                         (conn-dot-register-data val)))))
-
-(defun conn-dot-state-to-register (register)
-  "Store current dots in REGISTER."
-  (interactive (list (register-read-with-preview "Dot state to register: ")))
-  (set-register register (conn--make-dot-register)))
 
 ;;;;; Dot Functions
 
@@ -1164,7 +1241,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
             conn--dot-this-undo))))
 
 (defun conn--delete-dot (dot)
-  (unless (or conn--dot-undoing conn-dot-macro-dispatch-p)
+  (unless (or conn--dot-undoing conn-macro-dispatch-p)
     (push `(delete ,(overlay-start dot) . ,(overlay-end dot))
           conn--dot-this-undo))
   (overlay-put dot 'dot nil)
@@ -1237,7 +1314,7 @@ If BUFFER is nil use current buffer."
 (defun conn--pop-to-mark-command-ad (&rest _)
   (unless (or (null (mark t))
               (= (point) (mark)))
-    (add-to-history 'conn--unpop-ring
+    (add-to-history 'conn--mark-unpop-ring
                     (conn--create-marker (mark t))
                     mark-ring-max
                     'keep-duplicates)))
@@ -1394,7 +1471,7 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-next-line-keys          "C-n")
 (conn-define-remapping-command conn-previous-line-keys      "C-p")
 
-;;;;; Buffer Color Mode
+;;;;; Per State Buffer Colors
 
 (defvar conn-buffer-colors)
 
@@ -1417,7 +1494,7 @@ C-x, M-s and M-g into various state maps."
       (add-hook 'conn-local-mode #'conn--buffer-color-setup)
     (remove-hook 'conn-local-mode #'conn--buffer-color-setup)))
 
-;;;;; Cursor Color Mode
+;;;;; Per State Cursor Colors
 
 (defvar conn--default-cursor-color)
 
@@ -1755,7 +1832,6 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "F u"      'conn-emacs-state-overwrite-binary
                  "M-TAB"    'conn-emacs-state-and-complete
                  "M-<tab>"  'conn-emacs-state-and-complete))
-
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
 (conn-define-state conn-dot-state
@@ -1884,21 +1960,6 @@ buffers completing read DOT."
     (save-mark-and-excursion
       (conn--with-dots-as-text-properties (list dot)
         (transpose-regions (region-beginning) (region-end) beg end)))))
-
-(defun conn-yank-to-dots (&optional at-end)
-  "Yank from `kill-ring' at the front of each dot.
-If AT-END is non-nil yank at the end of each dot instead."
-  (interactive "P")
-  (save-mark-and-excursion
-    (conn--thread @
-      (conn--sorted-overlays #'conn-dotp '<)
-      (conn--dot-iterator @)
-      (conn--dispatch-stationary-dots @)
-      (if at-end (conn--dispatch-at-end @) @)
-      (conn--dispatch-handle-buffers @)
-      (conn--dispatch-with-state @ 'conn-emacs-state)
-      (conn--pulse-on-record @)
-      (conn--macro-dispatch @ conn-yank-keys))))
 
 (defun conn-sort-dots ()
   "Sort all dots in the current buffer by the text they contain.
@@ -2199,17 +2260,6 @@ between `point-min' and `point-max'."
         (conn--remove-dots start end)
         (apply #'conn--create-dots new-dots)))))
 
-(defun conn-add-dots-matching-region (start end &optional refine)
-  "Dot all occurrences of string within region from START to END.
-If REFINE is non-nil only dot occurrences in dots.
-
-When called interactively uses point and mark."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
-  (conn-add-dots-matching-literal
-   (buffer-substring-no-properties start end) nil nil refine))
-
 (defun conn-dot-lines (start end)
   "Dot each line in region from START to END.
 
@@ -2270,15 +2320,6 @@ between `point-min' and `point-max'."
        (conn--delete-dot dot)
        (conn-split-region-on-regexp regexp start end)))
    nil start end))
-
-(defun conn-split-dots-on-newline (start end)
-  "Split dots in region START to END on newlines.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)))
-  (conn-split-dots-on-regexp "\n" start end))
 
 (defun conn--previous-dot-1 ()
   "Perform one iteration for `conn-previous-dot-end'."
@@ -2440,21 +2481,6 @@ between `point-min' and `point-max'."
   (when (called-interactively-p 'interactive)
     (message "Dots before point removed")))
 
-(defun conn--read-thing-command ()
-  (with-temp-message ""
-    (let ((key (thread-last
-                 (read-key-sequence "Movement Command:")
-                 (key-description)
-                 (keymap-lookup nil))))
-      (while (not (get key :conn-command-thing))
-        (when (eq 'keyboard-quit key) (keyboard-quit))
-        (setq key (thread-last
-                    "Not a valid movement command\nMovement Command:"
-                    (read-key-sequence)
-                    (key-description)
-                    (keymap-lookup nil))))
-      (get key :conn-command-thing))))
-
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
 
@@ -2495,20 +2521,6 @@ THING is something with a forward-op as defined by thingatpt."
           (delete-char 1))))))
 
 ;;;;; Isearch commands
-
-(defun conn--isearch-matches-in-buffer (&optional buffer)
-  (with-current-buffer (or buffer (current-buffer))
-    (let (matches)
-      (save-excursion
-        (isearch-repeat-forward)
-        (goto-char (point-min))
-        (while (isearch-search-string isearch-string (point-max) t)
-          (when (funcall isearch-filter-predicate
-                         (match-beginning 0) (match-end 0))
-            (push (cons (conn--create-marker (match-beginning 0))
-                        (conn--create-marker (match-end 0)))
-                  matches))))
-      (nreverse matches))))
 
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
@@ -2615,7 +2627,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
     (if (null mark-ring)
         (user-error "No marks to pop")
       (conn--maybe-push-mark 'mark-ring)
-      (conn--maybe-push-mark 'conn--unpop-ring (car mark-ring))
+      (conn--maybe-push-mark 'conn--mark-unpop-ring (car mark-ring))
       (set-marker (car mark-ring) nil)
       (pop mark-ring)
       (goto-char (mark t)))
@@ -2625,12 +2637,12 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive)
   (if (null (mark t))
       (user-error "No mark set in this buffer")
-    (if (null conn--unpop-ring)
+    (if (null conn--mark-unpop-ring)
         (user-error "No marks to unpop")
-      (conn--maybe-push-mark 'conn--unpop-ring)
-      (conn--maybe-push-mark 'mark-ring (car conn--unpop-ring))
-      (set-marker (car conn--unpop-ring) nil)
-      (pop conn--unpop-ring)
+      (conn--maybe-push-mark 'conn--mark-unpop-ring)
+      (conn--maybe-push-mark 'mark-ring (car conn--mark-unpop-ring))
+      (set-marker (car conn--mark-unpop-ring) nil)
+      (pop conn--mark-unpop-ring)
       (goto-char (mark t)))
     (deactivate-mark)))
 
@@ -2680,19 +2692,6 @@ Also ensure point is at START before running `query-replace-regexp'."
     (minibuffer-with-setup-hook
         (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
       (call-interactively #'query-replace-regexp))))
-
-(defun conn-macro-at-point-and-mark ()
-  "Dispatch dot macro at point and mark."
-  (interactive)
-  (save-mark-and-excursion
-    (thread-first
-      (list (cons (point-marker) (point-marker))
-            (cons (conn--create-marker (mark t))
-                  (conn--create-marker (mark t))))
-      (conn--region-iterator)
-      (conn--dispatch-handle-buffers)
-      (conn--dispatch-with-state conn-current-state)
-      (conn--macro-dispatch))))
 
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position."
@@ -2836,32 +2835,6 @@ Interactively `region-beginning' and `region-end'."
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content))
 
-(defun conn--read-string-preview-overlays (string &optional dir)
-  (let (ovs)
-    (save-excursion
-      (with-restriction
-          (if (eq dir 'forward)  (point) (window-start))
-          (if (eq dir 'backward) (point) (window-end))
-        (goto-char (point-max))
-        (while (search-backward string nil t)
-          (push (make-overlay (point) (+ (point) (length string)))
-                ovs)
-          (overlay-put (car ovs) 'face 'isearch))))
-    ovs))
-
-(defun conn--read-string-with-timeout (timeout &optional dir)
-  (let* ((string (char-to-string (read-char "char 0: " t)))
-         (overlays (conn--read-string-preview-overlays string dir))
-         next-char)
-    (unwind-protect
-        (while (setq next-char (read-char (format "char (%s):" string) t timeout))
-          (setq string (concat string (char-to-string next-char)))
-          (mapc #'delete-overlay overlays)
-          (setq overlays (conn--read-string-preview-overlays string dir)))
-      (mapc #'delete-overlay overlays)
-      (message nil))
-    string))
-
 (defun conn-backward-char (string arg)
   "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
@@ -2933,19 +2906,6 @@ This command should only be called interactively."
   (interactive)
   (when conn-previous-state
     (funcall conn-previous-state)))
-
-(defun conn-toggle-minibuffer-focus ()
-  "Toggle input focus between minibuffer and `other-window'."
-  (interactive)
-  (cond ((not (active-minibuffer-window))
-         (user-error "Minibuffer is not active"))
-        ((eq (selected-window) (active-minibuffer-window))
-         (when-let ((win (minibuffer-selected-window)))
-           (select-window win)
-           (message "Switched to %s" (current-buffer))))
-        (t
-         (select-window (active-minibuffer-window))
-         (message "Switched to *MINIBUFFER*"))))
 
 (defun conn--apply-region-transform (transform-func)
   "Apply TRANSFORM-FUNC to region contents.
@@ -3517,41 +3477,6 @@ there's a region, all lines that region covers will be duplicated."
                     (region-end))))
 
 ;;;;; Window Commands
-
-(defun conn--create-window-prompt-overlay (window id)
-  (with-current-buffer (window-buffer window)
-    (let ((overlay (make-overlay (window-start window)
-                                 (window-end window))))
-      (overlay-put overlay 'face 'shadow)
-      (overlay-put overlay 'window window)
-      (overlay-put overlay 'before-string
-                   (propertize (number-to-string id)
-                               'face 'conn-window-prompt-face))
-      overlay)))
-
-(defun conn--all-visible-windows ()
-  (let (wins)
-    (walk-windows (lambda (win) (push win wins)) 'nomini 'visible)
-    wins))
-
-(defun conn--prompt-for-window (windows)
-  (when (setq windows (seq-remove (lambda (win) (window-dedicated-p win))
-                                  windows))
-    (if (length= windows 1)
-        (car windows)
-      (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
-                                       windows))
-            num)
-        (unwind-protect
-            (while (or (not num)
-                       (< num 0)
-                       (length< windows num))
-              (setq num (if (length> windows 10)
-                            (read-number "Window: ")
-                          (- (logand (read-char "Window: ") ?\177) ?0))))
-          (dolist (ov overlays)
-            (delete-overlay ov)))
-        (nth num windows)))))
 
 (defun conn-swap-windows (&optional no-select)
   "Swap selected window and another window.
@@ -4852,11 +4777,11 @@ The last value is \"don't use any of these switches\"."
   "n"   'narrow-to-region
   "o"   'conn-occur-region
   "p"   'conn-change-pair
-  "r"   'conn-query-replace-region
+  "r"   'conn-query-replace-regexp-region
   "s"   'conn-sort-menu
   "u"   'conn-insert-pair
   "v"   'vc-region-history
-  "w"   'conn-query-replace-regexp-region
+  "w"   'conn-query-replace-region
   "y"   'yank-rectangle)
 
 (defvar-keymap conn-window-resize-map
@@ -4900,9 +4825,9 @@ The last value is \"don't use any of these switches\"."
   "p"   'conn-dot-text-property
   "q"   'conn-query-remove-dots
   "r"   'conn-add-dots-matching-regexp
+  "s"   'conn-sort-dots
   "t"   'conn-dot-trim-regexp
-  "w"   'conn-add-dots-matching-literal
-  "y"   'conn-yank-to-dots)
+  "w"   'conn-add-dots-matching-literal)
 
 (defvar-keymap conn-dot-region-repeat-map
   :repeat t
@@ -5003,11 +4928,11 @@ The last value is \"don't use any of these switches\"."
   "n"   'conn-narrow-to-thing
   "o"   'transpose-words
   "q"   'indent-for-tab-command
-  "r"   'query-replace
+  "r"   'query-replace-regexp
   "u"   'conn-mark-thing
   "V"   'conn-narrow-indirect-to-visible
   "v"   'conn-narrow-to-visible
-  "w"   'query-replace-regexp
+  "w"   'query-replace
   "y"   'yank-in-context)
 
 (define-keymap
@@ -5015,7 +4940,7 @@ The last value is \"don't use any of these switches\"."
   "M-<down-mouse-1>" 'conn-dot-at-click
   "M-/"              'conn-dot-undo
   "<return>"         'conn-dot-lines
-  "<backspace>"      'conn-kill-to-dots
+  "<backspace>"      'conn-remove-dot-backward
   "M-?"              'conn-dot-redo
   "C-p"              'conn-previous-dot
   "C-n"              'conn-next-dot
@@ -5024,16 +4949,9 @@ The last value is \"don't use any of these switches\"."
   "|"                'conn-shell-command-on-dots
   "{"                'conn-first-dot
   "}"                'conn-last-dot
-  "#"                'conn-split-dots-on-regexp
-  "$"                'conn-split-region-on-regexp
-  "%"                'conn-query-remove-dots
-  "!"                'conn-dots-dispatch
-  "_"                'conn-remove-dots-outside-region
-  "="                'conn-dot-trim-regexp
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
-  "c"                'conn-add-dots-matching-literal
-  "C"                nil
+  ;; "c"                'conn-split-dots-on-regexp
   "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
@@ -5041,7 +4959,7 @@ The last value is \"don't use any of these switches\"."
   "q"                'conn-dot-edit-map
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
-  "w"                'conn-remove-dot-backward
+  "w"                'conn-kill-to-dots
   "y"                'conn-add-dots-matching-regexp)
 
 (define-keymap
@@ -5201,7 +5119,6 @@ The last value is \"don't use any of these switches\"."
   :keymap conn-global-map
   "C-<backspace>" 'conn-kill-whole-line
   "C-`"           'conn-other-window
-  "<pause>"       'conn-toggle-minibuffer-focus
   "C-S-w"         'delete-region
   "C-x /"         'tab-bar-history-back
   "C-x 4"         conn-c-x-4-map
