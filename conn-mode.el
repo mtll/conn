@@ -944,6 +944,7 @@ The iterator must be the first argument in ARGLIST.
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
+       (deactivate-mark)
        (save-mark-and-excursion
          (save-window-excursion
            (let* ((undo-outer-limit nil)
@@ -4248,12 +4249,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;; Transient Menus
 
 (defun conn--kmacro-display (macro &optional trunc)
-  (let* ((m (format-kbd-macro macro))
-         (l (length m))
-         (z (and trunc (> l trunc))))
-    (format "%s%s"
-            (if z (substring m 0 (1- trunc)) m)
-            (if z "..." ""))))
+  (if macro
+      (let* ((m (format-kbd-macro macro))
+             (l (length m))
+             (z (and trunc (> l trunc))))
+        (format "%s%s"
+                (if z (substring m 0 (1- trunc)) m)
+                (if z "..." "")))
+    "nil"))
 
 (defun conn--kmacro-ring-format ()
   (with-temp-message ""
@@ -4478,7 +4481,7 @@ The last value is \"don't use any of these switches\"."
   :class 'conn-transient-switches
   :required t
   :key "r"
-  :description "Region"
+  :description "Regions"
   :argument "region="
   :argument-format "region=%s"
   :argument-regexp "\\(region=\\(start\\|change\\|end\\)\\)"
@@ -4720,8 +4723,8 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-state-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
-    (conn--dispatch-order-infix)
-    (conn--dispatch-empty-infix)]])
+    (conn--dispatch-empty-infix)
+    (conn--dispatch-order-infix)]])
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4763,8 +4766,8 @@ The last value is \"don't use any of these switches\"."
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-order-infix)
-    (conn--dispatch-empty-infix)]]
+    (conn--dispatch-empty-infix)
+    (conn--dispatch-order-infix)]]
   (interactive (list nil))
   (unless regions (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
