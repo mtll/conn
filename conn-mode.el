@@ -252,8 +252,6 @@ dynamically.")
 (put 'conn--mark-cursor 'face 'conn-mark-face)
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 
-(defvar-local conn--handle-mark nil)
-
 (defvar conn-macro-dispatch-p nil
   "Non-nil during macro dispatch.
 
@@ -269,11 +267,7 @@ See `conn--dispatch-on-regions'.")
 (defvar conn-dot-undo-ring-max 32
   "Maximum size of the dot undo ring.")
 
-(defvar conn--repat-check-key-prev-val)
-
 (defvar conn--aux-bindings nil)
-
-(defvar conn--goto-char-last-char nil)
 
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
@@ -300,9 +294,6 @@ Each function is run without any arguments and if any of them return nil
 (put 'conn--dot 'evaporate t)
 
 ;;;;; Command Histories
-
-(defvar conn-thing-history nil
-  "History list for conn thing commands.")
 
 (defvar conn--seperator-history nil
   "History var for `conn-set-register-seperator'.")
@@ -395,35 +386,6 @@ Uses `read-regexp' to read the regexp."
   (let* ((collection (mapcar #'buffer-name
                              (seq-filter #'conn--dots-active-p (buffer-list)))))
     (completing-read-multiple "First buffer: " collection nil t)))
-
-;; From thingatpt+
-(defun conn--defined-thing-p (thing)
-  (when (consp thing) (setq thing  (car thing)))
-  (when (stringp thing) (setq thing  (intern thing)))
-  (let ((forward-op    (or (get thing 'forward-op)  (intern-soft (format "forward-%s" thing))))
-        (beginning-op  (get thing 'beginning-op))
-        (end-op        (get thing 'end-op))
-        (bounds-fn     (get thing 'bounds-of-thing-at-point))
-        (thing-fn      (get thing 'thing-at-point)))
-    (or (functionp forward-op)
-        (and (functionp beginning-op)  (functionp end-op))
-        (functionp bounds-fn)
-        (functionp thing-fn))))
-
-(defun conn--movement-thing-p (thing)
-  (when (consp thing) (setq thing  (car thing)))
-  (when (stringp thing) (setq thing  (intern thing)))
-  (or (get thing 'forward-op)  (intern-soft (format "forward-%s" thing))))
-
-;; From thingatpt+
-(defun conn--things (predicate)
-  (let (types)
-    (mapatoms
-     (lambda (tt)
-       (when (funcall predicate tt) (push (symbol-name tt) types))))
-    (dolist (typ  '("thing" "buffer" "point")) ; Remove types that do not make sense.
-      (setq types (delete typ types)))
-    (sort types #'string-lessp)))
 
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
@@ -1002,9 +964,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (setq conn--dispatch-error err)
                 (signal (car err) (cdr err)))
                (:success
-                (let ((mark (mark t)))
-                  (push-mark ,start t nil)
-                  (conn--push-ephemeral-mark mark))))
+                (conn--push-ephemeral-mark ,start)))
            (advice-remove 'kmacro-loop-setup-function ,sym)
            (funcall ,iterator :finalize))))))
 
@@ -1362,7 +1322,7 @@ If BUFFER is nil use current buffer."
                                           conn--aux-map-history
                                         (delete new @)
                                         (cons new @)
-                                        (seq-take @ 8))))))
+                                        (seq-take @ conn--aux-map-history-size))))))
       (setq conn--aux-update-flag nil
             conn--last-remapping current-remappings))))
 
@@ -2791,7 +2751,7 @@ With arg N, insert N newlines."
         command)
     (fset before (lambda ()
                    (remove-hook 'pre-command-hook before t)
-                   (add-hook 'post-command-hook after -90 t)
+                   (add-hook 'post-command-hook after 90 t)
                    (setq prefix-arg prefix
                          command this-command)))
     (fset after (lambda ()
@@ -2799,6 +2759,8 @@ With arg N, insert N newlines."
                   (let ((current-prefix-arg prefix))
                     (save-mark-and-excursion
                       (exchange-point-and-mark (not mark-active))
+                      (let ((last-kbd-macro (this-command-keys-vector)))
+                        (call-last-kbd-macro))
                       (call-interactively command)))))
     (add-hook 'pre-command-hook before -80 t)))
 
@@ -4523,18 +4485,12 @@ The last value is \"don't use any of these switches\"."
   :argument "reverse"
   :unsavable t)
 
-(defun conn--dot-dispatch-title ()
-  (let ((count 0))
-    (conn--for-each-dot (lambda (_) (cl-incf count)))
-    (concat (propertize "Dot Dispatch: " 'face 'bold)
-            (propertize (format "%d" count) 'face 'transient-value))))
-
 (transient-define-suffix conn--dispatch-suffix (args)
   :transient 'transient--do-exit
   :key "d"
   :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
-  (save-mark-and-excursion
+  (save-excursion
     (save-window-excursion
       (conn--thread @
           (region-bounds)
@@ -4561,7 +4517,7 @@ The last value is \"don't use any of these switches\"."
   :key "e"
   :description "On Dots"
   (interactive (list (transient-args transient-current-command)))
-  (save-mark-and-excursion
+  (save-excursion
     (save-window-excursion
       (conn--thread @
           (pcase (transient-arg-value "buffer=" args)
@@ -4598,10 +4554,46 @@ The last value is \"don't use any of these switches\"."
   :description "On Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (save-mark-and-excursion
+  (save-excursion
     (save-window-excursion
       (conn--thread @
           (conn--region-iterator regions (member "reverse" args))
+        (conn--dispatch-handle-buffers @)
+        (pcase-exhaustive (transient-arg-value "state=" args)
+          ("conn" (conn--dispatch-with-state @ 'conn-state))
+          ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+          ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+        (pcase-exhaustive (transient-arg-value "region=" args)
+          ("change" (conn--dispatch-change-region @))
+          ("end" (conn--dispatch-at-end @))
+          ("start" @))
+        (conn--pulse-on-record @)
+        (pcase (transient-arg-value "last-kmacro=" args)
+          ("apply" (conn--macro-dispatch @ last-kbd-macro))
+          ("append" (conn--macro-dispatch-append @))
+          ("step-edit" (conn--macro-dispatch-step-edit @))
+          (_ (conn--macro-dispatch @)))))))
+
+(transient-define-suffix conn--lines-dispatch-suffix (args)
+  :transient 'transient--do-exit
+  :key "k"
+  :description "On Lines"
+  (interactive (list (transient-args transient-current-command)))
+  (save-excursion
+    (save-window-excursion
+      (conn--thread @
+          (let ((beg (region-beginning))
+                (end (region-end))
+                regions)
+            (goto-char beg)
+            (move-beginning-of-line 1)
+            (while (< (point) end)
+              (when-let ((eol (line-end-position))
+                         (_ (not (= (point) eol))))
+                (push (cons (point) eol) regions))
+              (forward-line))
+            regions)
+        (conn--region-iterator @ (not (member "reverse" args)))
         (conn--dispatch-handle-buffers @)
         (pcase-exhaustive (transient-arg-value "state=" args)
           ("conn" (conn--dispatch-with-state @ 'conn-state))
@@ -4623,7 +4615,7 @@ The last value is \"don't use any of these switches\"."
   :key "d"
   :description "On Matches"
   (interactive (list (transient-args transient-current-command)))
-  (save-mark-and-excursion
+  (save-excursion
     (save-window-excursion
       (conn--thread @
           (prog1
@@ -4668,7 +4660,7 @@ The last value is \"don't use any of these switches\"."
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
-  (save-mark-and-excursion
+  (save-excursion
     (conn--thread @
         (save-excursion
           (goto-char (point-min))
@@ -4709,6 +4701,7 @@ The last value is \"don't use any of these switches\"."
    "Dispatch"
    [(conn--dispatch-suffix)
     (conn--dot-dispatch-suffix)
+    (conn--lines-dispatch-suffix)
     (conn--text-property-dispatch-suffix)]
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
