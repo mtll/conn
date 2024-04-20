@@ -1011,7 +1011,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (_ (error "iterator unknown return")))
   (let ((prev last-kbd-macro))
     (kmacro-step-edit-macro)
-    (when (eq prev last-kbd-macro)
+    (when (or (eq prev last-kbd-macro)
+              (not (y-or-n-p "Macro edit finished, continue executing on regions?")))
       (user-error "Keyboard macro edit aborted")))
   (kmacro-call-macro 0))
 
@@ -4485,31 +4486,39 @@ The last value is \"don't use any of these switches\"."
   :argument "reverse"
   :unsavable t)
 
+(transient-define-argument conn--dispatch-empty-infix ()
+  :class 'transient-switch
+  :key "u"
+  :description "Include Empty"
+  :argument "empty"
+  :unsavable t)
+
 (transient-define-suffix conn--dispatch-suffix (args)
   :transient 'transient--do-exit
   :key "d"
   :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
-  (save-excursion
-    (save-window-excursion
-      (conn--thread @
+  (conn--thread @
+      (if (member "empty" args)
           (region-bounds)
-        (conn--region-iterator @ (member "reverse" args))
-        (conn--dispatch-handle-buffers @)
-        (pcase-exhaustive (transient-arg-value "state=" args)
-          ("conn" (conn--dispatch-with-state @ 'conn-state))
-          ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
-          ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
-        (pcase-exhaustive (transient-arg-value "region=" args)
-          ("change" (conn--dispatch-change-region @))
-          ("end" (conn--dispatch-at-end @))
-          ("start" @))
-        (conn--pulse-on-record @)
-        (pcase (transient-arg-value "last-kmacro=" args)
-          ("apply" (conn--macro-dispatch @ last-kbd-macro))
-          ("append" (conn--macro-dispatch-append @))
-          ("step-edit" (conn--macro-dispatch-step-edit @))
-          (_ (conn--macro-dispatch @)))))))
+        (seq-remove (pcase-lambda (`(,beg . ,end)) (= beg end))
+                    (region-bounds)))
+    (conn--region-iterator @ (member "reverse" args))
+    (conn--dispatch-handle-buffers @)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--dispatch-with-state @ 'conn-state))
+      ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+      ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--dispatch-change-region @))
+      ("end" (conn--dispatch-at-end @))
+      ("start" @))
+    (conn--pulse-on-record @)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--macro-dispatch @ last-kbd-macro))
+      ("append" (conn--macro-dispatch-append @))
+      ("step-edit" (conn--macro-dispatch-step-edit @))
+      (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--dot-dispatch-suffix (args)
   :transient 'transient--do-exit
@@ -4517,36 +4526,34 @@ The last value is \"don't use any of these switches\"."
   :key "e"
   :description "On Dots"
   (interactive (list (transient-args transient-current-command)))
-  (save-excursion
-    (save-window-excursion
-      (conn--thread @
-          (pcase (transient-arg-value "buffer=" args)
-            ("CRM" (conn-read-dot-buffers))
-            ("match-regexp" (conn-read-matching-dot-buffers))
-            (_ (list (current-buffer))))
-        (mapcan (apply-partially 'conn--sorted-overlays
-                                 #'conn-dotp '< nil nil)
-                @)
-        (conn--dot-iterator @ (member "reverse" args))
-        (pcase-exhaustive (transient-arg-value "dots=" args)
-          ("keep" (conn--dispatch-stationary-dots @))
-          ("to-region" (conn--dispatch-relocate-dots @))
-          ("remove" (conn--dispatch-remove-dots @)))
-        (conn--dispatch-handle-buffers @)
-        (pcase-exhaustive (transient-arg-value "state=" args)
-          ("conn" (conn--dispatch-with-state @ 'conn-state))
-          ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
-          ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
-        (pcase-exhaustive (transient-arg-value "region=" args)
-          ("change" (conn--dispatch-change-region @))
-          ("end" (conn--dispatch-at-end @))
-          ("start" @))
-        (conn--pulse-on-record @)
-        (pcase (transient-arg-value "last-kmacro=" args)
-          ("apply" (conn--macro-dispatch @ last-kbd-macro))
-          ("append" (conn--macro-dispatch-append @))
-          ("step-edit" (conn--macro-dispatch-step-edit @))
-          (_ (conn--macro-dispatch @)))))))
+  (conn--thread @
+      (pcase (transient-arg-value "buffer=" args)
+        ("CRM" (conn-read-dot-buffers))
+        ("match-regexp" (conn-read-matching-dot-buffers))
+        (_ (list (current-buffer))))
+    (mapcan (apply-partially 'conn--sorted-overlays
+                             #'conn-dotp '< nil nil)
+            @)
+    (conn--dot-iterator @ (member "reverse" args))
+    (pcase-exhaustive (transient-arg-value "dots=" args)
+      ("keep" (conn--dispatch-stationary-dots @))
+      ("to-region" (conn--dispatch-relocate-dots @))
+      ("remove" (conn--dispatch-remove-dots @)))
+    (conn--dispatch-handle-buffers @)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--dispatch-with-state @ 'conn-state))
+      ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+      ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--dispatch-change-region @))
+      ("end" (conn--dispatch-at-end @))
+      ("start" @))
+    (conn--pulse-on-record @)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--macro-dispatch @ last-kbd-macro))
+      ("append" (conn--macro-dispatch-append @))
+      ("step-edit" (conn--macro-dispatch-step-edit @))
+      (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--regions-dispatch-suffix (regions args)
   :transient 'transient--do-exit
@@ -4554,95 +4561,94 @@ The last value is \"don't use any of these switches\"."
   :description "On Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (save-excursion
-    (save-window-excursion
-      (conn--thread @
-          (conn--region-iterator regions (member "reverse" args))
-        (conn--dispatch-handle-buffers @)
-        (pcase-exhaustive (transient-arg-value "state=" args)
-          ("conn" (conn--dispatch-with-state @ 'conn-state))
-          ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
-          ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
-        (pcase-exhaustive (transient-arg-value "region=" args)
-          ("change" (conn--dispatch-change-region @))
-          ("end" (conn--dispatch-at-end @))
-          ("start" @))
-        (conn--pulse-on-record @)
-        (pcase (transient-arg-value "last-kmacro=" args)
-          ("apply" (conn--macro-dispatch @ last-kbd-macro))
-          ("append" (conn--macro-dispatch-append @))
-          ("step-edit" (conn--macro-dispatch-step-edit @))
-          (_ (conn--macro-dispatch @)))))))
+  (conn--thread @
+      (if (member "empty" args)
+          regions
+        (seq-remove (pcase-lambda (`(,beg . ,end)) (= beg end))
+                    regions))
+    (conn--region-iterator @ (member "reverse" args))
+    (conn--dispatch-handle-buffers @)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--dispatch-with-state @ 'conn-state))
+      ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+      ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--dispatch-change-region @))
+      ("end" (conn--dispatch-at-end @))
+      ("start" @))
+    (conn--pulse-on-record @)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--macro-dispatch @ last-kbd-macro))
+      ("append" (conn--macro-dispatch-append @))
+      ("step-edit" (conn--macro-dispatch-step-edit @))
+      (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--lines-dispatch-suffix (args)
   :transient 'transient--do-exit
-  :key "k"
+  :key "c"
   :description "On Lines"
   (interactive (list (transient-args transient-current-command)))
-  (save-excursion
-    (save-window-excursion
-      (conn--thread @
-          (let ((beg (region-beginning))
-                (end (region-end))
-                regions)
-            (goto-char beg)
-            (move-beginning-of-line 1)
-            (while (< (point) end)
-              (when-let ((eol (line-end-position))
-                         (_ (not (= (point) eol))))
-                (push (cons (point) eol) regions))
-              (forward-line))
+  (conn--thread @
+      (let ((beg (region-beginning))
+            (end (region-end))
+            (emptyp (member "empty" args))
             regions)
-        (conn--region-iterator @ (not (member "reverse" args)))
-        (conn--dispatch-handle-buffers @)
-        (pcase-exhaustive (transient-arg-value "state=" args)
-          ("conn" (conn--dispatch-with-state @ 'conn-state))
-          ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
-          ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
-        (pcase-exhaustive (transient-arg-value "region=" args)
-          ("change" (conn--dispatch-change-region @))
-          ("end" (conn--dispatch-at-end @))
-          ("start" @))
-        (conn--pulse-on-record @)
-        (pcase (transient-arg-value "last-kmacro=" args)
-          ("apply" (conn--macro-dispatch @ last-kbd-macro))
-          ("append" (conn--macro-dispatch-append @))
-          ("step-edit" (conn--macro-dispatch-step-edit @))
-          (_ (conn--macro-dispatch @)))))))
+        (goto-char beg)
+        (move-beginning-of-line 1)
+        (while (< (point) end)
+          (when-let ((eol (line-end-position))
+                     (_ (or emptyp (not (= (point) eol)))))
+            (push (cons (point) eol) regions))
+          (forward-line))
+        regions)
+    (conn--region-iterator @ (not (member "reverse" args)))
+    (conn--dispatch-handle-buffers @)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--dispatch-with-state @ 'conn-state))
+      ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+      ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--dispatch-change-region @))
+      ("end" (conn--dispatch-at-end @))
+      ("start" @))
+    (conn--pulse-on-record @)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--macro-dispatch @ last-kbd-macro))
+      ("append" (conn--macro-dispatch-append @))
+      ("step-edit" (conn--macro-dispatch-step-edit @))
+      (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--isearch-dispatch-suffix (args)
   :transient 'transient--do-exit
   :key "d"
   :description "On Matches"
   (interactive (list (transient-args transient-current-command)))
-  (save-excursion
-    (save-window-excursion
-      (conn--thread @
-          (prog1
-              (if (or (not (boundp 'multi-isearch-buffer-list))
-                      (not multi-isearch-buffer-list))
-                  (conn--isearch-matches-in-buffer)
-                (mapcan 'conn--isearch-matches-in-buffer
-                        (append
-                         (remq (current-buffer) multi-isearch-buffer-list)
-                         (list (current-buffer)))))
-            (isearch-exit))
-        (conn--region-iterator @ (member "reverse" args))
-        (conn--dispatch-handle-buffers @)
-        (pcase-exhaustive (transient-arg-value "state=" args)
-          ("conn" (conn--dispatch-with-state @ 'conn-state))
-          ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
-          ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
-        (pcase-exhaustive (transient-arg-value "region=" args)
-          ("change" (conn--dispatch-change-region @))
-          ("end" (conn--dispatch-at-end @))
-          ("start" @))
-        (conn--pulse-on-record @)
-        (pcase (transient-arg-value "last-kmacro=" args)
-          ("apply" (conn--macro-dispatch @ last-kbd-macro))
-          ("append" (conn--macro-dispatch-append @))
-          ("step-edit" (conn--macro-dispatch-step-edit @))
-          (_ (conn--macro-dispatch @)))))))
+  (conn--thread @
+      (prog1
+          (if (or (not (boundp 'multi-isearch-buffer-list))
+                  (not multi-isearch-buffer-list))
+              (conn--isearch-matches-in-buffer)
+            (mapcan 'conn--isearch-matches-in-buffer
+                    (append
+                     (remq (current-buffer) multi-isearch-buffer-list)
+                     (list (current-buffer)))))
+        (isearch-exit))
+    (conn--region-iterator @ (member "reverse" args))
+    (conn--dispatch-handle-buffers @)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--dispatch-with-state @ 'conn-state))
+      ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+      ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--dispatch-change-region @))
+      ("end" (conn--dispatch-at-end @))
+      ("start" @))
+    (conn--pulse-on-record @)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--macro-dispatch @ last-kbd-macro))
+      ("append" (conn--macro-dispatch-append @))
+      ("step-edit" (conn--macro-dispatch-step-edit @))
+      (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--text-property-dispatch-suffix (prop value args)
   :transient 'transient--do-exit
@@ -4660,33 +4666,32 @@ The last value is \"don't use any of these switches\"."
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
-  (save-excursion
-    (conn--thread @
-        (save-excursion
-          (goto-char (point-min))
-          (let (regions match)
-            (while (setq match (text-property-search-forward
-                                prop value t))
-              (push (cons (prop-match-beginning match)
-                          (prop-match-end match))
-                    regions))
-            regions))
-      (conn--region-iterator @ (not (member "reverse" args)))
-      (conn--dispatch-handle-buffers @)
-      (pcase-exhaustive (transient-arg-value "state=" args)
-        ("conn" (conn--dispatch-with-state @ 'conn-state))
-        ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
-        ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
-      (pcase-exhaustive (transient-arg-value "region=" args)
-        ("change" (conn--dispatch-change-region @))
-        ("end" (conn--dispatch-at-end @))
-        ("start" @))
-      (conn--pulse-on-record @)
-      (pcase (transient-arg-value "last-kmacro=" args)
-        ("apply" (conn--macro-dispatch @ last-kbd-macro))
-        ("append" (conn--macro-dispatch-append @))
-        ("step-edit" (conn--macro-dispatch-step-edit @))
-        (_ (conn--macro-dispatch @))))))
+  (conn--thread @
+      (save-excursion
+        (goto-char (point-min))
+        (let (regions match)
+          (while (setq match (text-property-search-forward
+                              prop value t))
+            (push (cons (prop-match-beginning match)
+                        (prop-match-end match))
+                  regions))
+          regions))
+    (conn--region-iterator @ (not (member "reverse" args)))
+    (conn--dispatch-handle-buffers @)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--dispatch-with-state @ 'conn-state))
+      ("emacs" (conn--dispatch-with-state @ 'conn-emacs-state))
+      ("dot" (conn--dispatch-with-state @ 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--dispatch-change-region @))
+      ("end" (conn--dispatch-at-end @))
+      ("start" @))
+    (conn--pulse-on-record @)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--macro-dispatch @ last-kbd-macro))
+      ("append" (conn--macro-dispatch-append @))
+      ("step-edit" (conn--macro-dispatch-step-edit @))
+      (_ (conn--macro-dispatch @)))))
 
 (transient-define-prefix conn-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4708,7 +4713,8 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-state-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
-    (conn--dispatch-order-infix)]])
+    (conn--dispatch-order-infix)
+    (conn--dispatch-empty-infix)]])
 
 (transient-define-prefix conn-isearch-dispatch-menu ()
   "Transient menu for macro dispatch on regions."
@@ -4750,7 +4756,8 @@ The last value is \"don't use any of these switches\"."
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-order-infix)]]
+    (conn--dispatch-order-infix)
+    (conn--dispatch-empty-infix)]]
   (interactive (list nil))
   (unless regions (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
