@@ -3516,16 +3516,6 @@ Otherwise behave like `other-window'."
         (select-window win))
     (other-window 1)))
 
-(defun conn-buffer-to-other-window ()
-  "Send buffer in selected window to another window and `bury-buffer'."
-  (interactive)
-  (when-let ((win (thread-last
-                    (window-list nil 'no-mini)
-                    (remove (selected-window))
-                    (conn--prompt-for-window))))
-    (set-window-buffer win (current-buffer))
-    (bury-buffer)))
-
 (defun conn-other-place-prefix (&optional arg)
   "One of `other-window-prefix', `other-tab-prefix' or `other-frame-prefix'.
 If ARG is nil `other-window-prefix',
@@ -3698,7 +3688,7 @@ if ARG is anything else `other-tab-prefix'."
   "q"       'conn-wincontrol-off
   "r"       'conn-wincontrol-split-right
   "s"       'conn-wincontrol-shorten
-  "t"       'conn-buffer-to-other-window
+  "t"       'conn-swap-buffers
   "u"       'bury-buffer
   "U"       'unbury-buffer
   "v"       'conn-wincontrol-split-vertically
@@ -5023,7 +5013,7 @@ The last value is \"don't use any of these switches\"."
   ">"     'forward-line
   "?"     'undo-redo
   "`"     'conn-other-window
-  "~"     'conn-buffer-to-other-window
+  "~"     'conn-swap-windows
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "B"     'ibuffer
