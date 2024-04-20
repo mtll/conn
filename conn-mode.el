@@ -532,9 +532,9 @@ If BUFFER is nil check `current-buffer'."
        ',name)))
 
 (defmacro conn-register-thing (thing &rest rest)
-  "Define a new thing.
+  "Register a new THING.
 
-\(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP COMMANDS MODES MARK-KEY EXPAND-KEY)"
+\(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-KEY EXPAND-KEY)"
   (declare (indent 1))
   (unless (or (intern-soft (format "forward-%s" thing))
               (get thing 'forward-op)
@@ -558,14 +558,6 @@ If BUFFER is nil check `current-buffer'."
       `((put ',thing 'end-op ,end)))
     (when-let ((bounds (plist-get rest :bounds-op)))
       `((put ',thing 'bounds-of-thing-at-point ,bounds)))
-    (when-let ((commands (plist-get rest :commands)))
-      (let ((cmds (gensym "commands")))
-        `((let ((,cmds ,commands))
-            ,@(nconc
-               `((dolist (cmd ,cmds)
-                   (put cmd :conn-command-thing ',thing)))
-               (when-let ((handler (plist-get rest :handler)))
-                 `((conn-set-mark-handler ,cmds ,handler))))))))
     (when-let ((binding (plist-get rest :mark-key)))
       (if-let ((modes (ensure-list (plist-get rest :modes))))
           (let ((forms))
@@ -592,6 +584,12 @@ If BUFFER is nil check `current-buffer'."
             forms)
         `((keymap-set conn-mark-thing-map ,binding
                       (conn--thing-expander-command ,thing))))))))
+
+(defun conn-register-thing-commands (thing handler &rest commands)
+  "Associate COMMANDS with a THING and a HANDLER."
+  (dolist (cmd commands)
+    (put cmd :conn-command-thing thing))
+  (conn-set-mark-handler commands handler))
 
 (defmacro conn-define-thing-handler (name lambda-list &rest rest)
   "Define a thing movement command mark handler constructor.
@@ -4155,65 +4153,82 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;;; Thing Definitions
 
 (conn-register-thing page
-  :handler (conn-individual-thing-handler 'page)
   :mark-key "p"
-  :forward-op 'forward-page
-  :commands '(forward-page backward-page))
+  :forward-op 'forward-page)
+
+(conn-register-thing-commands
+ 'page (conn-individual-thing-handler 'page)
+ 'forward-page 'backward-page)
 
 (conn-register-thing dot
-  :handler (conn-individual-thing-handler 'dot)
   :expand-key "."
   :beg-op (lambda () (conn-previous-dot 1))
-  :end-op (lambda () (conn-next-dot 1))
-  :commands '(conn-next-dot conn-previous-dot))
+  :end-op (lambda () (conn-next-dot 1)))
+
+(conn-register-thing-commands
+ 'dot (conn-individual-thing-handler 'dot)
+ 'conn-next-dot 'conn-previous-dot) 
 
 (conn-register-thing word
-  :handler (conn-sequential-thing-handler 'word)
   :expand-key "o"
-  :forward-op 'forward-word
-  :commands '(forward-word backward-word))
+  :forward-op 'forward-word)
+
+(conn-register-thing-commands
+ 'word (conn-sequential-thing-handler 'word)
+ 'forward-word 'backward-word)
 
 (conn-register-thing sexp
-  :handler (conn-sequential-thing-handler 'sexp)
   :expand-key "m"
-  :forward-op 'forward-sexp
-  :commands '(forward-sexp backward-sexp))
+  :forward-op 'forward-sexp)
 
-(conn-register-thing sexp
-  :handler (conn-individual-thing-handler 'sexp)
-  :commands '(up-list backward-up-list))
+(conn-register-thing-commands
+ 'sexp (conn-sequential-thing-handler 'sexp)
+ 'forward-sexp 'backward-sexp)
+
+(conn-register-thing-commands
+ 'sexp (conn-individual-thing-handler 'sexp)
+ 'up-list 'backward-up-list)
 
 (conn-register-thing whitespace
-  :handler (conn-individual-thing-handler 'whitespace)
   :expand-key "S-SPC"
   :mark-key "SPC"
-  :forward-op 'forward-whitespace
-  :commands '(forward-whitespace conn-backward-whitespace))
+  :forward-op 'forward-whitespace)
+
+(conn-register-thing-commands
+ 'whitespace (conn-individual-thing-handler 'whitespace)
+ 'forward-whitespace 'conn-backward-whitespace)
 
 (conn-register-thing sentence
-  :handler (conn-sequential-thing-handler 'sentence)
   :forward-op 'forward-sentence
-  :expand-key "{"
-  :commands '(forward-sentence backward-sentence))
+  :expand-key "{")
+
+(conn-register-thing-commands
+ 'sentence (conn-sequential-thing-handler 'sentence)
+ 'forward-sentence 'backward-sentence)
 
 (conn-register-thing paragraph
-  :handler (conn-sequential-thing-handler 'paragraph)
   :expand-key "K"
-  :forward-op 'forward-paragraph
-  :commands '(forward-paragraph backward-paragraph))
+  :forward-op 'forward-paragraph)
+
+(conn-register-thing-commands
+ 'paragraph (conn-sequential-thing-handler 'paragraph)
+ 'forward-paragraph 'backward-paragraph)
 
 (conn-register-thing defun
-  :handler (conn-sequential-thing-handler 'defun)
-  :expand-key "M"
-  :commands '(end-of-defun beginning-of-defun))
+  :expand-key "M")
+
+(conn-register-thing-commands
+ 'defun (conn-sequential-thing-handler 'defun)
+ 'end-of-defun 'beginning-of-defun)
 
 (conn-register-thing buffer
-  :handler (conn-individual-thing-handler 'buffer)
-  :bounds-op (lambda () (cons (point-min) (point-max)))
-  :commands '(end-of-buffer beginning-of-buffer))
+  :bounds-op (lambda () (cons (point-min) (point-max))))
+
+(conn-register-thing-commands
+ 'buffer (conn-individual-thing-handler 'buffer)
+ 'end-of-buffer 'beginning-of-buffer)
 
 (conn-register-thing line
-  :handler (conn-sequential-thing-handler 'line)
   :expand-key ">"
   :forward-op (lambda (N)
                 (cond ((> N 0)
@@ -4223,27 +4238,33 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                          (beginning-of-line)
                          (if (= pt (point))
                              (forward-line N)
-                           (forward-line (1+ N)))))))
-  :commands '(forward-line conn-backward-line))
+                           (forward-line (1+ N))))))))
 
-(conn-register-thing line
-  :handler 'conn-jump-handler
-  :commands '(next-line previous-line))
+(conn-register-thing-commands
+ 'line (conn-sequential-thing-handler 'line)
+ 'forward-line 'conn-backward-line)
+
+(conn-register-thing-commands
+ 'line 'conn-jump-handler
+ 'next-line 'previous-line)
 
 (conn-register-thing outer-line
-  :handler (conn-individual-thing-handler 'outer-line)
   :beg-op (lambda () (move-beginning-of-line nil))
-  :end-op (lambda () (move-end-of-line nil))
-  :commands '(move-beginning-of-line
-              move-end-of-line))
+  :end-op (lambda () (move-end-of-line nil)))
+
+(conn-register-thing-commands
+ 'outer-line (conn-individual-thing-handler 'outer-line)
+ 'move-beginning-of-line 'move-end-of-line)
 
 (conn-register-thing inner-line
-  :handler (conn-individual-thing-handler 'inner-line)
   :beg-op 'back-to-indentation
-  :end-op 'conn--end-of-inner-line-1
-  :commands '(back-to-indentation
-              conn-beginning-of-inner-line
-              conn-end-of-inner-line))
+  :end-op 'conn--end-of-inner-line-1)
+
+(conn-register-thing-commands
+ 'inner-line (conn-individual-thing-handler 'inner-line)
+ 'back-to-indentation
+ 'conn-beginning-of-inner-line
+ 'conn-end-of-inner-line)
 
 
 ;;;; Transient Menus
@@ -4971,22 +4992,22 @@ The last value is \"don't use any of these switches\"."
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-menu
-  "H"   'conn-mark-thing
   "h"   'conn-mark-thing-map
   "I"   'copy-from-above-command
   "j"   'join-line
-  "K"   'transpose-paragraphs
   "k"   'transpose-lines
+  "K"   'transpose-paragraphs
   "l"   'transpose-chars
   "m"   'transpose-sexps
+  "N"   'conn-narrow-indirect-to-thing
+  "n"   'conn-narrow-to-thing
   "o"   'transpose-words
   "q"   'indent-for-tab-command
   "r"   'query-replace
-  "w"   'query-replace-regexp
+  "u"   'conn-mark-thing
   "V"   'conn-narrow-indirect-to-visible
   "v"   'conn-narrow-to-visible
-  "N"   'conn-narrow-indirect-to-thing
-  "n"   'conn-narrow-to-thing
+  "w"   'query-replace-regexp
   "y"   'yank-in-context)
 
 (define-keymap
@@ -5354,33 +5375,39 @@ The last value is \"don't use any of these switches\"."
   (declare-function org-forward-sentence "org")
 
   (conn-register-thing org-paragraph
-    :handler (conn-sequential-thing-handler 'org-paragraph)
     :forward-op 'org-forward-paragraph
-    :commands '(org-forward-paragraph org-backward-paragraph)
     :expand-key "I"
     :modes 'org-mode)
 
+  (conn-register-thing-commands
+   'org-paragraph (conn-sequential-thing-handler 'org-paragraph)
+   'org-forward-paragraph 'org-backward-paragraph)
+
   (conn-register-thing org-sentence
-    :handler (conn-sequential-thing-handler 'org-sentence)
     :forward-op (lambda (arg)
                   (if (>= arg 0)
                       (org-forward-sentence arg)
                     (org-backward-sentence (abs arg))))
-    :commands '(org-forward-sentence org-backward-sentence)
     :expand-key "{"
     :modes 'org-mode)
 
+  (conn-register-thing-commands
+   'org-sentence (conn-sequential-thing-handler 'org-sentence)
+   'org-forward-sentence 'org-backward-sentence)
+
   (conn-register-thing org-element
-    :handler (conn-individual-thing-handler 'org-element)
     :expand-key "K"
     :beg-op 'org-backward-element
     :end-op 'org-forward-element
-    :commands '(org-forward-element
-                org-backward-element
-                org-next-visible-heading
-                org-previous-visible-heading
-                org-up-element)
     :modes 'org-mode)
+
+  (conn-register-thing-commands
+   'org-element (conn-individual-thing-handler 'org-element)
+   'org-forward-element
+   'org-backward-element
+   'org-next-visible-heading
+   'org-previous-visible-heading
+   'org-up-element)
 
   (keymap-set (conn-get-mode-map 'conn-state 'org-mode)
               "T" 'conn-org-tree-edit-state)
@@ -5422,18 +5449,20 @@ The last value is \"don't use any of these switches\"."
       "(" 'paredit-backward-up))
 
   (conn-register-thing paredit-sexp
-    :handler (conn-sequential-thing-handler 'paredit-sexp)
     :forward-op 'paredit-forward
     :expand-key "m"
-    :modes 'paredit-mode
-    :commands '(paredit-forward
-                paredit-backward
-                paredit-forward-up
-                paredit-backward-up))
+    :modes 'paredit-mode)
 
-  (conn-register-thing sexp
-    :handler (conn-individual-thing-handler 'paredit-sexp)
-    :commands '(paredit-forward-up paredit-backward-up)))
+  (conn-register-thing-commands
+   'paredit-sexp (conn-sequential-thing-handler 'paredit-sexp)
+   'paredit-forward
+   'paredit-backward
+   'paredit-forward-up
+   'paredit-backward-up)
+
+  (conn-register-thing-commands
+   'sexp (conn-individual-thing-handler 'paredit-sexp)
+   'paredit-forward-up 'paredit-backward-up))
 
 (with-eval-after-load 'zones
   (defvar zz-add-zone-anyway-p)
@@ -5458,7 +5487,6 @@ The last value is \"don't use any of these switches\"."
   (declare-function outline-end-of-subtree "outline")
 
   (conn-register-thing heading
-    :handler (conn-individual-thing-handler 'heading)
     :mark-key "H"
     :beg-op (lambda ()
               (unless (looking-at outline-regexp)
@@ -5466,10 +5494,13 @@ The last value is \"don't use any of these switches\"."
     :end-op (lambda ()
               (unless (looking-at outline-regexp)
                 (outline-up-heading 1))
-              (outline-end-of-subtree))
-    :commands '(outline-up-heading
-                outline-next-heading
-                outline-previous-heading
-                outline-forward-same-level
-                outline-backward-same-level)))
+              (outline-end-of-subtree)))
+
+  (conn-register-thing-commands
+   'heading (conn-individual-thing-handler 'heading)
+   'outline-up-heading
+   'outline-next-heading
+   'outline-previous-heading
+   'outline-forward-same-level
+   'outline-backward-same-level))
 ;;; conn-mode.el ends here
