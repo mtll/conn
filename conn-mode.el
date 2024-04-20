@@ -257,7 +257,7 @@ dynamically.")
 
 See `conn--dispatch-on-regions'.")
 
-(defvar conn--dispatch-error nil)
+(defvar conn-dispatch-error nil)
 
 (defvar-local conn--dot-undoing nil)
 (defvar-local conn--dot-undo-ring nil)
@@ -770,7 +770,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (lambda (&optional state)
       (when (eq state :finalize)
         (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
-          (if conn--dispatch-error
+          (if conn-dispatch-error
               (cancel-change-group handle)
             (accept-change-group handle)
             (undo-amalgamate-change-group handle))
@@ -822,13 +822,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          ret)))))
 
 (defun conn--region-iterator (regions &optional reverse)
-  (setq regions (mapcar (lambda (region)
-                          (if (markerp (car region))
-                              region
-                            (cons (conn--create-marker (car region))
-                                  (conn--create-marker (cdr region)))))
-                        regions))
   (when reverse (setq regions (reverse regions)))
+  (dolist (reg regions)
+    (unless (markerp (car reg))
+      (setcar reg (conn--create-marker (car reg))))
+    (unless (markerp (cdr reg))
+      (setcdr reg (conn--create-marker (cdr reg)))))
   (lambda (&optional state)
     (if (eq state :finalize)
         (pcase-dolist (`(,beg . ,end) regions)
@@ -862,7 +861,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (if (eq state :finalize)
           (progn
             (pcase-dolist (`(,buffer . ,dots)
-                           (if conn--dispatch-error old-dots new-dots))
+                           (if conn-dispatch-error old-dots new-dots))
               (with-current-buffer buffer
                 (apply 'conn--create-dots dots)))
             (dolist (list (list new-dots old-dots))
@@ -904,7 +903,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (lambda (&optional state)
       (if (eq state :finalize)
           (progn
-            (when conn--dispatch-error
+            (when conn-dispatch-error
               (pcase-dolist (`(,buffer . ,dots) old-dots)
                 (with-current-buffer buffer
                   (apply 'conn--create-dots dots))))
@@ -930,43 +929,51 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (`(,beg . ,end) (cons end beg))
       (ret ret))))
 
-(defmacro conn--define-dispatcher (name args &rest body)
+(defvar conn-dispatch-end-hook nil)
+(defvar conn-dispatch-start-hook nil)
+(defvar conn-dispatch-iterator-hook nil)
+
+(defmacro conn--define-dispatcher (name arglist &rest body)
   "Define a macro dispatcher.
+The iterator must be the first argument in ARGLIST.
 
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
   (declare (doc-string 3) (indent 2))
-  (let ((iterator (car args))
-        (sym (gensym "advice-sym"))
-        (start (gensym "start"))
+  (let ((iterator (car arglist))
+        (sym (make-symbol "advice-sym"))
         (docstring (if (stringp (car body)) (pop body) "")))
-    `(defun ,name ,args
+    `(defun ,name ,arglist
        ,docstring
-       (let* ((undo-outer-limit nil)
-              (undo-limit most-positive-fixnum)
-              (undo-strong-limit most-positive-fixnum)
-              (conn-macro-dispatch-p t)
-              (conn--dispatch-error nil)
-              (,sym (make-symbol "conn--kmacro-iterator"))
-              (,start (point)))
-         (fset ,sym (lambda (&optional state)
-                      (pcase (funcall ,iterator state)
-                        (`(,beg . ,end)
-                         (goto-char beg)
-                         (conn--push-ephemeral-mark end)
-                         (set-marker beg nil)
-                         (set-marker end nil)
-                         t))))
-         (advice-add #'kmacro-loop-setup-function :before-while ,sym)
-         (unwind-protect
-             (condition-case err
-                 ,(macroexp-progn body)
-               (t
-                (setq conn--dispatch-error err)
-                (signal (car err) (cdr err)))
-               (:success
-                (conn--push-ephemeral-mark ,start)))
-           (advice-remove 'kmacro-loop-setup-function ,sym)
-           (funcall ,iterator :finalize))))))
+       (save-mark-and-excursion
+         (save-window-excursion
+           (let* ((undo-outer-limit nil)
+                  (undo-limit most-positive-fixnum)
+                  (undo-strong-limit most-positive-fixnum)
+                  (conn-macro-dispatch-p t)
+                  (conn-dispatch-error nil)
+                  (,sym (make-symbol "conn--kmacro-iterator")))
+             (fset ,sym (lambda (&optional state)
+                          (pcase (funcall ,iterator state)
+                            (`(,beg . ,end)
+                             (goto-char beg)
+                             (conn--push-ephemeral-mark end)
+                             (set-marker beg nil)
+                             (set-marker end nil)
+                             (and (run-hook-with-args-until-failure
+                                   'conn-dispatch-iterator-hook)
+                                  t)))))
+             (advice-add #'kmacro-loop-setup-function :before-while ,sym)
+             (unwind-protect
+                 (condition-case err
+                     (progn
+                       (run-hooks 'conn-dispatch-start-hook)
+                       ,@body)
+                   (t
+                    (setq conn-dispatch-error err)
+                    (signal (car err) (cdr err))))
+               (advice-remove 'kmacro-loop-setup-function ,sym)
+               (funcall ,iterator :finalize)
+               (run-hooks 'conn-dispatch-end-hook))))))))
 
 (conn--define-dispatcher conn--macro-dispatch (iterator &optional macro)
   (pcase-exhaustive macro
