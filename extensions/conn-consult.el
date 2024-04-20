@@ -183,8 +183,9 @@ THING BEG and END are bound in BODY."
   (defun conn-dispatch-grep-candidates (cands)
     (conn-regions-dispatch-menu
      (mapcar (lambda (cand)
-               (let ((marker (car (consult--grep-position cand))))
-                 (cons marker marker)))
+               (pcase-let ((`(,line-pos (,beg . ,end) . _)
+                            (consult--grep-position cand)))
+                 (cons (+ line-pos beg) (+ line-pos end))))
              cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
@@ -192,7 +193,9 @@ THING BEG and END are bound in BODY."
     (conn-regions-dispatch-menu
      (mapcar (lambda (cand)
                (let ((marker (car (consult--get-location cand))))
-                 (cons marker marker)))
+                 (save-excursion
+                   (goto-char marker)
+                   (cons marker (line-end-position)))))
              cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
