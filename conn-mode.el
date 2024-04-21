@@ -452,19 +452,23 @@ If BUFFER is nil check `current-buffer'."
                     (keymap-lookup nil))))
       (get key :conn-command-thing))))
 
-(defun conn--isearch-matches-in-buffer (&optional buffer)
+(defun conn--isearch-matches-in-buffer (&optional buffer all)
   (with-current-buffer (or buffer (current-buffer))
-    (let (matches)
+    (let (matches
+          (bound (if isearch-forward (point-max) (point-min))))
       (save-excursion
-        (isearch-repeat-forward)
-        (goto-char (point-min))
-        (while (isearch-search-string isearch-string (point-max) t)
+        (if all
+            (goto-char (if isearch-forward (point-min) (point-max)))
+          (goto-char isearch-other-end))
+        (while (isearch-search-string isearch-string bound t)
           (when (funcall isearch-filter-predicate
                          (match-beginning 0) (match-end 0))
             (push (cons (conn--create-marker (match-beginning 0))
                         (conn--create-marker (match-end 0)))
                   matches))))
-      (nreverse matches))))
+      (if isearch-forward
+          (nreverse matches)
+        matches))))
 
 (defun conn--read-string-preview-overlays (string &optional dir)
   (let (ovs)
@@ -1117,7 +1121,7 @@ The iterator must be the first argument in ARGLIST.
        (`(,beg . ,end)
         (goto-char beg)
         (conn--push-ephemeral-mark end))
-       (_ (error "iterator unknown return")))
+       (_ (error "Invalid region")))
      (kmacro-start-macro nil)
      (unwind-protect
          (recursive-edit)
@@ -1131,7 +1135,7 @@ The iterator must be the first argument in ARGLIST.
     (`(,beg . ,end)
      (goto-char beg)
      (conn--push-ephemeral-mark end))
-    (_ (error "iterator unknown return")))
+    (_ (error "Invalid region")))
   (kmacro-start-macro (if dont-exec '(16) '(4)))
   (unwind-protect
       (recursive-edit)
@@ -1145,7 +1149,7 @@ The iterator must be the first argument in ARGLIST.
     (`(,beg . ,end)
      (goto-char beg)
      (conn--push-ephemeral-mark end))
-    (_ (error "iterator unknown return")))
+    (_ (error "Invalid region")))
   (let ((prev last-kbd-macro))
     (kmacro-step-edit-macro)
     (when (or (eq prev last-kbd-macro)
@@ -4688,7 +4692,8 @@ The last value is \"don't use any of these switches\"."
           (if (or (not (boundp 'multi-isearch-buffer-list))
                   (not multi-isearch-buffer-list))
               (conn--isearch-matches-in-buffer)
-            (mapcan 'conn--isearch-matches-in-buffer
+            (mapcan (lambda (buffer)
+                      (conn--isearch-matches-in-buffer buffer t))
                     (append
                      (remq (current-buffer) multi-isearch-buffer-list)
                      (list (current-buffer)))))
