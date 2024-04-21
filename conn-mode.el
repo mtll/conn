@@ -1596,10 +1596,9 @@ Also enable input methods when any `conn-input-method-overriding-mode' is on."
       (pcase (get conn-current-state :conn-suppress-input-method)
         ((and 'nil (guard conn--input-method))
          (activate-input-method conn--input-method))
-        ('nil
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title))
         ((guard (and current-input-method conn--input-method))
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title)
          (deactivate-input-method))
         ((guard current-input-method)
          (setq conn--input-method current-input-method
@@ -1608,22 +1607,17 @@ Also enable input methods when any `conn-input-method-overriding-mode' is on."
 
 (defun conn--deactivate-input-method ()
   "Disable input method in all states."
-  (let (input-method-activate-hook
-        input-method-deactivate-hook)
-    (setq conn--input-method nil)))
+  (setq conn--input-method nil
+        conn--input-method-title nil))
 
 (defun conn-toggle-input-method ()
   (interactive)
-  (if conn--input-method
-      (setq conn--input-method nil
-            conn--input-method-title nil)
-    (let* ((input-method (or (car input-method-history)
-                             default-input-method
-                             (read-input-method-name
-                              (format-prompt "Input method" nil) t)))
-           (title (nth 3 (assoc input-method input-method-alist))))
-      (setq conn--input-method input-method
-            conn--input-method-title title))))
+  (if (and conn--input-method (not current-input-method))
+      (let ((current-input-method conn--input-method))
+        (deactivate-input-method)
+        (setq conn--input-method nil
+              conn--input-method-title nil))
+    (call-interactively 'toggle-input-method)))
 
 (defun conn--input-method-mode-line ()
   (cond
