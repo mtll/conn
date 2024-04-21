@@ -3587,6 +3587,7 @@ if ARG is anything else `other-tab-prefix'."
 
 (defvar conn--wincontrol-arg 1)
 (defvar conn--previous-scroll-conservatively)
+(defvar conn--wincontrol-help)
 (defvar conn--wincontrol-help-format)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
@@ -3602,66 +3603,91 @@ if ARG is anything else `other-tab-prefix'."
   :group 'conn-mode
   :type 'integer)
 
-(defvar conn--wincontrol-window-format
-  (concat
-   (propertize "Window: " 'face 'bold)            "prefix arg: "
-   (propertize "%d" 'face 'transient-value)       "; "
-   (propertize "." 'face 'help-key-binding)       ": reset; "
-   (propertize "H" 'face 'help-key-binding)       ": help; "
-   (propertize "q" 'face 'help-key-binding)       ": quit; "
-   (propertize "h s w n" 'face 'help-key-binding) ": heighten/shorten/widen/narrow"
-   "\n"
-   (propertize "i j k l" 'face 'help-key-binding) ": move; "
-   (propertize "SPC DEL" 'face 'help-key-binding) ": scroll; "
-   (propertize "u U" 'face 'help-key-binding)     ": un/bury; "
-   (propertize "d D" 'face 'help-key-binding)     ": delete win/other; "
-   (propertize "x t" 'face 'help-key-binding)     ": swap/throw buf"
-   "\n"
-   (propertize "p P" 'face 'help-key-binding) ": load/store; "
-   (propertize "c" 'face 'help-key-binding)   ": clone; "
-   (propertize "v r" 'face 'help-key-binding) ": split vert/right; "
-   (propertize "z Z" 'face 'help-key-binding) ": zoom; "
-   (propertize "= +" 'face 'help-key-binding) ": balance/max; "
-   (propertize "/ ?" 'face 'help-key-binding) ": undo/redo"))
+(defun conn--wincontrol-window-format ()
+  (substitute-command-keys
+   (concat
+    "\\<conn-wincontrol-map>"
+    (propertize "Window: " 'face 'bold)
+    "prefix arg: "
+    (propertize "%d" 'face 'transient-value) "; "
+    "\\[conn-wincontrol-digit-argument-reset]: reset; "
+    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-off]: quit; "
+    "\\[conn-wincontrol-heighten] "
+    "\\[conn-wincontrol-shorten] "
+    "\\[conn-wincontrol-widen] "
+    "\\[conn-wincontrol-narrow]: "
+    "heighten shorten widen narrow; "
+    "\n"
+    "\\[conn-wincontrol-windmove-up] "
+    "\\[conn-wincontrol-windmove-down] "
+    "\\[conn-wincontrol-windmove-left] "
+    "\\[conn-wincontrol-windmove-right]: "
+    "move; "
+    "\\[conn-wincontrol-scroll-up] "
+    "\\[conn-wincontrol-scroll-down]: "
+    "scroll; "
+    "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
+    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
+    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/throw; "
+    "\n"
+    "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
+    "\\[conn-wincontrol-clone-buffer]: clone; "
+    "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
+    "split vert/right; "
+    "\\[text-scale-decrease] \\[text-scale-increase]: zoom; "
+    "\\[balance-windows] \\[maximize-window]: balance/max; "
+    "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo")))
 
-(defvar conn--wincontrol-tab-format
-  (concat
-   (propertize "Tab: " 'face 'bold)         "prefix arg: "
-   (propertize "%d" 'face 'transient-value) "; "
-   (propertize "." 'face 'help-key-binding) ": reset; "
-   (propertize "H" 'face 'help-key-binding) ": help; "
-   (propertize "q" 'face 'help-key-binding) ": quit; "
-   (propertize "I" 'face 'help-key-binding) ": win to new tab; "
-   "\n"
-   (propertize "e" 'face 'help-key-binding)     ": store; "
-   (propertize "J L" 'face 'help-key-binding)   ": next/prev; "
-   (propertize "N C K" 'face 'help-key-binding) ": new/clone/kill; "
-   (propertize "G" 'face 'help-key-binding)     ": group; "
-   (propertize "O" 'face 'help-key-binding)     ": tear off"))
+(defun conn--wincontrol-tab-format ()
+  (substitute-command-keys
+   (concat
+    "\\<conn-wincontrol-map>"
+    (propertize "Tab: " 'face 'bold)
+    "prefix arg: "
+    (propertize "%d" 'face 'transient-value) "; "
+    "\\[conn-wincontrol-digit-argument-reset]: reset; "
+    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-off]: quit; "
+    "\\[tab-bar-move-window-to-tab]: win to new tab"
+    "\n"
+    "\\[conn-tab-to-register]: store; "
+    "\\[tab-previous] \\[tab-next]: next/prev; "
+    "\\[tab-bar-new-tab] \\[tab-bar-duplicate-tab] \\[conn-wincontrol-tab-close]: "
+    "new/clone/kill; "
+    "\\[conn-tab-group]: group; "
+    "\\[tab-bar-detach-tab]: tear off")))
 
-(defvar conn--wincontrol-frame-format
-  (concat
-   (propertize "Frame: " 'face 'bold)         "prefix arg: "
-   (propertize "%d" 'face 'transient-value)   "; "
-   (propertize "." 'face 'help-key-binding)   ": reset; "
-   (propertize "H" 'face 'help-key-binding)   ": help; "
-   (propertize "q" 'face 'help-key-binding)   ": quit; "
-   (propertize "f" 'face 'help-key-binding)   ": fullscreen; "
-   (propertize "M-c" 'face 'help-key-binding) ": clone; "
-   (propertize "o" 'face 'help-key-binding)   ": tear off"
-   "\n"
-   (propertize "M-/" 'face 'help-key-binding)       ": undelete; "
-   (propertize "M-`" 'face 'help-key-binding)       ": switch; "
-   (propertize "M-1 M-2" 'face 'help-key-binding)   ": iconify/create; "
-   (propertize "< >" 'face 'help-key-binding)       ": rot/rev; "
-   (propertize "M-d C-M-d" 'face 'help-key-binding) ": delete/other"))
+(defun conn--wincontrol-frame-format ()
+  (substitute-command-keys
+   (concat
+    "\\<conn-wincontrol-map>"
+    (propertize "Frame: " 'face 'bold)
+    "prefix arg: "
+    (propertize "%d" 'face 'transient-value) "; "
+    "\\[conn-wincontrol-digit-argument-reset]: reset; "
+    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-off]: quit; "
+    "\\[toggle-frame-fullscreen]: fullscreen; "
+    "\\[clone-frame]: clone; "
+    "\\[undelete-frame]: undelete"
+    "\n"
+    "\\[conn-wincontrol-reverse] \\[conn-wincontrol-reflect]: reverse/reflect; "
+    "\\[other-frame]: other; "
+    "\\[iconify-or-deiconify-frame] \\[make-frame-command]: iconify/create; "
+    "\\[tear-off-window]: tear off; "
+    "\\[delete-frame] \\[delete-other-frames]: delete/other")))
 
-(defvar conn--wincontrol-simple-format
-  (concat
-   (propertize "Win Control: " 'face 'bold) "prefix arg: "
-   (propertize "%d" 'face 'transient-value) "; "
-   (propertize "H" 'face 'help-key-binding) ": help; "
-   (propertize "q" 'face 'help-key-binding) ": quit"))
+(defun conn--wincontrol-simple-format ()
+  (substitute-command-keys
+   (concat
+    "\\<conn-wincontrol-map>"
+    (propertize "WinControl: " 'face 'bold)
+    "prefix arg: "
+    (propertize "%d" 'face 'transient-value) "; "
+    "\\[conn-wincontrol-digit-argument-reset]: reset; "
+    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-off]: quit; ")))
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
@@ -3709,11 +3735,11 @@ if ARG is anything else `other-tab-prefix'."
   "<right>" 'conn-wincontrol-windmove-right
   "<tab>"   'conn-wincontrol-scroll-up
   "<up>"    'conn-wincontrol-windmove-up
+  "TAB"     'conn-wincontrol-scroll-up
   "DEL"     'conn-wincontrol-scroll-down
   "SPC"     'conn-wincontrol-scroll-up
   "M-<tab>" 'conn-wincontrol-scroll-down
   "M-TAB"   'conn-wincontrol-scroll-down
-  "TAB"     'conn-wincontrol-scroll-up
   "a"       'conn-wincontrol-off
   "b"       'switch-to-buffer
   "c"       'conn-wincontrol-clone-buffer
@@ -3723,7 +3749,7 @@ if ARG is anything else `other-tab-prefix'."
   "e"       'conn-tab-to-register
   "f"       'toggle-frame-fullscreen
   "G"       'conn-tab-group
-  "H"       'conn-wincontrol-toggle-help
+  "H"       'conn-wincontrol-help
   "h"       'conn-wincontrol-heighten
   "i"       'conn-wincontrol-windmove-up
   "I"       'tab-bar-move-window-to-tab
@@ -3766,6 +3792,20 @@ if ARG is anything else `other-tab-prefix'."
   (interactive)
   (conn-wincontrol-mode 1))
 
+(defun conn--wincontrol-set-format (&optional cycle)
+  (when cycle
+    (setq conn--wincontrol-help (pcase conn--wincontrol-help
+                                  ('window 'tab)
+                                  ('tab    'frame)
+                                  ('frame  nil)
+                                  (_       'window))))
+  (setq conn--wincontrol-help-format
+        (pcase conn--wincontrol-help
+          ('window (conn--wincontrol-window-format))
+          ('tab    (conn--wincontrol-tab-format))
+          ('frame  (conn--wincontrol-frame-format))
+          (_       (conn--wincontrol-simple-format)))))
+
 (defun conn--wincontrol-pre-command ()
   (when (null conn--wincontrol-arg)
     (setq conn--wincontrol-arg 1))
@@ -3788,24 +3828,20 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
         (resize-mini-windows t))
-    (message (pcase conn--wincontrol-help-format
-               ('tab    conn--wincontrol-tab-format)
-               ('frame  conn--wincontrol-frame-format)
-               ('window conn--wincontrol-window-format)
-               (_       conn--wincontrol-simple-format))
-             conn--wincontrol-arg)))
+    (message conn--wincontrol-help-format conn--wincontrol-arg)))
 
 (defun conn--wincontrol-setup ()
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq conn--previous-scroll-conservatively scroll-conservatively
-        conn--wincontrol-help-format conn-wincontrol-initial-help
+        conn--wincontrol-help conn-wincontrol-initial-help
         conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
         eldoc-message-function #'ignore
         scroll-conservatively 100
         conn--wincontrol-arg (mod (prefix-numeric-value current-prefix-arg)
                                   conn-wincontrol-arg-limit))
+  (conn-wincontrol-help)
   (dolist (state conn-states)
     (set-face-foreground (get state :conn-lighter-face)
                          (face-foreground 'mode-line)))
@@ -3852,15 +3888,21 @@ When called interactively N is `last-command-event'."
   (interactive)
   (conn-wincontrol-mode -1))
 
-(defun conn-wincontrol-toggle-help ()
+(defun conn-wincontrol-help (&optional interactive)
   "Cycle to the next `conn-wincontrol-mode' help message."
-  (interactive)
+  (interactive (list t))
+  (when interactive
+    (setq conn--wincontrol-help (pcase conn--wincontrol-help
+                                  ('window 'tab)
+                                  ('tab    'frame)
+                                  ('frame  nil)
+                                  (_       'window))))
   (setq conn--wincontrol-help-format
-        (pcase conn--wincontrol-help-format
-          ('window 'tab)
-          ('tab    'frame)
-          ('frame  nil)
-          (_       'window))))
+        (pcase conn--wincontrol-help
+          ('window (conn--wincontrol-window-format))
+          ('tab    (conn--wincontrol-tab-format))
+          ('frame  (conn--wincontrol-frame-format))
+          (_       (conn--wincontrol-simple-format)))))
 
 (defun conn-wincontrol-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
@@ -4310,8 +4352,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ["Commands:"
    :if-not conn--in-kbd-macro-p
    [("k" "Call Macro" kmacro-call-macro)
-    ("a" "Append to Macro" (lambda (arg)
-                             (interactive "P")
+    ("a" "Append to Macro" (lambda ()
+                             (interactive)
                              (kmacro-start-macro '(4))))
     ("A" "Append w/o Executing" (lambda ()
                                   (interactive)
