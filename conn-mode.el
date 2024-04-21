@@ -4301,7 +4301,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    :if-not conn--in-kbd-macro-p
    [("i" "Insert Counter" kmacro-insert-counter)
     ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
@@ -4309,14 +4309,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("o" "Pop" kmacro-delete-ring-head :transient t)]]
   ["Commands:"
    :if-not conn--in-kbd-macro-p
-   [("a" "Call Macro" kmacro-call-macro)
+   [("k" "Call Macro" kmacro-call-macro)
+    ("a" "Append to Macro" (lambda (arg)
+                             (interactive "P")
+                             (kmacro-start-macro '(4))))
+    ("A" "Append w/o Executing" (lambda ()
+                                  (interactive)
+                                  (kmacro-start-macro '(16))))
     ("r" "Record Macro" kmacro-start-macro)
-    ("e" "Edit Macro" kmacro-edit-macro)
-    ("m" "Step Edit Macro" kmacro-step-edit-macro)]
+    ("e" "Edit Macro" kmacro-edit-macro)]
    [("d" "Name Last Macro" kmacro-name-last-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
     ("q" "Kmacro to Register" kmacro-to-register)
-    ("c" "Apply Macro on Lines" apply-macro-to-region-lines)]]
+    ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
+    ("m" "Step Edit Macro" kmacro-step-edit-macro)]]
   [:if
    conn--in-kbd-macro-p
    ["Commands:"
@@ -4326,7 +4332,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     conn--kmacro-counter-format
     ("i" "Insert Counter" kmacro-insert-counter)
     ("s" "Set Counter" kmacro-set-counter :transient t)
-    ("a" "Add to Counter" kmacro-add-counter :transient t)
+    ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
 (transient-define-prefix conn-register-prefix ()
@@ -4785,10 +4791,6 @@ The last value is \"don't use any of these switches\"."
 (dolist (state conn-states)
   (define-keymap
     :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
-    "<remap> <conn-dots-dispatch>"              'exit-recursive-edit
-    "<remap> <conn-dots-dispatch-macro>"        'exit-recursive-edit
-    "<remap> <conn-region-dispatch>"            'exit-recursive-edit
-    "<remap> <conn-region-dispatch-macro>"      'exit-recursive-edit
     "<remap> <kmacro-end-macro>"                'exit-recursive-edit
     "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
     "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
