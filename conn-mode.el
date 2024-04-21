@@ -5019,6 +5019,8 @@ The last value is \"don't use any of these switches\"."
   "<tab>" 'indent-region
   "]"     'conn-kill-append-region
   "'"     'conn-other-place-prefix
+  "B"     'ibuffer
+  "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
   "E"     'conn-dot-region
@@ -5068,8 +5070,6 @@ The last value is \"don't use any of these switches\"."
   "~"     'conn-swap-windows
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
-  "B"     'ibuffer
-  "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "g"     'conn-M-g-keys
   "h"     'repeat
