@@ -1873,7 +1873,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :transitions (define-keymap
                  "f"        'conn-emacs-state
                  "<escape>" 'conn-dot-state
-                 "\\"       'conn-dispatch-menu
+                 "\\"       'conn-dispatch-prefix
                  "t"        'conn-change
                  "F i"      'conn-emacs-state-open-line-above
                  "F k"      'conn-emacs-state-open-line
@@ -1904,7 +1904,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "<escape>" 'conn-state
-                 "\\"       'conn-dispatch-menu
+                 "\\"       'conn-dispatch-prefix
                  "f"        'conn-emacs-state
                  "Q"        'conn-dot-quit)
   (if conn-dot-state
@@ -4366,7 +4366,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :variable 'auto-fill-function
   :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
 
-(transient-define-prefix conn-fill-menu ()
+(transient-define-prefix conn-fill-prefix ()
   "Transient menu for fill functions."
   [["Fill:"
     ("r" "Region" fill-region)
@@ -4383,7 +4383,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :reader (lambda (&rest _)
             (not sort-fold-case)))
 
-(transient-define-prefix conn-sort-menu ()
+(transient-define-prefix conn-sort-prefix ()
   "Transient menu for buffer sorting functions."
   [["Sort Region: "
     ("a" "sort pages" sort-pages)
@@ -4705,7 +4705,7 @@ The last value is \"don't use any of these switches\"."
       ("step-edit" (conn--macro-dispatch-step-edit @))
       (_ (conn--macro-dispatch @)))))
 
-(transient-define-prefix conn-dispatch-menu ()
+(transient-define-prefix conn-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-format
@@ -4728,7 +4728,7 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]])
 
-(transient-define-prefix conn-isearch-dispatch-menu ()
+(transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-format
@@ -4753,7 +4753,7 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-order-infix)]])
 
-(transient-define-prefix conn-regions-dispatch-menu (iterator)
+(transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-format
@@ -4772,7 +4772,7 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-order-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
-  (transient-setup 'conn-regions-dispatch-menu nil nil :scope iterator))
+  (transient-setup 'conn-regions-dispatch-prefix nil nil :scope iterator))
 
 
 ;;;; Keymaps
@@ -4834,7 +4834,7 @@ The last value is \"don't use any of these switches\"."
   "o"   'conn-occur-region
   "p"   'conn-change-pair
   "r"   'conn-query-replace-regexp-region
-  "s"   'conn-sort-menu
+  "s"   'conn-sort-prefix
   "u"   'conn-insert-pair
   "v"   'vc-region-history
   "w"   'conn-query-replace-region
@@ -4904,7 +4904,7 @@ The last value is \"don't use any of these switches\"."
 (define-keymap
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
-  "M-\\"       'conn-isearch-dispatch-menu
+  "M-\\"       'conn-isearch-dispatch-prefix
   "M-E"        'conn-isearch-add-dots
   "M-R"        'conn-isearch-refine-dots
   "M-W"        'conn-isearch-remove-dots
@@ -4972,7 +4972,7 @@ The last value is \"don't use any of these switches\"."
   "b"   'regexp-builder
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
-  "f"   'conn-fill-menu
+  "f"   'conn-fill-prefix
   "h"   'conn-mark-thing-map
   "I"   'copy-from-above-command
   "j"   'join-line

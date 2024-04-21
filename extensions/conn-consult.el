@@ -188,11 +188,11 @@ THING BEG and END are bound in BODY."
                   (cons (+ line-pos beg) (+ line-pos end))))
               cands)
       (apply-partially 'conn--region-iterator)
-      (conn-regions-dispatch-menu)))
+      (conn-regions-dispatch-prefix)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
-    (conn-regions-dispatch-menu
+    (conn-regions-dispatch-prefix
      (let ((lines (mapcar (lambda (cand)
                             (car (consult--get-location cand)))
                           cands)))
