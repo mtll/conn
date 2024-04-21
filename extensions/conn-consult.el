@@ -192,10 +192,13 @@ THING BEG and END are bound in BODY."
   (defun conn-dispatch-location-candidates (cands)
     (conn-regions-dispatch-menu
      (mapcar (lambda (cand)
-               (let ((marker (car (consult--get-location cand))))
-                 (save-excursion
-                   (goto-char marker)
-                   (cons marker (line-end-position)))))
+               (let ((loc (pcase (car (get-text-property 0 'consult-location cand))
+                            (`(,_ . ,loc) loc)
+                            (loc loc)))
+                     (matches (consult--find-highlights
+                               cand 0 'completions-first-difference)))
+                 (cons (+ loc (caar matches))
+                       (+ loc (cdar matches)))))
              cands)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
