@@ -1,8 +1,8 @@
 Conn State:
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
-┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _        │ +  set   │         BKSP ┃
-┃  swap    │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │ →up list │          │ register │              ┃
-┃  window  │          │          │          │          │          │          │          │ dispatch │          │          │          │ seperator│              ┃
+┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │         BKSP ┃
+┃  swap    │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │ →up list │  complex │ register │              ┃
+┃  window  │          │          │          │          │          │          │          │ dispatch │          │          │  command │ seperator│              ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
 ┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
 ┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃

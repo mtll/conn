@@ -4998,7 +4998,6 @@ The last value is \"don't use any of these switches\"."
   "}"                'conn-last-dot
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
-  ;; "c"                'conn-split-dots-on-regexp
   "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
@@ -5061,6 +5060,7 @@ The last value is \"don't use any of these switches\"."
   "M-9"   'tab-detach
   "C-M-0" 'kill-buffer-and-window
   "SPC"   'conn-set-mark-command
+  "_"     'repeat-complex-command
   "+"     'conn-set-register-seperator
   ","     'isearch-backward
   "."     'isearch-forward
