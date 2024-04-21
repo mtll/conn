@@ -250,12 +250,12 @@ Each function is run without any arguments and if any of them return nil
 
 ;;;;; Mark Variables
 
-(defvar conn-this-thing-handler nil
+(defvar conn-this-command-handler nil
   "Mark handler for current command.
 Commands can set this variable if they need to change their handler
 dynamically.")
 
-(defvar conn-this-thing-start nil
+(defvar conn-this-command-start nil
   "Start position for current mark movement command.")
 
 (defvar conn--prev-mark-even-if-inactive nil
@@ -697,7 +697,7 @@ If BUFFER is nil check `current-buffer'."
   "Associate COMMANDS with a THING and a HANDLER."
   (dolist (cmd commands)
     (put cmd :conn-command-thing thing))
-  (conn-set-mark-handler commands handler))
+  (apply 'conn-set-command-handler handler commands))
 
 (defmacro conn-define-thing-handler (name lambda-list &rest rest)
   "Define a thing movement command mark handler constructor.
@@ -774,7 +774,7 @@ of the movement command unless `region-active-p'."
               (eq beg (point)))
     (conn--push-ephemeral-mark beg)))
 
-(defun conn-set-mark-handler (commands handler)
+(defun conn-set-command-handler (handler &rest commands)
   "Register a thing movement command for THING."
   (dolist (cmd (ensure-list commands))
     (put cmd :conn-mark-handler handler)))
@@ -836,17 +836,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (put mmode-or-state :conn-hide-mark nil))
 
 (defun conn--mark-pre-command-hook ()
-  (when-let ((_ (memq conn-current-state conn-ephemeral-mark-states))
-             (handler (conn--command-property :conn-mark-handler)))
-    (setq conn-this-thing-handler handler
-          conn-this-thing-start (point))))
+  (setq conn-this-command-start
+        (when (memq conn-current-state conn-ephemeral-mark-states)
+          (setq conn-this-command-start (point)))))
 
 (defun conn--mark-post-command-hook ()
   (with-demoted-errors "error marking thing: %s"
-    (when conn-this-thing-handler
-      (funcall conn-this-thing-handler conn-this-thing-start)))
-  (setq conn-this-thing-handler nil
-        conn-this-thing-start nil))
+    (when-let ((_ conn-this-command-start)
+               (handler (or conn-this-command-handler
+                            (conn--command-property :conn-mark-handler))))
+      (funcall handler conn-this-command-start)))
+  (setq conn-this-command-handler nil))
 
 (defun conn--setup-mark ()
   (when conn--mark-cursor-timer
@@ -2906,6 +2906,7 @@ This command should only be called interactively."
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (backward-char arg)
+    (setq this-command 'conn-goto-string-backward)
     (conn-goto-string-backward string)))
 
 (defun conn-goto-string-backward (string)
@@ -2918,11 +2919,6 @@ This command should only be called interactively."
                           (and (search-backward string nil t)
                                (match-beginning 0)))
                         (user-error "\"%s\" not found." string))))
-      (unless (and (eq this-command last-command)
-                   (equal string (get 'conn-goto-string-backward
-                                      :last-string)))
-        (push-mark nil t)
-        (put 'conn-goto-string-backward :last-string string))
       (goto-char pos))))
 
 (defun conn-forward-char (string arg)
@@ -2939,6 +2935,7 @@ This command should only be called interactively."
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (forward-char arg)
+    (setq this-command 'conn-goto-string-forward)
     (conn-goto-string-forward string)))
 
 (defun conn-goto-string-forward (string)
@@ -2951,12 +2948,18 @@ This command should only be called interactively."
                           (and (search-forward string nil t)
                                (match-beginning 0)))
                         (user-error "\"%s\" not found." string))))
-      (unless (and (eq this-command last-command)
-                   (equal string (get 'conn-goto-string-forward
-                                      :last-string)))
-        (push-mark nil t)
-        (put 'conn-goto-string-forward :last-string string))
       (goto-char pos))))
+
+(defun conn--goto-string-handler (beg)
+  (when (and (not (region-active-p))
+             (memq this-command '(conn-goto-string-forward
+                                  conn-goto-string-backward))
+             (not (eq this-command last-command)))
+    (push-mark beg t)))
+
+(conn-set-command-handler 'conn--goto-string-handler
+                          'conn-forward-char
+                          'conn-backward-char)
 
 (defun conn-pop-state ()
   "Transition to the previous state."
@@ -3365,7 +3368,7 @@ Immediately repeating this command goes to the point at end of line proper."
                              (point)))
                    (region-active-p)))
       (goto-char (line-end-position))
-      (setq conn-this-thing-handler
+      (setq conn-this-command-handler
             (conn-individual-thing-handler 'outer-line)))))
 
 (defun conn-beginning-of-inner-line (&optional N)
@@ -3383,7 +3386,7 @@ of line proper."
                              (point)))
                    (region-active-p)))
       (goto-char (line-beginning-position))
-      (setq conn-this-thing-handler
+      (setq conn-this-command-handler
             (conn-individual-thing-handler 'outer-line)))))
 
 (defun conn-xref-definition-prompt ()
