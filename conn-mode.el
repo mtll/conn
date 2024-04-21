@@ -4244,7 +4244,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (with-isearch-suspended
              (read-string "Macro Counter Format: "))))
 
-(transient-define-prefix conn-kmacro-menu ()
+(transient-define-prefix conn-kmacro-prefix ()
   "Transient menu for kmacro functions."
   [:description
    conn--kmacro-ring-format
@@ -4272,7 +4272,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    :if conn--in-kbd-macro-p
    ["Commands:"
     ("q" "Query" kbd-macro-query)
-    ("r" "Stop Recording Macro" kmacro-end-macro)
     ("d" "Redisplay" kmacro-redisplay)]
    [:description
     conn--kmacro-counter-format
@@ -5125,7 +5124,7 @@ The last value is \"don't use any of these switches\"."
   "C-x n v"       'conn-narrow-to-visible
   "C-x n V"       'conn-narrow-indirect-to-visible
   "C-x n N"       'conn-narrow-indirect-to-region
-  "C-x m"         'conn-kmacro-menu
+  "C-x m"         'conn-kmacro-prefix
   "C-x r"         conn-ctl-x-r-map
   "C-x t j"       'conn-register-load
   "C-x t s"       'tab-switch
