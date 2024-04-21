@@ -1046,6 +1046,14 @@ If any function returns a nil value then dispatch it halted.")
       (`(,beg . ,end) (cons end beg))
       (ret ret))))
 
+(defun conn--dispatch-skip-empty (iterator)
+  (lambda (&optional state)
+    (let ((ret (funcall iterator state)))
+      (unless (eq state :finalize)
+        (while (and ret (= (car ret) (cdr ret)))
+          (setq ret (funcall iterator state))))
+      ret)))
+
 (defmacro conn--define-dispatcher (name arglist &rest body)
   "Define a macro dispatcher.
 The iterator must be the first argument in ARGLIST.
@@ -4445,11 +4453,9 @@ The last value is \"don't use any of these switches\"."
   :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread @
-      (if (member "empty" args)
-          (region-bounds)
-        (seq-remove (pcase-lambda (`(,beg . ,end)) (= beg end))
-                    (region-bounds)))
+      (region-bounds)
     (conn--region-iterator @ (member "reverse" args))
+    (if (member "empty" args) @ (conn--dispatch-skip-empty @))
     (conn--dispatch-handle-buffers @)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state @ 'conn-state))
@@ -4509,6 +4515,7 @@ The last value is \"don't use any of these switches\"."
                      (transient-args transient-current-command)))
   (conn--thread @
       (funcall iterator (member "reverse" args))
+    (if (member "empty" args) @ (conn--dispatch-skip-empty @))
     (conn--dispatch-handle-buffers @)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state @ 'conn-state))
@@ -4698,6 +4705,7 @@ The last value is \"don't use any of these switches\"."
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
+    (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
