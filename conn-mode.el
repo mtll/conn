@@ -2761,6 +2761,7 @@ Also ensure point is at START before running `query-replace-regexp'."
     (let ((start (window-start)))
       (scroll-down arg)
       (pulse-momentary-highlight-one-line start))))
+(put 'conn-scroll-down 'scroll-command t)
 
 (defun conn-scroll-up (&optional arg)
   "`scroll-up-command' leaving point at the same relative window position."
@@ -2770,6 +2771,7 @@ Also ensure point is at START before running `query-replace-regexp'."
     (let ((end (window-end)))
       (scroll-up arg)
       (pulse-momentary-highlight-one-line (1- end)))))
+(put 'conn-scroll-up 'scroll-command t)
 
 (defun conn-open-line-and-indent (N)
   "Insert a newline, leave point before it and indent the new line.
@@ -3329,7 +3331,6 @@ With a prefix ARG `push-mark' without activating it."
 
 (defun conn-yank-replace (start end &optional arg)
   "`yank' replacing region between START and END.
-
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
@@ -3358,8 +3359,9 @@ of deleting it."
   (when (bolp) (skip-chars-forward " \t" (line-end-position))))
 
 (defun conn-end-of-inner-line (&optional N)
-  "Go to point after the last non-whitespace and non-comment character in line.
-Immediately repeating this command goes to the point at end of line proper."
+  "Go to point after the last non-whitespace or comment character in line.
+Immediately repeating this command goes to the point at end
+of line proper."
   (interactive "P")
   (let ((point (point))
         (mark (mark t)))
@@ -3916,12 +3918,14 @@ When called interactively N is `last-command-event'."
 (defun conn-wincontrol-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive "p")
+  (setq this-command 'conn-scroll-down)
   (let ((next-screen-context-lines arg))
     (conn-scroll-down)))
 
 (defun conn-wincontrol-scroll-up (arg)
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive "p")
+  (setq this-command 'conn-scroll-up)
   (let ((next-screen-context-lines arg))
     (conn-scroll-up)))
 
