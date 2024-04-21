@@ -64,36 +64,6 @@ THING BEG and END are bound in BODY."
     (nreverse candidates)))
 
 ;;;###autoload
-(defun conn-consult-thing (&optional initial thing)
-  "Search for a matching top-level THING."
-  (interactive (list nil
-                     (intern
-                      (completing-read
-                       (format "Thing: ")
-                       (conn--things 'conn--defined-thing-p) nil nil nil
-                       'conn-thing-history))
-                     (not (not current-prefix-arg))))
-  (let* ((candidates (consult--slow-operation "Collecting things..."
-                       (conn--thing-candidates thing))))
-    (consult--read
-     candidates
-     :prompt "Goto thing: "
-     :annotate (consult--line-prefix)
-     :category 'consult-location
-     :sort nil
-     :require-match t
-     ;; Always add last isearch string to future history
-     :add-history (list (thing-at-point 'symbol) isearch-string)
-     ;; :history '(:input consult--line-history)
-     :lookup #'consult--line-match
-     :default (car candidates)
-     ;; Add isearch-string as initial input if starting from isearch
-     :initial (or initial
-                  (and isearch-mode
-                       (prog1 isearch-string (isearch-done))))
-     :state (consult--location-state candidates))))
-
-;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
@@ -188,11 +158,12 @@ THING BEG and END are bound in BODY."
                   (cons (+ line-pos beg) (+ line-pos end))))
               cands)
       (apply-partially 'conn--region-iterator)
-      (conn-regions-dispatch-prefix)))
+      (funcall-interactively 'conn-regions-dispatch-prefix)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
-    (conn-regions-dispatch-prefix
+    (funcall-interactively
+     'conn-regions-dispatch-prefix
      (let ((lines (mapcar (lambda (cand)
                             (car (consult--get-location cand)))
                           cands)))
