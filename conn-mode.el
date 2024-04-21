@@ -454,7 +454,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
-    (let (matches bound)
+    (let (bound)
       (save-excursion
         (pcase restrict
           ('after
@@ -3628,7 +3628,7 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-shorten] "
     "\\[conn-wincontrol-widen] "
     "\\[conn-wincontrol-narrow]: "
-    "heighten shorten widen narrow; "
+    "heighten shorten widen narrow"
     "\n"
     "\\[conn-wincontrol-windmove-up] "
     "\\[conn-wincontrol-windmove-down] "
@@ -3640,7 +3640,7 @@ if ARG is anything else `other-tab-prefix'."
     "scroll; "
     "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
     "\\[delete-window] \\[delete-other-windows]: delete win/other; "
-    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/throw; "
+    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/grab"
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-clone-buffer]: clone; "
@@ -3698,7 +3698,7 @@ if ARG is anything else `other-tab-prefix'."
     (propertize "%d" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
-    "\\[conn-wincontrol-off]: quit; ")))
+    "\\[conn-wincontrol-off]: quit")))
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
