@@ -205,6 +205,14 @@ Supported values are:
 
 (defvar-local conn--input-method nil
   "Current input for buffer.")
+(put 'conn--input-method 'permanent-local t)
+
+(defvar-local conn--input-method-title nil
+  "Title string of the current input method shown in mode line.")
+(put 'conn--input-method-title 'permanent-local t)
+
+(defvar-local conn--prev-mode-line-mule-info nil)
+(put 'conn--prev-mode-line-mule-info 'risky-local-variable t)
 
 (defvar conn-input-method-overriding-modes
   (list (list 'isearch-mode 'isearch-mode-hook 'isearch-mode-end-hook))
@@ -1588,11 +1596,14 @@ Also enable input methods when any `conn-input-method-overriding-mode' is on."
       (pcase (get conn-current-state :conn-suppress-input-method)
         ((and 'nil (guard conn--input-method))
          (activate-input-method conn--input-method))
-        ('nil (setq conn--input-method current-input-method))
+        ('nil
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title))
         ((guard (and current-input-method conn--input-method))
          (deactivate-input-method))
         ((guard current-input-method)
-         (setq conn--input-method current-input-method)
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title)
          (deactivate-input-method))))))
 
 (defun conn--deactivate-input-method ()
@@ -1600,6 +1611,44 @@ Also enable input methods when any `conn-input-method-overriding-mode' is on."
   (let (input-method-activate-hook
         input-method-deactivate-hook)
     (setq conn--input-method nil)))
+
+(defun conn-toggle-input-method ()
+  (interactive)
+  (if conn--input-method
+      (setq conn--input-method nil
+            conn--input-method-title nil)
+    (let* ((input-method (or (car input-method-history)
+                             default-input-method
+                             (read-input-method-name
+                              (format-prompt "Input method" nil) t)))
+           (title (nth 3 (assoc input-method input-method-alist))))
+      (setq conn--input-method input-method
+            conn--input-method-title title))))
+
+(defun conn--input-method-mode-line ()
+  (cond
+   (conn-local-mode
+    (setq conn--prev-mode-line-mule-info mode-line-mule-info
+          mode-line-mule-info
+          `(""
+            (conn--input-method
+             (:propertize ("" conn--input-method-title)
+                          help-echo (concat
+                                     ,(purecopy "Current input method: ")
+                                     conn--input-method
+                                     ,(purecopy "\n\
+mouse-2: Disable input method\n\
+mouse-3: Describe current input method"))
+                          local-map ,mode-line-input-method-map
+                          mouse-face mode-line-highlight))
+            ,(propertize
+              "%z"
+              'help-echo 'mode-line-mule-info-help-echo
+              'mouse-face 'mode-line-highlight
+              'local-map mode-line-coding-system-map)
+            (:eval (mode-line-eol-desc)))))
+   (conn--prev-mode-line-mule-info
+    (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
 
 (defun conn--default-state-for-buffer (&optional buffer)
   "Get default state for BUFFER."
@@ -4090,7 +4139,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (conn-register-thing-commands
  'dot (conn-individual-thing-handler 'dot)
- 'conn-next-dot 'conn-previous-dot) 
+ 'conn-next-dot 'conn-previous-dot)
 
 (conn-register-thing word
   :expand-key "o"
@@ -4241,8 +4290,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :set-value (lambda (_ format) (kmacro-set-format format))
   :variable 'kmacro-counter-format
   :reader (lambda (&rest _)
-            (with-isearch-suspended
-             (read-string "Macro Counter Format: "))))
+            (read-string "Macro Counter Format: ")))
 
 (transient-define-prefix conn-kmacro-prefix ()
   "Transient menu for kmacro functions."
@@ -4267,9 +4315,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("m" "Step Edit Macro" kmacro-step-edit-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
     ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]]
-  [:description
-   nil
-   :if conn--in-kbd-macro-p
+  [:if
+   conn--in-kbd-macro-p
    ["Commands:"
     ("q" "Query" kbd-macro-query)
     ("d" "Redisplay" kmacro-redisplay)]
@@ -4985,6 +5032,7 @@ The last value is \"don't use any of these switches\"."
 
 (define-keymap
   :keymap conn-common-map
+  "<remap> <toggle-input-method>" 'conn-toggle-input-method
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
   "C-3"   'split-window-right
@@ -5179,6 +5227,7 @@ The last value is \"don't use any of these switches\"."
   :init-value nil
   :keymap conn-local-map
   :lighter (:eval conn-lighter)
+  (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
         ;; Since eldoc clobbers mode-line-format structure we need to
