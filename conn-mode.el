@@ -452,23 +452,29 @@ If BUFFER is nil check `current-buffer'."
                     (keymap-lookup nil))))
       (get key :conn-command-thing))))
 
-(defun conn--isearch-matches-in-buffer (&optional buffer all)
+(defun conn--isearch-matches-in-buffer (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
-    (let (matches
-          (bound (if isearch-forward (point-max) (point-min))))
+    (let (matches bound)
       (save-excursion
-        (if all
-            (goto-char (if isearch-forward (point-min) (point-max)))
-          (goto-char isearch-other-end))
+        (pcase restrict
+          ('after
+           (unless isearch-forward
+             (isearch-repeat 'forward))
+           (goto-char isearch-other-end))
+          ('before
+           (when isearch-forward
+             (isearch-repeat 'backward))
+           (goto-char isearch-other-end))
+          (_
+           (goto-char (if isearch-forward (point-min) (point-max)))))
+        (setq bound (if isearch-forward (point-max) (point-min)))
         (while (isearch-search-string isearch-string bound t)
           (when (funcall isearch-filter-predicate
                          (match-beginning 0) (match-end 0))
             (push (cons (conn--create-marker (match-beginning 0))
                         (conn--create-marker (match-end 0)))
                   matches))))
-      (if isearch-forward
-          (nreverse matches)
-        matches))))
+      (nreverse matches))))
 
 (defun conn--read-string-preview-overlays (string &optional dir)
   (let (ovs)
@@ -4519,6 +4525,17 @@ The last value is \"don't use any of these switches\"."
   :choices '("apply" "append" "step-edit")
   :unsavable t)
 
+(transient-define-argument conn--dispatch-matches-infix ()
+  :class 'conn-transient-switches
+  :description "Matches Inclusive"
+  :if-not (lambda () (bound-and-true-p multi-isearch-buffer-list))
+  :key "j"
+  :argument "matches="
+  :argument-format "matches=%s"
+  :argument-regexp "\\(matches=\\(after\\|before\\)\\)"
+  :choices '("after" "before")
+  :unsavable t)
+
 (transient-define-argument conn--dispatch-state-infix ()
   :class 'conn-transient-switches
   :required t
@@ -4689,14 +4706,16 @@ The last value is \"don't use any of these switches\"."
   (interactive (list (transient-args transient-current-command)))
   (conn--thread @
       (prog1
-          (if (or (not (boundp 'multi-isearch-buffer-list))
-                  (not multi-isearch-buffer-list))
-              (conn--isearch-matches-in-buffer)
-            (mapcan (lambda (buffer)
-                      (conn--isearch-matches-in-buffer buffer t))
-                    (append
-                     (remq (current-buffer) multi-isearch-buffer-list)
-                     (list (current-buffer)))))
+          (if (bound-and-true-p multi-isearch-buffer-list)
+              (mapcan 'conn--isearch-matches-in-buffer
+                      (append
+                       (remq (current-buffer) multi-isearch-buffer-list)
+                       (list (current-buffer))))
+            (conn--isearch-matches-in-buffer
+             (current-buffer)
+             (pcase (transient-arg-value "matches=" args)
+               ("after" 'after)
+               ("before" 'before))))
         (isearch-exit))
     (conn--region-iterator @ (member "reverse" args))
     (conn--dispatch-handle-buffers @)
@@ -4802,6 +4821,7 @@ The last value is \"don't use any of these switches\"."
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
+    (conn--dispatch-matches-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-order-infix)]])
