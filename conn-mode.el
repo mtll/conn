@@ -4261,15 +4261,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                                   (format "[%s]" kmacro-counter)))
                  'face 'transient-value)
      " - "
-     (propertize (conn--kmacro-display last-kbd-macro 20)
+     (when (length> kmacro-ring 1)
+       (conn--thread @
+           (car (last kmacro-ring))
+         (kmacro--keys @)
+         (conn--kmacro-display @ 15)
+         (concat @ ", ")))
+     (propertize (conn--kmacro-display last-kbd-macro 15)
                  'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
        (conn--thread @
            (car kmacro-ring)
          (kmacro--keys @)
-         (conn--kmacro-display @ 20)
-         (propertize @ 'face 'transient-value)
+         (conn--kmacro-display @ 15)
          (concat ", " @))))))
 
 (defun conn--kmacro-counter-format ()
@@ -4303,18 +4308,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("f" "Set Format" conn--set-counter-format-infix)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("~" "Swap" kmacro-swap-ring :transient t)
-    ("w" "Pop" kmacro-delete-ring-head :transient t)]]
+    ("w" "Swap" kmacro-swap-ring :transient t)
+    ("o" "Pop" kmacro-delete-ring-head :transient t)]]
   ["Commands:"
    :if-not conn--in-kbd-macro-p
-   [("c" "Call Macro" kmacro-call-macro)
+   [("a" "Call Macro" kmacro-call-macro)
     ("r" "Record Macro" kmacro-start-macro)
     ("e" "Edit Macro" kmacro-edit-macro)
-    ("!" "Kmacro to Register" kmacro-to-register)]
+    ("m" "Step Edit Macro" kmacro-step-edit-macro)]
    [("d" "Name Last Macro" kmacro-name-last-macro)
-    ("m" "Step Edit Macro" kmacro-step-edit-macro)
     ("l" "Edit Macro Lossage" kmacro-edit-lossage)
-    ("@" "Apply Macro on Lines" apply-macro-to-region-lines)]]
+    ("q" "Kmacro to Register" kmacro-to-register)
+    ("c" "Apply Macro on Lines" apply-macro-to-region-lines)]]
   [:if
    conn--in-kbd-macro-p
    ["Commands:"
