@@ -1,6 +1,6 @@
 Conn State:
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
-┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │         BKSP ┃
+┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │ Backspace    ┃
 ┃  swap    │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │ →up list │  complex │ register │              ┃
 ┃  window  │          │          │          │          │          │          │          │ dispatch │          │          │  command │ seperator│              ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
@@ -8,21 +8,21 @@ Conn State:
 ┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
-┃         TAB  │ Q        │ W        │ E        │ R  dot   │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
+┃ TAB          │ Q        │ W        │ E        │ R  dot   │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
 ┃              │ dot edit │  widen   │   dot    │  region  │   dot    │   yank   │←sentence │  ↑para   │→sentence │ mark to  │          │          │ shell cmd┃
-┃    indent    │   map    │          │  region  │   map    │  things  │  replace │          │          │          │ register │          │          │ on region┃
+┃    indent    │   map    │          │  region  │   map    │  things  │   read   │          │          │          │ register │          │          │ on region┃
 ┃    region    ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
 ┃              │   edit   │   kill   │          │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │   kill   │   kill   │ dispatch ┃
 ┃              │    map   │  region  │          │   map    │  region  │          │          │          │          │   load   │  append  │  prepend │   menu   ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
-┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │               RET ┃
+┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
 ┃                │          │          │          │   emacs  │          │          │  ←line   │  ↓para   │  →line   │   M-X    │  insert  │                   ┃
 ┃                │          │          │          │ state map│          │          │          │          │          │          │   pair   │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '  other │                   ┃
-┃                │    win   │  search  │   del    │  emacs   │  goto    │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
-┃                │  control │   map    │ forward  │  state   │   map    │          │          │          │          │          │   prefix │                   ┃
+┃                │    win   │  search  │  →delete │  emacs   │  goto    │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
+┃                │  control │   map    │          │  state   │   map    │          │          │          │          │          │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │          │   copy   │  narrow  │  ibuffer │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
@@ -32,8 +32,48 @@ Conn State:
 ┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │  switch  │  ←sexp   │  →sexp   │ ←isearch │ →isearch │   undo   │                       ┃
 ┃                      │ and mark  │          │          │  region  │  buffer  │          │          │          │          │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
-                                                         ┃                                       SPC ┃
-                                                         ┃            push ephemeral mark            ┃
+                                                         ┃ SPC                                       ┃
+                                                         ┃                  set mark                 ┃
+                                                         ┃                                           ┃
+                                                         ┃                                           ┃
+                                                         ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+Dot State:
+┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
+┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │ Backspace    ┃
+┃  swap    │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │ →up list │  complex │ register │              ┃
+┃  window  │          │          │          │          │          │          │          │ dispatch │          │          │  command │ seperator│              ┃
+┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
+┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
+┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃
+┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
+┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
+┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
+┃              │ dot quit │  widen   │   dot    │          │          │          │←sentence │  ↑para   │→sentence │ mark to  │  first   │  last    │ shell cmd┃
+┃              │          │          │  point   │          │          │          │          │          │          │ register │   dot    │  dot     │ on dots  ┃
+┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
+┃              │ q  dot   │ w        │ e        │ r  dot   │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
+┃              │   edit   │  →kill   │   dot    │  region  │   dot    │ add dots │  ←word   │  ↑line   │  →word   │ register │ del dots │ del dots │ dispatch ┃
+┃              │    map   │   dot    │  region  │   map    │  things  │  regexp  │          │          │          │   load   │  before  │   after  │   menu   ┃
+┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
+┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
+┃                │          │          │  delete  │   emacs  │          │          │  ←line   │  ↓para   │  →line   │   M-X    │          │                   ┃
+┃                │          │          │ all dots │ state map│          │          │          │          │          │          │          │                   ┃
+┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
+┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '  other │                   ┃
+┃                │    win   │  search  │  →delete │  emacs   │  goto    │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
+┃                │  control │   map    │    dot   │  state   │   map    │          │          │          │          │          │   prefix │                   ┃
+┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
+┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
+┃                      │           │          │          │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
+┃                      │           │          │          │  region  │          │          │          │   line   │   line   │          │                       ┃
+┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
+┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
+┃                      │   swap    │   C-x    │   C-c    │  toggle  │  switch  │  ←sexp   │  →sexp   │ ←isearch │ →isearch │   undo   │                       ┃
+┃                      │   mark    │          │          │   mark   │  buffer  │          │          │          │          │          │                       ┃
+┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
+                                                         ┃ SPC                                       ┃
+                                                         ┃                  set mark                 ┃
                                                          ┃                                           ┃
                                                          ┃                                           ┃
                                                          ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
