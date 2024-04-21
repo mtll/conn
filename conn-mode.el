@@ -56,7 +56,7 @@
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
 
-(defvar-keymap conn-global-map
+(defvar-keymap conn-mode-map
   :doc "`conn-mode' keymap which is always active.
 This keymap is active even in buffers which do not have
 `conn-local-mode' turned on.")
@@ -5150,13 +5150,8 @@ The last value is \"don't use any of these switches\"."
   "?" 'tab-bar-history-forward
   "-" 'conn-window-resize-map)
 
-(defvar-keymap conn-local-map
-  :doc "Keymap for `conn-local-mode'."
-  "C-v" 'conn-scroll-up
-  "M-v" 'conn-scroll-down)
-
 (define-keymap
-  :keymap conn-global-map
+  :keymap conn-mode-map
   "C-<backspace>" 'conn-kill-whole-line
   "C-`"           'conn-other-window
   "C-S-w"         'delete-region
@@ -5225,7 +5220,7 @@ The last value is \"don't use any of these switches\"."
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :keymap conn-local-map
+  :keymap (make-sparse-keymap)
   :lighter (:eval conn-lighter)
   (conn--input-method-mode-line)
   (if conn-local-mode
@@ -5282,7 +5277,7 @@ The last value is \"don't use any of these switches\"."
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn--initialize-buffer
-  :keymap conn-global-map
+  :keymap conn-mode-map
   :group 'conn-mode
   :predicate '(occur-mode
                grep-mode
