@@ -4329,6 +4329,21 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     ("a" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
+(transient-define-prefix conn-register-prefix ()
+  "Transient menu for register functions."
+  ["Register Store:"
+   [("p" "Point" point-to-register)
+    ("m" "Macro" kmacro-to-register)
+    ("t" "Tab" conn-tab-to-register)]
+   [("f" "Frameset" frameset-to-register)
+    ("r" "Rectangle" copy-rectangle-to-register)
+    ("w" "Window Configuration" window-configuration-to-register)]]
+  ["Register:"
+   [("l" "Load" conn-register-load)
+    ("u" "Unset" conn-unset-register :transient t)]
+   [("i" "Increment" increment-register :transient t)
+    ("s" "List" list-registers :transient t)]])
+
 (transient-define-infix conn--set-fill-column-infix ()
   :class 'transient-lisp-variable
   :variable 'fill-column
@@ -5087,7 +5102,7 @@ The last value is \"don't use any of these switches\"."
   "n"     'conn-backward-sexp-keys
   "O"     'conn-forward-sentence-keys
   "o"     'conn-forward-word-keys
-  "P"     'point-to-register
+  "P"     'conn-register-prefix
   "p"     'conn-register-load
   "s"     'conn-M-s-keys
   "U"     'conn-backward-sentence-keys
@@ -5427,7 +5442,12 @@ The last value is \"don't use any of these switches\"."
     (interactive (list (conn--read-thing-command)))
     (when-let ((bounds (bounds-of-thing-at-point thing)))
       (let ((zz-add-zone-anyway-p t))
-        (narrow-to-region (car bounds) (cdr bounds))))))
+        (narrow-to-region (car bounds) (cdr bounds)))))
+
+  (transient-append-suffix
+    'conn-register-prefix
+    '(0 0 -1)
+    '("z" "Izones" izones-to-register)))
 
 (with-eval-after-load 'edebug
   (defvar edebug-mode)
