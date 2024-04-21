@@ -468,13 +468,12 @@ If BUFFER is nil check `current-buffer'."
           (_
            (goto-char (if isearch-forward (point-min) (point-max)))))
         (setq bound (if isearch-forward (point-max) (point-min)))
-        (while (isearch-search-string isearch-string bound t)
-          (when (funcall isearch-filter-predicate
-                         (match-beginning 0) (match-end 0))
-            (push (cons (conn--create-marker (match-beginning 0))
-                        (conn--create-marker (match-end 0)))
-                  matches))))
-      (nreverse matches))))
+        (cl-loop for match = (isearch-search-string isearch-string bound t)
+                 while match
+                 when (funcall isearch-filter-predicate
+                               (match-beginning 0) (match-end 0))
+                 collect (cons (conn--create-marker (match-beginning 0))
+                               (conn--create-marker (match-end 0))))))))
 
 (defun conn--read-string-preview-overlays (string &optional dir)
   (let (ovs)
@@ -3552,9 +3551,9 @@ selected window will be the window containing the current buffer."
              (win2 (conn--prompt-for-window
                     (remove win1 (conn--all-visible-windows)))))
     (window-swap-states win1 win2)
-    (unless no-select
-      (select-window win2)
-      (select-frame-set-input-focus (window-frame win2)))))
+    (when no-select
+      (select-window win1)
+      (select-frame-set-input-focus (window-frame win1)))))
 
 (defun conn-swap-buffers ()
   "Swap the buffers of the selected window and another window."
