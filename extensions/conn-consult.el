@@ -181,25 +181,31 @@ THING BEG and END are bound in BODY."
   (defvar embark-keymap-alist)
 
   (defun conn-dispatch-grep-candidates (cands)
-    (conn-regions-dispatch-menu
-     (mapcar (lambda (cand)
-               (pcase-let ((`(,line-pos (,beg . ,end) . _)
-                            (consult--grep-position cand)))
-                 (cons (+ line-pos beg) (+ line-pos end))))
-             cands)))
+    (thread-last
+      (mapcar (lambda (cand)
+                (pcase-let ((`(,line-pos (,beg . ,end) . _)
+                             (consult--grep-position cand)))
+                  (cons (+ line-pos beg) (+ line-pos end))))
+              cands)
+      (apply-partially 'conn--region-iterator)
+      (conn-regions-dispatch-menu)))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
 
   (defun conn-dispatch-location-candidates (cands)
     (conn-regions-dispatch-menu
-     (mapcar (lambda (cand)
-               (let ((loc (pcase (car (get-text-property 0 'consult-location cand))
-                            (`(,_ . ,loc) loc)
-                            (loc loc)))
-                     (matches (consult--find-highlights
-                               cand 0 'completions-first-difference)))
-                 (cons (+ loc (caar matches))
-                       (+ loc (cdar matches)))))
-             cands)))
+     (let ((lines (mapcar (lambda (cand)
+                            (car (consult--get-location cand)))
+                          cands)))
+       (lambda (reverse)
+         (when reverse (setq lines (nreverse lines)))
+         (lambda (&optional state)
+           (if (eq state :finalize)
+               (dolist (line lines)
+                 (set-marker line nil))
+             (when-let ((line (pop lines)))
+               (cons line (save-excursion
+                            (goto-char line)
+                            (conn--create-marker (line-end-position)))))))))))
   (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
