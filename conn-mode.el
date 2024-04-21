@@ -948,8 +948,8 @@ If any function returns a nil value then dispatch it halted.")
   (lambda (&optional state)
     (if (eq state :finalize)
         (pcase-dolist (`(,beg . ,end) regions)
-          (set-marker beg nil)
-          (set-marker end nil))
+          (when (markerp beg) (set-marker beg nil))
+          (when (markerp end) (set-marker end nil)))
       (pop regions))))
 
 (defun conn--pulse-on-record (iterator)
@@ -4501,18 +4501,14 @@ The last value is \"don't use any of these switches\"."
       ("step-edit" (conn--macro-dispatch-step-edit @))
       (_ (conn--macro-dispatch @)))))
 
-(transient-define-suffix conn--regions-dispatch-suffix (regions args)
+(transient-define-suffix conn--regions-dispatch-suffix (iterator args)
   :transient 'transient--do-exit
   :key "d"
   :description "On Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (conn--thread @
-      (if (member "empty" args)
-          regions
-        (seq-remove (pcase-lambda (`(,beg . ,end)) (= beg end))
-                    regions))
-    (conn--region-iterator @ (member "reverse" args))
+      (funcall iterator (member "reverse" args))
     (conn--dispatch-handle-buffers @)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state @ 'conn-state))
@@ -4687,7 +4683,7 @@ The last value is \"don't use any of these switches\"."
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-order-infix)]])
 
-(transient-define-prefix conn-regions-dispatch-menu (regions)
+(transient-define-prefix conn-regions-dispatch-menu (iterator)
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-format
@@ -4702,11 +4698,10 @@ The last value is \"don't use any of these switches\"."
    [(conn--dispatch-macro-infix)
     (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
-    (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]]
   (interactive (list nil))
-  (unless regions (user-error "No regions"))
-  (transient-setup 'conn-regions-dispatch-menu nil nil :scope regions))
+  (unless iterator (user-error "No regions"))
+  (transient-setup 'conn-regions-dispatch-menu nil nil :scope iterator))
 
 
 ;;;; Keymaps
