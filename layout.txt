@@ -53,7 +53,7 @@ Dot State:
 ┃              │          │          │  point   │          │          │          │          │          │          │ register │   dot    │  dot     │ on dots  ┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q  dot   │ w        │ e        │ r  dot   │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │   edit   │  →kill   │   dot    │  region  │   dot    │ add dots │  ←word   │  ↑line   │  →word   │ register │ del dots │ del dots │ dispatch ┃
+┃              │   edit   │  ←delete │   dot    │  region  │   dot    │ add dots │  ←word   │  ↑line   │  →word   │ register │ del dots │ del dots │ dispatch ┃
 ┃              │    map   │   dot    │  region  │   map    │  things  │  regexp  │          │          │          │   load   │  before  │   after  │   menu   ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
