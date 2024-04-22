@@ -1653,10 +1653,8 @@ mouse-3: Describe current input method"))
 
 (defun conn--default-state-for-buffer (&optional buffer)
   "Get default state for BUFFER."
-  (or (cdr (assoc (buffer-name buffer)
-                  (buffer-local-value 'conn-buffer-default-state-alist
-                                      (or buffer (current-buffer)))
-                  #'buffer-match-p))
+  (or (alist-get (current-buffer) conn-buffer-default-state-alist
+                 nil nil #'buffer-match-p)
       (conn--derived-mode-property :conn-default-state buffer)
       conn-default-state))
 
@@ -1668,7 +1666,9 @@ Buffers are strings matched using `buffer-match-p'."
   (dolist (var (ensure-list modes-or-buffers))
     (cl-etypecase var
       (symbol (put var :conn-default-state state))
-      (string (push (cons var state) conn-buffer-default-state-alist)))))
+      (string (setf (alist-get var conn-buffer-default-state-alist
+                               nil nil #'equal)
+                    state)))))
 
 (defmacro conn-define-state (name doc &rest body)
   "Define a conn state NAME.
