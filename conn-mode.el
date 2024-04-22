@@ -253,8 +253,14 @@ Each element may be either a symbol or a list of the form
   (list (apply-partially 'easy-mmode--globalized-predicate-p conn-in-modes)
         'conn-mode-buffer-predicate)
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
-Each function is run without any arguments and if any of them return t
-`conn-local-mode' will be enabled in the buffer.")
+Each function is run without any arguments and if any of them return
+non-nil `conn-local-mode' will be enabled in the buffer.")
+
+(defvar conn-disable-in-buffer-hook
+  nil
+  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
+Each function is run without any arguments and if any of them return
+nil `conn-local-mode' will be not enabled in the buffer.")
 
 ;;;;;; State Keymaps
 
@@ -5467,7 +5473,8 @@ The last value is \"don't use any of these switches\"."
 
 (defun conn--initialize-buffer ()
   "Initialize conn STATE in BUFFER."
-  (when (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
+  (when (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
+             (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook))
     (conn-local-mode 1)))
 
 ;;;###autoload
