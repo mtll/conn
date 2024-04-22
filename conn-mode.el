@@ -4364,10 +4364,10 @@ the edit in the macro."
                 (if z "..." "")))
     "nil"))
 
-(defun conn--kmacro-ring-format ()
+(defun conn--kmacro-ring-display ()
   (with-temp-message ""
     (concat
-     (propertize "Kmacro Ring: " 'face 'bold)
+     (propertize "Kmacro Ring: " 'face 'transient-heading)
      (propertize (format "%s" (or (if defining-kbd-macro
                                       kmacro-counter
                                     kmacro-initial-counter-value)
@@ -4390,10 +4390,10 @@ the edit in the macro."
          (conn--kmacro-display @ 15)
          (concat ", " @))))))
 
-(defun conn--kmacro-counter-format ()
+(defun conn--kmacro-counter-display ()
   (with-temp-message ""
     (concat
-     (propertize "Kmacro Counter: " 'face 'bold)
+     (propertize "Kmacro Counter: " 'face 'transient-heading)
      (propertize (format "%s" (or (if defining-kbd-macro
                                       kmacro-counter
                                     kmacro-initial-counter-value)
@@ -4419,12 +4419,12 @@ the edit in the macro."
 (transient-define-prefix conn-kmacro-prefix ()
   "Transient menu for kmacro functions."
   [:description
-   conn--kmacro-ring-format
+   conn--kmacro-ring-display
    :if-not conn--in-kbd-macro-p
    [("i" "Insert Counter" kmacro-insert-counter)
     ("s" "Set Counter" kmacro-set-counter :transient t)
     ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
+    ("f" "Set Format" conn--set-counter-format-infix :transient t)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("w" "Swap" kmacro-swap-ring :transient t)
@@ -4451,7 +4451,7 @@ the edit in the macro."
     ("q" "Query" kbd-macro-query)
     ("d" "Redisplay" kmacro-redisplay)]
    [:description
-    conn--kmacro-counter-format
+    conn--kmacro-counter-display
     ("i" "Insert Counter" kmacro-insert-counter)
     ("s" "Set Counter" kmacro-set-counter :transient t)
     ("+" "Add to Counter" kmacro-add-counter :transient t)
@@ -4842,7 +4842,7 @@ The last value is \"don't use any of these switches\"."
 (transient-define-prefix conn-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
   [:description
-   conn--kmacro-ring-format
+   conn--kmacro-ring-display
    [("s" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("l" "Edit Macro" conn-recursive-edit-kmacro
@@ -4869,7 +4869,7 @@ The last value is \"don't use any of these switches\"."
 (transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
   [:description
-   conn--kmacro-ring-format
+   conn--kmacro-ring-display
    [("s" "Set Counter"
      (lambda ()
        (interactive)
@@ -4899,7 +4899,7 @@ The last value is \"don't use any of these switches\"."
 (transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
   [:description
-   conn--kmacro-ring-format
+   conn--kmacro-ring-display
    [("s" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("l" "Edit Macro" conn-recursive-edit-kmacro
