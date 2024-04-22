@@ -226,11 +226,30 @@ Each element may be either a symbol or a list of the form
 (defvar-local conn-previous-state nil
   "Previous conn state for buffer.")
 
-(defvar conn-enable-in-buffer-hook nil
+(defvar conn-in-modes
+  '(occur-mode
+    grep-mode
+    occur-edit-mode
+    eshell-mode
+    edmacro-mode
+    (not minibuffer-mode
+         dired-mode
+         slime-xref-mode
+         calc-mode
+         calc-trail-mode
+         calc-keypad-mode
+         special-mode)
+    t))
+
+(defvar conn-mode-buffers
+  '("\\*Edit Macro\\*"))
+
+(defvar conn-enable-in-buffer-hook
+  (list (apply-partially 'easy-mmode--globalized-predicate-p conn-in-modes)
+        'conn-mode-buffer-predicate)
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
-Each function is run without any arguments and if any of them return nil
-`conn-local-mode' will not be enabled in the buffer, otherwise
-`conn-local-mode' will be enabled.")
+Each function is run without any arguments and if any of them return t
+`conn-local-mode' will be enabled in the buffer.")
 
 ;;;;;; State Keymaps
 
@@ -5356,6 +5375,11 @@ The last value is \"don't use any of these switches\"."
   (setq conn--mode-line-indicator
         (or (get conn-current-state :conn-indicator) "")))
 
+(defun conn-mode-buffer-predicate ()
+  (seq-find (lambda (condition)
+              (buffer-match-p condition (current-buffer)))
+            conn-mode-buffers))
+
 (define-minor-mode conn-mode-line-indicator-mode
   "Display Conn state indicator at the beginning of the mode line."
   :group 'conn-mode
@@ -5415,27 +5439,15 @@ The last value is \"don't use any of these switches\"."
 
 (defun conn--initialize-buffer ()
   "Initialize conn STATE in BUFFER."
-  (when (run-hook-with-args-until-failure 'conn-enable-in-buffer-hook)
-    (conn-local-mode 1)))
+  (when (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
+    (conn-local-mode 1))
+  (conn-local-mode 1))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn--initialize-buffer
   :keymap conn-mode-map
   :group 'conn-mode
-  :predicate '(occur-mode
-               grep-mode
-               occur-edit-mode
-               eshell-mode
-               edmacro-mode
-               (not minibuffer-mode
-                    dired-mode
-                    slime-xref-mode
-                    calc-mode
-                    calc-trail-mode
-                    calc-keypad-mode
-                    special-mode)
-               t)
   (progn
     (conn--setup-keymaps)
     (conn--setup-mark)
