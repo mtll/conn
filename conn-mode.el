@@ -533,7 +533,8 @@ first line of the documentation string; for keyboard macros use
 
 (defun conn--completing-read-thing-keymap ()
   (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
-         (mark-map-keys (where-is-internal 'conn--local-mark-thing-map (list keymap))))
+         (mark-map-keys (where-is-internal 'conn--local-mark-thing-map
+                                           (list keymap))))
     (when mark-map-keys
       (dolist (key mark-map-keys)
         (define-key keymap key conn--local-mark-thing-map)))
@@ -1245,6 +1246,35 @@ The iterator must be the first argument in ARGLIST.
               (not (y-or-n-p "Macro edit finished, continue executing on regions?")))
       (user-error "Keyboard macro edit aborted")))
   (kmacro-call-macro 0))
+
+(conn--define-dispatcher conn--dispatch-one-command (iterator)
+  (deactivate-mark t)
+  (let* (arg keys macro end)
+    (while (not end)
+      (setq keys (read-key-sequence
+                  (format (concat
+                           "Command (prefix: "
+                           (propertize "%s" 'face 'transient-value)
+                           "):")
+                          arg)))
+      (setq macro (vconcat macro keys))
+      (pcase (keymap-lookup nil (key-description keys))
+        ('digit-argument
+         (setq arg (+ (* 10 (or arg 0))
+                      (- (logand (aref keys (1- (length keys))) ?\177) ?0))))
+        ('negative-argument
+         (if arg
+             (setq arg (- arg))
+           (setq arg -1)))
+        ('universal-argument
+         (if arg
+             (setcar arg (* (car arg) (car arg)))
+           (setq arg (list 4))))
+        ('keyboard-quit
+         (keyboard-quit))
+        (_ (setq end t))))
+    (let ((last-kbd-macro macro))
+      (kmacro-call-macro 0))))
 
 
 ;;;; Dots
@@ -2894,24 +2924,15 @@ With arg N, insert N newlines."
 (defun conn-command-at-point-and-mark ()
   "Run the next command at both the point and the mark."
   (interactive)
-  (let ((before (make-symbol "conn-at-point-and-mark-before"))
-        (after (make-symbol "conn-at-point-and-mark-after"))
-        (prefix current-prefix-arg)
-        command)
-    (fset before (lambda ()
-                   (remove-hook 'pre-command-hook before t)
-                   (add-hook 'post-command-hook after 90 t)
-                   (setq prefix-arg prefix
-                         command this-command)))
-    (fset after (lambda ()
-                  (remove-hook 'post-command-hook after t)
-                  (let ((current-prefix-arg prefix))
-                    (save-mark-and-excursion
-                      (exchange-point-and-mark (not mark-active))
-                      (let ((last-kbd-macro (this-command-keys-vector)))
-                        (call-last-kbd-macro))
-                      (call-interactively command)))))
-    (add-hook 'pre-command-hook before -80 t)))
+  (unless (mark t)
+    (user-error "No mark in buffer"))
+  (conn--thread @
+      (list (cons (point) (point))
+            (cons (mark t) (mark t)))
+    (conn--region-iterator)
+    (conn--dispatch-handle-buffers @)
+    (conn--dispatch-with-state @ conn-current-state)
+    (conn--dispatch-one-command @)))
 
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
