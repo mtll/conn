@@ -518,57 +518,67 @@ first line of the documentation string; for keyboard macros use
     (nreverse binds)))
 
 (defun conn--completing-read-thing ()
-  (let ((cmds (mapcar (pcase-lambda (`(,key . ,def))
-                        (cons (concat (propertize (concat "h " (key-description key))
-                                                  'face 'help-key-binding)
-                                      ": " (conn--command-name def))
-                              def))
+  (let* ((prefix (key-description
+                  (car (where-is-internal 'conn--local-mark-thing-map
+                                          (list conn-read-thing-command-mark-map)))))
+         (cmds (mapcar (pcase-lambda (`(,key . ,def))
+                         (cons (concat (propertize
+                                        (concat prefix " " (key-description key))
+                                        'face 'help-key-binding)
+                                       ": "
+                                       (conn--command-name def))
+                               def))
                       (conn--get-map-bindings nil conn--local-mark-thing-map))))
     (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
 
+(defun conn--completing-read-thing-keymap ()
+  (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
+         (mark-map-keys (where-is-internal 'conn--local-mark-thing-map (list keymap))))
+    (when mark-map-keys
+      (dolist (key mark-map-keys)
+        (define-key keymap key conn--local-mark-thing-map)))
+    keymap))
+
 (defvar-keymap conn-read-thing-command-mark-map
-  "h" conn--local-mark-thing-map
+  "h" 'conn--local-mark-thing-map
   "C-h" 'conn--completing-read-thing)
 
 (defun conn--read-thing-command ()
   (with-temp-message ""
-    (internal-push-keymap conn-read-thing-command-mark-map
-                          'overriding-terminal-local-map)
-    (unwind-protect
-        (let ((key (thread-last
-                     (concat
-                      (propertize "Thing Command\n" 'face 'bold)
-                      (propertize "C-h" 'face 'help-key-binding)
-                      ": completing-read mark thing map")
-                     (read-key-sequence)
-                     (key-description)
-                     (keymap-lookup nil))))
-          (while (not (get key :conn-command-thing))
-            (pcase key
-              ('keyboard-quit
-               (keyboard-quit))
-              ('conn--completing-read-thing
-               (internal-pop-keymap conn-read-thing-command-mark-map
-                                    'overriding-terminal-local-map)
-               (setq key (condition-case nil
-                             (conn--completing-read-thing)
-                           ('quit)))
-               (internal-push-keymap conn-read-thing-command-mark-map
-                                     'overriding-terminal-local-map))
-              (_
-               (setq key (thread-last
-                           (concat
-                            (propertize "Thing Command\n" 'face 'bold)
-                            (propertize "C-h" 'face 'help-key-binding)
-                            ": completing-read mark thing map\n"
-                            (propertize "Not a valid thing command"
-                                        'face 'error))
-                           (read-key-sequence)
-                           (key-description)
-                           (keymap-lookup nil))))))
-          (get key :conn-command-thing))
-      (internal-pop-keymap conn-read-thing-command-mark-map
-                           'overriding-terminal-local-map))))
+    (let ((keymap (conn--completing-read-thing-keymap)))
+      (internal-push-keymap keymap 'overriding-terminal-local-map)
+      (unwind-protect
+          (let ((key (thread-last
+                       (concat
+                        (propertize "Thing Command\n" 'face 'bold)
+                        (propertize "C-h" 'face 'help-key-binding)
+                        ": completing-read mark thing map")
+                       (read-key-sequence)
+                       (key-description)
+                       (keymap-lookup nil))))
+            (while (not (get key :conn-command-thing))
+              (pcase key
+                ('keyboard-quit
+                 (keyboard-quit))
+                ('conn--completing-read-thing
+                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                 (setq key (condition-case nil
+                               (conn--completing-read-thing)
+                             ('quit)))
+                 (internal-push-keymap keymap 'overriding-terminal-local-map))
+                (_
+                 (setq key (thread-last
+                             (concat
+                              (propertize "Thing Command\n" 'face 'bold)
+                              (propertize "C-h" 'face 'help-key-binding)
+                              ": completing-read mark thing map\n"
+                              (propertize "Not a valid thing command"
+                                          'face 'error))
+                             (read-key-sequence)
+                             (key-description)
+                             (keymap-lookup nil))))))
+            (get key :conn-command-thing))
+        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
