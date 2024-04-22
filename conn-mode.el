@@ -1129,7 +1129,8 @@ If any function returns a nil value then dispatch it halted.")
 
 (defun conn--dispatch-save-buffer-state (iterator)
   (let (dispatch-undo-handles
-        dispatch-saved-excursions)
+        dispatch-saved-excursions
+        dispatch-buffer-restriction)
     (lambda (state)
       (when (eq state :finalize)
         (funcall iterator state)
@@ -1156,6 +1157,13 @@ If any function returns a nil value then dispatch it halted.")
           (deactivate-mark t)
           (unless (eq buffer (window-buffer (selected-window)))
             (error "Could not pop to buffer %s" buffer)))
+        (if-let ((restriction (alist-get (current-buffer) dispatch-buffer-restriction)))
+            (progn
+              (widen)
+              (narrow-to-region (car restriction) (cdr restriction)))
+          (setf (alist-get (current-buffer) dispatch-buffer-restriction)
+                (cons (point-min-marker)
+                      (point-max-marker))))
         (unless (alist-get (current-buffer) dispatch-saved-excursions)
           (setf (alist-get (current-buffer) dispatch-saved-excursions)
                 (nconc (list (point-marker)
@@ -1171,13 +1179,6 @@ If any function returns a nil value then dispatch it halted.")
           (run-hooks 'conn-macro-dispatch-buffer-start-hook))
         ret))))
 
-(defun conn--dispatch-macro-loop (iterator &optional macro)
-  (while (funcall iterator :loop)
-    (save-restriction
-      (if (kmacro-p macro)
-          (funcall macro)
-        (kmacro-call-macro nil nil nil macro)))))
-
 (defmacro conn--define-dispatcher (name arglist &rest body)
   "Define a macro dispatcher.
 The iterator must be the first argument in ARGLIST.
@@ -1185,6 +1186,7 @@ The iterator must be the first argument in ARGLIST.
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
   (declare (doc-string 3) (indent 2))
   (let ((iterator (car arglist))
+        (sym (make-symbol "sym"))
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
@@ -1194,8 +1196,8 @@ The iterator must be the first argument in ARGLIST.
                (undo-strong-limit most-positive-fixnum)
                (conn-macro-dispatch-p t)
                (conn-dispatch-error nil)
-               (,iterator (lambda (state)
-                            (pcase (funcall ,iterator state)
+               (,iterator (lambda (&optional state)
+                            (pcase (funcall ,iterator (or state :loop))
                               (`(,beg . ,end)
                                (goto-char beg)
                                (conn--push-ephemeral-mark end)
@@ -1203,7 +1205,10 @@ The iterator must be the first argument in ARGLIST.
                                (set-marker end nil)
                                (and (run-hook-with-args-until-failure
                                      'conn-macro-dispatch-iterator-hook)
-                                    t))))))
+                                    t)))))
+               (,sym (make-symbol "kmacro-iterator")))
+           (fset ,sym ,iterator)
+           (advice-add 'kmacro-loop-setup-function :before-while ,sym)
            (unwind-protect
                (condition-case err
                    (progn
@@ -1212,19 +1217,24 @@ The iterator must be the first argument in ARGLIST.
                  (t
                   (setq conn-dispatch-error err)
                   (signal (car err) (cdr err))))
+             (advice-remove 'kmacro-loop-setup-function ,sym)
              (funcall ,iterator :finalize)
              (run-hooks 'conn-macro-dispatch-end-hook)))))))
 
 (conn--define-dispatcher conn--macro-dispatch (iterator &optional macro)
-  (unless macro
-    (when (funcall iterator :record)
-      (kmacro-start-macro nil)
-      (unwind-protect
-          (recursive-edit)
-        (if (not defining-kbd-macro)
-            (user-error "Not defining keyboard macro")
-          (kmacro-end-macro nil))))
-    (conn--dispatch-macro-loop iterator macro)))
+  (pcase-exhaustive macro
+    ((pred kmacro-p)
+     (funcall macro 0))
+    ((or (pred stringp) (pred vectorp))
+     (kmacro-call-macro 0 nil nil macro))
+    ('nil
+     (when (funcall iterator :record)
+       (kmacro-start-macro nil)
+       (unwind-protect
+           (recursive-edit)
+         (if (not defining-kbd-macro)
+             (user-error "Not defining keyboard macro")
+           (kmacro-end-macro 0)))))))
 
 (conn--define-dispatcher conn--macro-dispatch-append (iterator &optional dont-exec)
   (when (funcall iterator :record)
@@ -1233,8 +1243,7 @@ The iterator must be the first argument in ARGLIST.
         (recursive-edit)
       (when (not defining-kbd-macro)
         (user-error "Not defining keyboard macro"))
-      (kmacro-end-macro nil)
-      (conn--dispatch-macro-loop iterator))))
+      (kmacro-end-macro 0))))
 
 (conn--define-dispatcher conn--macro-dispatch-step-edit (iterator)
   (when (funcall iterator :record)
@@ -1243,7 +1252,7 @@ The iterator must be the first argument in ARGLIST.
       (when (or (eq prev last-kbd-macro)
                 (not (y-or-n-p "Macro edit finished, continue executing on regions?")))
         (user-error "Keyboard macro edit aborted")))
-    (conn--dispatch-macro-loop iterator)))
+    (kmacro-call-macro 0)))
 
 
 ;;;; Dots
