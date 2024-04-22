@@ -4310,58 +4310,46 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transient Menus
 
-(defvar-keymap conn-kmacro-recursive-edit-map
-  "<remap> <edmacro-finish-edit>" 'exit-recursive-edit)
-
 (defun conn-recursive-edit-kmacro ()
-  "`kmacro-edit-macro' inside a recursive edit.
-When the recursive edit is exited the new macro is recorded if the
-edit buffer is still live and the current transient is resumed.
-\\<edmacro-mode-map>\\[edmacro-finish-edit] is remapped to `exit-recursive-edit' inside
-the edmacro buffer for the duration of this command."
+  "Edit last keyboard macro inside a recursive edit.
+Press \\[exit-recursive-edit] to exit the recursive edit and abort
+the edit in the macro."
   (interactive)
-  (save-excursion
+  (save-mark-and-excursion
     (save-window-excursion
       (kmacro-edit-macro)
-      (unwind-protect
-          (let ((buffer (current-buffer)))
-            (internal-push-keymap conn-kmacro-recursive-edit-map
-                                  'overriding-terminal-local-map)
+      (when-let ((buffer (get-buffer "*Edit Macro*")))
+        (delete-other-windows)
+        (conn-local-mode 1)
+        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
+        (unwind-protect
             (if isearch-mode
                 (with-isearch-suspended
                  (recursive-edit))
               (recursive-edit))
-            (when (buffer-live-p buffer)
-              (with-current-buffer buffer
-                (edmacro-finish-edit))))
-        (internal-pop-keymap conn-kmacro-recursive-edit-map
-                             'overriding-terminal-local-map))))
-  (transient-resume))
+          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
+          (kill-buffer buffer)
+          (transient-resume))))))
 
-(defun conn-recursive-edit-macro-lossage ()
-  "`kmacro-edit-macro' inside a recursive edit.
-When the recursive edit is exited the new macro is recorded if the
-edit buffer is still live and the current transient is resumed.
-\\<edmacro-mode-map>\\[edmacro-finish-edit] is remapped to `exit-recursive-edit' inside
-the edmacro buffer for the duration of this command."
+(defun conn-recursive-edit-lossage ()
+  "Edit lossage macro inside a recursive edit.
+Press \\[exit-recursive-edit] to exit the recursive edit and abort
+the edit in the macro."
   (interactive)
-  (save-excursion
+  (save-mark-and-excursion
     (save-window-excursion
       (kmacro-edit-lossage)
-      (unwind-protect
-          (let ((buffer (current-buffer)))
-            (internal-push-keymap conn-kmacro-recursive-edit-map
-                                  'overriding-terminal-local-map)
+      (when-let ((buffer (get-buffer "*Edit Macro*")))
+        (delete-other-windows)
+        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
+        (unwind-protect
             (if isearch-mode
                 (with-isearch-suspended
                  (recursive-edit))
               (recursive-edit))
-            (when (buffer-live-p buffer)
-              (with-current-buffer buffer
-                (edmacro-finish-edit))))
-        (internal-pop-keymap conn-kmacro-recursive-edit-map
-                             'overriding-terminal-local-map))))
-  (transient-resume))
+          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
+          (kill-buffer buffer)
+          (transient-resume))))))
 
 (defun conn--kmacro-display (macro &optional trunc)
   (if macro
@@ -4412,6 +4400,12 @@ the edmacro buffer for the duration of this command."
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
 
+(defun conn--kmacro-ring-empty-p ()
+  ;; Avoid the messages kmacro-ring-empty-p dispays
+  (while (and (null last-kbd-macro) kmacro-ring)
+    (kmacro-pop-ring1))
+  (null last-kbd-macro))
+
 (transient-define-infix conn--set-counter-format-infix ()
   :class 'transient-lisp-variable
   :set-value (lambda (_ format) (kmacro-set-format format))
@@ -4442,9 +4436,9 @@ the edmacro buffer for the duration of this command."
                                   (interactive)
                                   (kmacro-start-macro '(16))))
     ("r" "Record Macro" kmacro-start-macro)
-    ("e" "Edit Macro" kmacro-edit-macro)]
-   [("d" "Name Last Macro" kmacro-name-last-macro)
-    ("l" "Edit Macro Lossage" kmacro-edit-lossage)
+    ("d" "Name Last Macro" kmacro-name-last-macro)]
+   [("l" "Edit Macro" kmacro-edit-macro)
+    ("L" "Edit Lossage" kmacro-edit-lossage)
     ("q" "Kmacro to Register" kmacro-to-register)
     ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
     ("m" "Step Edit Macro" kmacro-step-edit-macro)]]
@@ -4589,7 +4583,7 @@ The last value is \"don't use any of these switches\"."
 (transient-define-argument conn--dispatch-macro-infix ()
   :class 'conn-transient-switches
   :description "Last Kmacro"
-  :key "l"
+  :key "k"
   :argument "last-kmacro="
   :argument-format "last-kmacro=%s"
   :argument-regexp "\\(last-kmacro=\\(apply\\|append\\|step-edit\\)\\)"
@@ -4848,9 +4842,10 @@ The last value is \"don't use any of these switches\"."
    conn--kmacro-ring-format
    [("s" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("h" "Edit Macro" conn-recursive-edit-kmacro
+    ("l" "Edit Macro" conn-recursive-edit-kmacro
+     :if-not conn--kmacro-ring-empty-p
      :transient transient--do-suspend)
-    ("H" "Edit Lossage" conn-recursive-edit-macro-lossage
+    ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
@@ -4880,9 +4875,10 @@ The last value is \"don't use any of these switches\"."
         (call-interactively 'kmacro-set-counter)))
      :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("h" "Edit Macro" conn-recursive-edit-kmacro
+    ("l" "Edit Macro" conn-recursive-edit-kmacro
+     :if-not conn--kmacro-ring-empty-p
      :transient transient--do-suspend)
-    ("H" "Edit Lossage" conn-recursive-edit-macro-lossage
+    ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
@@ -4905,9 +4901,10 @@ The last value is \"don't use any of these switches\"."
    conn--kmacro-ring-format
    [("s" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("h" "Edit Macro" conn-recursive-edit-kmacro
+    ("l" "Edit Macro" conn-recursive-edit-kmacro
+     :if-not conn--kmacro-ring-empty-p
      :transient transient--do-suspend)
-    ("H" "Edit Lossage" conn-recursive-edit-macro-lossage
+    ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
