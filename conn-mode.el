@@ -5437,8 +5437,7 @@ The last value is \"don't use any of these switches\"."
 (defun conn--initialize-buffer ()
   "Initialize conn STATE in BUFFER."
   (when (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
-    (conn-local-mode 1))
-  (conn-local-mode 1))
+    (conn-local-mode 1)))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
