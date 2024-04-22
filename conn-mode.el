@@ -1410,13 +1410,17 @@ If BUFFER is nil use current buffer."
         (keymap-set keymap binding command))
       keymap)))
 
-(defun conn--generate-aux-map ()
+(defun conn--aux-map-key-equal-p (a b)
+  (and (eq (car a) (car b))
+       (equal (cdr a) (cdr b))))
+
+(defun conn--generate-aux-map (keymaps)
   (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
                        (make-sparse-keymap)))
         (state-map (list (alist-get conn-current-state conn--state-maps))))
     (conn--without-conn-maps
       (dolist (sentinal conn--aux-bindings)
-        (when-let ((def (key-binding (symbol-value sentinal) t)))
+        (when-let ((def (lookup-key keymaps (symbol-value sentinal) t)))
           (dolist (key (where-is-internal sentinal state-map nil t))
             (define-key aux-map key def)))))
     (let ((mark-map (conn--modes-mark-map)))
@@ -1434,21 +1438,20 @@ If BUFFER is nil use current buffer."
        ((or conn--aux-update-flag
             (not (equal conn--last-remapping current-remappings))
             force)
-        (let ((aux-map (conn--generate-aux-map))
+        (let ((aux-map (conn--generate-aux-map active))
               (key (cons conn-current-state active)))
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
                 conn--aux-map-history (list (cons key aux-map)))))
        (t
         (let* ((key (cons conn-current-state active))
-               (aux-map (or (alist-get key conn--aux-map-history nil nil #'equal)
-                            (conn--generate-aux-map)))
-               (new (cons key aux-map)))
+               (aux-map (or (alist-get key conn--aux-map-history nil nil
+                                       #'conn--aux-map-key-equal-p)
+                            (setf (alist-get key conn--aux-map-history nil nil
+                                             #'conn--aux-map-key-equal-p)
+                                  (conn--generate-aux-map active)))))
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
-                conn--aux-map-history (conn--thread @
-                                          conn--aux-map-history
-                                        (delete new @)
-                                        (cons new @)
-                                        (seq-take @ conn--aux-map-history-size))))))
+                conn--aux-map-history (seq-take conn--aux-map-history
+                                                conn--aux-map-history-size)))))
       (setq conn--aux-update-flag nil
             conn--last-remapping current-remappings))))
 
