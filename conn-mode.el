@@ -710,7 +710,6 @@ If BUFFER is nil check `current-buffer'."
 
 (defmacro conn-define-thing-handler (name lambda-list &rest rest)
   "Define a thing movement command mark handler constructor.
-
 Defines a constructor function NAME which takes LAMBDA-LIST as its
 arguments, the first of which will should be the thing.  The first
 time NAME is called with a unique THING it creates a closure over
@@ -793,7 +792,6 @@ of the movement command unless `region-active-p'."
 
 (defun conn--push-ephemeral-mark (&optional location msg activate)
   "Push a mark at LOCATION that will not be added to `mark-ring'.
-
 For the meaning of MSG and ACTIVATE see `push-mark'."
   (push-mark location (not msg) activate)
   (setq conn--ephemeral-mark t)
@@ -884,7 +882,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "If non-nil contains the error encountered during macro dispatch.")
 
 (defvar conn-macro-dispatch-buffer-start-hook nil
-  "Hook run in each buffer the first time it is encountered during macro dispatch.")
+  "Hook run in each buffer when it is first encountered during macro dispatch.")
 
 (defvar conn-macro-dispatch-buffer-end-hook nil
   "Hook run in each buffer encountered after macro dispatch finishes.")
@@ -4293,6 +4291,59 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transient Menus
 
+(defvar-keymap conn-kmacro-recursive-edit-map
+  "<remap> <edmacro-finish-edit>" 'exit-recursive-edit)
+
+(defun conn-recursive-edit-kmacro ()
+  "`kmacro-edit-macro' inside a recursive edit.
+When the recursive edit is exited the new macro is recorded if the
+edit buffer is still live and the current transient is resumed.
+\\<edmacro-mode-map>\\[edmacro-finish-edit] is remapped to `exit-recursive-edit' inside
+the edmacro buffer for the duration of this command."
+  (interactive)
+  (save-excursion
+    (save-window-excursion
+      (kmacro-edit-macro)
+      (unwind-protect
+          (let ((buffer (current-buffer)))
+            (internal-push-keymap conn-kmacro-recursive-edit-map
+                                  'overriding-terminal-local-map)
+            (if isearch-mode
+                (with-isearch-suspended
+                 (recursive-edit))
+              (recursive-edit))
+            (when (buffer-live-p buffer)
+              (with-current-buffer buffer
+                (edmacro-finish-edit))))
+        (internal-pop-keymap conn-kmacro-recursive-edit-map
+                             'overriding-terminal-local-map))))
+  (transient-resume))
+
+(defun conn-recursive-edit-macro-lossage ()
+  "`kmacro-edit-macro' inside a recursive edit.
+When the recursive edit is exited the new macro is recorded if the
+edit buffer is still live and the current transient is resumed.
+\\<edmacro-mode-map>\\[edmacro-finish-edit] is remapped to `exit-recursive-edit' inside
+the edmacro buffer for the duration of this command."
+  (interactive)
+  (save-excursion
+    (save-window-excursion
+      (kmacro-edit-lossage)
+      (unwind-protect
+          (let ((buffer (current-buffer)))
+            (internal-push-keymap conn-kmacro-recursive-edit-map
+                                  'overriding-terminal-local-map)
+            (if isearch-mode
+                (with-isearch-suspended
+                 (recursive-edit))
+              (recursive-edit))
+            (when (buffer-live-p buffer)
+              (with-current-buffer buffer
+                (edmacro-finish-edit))))
+        (internal-pop-keymap conn-kmacro-recursive-edit-map
+                             'overriding-terminal-local-map))))
+  (transient-resume))
+
 (defun conn--kmacro-display (macro &optional trunc)
   (if macro
       (let* ((m (format-kbd-macro macro))
@@ -4502,7 +4553,6 @@ The last value is \"don't use any of these switches\"."
   :argument-format "buffers=%s"
   :argument-regexp "\\(buffers=\\(CRM\\|match-regexp\\)\\)"
   :choices '("CRM" "match-regexp")
-  :unsavable t
   :if 'conn--dots-active-p)
 
 (transient-define-argument conn--dispatch-dots-infix ()
@@ -4514,7 +4564,6 @@ The last value is \"don't use any of these switches\"."
   :argument-regexp "\\(dots=\\(remove\\|to-region\\|keep\\)\\)"
   :choices '("remove" "to-region" "keep")
   :required t
-  :unsavable t
   :if 'conn--dots-active-p
   :init-value (lambda (obj) (oset obj value "dots=remove")))
 
@@ -4525,19 +4574,17 @@ The last value is \"don't use any of these switches\"."
   :argument "last-kmacro="
   :argument-format "last-kmacro=%s"
   :argument-regexp "\\(last-kmacro=\\(apply\\|append\\|step-edit\\)\\)"
-  :choices '("apply" "append" "step-edit")
-  :unsavable t)
+  :choices '("apply" "append" "step-edit"))
 
 (transient-define-argument conn--dispatch-matches-infix ()
   :class 'conn-transient-switches
-  :description "Matches Inclusive"
+  :description "Restrict Matches Inclusive"
   :if-not (lambda () (bound-and-true-p multi-isearch-buffer-list))
   :key "j"
   :argument "matches="
   :argument-format "matches=%s"
   :argument-regexp "\\(matches=\\(after\\|before\\)\\)"
-  :choices '("after" "before")
-  :unsavable t)
+  :choices '("after" "before"))
 
 (transient-define-argument conn--dispatch-state-infix ()
   :class 'conn-transient-switches
@@ -4553,8 +4600,7 @@ The last value is \"don't use any of these switches\"."
                       (format "state=%s"
                               (pcase conn-current-state
                                 ('conn-emacs-state "emacs")
-                                (_ "conn")))))
-  :unsavable t)
+                                (_ "conn"))))))
 
 (transient-define-argument conn--dispatch-region-infix ()
   :class 'conn-transient-switches
@@ -4565,22 +4611,19 @@ The last value is \"don't use any of these switches\"."
   :argument-format "region=%s"
   :argument-regexp "\\(region=\\(start\\|change\\|end\\)\\)"
   :choices '("start" "end" "change")
-  :init-value (lambda (obj) (oset obj value "region=start"))
-  :unsavable t)
+  :init-value (lambda (obj) (oset obj value "region=start")))
 
 (transient-define-argument conn--dispatch-order-infix ()
   :class 'transient-switch
   :key "o"
   :description "Order"
-  :argument "reverse"
-  :unsavable t)
+  :argument "reverse")
 
 (transient-define-argument conn--dispatch-empty-infix ()
   :class 'transient-switch
   :key "u"
   :description "Include Empty"
-  :argument "empty"
-  :unsavable t)
+  :argument "empty")
 
 (transient-define-suffix conn--dispatch-suffix (args)
   :transient 'transient--do-exit
@@ -4785,7 +4828,11 @@ The last value is \"don't use any of these switches\"."
   [:description
    conn--kmacro-ring-format
    [("s" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("h" "Edit Macro" conn-recursive-edit-kmacro
+     :transient transient--do-suspend)
+    ("H" "Edit Lossage" conn-recursive-edit-macro-lossage
+     :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
@@ -4813,7 +4860,11 @@ The last value is \"don't use any of these switches\"."
        (with-isearch-suspended
         (call-interactively 'kmacro-set-counter)))
      :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("h" "Edit Macro" conn-recursive-edit-kmacro
+     :transient transient--do-suspend)
+    ("H" "Edit Lossage" conn-recursive-edit-macro-lossage
+     :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
@@ -4834,7 +4885,11 @@ The last value is \"don't use any of these switches\"."
   [:description
    conn--kmacro-ring-format
    [("s" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("h" "Edit Macro" conn-recursive-edit-kmacro
+     :transient transient--do-suspend)
+    ("H" "Edit Lossage" conn-recursive-edit-macro-lossage
+     :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
