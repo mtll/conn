@@ -4442,9 +4442,9 @@ the edit in the macro."
     ("d" "Name Last Macro" kmacro-name-last-macro)]
    [("l" "Edit Macro" kmacro-edit-macro)
     ("L" "Edit Lossage" kmacro-edit-lossage)
-    ("q" "Kmacro to Register" kmacro-to-register)
+    ("m" "Kmacro to Register" kmacro-to-register)
     ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
-    ("m" "Step Edit Macro" kmacro-step-edit-macro)]]
+    ("q" "Step Edit Macro" kmacro-step-edit-macro)]]
   [:if
    conn--in-kbd-macro-p
    ["Commands:"
@@ -4846,7 +4846,6 @@ The last value is \"don't use any of these switches\"."
    [("s" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("l" "Edit Macro" conn-recursive-edit-kmacro
-     :if-not conn--kmacro-ring-empty-p
      :transient transient--do-suspend)
     ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
@@ -4879,7 +4878,6 @@ The last value is \"don't use any of these switches\"."
      :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("l" "Edit Macro" conn-recursive-edit-kmacro
-     :if-not conn--kmacro-ring-empty-p
      :transient transient--do-suspend)
     ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
@@ -4905,7 +4903,6 @@ The last value is \"don't use any of these switches\"."
    [("s" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("l" "Edit Macro" conn-recursive-edit-kmacro
-     :if-not conn--kmacro-ring-empty-p
      :transient transient--do-suspend)
     ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
