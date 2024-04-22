@@ -199,6 +199,11 @@ Supported values are:
   :group 'conn-mode
   :type 'string)
 
+(defcustom conn-read-thing-mark-map-key "h"
+  "Key for `conn-mark-thing-map' when prompting for thing."
+  :group 'conn-mode
+  :type 'string)
+
 ;;;;; State Variables
 
 (defvar conn-states nil)
@@ -280,6 +285,8 @@ dynamically.")
 (defvar conn--prev-mark-even-if-inactive nil
   "Previous value of `mark-even-if-inactive'.
 Used to restore previous value when `conn-mode' is disabled.")
+
+(defvar-local conn--local-mark-thing-map (make-sparse-keymap))
 
 (defvar-local conn--mark-unpop-ring nil)
 
@@ -437,7 +444,8 @@ Uses `read-regexp' to read the regexp."
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
-  (let* ((modes (conn--thread mode 'major-mode
+  (let* ((modes (conn--thread mode
+                    'major-mode
                   (buffer-local-value mode (or buffer (current-buffer)))
                   (derived-mode-all-parents mode)))
          result)
@@ -450,25 +458,106 @@ If BUFFER is nil check `current-buffer'."
          (linenum  (- (line-number-at-pos end) line-beg))
          (name     (format "%s@%s+%s - %s"
                            (buffer-name (current-buffer)) line-beg linenum
-                           (substring (string-trim (buffer-substring-no-properties beg end)) 0 20)))
+                           (thread-first
+                             (buffer-substring-no-properties beg end)
+                             (string-trim)
+                             (substring 0 20))))
          (buffer   (clone-indirect-buffer-other-window name nil)))
     (pop-to-buffer buffer)
     (narrow-to-region beg end)
     (deactivate-mark)))
 
+;; From embark
+(defun conn--command-name (cmd)
+  "Return an appropriate name for CMD.
+If CMD is a symbol, use its symbol name; for lambdas, use the
+first line of the documentation string; for keyboard macros use
+`key-description'; otherwise use the word \"unnamed\"."
+  (concat ; fresh copy, so we can freely add text properties
+   (cond
+    ((or (stringp cmd) (vectorp cmd)) (key-description cmd))
+    ((stringp (car-safe cmd)) (car cmd))
+    ((eq (car-safe cmd) 'menu-item) (eval (cadr cmd)))
+    ((keymapp cmd)
+     (propertize (if (symbolp cmd) (format "+%s" cmd) "<keymap>")
+                 'face 'embark-keymap))
+    ((symbolp cmd)
+     (let ((name (symbol-name cmd)))
+       (if (string-prefix-p "conn-" name) ; direct action mode
+           (format "%s" (string-remove-prefix "conn-" name))
+         name)))
+    ((when-let (doc (and (functionp cmd) (ignore-errors (documentation cmd))))
+       (save-match-data
+         (when (string-match "^\\(.*\\)$" doc)
+           (match-string 1 doc)))))
+    (t "<unnamed>"))))
+
+(defun conn--get-map-bindings (prefix map)
+  (let ((prefix-map (if (= 0 (seq-length prefix))
+                        map
+                      (keymap-lookup map (key-description prefix))))
+        binds)
+    (cond
+     ((or (null prefix-map) (numberp prefix-map)))
+     ((keymapp prefix-map)
+      (map-keymap
+       (lambda (key def)
+         (cond
+          ((and (numberp key)
+                (= key 27)
+                (keymapp def))
+           (map-keymap
+            (lambda (key2 def2)
+              (unless (memq def (list 'undefined 'self-insert-command 'digit-argument
+                                      'negative-argument 'embark-keymap-help nil))
+                (push (cons (vconcat (vector key key2)) def2) binds)))
+            def))
+          (t (push (cons (vector key) def) binds))))
+       (keymap-canonicalize prefix-map))))
+    (nreverse binds)))
+
+(defun conn--completing-read-thing ()
+  (let ((cmds (mapcar (pcase-lambda (`(,key . ,def))
+                        (cons (concat (propertize (concat "h " (key-description key))
+                                                  'face 'help-key-binding)
+                                      ": " (conn--command-name def))
+                              def))
+                      (conn--get-map-bindings nil conn--local-mark-thing-map))))
+    (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
+
 (defun conn--read-thing-command ()
   (with-temp-message ""
-    (let ((key (thread-last
-                 (read-key-sequence "Movement Command:")
+    (let ((quit (set-transient-map
+                 (define-keymap
+                   conn-read-thing-mark-map-key conn--local-mark-thing-map
+                   "?" 'conn--completing-read-thing)
+                 t))
+          (key (thread-last
+                 (concat
+                  (propertize "?" 'face 'help-key-binding)
+                  ": completing-read mark thing map\n"
+                  "Movement Command:")
+                 (read-key-sequence)
                  (key-description)
                  (keymap-lookup nil))))
-      (while (not (get key :conn-command-thing))
-        (when (eq 'keyboard-quit key) (keyboard-quit))
-        (setq key (thread-last
-                    "Not a valid movement command\nMovement Command:"
-                    (read-key-sequence)
-                    (key-description)
-                    (keymap-lookup nil))))
+      (unwind-protect
+          (while (not (get key :conn-command-thing))
+            (pcase key
+              ('keyboard-quit
+               (keyboard-quit))
+              ('conn--completing-read-thing
+               (setq key (conn--completing-read-thing)))
+              (_
+               (setq key (thread-last
+                               (concat
+                                "Not a valid movement command\n"
+                                (propertize "?" 'face 'help-key-binding)
+                                ": completing-read mark thing map\n"
+                                "Movement Command:")
+                               (read-key-sequence)
+                               (key-description)
+                               (keymap-lookup nil))))))
+        (funcall quit))
       (get key :conn-command-thing))))
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
@@ -539,8 +628,7 @@ If BUFFER is nil check `current-buffer'."
     wins))
 
 (defun conn--prompt-for-window (windows)
-  (when (setq windows (seq-remove (lambda (win) (window-dedicated-p win))
-                                  windows))
+  (when (setq windows (seq-remove 'window-dedicated-p windows))
     (if (length= windows 1)
         (car windows)
       (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
@@ -631,29 +719,6 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Mark
 
-(defmacro conn--thing-expander-command (thing)
-  (let ((name (conn--symbolicate "conn-" thing "-expand")))
-    `(progn
-       (defun ,name (N)
-         (interactive "p")
-         (activate-mark)
-         (let ((end (region-end)))
-           (if (= (point) end)
-               (progn
-                 (forward-thing ',thing N)
-                 (save-excursion
-                   (conn-exchange-mark-command)
-                   (forward-thing ',thing (- N))
-                   (conn--push-ephemeral-mark)))
-             (progn
-               (save-excursion
-                 (conn-exchange-mark-command)
-                 (forward-thing ',thing N)
-                 (conn--push-ephemeral-mark))
-               (forward-thing ',thing (- N))))))
-       (put ',name :conn-command-thing ',thing)
-       ',name)))
-
 (defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
     `(progn
@@ -695,31 +760,13 @@ If BUFFER is nil check `current-buffer'."
     (when-let ((bounds (plist-get rest :bounds-op)))
       `((put ',thing 'bounds-of-thing-at-point ,bounds)))
     (when-let ((binding (plist-get rest :mark-key)))
-      (if-let ((modes (ensure-list (plist-get rest :modes))))
-          (let ((forms))
-            (dolist (mode modes)
-              (push
-               `(setf (alist-get ,binding (get ',mode :conn-mode-things)
-                                 nil nil #'equal)
-                      (conn--thing-bounds-command ,thing))
-               forms))
-            forms)
-        `((keymap-set conn-mark-thing-map ,binding
-                      (conn--thing-bounds-command ,thing)))))
-    (when-let ((_ (or (get thing 'forward-op)
-                      (plist-get rest :forward-op)))
-               (binding (plist-get rest :expand-key)))
-      (if-let ((modes (ensure-list (plist-get rest :modes))))
-          (let ((forms))
-            (dolist (mode ',modes)
-              (push
-               `(setf (alist-get ,binding (get ',mode :conn-mode-things)
-                                 nil nil #'equal)
-                      (conn--thing-expander-command ,thing))
-               forms))
-            forms)
-        `((keymap-set conn-mark-thing-map ,binding
-                      (conn--thing-expander-command ,thing))))))))
+      `((let ((mark-command (conn--thing-bounds-command ,thing)))
+           ,(if-let ((modes (plist-get rest :modes)))
+                `(dolist (mode (ensure-list ,modes))
+                   (setf (alist-get ,binding (get mode :conn-mode-things)
+                                    nil nil #'equal)
+                         mark-command))
+              `(keymap-set conn-mark-thing-map ,binding mark-command))))))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
@@ -1398,21 +1445,17 @@ If BUFFER is nil use current buffer."
 ;;;;; Remapping Functions
 
 (defun conn--modes-mark-map ()
-  (let (selectors keymap)
+  (setq conn--local-mark-thing-map (copy-keymap conn-mark-thing-map))
+  (let (selectors)
     (dolist (mode local-minor-modes)
       (setq selectors (nconc (get mode :conn-mode-things) selectors)))
     (dolist (mode (derived-mode-all-parents major-mode))
       (setq selectors (nconc (get mode :conn-mode-things) selectors)))
     (when selectors
-      (setq keymap (make-sparse-keymap)
-            selectors (nreverse selectors))
+      (setq selectors (nreverse selectors))
       (pcase-dolist (`(,binding . ,command) selectors)
-        (keymap-set keymap binding command))
-      keymap)))
-
-(defun conn--aux-map-key-equal-p (a b)
-  (and (eq (car a) (car b))
-       (equal (cdr a) (cdr b))))
+        (keymap-set conn--local-mark-thing-map binding command))))
+  conn--local-mark-thing-map)
 
 (defun conn--generate-aux-map (keymaps)
   (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
@@ -1444,10 +1487,8 @@ If BUFFER is nil use current buffer."
                 conn--aux-map-history (list (cons key aux-map)))))
        (t
         (let* ((key (cons conn-current-state active))
-               (aux-map (or (alist-get key conn--aux-map-history nil nil
-                                       #'conn--aux-map-key-equal-p)
-                            (setf (alist-get key conn--aux-map-history nil nil
-                                             #'conn--aux-map-key-equal-p)
+               (aux-map (or (alist-get key conn--aux-map-history nil nil #'equal)
+                            (setf (alist-get key conn--aux-map-history nil nil #'equal)
                                   (conn--generate-aux-map active)))))
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
                 conn--aux-map-history (seq-take conn--aux-map-history
@@ -4205,7 +4246,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'forward-page 'backward-page)
 
 (conn-register-thing dot
-  :expand-key "."
   :beg-op (lambda () (conn-previous-dot 1))
   :end-op (lambda () (conn-next-dot 1)))
 
@@ -4214,7 +4254,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'conn-next-dot 'conn-previous-dot)
 
 (conn-register-thing word
-  :expand-key "o"
   :forward-op 'forward-word)
 
 (conn-register-thing-commands
@@ -4222,7 +4261,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'forward-word 'backward-word)
 
 (conn-register-thing sexp
-  :expand-key "m"
   :forward-op 'forward-sexp)
 
 (conn-register-thing-commands
@@ -4234,7 +4272,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'up-list 'backward-up-list)
 
 (conn-register-thing whitespace
-  :expand-key "S-SPC"
   :mark-key "SPC"
   :forward-op 'forward-whitespace)
 
@@ -4243,23 +4280,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'forward-whitespace 'conn-backward-whitespace)
 
 (conn-register-thing sentence
-  :forward-op 'forward-sentence
-  :expand-key "{")
+  :forward-op 'forward-sentence)
 
 (conn-register-thing-commands
  'sentence (conn-sequential-thing-handler 'sentence)
  'forward-sentence 'backward-sentence)
 
 (conn-register-thing paragraph
-  :expand-key "K"
   :forward-op 'forward-paragraph)
 
 (conn-register-thing-commands
  'paragraph (conn-sequential-thing-handler 'paragraph)
  'forward-paragraph 'backward-paragraph)
-
-(conn-register-thing defun
-  :expand-key "M")
 
 (conn-register-thing-commands
  'defun (conn-sequential-thing-handler 'defun)
@@ -4273,7 +4305,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'end-of-buffer 'beginning-of-buffer)
 
 (conn-register-thing line
-  :expand-key ">"
   :forward-op (lambda (N)
                 (cond ((> N 0)
                        (forward-line N))

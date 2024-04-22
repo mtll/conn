@@ -52,30 +52,6 @@ Value must satisfy `key-valid-p'."
   :type 'string
   :group 'conn-embark)
 
-(defun conn-complete-keys--get-bindings (prefix map)
-  (let ((prefix-map (if (= 0 (seq-length prefix))
-                        map
-                      (keymap-lookup map (key-description prefix))))
-        binds)
-    (cond
-     ((or (null prefix-map) (numberp prefix-map)))
-     ((keymapp prefix-map)
-      (map-keymap
-       (lambda (key def)
-         (cond
-          ((and (numberp key)
-                (= key 27)
-                (keymapp def))
-           (map-keymap
-            (lambda (key2 def2)
-              (unless (memq def (list 'undefined 'self-insert-command 'digit-argument
-                                      'negative-argument 'embark-keymap-help nil))
-                (push (cons (vconcat (vector key key2)) def2) binds)))
-            def))
-          (t (push (cons (vector key) def) binds))))
-       (keymap-canonicalize prefix-map))))
-    (nreverse binds)))
-
 ;; `embark--formatted-bindings' almost
 (defun conn-complete-keys--formatted-bindings (map)
   "Return the formatted keybinding of KEYMAP.
@@ -171,7 +147,7 @@ will navigate up out of a keymap."
          prompt choice cand return)
     (while (not return)
       (setq cand (conn-complete-keys--formatted-bindings
-                  (conn-complete-keys--get-bindings prefix map))
+                  (conn--get-map-bindings prefix map))
             prompt (if (> (length prefix) 0)
                        (concat "Command: " (key-description prefix) "- ")
                      "Command: ")
