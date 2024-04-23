@@ -1,10 +1,11 @@
-;;; conn.el --- Modal keybinding mode -*- lexical-binding: t -*-
+;;; conn.el --- Region oriented modal keybinding mode -*- lexical-binding: t -*-
 ;;
 ;; Filename: conn.el
 ;; Description: A modal keybinding mode and keyboard macro enhancement
 ;; Author: David Feller
-;; Package-Version: 0.1
+;; Version: 0.1
 ;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4"))
+;; Homepage: https://github.com/mtll/conn
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -21,14 +22,14 @@
 ;;
 ;;; Commentary:
 ;;
-;; Modal keybinding mode
+;; A region oriented modal keybinding mode.
 ;;
 ;;; Code:
 
 ;;;; Requires
 
-(require 'transient)
 (require 'compat)
+(require 'transient)
 (require 'thingatpt)
 (require 'rect)
 (require 'isearch)
@@ -289,8 +290,6 @@ dynamically.")
 Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar-local conn--local-mark-thing-map (make-sparse-keymap))
-
-(defvar-local conn--mark-unpop-ring nil)
 
 (defvar-local conn--ephemeral-mark nil)
 
@@ -1438,21 +1437,9 @@ If BUFFER is nil use current buffer."
                      (mapcar #'symbol-value conn--aux-bindings)))
     (setq conn--aux-update-flag t)))
 
-(defun conn--pop-to-mark-command-ad (&rest _)
-  (unless (or (null (mark t))
-              (= (point) (mark)))
-    (add-to-history 'conn--mark-unpop-ring
-                    (conn--create-marker (mark t))
-                    mark-ring-max
-                    'keep-duplicates)))
-
-(defun conn--push-mark-ad (fn &rest args)
-  (if conn--ephemeral-mark
-      (let ((mark-ring nil))
-        (apply fn args)
-        (when (car mark-ring)
-          (set-marker (car mark-ring) nil)))
-    (apply fn args))
+(defun conn--push-mark-ad (&optional location &rest _)
+  (unless conn--ephemeral-mark
+    (conn--maybe-push-mark 'conn--mark-ring (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--save-ephemeral-mark-ad (&rest _)
@@ -1465,17 +1452,15 @@ If BUFFER is nil use current buffer."
   (if conn-mode
       (progn
         (advice-add 'define-key :after #'conn--define-key-advice)
-        (advice-add 'push-mark :around #'conn--push-mark-ad)
+        (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
-                    #'conn--restore-ephemeral-mark-ad)
-        (advice-add 'pop-to-mark-command :before #'conn--pop-to-mark-command-ad))
+                    #'conn--restore-ephemeral-mark-ad))
     (advice-remove 'define-key #'conn--define-key-advice)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
-    (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)
-    (advice-remove 'pop-to-mark-command 'conn--pop-to-mark-command-ad)))
+    (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
 
 
 ;;;; State Functionality
@@ -2776,43 +2761,50 @@ Interactively PARTIAL-MATCH is the prefix argument."
 
 ;;;;; Editing Commands
 
-(defun conn--maybe-push-mark (ring &optional location)
-  (when (and (mark t)
-             (not conn--ephemeral-mark)
-             (/= (or location (point)) (mark t)))
-    (let ((old (nth mark-ring-max (symbol-value ring)))
-          (history-delete-duplicates t))
-      (add-to-history ring (copy-marker (mark-marker)) mark-ring-max)
-      (when (and old (not (memq old (symbol-value ring))))
-        (set-marker old nil))))
-  (set-marker (mark-marker) (or location (point)) (current-buffer))
-  (setq conn--ephemeral-mark nil))
+(defvar-local conn--mark-ring nil)
+(defvar-local conn--mark-unpop-ring nil)
+
+(defun conn--push-ring-delete-duplicate (ring location)
+  (let ((old (nth mark-ring-max (symbol-value ring)))
+        (history-delete-duplicates t))
+    (add-to-history ring
+                    (pcase location
+                      ((pred markerp) (copy-marker location))
+                      ((pred numberp) (conn--create-marker location)))
+                    mark-ring-max)
+    (when (and old (not (memq old (symbol-value ring))))
+      (set-marker old nil))))
 
 (defun conn-pop-to-mark-command ()
   (interactive)
-  (if (null (mark t))
-      (user-error "No mark set in this buffer")
-    (if (null mark-ring)
-        (user-error "No marks to pop")
-      (conn--maybe-push-mark 'mark-ring)
-      (conn--maybe-push-mark 'conn--mark-unpop-ring (car mark-ring))
-      (set-marker (car mark-ring) nil)
-      (pop mark-ring)
-      (goto-char (mark t)))
-    (deactivate-mark)))
+  (cond ((null (mark t))
+         (user-error "No mark set in this buffer"))
+        ((null conn--mark-ring)
+         (user-error "No marks to unpop"))
+        ((= (point) (mark t))
+         (conn--push-ring-delete-duplicate 'conn--mark-unpop-ring (mark t))
+         (let ((conn--mark-ring conn--mark-ring))
+           (push-mark (car conn--mark-ring)))
+         (pop conn--mark-ring)
+         (goto-char (mark t)))
+        (t
+         (conn--push-ring-delete-duplicate 'conn--mark-unpop-ring (point))
+         (goto-char (mark t))))
+  (deactivate-mark))
 
 (defun conn-unpop-to-mark-command ()
   (interactive)
-  (if (null (mark t))
-      (user-error "No mark set in this buffer")
-    (if (null conn--mark-unpop-ring)
-        (user-error "No marks to unpop")
-      (conn--maybe-push-mark 'conn--mark-unpop-ring)
-      (conn--maybe-push-mark 'mark-ring (car conn--mark-unpop-ring))
-      (set-marker (car conn--mark-unpop-ring) nil)
-      (pop conn--mark-unpop-ring)
-      (goto-char (mark t)))
-    (deactivate-mark)))
+  (cond ((null (mark t))
+         (user-error "No mark set in this buffer"))
+        ((null conn--mark-unpop-ring)
+         (user-error "No marks to unpop"))
+        ((= (point) (mark t))
+         (push-mark (pop conn--mark-unpop-ring))
+         (goto-char (mark t)))
+        (t
+         (conn--push-ring-delete-duplicate 'conn--mark-ring (point))
+         (goto-char (mark t))))
+  (deactivate-mark))
 
 (defun conn-toggle-sort-fold-case ()
   "Toggle the value of `sort-fold-case'."
