@@ -957,6 +957,24 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "Hook run during each iteration of macro dispatch.
 If any function returns a nil value then dispatch it halted.")
 
+(defun conn--dispatch-ensure-region-buffer (region)
+  (when-let ((buffer (and region (marker-buffer (car region)))))
+    (when (not (eq buffer (current-buffer)))
+      (pop-to-buffer buffer)
+      (deactivate-mark t)
+      (unless (eq buffer (window-buffer (selected-window)))
+        (error "Could not pop to buffer %s" buffer))))
+  region)
+
+(defun conn--dispatch-ensure-overlay-buffer (dot)
+  (when-let ((buffer (and dot (overlay-buffer dot))))
+    (when (not (eq buffer (current-buffer)))
+      (pop-to-buffer buffer)
+      (deactivate-mark t)
+      (unless (eq buffer (window-buffer (selected-window)))
+        (error "Could not pop to buffer %s" buffer))))
+  dot)
+
 (defun conn--region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
   (dolist (reg regions)
@@ -971,7 +989,7 @@ If any function returns a nil value then dispatch it halted.")
          (set-marker beg nil)
          (set-marker end nil)))
       (_
-       (pop regions)))))
+       (conn--dispatch-ensure-region-buffer (pop regions))))))
 
 (defun conn--point-iterator (points &optional reverse)
   (setq points (mapcar (lambda (pt)
@@ -986,7 +1004,7 @@ If any function returns a nil value then dispatch it halted.")
          (set-marker pt nil)))
       (_
        (when-let ((pt (pop points)))
-         (cons pt pt))))))
+         (conn--dispatch-ensure-region-buffer (cons pt pt)))))))
 
 (defun conn--dot-iterator (dots &optional reverse)
   (when reverse (setq dots (reverse dots)))
@@ -998,12 +1016,10 @@ If any function returns a nil value then dispatch it halted.")
        (dolist (dot dots)
          (overlay-put dot 'evaporate t)))
       (_
-       (pop dots)))))
+       (conn--dispatch-ensure-overlay-buffer (pop dots))))))
 
-(defun conn--dispatch-save-buffer-state (iterator)
-  (let (dispatch-undo-handles
-        dispatch-saved-excursions
-        dispatch-saved-restrictions)
+(defun conn--dispatch-merge-undo (iterator)
+  (let (dispatch-undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
@@ -1012,43 +1028,52 @@ If any function returns a nil value then dispatch it halted.")
            (if conn-dispatch-error
                (cancel-change-group handle)
              (accept-change-group handle)
-             (undo-amalgamate-change-group handle))
-           (with-current-buffer buffer
-             (pcase-let ((`(,pt . ,saved)
-                          (alist-get buffer dispatch-saved-excursions))
-                         (`(,beg . ,end)
-                          (alist-get buffer dispatch-saved-restrictions)))
-               (widen)
-               (narrow-to-region beg end)
-               (goto-char pt)
-               (set-marker pt nil)
-               (save-mark-and-excursion--restore saved))
-             (run-hooks conn-macro-dispatch-buffer-end-hook))))
+             (undo-amalgamate-change-group handle))))
         (_
-         (let* ((ret (funcall iterator state))
-                (buffer (and (consp ret)
-                             (marker-buffer (car ret)))))
-           (when (and buffer (not (eq buffer (current-buffer))))
-             (pop-to-buffer buffer)
-             (deactivate-mark t)
-             (unless (eq buffer (window-buffer (selected-window)))
-               (error "Could not pop to buffer %s" buffer)))
+         (prog1
+             (funcall iterator state)
+           (unless (alist-get (current-buffer) dispatch-undo-handles)
+             (activate-change-group
+              (setf (alist-get (current-buffer) dispatch-undo-handles)
+                    (prepare-change-group))))))))))
+
+(defun conn--dispatch-save-excursion (iterator)
+  (let (dispatch-saved-excursions)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(,buffer ,pt . ,saved) dispatch-saved-excursions)
+           (with-current-buffer buffer
+             (goto-char pt)
+             (set-marker pt nil)
+             (save-mark-and-excursion--restore saved))))
+        (_
+         (prog1 (funcall iterator state)
+           (unless (alist-get (current-buffer) dispatch-saved-excursions)
+             (setf (alist-get (current-buffer) dispatch-saved-excursions)
+                   (cons (point-marker) (save-mark-and-excursion--save))))))))))
+
+(defun conn--dispatch-save-restriction (iterator)
+  (let (dispatch-saved-restrictions)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(,buffer ,beg . ,end) dispatch-saved-restrictions)
+           (with-current-buffer buffer
+             (widen)
+             (narrow-to-region beg end))))
+        (_
+         (prog1
+             (funcall iterator state)
            (if-let ((restriction (alist-get (current-buffer) dispatch-saved-restrictions)))
                (progn
                  (widen)
                  (narrow-to-region (car restriction) (cdr restriction)))
              (setf (alist-get (current-buffer) dispatch-saved-restrictions)
                    (cons (point-min-marker)
-                         (point-max-marker))))
-           (unless (alist-get (current-buffer) dispatch-saved-excursions)
-             (setf (alist-get (current-buffer) dispatch-saved-excursions)
-                   (cons (point-marker) (save-mark-and-excursion--save))))
-           (unless (alist-get (current-buffer) dispatch-undo-handles)
-             (activate-change-group
-              (setf (alist-get (current-buffer) dispatch-undo-handles)
-                    (prepare-change-group)))
-             (run-hooks 'conn-macro-dispatch-buffer-start-hook))
-           ret))))))
+                         (point-max-marker))))))))))
 
 (defun conn--dispatch-change-region (iterator)
   (lambda (state)
@@ -1198,6 +1223,7 @@ The iterator must be the first argument in ARGLIST.
                 (undo-strong-limit most-positive-fixnum)
                 (conn-macro-dispatch-p t)
                 (conn-dispatch-error nil)
+                (hook-buffers nil)
                 (,sym (make-symbol "kmacro-loop-function"))
                 (,iterator (lambda (&optional state)
                              (pcase (funcall ,iterator (or state :loop))
@@ -1206,6 +1232,9 @@ The iterator must be the first argument in ARGLIST.
                                 (conn--push-ephemeral-mark end)
                                 (when (markerp beg) (set-marker beg nil))
                                 (when (markerp end) (set-marker end nil))
+                                (unless (memq (current-buffer) hook-buffers)
+                                  (run-hooks 'conn-macro-dispatch-buffer-start-hook)
+                                  (push (current-buffer) hook-buffers))
                                 (and (run-hook-with-args-until-failure
                                       'conn-macro-dispatch-iterator-hook)
                                      t))))))
@@ -1222,6 +1251,11 @@ The iterator must be the first argument in ARGLIST.
                   (signal (car err) (cdr err))))
              (advice-remove 'kmacro-loop-setup-function ,sym)
              (funcall ,iterator :finalize)
+             (dolist (buffer hook-buffers)
+               (with-current-buffer buffer
+                 (run-hook-wrapped 'conn-macro-dispatch-buffer-end-hook
+                                   (lambda (hook)
+                                     (ignore-errors (funcall hook))))))
              (run-hook-wrapped 'conn-macro-dispatch-end-hook
                                (lambda (hook)
                                  (ignore-errors (funcall hook))))))))))
@@ -1439,7 +1473,7 @@ If BUFFER is nil use current buffer."
 
 (defun conn--push-mark-ad (&optional location &rest _)
   (unless conn--ephemeral-mark
-    (conn--maybe-push-mark 'conn--mark-ring (mark-marker)))
+    (conn--push-ring-delete-duplicate 'conn--mark-ring (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--save-ephemeral-mark-ad (&rest _)
@@ -1451,7 +1485,7 @@ If BUFFER is nil use current buffer."
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
-        (advice-add 'define-key :after #'conn--define-key-advice)
+        (advice-add 'define-key :before #'conn--define-key-advice)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
@@ -4633,7 +4667,7 @@ current region after each macro has finished executing, and KEEP
 means keep the dots in their original position."
   :class 'conn-transient-switches
   :description "Dots"
-  :key "c"
+  :key "h"
   :argument "dots"
   :argument-format "dots=%s"
   :argument-regexp "\\(dots=\\(remove\\|to-region\\|keep\\)\\)"
@@ -4716,6 +4750,30 @@ before each iteration."
   :description "Include Empty"
   :argument "empty")
 
+(transient-define-argument conn--dispatch-save-excursion-infix ()
+  "Include empty regions in dispatch."
+  :class 'transient-switch
+  :key "se"
+  :description "Save Excursions"
+  :argument "excursion"
+  :init-value (lambda (obj) (oset obj value "excursion")))
+
+(transient-define-argument conn--dispatch-save-restriction-infix ()
+  "Include empty regions in dispatch."
+  :class 'transient-switch
+  :key "sr"
+  :description "Save Restrictions"
+  :argument "restrictions"
+  :init-value (lambda (obj) (oset obj value "restrictions")))
+
+(transient-define-argument conn--dispatch-merge-undo-infix ()
+  "Include empty regions in dispatch."
+  :class 'transient-switch
+  :key "su"
+  :description "Merge Undo"
+  :argument "undo"
+  :init-value (lambda (obj) (oset obj value "undo")))
+
 (transient-define-suffix conn--dispatch-suffix (args)
   "Dispatch on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
@@ -4728,7 +4786,9 @@ dispatch on each contiguous component of the region."
       (region-bounds)
     (conn--region-iterator <> (member "reverse" args))
     (if (member "empty" args) <> (conn--dispatch-skip-empty <>))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4753,7 +4813,9 @@ dispatch on each contiguous component of the region."
   (conn--thread <>
       (list (point) (mark t))
     (conn--point-iterator <> (member "reverse" args))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4784,7 +4846,9 @@ dispatch on each contiguous component of the region."
       ("keep" (conn--dispatch-stationary-dots <>))
       ("to-region" (conn--dispatch-relocate-dots <>))
       ("remove" (conn--dispatch-remove-dots <>)))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4809,7 +4873,9 @@ dispatch on each contiguous component of the region."
   (conn--thread <>
       (funcall iterator (member "reverse" args))
     (if (member "empty" args) <> (conn--dispatch-skip-empty <>))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4828,7 +4894,7 @@ dispatch on each contiguous component of the region."
 (transient-define-suffix conn--lines-dispatch-suffix (args)
   "Dispatch on each line between `point' and `mark'."
   :transient 'transient--do-exit
-  :key "c"
+  :key "l"
   :description "On Lines"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread <>
@@ -4846,7 +4912,9 @@ dispatch on each contiguous component of the region."
             (forward-line))
           regions))
     (conn--region-iterator <> (not (member "reverse" args)))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4882,7 +4950,9 @@ dispatch on each contiguous component of the region."
                ("before" 'before))))
         (isearch-exit))
     (conn--region-iterator <> (member "reverse" args))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4926,7 +4996,9 @@ dispatch on each contiguous component of the region."
                   regions))
           regions))
     (conn--region-iterator <> (not (member "reverse" args)))
-    (conn--dispatch-save-buffer-state <>)
+    (if (member "undo" args) (conn--dispatch-merge-undo <>) <>)
+    (if (member "restriction" args) (conn--dispatch-save-restriction <>) <>)
+    (if (member "excursion" args) (conn--dispatch-save-excursion <>) <>)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
@@ -4942,19 +5014,20 @@ dispatch on each contiguous component of the region."
       ("step-edit" (conn--macro-dispatch-step-edit <>))
       (_ (conn--macro-dispatch <>)))))
 
-(transient-define-prefix conn-dispatch-prefix ()
+(transient-define-prefix conn-dispatch-prefix (args)
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-display
-   [("s" "Set Counter" kmacro-set-counter :transient t)
+   [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("l" "Edit Macro" conn-recursive-edit-kmacro
+    ("m" "Edit Macro" conn-recursive-edit-kmacro
      :transient transient--do-suspend)
     ("L" "Edit Lossage" conn-recursive-edit-lossage
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)
+    (conn--dispatch-macro-infix)]]
   [:description
    "Dispatch"
    [(conn--dispatch-suffix)
@@ -4962,19 +5035,21 @@ dispatch on each contiguous component of the region."
     (conn--lines-dispatch-suffix)
     (conn--dispatch-point-and-mark-suffix)
     (conn--text-property-dispatch-suffix)]
-   [(conn--dispatch-macro-infix)
-    (conn--dispatch-region-infix)
+   [(conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-empty-infix)
-    (conn--dispatch-order-infix)]])
+    (conn--dispatch-order-infix)
+    (conn--dispatch-save-excursion-infix)
+    (conn--dispatch-save-restriction-infix)
+    (conn--dispatch-merge-undo-infix)]])
 
 (transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-display
-   [("s" "Set Counter"
+   [("c" "Set Counter"
      (lambda ()
        (interactive)
        (with-isearch-suspended
@@ -4987,24 +5062,27 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)
+    (conn--dispatch-macro-infix)]]
   [:description
    "Dispatch"
    [(conn--isearch-dispatch-suffix)
     (conn--dot-dispatch-suffix)]
-   [(conn--dispatch-macro-infix)
-    (conn--dispatch-region-infix)
+   [(conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-matches-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
-    (conn--dispatch-order-infix)]])
+    (conn--dispatch-order-infix)
+    (conn--dispatch-save-excursion-infix)
+    (conn--dispatch-save-restriction-infix)
+    (conn--dispatch-merge-undo-infix)]])
 
 (transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-display
-   [("s" "Set Counter" kmacro-set-counter :transient t)
+   [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("l" "Edit Macro" conn-recursive-edit-kmacro
      :transient transient--do-suspend)
@@ -5012,15 +5090,18 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)
+    (conn--dispatch-macro-infix)]]
   [:description
    "Dispatch"
    [(conn--regions-dispatch-suffix)]
-   [(conn--dispatch-macro-infix)
-    (conn--dispatch-region-infix)
+   [(conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-empty-infix)
-    (conn--dispatch-order-infix)]]
+    (conn--dispatch-order-infix)
+    (conn--dispatch-save-excursion-infix)
+    (conn--dispatch-save-restriction-infix)
+    (conn--dispatch-merge-undo-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-prefix nil nil :scope iterator))
