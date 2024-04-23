@@ -52,6 +52,7 @@
 (defvar conn-modes)
 (defvar conn-local-map)
 (defvar conn-emacs-state)
+(defvar kmacro-step-edit-replace)
 
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
@@ -387,13 +388,6 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn--save-window-configuration (&rest body)
-  (let ((wind (gensym "window-conf")))
-    `(let ((,wind (current-window-configuration)))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (set-window-configuration ,wind)))))
-
 ;; From repeat-mode
 (defun conn--command-property (property)
   (or (and (symbolp this-command)
@@ -717,24 +711,6 @@ first line of the documentation string; for keyboard macros use
 
        ',name)))
 
-;;;;; Repeat Cursor Extension
-
-(let (original-cursor-color)
-  (defun conn--repeat-cursor-message-ad (map)
-    (when (and map (not original-cursor-color))
-      (setq original-cursor-color (face-background 'cursor)))
-    (modify-all-frames-parameters
-     `((cursor-color . ,(if map
-                            conn-repeating-cursor-color
-                          original-cursor-color))))
-    (unless map (setq original-cursor-color nil))))
-
-(conn-define-extension conn-repeat-cursor
-  "Change the cursor color when a repeat map is active."
-  (if conn-repeat-cursor
-      (add-function :after repeat-echo-function 'conn--repeat-cursor-message-ad)
-    (remove-function repeat-echo-function 'conn--repeat-cursor-message-ad)))
-
 
 ;;;; Mark
 
@@ -990,13 +966,13 @@ If any function returns a nil value then dispatch it halted.")
     (unless (markerp (cdr reg))
       (setcdr reg (conn--create-marker (cdr reg)))))
   (lambda (state)
-    (cond
-     ((eq state :finalize)
-      (pcase-dolist (`(,beg . ,end) regions)
-        (set-marker beg nil)
-        (set-marker end nil)))
-     (t
-      (pop regions)))))
+    (pcase state
+      (:finalize
+       (pcase-dolist (`(,beg . ,end) regions)
+         (set-marker beg nil)
+         (set-marker end nil)))
+      (_
+       (pop regions)))))
 
 (defun conn--point-iterator (points &optional reverse)
   (setq points (mapcar (lambda (pt)
@@ -1005,71 +981,75 @@ If any function returns a nil value then dispatch it halted.")
                            (conn--create-marker pt)))
                        (if reverse (nreverse points) points)))
   (lambda (state)
-    (cond
-     ((eq state :finalize)
-      (dolist (pt points)
-        (set-marker pt nil)))
-     (t
-      (when-let ((pt (pop points)))
-        (cons pt pt))))))
+    (pcase state
+      (:finalize
+       (dolist (pt points)
+         (set-marker pt nil)))
+      (_
+       (when-let ((pt (pop points)))
+         (cons pt pt))))))
 
 (defun conn--dot-iterator (dots &optional reverse)
   (when reverse (setq dots (reverse dots)))
   (dolist (dot dots)
     (overlay-put dot 'evaporate nil))
   (lambda (state)
-    (cond ((eq state :finalize)
-           (dolist (dot dots)
-             (overlay-put dot 'evaporate t)))
-          (t (pop dots)))))
+    (pcase state
+      (:finalize
+       (dolist (dot dots)
+         (overlay-put dot 'evaporate t)))
+      (_
+       (pop dots)))))
 
 (defun conn--dispatch-save-buffer-state (iterator)
   (let (dispatch-undo-handles
         dispatch-saved-excursions
         dispatch-saved-restrictions)
     (lambda (state)
-      (when (eq state :finalize)
-        (funcall iterator state)
-        (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
-          (if conn-dispatch-error
-              (cancel-change-group handle)
-            (accept-change-group handle)
-            (undo-amalgamate-change-group handle))
-          (with-current-buffer buffer
-            (pcase-let ((`(,pt . ,saved)
-                         (alist-get buffer dispatch-saved-excursions))
-                        (`(,beg . ,end)
-                         (alist-get buffer dispatch-saved-restrictions)))
-              (widen)
-              (narrow-to-region beg end)
-              (goto-char pt)
-              (set-marker pt nil)
-              (save-mark-and-excursion--restore saved))
-            (run-hooks conn-macro-dispatch-buffer-end-hook))))
-      (let* ((ret (funcall iterator state))
-             (buffer (and (consp ret)
-                          (marker-buffer (car ret)))))
-        (when (and buffer (not (eq buffer (current-buffer))))
-          (pop-to-buffer buffer)
-          (deactivate-mark t)
-          (unless (eq buffer (window-buffer (selected-window)))
-            (error "Could not pop to buffer %s" buffer)))
-        (if-let ((restriction (alist-get (current-buffer) dispatch-saved-restrictions)))
-            (progn
-              (widen)
-              (narrow-to-region (car restriction) (cdr restriction)))
-          (setf (alist-get (current-buffer) dispatch-saved-restrictions)
-                (cons (point-min-marker)
-                      (point-max-marker))))
-        (unless (alist-get (current-buffer) dispatch-saved-excursions)
-          (setf (alist-get (current-buffer) dispatch-saved-excursions)
-                (cons (point-marker) (save-mark-and-excursion--save))))
-        (unless (alist-get (current-buffer) dispatch-undo-handles)
-          (activate-change-group
-           (setf (alist-get (current-buffer) dispatch-undo-handles)
-                 (prepare-change-group)))
-          (run-hooks 'conn-macro-dispatch-buffer-start-hook))
-        ret))))
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(,buffer . ,handle) dispatch-undo-handles)
+           (if conn-dispatch-error
+               (cancel-change-group handle)
+             (accept-change-group handle)
+             (undo-amalgamate-change-group handle))
+           (with-current-buffer buffer
+             (pcase-let ((`(,pt . ,saved)
+                          (alist-get buffer dispatch-saved-excursions))
+                         (`(,beg . ,end)
+                          (alist-get buffer dispatch-saved-restrictions)))
+               (widen)
+               (narrow-to-region beg end)
+               (goto-char pt)
+               (set-marker pt nil)
+               (save-mark-and-excursion--restore saved))
+             (run-hooks conn-macro-dispatch-buffer-end-hook))))
+        (_
+         (let* ((ret (funcall iterator state))
+                (buffer (and (consp ret)
+                             (marker-buffer (car ret)))))
+           (when (and buffer (not (eq buffer (current-buffer))))
+             (pop-to-buffer buffer)
+             (deactivate-mark t)
+             (unless (eq buffer (window-buffer (selected-window)))
+               (error "Could not pop to buffer %s" buffer)))
+           (if-let ((restriction (alist-get (current-buffer) dispatch-saved-restrictions)))
+               (progn
+                 (widen)
+                 (narrow-to-region (car restriction) (cdr restriction)))
+             (setf (alist-get (current-buffer) dispatch-saved-restrictions)
+                   (cons (point-min-marker)
+                         (point-max-marker))))
+           (unless (alist-get (current-buffer) dispatch-saved-excursions)
+             (setf (alist-get (current-buffer) dispatch-saved-excursions)
+                   (cons (point-marker) (save-mark-and-excursion--save))))
+           (unless (alist-get (current-buffer) dispatch-undo-handles)
+             (activate-change-group
+              (setf (alist-get (current-buffer) dispatch-undo-handles)
+                    (prepare-change-group)))
+             (run-hooks 'conn-macro-dispatch-buffer-start-hook))
+           ret))))))
 
 (defun conn--dispatch-change-region (iterator)
   (lambda (state)
@@ -1100,35 +1080,35 @@ If any function returns a nil value then dispatch it halted.")
 (defun conn--dispatch-relocate-dots (iterator)
   (let (primed new-dots old-dots)
     (lambda (state)
-      (cond
-       ((eq state :finalize)
-        (pcase-dolist (`(,buffer . ,dots)
-                       (if conn-dispatch-error old-dots new-dots))
-          (with-current-buffer buffer
-            (apply 'conn--create-dots dots)))
-        (dolist (list (list new-dots old-dots))
-          (pcase-dolist (`(,_ . ,dots) list)
-            (pcase-dolist (`(,beg . ,end) dots)
-              (set-marker beg nil)
-              (set-marker end nil))))
-        (funcall iterator state))
-       (t
-        (if primed
-            (push (cons (conn--create-marker (region-beginning)
-                                             (current-buffer))
-                        (conn--create-marker (region-end)
-                                             (current-buffer)))
-                  (alist-get (current-buffer) new-dots))
-          (setq primed t))
-        (pcase (funcall iterator state)
-          ((and (pred conn-dotp) dot)
-           (let* ((buffer (overlay-buffer dot))
-                  (beg (conn--create-marker (overlay-start dot) buffer))
-                  (end (conn--create-marker (overlay-end dot) buffer)))
-             (conn--delete-dot dot)
-             (push (cons beg end) (alist-get buffer old-dots))
-             (cons (copy-marker beg) (copy-marker end))))
-          (ret ret)))))))
+      (pcase state
+        (:finalize
+         (pcase-dolist (`(,buffer . ,dots)
+                        (if conn-dispatch-error old-dots new-dots))
+           (with-current-buffer buffer
+             (apply 'conn--create-dots dots)))
+         (dolist (list (list new-dots old-dots))
+           (pcase-dolist (`(,_ . ,dots) list)
+             (pcase-dolist (`(,beg . ,end) dots)
+               (set-marker beg nil)
+               (set-marker end nil))))
+         (funcall iterator state))
+        (_
+         (if primed
+             (push (cons (conn--create-marker (region-beginning)
+                                              (current-buffer))
+                         (conn--create-marker (region-end)
+                                              (current-buffer)))
+                   (alist-get (current-buffer) new-dots))
+           (setq primed t))
+         (pcase (funcall iterator state)
+           ((and (pred conn-dotp) dot)
+            (let* ((buffer (overlay-buffer dot))
+                   (beg (conn--create-marker (overlay-start dot) buffer))
+                   (end (conn--create-marker (overlay-end dot) buffer)))
+              (conn--delete-dot dot)
+              (push (cons beg end) (alist-get buffer old-dots))
+              (cons (copy-marker beg) (copy-marker end))))
+           (ret ret)))))))
 
 (defun conn--dispatch-stationary-dots (iterator)
   (lambda (state)
@@ -1144,29 +1124,29 @@ If any function returns a nil value then dispatch it halted.")
 (defun conn--dispatch-remove-dots (iterator)
   (let (old-dots)
     (lambda (state)
-      (cond
-       ((eq state :finalize)
-        (funcall iterator state)
-        (when conn-dispatch-error
-          (pcase-dolist (`(,buffer . ,dots) old-dots)
-            (with-current-buffer buffer
-              (apply 'conn--create-dots dots))))
-        (pcase-dolist (`(,_ . ,dots) old-dots)
-          (pcase-dolist (`(,beg . ,end) dots)
-            (set-marker beg nil)
-            (set-marker end nil))))
-       (t
-        (pcase (funcall iterator state)
-          ((and (pred conn-dotp) dot)
-           (let* ((buffer (overlay-buffer dot))
-                  (beg (conn--create-marker (overlay-start dot) buffer))
-                  (end (conn--create-marker (overlay-end dot) buffer)))
-             (conn--delete-dot dot)
-             (push (cons (copy-marker beg)
-                         (copy-marker end))
-                   (alist-get buffer old-dots))
-             (cons beg end)))
-          (ret ret)))))))
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (when conn-dispatch-error
+           (pcase-dolist (`(,buffer . ,dots) old-dots)
+             (with-current-buffer buffer
+               (apply 'conn--create-dots dots))))
+         (pcase-dolist (`(,_ . ,dots) old-dots)
+           (pcase-dolist (`(,beg . ,end) dots)
+             (set-marker beg nil)
+             (set-marker end nil))))
+        (_
+         (pcase (funcall iterator state)
+           ((and (pred conn-dotp) dot)
+            (let* ((buffer (overlay-buffer dot))
+                   (beg (conn--create-marker (overlay-start dot) buffer))
+                   (end (conn--create-marker (overlay-end dot) buffer)))
+              (conn--delete-dot dot)
+              (push (cons (copy-marker beg)
+                          (copy-marker end))
+                    (alist-get buffer old-dots))
+              (cons beg end)))
+           (ret ret)))))))
 
 (defun conn--dispatch-at-end (iterator)
   (lambda (state)
