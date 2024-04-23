@@ -941,12 +941,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defvar conn-dispatch-error nil
   "If non-nil contains the error encountered during macro dispatch.")
 
-(defvar conn-macro-dispatch-buffer-start-hook nil
-  "Hook run in each buffer when it is first encountered during macro dispatch.")
-
-(defvar conn-macro-dispatch-buffer-end-hook nil
-  "Hook run in each buffer encountered after macro dispatch finishes.")
-
 (defvar conn-macro-dispatch-end-hook nil
   "Hook run after macro dispatch has completed.")
 
@@ -1232,9 +1226,6 @@ The iterator must be the first argument in ARGLIST.
                                 (conn--push-ephemeral-mark end)
                                 (when (markerp beg) (set-marker beg nil))
                                 (when (markerp end) (set-marker end nil))
-                                (unless (memq (current-buffer) hook-buffers)
-                                  (run-hooks 'conn-macro-dispatch-buffer-start-hook)
-                                  (push (current-buffer) hook-buffers))
                                 (and (run-hook-with-args-until-failure
                                       'conn-macro-dispatch-iterator-hook)
                                      t))))))
@@ -1251,11 +1242,6 @@ The iterator must be the first argument in ARGLIST.
                   (signal (car err) (cdr err))))
              (advice-remove 'kmacro-loop-setup-function ,sym)
              (funcall ,iterator :finalize)
-             (dolist (buffer hook-buffers)
-               (with-current-buffer buffer
-                 (run-hook-wrapped 'conn-macro-dispatch-buffer-end-hook
-                                   (lambda (hook)
-                                     (ignore-errors (funcall hook))))))
              (run-hook-wrapped 'conn-macro-dispatch-end-hook
                                (lambda (hook)
                                  (ignore-errors (funcall hook))))))))))
