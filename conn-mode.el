@@ -549,14 +549,13 @@ first line of the documentation string; for keyboard macros use
     (let ((keymap (conn--completing-read-thing-keymap)))
       (internal-push-keymap keymap 'overriding-terminal-local-map)
       (unwind-protect
-          (let ((key (thread-last
+          (let ((key (thread-first
                        (concat
                         (propertize "Thing Command\n" 'face 'bold)
                         (propertize "C-h" 'face 'help-key-binding)
                         ": completing-read mark thing map")
                        (read-key-sequence)
-                       (key-description)
-                       (keymap-lookup nil))))
+                       (key-binding t nil))))
             (while (not (get key :conn-command-thing))
               (pcase key
                 ('keyboard-quit
@@ -568,7 +567,7 @@ first line of the documentation string; for keyboard macros use
                              (quit)))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
                 (_
-                 (setq key (thread-last
+                 (setq key (thread-first
                              (concat
                               (propertize "Thing Command\n" 'face 'bold)
                               (propertize "C-h" 'face 'help-key-binding)
@@ -576,8 +575,7 @@ first line of the documentation string; for keyboard macros use
                               (propertize "Not a valid thing command"
                                           'face 'error))
                              (read-key-sequence)
-                             (key-description)
-                             (keymap-lookup nil))))))
+                             (key-binding t nil))))))
             (get key :conn-command-thing))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
@@ -1130,7 +1128,7 @@ If any function returns a nil value then dispatch it halted.")
 (defun conn--dispatch-save-buffer-state (iterator)
   (let (dispatch-undo-handles
         dispatch-saved-excursions
-        dispatch-buffer-restriction)
+        dispatch-saved-restrictions)
     (lambda (state)
       (when (eq state :finalize)
         (funcall iterator state)
@@ -1140,16 +1138,15 @@ If any function returns a nil value then dispatch it halted.")
             (accept-change-group handle)
             (undo-amalgamate-change-group handle))
           (with-current-buffer buffer
-            (pcase-let ((`(,pt ,ephemeral . ,saved)
+            (pcase-let ((`(,pt . ,saved)
                          (alist-get buffer dispatch-saved-excursions))
                         (`(,beg . ,end)
-                         (alist-get buffer dispatch-buffer-restriction)))
+                         (alist-get buffer dispatch-saved-restrictions)))
               (widen)
               (narrow-to-region beg end)
               (goto-char pt)
               (set-marker pt nil)
-              (save-mark-and-excursion--restore saved)
-              (setq conn--ephemeral-mark ephemeral))
+              (save-mark-and-excursion--restore saved))
             (run-hooks conn-macro-dispatch-buffer-end-hook))))
       (let* ((ret (funcall iterator state))
              (buffer (and (consp ret)
@@ -1161,21 +1158,16 @@ If any function returns a nil value then dispatch it halted.")
           (deactivate-mark t)
           (unless (eq buffer (window-buffer (selected-window)))
             (error "Could not pop to buffer %s" buffer)))
-        (if-let ((restriction (alist-get (current-buffer) dispatch-buffer-restriction)))
+        (if-let ((restriction (alist-get (current-buffer) dispatch-saved-restrictions)))
             (progn
               (widen)
               (narrow-to-region (car restriction) (cdr restriction)))
-          (setf (alist-get (current-buffer) dispatch-buffer-restriction)
+          (setf (alist-get (current-buffer) dispatch-saved-restrictions)
                 (cons (point-min-marker)
                       (point-max-marker))))
         (unless (alist-get (current-buffer) dispatch-saved-excursions)
           (setf (alist-get (current-buffer) dispatch-saved-excursions)
-                (nconc (list (point-marker)
-                             conn--ephemeral-mark
-                             (let ((mark (mark-marker)))
-                               (and (marker-position mark)
-                                    (copy-marker mark))))
-                       mark-active)))
+                (cons (point-marker) (save-mark-and-excursion--save))))
         (unless (alist-get (current-buffer) dispatch-undo-handles)
           (activate-change-group
            (setf (alist-get (current-buffer) dispatch-undo-handles)
