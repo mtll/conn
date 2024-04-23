@@ -3893,20 +3893,6 @@ if ARG is anything else `other-tab-prefix'."
   (interactive)
   (conn-wincontrol-mode 1))
 
-(defun conn--wincontrol-set-format (&optional cycle)
-  (when cycle
-    (setq conn--wincontrol-help (pcase conn--wincontrol-help
-                                  ('window 'tab)
-                                  ('tab    'frame)
-                                  ('frame  nil)
-                                  (_       'window))))
-  (setq conn--wincontrol-help-format
-        (pcase conn--wincontrol-help
-          ('window (conn--wincontrol-window-format))
-          ('tab    (conn--wincontrol-tab-format))
-          ('frame  (conn--wincontrol-frame-format))
-          (_       (conn--wincontrol-simple-format)))))
-
 (defun conn--wincontrol-pre-command ()
   (when (null conn--wincontrol-arg)
     (setq conn--wincontrol-arg 1))
@@ -5528,15 +5514,17 @@ dispatch on each contiguous component of the region."
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
-(defun conn--initialize-buffer ()
-  "Initialize conn STATE in BUFFER."
+(defun conn-initialize-buffer ()
+  "Maybe initialize `conn-local-mode' in current buffer.
+Check `conn-enable-in-buffer-hook' and `conn-disable-in-buffer-hook' to
+determine if `conn-local-mode' should be enabled."
   (when (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
              (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook))
     (conn-local-mode 1)))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
-  conn-local-mode conn--initialize-buffer
+  conn-local-mode conn-initialize-buffer
   :keymap conn-mode-map
   :group 'conn-mode
   (progn
