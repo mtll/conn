@@ -1273,10 +1273,15 @@ The iterator must be the first argument in ARGLIST.
 
 (conn--define-dispatcher conn--macro-dispatch-step-edit (iterator)
   (when (funcall iterator :record)
-    (let ((prev last-kbd-macro))
-      (kmacro-step-edit-macro)
-      (when (or (eq prev last-kbd-macro)
-                (not (y-or-n-p "Macro edit finished, continue executing on regions?")))
+    (let ((prev last-kbd-macro)
+          (sym (make-symbol "kbd-terminate-hook"))
+          apply)
+      (fset sym (lambda () (setq apply kmacro-step-edit-replace)))
+      (add-hook 'kbd-macro-termination-hook sym)
+      (unwind-protect
+          (kmacro-step-edit-macro)
+        (remove-hook 'kbd-macro-termination-hook sym))
+      (unless apply
         (user-error "Keyboard macro edit aborted")))
     (kmacro-call-macro 0)))
 
