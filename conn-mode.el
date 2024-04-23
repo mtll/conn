@@ -1016,11 +1016,13 @@ If any function returns a nil value then dispatch it halted.")
     (unless (markerp (cdr reg))
       (setcdr reg (conn--create-marker (cdr reg)))))
   (lambda (state)
-    (if (eq state :finalize)
-        (pcase-dolist (`(,beg . ,end) regions)
-          (when (markerp beg) (set-marker beg nil))
-          (when (markerp end) (set-marker end nil)))
-      (pop regions))))
+    (cond
+     ((eq state :finalize)
+      (pcase-dolist (`(,beg . ,end) regions)
+        (when (markerp beg) (set-marker beg nil))
+        (when (markerp end) (set-marker end nil))))
+     (t
+      (pop regions)))))
 
 (defun conn--pulse-on-record (iterator)
   (lambda (state)
@@ -1182,7 +1184,7 @@ The iterator must be the first argument in ARGLIST.
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
   (declare (doc-string 3) (indent 2))
   (let ((iterator (car arglist))
-        (sym (make-symbol "sym"))
+        (sym (make-symbol "loop-function-symbol"))
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
@@ -1202,20 +1204,23 @@ The iterator must be the first argument in ARGLIST.
                                (and (run-hook-with-args-until-failure
                                      'conn-macro-dispatch-iterator-hook)
                                     t)))))
-               (,sym (make-symbol "kmacro-iterator")))
+               (,sym (make-symbol "kmacro-loop-function")))
+           (run-hook-wrapped 'conn-macro-dispatch-start-hook
+                             (lambda (hook)
+                               (ignore-errors (funcall hook))))
            (fset ,sym ,iterator)
            (advice-add 'kmacro-loop-setup-function :before-while ,sym)
            (unwind-protect
                (condition-case err
-                   (progn
-                     (run-hooks 'conn-macro-dispatch-start-hook)
-                     ,@body)
+                   ,(macroexp-progn body)
                  (t
                   (setq conn-dispatch-error err)
                   (signal (car err) (cdr err))))
              (advice-remove 'kmacro-loop-setup-function ,sym)
              (funcall ,iterator :finalize)
-             (run-hooks 'conn-macro-dispatch-end-hook)))))))
+             (run-hook-wrapped 'conn-macro-dispatch-end-hook
+                               (lambda (hook)
+                                 (ignore-errors (funcall hook))))))))))
 
 (conn--define-dispatcher conn--macro-dispatch (iterator &optional macro)
   (pcase-exhaustive macro
@@ -2512,19 +2517,6 @@ between `point-min' and `point-max'."
   (interactive "p")
   (conn-next-dot (- arg)))
 
-(defun conn-kill-to-dots (start end)
-  "Kill region from START to END and insert region to each dot.
-When called interactively START and END default to point and mark."
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (let ((str (buffer-substring start end)))
-    (delete-region start end)
-    (conn--for-each-dot
-     (lambda (dot)
-       (save-mark-and-excursion
-         (goto-char (overlay-start dot))
-         (insert str))))))
-
 (defun conn-dot-point (point)
   "Insert dot at point."
   (interactive (list (point)))
@@ -2605,12 +2597,28 @@ between `point-min' and `point-max'."
   "Prompt to keep each dot."
   (interactive)
   (save-excursion
-    (conn--for-each-dot
-     (lambda (dot)
-       (goto-char (overlay-start dot))
-       (unless (y-or-n-p "Keep this dot?")
-         (conn--delete-dot dot)))
-     #'<)))
+    (catch 'keep
+      (conn--for-each-dot
+       (let ((message (format "%s (%s)es; (%s)o; (%s)elete rest; (%s)eep rest"
+                              (propertize "Delete:" 'face 'bold)
+                              (propertize "y" 'face 'help-key-binding)
+                              (propertize "n" 'face 'help-key-binding)
+                              (propertize "d" 'face 'help-key-binding)
+                              (propertize "k" 'face 'help-key-binding)))
+             rest)
+         (lambda (dot)
+           (goto-char (overlay-start dot))
+           (if rest
+               (conn--delete-dot dot)
+             (while (pcase (read-char message)
+                      (?y (conn--delete-dot dot) nil)
+                      (?n nil)
+                      (?d (conn--delete-dot dot)
+                          (setq rest t)
+                          nil)
+                      (?k (throw 'keep nil))
+                      (_ t))))))
+       #'<))))
 
 (defun conn-remove-dots-after (point)
   "Clear all dots after POINT."
@@ -2721,7 +2729,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
         (conn--delete-dot dot)))))
 
 (defun conn-isearch-split-dots (&optional refine)
-  "Split region from START to END into dots on REGEXP."
+  "Split dots on isearch matches."
   (interactive "P")
   (let ((forward isearch-forward)
         dots)
@@ -5184,6 +5192,7 @@ The last value is \"don't use any of these switches\"."
   "}"                'conn-last-dot
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
+  "c"                'conn-split-dots-on-regexp
   "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
@@ -5191,7 +5200,6 @@ The last value is \"don't use any of these switches\"."
   "q"                'conn-dot-edit-map
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
-  "w"                'conn-kill-to-dots
   "y"                'conn-add-dots-matching-regexp)
 
 (define-keymap
@@ -5262,7 +5270,6 @@ The last value is \"don't use any of these switches\"."
   "~"     'conn-swap-windows
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
-  "c"     'conn-C-c-keys
   "g"     'conn-M-g-keys
   "h"     'repeat
   "I"     'conn-backward-paragraph-keys
