@@ -64,8 +64,8 @@ This keymap is active even in buffers which do not have
 
 ;;;;; Custom Variables
 
-(defgroup conn-mode nil
-  "Modal keybinding mode."
+(defgroup conn nil
+  "A region oriented modal keybinding mode."
   :prefix "conn-"
   :group 'editing)
 
@@ -5427,29 +5427,28 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap conn-mode-map
-  "C-<backspace>" 'conn-kill-whole-line
-  "C-`"           'conn-other-window
-  "C-S-w"         'delete-region
-  "C-x /"         'tab-bar-history-back
-  "C-x 4"         conn-c-x-4-map
-  "C-x ?"         'tab-bar-history-forward
-  "C-x n M-<"     'conn-narrow-to-beginning-of-buffer-indirect
-  "C-x n <"       'conn-narrow-to-beginning-of-buffer
-  "C-x n M->"     'conn-narrow-to-end-of-buffer-indirect
-  "C-x n >"       'conn-narrow-to-end-of-buffer
-  "C-x n t"       'conn-narrow-to-thing
-  "C-x n T"       'conn-narrow-indirect-to-thing
-  "C-x n v"       'conn-narrow-to-visible
-  "C-x n V"       'conn-narrow-indirect-to-visible
-  "C-x n N"       'conn-narrow-indirect-to-region
-  "C-x r"         conn-ctl-x-r-map
-  "C-x t j"       'conn-register-load
-  "C-x t s"       'tab-switch
-  "C-x r a"       'conn-tab-to-register
-  "C-x t a"       'conn-tab-to-register
-  "M-RET"         'conn-open-line-and-indent
-  "M-O"           'conn-pop-to-mark-command
-  "M-U"           'conn-unpop-to-mark-command)
+  "C-`"       'conn-other-window
+  "C-S-w"     'delete-region
+  "C-x /"     'tab-bar-history-back
+  "C-x 4"     conn-c-x-4-map
+  "C-x ?"     'tab-bar-history-forward
+  "C-x n M-<" 'conn-narrow-to-beginning-of-buffer-indirect
+  "C-x n <"   'conn-narrow-to-beginning-of-buffer
+  "C-x n M->" 'conn-narrow-to-end-of-buffer-indirect
+  "C-x n >"   'conn-narrow-to-end-of-buffer
+  "C-x n t"   'conn-narrow-to-thing
+  "C-x n T"   'conn-narrow-indirect-to-thing
+  "C-x n v"   'conn-narrow-to-visible
+  "C-x n V"   'conn-narrow-indirect-to-visible
+  "C-x n N"   'conn-narrow-indirect-to-region
+  "C-x r"     conn-ctl-x-r-map
+  "C-x t j"   'conn-register-load
+  "C-x t s"   'tab-switch
+  "C-x r a"   'conn-tab-to-register
+  "C-x t a"   'conn-tab-to-register
+  "M-RET"     'conn-open-line-and-indent
+  "M-O"       'conn-pop-to-mark-command
+  "M-U"       'conn-unpop-to-mark-command)
 
 (defun conn--setup-keymaps ()
   (if conn-mode
