@@ -1765,30 +1765,36 @@ Buffers are strings matched using `buffer-match-p'."
 (defmacro conn-define-state (name doc &rest body)
   "Define a conn state NAME.
 Defines a transition function and variable NAME.  NAME is non-nil when
-the state is active.  DOC is required.
+the state is active.
 
 :INDICATOR is a mode-line construct that will be displayed on the left
 of the mode-line in state NAME.  Indicator is only displayed when
 `conn-mode-line-indicator-mode' is non-nil.
 
-:LIGHTER-FACE is the face for the conn mode-line lighter in state NAME.
+:LIGHTER-FACE is the face for the conn mode-line lighter in NAME.
 
-:SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in state NAME.
+:SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
+NAME.
 
 :KEYMAP is a keymap for the state.
 
-:CURSOR is the `cursor-type' for state NAME.
+:CURSOR is the `cursor-type' for NAME.
+
+:CURSOR-FACE is the face for the cursor in NAME.  Only the the background
+color of the face is used.  Only has an effect when `conn-cursor-colors'
+is enabled.
 
 :TRANSITIONS is a list of transition key bindings to be bound in NAME's
 transition map.  It is of the form ((KEY . TRANSITION-FUNCTION) ...).
 
-:EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral marks
-while in state NAME.
+:EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral
+marks while in state NAME.
 
 :BUFFER-FACE is the default face for the buffer while in state NAME.
-only has an effect when `conn-buffer-colors' is non-nil.
+only has an effect when `conn-buffer-colors' is enabled.
 
-BODY contains code to be executed each time the transition function is executed.
+BODY contains code to be executed each time the state is enabled or
+disabled.
 
 \(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP TRANSITIONS INDICATOR EPHEMERAL-MARKS BUFFER-FACE &rest BODY)"
   (declare (indent defun))
@@ -1943,7 +1949,7 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :lighter-face ((default              (:inherit mode-line :background "#cae1ff"))
                  (((background light)) (:inherit mode-line :background "#cae1ff"))
                  (((background dark))  (:inherit mode-line :background "#49739f")))
-  :cursor-face ((default              (:background "#00517d"))
+  :cursor-face ((default               (:background "#00517d"))
                  (((background light)) (:background "#00517d"))
                  (((background dark))  (:background "#b6d6e7")))
   :buffer-face ((t :inherit default))
@@ -1961,7 +1967,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :lighter-face ((default              (:inherit mode-line :background "#f3bdbd"))
                  (((background light)) (:inherit mode-line :background "#f3bdbd"))
                  (((background dark))  (:inherit mode-line :background "#8c3c3c")))
-  :cursor-face ((default              (:background "#7d0002"))
+  :cursor-face ((default               (:background "#7d0002"))
                  (((background light)) (:background "#7d0002"))
                  (((background dark))  (:background "#eba4a4")))
   :buffer-face ((t :inherit default :background "#f7eee1"))
@@ -1994,7 +2000,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
                  (((background light)) (:inherit mode-line :background "#c3eac9"))
                  (((background dark))  (:inherit mode-line :background "#4f7555")))
   :buffer-face ((t :inherit default :background "#f6fff9"))
-  :cursor-face ((default              (:background "#267d00"))
+  :cursor-face ((default               (:background "#267d00"))
                  (((background light)) (:background "#267d00"))
                  (((background dark))  (:background "#b2e5a6")))
   :suppress-input-method t
@@ -2031,7 +2037,7 @@ state."
                  (((background light)) (:inherit mode-line :background "#f5c5ff"))
                  (((background dark))  (:inherit mode-line :background "#85508c")))
   :buffer-face ((t :inherit default :background "#fff6ff"))
-  :cursor-face ((default              (:background "#7d0077"))
+  :cursor-face ((default               (:background "#7d0077"))
                  (((background light)) (:background "#7d0077"))
                  (((background dark))  (:background "#f1b9ee")))
   :suppress-input-method t
