@@ -2,7 +2,7 @@
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") (embark "1.0") conn-mode)
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") (embark "1.0") conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -21,13 +21,13 @@
 ;;
 ;;; Code:
 
-(require 'conn-mode)
+(require 'conn)
 (require 'embark)
 
 (defgroup conn-embark nil
   "Conn-mode states."
   :prefix "conn-"
-  :group 'conn-mode)
+  :group 'conn)
 
 (defcustom conn-embark-alt-default-action-overrides
   '((symbol . describe-symbol)

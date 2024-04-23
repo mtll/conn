@@ -4,7 +4,7 @@
 ;; Description: Avy extensions for Conn Mode
 ;; Author: David Feller
 ;; Package-Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") avy conn-mode)
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") avy conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 ;;; Code:
 
 (require 'avy)
-(require 'conn-mode)
+(require 'conn)
 
 ;;;###autoload
 (defun conn-avy-goto-dot ()

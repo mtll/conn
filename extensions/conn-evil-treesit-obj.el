@@ -2,7 +2,7 @@
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") evil-textobj-tree-sitter conn-mode)
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") evil-textobj-tree-sitter conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@
 ;;
 ;;; Code:
 
-(require 'conn-mode)
+(require 'conn)
 (require 'evil-textobj-tree-sitter)
 
 (defvar conn--ts-modes '(c++-ts-mode
