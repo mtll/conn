@@ -615,7 +615,7 @@ first line of the documentation string; for keyboard macros use
           (overlay-put (car ovs) 'face 'isearch))))
     ovs))
 
-(defvar conn--read-string-timout 0.5)
+(defvar conn-read-string-timout 0.5)
 
 (defun conn--read-string-with-timeout (timeout &optional dir)
   (let* ((string (char-to-string (read-char "char 0: " t)))
@@ -670,7 +670,7 @@ first line of the documentation string; for keyboard macros use
 (defvar conn--extensions nil)
 
 (defun conn--setup-extensions ()
-  "Run when `conn-mode' is turned on or off to turn shims on or off."
+  "Run when `conn-mode' is turned on or off to turn extensions on or off."
   (run-hook-with-args 'conn--extensions conn-mode))
 
 (defmacro conn-define-extension (name &rest body)
@@ -1527,7 +1527,6 @@ If BUFFER is nil use current buffer."
 
 (defmacro conn-define-remapping-command (name from-keys &optional aux-map-omit)
   "Define a command NAME that remaps to FROM-KEYS.
-
 Placing NAME in a keymap will cause conn to remap it to the
 result of FROM-KEYS.  For example conn uses this to map C-c,
 C-x, M-s and M-g into various state maps."
@@ -1675,7 +1674,7 @@ in STATE and return it."
             (make-sparse-keymap))))
 
 (defun conn-input-method-overriding-mode (mode &rest hooks)
-  "Make a MODE ignore conn state input method supression.
+  "Make a MODE ignore `conn-mode' input method supression.
 If HOOKS are not specified checks are performed in MODE-hook to toggle
 the input method.  If HOOKS are specified checks are performed in those
 hooks instead."
@@ -1752,7 +1751,6 @@ mouse-3: Describe current input method"))
 
 (defun set-default-conn-state (modes-or-buffers state)
   "Set default STATE for each MODES-OR-BUFFERS.
-
 Modes are symbols tested against `major-mode'.
 Buffers are strings matched using `buffer-match-p'."
   (dolist (var (ensure-list modes-or-buffers))
@@ -2170,7 +2168,8 @@ With a numerical prefix argument read buffers using `completing-read'."
     (message "Dots removed")))
 
 (defun conn-dot-undo ()
-  "Undo last dot change."
+  "Undo last dot change.
+Dot undo ring is invalidated whenever the buffer or state changes."
   (interactive)
   (unless conn--dot-undo-ring
     (user-error "Dot undo ring is empty"))
@@ -2202,7 +2201,8 @@ With a numerical prefix argument read buffers using `completing-read'."
       (message "Dots undone"))))
 
 (defun conn-dot-redo ()
-  "Redo last dot change."
+  "Redo last dot change.
+Dot undo ring is invalidated whenever the buffer or state changes."
   (interactive)
   (unless conn--dot-undone
     (user-error "No further redo information"))
@@ -2594,7 +2594,11 @@ between `point-min' and `point-max'."
    '> start end))
 
 (defun conn-query-remove-dots ()
-  "Prompt to keep each dot."
+  "Prompt to delete each dot.
+y delete the dot.
+n keeps the dot.
+d deletes the remaining dots.
+k keeps the remaining dots."
   (interactive)
   (save-excursion
     (catch 'keep
@@ -2636,8 +2640,8 @@ between `point-min' and `point-max'."
 
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
-
-THING is something with a forward-op as defined by thingatpt."
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (unless thing (error "Unknown thing command"))
   (save-excursion (forward-thing thing))
@@ -2805,21 +2809,20 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (message "Sort fold case: %s"
            (setq sort-fold-case (not sort-fold-case))))
 
-(defvar-local conn-minibuffer-initial-region nil)
+(defvar-local conn--minibuffer-initial-region nil)
 
-(defun conn-yank-region-to-minibuffer-hook ()
-  (setq conn-minibuffer-initial-region
+(defun conn--yank-region-to-minibuffer-hook ()
+  (setq conn--minibuffer-initial-region
         (with-minibuffer-selected-window
           (ignore-errors (cons (region-beginning) (region-end))))))
 
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
-  "Yank region from `minibuffer-selected-window' into minibuffer.
-Interactively defaults to the region in buffer."
+  "Yank region from `minibuffer-selected-window' into minibuffer."
   (interactive (list (pcase current-prefix-arg
                        ('(4) conn-completion-region-quote-function)
                        ('nil 'identity)
                        (_    'regexp-quote))))
-  (insert (pcase-exhaustive conn-minibuffer-initial-region
+  (insert (pcase-exhaustive conn--minibuffer-initial-region
             (`(,beg . ,end)
              (with-minibuffer-selected-window
                (funcall (or quote-function 'identity)
@@ -2837,7 +2840,7 @@ Interactively defaults to the region in buffer."
 
 (defun conn-query-replace-regexp-region ()
   "Run `query-replace-regexp' with the region as initial contents.
-Also ensure point is at START before running `query-replace-regexp'."
+Also ensure point is at start of region beforehand."
   (interactive)
   (save-mark-and-excursion
     (unless (eq (point) (region-beginning))
@@ -2847,7 +2850,8 @@ Also ensure point is at START before running `query-replace-regexp'."
       (call-interactively #'query-replace-regexp))))
 
 (defun conn-scroll-down (&optional arg)
-  "`scroll-down-command' leaving point at the same relative window position."
+  "`scroll-down-command' leaving point at the same relative window position.
+Pulses line that was the first visible line before scrolling."
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
       (progn (beep) (message "Beginning of buffer"))
@@ -2857,7 +2861,8 @@ Also ensure point is at START before running `query-replace-regexp'."
 (put 'conn-scroll-down 'scroll-command t)
 
 (defun conn-scroll-up (&optional arg)
-  "`scroll-up-command' leaving point at the same relative window position."
+  "`scroll-up-command' leaving point at the same relative window position.
+Pulses line that was the last visible line before scrolling."
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
       (progn (beep) (message "End of buffer"))
@@ -2883,7 +2888,8 @@ With arg N, insert N newlines."
   (narrow-to-region (point) (point-max)))
 
 (defun conn-narrow-to-end-of-buffer-indirect ()
-  "Narrow to the region between `point' and `point-max'."
+  "Narrow to the region between `point' and `point-max' in an indirect buffer.
+See `clone-indirect-buffer'."
   (interactive)
   (conn--narrow-indirect (point) (point-max)))
 
@@ -2893,7 +2899,8 @@ With arg N, insert N newlines."
   (narrow-to-region (point-min) (point)))
 
 (defun conn-narrow-to-beginning-of-buffer-indirect ()
-  "Narrow to the region between `point-min' and `point'."
+  "Narrow to the region between `point-min' and `point' in an indirect buffer.
+See `clone-indirect-buffer'."
   (interactive)
   (conn--narrow-indirect (point-min) (point)))
 
@@ -2986,6 +2993,9 @@ This command should only be called interactively."
     (conn-goto-string-backward string)))
 
 (defun conn-goto-string-backward (string)
+  "Go to the first visible occurrence backward of STRING in buffer.
+When called interactively reads STRING with timeout
+`conn-read-string-timout'."
   (interactive
    (list (conn--read-string-with-timeout
           conn--read-string-timout 'backward)))
@@ -3015,6 +3025,9 @@ This command should only be called interactively."
     (conn-goto-string-forward string)))
 
 (defun conn-goto-string-forward (string)
+  "Go to the first visible occurrence forward of STRING in buffer.
+When called interactively reads STRING with timeout
+`conn-read-string-timout'."
   (interactive
    (list (conn--read-string-with-timeout
           conn--read-string-timout 'forward)))
@@ -3225,7 +3238,9 @@ interactively."
                  t)))
 
 (defun conn-mark-thing (thing)
-  "Mark THING at point."
+  "Mark THING at point.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (goto-char (cdr bounds))
@@ -3234,13 +3249,17 @@ interactively."
 
 (defun conn-narrow-to-thing (thing)
   "Narrow indirect buffer to THING at point.
-See `clone-indirect-buffer' for meaning of indirect buffer."
+See `clone-indirect-buffer' for meaning of indirect buffer.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (narrow-to-region (car bounds) (cdr bounds))))
 
 (defun conn-narrow-indirect-to-thing (thing)
-  "Narrow to THING at point."
+  "Narrow to THING at point.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (conn--narrow-indirect (car bounds) (cdr bounds))))
@@ -4451,6 +4470,7 @@ the edit in the macro."
   (null last-kbd-macro))
 
 (transient-define-infix conn--set-counter-format-infix ()
+  "Set `kmacro-counter-format'."
   :class 'transient-lisp-variable
   :set-value (lambda (_ format) (kmacro-set-format format))
   :variable 'kmacro-counter-format
@@ -4514,6 +4534,7 @@ the edit in the macro."
     ("s" "List" list-registers :transient t)]])
 
 (transient-define-infix conn--set-fill-column-infix ()
+  "Set `fill-column'."
   :class 'transient-lisp-variable
   :variable 'fill-column
   :set-value (lambda (_ val) (set-fill-column val))
@@ -4522,6 +4543,7 @@ the edit in the macro."
                          (current-column))))
 
 (transient-define-infix conn--set-fill-prefix-infix ()
+  "Toggle `fill-prefix'."
   :class 'transient-lisp-variable
   :set-value #'ignore
   :variable 'fill-prefix
@@ -4530,6 +4552,7 @@ the edit in the macro."
             (substring-no-properties fill-prefix)))
 
 (transient-define-infix conn--auto-fill-infix ()
+  "Toggle `auto-fill-function'."
   :class 'transient-lisp-variable
   :set-value #'ignore
   :variable 'auto-fill-function
@@ -4603,6 +4626,9 @@ The last value is \"don't use any of these switches\"."
   (kmacro-swap-ring))
 
 (transient-define-argument conn--dispatch-dot-read-buffers-infix ()
+  "How to read additional buffers on which to dispatch.
+CRM means read buffers with `completing-read-multiple',
+MATCH-REGEXP means dispatch on buffers matching a regexp."
   :class 'conn-transient-switches
   :description "Read Dot Buffers"
   :key "b"
@@ -4613,6 +4639,10 @@ The last value is \"don't use any of these switches\"."
   :if 'conn--dots-active-p)
 
 (transient-define-argument conn--dispatch-dots-infix ()
+  "What to do with dots after dispatching on them.
+REMOVE means delete the dots, to-region means move the dots to the
+current region after each macro has finished executing, and KEEP
+means keep the dots in their original position."
   :class 'conn-transient-switches
   :description "Dots"
   :key "c"
@@ -4625,6 +4655,11 @@ The last value is \"don't use any of these switches\"."
   :init-value (lambda (obj) (oset obj value "dots=remove")))
 
 (transient-define-argument conn--dispatch-macro-infix ()
+  "Dispatch `last-kbd-macro'.
+APPLY simply executes the macro at each region.  APPEND executes
+the macro and records additional keys on the first iteration.
+STEP-EDIT uses `kmacro-step-edit-macro' to edit the macro before
+dispatch."
   :class 'conn-transient-switches
   :description "Last Kmacro"
   :key "k"
@@ -4634,6 +4669,9 @@ The last value is \"don't use any of these switches\"."
   :choices '("apply" "append" "step-edit"))
 
 (transient-define-argument conn--dispatch-matches-infix ()
+  "Restrict dispatch to only some isearch matches.
+AFTER means only those matchs after, and including, the current match.
+BEFORE means only those matches before, and including, the current match."
   :class 'conn-transient-switches
   :description "Restrict Matches Inclusive"
   :if-not (lambda () (bound-and-true-p multi-isearch-buffer-list))
@@ -4644,6 +4682,7 @@ The last value is \"don't use any of these switches\"."
   :choices '("after" "before"))
 
 (transient-define-argument conn--dispatch-state-infix ()
+  "Dispatch in a specific state."
   :class 'conn-transient-switches
   :required t
   :description "In State"
@@ -4660,6 +4699,11 @@ The last value is \"don't use any of these switches\"."
                                 (_ "conn"))))))
 
 (transient-define-argument conn--dispatch-region-infix ()
+  "How to dispatch on each region.
+START means place the point at the start of the region before
+each iteration.  END means place the point at the end of the
+region before each iteration.  CHANGE means delete the region
+before each iteration."
   :class 'conn-transient-switches
   :required t
   :key "r"
@@ -4671,18 +4715,23 @@ The last value is \"don't use any of these switches\"."
   :init-value (lambda (obj) (oset obj value "region=start")))
 
 (transient-define-argument conn--dispatch-order-infix ()
+  "Dispatch on regions from last to first."
   :class 'transient-switch
   :key "o"
   :description "Order"
   :argument "reverse")
 
 (transient-define-argument conn--dispatch-empty-infix ()
+  "Include empty regions in dispatch."
   :class 'transient-switch
   :key "u"
   :description "Include Empty"
   :argument "empty")
 
 (transient-define-suffix conn--dispatch-suffix (args)
+  "Dispatch on the current region.
+If the region is discontiguous (e.g. a rectangular region) then
+dispatch on each contiguous component of the region."
   :transient 'transient--do-exit
   :key "d"
   :description "On Regions"
@@ -4708,6 +4757,7 @@ The last value is \"don't use any of these switches\"."
       (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--dot-dispatch-suffix (args)
+  "Dispatch on dots in the selected buffers."
   :transient 'transient--do-exit
   :if 'conn--dots-active-p
   :key "e"
@@ -4768,6 +4818,7 @@ The last value is \"don't use any of these switches\"."
       (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--lines-dispatch-suffix (args)
+  "Dispatch on each line between `point' and `mark'."
   :transient 'transient--do-exit
   :key "c"
   :description "On Lines"
@@ -4804,6 +4855,7 @@ The last value is \"don't use any of these switches\"."
       (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--isearch-dispatch-suffix (args)
+  "Dispatch on current isearch matches."
   :transient 'transient--do-exit
   :key "d"
   :description "On Matches"
@@ -4839,6 +4891,7 @@ The last value is \"don't use any of these switches\"."
       (_ (conn--macro-dispatch @)))))
 
 (transient-define-suffix conn--text-property-dispatch-suffix (prop value args)
+  "Dispatch on regions of text with a text property."
   :transient 'transient--do-exit
   :key "t"
   :description "On Text Prop"
@@ -5498,14 +5551,14 @@ The last value is \"don't use any of these switches\"."
                 mark-even-if-inactive t)
           (add-hook 'post-command-hook #'conn--update-aux-map)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor)
-          (add-hook 'minibuffer-setup-hook 'conn-yank-region-to-minibuffer-hook -50))
+          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
       (remove-hook 'post-command-hook #'conn--update-aux-map)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor)
-      (remove-hook 'minibuffer-setup-hook 'conn-yank-region-to-minibuffer-hook))))
+      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
 (provide 'conn-mode)
 
@@ -5615,7 +5668,9 @@ The last value is \"don't use any of these switches\"."
   (defvar zz-add-zone-anyway-p)
   ;; Make this command add narrowings to izone var
   (defun conn-narrow-to-thing (thing)
-    "Narrow to THING at point."
+    "Narrow to THING at point.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
     (interactive (list (conn--read-thing-command)))
     (when-let ((bounds (bounds-of-thing-at-point thing)))
       (let ((zz-add-zone-anyway-p t))
