@@ -5238,6 +5238,7 @@ dispatch on each contiguous component of the region."
   "N"   'conn-narrow-indirect-to-thing
   "n"   'conn-narrow-to-thing
   "o"   'transpose-words
+  "p"   'conn-kmacro-prefix
   "q"   'indent-for-tab-command
   "r"   'query-replace-regexp
   "u"   'conn-mark-thing
@@ -5251,7 +5252,9 @@ dispatch on each contiguous component of the region."
   "M-<down-mouse-1>" 'conn-dot-at-click
   "M-/"              'conn-dot-undo
   "<return>"         'conn-dot-lines
+  "RET"              'conn-dot-lines
   "<backspace>"      'conn-remove-dot-backward
+  "DEL"              'conn-remove-dot-backward
   "M-?"              'conn-dot-redo
   "C-p"              'conn-previous-dot
   "C-n"              'conn-next-dot
@@ -5285,8 +5288,8 @@ dispatch on each contiguous component of the region."
   "("     'backward-up-list
   "["     'conn-kill-prepend-region
   "\""    'conn-insert-pair
-  "TAB"   'indent-region
   "<tab>" 'indent-region
+  "TAB"   'indent-region
   "]"     'conn-kill-append-region
   "'"     'conn-other-place-prefix
   "B"     'ibuffer
@@ -5369,45 +5372,46 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap conn-org-tree-edit-state-map
-  "SPC" 'conn-scroll-up
-  "DEL" 'conn-scroll-down
-  "M-;" 'org-toggle-comment
-  "."   'point-to-register
-  "/"   'undo-only
-  ";"   'execute-extended-command
-  ":"   'execute-extended-command-for-buffer
-  "*"   'conn-org-tree-edit-insert-heading
-  "<"   'org-promote-subtree
-  ">"   'org-demote-subtree
-  "?"   'undo-redo
-  "q s" 'org-sort
-  "q c" 'org-columns
-  "b"   'switch-to-buffer
-  "c"   'conn-C-c-keys
-  "g"   'conn-M-g-keys
-  "i"   'org-backward-element
-  "I"   'org-metaup
-  "J"   'org-metaleft
-  "j"   'org-previous-visible-heading
-  "k"   'org-forward-element
-  "K"   'org-metadown
-  "L"   'org-metaright
-  "l"   'org-next-visible-heading
-  "M"   'org-mark-subtree
-  "m"   'org-backward-element
-  "n"   'org-forward-element
-  "N"   'org-toggle-narrow-to-subtree
-  "O"   'org-next-block
-  "p"   'conn-register-load
-  "s"   'conn-M-s-keys
-  "T"   'org-todo
-  "t"   'org-sparse-tree
-  "U"   'org-previous-block
-  "u"   'org-up-element
-  "W"   'widen
-  "w"   'org-refile
-  "x"   'conn-C-x-keys
-  "z"   'conn-exchange-mark-command)
+  "SPC"         'conn-scroll-up
+  "<backspace>" 'conn-scroll-down
+  "DEL"         'conn-scroll-down
+  "M-;"         'org-toggle-comment
+  "."           'point-to-register
+  "/"           'undo-only
+  ";"           'execute-extended-command
+  ":"           'execute-extended-command-for-buffer
+  "*"           'conn-org-tree-edit-insert-heading
+  "<"           'org-promote-subtree
+  ">"           'org-demote-subtree
+  "?"           'undo-redo
+  "q s"         'org-sort
+  "q c"         'org-columns
+  "b"           'switch-to-buffer
+  "c"           'conn-C-c-keys
+  "g"           'conn-M-g-keys
+  "i"           'org-backward-element
+  "I"           'org-metaup
+  "J"           'org-metaleft
+  "j"           'org-previous-visible-heading
+  "k"           'org-forward-element
+  "K"           'org-metadown
+  "L"           'org-metaright
+  "l"           'org-next-visible-heading
+  "M"           'org-mark-subtree
+  "m"           'org-backward-element
+  "n"           'org-forward-element
+  "N"           'org-toggle-narrow-to-subtree
+  "O"           'org-next-block
+  "p"           'conn-register-load
+  "s"           'conn-M-s-keys
+  "T"           'org-todo
+  "t"           'org-sparse-tree
+  "U"           'org-previous-block
+  "u"           'org-up-element
+  "W"           'widen
+  "w"           'org-refile
+  "x"           'conn-C-x-keys
+  "z"           'conn-exchange-mark-command)
 
 (defvar-keymap conn-ctl-x-r-map
   "\\" 'conn-set-register-seperator
@@ -5438,7 +5442,6 @@ dispatch on each contiguous component of the region."
   "C-x n v"       'conn-narrow-to-visible
   "C-x n V"       'conn-narrow-indirect-to-visible
   "C-x n N"       'conn-narrow-indirect-to-region
-  "C-x m"         'conn-kmacro-prefix
   "C-x r"         conn-ctl-x-r-map
   "C-x t j"       'conn-register-load
   "C-x t s"       'tab-switch
