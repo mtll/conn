@@ -4373,15 +4373,21 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transient Menus
 
-(defun conn-recursive-edit-kmacro ()
+(defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
 Press \\[exit-recursive-edit] to exit the recursive edit and abort
 the edit in the macro."
-  (interactive)
+  (interactive "P")
   (save-mark-and-excursion
     (save-window-excursion
-      (kmacro-edit-macro)
+      (kmacro-edit-macro (not arg))
       (when-let ((buffer (get-buffer "*Edit Macro*")))
+        (save-excursion
+          (goto-char (point-min))
+          (with-restriction (point) (line-end-position)
+            (replace-regexp "finish; press .* to cancel"
+                            (substitute-command-keys
+                             "finish; press \\[exit-recursive-edit] to cancel"))))
         (delete-other-windows)
         (conn-local-mode 1)
         (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
@@ -4393,15 +4399,21 @@ the edit in the macro."
           (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
           (kill-buffer buffer))))))
 
-(defun conn-recursive-edit-lossage ()
+(defun conn-recursive-edit-lossage (arg)
   "Edit lossage macro inside a recursive edit.
 Press \\[exit-recursive-edit] to exit the recursive edit and abort
 the edit in the macro."
-  (interactive)
+  (interactive "P")
   (save-mark-and-excursion
     (save-window-excursion
-      (kmacro-edit-lossage)
+      (kmacro-edit-lossage (not arg))
       (when-let ((buffer (get-buffer "*Edit Macro*")))
+        (save-excursion
+          (goto-char (point-min))
+          (with-restriction (point) (line-end-position)
+            (replace-regexp "finish; press .* to cancel"
+                            (substitute-command-keys
+                             "finish; press \\[exit-recursive-edit] to cancel"))))
         (delete-other-windows)
         (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
         (unwind-protect
@@ -4997,9 +5009,9 @@ dispatch on each contiguous component of the region."
    [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("e" "Edit Macro"
-     (lambda ()
-       (interactive)
-       (conn-recursive-edit-kmacro)
+     (lambda (arg)
+       (interactive "P")
+       (conn-recursive-edit-kmacro arg)
        (transient-resume))
      :transient transient--do-suspend)
     ("E" "Edit Lossage"
@@ -5041,9 +5053,9 @@ dispatch on each contiguous component of the region."
      :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("e" "Edit Macro"
-     (lambda ()
-       (interactive)
-       (with-isearch-suspended (conn-recursive-edit-kmacro))
+     (lambda (arg)
+       (interactive "P")
+       (with-isearch-suspended (conn-recursive-edit-kmacro arg))
        (transient-resume))
      :transient transient--do-suspend)
     ("E" "Edit Lossage"
@@ -5077,9 +5089,9 @@ dispatch on each contiguous component of the region."
    [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
     ("e" "Edit Macro"
-     (lambda ()
-       (interactive)
-       (conn-recursive-edit-kmacro)
+     (lambda (arg)
+       (interactive "P")
+       (conn-recursive-edit-kmacro arg)
        (transient-resume))
      :transient transient--do-suspend)
     ("E" "Edit Lossage"
