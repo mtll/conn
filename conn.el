@@ -145,13 +145,13 @@ Defines default STATE for buffers matching REGEXP."
   "Face for conn window prompt overlay."
   :group conn-mode)
 
-;; Isearch uses a priority of 1001 for
-;; its lazy highlighting, we want to be
-;; less than that by default.
-(defcustom conn-dot-overlay-priority 1000
+(defcustom conn-dot-overlay-priority 1001
   "Priority of dot overlays."
   :type 'integer
-  :group 'conn-dots)
+  :group 'conn-dots
+  :set (lambda (sym val)
+         (set sym val)
+         (put 'conn--dot 'priority val)))
 
 (defcustom conn-mark-overlay-priority 2000
   "Priority of mark overlay."
@@ -2846,6 +2846,15 @@ Meant to be used as `isearch-filter-predicate'."
       (conn--remove-dots (point-min) (point-max)))
     (apply #'conn--create-dots (conn--isearch-matches-in-buffer))))
 
+(defun conn-isearch-dot-match ()
+  "Dot the current isearch match and repeat in current direction."
+  (interactive)
+  (conn--create-dots (cons (min (point) isearch-other-end)
+                           (max (point) isearch-other-end)))
+  (if isearch-forward
+      (isearch-repeat-forward)
+    (isearch-repeat-backward)))
+
 (defun conn-isearch-add-dots ()
   "Dot all isearch matches."
   (interactive)
@@ -5396,6 +5405,8 @@ dispatch on each contiguous component of the region."
 (define-keymap
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
+  "C-TAB"      'conn-isearch-dot-match
+  "C-<tab>"    'conn-isearch-dot-match
   "M-\\"       'conn-isearch-dispatch-prefix
   "M-E"        'conn-isearch-add-dots
   "M-R"        'conn-isearch-refine-dots
@@ -5582,8 +5593,8 @@ dispatch on each contiguous component of the region."
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "g"     'conn-M-g-keys
-  "H"     'conn-expand
-  "h"     'repeat
+  "H"     'repeat
+  "h"     'conn-expand
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
   "J"     'conn-beginning-of-inner-line
