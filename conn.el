@@ -2123,16 +2123,6 @@ state."
   (setq conn--current-expansions nil)
   (remove-hook 'after-change-functions 'conn--expand-post-change-hook t))
 
-(with-eval-after-load 'expreg
-  (defvar expreg-functions)
-  (defun conn--expreg-expansions ()
-    (save-mark-and-excursion
-      (activate-mark)
-      (mapcan (lambda (fn) (save-excursion
-                             (mapcar #'cdr (funcall fn))))
-              expreg-functions)))
-  (cl-pushnew 'conn--expreg-expansions conn-expansion-functions))
-
 (defun conn--expansion-filter-regions (regions)
   (delete-dups
    (seq-filter (pcase-lambda (`(,beg . ,end))

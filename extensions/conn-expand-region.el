@@ -1,4 +1,4 @@
-;;; conn-avy.el --- Conn avy extension -*- lexical-binding: t -*-
+;;; conn-expand-region.el --- Conn expreg extension -*- lexical-binding: t -*-
 ;;
 ;; Filename: conn-expand-region.el
 ;; Description: expand-region extensions for conn
