@@ -201,6 +201,11 @@ Supported values are:
   :group 'conn
   :type 'string)
 
+(defcustom conn-expand-pulse-region t
+  "Pulse region on expansion when mark is not active"
+  :group 'conn
+  :type 'boolean)
+
 ;;;;; State Variables
 
 (defvar conn-states nil)
@@ -2174,7 +2179,7 @@ state."
               (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
              ('nil
               (user-error "No more expansions"))))))
-  (unless (region-active-p)
+  (unless (or (region-active-p) (not conn-expand-pulse-region))
     (pulse-momentary-highlight-region (region-beginning) (region-end))))
 
 (defun conn-contract (arg)
@@ -2206,7 +2211,7 @@ state."
               (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
              ('nil
               (user-error "No more contractions"))))))
-  (unless (region-active-p)
+  (unless (or (region-active-p) (not conn-expand-pulse-region))
     (pulse-momentary-highlight-region (region-beginning) (region-end))))
 
 ;;;;; Dot Commands
