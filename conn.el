@@ -4391,8 +4391,7 @@ the edit in the macro."
                  (recursive-edit))
               (recursive-edit))
           (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
-          (kill-buffer buffer)
-          (transient-resume))))))
+          (kill-buffer buffer))))))
 
 (defun conn-recursive-edit-lossage ()
   "Edit lossage macro inside a recursive edit.
@@ -4411,8 +4410,7 @@ the edit in the macro."
                  (recursive-edit))
               (recursive-edit))
           (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
-          (kill-buffer buffer)
-          (transient-resume))))))
+          (kill-buffer buffer))))))
 
 (defun conn--kmacro-display (macro &optional trunc)
   (pcase macro
@@ -4706,7 +4704,7 @@ region before each iteration.  CHANGE means delete the region
 before each iteration."
   :class 'conn-transient-switches
   :required t
-  :key "r"
+  :key "w"
   :description "Regions"
   :argument "region="
   :argument-format "region=%s"
@@ -4757,7 +4755,7 @@ before each iteration."
 If the region is discontiguous (e.g. a rectangular region) then
 dispatch on each contiguous component of the region."
   :transient 'transient--do-exit
-  :key "d"
+  :key "r"
   :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread <>
@@ -4808,7 +4806,7 @@ dispatch on each contiguous component of the region."
   "Dispatch on dots in the selected buffers."
   :transient 'transient--do-exit
   :if 'conn--dots-active-p
-  :key "e"
+  :key "d"
   :description "On Dots"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread <>
@@ -4844,7 +4842,7 @@ dispatch on each contiguous component of the region."
 
 (transient-define-suffix conn--regions-dispatch-suffix (iterator args)
   :transient 'transient--do-exit
-  :key "d"
+  :key "r"
   :description "On Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
@@ -4911,7 +4909,7 @@ dispatch on each contiguous component of the region."
 (transient-define-suffix conn--isearch-dispatch-suffix (args)
   "Dispatch on current isearch matches."
   :transient 'transient--do-exit
-  :key "d"
+  :key "m"
   :description "On Matches"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread <>
@@ -4998,9 +4996,17 @@ dispatch on each contiguous component of the region."
    conn--kmacro-ring-display
    [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("m" "Edit Macro" conn-recursive-edit-kmacro
+    ("e" "Edit Macro"
+     (lambda ()
+       (interactive)
+       (conn-recursive-edit-kmacro)
+       (transient-resume))
      :transient transient--do-suspend)
-    ("L" "Edit Lossage" conn-recursive-edit-lossage
+    ("E" "Edit Lossage"
+     (lambda ()
+       (interactive)
+       (conn-recursive-edit-lossage)
+       (transient-resume))
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
@@ -5034,9 +5040,17 @@ dispatch on each contiguous component of the region."
         (call-interactively 'kmacro-set-counter)))
      :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("l" "Edit Macro" conn-recursive-edit-kmacro
+    ("e" "Edit Macro"
+     (lambda ()
+       (interactive)
+       (with-isearch-suspended (conn-recursive-edit-kmacro))
+       (transient-resume))
      :transient transient--do-suspend)
-    ("L" "Edit Lossage" conn-recursive-edit-lossage
+    ("E" "Edit Lossage"
+     (lambda ()
+       (interactive)
+       (with-isearch-suspended (conn-recursive-edit-lossage))
+       (transient-resume))
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
@@ -5062,9 +5076,17 @@ dispatch on each contiguous component of the region."
    conn--kmacro-ring-display
    [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("l" "Edit Macro" conn-recursive-edit-kmacro
+    ("e" "Edit Macro"
+     (lambda ()
+       (interactive)
+       (conn-recursive-edit-kmacro)
+       (transient-resume))
      :transient transient--do-suspend)
-    ("L" "Edit Lossage" conn-recursive-edit-lossage
+    ("E" "Edit Lossage"
+     (lambda ()
+       (interactive)
+       (conn-recursive-edit-lossage)
+       (transient-resume))
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
