@@ -1194,6 +1194,18 @@ If any function returns a nil value then dispatch it halted.")
        ret)
       (ret ret))))
 
+(defun conn--dispatch-save-windows (iterator)
+  (let (wconf)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (set-window-configuration wconf))
+        (_
+         (unless wconf
+           (setq wconf (current-window-configuration)))
+         (funcall iterator state))))))
+
 (defmacro conn--define-dispatcher (name arglist &rest body)
   "Define a macro dispatcher.
 The iterator must be the first argument in ARGLIST.
@@ -1205,38 +1217,37 @@ The iterator must be the first argument in ARGLIST.
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
-       (save-window-excursion
-         (let* ((undo-outer-limit nil)
-                (undo-limit most-positive-fixnum)
-                (undo-strong-limit most-positive-fixnum)
-                (conn-macro-dispatch-p t)
-                (conn-dispatch-error nil)
-                (,sym (make-symbol "kmacro-loop-function"))
-                (,iterator (lambda (&optional state)
-                             (pcase (funcall ,iterator (or state :loop))
-                               (`(,beg . ,end)
-                                (goto-char beg)
-                                (conn--push-ephemeral-mark end)
-                                (set-marker beg nil)
-                                (when (markerp end) (set-marker end nil))
-                                (and (run-hook-with-args-until-failure
-                                      'conn-macro-dispatch-iterator-hook)
-                                     t))))))
-           (fset ,sym ,iterator)
-           (advice-add 'kmacro-loop-setup-function :before-while ,sym)
-           (unwind-protect
-               (condition-case err
-                   (progn
-                     (run-hooks 'conn-macro-dispatch-start-hook)
-                     ,@body)
-                 (t
-                  (setq conn-dispatch-error err)
-                  (signal (car err) (cdr err))))
-             (advice-remove 'kmacro-loop-setup-function ,sym)
-             (funcall ,iterator :finalize)
-             (run-hook-wrapped 'conn-macro-dispatch-end-hook
-                               (lambda (hook)
-                                 (ignore-errors (funcall hook))))))))))
+       (let* ((undo-outer-limit nil)
+              (undo-limit most-positive-fixnum)
+              (undo-strong-limit most-positive-fixnum)
+              (conn-macro-dispatch-p t)
+              (conn-dispatch-error nil)
+              (,sym (make-symbol "kmacro-loop-function"))
+              (,iterator (lambda (&optional state)
+                           (pcase (funcall ,iterator (or state :loop))
+                             (`(,beg . ,end)
+                              (goto-char beg)
+                              (conn--push-ephemeral-mark end)
+                              (set-marker beg nil)
+                              (when (markerp end) (set-marker end nil))
+                              (and (run-hook-with-args-until-failure
+                                    'conn-macro-dispatch-iterator-hook)
+                                   t))))))
+         (fset ,sym ,iterator)
+         (advice-add 'kmacro-loop-setup-function :before-while ,sym)
+         (unwind-protect
+             (condition-case err
+                 (progn
+                   (run-hooks 'conn-macro-dispatch-start-hook)
+                   ,@body)
+               (t
+                (setq conn-dispatch-error err)
+                (signal (car err) (cdr err))))
+           (advice-remove 'kmacro-loop-setup-function ,sym)
+           (funcall ,iterator :finalize)
+           (run-hook-wrapped 'conn-macro-dispatch-end-hook
+                             (lambda (hook)
+                               (ignore-errors (funcall hook)))))))))
 
 (conn--define-dispatcher conn--macro-dispatch (iterator &optional macro)
   (pcase-exhaustive macro
@@ -4392,10 +4403,7 @@ the edit in the macro."
         (conn-local-mode 1)
         (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
         (unwind-protect
-            (if isearch-mode
-                (with-isearch-suspended
-                 (recursive-edit))
-              (recursive-edit))
+            (recursive-edit)
           (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
           (kill-buffer buffer))))))
 
@@ -4417,10 +4425,7 @@ the edit in the macro."
         (delete-other-windows)
         (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
         (unwind-protect
-            (if isearch-mode
-                (with-isearch-suspended
-                 (recursive-edit))
-              (recursive-edit))
+            (recursive-edit)
           (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
           (kill-buffer buffer))))))
 
@@ -4739,28 +4744,35 @@ before each iteration."
   :argument "empty")
 
 (transient-define-argument conn--dispatch-save-excursion-infix ()
-  "Include empty regions in dispatch."
+  "Save the point and mark in each buffer during dispatch."
   :class 'transient-switch
   :key "se"
-  :description "Save Excursions"
+  :description "Excursions"
   :argument "excursion"
   :init-value (lambda (obj) (oset obj value "excursion")))
 
 (transient-define-argument conn--dispatch-save-restriction-infix ()
-  "Include empty regions in dispatch."
+  "Save and restore the current restriction in each buffer during dispatch."
   :class 'transient-switch
   :key "sr"
-  :description "Save Restrictions"
+  :description "Restrictions"
   :argument "restrictions"
   :init-value (lambda (obj) (oset obj value "restrictions")))
 
 (transient-define-argument conn--dispatch-merge-undo-infix ()
-  "Include empty regions in dispatch."
+  "Merge all macro iterations into a single undo in each buffer."
   :class 'transient-switch
   :key "su"
   :description "Merge Undo"
   :argument "undo"
   :init-value (lambda (obj) (oset obj value "undo")))
+
+(transient-define-argument conn--dispatch-save-windows-infix ()
+  "Save and restore current window configuration during dispatch."
+  :class 'transient-switch
+  :key "sw"
+  :description "Windows"
+  :argument "windows")
 
 (transient-define-suffix conn--dispatch-suffix (args)
   "Dispatch on the current region.
@@ -4786,6 +4798,7 @@ dispatch on each contiguous component of the region."
       ("end" (conn--dispatch-at-end <>))
       ("start" <>))
     (conn--pulse-on-record <>)
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -4808,6 +4821,7 @@ dispatch on each contiguous component of the region."
       ("conn" (conn--dispatch-with-state <> 'conn-state))
       ("emacs" (conn--dispatch-with-state <> 'conn-emacs-state))
       ("dot" (conn--dispatch-with-state <> 'conn-dot-state)))
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -4846,6 +4860,7 @@ dispatch on each contiguous component of the region."
       ("end" (conn--dispatch-at-end <>))
       ("start" <>))
     (conn--pulse-on-record <>)
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -4873,6 +4888,7 @@ dispatch on each contiguous component of the region."
       ("end" (conn--dispatch-at-end <>))
       ("start" <>))
     (conn--pulse-on-record <>)
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -4912,6 +4928,7 @@ dispatch on each contiguous component of the region."
       ("end" (conn--dispatch-at-end <>))
       ("start" <>))
     (conn--pulse-on-record <>)
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -4950,6 +4967,7 @@ dispatch on each contiguous component of the region."
       ("end" (conn--dispatch-at-end <>))
       ("start" <>))
     (conn--pulse-on-record <>)
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -4996,6 +5014,7 @@ dispatch on each contiguous component of the region."
       ("end" (conn--dispatch-at-end <>))
       ("start" <>))
     (conn--pulse-on-record <>)
+    (if (member "windows" args) (conn--dispatch-save-windows <>) <>)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch <> last-kbd-macro))
       ("append" (conn--macro-dispatch-append <>))
@@ -5036,10 +5055,12 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-empty-infix)
-    (conn--dispatch-order-infix)
-    (conn--dispatch-save-excursion-infix)
-    (conn--dispatch-save-restriction-infix)
-    (conn--dispatch-merge-undo-infix)]])
+    (conn--dispatch-order-infix)]]
+  ["Save States"
+   [(conn--dispatch-merge-undo-infix)
+    (conn--dispatch-save-windows-infix)]
+   [(conn--dispatch-save-restriction-infix)
+    (conn--dispatch-save-excursion-infix)]])
 
 (transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
@@ -5068,8 +5089,7 @@ dispatch on each contiguous component of the region."
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)
     (conn--dispatch-macro-infix)]]
-  [:description
-   "Dispatch"
+  ["Dispatch"
    [(conn--isearch-dispatch-suffix)
     (conn--dot-dispatch-suffix)]
    [(conn--dispatch-region-infix)
@@ -5077,10 +5097,12 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-matches-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
-    (conn--dispatch-order-infix)
-    (conn--dispatch-save-excursion-infix)
-    (conn--dispatch-save-restriction-infix)
-    (conn--dispatch-merge-undo-infix)]])
+    (conn--dispatch-order-infix)]]
+  ["Save States"
+   [(conn--dispatch-merge-undo-infix)
+    (conn--dispatch-save-windows-infix)]
+   [(conn--dispatch-save-restriction-infix)
+    (conn--dispatch-save-excursion-infix)]])
 
 (transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
@@ -5104,16 +5126,17 @@ dispatch on each contiguous component of the region."
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)
     (conn--dispatch-macro-infix)]]
-  [:description
-   "Dispatch"
+  ["Dispatch"
    [(conn--regions-dispatch-suffix)]
    [(conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-empty-infix)
-    (conn--dispatch-order-infix)
-    (conn--dispatch-save-excursion-infix)
-    (conn--dispatch-save-restriction-infix)
-    (conn--dispatch-merge-undo-infix)]]
+    (conn--dispatch-order-infix)]]
+  ["Save States"
+   [(conn--dispatch-merge-undo-infix)
+    (conn--dispatch-save-windows-infix)]
+   [(conn--dispatch-save-restriction-infix)
+    (conn--dispatch-save-excursion-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-prefix nil nil :scope iterator))
