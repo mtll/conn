@@ -2108,6 +2108,115 @@ state."
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-tab-register)))
 
+;;;;; Expand
+
+(defvar conn-expansion-functions nil)
+
+(defvar-local conn--current-expansions nil)
+
+(defun conn--expand-post-change-hook (&rest _)
+  (setq conn--current-expansions nil)
+  (remove-hook 'after-change-functions 'conn--expand-post-change-hook t))
+
+(with-eval-after-load 'expreg
+  (defvar expreg-functions)
+  (defun conn--expreg-expansions ()
+    (save-mark-and-excursion
+      (activate-mark)
+      (mapcan (lambda (fn) (save-excursion
+                             (mapcar #'cdr (funcall fn))))
+              expreg-functions))))
+
+(defun conn--valid-expansions-p ()
+  (or (and conn--current-expansions
+           (region-active-p)
+           (= (mark t) (region-beginning))
+           (= (mark t) (caar conn--current-expansions))
+           (seq-find (pcase-lambda (`(,_ . ,end))
+                       (= end (point)))
+                     conn--current-expansions))
+      (and conn--current-expansions
+           (region-active-p)
+           (= (mark t) (region-end))
+           (= (mark t) (cdar conn--current-expansions))
+           (seq-find (pcase-lambda (`(,beg . ,_))
+                       (= beg (point)))
+                     conn--current-expansions))
+      (member (cons (region-beginning) (region-end))
+              conn--current-expansions)))
+
+(defun conn--ensure-expansions ()
+  (unless (conn--valid-expansions-p)
+    (setq conn--current-expansions
+          (thread-last
+            (mapcan #'funcall conn-expansion-functions)
+            (cons (cons (region-beginning) (region-end)))
+            (conn--expansion-filter-regions)
+            (seq-sort (pcase-lambda (`(,b1 . ,e1) `(,b2 . ,e2))
+                        (or (> b1 b2) (< e1 e2))))))
+    (add-hook 'after-change-functions 'conn--expand-post-change-hook t)))
+
+(defun conn--expansion-filter-regions (regions)
+  (delete-dups
+   (seq-filter (pcase-lambda (`(,beg . ,end))
+                 (and beg end
+                      (/= beg end)
+                      (<= beg (region-beginning))
+                      (>= end (region-end))))
+               regions)))
+
+(defun conn-expand ()
+  (interactive)
+  (conn--ensure-expansions)
+  (cond ((and (region-active-p)
+              (= (point) (region-end)))
+         (thread-first
+           (seq-find (pcase-lambda (`(,_ . ,end))
+                       (> end (point)))
+                     conn--current-expansions)
+           (cdr)
+           (goto-char)))
+        ((and (region-active-p)
+              (= (point) (region-beginning)))
+         (thread-first
+           (seq-find (pcase-lambda (`(,beg . ,_))
+                                     (< beg (point)))
+                     conn--current-expansions)
+           (cdr)
+           (goto-char)))
+        (t
+         (pcase (seq-find (pcase-lambda (`(,beg . ,end))
+                            (or (< beg (region-beginning))
+                                (> end (region-end))))
+                          conn--current-expansions)
+           (`(,beg . ,end)
+            (goto-char (if (= (point) (region-end)) end beg))
+            (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end))
+            (pulse-momentary-highlight-region (region-beginning) (region-end)))))))
+
+(defun conn-contract ()
+  (interactive)
+  (conn--ensure-expansions)
+  (cond ((and (region-active-p)
+              (= (point) (region-end)))
+         (goto-char (car (seq-find (pcase-lambda (`(,_ . ,end))
+                                     (< end (point)))
+                                   (reverse conn--current-expansions)))))
+        ((and (region-active-p)
+              (= (point) (region-beginning)))
+         (goto-char (cdr (seq-find (pcase-lambda (`(,beg . ,_))
+                                     (> beg (point)))
+                                   (reverse conn--current-expansions)))))
+        (t
+         (pcase (seq-find (pcase-lambda (`(,beg . ,end))
+                            (or (> beg (region-beginning))
+                                (< end (region-end))))
+                          (reverse conn--current-expansions))
+           (`(,beg . ,end)
+            (goto-char (if (= (point) (region-end)) end beg))
+            (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end))
+            (pulse-momentary-highlight-region (region-beginning) (region-end)))))))
+
 ;;;;; Dot Commands
 
 (defun conn-transpose-region-and-dot (dot)
@@ -5205,6 +5314,11 @@ dispatch on each contiguous component of the region."
   "w"   'conn-query-replace-region
   "y"   'yank-rectangle)
 
+(defvar-keymap conn-expand-repeat-map
+  :repeat t
+  "h" 'conn-contract
+  "H" 'conn-expand)
+
 (defvar-keymap conn-window-resize-map
   :repeat t
   :prefix 'conn-window-resize-map
@@ -5454,6 +5568,7 @@ dispatch on each contiguous component of the region."
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "g"     'conn-M-g-keys
+  "H"     'conn-expand
   "h"     'repeat
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
