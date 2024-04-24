@@ -59,6 +59,8 @@
                   (= best-end (point-max)))
          (cl-return expansions))))))
 
+(cl-pushnew 'conn--er-expansions conn-expansion-functions)
+
 (provide 'conn-expand-region)
 ;;; conn-expand-region.el ends here
 

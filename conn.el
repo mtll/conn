@@ -2125,7 +2125,8 @@ state."
       (activate-mark)
       (mapcan (lambda (fn) (save-excursion
                              (mapcar #'cdr (funcall fn))))
-              expreg-functions))))
+              expreg-functions)))
+  (cl-pushnew 'conn--expreg-expansions conn-expansion-functions))
 
 (defun conn--valid-expansions-p ()
   (or (and conn--current-expansions
