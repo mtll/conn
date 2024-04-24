@@ -5172,10 +5172,10 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-order-infix)]]
   [:description
    "Save States"
-   [(conn--dispatch-merge-undo-infix :level 6)
-    (conn--dispatch-save-windows-infix :level 6)]
-   [(conn--dispatch-save-restriction-infix :level 6)
-    (conn--dispatch-save-excursion-infix :level 6)]])
+   [(conn--dispatch-merge-undo-infix)
+    (conn--dispatch-save-windows-infix)]
+   [(conn--dispatch-save-restriction-infix)
+    (conn--dispatch-save-excursion-infix)]])
 
 (transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
@@ -5215,10 +5215,10 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-order-infix)]]
   [:description
    "Save States"
-   [(conn--dispatch-merge-undo-infix :level 6)
-    (conn--dispatch-save-windows-infix :level 6)]
-   [(conn--dispatch-save-restriction-infix :level 6)
-    (conn--dispatch-save-excursion-infix :level 6)]])
+   [(conn--dispatch-merge-undo-infix)
+    (conn--dispatch-save-windows-infix)]
+   [(conn--dispatch-save-restriction-infix)
+    (conn--dispatch-save-excursion-infix)]])
 
 (transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
@@ -5250,10 +5250,10 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-order-infix)]]
   [:description
    "Save States"
-   [(conn--dispatch-merge-undo-infix :level 6)
-    (conn--dispatch-save-windows-infix :level 6)]
-   [(conn--dispatch-save-restriction-infix :level 6)
-    (conn--dispatch-save-excursion-infix :level 6)]]
+   [(conn--dispatch-merge-undo-infix)
+    (conn--dispatch-save-windows-infix)]
+   [(conn--dispatch-save-restriction-infix)
+    (conn--dispatch-save-excursion-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-prefix nil nil :scope iterator))
