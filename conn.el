@@ -347,17 +347,11 @@ Used to restore previous value when `conn-mode' is disabled.")
 ;;;; Utilities
 
 (eval-and-compile
-  (defun conn--thread-1 (needle first &rest forms)
-    (if (car forms)
-        `((setq ,needle ,first)
-          ,@(apply #'conn--thread-1 needle forms))
-      (list first)))
-
   (defmacro conn--thread (needle form &rest forms)
     (declare (indent 2))
     (if forms
         `(let ((,needle ,form))
-           ,@(apply #'conn--thread-1 needle forms))
+           (conn--thread ,needle ,@forms))
       form))
 
   (defun conn--stringify (&rest symbols-or-strings)
@@ -1217,26 +1211,24 @@ The iterator must be the first argument in ARGLIST.
                 (undo-strong-limit most-positive-fixnum)
                 (conn-macro-dispatch-p t)
                 (conn-dispatch-error nil)
-                (hook-buffers nil)
                 (,sym (make-symbol "kmacro-loop-function"))
                 (,iterator (lambda (&optional state)
                              (pcase (funcall ,iterator (or state :loop))
                                (`(,beg . ,end)
                                 (goto-char beg)
                                 (conn--push-ephemeral-mark end)
-                                (when (markerp beg) (set-marker beg nil))
+                                (set-marker beg nil)
                                 (when (markerp end) (set-marker end nil))
                                 (and (run-hook-with-args-until-failure
                                       'conn-macro-dispatch-iterator-hook)
                                      t))))))
-           (run-hook-wrapped 'conn-macro-dispatch-start-hook
-                             (lambda (hook)
-                               (ignore-errors (funcall hook))))
            (fset ,sym ,iterator)
            (advice-add 'kmacro-loop-setup-function :before-while ,sym)
            (unwind-protect
                (condition-case err
-                   ,(macroexp-progn body)
+                   (progn
+                     (run-hooks 'conn-macro-dispatch-start-hook)
+                     ,@body)
                  (t
                   (setq conn-dispatch-error err)
                   (signal (car err) (cdr err))))
