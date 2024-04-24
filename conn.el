@@ -5039,8 +5039,7 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)
-    (conn--dispatch-macro-infix)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [:description
    "Dispatch"
    [(conn--dispatch-suffix)
@@ -5048,17 +5047,19 @@ dispatch on each contiguous component of the region."
     (conn--lines-dispatch-suffix)
     (conn--dispatch-point-and-mark-suffix)
     (conn--text-property-dispatch-suffix)]
-   [(conn--dispatch-region-infix)
+   [(conn--dispatch-macro-infix)
+    (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]]
-  ["Save States"
-   [(conn--dispatch-merge-undo-infix)
-    (conn--dispatch-save-windows-infix)]
-   [(conn--dispatch-save-restriction-infix)
-    (conn--dispatch-save-excursion-infix)]])
+  [:description
+   "Save States"
+   [(conn--dispatch-merge-undo-infix :level 6)
+    (conn--dispatch-save-windows-infix :level 6)]
+   [(conn--dispatch-save-restriction-infix :level 6)
+    (conn--dispatch-save-excursion-infix :level 6)]])
 
 (transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
@@ -5085,22 +5086,23 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)
-    (conn--dispatch-macro-infix)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   ["Dispatch"
    [(conn--isearch-dispatch-suffix)
     (conn--dot-dispatch-suffix)]
-   [(conn--dispatch-region-infix)
+   [(conn--dispatch-macro-infix)
+    (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-matches-infix)
     (conn--dispatch-dots-infix)
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-order-infix)]]
-  ["Save States"
-   [(conn--dispatch-merge-undo-infix)
-    (conn--dispatch-save-windows-infix)]
-   [(conn--dispatch-save-restriction-infix)
-    (conn--dispatch-save-excursion-infix)]])
+  [:description
+   "Save States"
+   [(conn--dispatch-merge-undo-infix :level 6)
+    (conn--dispatch-save-windows-infix :level 6)]
+   [(conn--dispatch-save-restriction-infix :level 6)
+    (conn--dispatch-save-excursion-infix :level 6)]])
 
 (transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
@@ -5122,19 +5124,20 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)
-    (conn--dispatch-macro-infix)]]
+    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   ["Dispatch"
    [(conn--regions-dispatch-suffix)]
-   [(conn--dispatch-region-infix)
+   [(conn--dispatch-macro-infix)
+    (conn--dispatch-region-infix)
     (conn--dispatch-state-infix)
     (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]]
-  ["Save States"
-   [(conn--dispatch-merge-undo-infix)
-    (conn--dispatch-save-windows-infix)]
-   [(conn--dispatch-save-restriction-infix)
-    (conn--dispatch-save-excursion-infix)]]
+  [:description
+   "Save States"
+   [(conn--dispatch-merge-undo-infix :level 6)
+    (conn--dispatch-save-windows-infix :level 6)]
+   [(conn--dispatch-save-restriction-infix :level 6)
+    (conn--dispatch-save-excursion-infix :level 6)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (transient-setup 'conn-regions-dispatch-prefix nil nil :scope iterator))
