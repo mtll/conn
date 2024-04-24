@@ -2804,8 +2804,9 @@ Interactively PARTIAL-MATCH is the prefix argument."
          (user-error "No mark set in this buffer"))
         ((null conn--mark-ring)
          (user-error "No marks to unpop"))
-        ((= (point) (mark t))
-         (conn--push-ring-delete-duplicate 'conn--mark-unpop-ring (mark t))
+        ((or conn--ephemeral-mark
+             (= (point) (mark t)))
+         (conn--push-ring-delete-duplicate 'conn--mark-unpop-ring (point))
          (let ((conn--mark-ring conn--mark-ring))
            (push-mark (car conn--mark-ring)))
          (pop conn--mark-ring)
