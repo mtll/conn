@@ -2027,7 +2027,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "\\" 'conn-dispatch-prefix
-                 "f"  'conn-emacs-state
+                 "f"  'conn-state
                  "Q"  'conn-dot-quit)
   (if conn-dot-state
       (progn
@@ -2772,13 +2772,20 @@ k keeps the remaining dots."
   (when (called-interactively-p 'interactive)
     (message "Dots before point removed")))
 
+(defun conn-dot-thing-at-point (thing)
+  "Dot THING at point.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
+  (interactive (list (conn--read-thing-command)))
+  (conn--create-dots (bounds-of-thing-at-point thing)))
+
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
-  (unless thing (error "Unknown thing command"))
-  (save-excursion (forward-thing thing))
+  (unless thing
+    (error "Unknown thing command"))
   (save-excursion
     (with-restriction
         (region-beginning) (region-end)
@@ -4795,7 +4802,7 @@ dispatch."
   :argument "last-kmacro="
   :argument-format "last-kmacro=%s"
   :argument-regexp "\\(last-kmacro=\\(apply\\|append\\|step-edit\\)\\)"
-  :choices '("apply" "append" "step-edit"))
+  :choices '("apply" "step-edit" "append"))
 
 (transient-define-argument conn--dispatch-matches-infix ()
   "Restrict dispatch to only some isearch matches.
@@ -5171,7 +5178,7 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]]
   [:description
-   "Save States"
+   "Save State"
    [(conn--dispatch-merge-undo-infix)
     (conn--dispatch-save-windows-infix)]
    [(conn--dispatch-save-restriction-infix)
@@ -5214,7 +5221,7 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-dot-read-buffers-infix)
     (conn--dispatch-order-infix)]]
   [:description
-   "Save States"
+   "Save State"
    [(conn--dispatch-merge-undo-infix)
     (conn--dispatch-save-windows-infix)]
    [(conn--dispatch-save-restriction-infix)
@@ -5249,7 +5256,7 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-empty-infix)
     (conn--dispatch-order-infix)]]
   [:description
-   "Save States"
+   "Save State"
    [(conn--dispatch-merge-undo-infix)
     (conn--dispatch-save-windows-infix)]
    [(conn--dispatch-save-restriction-infix)
@@ -5495,6 +5502,7 @@ dispatch on each contiguous component of the region."
   "}"                'conn-last-dot
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
+  "="                'conn-dot-thing-at-point
   "c"                'conn-split-dots-on-regexp
   "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward

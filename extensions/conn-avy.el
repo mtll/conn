@@ -45,31 +45,30 @@
 
 (defun conn-avy-action-dot (pt)
   "Kill sexp at PT and move there."
-  (when-let ((handler (get this-command :conn-mark-handler))
+  (when-let ((thing (or (get this-command :conn-command-thing)
+                        (conn--read-thing-command)))
              (beg (point)))
     (save-mark-and-excursion
       (goto-char pt)
-      (funcall handler beg)
-      (setq conn-this-command-handler 'ignore)
-      (conn-dot-region (region-bounds)))
+      (conn-dot-thing-at-point thing))
     beg))
 
-(conn-set-command-handler
- (conn-individual-thing-handler 'sexp)
+(conn-register-thing-commands
+ 'sexp (conn-individual-thing-handler 'sexp)
  'avy-goto-symbol-1
  'avy-goto-symbol-1-above
  'avy-goto-symbol-1-below)
 
-(conn-set-command-handler
- (conn-individual-thing-handler 'word)
+(conn-register-thing-commands
+ 'word (conn-individual-thing-handler 'word)
  'avy-goto-word-0
  'avy-goto-word-1
  'avy-goto-word-or-subword-1
  'avy-goto-word-1-above
  'avy-goto-word-1-below)
 
-(conn-set-command-handler
- (conn-individual-thing-handler 'line)
+(conn-register-thing-commands
+ 'line (conn-individual-thing-handler 'line)
  'avy-goto-line
  'avy-goto-line-above
  'avy-goto-line-below
