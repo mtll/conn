@@ -514,7 +514,7 @@ first line of the documentation string; for keyboard macros use
 
 (defvar-keymap conn-read-thing-command-mark-map
   "h" 'conn--local-mark-thing-map
-  "C-h" 'conn--completing-read-thing)
+  "C-h" 'help)
 
 (defun conn--completing-read-thing ()
   (let* ((prefix (key-description
@@ -527,7 +527,7 @@ first line of the documentation string; for keyboard macros use
                                        ": "
                                        (conn--command-name def))
                                def))
-                      (conn--get-map-bindings nil conn--local-mark-thing-map))))
+                       (conn--get-map-bindings nil conn--local-mark-thing-map))))
     (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
 
 (defun conn--completing-read-thing-keymap ()
@@ -544,25 +544,25 @@ first line of the documentation string; for keyboard macros use
     (let ((keymap (conn--completing-read-thing-keymap)))
       (internal-push-keymap keymap 'overriding-terminal-local-map)
       (unwind-protect
-          (let ((key (thread-first
+          (let ((cmd (thread-first
                        (concat
                         (propertize "Thing Command\n" 'face 'bold)
                         (propertize "C-h" 'face 'help-key-binding)
                         ": completing-read mark thing map")
                        (read-key-sequence)
                        (key-binding t))))
-            (while (not (get key :conn-command-thing))
-              (pcase key
+            (while (not (get cmd :conn-command-thing))
+              (pcase cmd
                 ('keyboard-quit
                  (keyboard-quit))
-                ('conn--completing-read-thing
+                ('help
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq key (condition-case nil
+                 (setq cmd (condition-case nil
                                (conn--completing-read-thing)
                              (quit)))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
                 (_
-                 (setq key (thread-first
+                 (setq cmd (thread-first
                              (concat
                               (propertize "Thing Command\n" 'face 'bold)
                               (propertize "C-h" 'face 'help-key-binding)
@@ -571,7 +571,7 @@ first line of the documentation string; for keyboard macros use
                                           'face 'error))
                              (read-key-sequence)
                              (key-binding t))))))
-            (get key :conn-command-thing))
+            (get cmd :conn-command-thing))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
@@ -597,7 +597,7 @@ first line of the documentation string; for keyboard macros use
                  collect (cons (conn--create-marker (match-beginning 0))
                                (conn--create-marker (match-end 0))))))))
 
-(defun conn--read-string-preview-overlays (string &optional dir)
+(defun conn--read-string-preview-overlays-1 (string &optional dir)
   (let (ovs)
     (save-excursion
       (with-restriction
@@ -610,20 +610,43 @@ first line of the documentation string; for keyboard macros use
           (overlay-put (car ovs) 'face 'isearch))))
     ovs))
 
+(defun conn--read-string-preview-overlays (string &optional dir all-windows)
+  (if all-windows
+      (let ((ovs))
+        (walk-windows
+         (lambda (win)
+           (with-selected-window win
+             (with-current-buffer (window-buffer win)
+               (setf (alist-get win ovs)
+                     (conn--read-string-preview-overlays-1 string dir)))))
+         'visible)
+        (seq-sort (lambda (_ b)
+                    (eq (selected-window) (car b)))
+                  ovs))
+    (list (cons (selected-window)
+                (conn--read-string-preview-overlays-1 string dir)))))
+
 (defvar conn-read-string-timout 0.5)
 
-(defun conn--read-string-with-timeout (timeout &optional dir)
-  (let* ((string (char-to-string (read-char "char 0: " t)))
-         (overlays (conn--read-string-preview-overlays string dir))
-         next-char)
+(defun conn--read-string-with-timeout (timeout &optional dir all-windows)
+  (let* ((string (char-to-string (read-char "string: " t)))
+         (overlays (conn--read-string-preview-overlays string dir all-windows))
+         next-char
+         results)
     (unwind-protect
-        (while (setq next-char (read-char (format "char (%s):" string) t timeout))
+        (while (setq next-char (read-char (format "string: %s" string) t timeout))
           (setq string (concat string (char-to-string next-char)))
-          (mapc #'delete-overlay overlays)
-          (setq overlays (conn--read-string-preview-overlays string dir)))
-      (mapc #'delete-overlay overlays)
+          (pcase-dolist (`(,_win . ,ovs) overlays)
+            (mapc #'delete-overlay ovs))
+          (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
+      (pcase-dolist (`(,win . ,ovs) overlays)
+        (setf (alist-get win results)
+              (mapcar (lambda (ov)
+                        (cons (overlay-start ov) (overlay-end ov)))
+                      ovs))
+        (mapc #'delete-overlay ovs))
       (message nil))
-    string))
+    (cons string results)))
 
 (defun conn--create-window-prompt-overlay (window id)
   (with-current-buffer (window-buffer window)
@@ -2082,6 +2105,254 @@ state."
 
 ;;;; Commands
 
+;;;;; Place Dispatch
+
+(defvar conn-dispatch-command-alist
+  `((conn-kill-region . conn-dispatch-kill-region)))
+
+(defvar conn-dispatch-command-maps
+  (list (define-keymap
+          "w" 'conn-dispatch-kill-region
+          "e" 'conn-dispatch-dot-region
+          "g" 'conn-dispatch-grab-region
+          "t" 'conn-dispatch-transpose-region
+          "y" 'conn-dispatch-yank-region)))
+
+(defvar conn-dispatch-label-characters
+  (list ?j ?f ?d ?k ?s ?g ?h ?l ?w ?e ?r
+        ?r ?t ?y ?u ?i ?o ?c ?v ?b ?n ?m))
+
+(defface conn-dispatch-lead-0
+  '((t (:background "#7feaff" :foreground "black" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn)
+
+(defface conn-dispatch-lead-1
+  '((t (:background "#ffaaff" :foreground "black" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn)
+
+(defun conn-dispatch-kill-region (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end) (kill-region beg end))
+        (_ (user-error "No thing at point"))))))
+
+(defun conn-dispatch-dot-region (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        ('nil (user-error "No thing at point"))
+        (reg (conn--create-dots reg))))))
+
+(defun conn-dispatch-grab-region (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (kill-region beg end))
+        (_ (user-error "No thing at point")))))
+  (yank))
+
+(defun conn-dispatch-yank-region (window pt thing)
+  (let ((str))
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (bounds-of-thing-at-point thing)
+          (`(,beg . ,end)
+           (setq str (buffer-substring beg end)))
+          (_ (user-error "No thing at point")))))
+    (insert str)))
+
+(defun conn-dispatch-transpose-region (window pt thing)
+  (if (eq (current-buffer) (window-buffer window))
+      (let ((beg1 (region-beginning))
+            (end1 (region-end)))
+        (goto-char pt)
+        (pcase (bounds-of-thing-at-point thing)
+          (`(,beg2 . ,end2)
+           (transpose-regions beg1 end1 beg2 end2))
+          (_ (user-error "No thing at point"))))
+    (let (str1 str2)
+      (setq str1 (buffer-substring (region-beginning) (region-end)))
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (pcase (bounds-of-thing-at-point thing)
+            (`(,beg . ,end)
+             (setq str2 (buffer-substring beg end))
+             (delete-region beg end)
+             (insert str1))
+            (_ (user-error "No thing at point")))))
+      (delete-region (region-beginning) (region-end))
+      (insert str2))))
+
+;; (defun conn--completing-read-dispatch-command (keymap)
+;;   (let* ((cmds (mapcar (pcase-lambda (`(,key . ,def))
+;;                          (cons (concat (propertize (key-description key)
+;;                                                    'face 'help-key-binding)
+;;                                        ": "
+;;                                        (conn--command-name def))
+;;                                def))
+;;                        (conn--get-map-bindings nil keymap))))
+;;     (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
+
+(defun conn--read-dispatch-command ()
+  (let ((keymap (make-composed-keymap
+                 (cons (conn--completing-read-thing-keymap)
+                       conn-dispatch-command-maps)))
+        (command-map (make-composed-keymap conn-dispatch-command-maps))
+        (action))
+    (with-temp-message ""
+      (internal-push-keymap keymap 'overriding-terminal-local-map)
+      (unwind-protect
+          (let ((cmd (thread-first
+                       (concat
+                        (propertize "Dispatch Command\n" 'face 'bold)
+                        (propertize "C-h" 'face 'help-key-binding)
+                        ": completing-read command map")
+                       (read-key-sequence)
+                       (key-binding t))))
+            (while (not (get cmd :conn-command-thing))
+              (pcase cmd
+                ('keyboard-quit
+                 (keyboard-quit))
+                ;; ('help
+                ;;  (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                ;;  (setq cmd (condition-case nil
+                ;;                (conn--completing-read-dispatch-command keymap)
+                ;;              (quit)))
+                ;;  (internal-push-keymap keymap 'overriding-terminal-local-map))
+                ((guard (where-is-internal cmd command-map))
+                 (setq action (unless (eq cmd action) cmd)
+                       cmd (thread-first
+                             (concat
+                              (propertize "Dispatch Command: " 'face 'bold)
+                              (when action (conn--stringify "(" action ")"))
+                              "\n"
+                              (propertize "C-h" 'face 'help-key-binding)
+                              ": completing-read command map")
+                             (read-key-sequence)
+                             (key-binding t))))
+                (_
+                 (setq cmd (thread-first
+                             (concat
+                              (propertize "Dispatch Command: " 'face 'bold)
+                              (when action (conn--stringify "(" action ")"))
+                              "\n"
+                              (propertize "C-h" 'face 'help-key-binding)
+                              ": completing-read command map\n"
+                              (propertize "Invalid dispatch command"
+                                          'face 'error))
+                             (read-key-sequence)
+                             (key-binding t))))))
+            (cons (get cmd :conn-command-thing) action))
+        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+
+(defun conn--dispatch-concat-label (chars)
+  ;; TODO: make this a custom var
+  (let ((faces (list 'conn-dispatch-lead-0 'conn-dispatch-lead-1))
+        (result nil))
+    (dolist (char (ensure-list chars))
+      (setq result (concat result (propertize char 'face (car faces)))
+            faces (nconc (cdr faces) (list (car faces)))))
+    result))
+
+;; just do this the dumb way for now
+(defun conn--dispatch-create-labels (count)
+  (let* ((alphabet (mapcar #'string (seq-uniq conn-dispatch-label-characters)))
+         (labels (seq-copy alphabet))
+         (prefixes nil))
+    (while (and labels
+                (> count (+ (length labels)
+                            (* (length prefixes)
+                               (length alphabet)))))
+      (push (pop labels) prefixes))
+    (when (null labels) (error "Too many candidates"))
+    (catch 'labels
+      (let ((n (length labels)))
+        (setq labels (nreverse labels))
+        (dolist (prefix (nreverse prefixes))
+          (dolist (c alphabet)
+            (push (list prefix c) labels)
+            (when (= (cl-incf n) count)
+              (throw 'labels nil))))))
+    (mapcar (apply-partially 'conn--dispatch-concat-label)
+            (nreverse labels))))
+
+(defun conn-dispatch-thing ()
+  (interactive)
+  (pcase-let* ((`(,thing . ,action) (conn--read-dispatch-command))
+               (`(,_str . ,places)  (conn--read-string-with-timeout
+                                     conn-read-string-timout nil t))
+               (labels (conn--dispatch-create-labels
+                         (conn--thread -it-
+                             places
+                           (mapcar (lambda (l) (length (cdr l))) -it-)
+                           (seq-reduce #'+ -it- 0))))
+               (overlays))
+    (unwind-protect
+        (progn
+          (when (and (null (cdr places))
+                     (null (cdar places)))
+            (user-error "No candidates"))
+
+          (pcase-dolist (`(,window . ,points) places)
+            (with-current-buffer (window-buffer window)
+              (pcase-dolist (`(,pt . ,_) points)
+                (let* ((label (pop labels))
+                       (ov (make-overlay pt pt)))
+                  (push ov overlays)
+                  (overlay-put ov 'priority (+ 3000 pt))
+                  ;; Dont fiddle with invisibility for now
+                  ;; (overlay-put ov 'category 'conn-dispatch-leader-overlay)
+                  ;; (overlay-put ov 'invisible t)
+                  (overlay-put ov 'window window)
+                  (overlay-put ov 'before-string label)))))
+
+          (while (cdr overlays)
+            (let ((c (read-char "char:"))
+                  (next))
+              (dolist (ov overlays)
+                (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
+                    (delete-overlay ov)
+                  (conn--thread -it-
+                      (overlay-get ov 'before-string)
+                    (substring -it- 1)
+                    (overlay-put ov 'before-string -it-))
+                  (push ov next)))
+              (setq overlays next)))
+
+          (unless overlays
+            (user-error "No matching label"))
+
+          (if action
+              (funcall action
+                       (overlay-get (car overlays) 'window)
+                       (overlay-start (car overlays))
+                       thing)
+            (setq conn-this-command-thing thing)
+            (select-window (overlay-get (car overlays) 'window))
+            (push-mark nil t)
+            (goto-char (overlay-start (car overlays)))))
+      (mapc #'delete-overlay overlays))))
+
+(conn-set-command-handler
+ (lambda (start)
+   (unless (or (null conn-this-command-thing)
+               (eq 'char conn-this-command-thing)
+               (= start (point)))
+     (pcase (bounds-of-thing-at-point conn-this-command-thing)
+       (`(,beg . ,end)
+        (goto-char beg)
+        (conn--push-ephemeral-mark end)))))
+ 'conn-dispatch-thing)
+
 ;;;;; Tab Registers
 
 (cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie)))
@@ -3151,8 +3422,8 @@ This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4))
-                        (conn--read-string-with-timeout
-                         conn-read-string-timout 'backward)))
+                        (car (conn--read-string-with-timeout
+                              conn-read-string-timout 'backward))))
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (backward-char arg)
@@ -3183,8 +3454,8 @@ This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4))
-                        (conn--read-string-with-timeout
-                         conn-read-string-timout 'forward)))
+                        (car (conn--read-string-with-timeout
+                              conn-read-string-timout 'forward))))
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (forward-char arg)
@@ -4660,8 +4931,8 @@ the edit in the macro."
                                   (kmacro-start-macro '(16))))
     ("r" "Record Macro" kmacro-start-macro)
     ("d" "Name Last Macro" kmacro-name-last-macro)]
-   [("l" "Edit Macro" kmacro-edit-macro)
-    ("L" "Edit Lossage" kmacro-edit-lossage)
+   [("e" "Edit Macro" kmacro-edit-macro)
+    ("E" "Edit Lossage" kmacro-edit-lossage)
     ("m" "Kmacro to Register" kmacro-to-register)
     ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
     ("q" "Step Edit Macro" kmacro-step-edit-macro)]]
@@ -5352,8 +5623,8 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
-  "H" 'conn-contract
-  "h" 'conn-expand)
+  "h" 'conn-contract
+  "H" 'conn-expand)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -5606,7 +5877,8 @@ dispatch on each contiguous component of the region."
   "~"     'conn-swap-windows
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
-  "g"     'conn-M-g-keys
+  "G"     'conn-M-g-keys
+  "g"     'conn-dispatch-thing
   "H"     'conn-expand
   "h"     'repeat
   "I"     'conn-backward-paragraph-keys
