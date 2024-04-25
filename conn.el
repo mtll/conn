@@ -2268,18 +2268,13 @@ state."
   (let ((keymap (make-composed-keymap
                  (cons (conn--read-thing-keymap)
                        conn-dispatch-command-maps)))
-        (command-map (make-composed-keymap conn-dispatch-command-maps))
+        (prompt (concat "Dispatch Command "
+                        "(" (propertize "C-h" 'face 'help-key-binding) " for help): "))
         (action))
     (with-temp-message ""
       (internal-push-keymap keymap 'overriding-terminal-local-map)
       (unwind-protect
-          (let ((cmd (thread-first
-                       (concat
-                        (propertize "Dispatch Command\n" 'face 'bold)
-                        (propertize "C-h" 'face 'help-key-binding)
-                        ": completing-read command map")
-                       (read-key-sequence)
-                       (key-binding t))))
+          (let ((cmd (key-binding (read-key-sequence prompt) t)))
             (while (not (get cmd :conn-command-thing))
               (pcase cmd
                 ('keyboard-quit
@@ -2288,27 +2283,20 @@ state."
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
                  (setq cmd (conn--completing-read-keymap keymap))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
-                ((guard (where-is-internal cmd command-map))
+                ((guard (where-is-internal cmd conn-dispatch-command-maps))
                  (setq action (unless (eq cmd action) cmd)
                        cmd (thread-first
                              (concat
-                              (propertize "Dispatch Command: " 'face 'bold)
-                              (when action (conn--stringify "(" action ")"))
-                              "\n"
-                              (propertize "C-h" 'face 'help-key-binding)
-                              ": completing-read command map")
+                              prompt
+                              (when action (conn--stringify action)))
                              (read-key-sequence)
                              (key-binding t))))
                 (_
                  (setq cmd (thread-first
                              (concat
-                              (propertize "Dispatch Command: " 'face 'bold)
-                              (when action (conn--stringify "(" action ")"))
-                              "\n"
-                              (propertize "C-h" 'face 'help-key-binding)
-                              ": completing-read command map\n"
-                              (propertize "Invalid dispatch command"
-                                          'face 'error))
+                              prompt
+                              (when action (conn--stringify action " - "))
+                              (propertize "Invalid dispatch command" 'face 'error))
                              (read-key-sequence)
                              (key-binding t))))))
             (cons (get cmd :conn-command-thing) action))
@@ -5755,8 +5743,8 @@ dispatch on each contiguous component of the region."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  ","     'conn-isearch-backward-symbol-at-point
-  "."     'isearch-forward-symbol-at-point
+  ","     'xref-go-back
+  "."     'xref-go-forward
   "TAB"   'conn-isearch-backward-symbol
   "M-TAB" 'conn-isearch-forward-symbol
   "0"     'xref-find-references
