@@ -488,7 +488,7 @@ first line of the documentation string; for keyboard macros use
            (match-string 1 doc)))))
     (t "<unnamed>"))))
 
-(defun conn--get-map-bindings (prefix map)
+(defun conn--get-map-bindings (prefix map &optional recursive concat)
   (let ((prefix-map (if (= 0 (seq-length prefix))
                         map
                       (keymap-lookup map (key-description prefix))))
@@ -508,7 +508,14 @@ first line of the documentation string; for keyboard macros use
                                       'negative-argument 'embark-keymap-help nil))
                 (push (cons (vconcat (vector key key2)) def2) binds)))
             def))
-          (t (push (cons (vector key) def) binds))))
+          ((and (keymapp def) recursive)
+           (setq binds
+                 (nconc (conn--get-map-bindings (vconcat prefix (vector key))
+                                                map t t)
+                        binds)))
+          (t (if concat
+                 (push (cons (vconcat prefix (vector key)) def) binds)
+               (push (cons (vector key) def) binds)))))
        (keymap-canonicalize prefix-map))))
     (nreverse binds)))
 
@@ -516,21 +523,25 @@ first line of the documentation string; for keyboard macros use
   "h" 'conn--local-mark-thing-map
   "C-h" 'help)
 
-(defun conn--completing-read-thing ()
-  (let* ((prefix (key-description
-                  (car (where-is-internal 'conn--local-mark-thing-map
-                                          (list conn-read-thing-command-mark-map)))))
+;; TODO: sorting and affixation
+(defun conn--completing-read-keymap (keymap)
+  (let* ((col 0)
          (cmds (mapcar (pcase-lambda (`(,key . ,def))
-                         (cons (concat (propertize
-                                        (concat prefix " " (key-description key))
-                                        'face 'help-key-binding)
-                                       ": "
-                                       (conn--command-name def))
+                         (let ((desc (key-description key)))
+                           (setq col (max col (length desc)))
+                           (cons (key-description key)
+                                 (cons (conn--command-name def)
+                                       def))))
+                       (conn--get-map-bindings nil keymap t)))
+         (cmds (mapcar (pcase-lambda (`(,key ,name . ,def))
+                         (cons (concat (propertize (string-pad key (+ col 2))
+                                                   'face 'help-key-binding)
+                                       name)
                                def))
-                       (conn--get-map-bindings nil conn--local-mark-thing-map))))
+                       cmds)))
     (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
 
-(defun conn--completing-read-thing-keymap ()
+(defun conn--read-thing-keymap ()
   (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
          (mark-map-keys (where-is-internal 'conn--local-mark-thing-map
                                            (list keymap))))
@@ -541,7 +552,7 @@ first line of the documentation string; for keyboard macros use
 
 (defun conn--read-thing-command ()
   (with-temp-message ""
-    (let ((keymap (conn--completing-read-thing-keymap)))
+    (let ((keymap (conn--read-thing-keymap)))
       (internal-push-keymap keymap 'overriding-terminal-local-map)
       (unwind-protect
           (let ((cmd (thread-first
@@ -557,9 +568,7 @@ first line of the documentation string; for keyboard macros use
                  (keyboard-quit))
                 ('help
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (condition-case nil
-                               (conn--completing-read-thing)
-                             (quit)))
+                 (setq cmd (conn--completing-read-keymap keymap))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
                 (_
                  (setq cmd (thread-first
@@ -2192,19 +2201,9 @@ state."
       (delete-region (region-beginning) (region-end))
       (insert str2))))
 
-;; (defun conn--completing-read-dispatch-command (keymap)
-;;   (let* ((cmds (mapcar (pcase-lambda (`(,key . ,def))
-;;                          (cons (concat (propertize (key-description key)
-;;                                                    'face 'help-key-binding)
-;;                                        ": "
-;;                                        (conn--command-name def))
-;;                                def))
-;;                        (conn--get-map-bindings nil keymap))))
-;;     (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
-
 (defun conn--read-dispatch-command ()
   (let ((keymap (make-composed-keymap
-                 (cons (conn--completing-read-thing-keymap)
+                 (cons (conn--read-thing-keymap)
                        conn-dispatch-command-maps)))
         (command-map (make-composed-keymap conn-dispatch-command-maps))
         (action))
@@ -2222,12 +2221,10 @@ state."
               (pcase cmd
                 ('keyboard-quit
                  (keyboard-quit))
-                ;; ('help
-                ;;  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                ;;  (setq cmd (condition-case nil
-                ;;                (conn--completing-read-dispatch-command keymap)
-                ;;              (quit)))
-                ;;  (internal-push-keymap keymap 'overriding-terminal-local-map))
+                ('help
+                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                 (setq cmd (conn--completing-read-keymap keymap))
+                 (internal-push-keymap keymap 'overriding-terminal-local-map))
                 ((guard (where-is-internal cmd command-map))
                  (setq action (unless (eq cmd action) cmd)
                        cmd (thread-first
