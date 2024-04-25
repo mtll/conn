@@ -45,13 +45,91 @@
 
 (defun conn-avy-action-dot (pt)
   "Kill sexp at PT and move there."
-  (when-let ((thing (or (get this-command :conn-command-thing)
+  (when-let ((thing (or (conn--get-this-command-thing)
                         (conn--read-thing-command)))
              (beg (point)))
-    (save-mark-and-excursion
+    (save-excursion
       (goto-char pt)
-      (conn-dot-thing-at-point thing))
-    beg))
+      (conn-dot-thing-at-point thing)))
+  (point))
+
+(defun conn-avy-action-transpose (pt)
+  (when-let ((thing (or (conn--get-this-command-thing)
+                        (conn--read-thing-command)))
+             (r1 (bounds-of-thing-at-point thing))
+             (r2 (progn
+                   (goto-char pt)
+                   (bounds-of-thing-at-point thing))))
+    (transpose-regions (car r1) (cdr r1)
+                       (car r2) (cdr r2)))
+  (point))
+
+(defun conn-avy-action-kill-move (pt)
+  (when-let ((thing (or (conn--get-this-command-thing)
+                        (conn--read-thing-command)))
+             (region (progn
+                       (goto-char pt)
+                       (bounds-of-thing-at-point thing))))
+    (kill-region (car region) (cdr region))
+    (message "Killed: %s" (current-kill 0))
+    (point)))
+
+(defun conn-avy-action-kill-stay (pt)
+  (when-let ((thing (or (conn--get-this-command-thing)
+                        (conn--read-thing-command)))
+             (region (save-excursion
+                       (goto-char pt)
+                       (bounds-of-thing-at-point thing))))
+    (kill-region (car region) (cdr region))
+    (message "Killed: %s" (current-kill 0))
+    (point)))
+
+(defun conn-avy-action-teleport (pt)
+  (when-let ((thing (or (conn--get-this-command-thing)
+                        (conn--read-thing-command)))
+             (region (save-excursion
+                       (goto-char pt)
+                       (bounds-of-thing-at-point thing)))
+             (string (buffer-substring (car region) (cdr region))))
+    (kill-region (car region) (cdr region))
+    (insert string)
+    (point)))
+
+(defun conn-avy-action-yank (pt)
+  (when-let ((thing (or (conn--get-this-command-thing)
+                        (conn--read-thing-command)))
+             (region (save-excursion
+                       (goto-char pt)
+                       (bounds-of-thing-at-point thing))))
+    (kill-new (buffer-substring (car region) (cdr region)))
+    (yank)
+    (point)))
+
+(defun conn-avy-action-copy (pt)
+  (when-let ((thing (or (conn--get-this-command-thing)
+                        (conn--read-thing-command)))
+             (region (save-excursion
+                       (goto-char pt)
+                       (bounds-of-thing-at-point thing)))
+             (string (buffer-substring (car region) (cdr region))))
+    (kill-new string)
+    (message "Copied: %s" string)
+    (point)))
+
+;;;###autoload
+(defun conn-avy-dispatch (thing)
+  (interactive (list (conn--read-thing-command)))
+  (if (eq thing 'char)
+      (avy-goto-char-timer)
+    (setq conn-this-command-thing thing
+          conn-this-command-handler
+          (lambda (start)
+            (unless (= start (point))
+              (pcase (bounds-of-thing-at-point thing)
+                (`(,beg . ,end)
+                 (goto-char beg)
+                 (conn--push-ephemeral-mark end))))))
+    (avy-goto-char-timer)))
 
 (conn-register-thing-commands
  'sexp (conn-individual-thing-handler 'sexp)
