@@ -287,6 +287,8 @@ nil `conn-local-mode' will be not enabled in the buffer.")
 Commands can set this variable if they need to change their handler
 dynamically.")
 
+(defvar conn-this-command-thing nil)
+
 (defvar conn-this-command-start nil
   "Start position for current mark movement command.")
 
@@ -326,7 +328,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map)
 
-(defvar conn--aux-update-flag nil)
+(defvar conn--aux-update-tick 0)
+(defvar conn--aux-update-local-tick 0)
 
 (defvar-local conn--aux-map-history nil)
 
@@ -826,8 +829,8 @@ THINGs at once unless `region-active-p'."
 If one has already been created return it, otherwise create a new one.
 Discrete handlers will only mark the last THING when moving over
 multiple THINGs at once unless `region-active-p'."
-  (lambda (_)
-    (unless (region-active-p)
+  (lambda (beg)
+    (unless (or (= beg (point)) (region-active-p))
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
          (conn--push-ephemeral-mark (if (= (point) end) beg end)))
@@ -912,7 +915,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (handler (or conn-this-command-handler
                             (conn--command-property :conn-mark-handler))))
       (funcall handler conn-this-command-start)))
-  (setq conn-this-command-handler nil))
+  (setq conn-this-command-handler nil
+        conn-this-command-thing nil))
 
 (defun conn--setup-mark ()
   (when conn--mark-cursor-timer
@@ -930,6 +934,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                     (point-min) (point-max)))
       (delete-overlay ov)))
   (setq conn--mark-cursor nil))
+
+(defun conn--get-this-command-thing ()
+  (or conn-this-command-thing
+      (get this-command :conn-command-thing)))
 
 
 ;;;; Macro Dispatch
@@ -1460,10 +1468,11 @@ If BUFFER is nil use current buffer."
 ;;;; Advice
 
 (defun conn--define-key-advice (keymap key &rest _)
-  (when (and (memq keymap (conn--without-conn-maps (current-active-maps)))
-             (member (if (stringp key) (key-parse key) key)
-                     (mapcar #'symbol-value conn--aux-bindings)))
-    (setq conn--aux-update-flag t)))
+  (when (or (memq keymap (mapcar #'cdr conn--state-maps))
+            (and (memq keymap (conn--without-conn-maps (current-active-maps)))
+                 (member (if (stringp key) (key-parse key) key)
+                         (mapcar #'symbol-value conn--aux-bindings))))
+    (cl-incf conn--aux-update-tick)))
 
 (defun conn--push-mark-ad (&rest _)
   (unless conn--ephemeral-mark
@@ -1529,7 +1538,7 @@ If BUFFER is nil use current buffer."
     (let ((active (conn--without-conn-maps (current-active-maps)))
           (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
       (cond
-       ((or conn--aux-update-flag
+       ((or (/= conn--aux-update-local-tick conn--aux-update-tick)
             (not (equal conn--last-remapping current-remappings))
             force)
         (let ((aux-map (conn--generate-aux-map active))
@@ -1544,7 +1553,7 @@ If BUFFER is nil use current buffer."
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
                 conn--aux-map-history (seq-take conn--aux-map-history
                                                 conn--aux-map-history-size)))))
-      (setq conn--aux-update-flag nil
+      (setq conn--aux-update-local-tick conn--aux-update-tick
             conn--last-remapping current-remappings))))
 
 (defmacro conn-define-remapping-command (name from-keys &optional aux-map-omit)
@@ -4424,6 +4433,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (conn-register-thing-commands
  'dot (conn-individual-thing-handler 'dot)
  'conn-next-dot 'conn-previous-dot)
+
+(conn-register-thing-commands
+ 'char nil
+ 'forward-char 'backward-char
+ 'conn-forward-char 'conn-backward-char)
 
 (conn-register-thing word
   :forward-op 'forward-word)
