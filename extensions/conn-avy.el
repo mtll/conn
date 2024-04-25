@@ -50,8 +50,8 @@
              (beg (point)))
     (save-excursion
       (goto-char pt)
-      (conn-dot-thing-at-point thing)))
-  (point))
+      (conn-dot-thing-at-point thing))
+    (point)))
 
 (defun conn-avy-action-transpose (pt)
   (when-let ((thing (or (conn--get-this-command-thing)
@@ -61,17 +61,7 @@
                    (goto-char pt)
                    (bounds-of-thing-at-point thing))))
     (transpose-regions (car r1) (cdr r1)
-                       (car r2) (cdr r2)))
-  (point))
-
-(defun conn-avy-action-kill-move (pt)
-  (when-let ((thing (or (conn--get-this-command-thing)
-                        (conn--read-thing-command)))
-             (region (progn
-                       (goto-char pt)
-                       (bounds-of-thing-at-point thing))))
-    (kill-region (car region) (cdr region))
-    (message "Killed: %s" (current-kill 0))
+                       (car r2) (cdr r2))
     (point)))
 
 (defun conn-avy-action-kill-stay (pt)
