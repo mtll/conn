@@ -206,6 +206,29 @@ Supported values are:
   :group 'conn
   :type 'boolean)
 
+(defcustom conn-dispatch-label-characters
+  (list ?j ?f ?d ?k ?s ?g ?h ?l ?w ?e ?r
+        ?r ?t ?y ?u ?i ?o ?c ?v ?b ?n ?m)
+  "Chars to use for dispatch leader overlays."
+  :group 'conn
+  :type '(list integer))
+
+(defface conn-dispatch-lead-0
+  '((t (:background "#7feaff" :foreground "black" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn)
+
+(defface conn-dispatch-lead-1
+  '((t (:background "#ffaaff" :foreground "black" :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn)
+
+(defcustom conn-dispatch-leader-faces
+  (list 'conn-dispatch-lead-0 'conn-dispatch-lead-1)
+  "Faces to use for dispatch leader overlays."
+  :group 'conn
+  :type 'string)
+
 ;;;;; State Variables
 
 (defvar conn-states nil)
@@ -2116,32 +2139,15 @@ state."
 
 ;;;;; Place Dispatch
 
-(defvar conn-dispatch-command-alist
-  `((conn-kill-region . conn-dispatch-kill-region)))
-
 (defvar conn-dispatch-command-maps
   (list (define-keymap
-          "w" 'conn-dispatch-kill-region
-          "e" 'conn-dispatch-dot-region
-          "g" 'conn-dispatch-grab-region
-          "t" 'conn-dispatch-transpose-region
-          "y" 'conn-dispatch-yank-region)))
+          "w" 'conn-dispatch-kill
+          "e" 'conn-dispatch-dot
+          "g" 'conn-dispatch-grab
+          "t" 'conn-dispatch-transpose
+          "y" 'conn-dispatch-yank)))
 
-(defvar conn-dispatch-label-characters
-  (list ?j ?f ?d ?k ?s ?g ?h ?l ?w ?e ?r
-        ?r ?t ?y ?u ?i ?o ?c ?v ?b ?n ?m))
-
-(defface conn-dispatch-lead-0
-  '((t (:background "#7feaff" :foreground "black" :bold t)))
-  "Face for group in dispatch lead overlay."
-  :group 'conn)
-
-(defface conn-dispatch-lead-1
-  '((t (:background "#ffaaff" :foreground "black" :bold t)))
-  "Face for group in dispatch lead overlay."
-  :group 'conn)
-
-(defun conn-dispatch-kill-region (window pt thing)
+(defun conn-dispatch-kill (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2149,7 +2155,7 @@ state."
         (`(,beg . ,end) (kill-region beg end))
         (_ (user-error "No thing at point"))))))
 
-(defun conn-dispatch-dot-region (window pt thing)
+(defun conn-dispatch-dot (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2157,7 +2163,7 @@ state."
         ('nil (user-error "No thing at point"))
         (reg (conn--create-dots reg))))))
 
-(defun conn-dispatch-grab-region (window pt thing)
+(defun conn-dispatch-grab (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2167,18 +2173,18 @@ state."
         (_ (user-error "No thing at point")))))
   (yank))
 
-(defun conn-dispatch-yank-region (window pt thing)
+(defun conn-dispatch-yank (window pt thing)
   (let ((str))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
         (pcase (bounds-of-thing-at-point thing)
           (`(,beg . ,end)
-           (setq str (buffer-substring beg end)))
+           (setq str (filter-buffer-substring beg end)))
           (_ (user-error "No thing at point")))))
     (insert str)))
 
-(defun conn-dispatch-transpose-region (window pt thing)
+(defun conn-dispatch-transpose (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
                  (cons (region-beginning) (region-end))
@@ -2195,14 +2201,14 @@ state."
                  (cons (region-beginning) (region-end))
                (bounds-of-thing-at-point thing))
         (`(,beg . ,end)
-         (setq str1 (buffer-substring beg end)))
+         (setq str1 (filter-buffer-substring beg end)))
         (_ (user-error "No thing at point")))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
           (pcase (bounds-of-thing-at-point thing)
             (`(,beg . ,end)
-             (setq str2 (buffer-substring beg end))
+             (setq str2 (filter-buffer-substring beg end))
              (delete-region beg end)
              (insert str1))
             (_ (user-error "No thing at point")))))
@@ -2261,7 +2267,7 @@ state."
 
 (defun conn--dispatch-concat-label (chars)
   ;; TODO: make this a custom var
-  (let ((faces (list 'conn-dispatch-lead-0 'conn-dispatch-lead-1))
+  (let ((faces (seq-copy conn-dispatch-leader-faces))
         (result nil))
     (dolist (char (ensure-list chars))
       (setq result (concat result (propertize char 'face (car faces)))
