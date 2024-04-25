@@ -2145,14 +2145,18 @@ state."
           "e" 'conn-dispatch-dot
           "g" 'conn-dispatch-grab
           "t" 'conn-dispatch-transpose
-          "y" 'conn-dispatch-yank)))
+          "y" 'conn-dispatch-yank
+          "c" 'conn-dispatch-copy)))
 
 (defun conn-dispatch-kill (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (bounds-of-thing-at-point thing)
-        (`(,beg . ,end) (kill-region beg end))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-region beg end)
+           (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-dot (window pt thing)
@@ -2183,6 +2187,17 @@ state."
            (setq str (filter-buffer-substring beg end)))
           (_ (user-error "No thing at point")))))
     (insert str)))
+
+(defun conn-dispatch-copy (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-new (filter-buffer-substring beg end))
+           (message "Copied: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-transpose (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
@@ -2302,10 +2317,10 @@ state."
                (`(,_str . ,places)  (conn--read-string-with-timeout
                                      conn-read-string-timout nil t))
                (labels (conn--dispatch-create-labels
-                         (conn--thread -it-
-                             places
-                           (mapcar (lambda (l) (length (cdr l))) -it-)
-                           (seq-reduce #'+ -it- 0))))
+                        (conn--thread -it-
+                            places
+                          (mapcar (lambda (l) (length (cdr l))) -it-)
+                          (seq-reduce #'+ -it- 0))))
                (overlays))
     (unwind-protect
         (progn
