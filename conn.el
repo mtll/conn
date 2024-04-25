@@ -5338,8 +5338,8 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
-  "h" 'conn-contract
-  "H" 'conn-expand)
+  "H" 'conn-contract
+  "h" 'conn-expand)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -5593,8 +5593,8 @@ dispatch on each contiguous component of the region."
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "g"     'conn-M-g-keys
-  "H"     'repeat
-  "h"     'conn-expand
+  "H"     'conn-expand
+  "h"     'repeat
   "I"     'conn-backward-paragraph-keys
   "i"     'conn-previous-line-keys
   "J"     'conn-beginning-of-inner-line
