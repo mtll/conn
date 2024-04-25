@@ -681,15 +681,42 @@ first line of the documentation string; for keyboard macros use
       (message nil))
     (cons string results)))
 
-(defun conn--create-window-prompt-overlay (window id)
+(defun conn--create-labels (count &optional labels)
+  (let* ((alphabet (thread-last
+                     (seq-uniq conn-dispatch-label-characters)
+                     (mapcar #'string)))
+         (labels (or labels (copy-sequence alphabet)))
+         (prefixes nil))
+    (while (and labels
+                (> count (+ (length labels)
+                            (* (length prefixes)
+                               (length alphabet)))))
+      (push (pop labels) prefixes))
+    (if (null labels)
+        (let ((new-labels))
+          (dolist (a prefixes)
+            (dolist (b alphabet)
+              (push (concat a b) new-labels)))
+          (conn--create-labels count new-labels))
+      (catch 'done
+        (let ((n (length labels)))
+          (setq labels (nreverse labels))
+          (dolist (prefix (nreverse prefixes))
+            (dolist (c alphabet)
+              (push (concat prefix c) labels)
+              (when (= (cl-incf n) count)
+                (throw 'done nil))))))
+      (mapc 'conn--dispatch-propertize-label labels)
+      (nreverse labels))))
+
+(defun conn--create-window-prompt-overlay (window label)
   (with-current-buffer (window-buffer window)
     (let ((overlay (make-overlay (window-start window)
                                  (window-end window))))
       (overlay-put overlay 'face 'shadow)
       (overlay-put overlay 'window window)
       (overlay-put overlay 'before-string
-                   (propertize (number-to-string id)
-                               'face 'conn-window-prompt-face))
+                   (propertize label 'face 'conn-window-prompt-face))
       overlay)))
 
 (defun conn--all-visible-windows ()
@@ -701,19 +728,25 @@ first line of the documentation string; for keyboard macros use
   (when (setq windows (seq-remove 'window-dedicated-p windows))
     (if (length= windows 1)
         (car windows)
-      (let ((overlays (seq-map-indexed #'conn--create-window-prompt-overlay
-                                       windows))
-            num)
+      (let ((overlays (seq-mapn #'conn--create-window-prompt-overlay
+                                windows (conn--create-labels (length windows)))))
         (unwind-protect
-            (while (or (not num)
-                       (< num 0)
-                       (length< windows num))
-              (setq num (if (length> windows 10)
-                            (read-number "Window: ")
-                          (- (logand (read-char "Window: ") ?\177) ?0))))
+            (progn
+              (while (cdr overlays)
+                (let ((c (read-char "char:"))
+                      (next))
+                  (dolist (ov overlays)
+                    (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
+                        (delete-overlay ov)
+                      (conn--thread -it-
+                          (overlay-get ov 'before-string)
+                        (substring -it- 1)
+                        (overlay-put ov 'before-string -it-))
+                      (push ov next)))
+                  (setq overlays next)))
+              (overlay-get (car overlays) 'window))
           (dolist (ov overlays)
-            (delete-overlay ov)))
-        (nth num windows)))))
+            (delete-overlay ov)))))))
 
 
 ;;;; Extensions
@@ -2289,40 +2322,12 @@ state."
                 conn-dispatch-leader-faces)
      chars)))
 
-(defun conn--dispatch-create-labels (count &optional labels)
-  (let* ((alphabet (thread-last
-                     (seq-uniq conn-dispatch-label-characters)
-                     (mapcar #'string)))
-         (labels (or labels (copy-sequence alphabet)))
-         (prefixes nil))
-    (while (and labels
-                (> count (+ (length labels)
-                            (* (length prefixes)
-                               (length alphabet)))))
-      (push (pop labels) prefixes))
-    (if (null labels)
-        (let ((new-labels))
-          (dolist (a prefixes)
-            (dolist (b alphabet)
-              (push (concat a b) new-labels)))
-          (conn--dispatch-create-labels count new-labels))
-      (catch 'done
-        (let ((n (length labels)))
-          (setq labels (nreverse labels))
-          (dolist (prefix (nreverse prefixes))
-            (dolist (c alphabet)
-              (push (concat prefix c) labels)
-              (when (= (cl-incf n) count)
-                (throw 'done nil))))))
-      (mapc 'conn--dispatch-propertize-label labels)
-      (nreverse labels))))
-
 (defun conn-dispatch-thing ()
   (interactive)
   (pcase-let* ((`(,thing . ,action) (conn--read-dispatch-command))
                (`(,_str . ,places)  (conn--read-string-with-timeout
                                      conn-read-string-timout nil t))
-               (labels (conn--dispatch-create-labels
+               (labels (conn--create-labels
                         (conn--thread -it-
                             places
                           (mapcar (lambda (l) (length (cdr l))) -it-)
@@ -2338,14 +2343,25 @@ state."
             (with-current-buffer (window-buffer window)
               (dolist (pt points)
                 (let* ((label (pop labels))
-                       (ov (make-overlay pt pt)))
+                       (end (min (+ pt (length label))
+                                 (save-excursion
+                                   (goto-char pt)
+                                   (line-end-position))))
+                       (overlap (seq-filter (lambda (o)
+                                              (eq 'conn-dispatch-leader-overlay
+                                                  (overlay-get o 'category)))
+                                            (overlays-in (1- pt) end)))
+                       (ov (make-overlay pt end)))
                   (when (null label)
                     (error "Labels exhausted"))
+                  (if (null overlap)
+                      (overlay-put ov 'invisible t)
+                    (mapc (lambda (o)
+                            (overlay-put o 'invisible nil))
+                          overlap))
                   (push ov overlays)
-                  (overlay-put ov 'priority (+ 3000 pt))
-                  ;; Dont fiddle with invisibility for now
-                  ;; (overlay-put ov 'category 'conn-dispatch-leader-overlay)
-                  ;; (overlay-put ov 'invisible t)
+                  (overlay-put ov 'priority 3000)
+                  (overlay-put ov 'category 'conn-dispatch-leader-overlay)
                   (overlay-put ov 'window window)
                   (overlay-put ov 'before-string label)))))
 
