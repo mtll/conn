@@ -676,9 +676,7 @@ first line of the documentation string; for keyboard macros use
           (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
       (pcase-dolist (`(,win . ,ovs) overlays)
         (setf (alist-get win results)
-              (mapcar (lambda (ov)
-                        (cons (overlay-start ov) (overlay-end ov)))
-                      ovs))
+              (mapcar 'overlay-start ovs))
         (mapc #'delete-overlay ovs))
       (message nil))
     (cons string results)))
@@ -2283,36 +2281,41 @@ state."
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
-(defun conn--dispatch-concat-label (chars)
-  ;; TODO: make this a custom var
-  (let ((faces (seq-copy conn-dispatch-leader-faces))
-        (result nil))
-    (dolist (char (ensure-list chars))
-      (setq result (concat result (propertize char 'face (car faces)))
-            faces (nconc (cdr faces) (list (car faces)))))
-    result))
+(defun conn--dispatch-propertize-label (chars)
+  (dotimes (i (length chars))
+    (put-text-property
+     i (1+ i)
+     'face (nth (mod i (length conn-dispatch-leader-faces))
+                conn-dispatch-leader-faces)
+     chars)))
 
-;; just do this the dumb way for now
-(defun conn--dispatch-create-labels (count)
-  (let* ((alphabet (mapcar #'string (seq-uniq conn-dispatch-label-characters)))
-         (labels (seq-copy alphabet))
+(defun conn--dispatch-create-labels (count &optional labels)
+  (let* ((alphabet (thread-last
+                     (seq-uniq conn-dispatch-label-characters)
+                     (mapcar #'string)))
+         (labels (or labels (copy-sequence alphabet)))
          (prefixes nil))
     (while (and labels
                 (> count (+ (length labels)
                             (* (length prefixes)
                                (length alphabet)))))
       (push (pop labels) prefixes))
-    (when (null labels) (error "Too many candidates"))
-    (catch 'labels
-      (let ((n (length labels)))
-        (setq labels (nreverse labels))
-        (dolist (prefix (nreverse prefixes))
-          (dolist (c alphabet)
-            (push (list prefix c) labels)
-            (when (= (cl-incf n) count)
-              (throw 'labels nil))))))
-    (mapcar (apply-partially 'conn--dispatch-concat-label)
-            (nreverse labels))))
+    (if (null labels)
+        (let ((new-labels))
+          (dolist (a prefixes)
+            (dolist (b alphabet)
+              (push (concat a b) new-labels)))
+          (conn--dispatch-create-labels count new-labels))
+      (catch 'done
+        (let ((n (length labels)))
+          (setq labels (nreverse labels))
+          (dolist (prefix (nreverse prefixes))
+            (dolist (c alphabet)
+              (push (concat prefix c) labels)
+              (when (= (cl-incf n) count)
+                (throw 'done nil))))))
+      (mapc 'conn--dispatch-propertize-label labels)
+      (nreverse labels))))
 
 (defun conn-dispatch-thing ()
   (interactive)
@@ -2333,9 +2336,11 @@ state."
 
           (pcase-dolist (`(,window . ,points) places)
             (with-current-buffer (window-buffer window)
-              (pcase-dolist (`(,pt . ,_) points)
+              (dolist (pt points)
                 (let* ((label (pop labels))
                        (ov (make-overlay pt pt)))
+                  (when (null label)
+                    (error "Labels exhausted"))
                   (push ov overlays)
                   (overlay-put ov 'priority (+ 3000 pt))
                   ;; Dont fiddle with invisibility for now
@@ -2379,7 +2384,8 @@ state."
      (pcase (bounds-of-thing-at-point conn-this-command-thing)
        (`(,beg . ,end)
         (goto-char beg)
-        (conn--push-ephemeral-mark end)))))
+        (unless (region-active-p)
+          (conn--push-ephemeral-mark end))))))
  'conn-dispatch-thing)
 
 ;;;;; Tab Registers
@@ -3464,8 +3470,8 @@ This command should only be called interactively."
 When called interactively reads STRING with timeout
 `conn-read-string-timout'."
   (interactive
-   (list (conn--read-string-with-timeout
-          conn-read-string-timout 'backward)))
+   (list (car (conn--read-string-with-timeout
+               conn-read-string-timout 'backward))))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (backward-char)
@@ -3496,8 +3502,8 @@ This command should only be called interactively."
 When called interactively reads STRING with timeout
 `conn-read-string-timout'."
   (interactive
-   (list (conn--read-string-with-timeout
-          conn-read-string-timout 'forward)))
+   (list (car (conn--read-string-with-timeout
+               conn-read-string-timout 'forward))))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (forward-char)
