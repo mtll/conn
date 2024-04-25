@@ -206,6 +206,11 @@ Supported values are:
   :group 'conn
   :type 'boolean)
 
+(defcustom conn-read-string-timout 0.5
+  "Timeout for string reading functions."
+  :group 'conn
+  :type 'number)
+
 (defcustom conn-dispatch-label-characters
   (list ?j ?f ?d ?k ?s ?g ?h ?l ?w ?e ?r
         ?r ?t ?y ?u ?i ?o ?c ?v ?b ?n ?m)
@@ -651,14 +656,12 @@ first line of the documentation string; for keyboard macros use
              (with-current-buffer (window-buffer win)
                (setf (alist-get win ovs)
                      (conn--read-string-preview-overlays-1 string dir)))))
-         'visible)
+         'no-minibuf 'visible)
         (seq-sort (lambda (_ b)
                     (eq (selected-window) (car b)))
                   ovs))
     (list (cons (selected-window)
                 (conn--read-string-preview-overlays-1 string dir)))))
-
-(defvar conn-read-string-timout 0.5)
 
 (defun conn--read-string-with-timeout (timeout &optional dir all-windows)
   (let* ((string (char-to-string (read-char "string: " t)))
