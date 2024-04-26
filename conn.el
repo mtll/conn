@@ -519,34 +519,34 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--read-thing-command ()
   (conn-with-state conn-state
-    (with-temp-message ""
-      (let ((keymap (conn--read-thing-keymap))
-            (prompt (concat "Thing Command ("
-                            (propertize "C-h" 'face 'help-key-binding)
-                            " for commands): ")))
-        (internal-push-keymap keymap 'overriding-terminal-local-map)
-        (unwind-protect
-            (let ((cmd (key-binding (read-key-sequence prompt) t)))
-              (while (not (get cmd :conn-command-thing))
-                (pcase cmd
-                  ('keyboard-quit
-                   (keyboard-quit))
-                  ('help
-                   (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                   (setq cmd (let ((read-extended-command-predicate
-                                    (lambda (symbol _)
-                                      (get symbol :conn-command-thing))))
-                               (read-extended-command)))
-                   (internal-push-keymap keymap 'overriding-terminal-local-map))
-                  (_
-                   (setq cmd (thread-first
-                               (concat prompt
-                                       (propertize "Not a valid thing command"
-                                                   'face 'error))
-                               (read-key-sequence)
-                               (key-binding t))))))
-              (get cmd :conn-command-thing))
-          (internal-pop-keymap keymap 'overriding-terminal-local-map))))))
+    (let ((keymap (conn--read-thing-keymap))
+          (prompt (concat "Thing Command ("
+                          (propertize "C-h" 'face 'help-key-binding)
+                          " for commands): ")))
+      (internal-push-keymap keymap 'overriding-terminal-local-map)
+      (unwind-protect
+          (let ((cmd (key-binding (read-key-sequence prompt) t)))
+            (while (not (get cmd :conn-command-thing))
+              (pcase cmd
+                ('keyboard-quit
+                 (keyboard-quit))
+                ('help
+                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                 (setq cmd (let ((read-extended-command-predicate
+                                  (lambda (symbol _)
+                                    (get symbol :conn-command-thing))))
+                             (read-extended-command)))
+                 (internal-push-keymap keymap 'overriding-terminal-local-map))
+                (_
+                 (setq cmd (thread-first
+                             (concat prompt
+                                     (propertize "Not a valid thing command"
+                                                 'face 'error))
+                             (read-key-sequence)
+                             (key-binding t))))))
+            (get cmd :conn-command-thing))
+        (message nil)
+        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -2180,39 +2180,38 @@ state."
                         "(" (propertize "C-h" 'face 'help-key-binding) " for commands): "))
         (action))
     (conn-with-state conn-state
-      (with-temp-message ""
-        (internal-push-keymap keymap 'overriding-terminal-local-map)
-        (unwind-protect
-            (let ((cmd (key-binding (read-key-sequence prompt) t)))
-              (while (not (get cmd :conn-command-thing))
-                (pcase cmd
-                  ('keyboard-quit
-                   (keyboard-quit))
-                  ('help
-                   (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                   (setq cmd (let ((read-extended-command-predicate
-                                    (lambda (symbol _)
-                                      (and (or (get symbol :conn-command-thing)
-                                               (where-is-internal symbol (list keymap)))
-                                           (not (eq 'help) symbol)))))
-                               (read-extended-command)))
-                   (internal-push-keymap keymap 'overriding-terminal-local-map))
-                  ((guard (where-is-internal cmd conn-dispatch-command-maps))
-                   (setq action (unless (eq cmd action) cmd)
-                         cmd (thread-first
-                               (concat prompt (when action (conn--stringify action)))
-                               (read-key-sequence)
-                               (key-binding t))))
-                  (_
-                   (setq cmd (thread-first
-                               prompt
-                               (concat (when action (conn--stringify action " - "))
-                                       (propertize "Invalid dispatch command"
-                                                   'face 'error))
-                               (read-key-sequence)
-                               (key-binding t))))))
-              (cons (get cmd :conn-command-thing) action))
-          (internal-pop-keymap keymap 'overriding-terminal-local-map))))))
+      (internal-push-keymap keymap 'overriding-terminal-local-map)
+      (unwind-protect
+          (let ((cmd (key-binding (read-key-sequence prompt) t)))
+            (while (not (get cmd :conn-command-thing))
+              (pcase cmd
+                ('keyboard-quit
+                 (keyboard-quit))
+                ('help
+                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                 (setq cmd (let ((read-extended-command-predicate
+                                  (lambda (symbol _)
+                                    (and (or (get symbol :conn-command-thing)
+                                             (where-is-internal symbol (list keymap)))
+                                         (not (eq 'help symbol))))))
+                             (read-extended-command)))
+                 (internal-push-keymap keymap 'overriding-terminal-local-map))
+                ((guard (where-is-internal cmd conn-dispatch-command-maps))
+                 (setq action (unless (eq cmd action) cmd)
+                       cmd (thread-first
+                             (concat prompt (conn--stringify action))
+                             (read-key-sequence)
+                             (key-binding t))))
+                (_
+                 (setq cmd (thread-first
+                             (concat prompt
+                                     (conn--stringify action " - ")
+                                     (propertize "Invalid dispatch command"
+                                                 'face 'error))
+                             (read-key-sequence)
+                             (key-binding t))))))
+            (cons (get cmd :conn-command-thing) action))
+        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
 (defun conn--narrow-label-overlays (overlays)
   (let ((c (read-char "char:"))
@@ -2989,7 +2988,8 @@ associated with that command (see `conn-register-thing')."
                                   (point)))
                     (setq bounds (bounds-of-thing-at-point thing)))
           (conn--create-dots bounds)
-          (setq bounds (bounds-of-thing-at-point thing)))))))
+          (setq bounds (bounds-of-thing-at-point thing))))))
+  (message "Dots added at %ss" thing))
 
 (defun conn-shell-command-on-dots (command arg)
   "Run `shell-command-on-region' on each dot."
@@ -3589,7 +3589,8 @@ associated with that command (see `conn-register-thing')."
   (when-let ((bounds (bounds-of-thing-at-point thing)))
     (goto-char (cdr bounds))
     (conn--push-ephemeral-mark (car bounds))
-    (activate-mark t)))
+    (activate-mark t))
+  (message "Marked %s" thing))
 
 (defun conn-narrow-to-thing (thing)
   "Narrow indirect buffer to THING at point.
@@ -3598,7 +3599,8 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (narrow-to-region (car bounds) (cdr bounds))))
+    (narrow-to-region (car bounds) (cdr bounds))
+    (message "Narrowed to %s" thing)))
 
 (defun conn-narrow-indirect-to-thing (thing)
   "Narrow to THING at point.
@@ -3606,7 +3608,8 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (conn--narrow-indirect (car bounds) (cdr bounds))))
+    (conn--narrow-indirect (car bounds) (cdr bounds))
+    (message "Narrow indirect to %s" thing)))
 
 (defun conn-narrow-to-visible ()
   "Narrow buffer to the visible portion of the selected window."
