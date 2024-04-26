@@ -330,6 +330,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--mark-cursor 'permanent-local t)
 (put 'conn--mark-cursor 'face 'conn-mark-face)
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
+(put 'conn--mark-cursor 'conn-overlay t)
 
 ;;;;; Dot Undo Ring Variables
 
@@ -366,6 +367,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--dot 'priority conn-dot-overlay-priority)
 (put 'conn--dot 'face 'conn-dot-face)
 (put 'conn--dot 'evaporate t)
+(put 'conn--dot 'conn-overlay t)
 
 ;;;;; Command Histories
 
@@ -562,6 +564,7 @@ If BUFFER is nil check `current-buffer'."
         (while (search-backward string nil t)
           (push (make-overlay (point) (+ (point) (length string)))
                 ovs)
+          (overlay-put (car ovs) 'conn-overlay t)
           (overlay-put (car ovs) 'face 'isearch))))
     ovs))
 
@@ -582,6 +585,11 @@ If BUFFER is nil check `current-buffer'."
     (list (cons (selected-window)
                 (conn--read-string-preview-overlays-1 string dir)))))
 
+(defun conn--sort-nearest (pts)
+  (seq-sort (lambda (a b)
+              (< (abs (- a (point))) (abs (- b (point)))))
+            pts))
+
 (defun conn--read-string-with-timeout (&optional dir all-windows)
   (let* ((string (char-to-string (read-char "string: " t)))
          (overlays (conn--read-string-preview-overlays string dir all-windows))
@@ -596,7 +604,11 @@ If BUFFER is nil check `current-buffer'."
           (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
       (pcase-dolist (`(,win . ,ovs) overlays)
         (setf (alist-get win results)
-              (mapcar 'overlay-start ovs))
+              (conn--thread -it-
+                  (mapcar 'overlay-start ovs)
+                (if (eq win (selected-window))
+                    (conn--sort-nearest -it-)
+                  -it-)))
         (mapc #'delete-overlay ovs))
       (message nil))
     (cons string results)))
@@ -635,6 +647,7 @@ If BUFFER is nil check `current-buffer'."
   (with-current-buffer (window-buffer window)
     (let ((overlay (make-overlay (window-start window)
                                  (window-end window))))
+      (overlay-put overlay 'conn-overlay t)
       (overlay-put overlay 'face 'shadow)
       (overlay-put overlay 'window window)
       (overlay-put overlay 'before-string
@@ -1371,9 +1384,7 @@ The iterator must be the first argument in ARGLIST.
     (widen)
     (mapc #'delete-overlay
           (conn--all-overlays
-           (lambda (ov)
-             (memq (overlay-get ov 'category)
-                   '(conn--dot conn--mark-cursor)))))))
+           (lambda (ov) (overlay-get ov 'conn-overlay))))))
 
 (defun conn--dot-after-change-function (&rest _)
   (setq conn--dot-undo-ring nil))
@@ -1936,8 +1947,8 @@ disabled.
        (put ',name :conn-lighter-face ',lighter-face-name)
 
        (cl-pushnew ',name conn-states)
-       (push (cons ',name ,map-name) conn--state-maps)
-       (push (cons ',name ,transition-map-name) conn--transition-maps)
+       (setf (alist-get ',name conn--state-maps) ,map-name
+             (alist-get ',name conn--transition-maps) ,transition-map-name)
 
        (defun ,name ()
          ,doc
@@ -1951,21 +1962,20 @@ disabled.
               (when (eq ,enter :exit) (setq ,enter nil))
               (unless (and ,enter (eq conn-current-state ',name))
                 (if (not ,enter)
-                    (progn
-                      (setq ,name nil)
-                      (setq conn-current-state nil)
-                      (setq conn-previous-state ',name))
-                  (setq conn-current-state ',name)
-                  (setq ,name t)
+                    (setq ,name nil
+                          conn-current-state nil
+                          conn-previous-state ',name)
+                  (setq conn-current-state ',name
+                        ,name t
+                        conn--local-mode-maps (alist-get conn-current-state
+                                                         conn--mode-maps))
                   (when conn-lighter
-                    (setq-local conn-lighter
-                                (propertize conn-lighter
-                                            'face ',lighter-face-name)))
+                    (put-text-property 0 (length conn-lighter)
+                                       'face ',lighter-face-name
+                                       conn-lighter))
                   (when conn-buffer-colors
                     (buffer-face-set ',buffer-face-name))
                   (conn--activate-input-method)
-                  (setq conn--local-mode-maps (alist-get conn-current-state
-                                                         conn--mode-maps))
                   (conn--update-cursor)
                   (conn--update-mode-line-indicator)
                   (when (not executing-kbd-macro)
@@ -2095,14 +2105,16 @@ state."
 
 ;;;;; Thing Dispatch
 
+(defvar-keymap conn-dispatch-base-command-map
+  "w" 'conn-dispatch-kill
+  "e" 'conn-dispatch-dot
+  "g" 'conn-dispatch-grab
+  "t" 'conn-dispatch-transpose
+  "y" 'conn-dispatch-yank
+  "c" 'conn-dispatch-copy)
+
 (defvar conn-dispatch-command-maps
-  (list (define-keymap
-          "w" 'conn-dispatch-kill
-          "e" 'conn-dispatch-dot
-          "g" 'conn-dispatch-grab
-          "t" 'conn-dispatch-transpose
-          "y" 'conn-dispatch-yank
-          "c" 'conn-dispatch-copy)))
+  (list conn-dispatch-base-command-map))
 
 (defun conn-dispatch-kill (window pt thing)
   (with-selected-window window
@@ -2139,22 +2151,20 @@ state."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (bounds-of-thing-at-point thing)
-          (`(,beg . ,end)
-           (setq str (filter-buffer-substring beg end)))
-          (_ (user-error "No thing at point")))))
-    (insert str)))
+        (setq str (thing-at-point thing))))
+    (if str
+        (insert str)
+      (user-error "No thing at point"))))
 
 (defun conn-dispatch-copy (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (bounds-of-thing-at-point thing)
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-new (filter-buffer-substring beg end))
-           (message "Copied: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let ((str (thing-at-point thing)))
+          (progn
+            (kill-new str)
+            (message "Copied: %s" str))
+        (user-error "No thing at point")))))
 
 (defun conn-dispatch-transpose (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
@@ -2240,7 +2250,7 @@ state."
         (progn
           (when (and (null (cdr places))
                      (null (cdar places)))
-            (user-error "No candidates"))
+            (user-error "No matching candidates"))
 
           (pcase-dolist (`(,window . ,points) places)
             (with-current-buffer (window-buffer window)
@@ -2253,7 +2263,7 @@ state."
                        (overlap (seq-filter (lambda (o)
                                               (eq 'conn-dispatch-leader-overlay
                                                   (overlay-get o 'category)))
-                                            (overlays-in (1- pt) end)))
+                                            (overlays-in (1- pt) (1+ end))))
                        (ov (make-overlay pt end)))
                   (when (null label)
                     (error "Labels exhausted"))
@@ -2264,6 +2274,7 @@ state."
                           overlap))
                   (push ov overlays)
                   (overlay-put ov 'priority 3000)
+                  (overlay-put ov 'conn-overlay t)
                   (overlay-put ov 'category 'conn-dispatch-leader-overlay)
                   (overlay-put ov 'window window)
                   (overlay-put ov 'before-string label)))))
@@ -3960,6 +3971,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                      current-prefix-arg))
   (let ((ov (make-overlay start end))
         exchange)
+    (overlay-put ov 'conn-overlay t)
     (unwind-protect
         (progn
           (when (setq exchange (= (point) start))
@@ -4742,7 +4754,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
  'conn-end-of-inner-line)
 
 
-;;;; Transient Menus
+;;;; Transient Definitions
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
@@ -5649,6 +5661,7 @@ dispatch on each contiguous component of the region."
 (defvar-keymap conn-search-map
   ","     'xref-go-back
   "."     'xref-go-forward
+  "<"     'pop-global-mark
   "TAB"   'conn-isearch-backward-symbol
   "M-TAB" 'conn-isearch-forward-symbol
   "0"     'xref-find-references
@@ -5989,6 +6002,7 @@ dispatch on each contiguous component of the region."
                                 #'eq)
           (push '(conn-mode-line-indicator-mode (:eval conn--mode-line-indicator))
                 mode-line-format))
+        (setq-local conn-lighter (seq-copy conn-lighter))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
         (pcase-dolist (`(,_ . ,hooks) conn-input-method-overriding-modes)
