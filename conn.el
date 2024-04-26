@@ -404,7 +404,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defmacro conn-with-state (state &rest body)
   (declare (indent 1))
   (let ((restore (make-symbol "restore")))
-    `(let ((,restore (unless (eq conn-current-state ,state)
+    `(let ((,restore (unless (eq conn-current-state ',state)
                        (prog1 (cons conn-current-state
                                     conn-previous-state)
                          (,state)))))
@@ -502,34 +502,35 @@ If BUFFER is nil check `current-buffer'."
     keymap))
 
 (defun conn--read-thing-command ()
-  (with-temp-message ""
-    (let ((keymap (conn--read-thing-keymap))
-          (prompt (concat "Thing Command ("
-                          (propertize "C-h" 'face 'help-key-binding)
-                          " for commands): ")))
-      (internal-push-keymap keymap 'overriding-terminal-local-map)
-      (unwind-protect
-          (let ((cmd (key-binding (read-key-sequence prompt) t)))
-            (while (not (get cmd :conn-command-thing))
-              (pcase cmd
-                ('keyboard-quit
-                 (keyboard-quit))
-                ('help
-                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (let ((read-extended-command-predicate
-                                  (lambda (symbol _)
-                                    (get symbol :conn-command-thing))))
-                             (read-extended-command)))
-                 (internal-push-keymap keymap 'overriding-terminal-local-map))
-                (_
-                 (setq cmd (thread-first
-                             (concat prompt
-                                     (propertize "Not a valid thing command"
-                                                 'face 'error))
-                             (read-key-sequence)
-                             (key-binding t))))))
-            (get cmd :conn-command-thing))
-        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+  (conn-with-state conn-state
+    (with-temp-message ""
+      (let ((keymap (conn--read-thing-keymap))
+            (prompt (concat "Thing Command ("
+                            (propertize "C-h" 'face 'help-key-binding)
+                            " for commands): ")))
+        (internal-push-keymap keymap 'overriding-terminal-local-map)
+        (unwind-protect
+            (let ((cmd (key-binding (read-key-sequence prompt) t)))
+              (while (not (get cmd :conn-command-thing))
+                (pcase cmd
+                  ('keyboard-quit
+                   (keyboard-quit))
+                  ('help
+                   (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                   (setq cmd (let ((read-extended-command-predicate
+                                    (lambda (symbol _)
+                                      (get symbol :conn-command-thing))))
+                               (read-extended-command)))
+                   (internal-push-keymap keymap 'overriding-terminal-local-map))
+                  (_
+                   (setq cmd (thread-first
+                               (concat prompt
+                                       (propertize "Not a valid thing command"
+                                                   'face 'error))
+                               (read-key-sequence)
+                               (key-binding t))))))
+              (get cmd :conn-command-thing))
+          (internal-pop-keymap keymap 'overriding-terminal-local-map))))))
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -1394,11 +1395,6 @@ Optionally between START and END and sorted by SORT-PREDICATE."
                        (conn--sorted-overlays #'conn-dotp sort-predicate start end)
                      (conn--all-overlays #'conn-dotp start end))))
     (mapc func dots)))
-
-(defun conn--move-dot (dot start end)
-  (let ((old-start (overlay-start dot))
-        (old-end (overlay-end dot)))
-    (move-overlay dot start end)))
 
 (defun conn--delete-dot (dot)
   (overlay-put dot 'dot nil)
