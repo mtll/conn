@@ -380,9 +380,10 @@ Used to restore previous value when `conn-mode' is disabled.")
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (conn--thread -it-
         (lambda (e)
-          (cl-etypecase e
-            (string e)
-            (symbol (symbol-name e))))
+          (pcase e
+            ((pred stringp) e)
+            ('nil "")
+            ((pred symbolp) (symbol-name e))))
       (mapcar -it- symbols-or-strings)
       (apply #'concat -it-)))
 
