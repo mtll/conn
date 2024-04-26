@@ -554,36 +554,37 @@ If BUFFER is nil check `current-buffer'."
                  collect (cons (conn--create-marker (match-beginning 0))
                                (conn--create-marker (match-end 0))))))))
 
-(defun conn--read-string-preview-overlays-1 (string &optional dir)
-  (let (ovs)
+(defun conn--visible-matches (string &optional dir)
+  (let (matches)
     (save-excursion
       (with-restriction
           (if (eq dir 'forward)  (point) (window-start))
           (if (eq dir 'backward) (point) (window-end))
         (goto-char (point-max))
         (while (search-backward string nil t)
-          (push (make-overlay (point) (+ (point) (length string)))
-                ovs)
-          (overlay-put (car ovs) 'conn-overlay t)
-          (overlay-put (car ovs) 'face 'isearch))))
-    ovs))
+          (push (point) matches))))
+    matches))
+
+(defun conn--read-string-preview-overlays-1 (string &optional dir)
+  (mapcar (pcase-lambda (pt)
+            (let ((ov (make-overlay pt (+ pt (length string)))))
+              (overlay-put ov 'conn-overlay t)
+              (overlay-put ov 'face 'isearch)
+              ov))
+          (conn--visible-matches string dir)))
 
 (defun conn--read-string-preview-overlays (string &optional dir all-windows)
   (if all-windows
-      (let ((ovs))
+      (let (ovs)
         (walk-windows
          (lambda (win)
            (with-selected-window win
-             (with-current-buffer (window-buffer win)
-               (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-                 (setf (alist-get win ovs)
-                       (conn--read-string-preview-overlays-1 string dir))))))
+             (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+               (push (conn--read-string-preview-overlays-1 string dir)
+                     ovs))))
          'no-minibuf 'visible)
-        (seq-sort (lambda (_ b)
-                    (eq (selected-window) (car b)))
-                  ovs))
-    (list (cons (selected-window)
-                (conn--read-string-preview-overlays-1 string dir)))))
+        (apply 'nconc ovs))
+    (conn--read-string-preview-overlays-1 string dir)))
 
 (defun conn--sort-nearest (pts)
   (seq-sort (lambda (a b)
@@ -591,27 +592,18 @@ If BUFFER is nil check `current-buffer'."
             pts))
 
 (defun conn--read-string-with-timeout (&optional dir all-windows)
-  (let* ((string (char-to-string (read-char "string: " t)))
-         (overlays (conn--read-string-preview-overlays string dir all-windows))
-         next-char
-         results)
-    (unwind-protect
-        (while (setq next-char (read-char (format "string: %s" string) t
-                                          conn-read-string-timeout))
-          (setq string (concat string (char-to-string next-char)))
-          (pcase-dolist (`(,_win . ,ovs) overlays)
-            (mapc #'delete-overlay ovs))
-          (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
-      (pcase-dolist (`(,win . ,ovs) overlays)
-        (setf (alist-get win results)
-              (conn--thread -it-
-                  (mapcar 'overlay-start ovs)
-                (if (eq win (selected-window))
-                    (conn--sort-nearest -it-)
-                  -it-)))
-        (mapc #'delete-overlay ovs))
-      (message nil))
-    (cons string results)))
+  (with-temp-message ""
+    (let* ((string (char-to-string (read-char "string: " t)))
+           (overlays (conn--read-string-preview-overlays string dir all-windows))
+           next-char)
+      (unwind-protect
+          (while (setq next-char (read-char (format "string: %s" string) t
+                                            conn-read-string-timeout))
+            (setq string (concat string (char-to-string next-char)))
+            (mapc #'delete-overlay overlays)
+            (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
+        (mapc #'delete-overlay overlays))
+      string)))
 
 ;; TODO: bipartite graph for labels to always alternate hands?
 (defun conn--create-labels (count &optional labels)
@@ -929,18 +921,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (put mmode-or-state :conn-hide-mark nil))
 
 (defun conn--mark-pre-command-hook ()
-  (setq conn-this-command-start
-        (when (memq conn-current-state conn-ephemeral-mark-states)
-          (setq conn-this-command-start (point)))))
+  (setq conn-this-command-start (point)))
 
 (defun conn--mark-post-command-hook ()
   (with-demoted-errors "error marking thing: %s"
-    (when-let ((_ conn-this-command-start)
+    (when-let ((_ (or (memq conn-current-state conn-ephemeral-mark-states)
+                      conn-this-command-thing
+                      conn-this-command-handler))
                (handler (or conn-this-command-handler
                             (conn--command-property :conn-mark-handler))))
       (funcall handler conn-this-command-start)))
   (setq conn-this-command-handler nil
-        conn-this-command-thing nil))
+        conn-this-command-thing nil
+        conn-this-command-start nil))
 
 (defun conn--setup-mark ()
   (when conn--mark-cursor-timer
@@ -2090,6 +2083,7 @@ state."
   :suppress-input-method t
   :indicator (:propertize " O " face conn-org-edit-state-lighter-face)
   :keymap (define-keymap :suppress t)
+  :ephemeral-marks t
   :transitions (define-keymap
                  "f"   'conn-emacs-state
                  "F i" 'conn-emacs-state-open-line-above
@@ -2098,7 +2092,6 @@ state."
                  "F j" 'conn-emacs-state-bol
                  "F o" 'conn-emacs-state-overwrite
                  "F u" 'conn-emacs-state-overwrite-binary))
-(put 'conn-org-edit-state :conn-hide-mark t)
 
 
 ;;;; Commands
@@ -2238,14 +2231,27 @@ state."
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
-(defun conn-thing-dispatch ()
-  (interactive)
-  (pcase-let* ((`(,thing . ,action) (conn--read-dispatch-command))
-               (`(,_str . ,places)  (conn--read-string-with-timeout nil t))
-               (labels              (conn--create-labels
-                                     (cl-loop for (_ . list) in places
-                                              sum (length list))))
-               (overlays))
+(defun conn-thing-dispatch (thing action string)
+  (interactive
+   (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command))
+               (string (conn--read-string-with-timeout nil t)))
+     (list thing action string)))
+  (let* ((places (let (places)
+                   (walk-windows
+                    (lambda (win)
+                      (with-current-buffer (window-buffer win)
+                        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+                          (push (cons win (conn--visible-matches string))
+                                places))))
+                    'no-minibuf 'visible)
+                   (setf (alist-get (selected-window) places)
+                         (conn--sort-nearest
+                          (alist-get (selected-window) places)))
+                   places))
+         (labels (conn--create-labels
+                  (cl-loop for (_ . list) in places
+                           sum (length list))))
+         (overlays))
     (unwind-protect
         (progn
           (when (and (null (cdr places))
@@ -2318,6 +2324,10 @@ state."
         (unless (region-active-p)
           (conn--push-ephemeral-mark end))))))
  'conn-thing-dispatch)
+
+(defun conn-goto-string-prompt (string)
+  (interactive (list (conn--read-string-with-timeout nil t)))
+  (conn-thing-dispatch 'char nil string))
 
 ;;;;; Tab Registers
 
@@ -3388,7 +3398,7 @@ This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4))
-                        (car (conn--read-string-with-timeout 'backward))))
+                        (conn--read-string-with-timeout 'backward)))
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (backward-char arg)
@@ -3400,7 +3410,7 @@ This command should only be called interactively."
 When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
-   (list (car (conn--read-string-with-timeout 'backward))))
+   (list (conn--read-string-with-timeout 'backward)))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (backward-char)
@@ -3418,7 +3428,7 @@ This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4))
-                        (car (conn--read-string-with-timeout 'forward))))
+                        (conn--read-string-with-timeout 'forward)))
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (forward-char arg)
@@ -3430,7 +3440,7 @@ This command should only be called interactively."
 When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
-   (list (car (conn--read-string-with-timeout 'forward))))
+   (list (conn--read-string-with-timeout 'forward)))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (forward-char)
@@ -5880,7 +5890,8 @@ dispatch on each contiguous component of the region."
   "b"           'switch-to-buffer
   "C"           'org-toggle-comment
   "c"           'conn-C-c-keys
-  "g"           'conn-M-g-keys
+  "G"           'conn-M-g-keys
+  "g"           'conn-thing-dispatch
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
@@ -6122,7 +6133,10 @@ determine if `conn-local-mode' should be enabled."
    'org-backward-element
    'org-next-visible-heading
    'org-previous-visible-heading
-   'org-up-element)
+   'org-forward-heading-same-level
+   'org-backward-heading-same-level
+   'org-up-element
+   'org-up-heading)
 
   (keymap-set (conn-get-mode-map 'conn-state 'org-mode)
               "T" 'conn-org-edit-state)
