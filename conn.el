@@ -145,7 +145,12 @@ Defines default STATE for buffers matching REGEXP."
     (((background light)) (:height 5.0 :foreground "#d00000"))
     (((background dark))  (:height 5.0 :foreground "#7c0000")))
   "Face for conn window prompt overlay."
-  :group conn-mode)
+  :group 'conn-mode)
+
+(defface conn-read-string-match-face
+  '((t (:inherit isearch)))
+  "Face for matches when reading strings."
+  :group 'conn)
 
 (defcustom conn-dot-overlay-priority 1001
   "Priority of dot overlays."
@@ -586,7 +591,7 @@ If BUFFER is nil check `current-buffer'."
   (mapcar (pcase-lambda (pt)
             (let ((ov (make-overlay pt (+ pt (length string)))))
               (overlay-put ov 'conn-overlay t)
-              (overlay-put ov 'face 'isearch)
+              (overlay-put ov 'face 'conn-read-string-match-face)
               ov))
           (conn--visible-matches string dir)))
 
@@ -654,8 +659,11 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--create-window-prompt-overlay (window label)
   (with-current-buffer (window-buffer window)
-    (let ((overlay (make-overlay (window-start window)
-                                 (window-end window))))
+    (let* ((beg (window-start window))
+           (overlay (make-overlay beg (window-end window))))
+      (ignore-errors
+        (goto-char beg)
+        (recenter 2))
       (overlay-put overlay 'conn-overlay t)
       (overlay-put overlay 'face 'shadow)
       (overlay-put overlay 'window window)
@@ -2097,7 +2105,6 @@ state."
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
-
 (defun conn-dispatch-dot (window pt thing)
   (with-selected-window window
     (save-excursion
@@ -2213,12 +2220,16 @@ state."
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
+(defun conn--delete-label-overlay (overlay)
+  (delete-overlay (overlay-get overlay 'char-overlay))
+  (delete-overlay overlay))
+
 (defun conn--narrow-label-overlays (overlays)
   (let ((c (read-char "char:"))
         (narrowed))
     (dolist (ov overlays)
       (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-          (delete-overlay ov)
+          (conn--delete-label-overlay ov)
         (conn--thread -it-
             (overlay-get ov 'before-string)
           (substring -it- 1)
@@ -2249,7 +2260,8 @@ state."
                                             (eq 'conn-dispatch-leader-overlay
                                                 (overlay-get o 'category)))
                                           (overlays-in (1- pt) (1+ end))))
-                     (ov (make-overlay pt end)))
+                     (ov (make-overlay pt end))
+                     (char-ov (make-overlay (1- pt) pt)))
                 (when (null label)
                   (error "Labels exhausted"))
                 (if (null overlap)
@@ -2258,12 +2270,18 @@ state."
                           (overlay-put o 'invisible nil))
                         overlap))
                 (push ov overlays)
+                (overlay-put char-ov 'priority 3000)
+                (overlay-put char-ov 'conn-overlay t)
+                (overlay-put char-ov 'category 'conn-dispatch-char-overlay)
+                (overlay-put char-ov 'window window)
+                (overlay-put char-ov 'face 'conn-read-string-match-face)
+                (overlay-put ov 'char-overlay char-ov)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
                 (overlay-put ov 'category 'conn-dispatch-leader-overlay)
                 (overlay-put ov 'window window)
                 (overlay-put ov 'before-string label)))))
-      (t (mapc #'delete-overlay overlays)))
+      (t (mapc #'conn--delete-label-overlay overlays)))
     overlays))
 
 (defun conn-thing-dispatch (thing action &optional repeat)
@@ -2306,10 +2324,10 @@ state."
            (select-window (overlay-get (car overlays) 'window))
            (push-mark nil t)
            (goto-char (overlay-start (car overlays))))
-         (mapc #'delete-overlay overlays)
+         (mapc #'conn--delete-label-overlay overlays)
          (setq overlays nil)
          (unless repeat (cl-return)))
-      (mapc #'delete-overlay overlays))))
+      (mapc #'conn--delete-label-overlay overlays))))
 
 (conn-set-command-handler
  (lambda (start)
