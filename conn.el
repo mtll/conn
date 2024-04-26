@@ -332,19 +332,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 (put 'conn--mark-cursor 'conn-overlay t)
 
-;;;;; Dot Undo Ring Variables
-
-(defvar-local conn--dot-undoing nil)
-
-(defvar-local conn--dot-undo-ring nil)
-
-(defvar-local conn--dot-undone nil)
-
-(defvar-local conn--dot-this-undo nil)
-
-(defvar conn-dot-undo-ring-max 32
-  "Maximum size of the dot undo ring.")
-
 ;;;;; Aux Map Variables
 
 (defvar conn--aux-bindings nil)
@@ -1379,19 +1366,6 @@ The iterator must be the first argument in ARGLIST.
           (conn--all-overlays
            (lambda (ov) (overlay-get ov 'conn-overlay))))))
 
-(defun conn--dot-after-change-function (&rest _)
-  (setq conn--dot-undo-ring nil))
-
-(defun conn--dot-post-command ()
-  (when conn--dot-this-undo
-    (setq conn--dot-undone nil)
-    (push conn--dot-this-undo conn--dot-undo-ring)
-    (when (> (length conn--dot-undo-ring)
-             conn-dot-undo-ring-max)
-      (setq conn--dot-undo-ring
-            (seq-take conn--dot-undo-ring conn-dot-undo-ring-max)))
-    (setq conn--dot-this-undo nil)))
-
 (defun conn--dot-before-point (point)
   (unless (= point (point-min))
     (seq-find #'conn-dotp (overlays-in (1- point) point))))
@@ -1411,16 +1385,9 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 (defun conn--move-dot (dot start end)
   (let ((old-start (overlay-start dot))
         (old-end (overlay-end dot)))
-    (move-overlay dot start end)
-    (unless (or conn--dot-undoing
-                conn-macro-dispatch-p)
-      (push `(move (,start . ,end) . (,old-start . ,old-end))
-            conn--dot-this-undo))))
+    (move-overlay dot start end)))
 
 (defun conn--delete-dot (dot)
-  (unless (or conn--dot-undoing conn-macro-dispatch-p)
-    (push `(delete ,(overlay-start dot) . ,(overlay-end dot))
-          conn--dot-this-undo))
   (overlay-put dot 'dot nil)
   (delete-overlay dot))
 
@@ -1434,10 +1401,7 @@ Optionally between START and END and sorted by SORT-PREDICATE."
              (end (apply #'max end (mapcar #'overlay-end overlaps)))
              (overlay (make-overlay start end nil nil t)))
         (mapc #'conn--delete-dot overlaps)
-        (overlay-put overlay 'category 'conn--dot)
-        (unless (or conn--dot-undoing
-                    conn-macro-dispatch-p)
-          (push `(create ,start . ,end) conn--dot-this-undo))))))
+        (overlay-put overlay 'category 'conn--dot)))))
 
 (defun conn--remove-dots (&optional start end)
   (mapc #'conn--delete-dot (conn--all-overlays #'conn-dotp start end)))
@@ -2051,19 +2015,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :transitions (define-keymap
                  "\\" 'conn-dispatch-prefix
                  "f"  'conn-state
-                 "Q"  'conn-dot-quit)
-  (if conn-dot-state
-      (progn
-        (setq conn--dot-undo-ring nil)
-        (conn--for-each-dot
-         (lambda (dot)
-           (push `(create ,(overlay-start dot) . ,(overlay-end dot))
-                 conn--dot-this-undo)))
-        (add-hook 'post-command-hook #'conn--dot-post-command t t)
-        (add-hook 'after-change-functions #'conn--dot-after-change-function t t))
-    (setq conn--dot-undo-ring nil)
-    (remove-hook 'after-change-functions #'conn--dot-after-change-function t)
-    (remove-hook 'post-command-hook #'conn--dot-post-command t)))
+                 "Q"  'conn-dot-quit))
 
 (conn-define-state conn-org-edit-state
   "Activate `conn-org-edit-state' in the current buffer.
@@ -2562,71 +2514,6 @@ With a numerical prefix argument read buffers using `completing-read'."
             (conn--end-of-region-or-restriction))))
   (when (called-interactively-p 'interactive)
     (message "Dots removed")))
-
-(defun conn-dot-undo ()
-  "Undo last dot change.
-Dot undo ring is invalidated whenever the buffer or state changes."
-  (interactive)
-  (unless conn--dot-undo-ring
-    (user-error "Dot undo ring is empty"))
-  (let ((this-undo (car (push (pop conn--dot-undo-ring) conn--dot-undone)))
-        (conn--dot-undoing t))
-    (dolist (action (sort this-undo
-                          ;; We need to undo creation first
-                          ;; to avoid possible overlaps
-                          (lambda (a1 _a2)
-                            (eq (car a1) 'create))))
-      (pcase action
-        (`(create ,beg . ,end)
-         (let ((dot (or (conn--dot-after-point beg)
-                        (error "Dot undo ring corrupted"))))
-           (conn--delete-dot dot))
-         (goto-char beg)
-         (conn--push-ephemeral-mark end))
-        (`(delete ,beg . ,end)
-         (conn--create-dots (cons beg end))
-         (goto-char beg)
-         (conn--push-ephemeral-mark end))
-        (`(move (,to-beg . ,_to-end) . (,from-beg . ,from-end))
-         (let ((dot (or (conn--dot-after-point to-beg)
-                        (error "Dot undo ring corrupted"))))
-           (conn--move-dot dot from-beg from-end))
-         (goto-char from-beg)
-         (conn--push-ephemeral-mark from-end))))
-    (when (called-interactively-p 'interactive)
-      (message "Dots undone"))))
-
-(defun conn-dot-redo ()
-  "Redo last dot change.
-Dot undo ring is invalidated whenever the buffer or state changes."
-  (interactive)
-  (unless conn--dot-undone
-    (user-error "No further redo information"))
-  (let ((this-redo (car (push (pop conn--dot-undone) conn--dot-undo-ring)))
-        (conn--dot-undoing t))
-    (dolist (action (sort this-redo
-                          ;; And here we need to redo deletion first
-                          (lambda (a1 _a2)
-                            (eq (car a1) 'delete))))
-      (pcase action
-        (`(create ,beg . ,end)
-         (conn--create-dots (cons beg end))
-         (goto-char beg)
-         (conn--push-ephemeral-mark end))
-        (`(delete ,beg . ,end)
-         (let ((dot (or (conn--dot-after-point beg)
-                        (error "Dot undo ring corrupted"))))
-           (conn--delete-dot dot))
-         (goto-char beg)
-         (conn--push-ephemeral-mark end))
-        (`(move (,to-beg . ,to-end) . (,from-beg . ,_from-end))
-         (let ((dot (or (conn--dot-after-point from-beg)
-                        (error "Dot undo ring corrupted"))))
-           (conn--move-dot dot to-beg to-end))
-         (goto-char to-beg)
-         (conn--push-ephemeral-mark to-end))))
-    (when (called-interactively-p 'interactive)
-      (message "Dots redone"))))
 
 (defun conn-first-dot ()
   "Go to the end of the first dot in buffer."
@@ -5755,12 +5642,10 @@ dispatch on each contiguous component of the region."
 (define-keymap
   :keymap conn-dot-state-map
   "M-<down-mouse-1>" 'conn-dot-at-click
-  "M-/"              'conn-dot-undo
   "<return>"         'conn-dot-lines
   "RET"              'conn-dot-lines
   "<backspace>"      'conn-remove-dot-backward
   "DEL"              'conn-remove-dot-backward
-  "M-?"              'conn-dot-redo
   "C-p"              'conn-previous-dot
   "C-n"              'conn-next-dot
   "C-M-p"            'conn-first-dot
