@@ -551,7 +551,6 @@ first line of the documentation string; for keyboard macros use
   "h" 'conn--local-mark-thing-map
   "C-h" 'help)
 
-;; TODO: sorting and affixation
 (defun conn--completing-read-keymap (keymap)
   (let* ((col 0)
          (cmds (mapcar (pcase-lambda (`(,key . ,def))
@@ -562,12 +561,19 @@ first line of the documentation string; for keyboard macros use
                                        def))))
                        (conn--get-map-bindings nil keymap t)))
          (cmds (mapcar (pcase-lambda (`(,key ,name . ,def))
-                         (cons (concat (propertize (string-pad key (+ col 2))
-                                                   'face 'help-key-binding)
-                                       name)
-                               def))
+                         (thread-first
+                           (propertize (string-pad key (+ col 2))
+                                       'face 'help-key-binding)
+                           (concat name)
+                           (cons def)))
                        cmds)))
-    (alist-get (completing-read "Command: " cmds) cmds nil nil #'equal)))
+    (conn--thread -it-
+        (lambda (string predicate action)
+          (if (eq action 'metadata)
+              `(metadata (display-sort-function . identity))
+            (complete-with-action action cmds string predicate)))
+      (completing-read "Command: " -it- nil t)
+      (alist-get -it- cmds nil nil #'equal))))
 
 (defun conn--read-thing-keymap ()
   (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
@@ -663,13 +669,14 @@ first line of the documentation string; for keyboard macros use
     (list (cons (selected-window)
                 (conn--read-string-preview-overlays-1 string dir)))))
 
-(defun conn--read-string-with-timeout (timeout &optional dir all-windows)
+(defun conn--read-string-with-timeout (&optional dir all-windows)
   (let* ((string (char-to-string (read-char "string: " t)))
          (overlays (conn--read-string-preview-overlays string dir all-windows))
          next-char
          results)
     (unwind-protect
-        (while (setq next-char (read-char (format "string: %s" string) t timeout))
+        (while (setq next-char (read-char (format "string: %s" string) t
+                                          conn-read-string-timout))
           (setq string (concat string (char-to-string next-char)))
           (pcase-dolist (`(,_win . ,ovs) overlays)
             (mapc #'delete-overlay ovs))
@@ -2281,22 +2288,21 @@ state."
                  (keyboard-quit))
                 ('help
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (conn--completing-read-keymap keymap))
+                 (setq cmd (save-window-excursion
+                             (conn--completing-read-keymap keymap)))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
                 ((guard (where-is-internal cmd conn-dispatch-command-maps))
                  (setq action (unless (eq cmd action) cmd)
                        cmd (thread-first
-                             (concat
-                              prompt
-                              (when action (conn--stringify action)))
+                             (concat prompt (when action (conn--stringify action)))
                              (read-key-sequence)
                              (key-binding t))))
                 (_
                  (setq cmd (thread-first
-                             (concat
-                              prompt
-                              (when action (conn--stringify action " - "))
-                              (propertize "Invalid dispatch command" 'face 'error))
+                             prompt
+                             (concat (when action (conn--stringify action " - "))
+                                     (propertize "Invalid dispatch command"
+                                                 'face 'error))
                              (read-key-sequence)
                              (key-binding t))))))
             (cons (get cmd :conn-command-thing) action))
@@ -2310,16 +2316,15 @@ state."
                 conn-dispatch-leader-faces)
      chars)))
 
-(defun conn-dispatch-thing ()
+(defun conn-thing-dispatch ()
   (interactive)
   (pcase-let* ((`(,thing . ,action) (conn--read-dispatch-command))
-               (`(,_str . ,places)  (conn--read-string-with-timeout
-                                     conn-read-string-timout nil t))
-               (labels (conn--create-labels
-                        (conn--thread -it-
-                            places
-                          (mapcar (lambda (l) (length (cdr l))) -it-)
-                          (seq-reduce #'+ -it- 0))))
+               (`(,_str . ,places)  (conn--read-string-with-timeout nil t))
+               (labels              (conn--create-labels
+                                     (conn--thread -it-
+                                         places
+                                       (mapcar (lambda (l) (length (cdr l))) -it-)
+                                       (seq-reduce #'+ -it- 0))))
                (overlays))
     (unwind-protect
         (progn
@@ -2390,7 +2395,7 @@ state."
         (goto-char beg)
         (unless (region-active-p)
           (conn--push-ephemeral-mark end))))))
- 'conn-dispatch-thing)
+ 'conn-thing-dispatch)
 
 ;;;;; Tab Registers
 
@@ -3461,8 +3466,7 @@ This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4))
-                        (car (conn--read-string-with-timeout
-                              conn-read-string-timout 'backward))))
+                        (car (conn--read-string-with-timeout 'backward))))
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (backward-char arg)
@@ -3474,8 +3478,7 @@ This command should only be called interactively."
 When called interactively reads STRING with timeout
 `conn-read-string-timout'."
   (interactive
-   (list (car (conn--read-string-with-timeout
-               conn-read-string-timout 'backward))))
+   (list (car (conn--read-string-with-timeout 'backward))))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (backward-char)
@@ -3493,8 +3496,7 @@ This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
                        ((or '1 '(4))
-                        (car (conn--read-string-with-timeout
-                              conn-read-string-timout 'forward))))
+                        (car (conn--read-string-with-timeout 'forward))))
                      (prefix-numeric-value current-prefix-arg)))
   (if (null string)
       (forward-char arg)
@@ -3506,8 +3508,7 @@ This command should only be called interactively."
 When called interactively reads STRING with timeout
 `conn-read-string-timout'."
   (interactive
-   (list (car (conn--read-string-with-timeout
-               conn-read-string-timout 'forward))))
+   (list (car (conn--read-string-with-timeout 'forward))))
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (forward-char)
@@ -5917,7 +5918,7 @@ dispatch on each contiguous component of the region."
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "G"     'conn-M-g-keys
-  "g"     'conn-dispatch-thing
+  "g"     'conn-thing-dispatch
   "H"     'conn-expand
   "h"     'repeat
   "I"     'conn-backward-paragraph-keys
