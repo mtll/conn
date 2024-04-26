@@ -46,11 +46,13 @@
 
 ;;;;; Declerations
 
-;; Some of the following custom vars need these
-;; vars so we need to declare them up here.
 (defvar conn-mode nil)
 (defvar conn-local-mode)
 (defvar conn-modes)
+(defvar conn-state)
+(defvar conn-emacs-state)
+(defvar conn-dot-state)
+(defvar conn-org-edit-state)
 (defvar conn-local-map)
 (defvar conn-emacs-state)
 (defvar kmacro-step-edit-replace)
@@ -196,7 +198,7 @@ Supported values are:
   :group 'conn
   :type '(repeat symbol))
 
-(defcustom conn-read-pair-split-string "	"
+(defcustom conn-read-pair-split-char " "
   "String on which to split `conn-insert-pair' brackets."
   :group 'conn
   :type 'string)
@@ -404,7 +406,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defmacro conn-with-state (state &rest body)
   (declare (indent 1))
   (let ((restore (make-symbol "restore")))
-    `(let ((,restore (unless (eq conn-current-state ',state)
+    `(let ((,restore (unless ,state
                        (prog1 (cons conn-current-state
                                     conn-previous-state)
                          (,state)))))
@@ -413,6 +415,19 @@ Used to restore previous value when `conn-mode' is disabled.")
          (when ,restore
            (funcall (car ,restore))
            (setq conn-previous-state (cdr ,restore)))))))
+
+;; From orderless
+(defun conn-escapable-split-on-char (string char)
+  "Split STRING on CHAR, which can be escaped with backslash."
+  (let ((quoted (concat "\\" char)))
+    (mapcar
+     (lambda (piece) (replace-regexp-in-string (string 0) char piece))
+     (split-string (replace-regexp-in-string
+                    (concat "\\\\\\" (substring quoted 0 (1- (length quoted)))
+                            "\\|\\\\" quoted)
+                    (lambda (x) (if (equal x quoted) (string 0) x))
+                    string 'fixedcase 'literal)
+                   (concat quoted "+")))))
 
 ;; From repeat-mode
 (defun conn--command-property (property)
@@ -3597,12 +3612,13 @@ See `clone-indirect-buffer' for meaning of indirect buffer."
   (conn--narrow-indirect beg end))
 
 (defun conn--read-pair ()
-  (pcase (string-split (minibuffer-with-setup-hook
-                           (lambda ()
-                             (when (boundp 'electric-pair-mode)
-                               (electric-pair-mode -1)))
-                         (read-string "Pair: " nil 'conn-pair-history))
-                       conn-read-pair-split-string)
+  (pcase (conn-escapable-split-on-char
+          (minibuffer-with-setup-hook
+              (lambda ()
+                (when (boundp 'electric-pair-mode)
+                  (electric-pair-mode -1)))
+            (read-string "Pair: " nil 'conn-pair-history))
+          conn-read-pair-split-char)
     (`(,front ,back . nil) (cons front back))
     (`(,str) (conn--thread -it-
                  (lambda (char)
@@ -3618,8 +3634,8 @@ See `clone-indirect-buffer' for meaning of indirect buffer."
 (defun conn-insert-pair (brackets beg end)
   "Insert BRACKETS at BEG and END.
 Brackets are matched using `insert-pair-alist'.  If BRACKETS contains
-`conn-read-pair-split-string' then split BRACKETS on
-`conn-read-pair-split-string' and use the first part as the beginning
+`conn-read-pair-split-char' then split BRACKETS on
+`conn-read-pair-split-char' and use the first part as the beginning
 brackets and the second part as the end brackets.
 When called interactively inserts STRING at `point' and `mark'."
   (interactive (list (conn--read-pair)
