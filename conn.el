@@ -2127,7 +2127,12 @@ state."
       (goto-char pt)
       (pcase (bounds-of-thing-at-point thing)
         ('nil (user-error "No thing at point"))
-        (reg (conn--create-dots reg))))))
+        ((and `(,beg . ,end) reg)
+         (if-let ((dot (conn--dot-after-point beg))
+                  (_ (and (= beg (overlay-start dot))
+                          (= end (overlay-end dot)))))
+             (conn--delete-dot dot)
+           (conn--create-dots reg)))))))
 
 (defun conn-dispatch-grab (window pt thing)
   (with-selected-window window
@@ -2231,11 +2236,11 @@ state."
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
-(defun conn-thing-dispatch (thing action string)
+(defun conn-thing-dispatch (thing action string &optional repeat)
   (interactive
    (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command))
                (string (conn--read-string-with-timeout nil t)))
-     (list thing action string)))
+     (list thing action string current-prefix-arg)))
   (let* ((places (let (places)
                    (walk-windows
                     (lambda (win)
@@ -2311,7 +2316,8 @@ state."
             (select-window (overlay-get (car overlays) 'window))
             (push-mark nil t)
             (goto-char (overlay-start (car overlays)))))
-      (mapc #'delete-overlay overlays))))
+      (mapc #'delete-overlay overlays))
+    (when repeat (conn-thing-dispatch thing action string repeat))))
 
 (conn-set-command-handler
  (lambda (start)
