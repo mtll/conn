@@ -401,6 +401,19 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
+(defmacro conn-with-state (state &rest body)
+  (declare (indent 1))
+  (let ((restore (make-symbol "restore")))
+    `(let ((,restore (unless (eq conn-current-state ,state)
+                       (prog1 (cons conn-current-state
+                                    conn-previous-state)
+                         (,state)))))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (when ,restore
+           (funcall (car ,restore))
+           (setq conn-previous-state (cdr ,restore)))))))
+
 ;; From repeat-mode
 (defun conn--command-property (property)
   (or (and (symbolp this-command)
@@ -2154,39 +2167,40 @@ state."
         (prompt (concat "Thing Dispatch "
                         "(" (propertize "C-h" 'face 'help-key-binding) " for commands): "))
         (action))
-    (with-temp-message ""
-      (internal-push-keymap keymap 'overriding-terminal-local-map)
-      (unwind-protect
-          (let ((cmd (key-binding (read-key-sequence prompt) t)))
-            (while (not (get cmd :conn-command-thing))
-              (pcase cmd
-                ('keyboard-quit
-                 (keyboard-quit))
-                ('help
-                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (let ((read-extended-command-predicate
-                                  (lambda (symbol _)
-                                    (and (or (get symbol :conn-command-thing)
-                                             (where-is-internal symbol (list keymap)))
-                                         (not (eq 'help) symbol)))))
-                             (read-extended-command)))
-                 (internal-push-keymap keymap 'overriding-terminal-local-map))
-                ((guard (where-is-internal cmd conn-dispatch-command-maps))
-                 (setq action (unless (eq cmd action) cmd)
-                       cmd (thread-first
-                             (concat prompt (when action (conn--stringify action)))
-                             (read-key-sequence)
-                             (key-binding t))))
-                (_
-                 (setq cmd (thread-first
-                             prompt
-                             (concat (when action (conn--stringify action " - "))
-                                     (propertize "Invalid dispatch command"
-                                                 'face 'error))
-                             (read-key-sequence)
-                             (key-binding t))))))
-            (cons (get cmd :conn-command-thing) action))
-        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+    (conn-with-state conn-state
+      (with-temp-message ""
+        (internal-push-keymap keymap 'overriding-terminal-local-map)
+        (unwind-protect
+            (let ((cmd (key-binding (read-key-sequence prompt) t)))
+              (while (not (get cmd :conn-command-thing))
+                (pcase cmd
+                  ('keyboard-quit
+                   (keyboard-quit))
+                  ('help
+                   (internal-pop-keymap keymap 'overriding-terminal-local-map)
+                   (setq cmd (let ((read-extended-command-predicate
+                                    (lambda (symbol _)
+                                      (and (or (get symbol :conn-command-thing)
+                                               (where-is-internal symbol (list keymap)))
+                                           (not (eq 'help) symbol)))))
+                               (read-extended-command)))
+                   (internal-push-keymap keymap 'overriding-terminal-local-map))
+                  ((guard (where-is-internal cmd conn-dispatch-command-maps))
+                   (setq action (unless (eq cmd action) cmd)
+                         cmd (thread-first
+                               (concat prompt (when action (conn--stringify action)))
+                               (read-key-sequence)
+                               (key-binding t))))
+                  (_
+                   (setq cmd (thread-first
+                               prompt
+                               (concat (when action (conn--stringify action " - "))
+                                       (propertize "Invalid dispatch command"
+                                                   'face 'error))
+                               (read-key-sequence)
+                               (key-binding t))))))
+              (cons (get cmd :conn-command-thing) action))
+          (internal-pop-keymap keymap 'overriding-terminal-local-map))))))
 
 (defun conn-thing-dispatch (thing action string &optional repeat)
   (interactive
