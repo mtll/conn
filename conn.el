@@ -234,6 +234,11 @@ Supported values are:
   :group 'conn
   :type 'string)
 
+(defcustom conn-dispatch-thing-ignored-modes
+  '(image-mode doc-view-mode pdf-view-mode)
+  "List of modes to ignore when searching for dispatch candidates."
+  :type 'list)
+
 ;;;;; State Variables
 
 (defvar conn-states nil)
@@ -660,8 +665,9 @@ first line of the documentation string; for keyboard macros use
          (lambda (win)
            (with-selected-window win
              (with-current-buffer (window-buffer win)
-               (setf (alist-get win ovs)
-                     (conn--read-string-preview-overlays-1 string dir)))))
+               (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+                 (setf (alist-get win ovs)
+                       (conn--read-string-preview-overlays-1 string dir))))))
          'no-minibuf 'visible)
         (seq-sort (lambda (_ b)
                     (eq (selected-window) (car b)))
@@ -2322,10 +2328,8 @@ state."
   (pcase-let* ((`(,thing . ,action) (conn--read-dispatch-command))
                (`(,_str . ,places)  (conn--read-string-with-timeout nil t))
                (labels              (conn--create-labels
-                                     (conn--thread -it-
-                                         places
-                                       (mapcar (lambda (l) (length (cdr l))) -it-)
-                                       (seq-reduce #'+ -it- 0))))
+                                     (cl-loop for (_ . list) in places
+                                              sum (length list))))
                (overlays))
     (unwind-protect
         (progn
