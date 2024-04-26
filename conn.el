@@ -2153,6 +2153,13 @@ state."
             (message "Copied: %s" str))
         (user-error "No thing at point")))))
 
+(defun conn-dispatch-goto (window pt thing)
+  (setq conn-this-command-thing thing)
+  (with-current-buffer (window-buffer window)
+    (push-mark nil t)
+    (select-window window)
+    (goto-char pt)))
+
 (defun conn-dispatch-transpose (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
@@ -2222,10 +2229,10 @@ state."
                             "Command: "
                             (lambda (string pred action)
                               (if (eq action 'metadata)
-	                          `(metadata
-	                            ,(cons 'affixation-function
+                                  `(metadata
+                                    ,(cons 'affixation-function
                                            (conn--read-dispatch-command-affixation keymap))
-	                            (category . conn-dispatch-command))
+                                    (category . conn-dispatch-command))
                                 (complete-with-action action obarray string pred)))
                             (lambda (sym)
                               (and (functionp sym)
@@ -2251,17 +2258,15 @@ state."
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
-(defun conn--delete-label-overlay (overlay)
-  (when-let ((prefix (overlay-get overlay 'prefix-overlay)))
-    (delete-overlay prefix))
-  (delete-overlay overlay))
-
 (defun conn--narrow-label-overlays (overlays)
   (let ((c (read-char "char:"))
         (narrowed))
     (dolist (ov overlays)
       (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-          (conn--delete-label-overlay ov)
+          (progn
+            (when-let ((prefix (overlay-get ov 'prefix-overlay)))
+              (overlay-put prefix 'face nil))
+            (delete-overlay ov))
         (conn--thread -it-
             (overlay-get ov 'before-string)
           (substring -it- 1)
@@ -2287,9 +2292,14 @@ state."
                                        (overlay-end p)))
                      (label (pop labels))
                      (end (min (+ pt (length label))
+                               ;; Be sure not to make the
+                               ;; newline char invisible
                                (save-excursion
                                  (goto-char pt)
                                  (line-end-position))))
+                     ;; Find any overlaps here so that we can
+                     ;; avoid making them invisible (or having
+                     ;; them make us invisible) later.
                      (overlap (seq-filter (lambda (o)
                                             (memq (overlay-get o 'category)
                                                   '(conn-dispatch-leader-overlay
@@ -2317,15 +2327,43 @@ state."
     overlays))
 
 (defun conn-thing-dispatch (thing action &optional repeat)
+  "Begin dispatching ACTION on a THING.
+
+The user is first prompted for a either a THING or an ACTION
+to be performed followed by a THING to perform it on.  If
+no ACTION is selected the default ACTION is to go to the THING.
+
+Actions and things are selected via keybindings.  Actions are
+bound in the keymaps in `conn-dispatch-command-maps' which are
+active during prompting.  Things are associated with movement
+commands and pressing the binding for a movement command selects
+that commands THING (e.g. forward-sexp will select sexp as the
+THING to operate on).
+
+Once a THING has been selected the user is prompted for a string and
+the THING at the location selected is acted upon.
+
+The string is read with an idle timeout of `conn-read-string-timeout'
+seconds."
   (interactive
    (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command)))
-     (list thing action current-prefix-arg)))
+     (list thing
+           (or action 'conn-dispatch-goto)
+           current-prefix-arg)))
   (let* ((prefix-ovs (seq-group-by (lambda (ov) (overlay-get ov 'window))
                                    (cdr (conn--read-string-with-timeout-1 nil t))))
          (labels (conn--create-labels
                   (cl-loop for (_ . ps) in prefix-ovs
                            sum (length ps))))
          (overlays))
+    (setf prefix-ovs (seq-sort (lambda (a b)
+                                 (eq (selected-window) (car a)))
+                               prefix-ovs)
+          (alist-get (selected-window) prefix-ovs)
+          (seq-sort (lambda (a b)
+                      (< (abs (- (overlay-start a) (point)))
+                         (abs (- (overlay-start b) (point)))))
+                    (alist-get (selected-window) prefix-ovs)))
     (unwind-protect
         (cl-loop
          (when (null labels)
@@ -2335,21 +2373,18 @@ state."
            (setq overlays (conn--narrow-label-overlays overlays)))
          (unless overlays
            (user-error "No matching label"))
-         (if action
-             (funcall action
-                      (overlay-get (car overlays) 'window)
-                      (overlay-start (car overlays))
-                      thing)
-           (setq conn-this-command-thing thing)
-           (select-window (overlay-get (car overlays) 'window))
-           (push-mark nil t)
-           (goto-char (overlay-start (car overlays))))
+         (funcall action
+                  (overlay-get (car overlays) 'window)
+                  (overlay-start (car overlays))
+                  thing)
          (mapc #'delete-overlay overlays)
+         (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
+           (dolist (ov ovs)
+             (overlay-put ov 'face 'conn-read-string-match-face)))
          (setq overlays nil)
          (unless repeat (cl-return)))
       (mapc #'delete-overlay overlays)
-      (mapc (lambda (l) (mapc #'delete-overlay (cdr l)))
-            prefix-ovs))))
+      (mapc (lambda (l) (mapc #'delete-overlay (cdr l))) prefix-ovs))))
 
 (conn-set-command-handler
  (lambda (start)
@@ -2364,6 +2399,7 @@ state."
  'conn-thing-dispatch)
 
 (defun conn-goto-string-prompt (string)
+  "Jump to STRING."
   (interactive (list (conn--read-string-with-timeout nil t)))
   (conn-thing-dispatch 'char nil string))
 
