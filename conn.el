@@ -5359,7 +5359,7 @@ dispatch on each contiguous component of the region."
       ("step-edit" (conn--macro-dispatch-step-edit -it-))
       (_ (conn--macro-dispatch -it-)))))
 
-(transient-define-prefix conn-dispatch-prefix (args)
+(transient-define-prefix conn-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
   [:description
    conn--kmacro-ring-display
@@ -5379,6 +5379,11 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("M" "Display"
+     (lambda ()
+       (interactive)
+       (kmacro-display last-kbd-macro t))
+     :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   [:description
    "Dispatch"
@@ -5399,7 +5404,10 @@ dispatch on each contiguous component of the region."
    [(conn--dispatch-merge-undo-infix)
     (conn--dispatch-save-windows-infix)]
    [(conn--dispatch-save-restriction-infix)
-    (conn--dispatch-save-excursion-infix)]])
+    (conn--dispatch-save-excursion-infix)]]
+  (interactive)
+  (kmacro-display last-kbd-macro t)
+  (transient-setup 'conn-dispatch-prefix))
 
 (transient-define-prefix conn-isearch-dispatch-prefix ()
   "Transient menu for macro dispatch on regions."
@@ -5426,6 +5434,11 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("M" "Display"
+     (lambda ()
+       (interactive)
+       (kmacro-display last-kbd-macro t))
+     :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   ["Dispatch"
    [(conn--isearch-dispatch-suffix)
@@ -5442,7 +5455,10 @@ dispatch on each contiguous component of the region."
    [(conn--dispatch-merge-undo-infix)
     (conn--dispatch-save-windows-infix)]
    [(conn--dispatch-save-restriction-infix)
-    (conn--dispatch-save-excursion-infix)]])
+    (conn--dispatch-save-excursion-infix)]]
+  (interactive)
+  (kmacro-display last-kbd-macro t)
+  (transient-setup 'conn-isearch-dispatch-prefix))
 
 (transient-define-prefix conn-regions-dispatch-prefix (iterator)
   "Transient menu for macro dispatch on regions."
@@ -5464,6 +5480,11 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("M" "Display"
+     (lambda ()
+       (interactive)
+       (kmacro-display last-kbd-macro t))
+     :transient t)
     ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
   ["Dispatch"
    [(conn--regions-dispatch-suffix)]
@@ -5480,6 +5501,7 @@ dispatch on each contiguous component of the region."
     (conn--dispatch-save-excursion-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
+  (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-regions-dispatch-prefix nil nil :scope iterator))
 
 
