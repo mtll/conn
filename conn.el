@@ -417,7 +417,7 @@ Used to restore previous value when `conn-mode' is disabled.")
            (setq conn-previous-state (cdr ,restore)))))))
 
 ;; From orderless
-(defun conn-escapable-split-on-char (string char)
+(defun conn--escapable-split-on-char (string char)
   "Split STRING on CHAR, which can be escaped with backslash."
   (let ((quoted (concat "\\" char)))
     (mapcar
@@ -2213,33 +2213,29 @@ state."
               (cons (get cmd :conn-command-thing) action))
           (internal-pop-keymap keymap 'overriding-terminal-local-map))))))
 
-(defun conn-thing-dispatch (thing action string &optional repeat)
-  (interactive
-   (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command))
-               (string (conn--read-string-with-timeout nil t)))
-     (list thing action string current-prefix-arg)))
-  (let* ((places (let (places)
-                   (walk-windows
-                    (lambda (win)
-                      (with-current-buffer (window-buffer win)
-                        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-                          (push (cons win (conn--visible-matches string))
-                                places))))
-                    'no-minibuf 'visible)
-                   (setf (alist-get (selected-window) places)
-                         (conn--sort-nearest
-                          (alist-get (selected-window) places)))
-                   places))
-         (labels (conn--create-labels
-                  (cl-loop for (_ . list) in places
-                           sum (length list))))
-         (overlays))
-    (unwind-protect
-        (progn
-          (when (and (null (cdr places))
-                     (null (cdar places)))
-            (user-error "No matching candidates"))
+(defun conn--narrow-label-overlays (overlays)
+  (let ((c (read-char "char:"))
+        (narrowed))
+    (dolist (ov overlays)
+      (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
+          (delete-overlay ov)
+        (conn--thread -it-
+            (overlay-get ov 'before-string)
+          (substring -it- 1)
+          (overlay-put ov 'before-string -it-))
+        (move-overlay ov
+                      (overlay-start ov)
+                      (+ (overlay-start ov)
+                         (max (length (overlay-get ov 'before-string))
+                              (- (overlay-start ov)
+                                 (overlay-end ov)))))
+        (push ov narrowed)))
+    narrowed))
 
+(defun conn--create-label-overlays (labels places)
+  (let (overlays)
+    (condition-case _
+        (progn
           (pcase-dolist (`(,window . ,points) places)
             (with-current-buffer (window-buffer window)
               (dolist (pt points)
@@ -2266,35 +2262,53 @@ state."
                   (overlay-put ov 'category 'conn-dispatch-leader-overlay)
                   (overlay-put ov 'window window)
                   (overlay-put ov 'before-string label)))))
+          overlays)
+      (t (mapc #'delete-overlay overlays)))))
 
-          (while (cdr overlays)
-            (let ((c (read-char "char:"))
-                  (next))
-              (dolist (ov overlays)
-                (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-                    (delete-overlay ov)
-                  (conn--thread -it-
-                      (overlay-get ov 'before-string)
-                    (substring -it- 1)
-                    (overlay-put ov 'before-string -it-))
-                  (move-overlay ov (overlay-start ov) (1- (overlay-end ov)))
-                  (push ov next)))
-              (setq overlays next)))
-
-          (unless overlays
-            (user-error "No matching label"))
-
-          (if action
-              (funcall action
-                       (overlay-get (car overlays) 'window)
-                       (overlay-start (car overlays))
-                       thing)
-            (setq conn-this-command-thing thing)
-            (select-window (overlay-get (car overlays) 'window))
-            (push-mark nil t)
-            (goto-char (overlay-start (car overlays)))))
-      (mapc #'delete-overlay overlays))
-    (when repeat (conn-thing-dispatch thing action string repeat))))
+(defun conn-thing-dispatch (thing action &optional repeat)
+  (interactive
+   (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command)))
+     (list thing action current-prefix-arg)))
+  (let* ((string (conn--read-string-with-timeout nil t))
+         (places (let (places)
+                   (walk-windows
+                    (lambda (win)
+                      (with-current-buffer (window-buffer win)
+                        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+                          (push (cons win (conn--visible-matches string))
+                                places))))
+                    'no-minibuf 'visible)
+                   (setf (alist-get (selected-window) places)
+                         (conn--sort-nearest
+                          (alist-get (selected-window) places)))
+                   places))
+         (labels (conn--create-labels
+                  (cl-loop for (_ . list) in places
+                           sum (length list))))
+         (overlays))
+    (unwind-protect
+        (cl-loop
+         (when (and (null (cdr places))
+                    (null (cdar places)))
+           (user-error "No matching candidates"))
+         (setq overlays (conn--create-label-overlays labels places))
+         (while (cdr overlays)
+           (setq overlays (conn--narrow-label-overlays overlays)))
+         (unless overlays
+           (user-error "No matching label"))
+         (if action
+             (funcall action
+                      (overlay-get (car overlays) 'window)
+                      (overlay-start (car overlays))
+                      thing)
+           (setq conn-this-command-thing thing)
+           (select-window (overlay-get (car overlays) 'window))
+           (push-mark nil t)
+           (goto-char (overlay-start (car overlays))))
+         (mapc #'delete-overlay overlays)
+         (setq overlays nil)
+         (unless repeat (cl-return)))
+      (mapc #'delete-overlay overlays))))
 
 (conn-set-command-handler
  (lambda (start)
@@ -3612,7 +3626,7 @@ See `clone-indirect-buffer' for meaning of indirect buffer."
   (conn--narrow-indirect beg end))
 
 (defun conn--read-pair ()
-  (pcase (conn-escapable-split-on-char
+  (pcase (conn--escapable-split-on-char
           (minibuffer-with-setup-hook
               (lambda ()
                 (when (boundp 'electric-pair-mode)
