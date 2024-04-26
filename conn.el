@@ -592,6 +592,7 @@ If BUFFER is nil check `current-buffer'."
             (let ((ov (make-overlay pt (+ pt (length string)))))
               (overlay-put ov 'conn-overlay t)
               (overlay-put ov 'face 'conn-read-string-match-face)
+              (overlay-put ov 'window (selected-window))
               ov))
           (conn--visible-matches string dir)))
 
@@ -613,19 +614,23 @@ If BUFFER is nil check `current-buffer'."
               (< (abs (- a (point))) (abs (- b (point)))))
             pts))
 
-(defun conn--read-string-with-timeout (&optional dir all-windows)
+(defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (with-temp-message ""
     (let* ((string (char-to-string (read-char "string: " t)))
            (overlays (conn--read-string-preview-overlays string dir all-windows))
            next-char)
-      (unwind-protect
-          (while (setq next-char (read-char (format "string: %s" string) t
-                                            conn-read-string-timeout))
-            (setq string (concat string (char-to-string next-char)))
-            (mapc #'delete-overlay overlays)
-            (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
-        (mapc #'delete-overlay overlays))
-      string)))
+      (while (setq next-char (read-char (format "string: %s" string) t
+                                        conn-read-string-timeout))
+        (setq string (concat string (char-to-string next-char)))
+        (mapc #'delete-overlay overlays)
+        (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
+      (cons string overlays))))
+
+(defun conn--read-string-with-timeout (&optional dir all-windows)
+  (pcase-let ((`(,string . ,overlays)
+               (conn--read-string-with-timeout-1 dir all-windows)))
+    (mapc #'delete-overlay overlays)
+    string))
 
 ;; TODO: bipartite graph for labels to always alternate hands?
 (defun conn--create-labels (count &optional labels)
@@ -2221,7 +2226,8 @@ state."
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
 (defun conn--delete-label-overlay (overlay)
-  (delete-overlay (overlay-get overlay 'prefix-overlay))
+  (when-let ((prefix (overlay-get overlay 'prefix-overlay)))
+    (delete-overlay prefix))
   (delete-overlay overlay))
 
 (defun conn--narrow-label-overlays (overlays)
@@ -2244,13 +2250,15 @@ state."
         (push ov narrowed)))
     narrowed))
 
-(defun conn--create-label-overlays (labels places prefix-length)
+(defun conn--create-label-overlays (labels prefix-overlays)
   (let (overlays)
-    (condition-case _
-        (pcase-dolist (`(,window . ,points) places)
+    (condition-case err
+        (pcase-dolist (`(,window . ,prefixes) prefix-overlays)
           (with-current-buffer (window-buffer window)
-            (dolist (pt points)
-              (let* ((pt (+ prefix-length pt))
+            (dolist (p prefixes)
+              (let* ((pt (overlay-end p))
+                     (prefix-length (- (overlay-start p)
+                                       (overlay-end p)))
                      (label (pop labels))
                      (end (min (+ pt (length label))
                                (save-excursion
@@ -2262,8 +2270,7 @@ state."
                                                     conn-dispatch-prefix-overlay)))
                                           (overlays-in (- pt prefix-length 1)
                                                        (1+ end))))
-                     (ov (make-overlay pt end))
-                     (prefix-ov (make-overlay (- pt prefix-length) pt)))
+                     (ov (make-overlay pt end)))
                 (when (null label)
                   (error "Labels exhausted"))
                 (if (null overlap)
@@ -2272,47 +2279,32 @@ state."
                           (overlay-put o 'invisible nil))
                         overlap))
                 (push ov overlays)
-                (overlay-put prefix-ov 'priority 3000)
-                (overlay-put prefix-ov 'conn-overlay t)
-                (overlay-put prefix-ov 'category 'conn-dispatch-prefix-overlay)
-                (overlay-put prefix-ov 'window window)
-                (overlay-put prefix-ov 'face 'conn-read-string-match-face)
-                (overlay-put ov 'prefix-overlay prefix-ov)
+                (overlay-put p 'category 'conn-dispatch-prefix-overlay)
+                (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
                 (overlay-put ov 'category 'conn-dispatch-leader-overlay)
                 (overlay-put ov 'window window)
                 (overlay-put ov 'before-string label)))))
-      (t (mapc #'conn--delete-label-overlay overlays)))
+      (t (mapc #'delete-overlay overlays)
+         (signal (car err) (cdr err))))
     overlays))
 
 (defun conn-thing-dispatch (thing action &optional repeat)
   (interactive
    (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command)))
      (list thing action current-prefix-arg)))
-  (let* ((string (conn--read-string-with-timeout nil t))
-         (places (let (places)
-                   (walk-windows
-                    (lambda (win)
-                      (with-current-buffer (window-buffer win)
-                        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-                          (push (cons win (conn--visible-matches string))
-                                places))))
-                    'no-minibuf 'visible)
-                   (setf (alist-get (selected-window) places)
-                         (conn--sort-nearest
-                          (alist-get (selected-window) places)))
-                   places))
+  (let* ((prefix-ovs (seq-group-by (lambda (ov) (overlay-get ov 'window))
+                                   (cdr (conn--read-string-with-timeout-1 nil t))))
          (labels (conn--create-labels
-                  (cl-loop for (_ . list) in places
-                           sum (length list))))
+                  (cl-loop for (_ . ps) in prefix-ovs
+                           sum (length ps))))
          (overlays))
     (unwind-protect
         (cl-loop
-         (when (and (null (cdr places))
-                    (null (cdar places)))
+         (when (null labels)
            (user-error "No matching candidates"))
-         (setq overlays (conn--create-label-overlays labels places (length string)))
+         (setq overlays (conn--create-label-overlays labels prefix-ovs))
          (while (cdr overlays)
            (setq overlays (conn--narrow-label-overlays overlays)))
          (unless overlays
@@ -2326,10 +2318,12 @@ state."
            (select-window (overlay-get (car overlays) 'window))
            (push-mark nil t)
            (goto-char (overlay-start (car overlays))))
-         (mapc #'conn--delete-label-overlay overlays)
+         (mapc #'delete-overlay overlays)
          (setq overlays nil)
          (unless repeat (cl-return)))
-      (mapc #'conn--delete-label-overlay overlays))))
+      (mapc #'delete-overlay overlays)
+      (mapc (lambda (l) (mapc #'delete-overlay (cdr l)))
+            prefix-ovs))))
 
 (conn-set-command-handler
  (lambda (start)
