@@ -2184,6 +2184,23 @@ state."
       (delete-region (region-beginning) (region-end))
       (insert str2))))
 
+(defun conn--read-dispatch-command-affixation (keymap)
+  (lambda (command-names)
+    (with-selected-window (or (minibuffer-selected-window) (selected-window))
+      (mapcar
+       (lambda (command-name)
+         (let* ((fun (and (stringp command-name) (intern-soft command-name)))
+                (binding (where-is-internal fun
+                                            (cons keymap (current-active-maps t))
+                                            t))
+                (suffix (if (and binding (not (stringp binding)))
+                            (format " (%s)" (key-description binding))
+                          "")))
+           (put-text-property 0 (length suffix)
+                              'face 'help-key-binding suffix)
+           (list command-name "" suffix)))
+       command-names))))
+
 (defun conn--read-dispatch-command ()
   (let ((keymap (make-composed-keymap
                  (cons (conn--read-thing-keymap)
@@ -2201,14 +2218,23 @@ state."
                  (keyboard-quit))
                 ('help
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (let ((read-extended-command-predicate
-                                  (lambda (symbol _)
-                                    (and (or (get symbol :conn-command-thing)
-                                             (where-is-internal symbol (list keymap)))
-                                         (not (eq 'help symbol))))))
-                             (read-extended-command)))
+                 (setq cmd (completing-read
+                            "Command: "
+                            (lambda (string pred action)
+                              (if (eq action 'metadata)
+	                          `(metadata
+	                            ,(cons 'affixation-function
+                                           (conn--read-dispatch-command-affixation keymap))
+	                            (category . conn-dispatch-command))
+                                (complete-with-action action obarray string pred)))
+                            (lambda (sym)
+                              (and (functionp sym)
+                                   (and (not (eq sym 'help))
+                                        (or (get sym :conn-command-thing)
+                                            (where-is-internal sym (list keymap) t)))))
+                            t))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
-                ((guard (where-is-internal cmd conn-dispatch-command-maps))
+                ((guard (where-is-internal cmd conn-dispatch-command-maps t))
                  (setq action (unless (eq cmd action) cmd)
                        cmd (thread-first
                              (concat prompt (conn--stringify action))
