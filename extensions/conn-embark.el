@@ -91,6 +91,37 @@ If NESTED is non-nil subkeymaps are not flattened."
                    collect (cons formatted item))))
     candidates))
 
+(defun conn--get-map-bindings (prefix map &optional recursive concat)
+  (let ((prefix-map (if (= 0 (seq-length prefix))
+                        map
+                      (keymap-lookup map (key-description prefix))))
+        binds)
+    (cond
+     ((or (null prefix-map) (numberp prefix-map)))
+     ((keymapp prefix-map)
+      (map-keymap
+       (lambda (key def)
+         (cond
+          ((and (numberp key)
+                (= key 27)
+                (keymapp def))
+           (map-keymap
+            (lambda (key2 def2)
+              (unless (memq def (list 'undefined 'self-insert-command 'digit-argument
+                                      'negative-argument 'embark-keymap-help nil))
+                (push (cons (vconcat (vector key key2)) def2) binds)))
+            def))
+          ((and (keymapp def) recursive)
+           (setq binds
+                 (nconc (conn--get-map-bindings (vconcat prefix (vector key))
+                                                map t t)
+                        binds)))
+          (t (if concat
+                 (push (cons (vconcat prefix (vector key)) def) binds)
+               (push (cons (vector key) def) binds)))))
+       (keymap-canonicalize prefix-map))))
+    (nreverse binds)))
+
 (defun conn-complete-keys--up ()
   (interactive)
   (delete-minibuffer-contents)

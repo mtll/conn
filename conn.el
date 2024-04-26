@@ -206,7 +206,7 @@ Supported values are:
   :group 'conn
   :type 'boolean)
 
-(defcustom conn-read-string-timout 0.5
+(defcustom conn-read-string-timeout 0.5
   "Timeout for string reading functions."
   :group 'conn
   :type 'number)
@@ -218,26 +218,16 @@ Supported values are:
   :group 'conn
   :type '(list integer))
 
-(defface conn-dispatch-lead-0
+(defface conn-dispatch-label-face
   '((t (:background "#7feaff" :foreground "black" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn)
 
-(defface conn-dispatch-lead-1
-  '((t (:background "#ffaaff" :foreground "black" :bold t)))
-  "Face for group in dispatch lead overlay."
-  :group 'conn)
-
-(defcustom conn-dispatch-leader-faces
-  (list 'conn-dispatch-lead-0 'conn-dispatch-lead-1)
-  "Faces to use for dispatch leader overlays."
-  :group 'conn
-  :type 'string)
-
 (defcustom conn-dispatch-thing-ignored-modes
-  '(image-mode doc-view-mode pdf-view-mode)
+  (list 'image-mode 'doc-view-mode 'pdf-view-mode)
   "List of modes to ignore when searching for dispatch candidates."
-  :type 'list)
+  :group 'conn
+  :type '(list symbol))
 
 ;;;;; State Variables
 
@@ -496,89 +486,9 @@ If BUFFER is nil check `current-buffer'."
     (narrow-to-region beg end)
     (deactivate-mark)))
 
-;; From embark
-(defun conn--command-name (cmd)
-  "Return an appropriate name for CMD.
-If CMD is a symbol, use its symbol name; for lambdas, use the
-first line of the documentation string; for keyboard macros use
-`key-description'; otherwise use the word \"unnamed\"."
-  (concat ; fresh copy, so we can freely add text properties
-   (cond
-    ((or (stringp cmd) (vectorp cmd)) (key-description cmd))
-    ((stringp (car-safe cmd)) (car cmd))
-    ((eq (car-safe cmd) 'menu-item) (eval (cadr cmd)))
-    ((keymapp cmd)
-     (propertize (if (symbolp cmd) (format "+%s" cmd) "<keymap>")
-                 'face 'embark-keymap))
-    ((symbolp cmd)
-     (let ((name (symbol-name cmd)))
-       (if (string-prefix-p "conn-" name) ; direct action mode
-           (format "%s" (string-remove-prefix "conn-" name))
-         name)))
-    ((when-let (doc (and (functionp cmd) (ignore-errors (documentation cmd))))
-       (save-match-data
-         (when (string-match "^\\(.*\\)$" doc)
-           (match-string 1 doc)))))
-    (t "<unnamed>"))))
-
-(defun conn--get-map-bindings (prefix map &optional recursive concat)
-  (let ((prefix-map (if (= 0 (seq-length prefix))
-                        map
-                      (keymap-lookup map (key-description prefix))))
-        binds)
-    (cond
-     ((or (null prefix-map) (numberp prefix-map)))
-     ((keymapp prefix-map)
-      (map-keymap
-       (lambda (key def)
-         (cond
-          ((and (numberp key)
-                (= key 27)
-                (keymapp def))
-           (map-keymap
-            (lambda (key2 def2)
-              (unless (memq def (list 'undefined 'self-insert-command 'digit-argument
-                                      'negative-argument 'embark-keymap-help nil))
-                (push (cons (vconcat (vector key key2)) def2) binds)))
-            def))
-          ((and (keymapp def) recursive)
-           (setq binds
-                 (nconc (conn--get-map-bindings (vconcat prefix (vector key))
-                                                map t t)
-                        binds)))
-          (t (if concat
-                 (push (cons (vconcat prefix (vector key)) def) binds)
-               (push (cons (vector key) def) binds)))))
-       (keymap-canonicalize prefix-map))))
-    (nreverse binds)))
-
 (defvar-keymap conn-read-thing-command-mark-map
   "h" 'conn--local-mark-thing-map
   "C-h" 'help)
-
-(defun conn--completing-read-keymap (keymap)
-  (let* ((col 0)
-         (cmds (mapcar (pcase-lambda (`(,key . ,def))
-                         (let ((desc (key-description key)))
-                           (setq col (max col (length desc)))
-                           (cons (key-description key)
-                                 (cons (conn--command-name def)
-                                       def))))
-                       (conn--get-map-bindings nil keymap t)))
-         (cmds (mapcar (pcase-lambda (`(,key ,name . ,def))
-                         (thread-first
-                           (propertize (string-pad key (+ col 2))
-                                       'face 'help-key-binding)
-                           (concat name)
-                           (cons def)))
-                       cmds)))
-    (conn--thread -it-
-        (lambda (string predicate action)
-          (if (eq action 'metadata)
-              `(metadata (display-sort-function . identity))
-            (complete-with-action action cmds string predicate)))
-      (completing-read "Command: " -it- nil t)
-      (alist-get -it- cmds nil nil #'equal))))
 
 (defun conn--read-thing-keymap ()
   (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
@@ -591,32 +501,29 @@ first line of the documentation string; for keyboard macros use
 
 (defun conn--read-thing-command ()
   (with-temp-message ""
-    (let ((keymap (conn--read-thing-keymap)))
+    (let ((keymap (conn--read-thing-keymap))
+          (prompt (concat "Thing Command ("
+                          (propertize "C-h" 'face 'help-key-binding)
+                          " for commands): ")))
       (internal-push-keymap keymap 'overriding-terminal-local-map)
       (unwind-protect
-          (let ((cmd (thread-first
-                       (concat
-                        (propertize "Thing Command\n" 'face 'bold)
-                        (propertize "C-h" 'face 'help-key-binding)
-                        ": completing-read mark thing map")
-                       (read-key-sequence)
-                       (key-binding t))))
+          (let ((cmd (key-binding (read-key-sequence prompt) t)))
             (while (not (get cmd :conn-command-thing))
               (pcase cmd
                 ('keyboard-quit
                  (keyboard-quit))
                 ('help
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (conn--completing-read-keymap keymap))
+                 (setq cmd (let ((read-extended-command-predicate
+                                  (lambda (symbol _)
+                                    (get symbol :conn-command-thing))))
+                             (read-extended-command)))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
                 (_
                  (setq cmd (thread-first
-                             (concat
-                              (propertize "Thing Command\n" 'face 'bold)
-                              (propertize "C-h" 'face 'help-key-binding)
-                              ": completing-read mark thing map\n"
-                              (propertize "Not a valid thing command"
-                                          'face 'error))
+                             (concat prompt
+                                     (propertize "Not a valid thing command"
+                                                 'face 'error))
                              (read-key-sequence)
                              (key-binding t))))))
             (get cmd :conn-command-thing))
@@ -682,7 +589,7 @@ first line of the documentation string; for keyboard macros use
          results)
     (unwind-protect
         (while (setq next-char (read-char (format "string: %s" string) t
-                                          conn-read-string-timout))
+                                          conn-read-string-timeout))
           (setq string (concat string (char-to-string next-char)))
           (pcase-dolist (`(,_win . ,ovs) overlays)
             (mapc #'delete-overlay ovs))
@@ -694,6 +601,7 @@ first line of the documentation string; for keyboard macros use
       (message nil))
     (cons string results)))
 
+;; TODO: bipartite graph for labels to always alternate hands?
 (defun conn--create-labels (count &optional labels)
   (let* ((alphabet (thread-last
                      (seq-uniq conn-dispatch-label-characters)
@@ -719,7 +627,8 @@ first line of the documentation string; for keyboard macros use
               (push (concat prefix c) labels)
               (when (= (cl-incf n) count)
                 (throw 'done nil))))))
-      (mapc 'conn--dispatch-propertize-label labels)
+      (dolist (l labels)
+        (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
       (nreverse labels))))
 
 (defun conn--create-window-prompt-overlay (window label)
@@ -2295,8 +2204,12 @@ state."
                  (keyboard-quit))
                 ('help
                  (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (save-window-excursion
-                             (conn--completing-read-keymap keymap)))
+                 (setq cmd (let ((read-extended-command-predicate
+                                  (lambda (symbol _)
+                                    (and (or (get symbol :conn-command-thing)
+                                             (where-is-internal symbol (list keymap)))
+                                         (not (eq 'help) symbol)))))
+                             (read-extended-command)))
                  (internal-push-keymap keymap 'overriding-terminal-local-map))
                 ((guard (where-is-internal cmd conn-dispatch-command-maps))
                  (setq action (unless (eq cmd action) cmd)
@@ -2314,14 +2227,6 @@ state."
                              (key-binding t))))))
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
-
-(defun conn--dispatch-propertize-label (chars)
-  (dotimes (i (length chars))
-    (put-text-property
-     i (1+ i)
-     'face (nth (mod i (length conn-dispatch-leader-faces))
-                conn-dispatch-leader-faces)
-     chars)))
 
 (defun conn-thing-dispatch ()
   (interactive)
@@ -3467,7 +3372,7 @@ Interactively `region-beginning' and `region-end'."
   "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
 occurrence of STRING.  STRING will finish reading after
-`conn-read-string-timout' seconds.
+`conn-read-string-timeout' seconds.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
@@ -3482,7 +3387,7 @@ This command should only be called interactively."
 (defun conn-goto-string-backward (string)
   "Go to the first visible occurrence backward of STRING in buffer.
 When called interactively reads STRING with timeout
-`conn-read-string-timout'."
+`conn-read-string-timeout'."
   (interactive
    (list (car (conn--read-string-with-timeout 'backward))))
   (with-restriction (window-start) (window-end)
@@ -3497,7 +3402,7 @@ When called interactively reads STRING with timeout
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
 If `current-prefix-arg' is 1 prompt for STRING and search forward for nearest
 occurrence of STRING.  STRING will finish reading after
-`conn-read-string-timout' seconds.
+`conn-read-string-timeout' seconds.
 This command should only be called interactively."
   (declare (interactive-only t))
   (interactive (list (pcase current-prefix-arg
@@ -3512,7 +3417,7 @@ This command should only be called interactively."
 (defun conn-goto-string-forward (string)
   "Go to the first visible occurrence forward of STRING in buffer.
 When called interactively reads STRING with timeout
-`conn-read-string-timout'."
+`conn-read-string-timeout'."
   (interactive
    (list (car (conn--read-string-with-timeout 'forward))))
   (with-restriction (window-start) (window-end)
@@ -4571,18 +4476,10 @@ See `tab-close'."
                 (conn--wincontrol-split-window-state state)))
     (let* ((height  (alist-get 'normal-height params))
            (width   (alist-get 'normal-width params))
-           (pheight (round (* (alist-get 'pixel-width params)
-                              (/ 1 width)
-                              (/ height 1))))
-           (theight (round (* (alist-get 'total-width params)
-                              (/ 1 width)
-                              (/ height 1))))
-           (pwidth  (round (* (alist-get 'pixel-height params)
-                              (/ 1 height)
-                              (/ width 1))))
-           (twidth  (round (* (alist-get 'total-height params)
-                              (/ 1 height)
-                              (/ width 1)))))
+           (pheight (* (alist-get 'pixel-width params) (/ height width)))
+           (theight (* (alist-get 'total-width params) (/ height width)))
+           (pwidth  (* (alist-get 'pixel-height params) (/ height width)))
+           (twidth  (* (alist-get 'total-height params) (/ height width))))
       (setf (alist-get 'normal-width params)  height
             (alist-get 'normal-height params) width
             (alist-get 'pixel-height params) pheight
