@@ -2178,7 +2178,7 @@ state."
 
 ;;;; Commands
 
-;;;;; Place Dispatch
+;;;;; Thing Dispatch
 
 (defvar conn-dispatch-command-maps
   (list (define-keymap
@@ -2199,6 +2199,7 @@ state."
            (kill-region beg end)
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
+
 
 (defun conn-dispatch-dot (window pt thing)
   (with-selected-window window
@@ -2275,8 +2276,8 @@ state."
   (let ((keymap (make-composed-keymap
                  (cons (conn--read-thing-keymap)
                        conn-dispatch-command-maps)))
-        (prompt (concat "Dispatch Command "
-                        "(" (propertize "C-h" 'face 'help-key-binding) " for help): "))
+        (prompt (concat "Thing Dispatch "
+                        "(" (propertize "C-h" 'face 'help-key-binding) " for commands): "))
         (action))
     (with-temp-message ""
       (internal-push-keymap keymap 'overriding-terminal-local-map)
@@ -2368,6 +2369,7 @@ state."
                       (overlay-get ov 'before-string)
                     (substring -it- 1)
                     (overlay-put ov 'before-string -it-))
+                  (move-overlay ov (overlay-start ov) (1- (overlay-end ov)))
                   (push ov next)))
               (setq overlays next)))
 
