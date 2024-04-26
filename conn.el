@@ -703,9 +703,9 @@ If BUFFER is nil check `current-buffer'."
     `(progn
        (defvar ,name nil)
 
-       (defun ,name (&optional enable)
+       (defun ,name (&optional enable interactive)
          ,(or doc "")
-         (interactive (list (not ,name)))
+         (interactive (list (not ,name) t))
          (cond ((eq enable 'toggle)
                 (setq enable (not ,name)))
                ((numberp enable)
@@ -715,10 +715,10 @@ If BUFFER is nil check `current-buffer'."
              (when conn-mode (funcall fn enable))
              (if enable
                  (progn
-                   (when (called-interactively-p 'interactive)
+                   (when interactive
                      (message ,(conn--stringify name " enabled.")))
                    (add-hook 'conn--extensions fn))
-               (when (called-interactively-p 'interactive)
+               (when interactive
                  (message ,(conn--stringify name " disabled.")))
                (remove-hook 'conn--extensions fn))))
          enable)
@@ -2072,23 +2072,23 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
     (remove-hook 'after-change-functions #'conn--dot-after-change-function t)
     (remove-hook 'post-command-hook #'conn--dot-post-command t)))
 
-(conn-define-state conn-org-tree-edit-state
-  "Activate `conn-org-tree-edit-state' in the current buffer.
+(conn-define-state conn-org-edit-state
+  "Activate `conn-org-edit-state' in the current buffer.
 A `conn-mode' state for structural editing of `org-mode' buffers.
 
-See `conn-org-tree-edit-state-transition-map' for keybindings to enter
+See `conn-org-edit-state-transition-map' for keybindings to enter
 other states from org-tree-edit state.  See
-`conn-org-tree-edit-state-map' for commands bound by org-tree-edit
+`conn-org-edit-state-map' for commands bound by org-tree-edit
 state."
   :lighter-face ((default              (:inherit mode-line :background "#f5c5ff"))
                  (((background light)) (:inherit mode-line :background "#f5c5ff"))
                  (((background dark))  (:inherit mode-line :background "#85508c")))
   :buffer-face ((t :inherit default :background "#fff6ff"))
   :cursor-face ((default               (:background "#7d0077"))
-                 (((background light)) (:background "#7d0077"))
-                 (((background dark))  (:background "#f1b9ee")))
+                (((background light)) (:background "#7d0077"))
+                (((background dark))  (:background "#f1b9ee")))
   :suppress-input-method t
-  :indicator (:propertize " T " face conn-org-tree-edit-state-lighter-face)
+  :indicator (:propertize " O " face conn-org-edit-state-lighter-face)
   :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "f"   'conn-emacs-state
@@ -2098,7 +2098,7 @@ state."
                  "F j" 'conn-emacs-state-bol
                  "F o" 'conn-emacs-state-overwrite
                  "F u" 'conn-emacs-state-overwrite-binary))
-(put 'conn-org-tree-edit-state :conn-hide-mark t)
+(put 'conn-org-edit-state :conn-hide-mark t)
 
 
 ;;;; Commands
@@ -5863,11 +5863,10 @@ dispatch on each contiguous component of the region."
   "z"     'conn-exchange-mark-command)
 
 (define-keymap
-  :keymap conn-org-tree-edit-state-map
+  :keymap conn-org-edit-state-map
   "SPC"         'conn-scroll-up
   "<backspace>" 'conn-scroll-down
   "DEL"         'conn-scroll-down
-  "M-;"         'org-toggle-comment
   "."           'point-to-register
   "/"           'undo-only
   ";"           'execute-extended-command
@@ -5879,13 +5878,14 @@ dispatch on each contiguous component of the region."
   "q s"         'org-sort
   "q c"         'org-columns
   "b"           'switch-to-buffer
+  "C"           'org-toggle-comment
   "c"           'conn-C-c-keys
   "g"           'conn-M-g-keys
-  "i"           'org-backward-element
+  "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
   "j"           'org-previous-visible-heading
-  "k"           'org-forward-element
+  "k"           'org-forward-heading-same-level
   "K"           'org-metadown
   "L"           'org-metaright
   "l"           'org-next-visible-heading
@@ -5894,6 +5894,7 @@ dispatch on each contiguous component of the region."
   "n"           'org-forward-element
   "N"           'org-toggle-narrow-to-subtree
   "O"           'org-next-block
+  "P"           'conn-register-prefix
   "p"           'conn-register-load
   "s"           'conn-M-s-keys
   "T"           'org-todo
@@ -6124,7 +6125,7 @@ determine if `conn-local-mode' should be enabled."
    'org-up-element)
 
   (keymap-set (conn-get-mode-map 'conn-state 'org-mode)
-              "T" 'conn-org-tree-edit-state)
+              "T" 'conn-org-edit-state)
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'org-mode)
