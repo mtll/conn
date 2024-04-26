@@ -13,16 +13,16 @@ Conn State:
 ┃    indent    │   map    │          │  region  │   map    │  things  │   read   │          │          │          │ register │          │          │ on region┃
 ┃    region    ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │   edit   │   kill   │          │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │   kill   │   kill   │ dispatch ┃
-┃              │    map   │  region  │          │   map    │  region  │          │          │          │          │   load   │  append  │  prepend │   menu   ┃
+┃              │   edit   │   kill   │          │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │   kill   │   kill   │  macro   ┃
+┃              │    map   │  region  │          │   map    │  region  │          │          │          │          │   load   │  append  │  prepend │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │          │          │          │   emacs  │          │          │  ←line   │  ↓para   │  →line   │   M-X    │  insert  │                   ┃
-┃                │          │          │          │ state map│          │          │          │          │          │          │   pair   │                   ┃
+┃                │          │          │          │   emacs  │   goto   │          │  ←line   │  ↓para   │  →line   │   M-X    │  insert  │                   ┃
+┃                │          │          │          │ state map│   map    │          │          │          │          │          │   pair   │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '  other │                   ┃
-┃                │    win   │  search  │  →delete │  emacs   │  goto    │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
-┃                │  control │   map    │          │  state   │   map    │          │          │          │          │          │   prefix │                   ┃
+┃                │    win   │  search  │  →delete │  emacs   │   goto   │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
+┃                │  control │   map    │          │  state   │   thing  │          │          │          │          │          │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │          │   copy   │  narrow  │  ibuffer │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
@@ -53,16 +53,16 @@ Dot State:
 ┃              │          │          │  point   │          │          │          │          │          │          │ register │   dot    │  dot     │ on dots  ┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q  dot   │ w        │ e        │ r  dot   │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │   edit   │  ←delete │   dot    │  region  │   dot    │ add dots │  ←word   │  ↑line   │  →word   │ register │ del dots │ del dots │ dispatch ┃
-┃              │    map   │   dot    │  region  │   map    │  things  │  regexp  │          │          │          │   load   │  before  │   after  │   menu   ┃
+┃              │   edit   │  ←delete │   dot    │  region  │   dot    │ add dots │  ←word   │  ↑line   │  →word   │ register │ del dots │ del dots │  macro   ┃
+┃              │    map   │   dot    │  region  │   map    │  things  │  regexp  │          │          │          │   load   │  before  │   after  │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │          │          │  delete  │   emacs  │          │          │  ←line   │  ↓para   │  →line   │   M-X    │          │                   ┃
-┃                │          │          │ all dots │ state map│          │          │          │          │          │          │          │                   ┃
+┃                │          │          │  delete  │   emacs  │   goto   │          │  ←line   │  ↓para   │  →line   │   M-X    │          │                   ┃
+┃                │          │          │ all dots │ state map│   map    │          │          │          │          │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '  other │                   ┃
-┃                │    win   │  search  │  →delete │  emacs   │  goto    │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
-┃                │  control │   map    │    dot   │  state   │   map    │          │          │          │          │          │   prefix │                   ┃
+┃                │    win   │  search  │  →delete │  emacs   │   goto   │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
+┃                │  control │   map    │    dot   │  state   │   thing  │          │          │          │          │          │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │          │          │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
