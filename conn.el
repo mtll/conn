@@ -2256,8 +2256,9 @@ state."
       (goto-char pt)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (kill-new (filter-buffer-substring beg end))
-         (message "Copied: %s" str))
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-new str)
+           (message "Copied: %s" str)))
         (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-goto (window pt thing)
@@ -6264,13 +6265,16 @@ associated with that command (see `conn-register-thing')."
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
 (with-eval-after-load 'outline
+  (declare-function outline-mark-subtree "outline")
+  (declare-function outline-on-heading-p "outline")
   (declare-function outline-up-heading "outline")
-  (declare-function outline-end-of-subtree "outline")
 
   (conn-register-thing heading
     :mark-key "H"
     :bounds-op (lambda ()
                  (save-mark-and-excursion
+                   (unless (outline-on-heading-p)
+                     (outline-up-heading 1))
                    (outline-mark-subtree)
                    (cons (region-beginning) (region-end)))))
 
