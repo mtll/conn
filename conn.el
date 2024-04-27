@@ -1432,6 +1432,7 @@ The iterator must be the first argument in ARGLIST.
              (condition-case err
                  (progn
                    (run-hooks 'conn-macro-dispatch-start-hook)
+                   (deactivate-mark)
                    ,@body)
                (t
                 (setq conn-dispatch-error err)
