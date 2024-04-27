@@ -6269,13 +6269,10 @@ associated with that command (see `conn-register-thing')."
 
   (conn-register-thing heading
     :mark-key "H"
-    :beg-op (lambda ()
-              (unless (looking-at outline-regexp)
-                (outline-up-heading 1)))
-    :end-op (lambda ()
-              (unless (looking-at outline-regexp)
-                (outline-up-heading 1))
-              (outline-end-of-subtree)))
+    :bounds-op (lambda ()
+                 (save-mark-and-excursion
+                   (outline-mark-subtree)
+                   (cons (region-beginning) (region-end)))))
 
   (conn-register-thing-commands
    'heading (conn-individual-thing-handler 'heading)
