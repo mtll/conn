@@ -4280,13 +4280,14 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-scroll-up] "
     "\\[conn-wincontrol-scroll-down]: "
     "scroll; "
-    "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
+    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/grab; "
     "\\[delete-window] \\[delete-other-windows]: delete win/other; "
-    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/grab"
+    "\\[kill-buffer-and-window]: kill buf+win; "
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
+    "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
     "\\[text-scale-set]: scale; "
     "\\[balance-windows] \\[maximize-window]: balance/max; "
     "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo")))
@@ -4411,6 +4412,7 @@ if ARG is anything else `other-tab-prefix'."
   "k"       'conn-wincontrol-windmove-down
   "l"       'conn-wincontrol-windmove-right
   "L"       'tab-next
+  "m"       'kill-buffer-and-window
   "n"       'conn-wincontrol-narrow
   "N"       'tab-bar-new-tab
   "o"       'tear-off-window
