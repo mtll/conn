@@ -598,7 +598,7 @@ If BUFFER is nil check `current-buffer'."
               ov))
           (conn--visible-matches string dir)))
 
-(defun conn--read-string-preview-overlays (string &optional dir all-windows sort)
+(defun conn--read-string-preview-overlays (string &optional dir all-windows)
   (if all-windows
       (let (ovs)
         (walk-windows
@@ -606,14 +606,12 @@ If BUFFER is nil check `current-buffer'."
            (with-selected-window win
              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
                (push (conn--read-string-preview-overlays-1 string dir)
-                     ovs)))
-           (when (and sort (eq (selected-window) win))
-             (setq ovs (sort ovs :lessp sort))))
+                     ovs))))
          'no-minibuf 'visible)
         (apply 'nconc ovs))
     (conn--read-string-preview-overlays-1 string dir)))
 
-(defun conn--read-string-with-timeout-1 (&optional dir all-windows sort)
+(defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (with-temp-message ""
     (let* ((string (char-to-string (read-char "string: " t)))
            (overlays (conn--read-string-preview-overlays string dir all-windows))
@@ -622,12 +620,12 @@ If BUFFER is nil check `current-buffer'."
                                         conn-read-string-timeout))
         (setq string (concat string (char-to-string next-char)))
         (mapc #'delete-overlay overlays)
-        (setq overlays (conn--read-string-preview-overlays string dir all-windows sort)))
+        (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
       (cons string overlays))))
 
-(defun conn--read-string-with-timeout (&optional dir all-windows sort)
+(defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
-               (conn--read-string-with-timeout-1 dir all-windows sort)))
+               (conn--read-string-with-timeout-1 dir all-windows)))
     (mapc #'delete-overlay overlays)
     string))
 
@@ -2367,15 +2365,15 @@ seconds."
     (unwind-protect
         (progn
           (setf prefix-ovs (thread-last
-                             (lambda (a b)
-                               (< (abs (- (overlay-start a)
-                                          (point)))
-                                  (abs (- (overlay-start b)
-                                          (point)))))
                              (conn--read-string-with-timeout-1 nil t)
                              (cdr)
                              (seq-group-by (lambda (ov) (overlay-get ov 'window)))
                              (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                (alist-get (selected-window) prefix-ovs)
+                (sort (alist-get (selected-window) prefix-ovs)
+                      :lessp (lambda (a b)
+                               (< (abs (- (overlay-start a) (point)))
+                                  (abs (- (overlay-start b) (point))))))
                 labels (conn--create-label-strings
                         (cl-loop for (_ . ps) in prefix-ovs
                                  sum (length ps))))
