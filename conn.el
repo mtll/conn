@@ -591,12 +591,14 @@ If BUFFER is nil check `current-buffer'."
   (mapcar (pcase-lambda (pt)
             (let ((ov (make-overlay pt (+ pt (length string)))))
               (overlay-put ov 'conn-overlay t)
+              (overlay-put ov 'category 'conn-read-string-match)
               (overlay-put ov 'face 'conn-read-string-match-face)
+              (overlay-put ov 'priority 1000)
               (overlay-put ov 'window (selected-window))
               ov))
           (conn--visible-matches string dir)))
 
-(defun conn--read-string-preview-overlays (string &optional dir all-windows)
+(defun conn--read-string-preview-overlays (string &optional dir all-windows sort)
   (if all-windows
       (let (ovs)
         (walk-windows
@@ -604,17 +606,14 @@ If BUFFER is nil check `current-buffer'."
            (with-selected-window win
              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
                (push (conn--read-string-preview-overlays-1 string dir)
-                     ovs))))
+                     ovs)))
+           (when (and sort (eq (selected-window) win))
+             (setq ovs (sort ovs :lessp sort))))
          'no-minibuf 'visible)
         (apply 'nconc ovs))
     (conn--read-string-preview-overlays-1 string dir)))
 
-(defun conn--sort-nearest (pts)
-  (seq-sort (lambda (a b)
-              (< (abs (- a (point))) (abs (- b (point)))))
-            pts))
-
-(defun conn--read-string-with-timeout-1 (&optional dir all-windows)
+(defun conn--read-string-with-timeout-1 (&optional dir all-windows sort)
   (with-temp-message ""
     (let* ((string (char-to-string (read-char "string: " t)))
            (overlays (conn--read-string-preview-overlays string dir all-windows))
@@ -623,17 +622,17 @@ If BUFFER is nil check `current-buffer'."
                                         conn-read-string-timeout))
         (setq string (concat string (char-to-string next-char)))
         (mapc #'delete-overlay overlays)
-        (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
+        (setq overlays (conn--read-string-preview-overlays string dir all-windows sort)))
       (cons string overlays))))
 
-(defun conn--read-string-with-timeout (&optional dir all-windows)
+(defun conn--read-string-with-timeout (&optional dir all-windows sort)
   (pcase-let ((`(,string . ,overlays)
-               (conn--read-string-with-timeout-1 dir all-windows)))
+               (conn--read-string-with-timeout-1 dir all-windows sort)))
     (mapc #'delete-overlay overlays)
     string))
 
 ;; TODO: bipartite graph for labels to always alternate hands?
-(defun conn--create-labels (count &optional labels)
+(defun conn--create-label-strings (count &optional labels)
   (let* ((alphabet (thread-last
                      (seq-uniq conn-dispatch-label-characters)
                      (mapcar #'string)))
@@ -649,7 +648,7 @@ If BUFFER is nil check `current-buffer'."
           (dolist (a prefixes)
             (dolist (b alphabet)
               (push (concat a b) new-labels)))
-          (conn--create-labels count new-labels))
+          (conn--create-label-strings count new-labels))
       (catch 'done
         (let ((n (length labels)))
           (setq labels (nreverse labels))
@@ -686,7 +685,7 @@ If BUFFER is nil check `current-buffer'."
     (if (length= windows 1)
         (car windows)
       (let ((overlays (seq-mapn #'conn--create-window-prompt-overlay
-                                windows (conn--create-labels (length windows)))))
+                                windows (conn--create-label-strings (length windows)))))
         (unwind-protect
             (progn
               (while (cdr overlays)
@@ -1324,9 +1323,9 @@ The iterator must be the first argument in ARGLIST.
              (user-error "Not defining keyboard macro")
            (kmacro-end-macro 0)))))))
 
-(conn--define-dispatcher conn--macro-dispatch-append (iterator &optional dont-exec)
+(conn--define-dispatcher conn--macro-dispatch-append (iterator &optional skip-exec)
   (when (funcall iterator :record)
-    (kmacro-start-macro (if dont-exec '(16) '(4)))
+    (kmacro-start-macro (if skip-exec '(16) '(4)))
     (unwind-protect
         (recursive-edit)
       (when (not defining-kbd-macro)
@@ -2258,8 +2257,8 @@ state."
             (cons (get cmd :conn-command-thing) action))
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
-(defun conn--narrow-label-overlays (overlays)
-  (let ((c (read-char "char:"))
+(defun conn--narrow-labeled-overlays (prompt overlays)
+  (let ((c (read-char prompt))
         (narrowed))
     (dolist (ov overlays)
       (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
@@ -2281,7 +2280,7 @@ state."
         (push ov narrowed)))
     narrowed))
 
-(defun conn--create-label-overlays (labels prefix-overlays)
+(defun conn--label-overlays (labels prefix-overlays)
   (let (overlays)
     (condition-case err
         (pcase-dolist (`(,window . ,prefixes) prefix-overlays)
@@ -2302,8 +2301,8 @@ state."
                      ;; them make us invisible) later.
                      (overlap (seq-filter (lambda (o)
                                             (memq (overlay-get o 'category)
-                                                  '(conn-dispatch-leader-overlay
-                                                    conn-dispatch-prefix-overlay)))
+                                                  '(conn-label-overlay
+                                                    conn-read-string-match)))
                                           (overlays-in (- pt prefix-length 1)
                                                        (1+ end))))
                      (ov (make-overlay pt end)))
@@ -2311,20 +2310,35 @@ state."
                   (error "Labels exhausted"))
                 (if (null overlap)
                     (overlay-put ov 'invisible t)
-                  (mapc (lambda (o)
-                          (overlay-put o 'invisible nil))
-                        overlap))
+                  (mapc (lambda (o) (overlay-put o 'invisible nil)) overlap))
                 (push ov overlays)
-                (overlay-put p 'category 'conn-dispatch-prefix-overlay)
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
-                (overlay-put ov 'category 'conn-dispatch-leader-overlay)
+                (overlay-put ov 'category 'conn-label-overlay)
                 (overlay-put ov 'window window)
                 (overlay-put ov 'before-string label)))))
       (t (mapc #'delete-overlay overlays)
          (signal (car err) (cdr err))))
     overlays))
+
+(defun conn--read-overlay-label (labels overlays)
+  (let ((candidates (conn--label-overlays labels overlays)))
+    (unwind-protect
+        (cl-loop
+         (pcase candidates
+           ('nil
+            (setq candidates
+                  (thread-last
+                    (conn--label-overlays labels overlays)
+                    (conn--narrow-labeled-overlays "char: (no matches)"))))
+           (`(,ov . nil)
+            (let ((prefix (overlay-get ov 'prefix-overlay)))
+              (cl-return (cons (overlay-get prefix 'window)
+                               (overlay-start prefix)))))
+           (_
+            (setq candidates (conn--narrow-labeled-overlays "char:" candidates)))))
+      (mapc #'delete-overlay candidates))))
 
 (defun conn-thing-dispatch (thing action &optional repeat)
   "Begin dispatching ACTION on a THING.
@@ -2347,44 +2361,37 @@ The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive
    (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command)))
-     (list thing
-           (or action 'conn-dispatch-goto)
-           current-prefix-arg)))
-  (let* ((prefix-ovs (seq-group-by (lambda (ov) (overlay-get ov 'window))
-                                   (cdr (conn--read-string-with-timeout-1 nil t))))
-         (labels (conn--create-labels
-                  (cl-loop for (_ . ps) in prefix-ovs
-                           sum (length ps))))
-         (overlays))
-    (setf prefix-ovs (seq-sort (lambda (a b)
-                                 (eq (selected-window) (car a)))
-                               prefix-ovs)
-          (alist-get (selected-window) prefix-ovs)
-          (seq-sort (lambda (a b)
-                      (< (abs (- (overlay-start a) (point)))
-                         (abs (- (overlay-start b) (point)))))
-                    (alist-get (selected-window) prefix-ovs)))
+     (list thing (or action 'conn-dispatch-goto) current-prefix-arg)))
+  (let* ((prefix-ovs)
+         (labels))
     (unwind-protect
-        (cl-loop
-         (when (null labels)
-           (user-error "No matching candidates"))
-         (setq overlays (conn--create-label-overlays labels prefix-ovs))
-         (while (cdr overlays)
-           (setq overlays (conn--narrow-label-overlays overlays)))
-         (unless overlays
-           (user-error "No matching label"))
-         (funcall action
-                  (overlay-get (car overlays) 'window)
-                  (overlay-start (car overlays))
-                  thing)
-         (mapc #'delete-overlay overlays)
-         (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
-           (dolist (ov ovs)
-             (overlay-put ov 'face 'conn-read-string-match-face)))
-         (setq overlays nil)
-         (unless repeat (cl-return)))
-      (mapc #'delete-overlay overlays)
-      (mapc (lambda (l) (mapc #'delete-overlay (cdr l))) prefix-ovs))))
+        (progn
+          (setf prefix-ovs (thread-last
+                             (lambda (a b)
+                               (< (abs (- (overlay-start a)
+                                          (point)))
+                                  (abs (- (overlay-start b)
+                                          (point)))))
+                             (conn--read-string-with-timeout-1 nil t)
+                             (cdr)
+                             (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                             (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                labels (conn--create-label-strings
+                        (cl-loop for (_ . ps) in prefix-ovs
+                                 sum (length ps))))
+          (cl-loop
+           (when (null labels)
+             (user-error "No matching candidates"))
+           (pcase-let ((`(,window . ,pt)
+                        (conn--read-overlay-label labels prefix-ovs)))
+             (funcall action window pt thing)
+             (unless repeat (cl-return)))
+           (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
+             (dolist (ov ovs)
+               (overlay-put ov 'face 'conn-read-string-match-face)))))
+      (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
+        (dolist (ov ovs)
+          (delete-overlay ov))))))
 
 (conn-set-command-handler
  (lambda (start)
@@ -5058,10 +5065,10 @@ means keep the dots in their original position."
   :argument "dots"
   :argument-format "dots=%s"
   :argument-regexp "\\(dots=\\(remove\\|to-region\\|keep\\)\\)"
-  :choices '("remove" "to-region" "keep")
+  :choices '("to-region" "remove" "keep")
   :required t
   :if 'conn--dots-active-p
-  :init-value (lambda (obj) (oset obj value "dots=remove")))
+  :init-value (lambda (obj) (oset obj value "dots=to-region")))
 
 (transient-define-argument conn--dispatch-macro-infix ()
   "Dispatch `last-kbd-macro'.
