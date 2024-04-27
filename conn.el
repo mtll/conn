@@ -2081,7 +2081,14 @@ disabled.
                   (when (not executing-kbd-macro)
                     (force-mode-line-update)))
                 ,@body
-                (run-hooks 'conn-transition-hook)))))))
+                (run-hook-wrapped
+                 'conn-transition-hook
+                 (lambda (hook)
+                   (condition-case _
+                       (funcall hook)
+                     (error
+                      (remove-hook 'conn-transition-hook hook)
+                      (message "Error in transition hook %s" hook)))))))))))
 
 
 ;;;;; State Definitions
