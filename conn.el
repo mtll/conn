@@ -56,6 +56,7 @@
 (defvar conn-local-map)
 (defvar conn-emacs-state)
 (defvar kmacro-step-edit-replace)
+(defvar conn-state-map)
 
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
@@ -409,19 +410,6 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn-with-state (state &rest body)
-  (declare (indent 1))
-  (let ((restore (make-symbol "restore")))
-    `(let ((,restore (unless ,state
-                       (prog1 (cons conn-current-state
-                                    conn-previous-state)
-                         (,state)))))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (when ,restore
-           (funcall (car ,restore))
-           (setq conn-previous-state (cdr ,restore)))))))
-
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
   "Split STRING on CHAR, which can be escaped with backslash."
@@ -523,35 +511,35 @@ If BUFFER is nil check `current-buffer'."
     keymap))
 
 (defun conn--read-thing-command ()
-  (conn-with-state conn-state
-    (let ((keymap (conn--read-thing-keymap))
-          (prompt (concat "Thing Command ("
-                          (propertize "C-h" 'face 'help-key-binding)
-                          " for commands): ")))
-      (internal-push-keymap keymap 'overriding-terminal-local-map)
-      (unwind-protect
-          (let ((cmd (key-binding (read-key-sequence prompt) t)))
-            (while (not (get cmd :conn-command-thing))
-              (pcase cmd
-                ('keyboard-quit
-                 (keyboard-quit))
-                ('help
-                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (let ((read-extended-command-predicate
-                                  (lambda (symbol _)
-                                    (get symbol :conn-command-thing))))
-                             (read-extended-command)))
-                 (internal-push-keymap keymap 'overriding-terminal-local-map))
-                (_
-                 (setq cmd (thread-first
-                             (concat prompt
-                                     (propertize "Not a valid thing command"
-                                                 'face 'error))
-                             (read-key-sequence)
-                             (key-binding t))))))
-            (get cmd :conn-command-thing))
-        (message nil)
-        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+  (let ((keymap (make-composed-keymap (conn--read-thing-keymap)
+                                      conn-state-map))
+        (prompt (concat "Thing Command ("
+                        (propertize "C-h" 'face 'help-key-binding)
+                        " for commands): ")))
+    (internal-push-keymap keymap 'overriding-terminal-local-map)
+    (unwind-protect
+        (let ((cmd (key-binding (read-key-sequence prompt) t)))
+          (while (not (get cmd :conn-command-thing))
+            (pcase cmd
+              ('keyboard-quit
+               (keyboard-quit))
+              ('help
+               (internal-pop-keymap keymap 'overriding-terminal-local-map)
+               (setq cmd (let ((read-extended-command-predicate
+                                (lambda (symbol _)
+                                  (get symbol :conn-command-thing))))
+                           (read-extended-command)))
+               (internal-push-keymap keymap 'overriding-terminal-local-map))
+              (_
+               (setq cmd (thread-first
+                           (concat prompt
+                                   (propertize "Not a valid thing command"
+                                               'face 'error))
+                           (read-key-sequence)
+                           (key-binding t))))))
+          (get cmd :conn-command-thing))
+      (message nil)
+      (internal-pop-keymap keymap 'overriding-terminal-local-map))))
 
 (defun conn--isearch-matches-in-buffer (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -1726,18 +1714,48 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-kill-region-keys        "C-w")
 (conn-define-remapping-command conn-backward-delete-keys    "DEL")
 (conn-define-remapping-command conn-delete-region-keys      "C-S-w" t)
+
 (conn-define-remapping-command conn-forward-sexp-keys       "C-M-f")
 (conn-define-remapping-command conn-backward-sexp-keys      "C-M-b")
+(conn-register-thing-commands
+ 'sexp (conn-sequential-thing-handler 'sexp)
+ 'conn-forward-sexp-keys
+ 'conn-backward-sexp-keys)
+
 (conn-define-remapping-command conn-forward-word-keys       "M-f")
 (conn-define-remapping-command conn-backward-word-keys      "M-b")
+(conn-register-thing-commands
+ 'word (conn-sequential-thing-handler 'word)
+ 'conn-forward-word-keys
+ 'conn-backward-word-keys)
+
 (conn-define-remapping-command conn-forward-paragraph-keys  "M-}")
 (conn-define-remapping-command conn-backward-paragraph-keys "M-{")
+(conn-register-thing-commands
+ 'paragraph (conn-sequential-thing-handler 'paragraph)
+ 'conn-forward-paragraph-keys
+ 'conn-backward-paragraph-keys)
+
 (conn-define-remapping-command conn-forward-sentence-keys   "M-e")
 (conn-define-remapping-command conn-backward-sentence-keys  "M-a")
+(conn-register-thing-commands
+ 'sentence (conn-sequential-thing-handler 'sentence)
+ 'conn-forward-sentence-keys
+ 'conn-backward-sentence-keys)
+
 (conn-define-remapping-command conn-beginning-of-defun-keys "C-M-a")
 (conn-define-remapping-command conn-end-of-defun-keys       "C-M-e")
+(conn-register-thing-commands
+ 'defun (conn-sequential-thing-handler 'defun)
+ 'conn-forward-defun-keys
+ 'conn-backward-defun-keys)
+
 (conn-define-remapping-command conn-next-line-keys          "C-n")
 (conn-define-remapping-command conn-previous-line-keys      "C-p")
+(conn-register-thing-commands
+ 'line (conn-sequential-thing-handler 'line)
+ 'conn-forward-line-keys
+ 'conn-backward-line-keys)
 
 ;;;;; Per State Buffer Colors
 
@@ -2325,53 +2343,53 @@ state."
 
 (defun conn--read-dispatch-command ()
   (let ((keymap (make-composed-keymap
-                 (cons (conn--read-thing-keymap)
-                       conn-dispatch-command-maps)))
+                 (append (list (conn--read-thing-keymap))
+                         conn-dispatch-command-maps
+                         (list conn-state-map))))
         (prompt (concat "Thing Dispatch "
                         "(" (propertize "C-h" 'face 'help-key-binding) " for commands): "))
         (action))
-    (conn-with-state conn-state
-      (internal-push-keymap keymap 'overriding-terminal-local-map)
-      (unwind-protect
-          (let ((cmd (key-binding (read-key-sequence prompt) t)))
-            (while (not (get cmd :conn-command-thing))
-              (pcase cmd
-                ('keyboard-quit
-                 (keyboard-quit))
-                ('help
-                 (internal-pop-keymap keymap 'overriding-terminal-local-map)
-                 (setq cmd (completing-read
-                            "Command: "
-                            (lambda (string pred action)
-                              (if (eq action 'metadata)
-                                  `(metadata
-                                    ,(cons 'affixation-function
-                                           (conn--read-dispatch-command-affixation keymap))
-                                    (category . conn-dispatch-command))
-                                (complete-with-action action obarray string pred)))
-                            (lambda (sym)
-                              (and (functionp sym)
-                                   (and (not (eq sym 'help))
-                                        (or (get sym :conn-command-thing)
-                                            (where-is-internal sym (list keymap) t)))))
-                            t))
-                 (internal-push-keymap keymap 'overriding-terminal-local-map))
-                ((guard (where-is-internal cmd conn-dispatch-command-maps t))
-                 (setq action (unless (eq cmd action) cmd)
-                       cmd (thread-first
-                             (concat prompt (conn--stringify action))
-                             (read-key-sequence)
-                             (key-binding t))))
-                (_
-                 (setq cmd (thread-first
-                             (concat prompt
-                                     (conn--stringify action " - ")
-                                     (propertize "Invalid dispatch command"
-                                                 'face 'error))
-                             (read-key-sequence)
-                             (key-binding t))))))
-            (cons (get cmd :conn-command-thing) action))
-        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+    (internal-push-keymap keymap 'overriding-terminal-local-map)
+    (unwind-protect
+        (let ((cmd (key-binding (read-key-sequence prompt) t)))
+          (while (not (get cmd :conn-command-thing))
+            (pcase cmd
+              ('keyboard-quit
+               (keyboard-quit))
+              ('help
+               (internal-pop-keymap keymap 'overriding-terminal-local-map)
+               (setq cmd (completing-read
+                          "Command: "
+                          (lambda (string pred action)
+                            (if (eq action 'metadata)
+                                `(metadata
+                                  ,(cons 'affixation-function
+                                         (conn--read-dispatch-command-affixation keymap))
+                                  (category . conn-dispatch-command))
+                              (complete-with-action action obarray string pred)))
+                          (lambda (sym)
+                            (and (functionp sym)
+                                 (and (not (eq sym 'help))
+                                      (or (get sym :conn-command-thing)
+                                          (where-is-internal sym (list keymap) t)))))
+                          t))
+               (internal-push-keymap keymap 'overriding-terminal-local-map))
+              ((guard (where-is-internal cmd conn-dispatch-command-maps t))
+               (setq action (unless (eq cmd action) cmd)
+                     cmd (thread-first
+                           (concat prompt (conn--stringify action))
+                           (read-key-sequence)
+                           (key-binding t))))
+              (_
+               (setq cmd (thread-first
+                           (concat prompt
+                                   (conn--stringify action " - ")
+                                   (propertize "Invalid dispatch command"
+                                               'face 'error))
+                           (read-key-sequence)
+                           (key-binding t))))))
+          (cons (get cmd :conn-command-thing) action))
+      (internal-pop-keymap keymap 'overriding-terminal-local-map))))
 
 (defun conn--narrow-labeled-overlays (prompt overlays)
   (let ((c (read-char prompt))
@@ -6068,6 +6086,8 @@ dispatch on each contiguous component of the region."
                                 #'eq)
           (push '(conn-mode-line-indicator-mode (:eval conn--mode-line-indicator))
                 mode-line-format))
+        (setq conn-current-state nil
+              conn-previous-state nil)
         (setq-local conn-lighter (seq-copy conn-lighter))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
@@ -6087,7 +6107,6 @@ dispatch on each contiguous component of the region."
       (conn--remove-dots))
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
-    (setq conn-current-state nil)
     (conn--clear-overlays)
     (setq-local mode-line-format
                 (assq-delete-all
