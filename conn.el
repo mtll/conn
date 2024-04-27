@@ -124,7 +124,7 @@ Defines default STATE for buffers matching REGEXP."
 (defface conn-dot-face
   '((default              (:background "#c6ebd9"))
     (((background dark))  (:background "#449066"))
-    (((background light)) (:background "#c6ebd9")))
+    (((background light)) (:background "#d6eeab")))
   "Face for dots."
   :group 'conn-dots)
 
@@ -226,7 +226,7 @@ Supported values are:
   :type '(list integer))
 
 (defface conn-dispatch-label-face
-  '((t (:background "#7feaff" :foreground "black" :bold t)))
+  '((t (:background "#fab3ff" :foreground "black" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn)
 
