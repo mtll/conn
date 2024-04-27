@@ -17,8 +17,8 @@ Conn State:
 ┃              │    map   │  region  │          │   map    │  region  │          │          │          │          │   load   │  append  │  prepend │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │          │          │          │   emacs  │   goto   │          │  ←line   │  ↓para   │  →line   │   M-X    │  insert  │                   ┃
-┃                │          │          │          │ state map│   map    │          │          │          │          │          │   pair   │                   ┃
+┃                │          │          │          │   emacs  │   goto   │  expand  │  ←line   │  ↓para   │  →line   │   M-X    │  insert  │                   ┃
+┃                │          │          │          │ state map│   map    │  region  │          │          │          │          │   pair   │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '  other │                   ┃
 ┃                │    win   │  search  │  →delete │  emacs   │   goto   │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
@@ -57,8 +57,8 @@ Dot State:
 ┃              │    map   │   dot    │  region  │   map    │  things  │  regexp  │          │          │          │   load   │  before  │   after  │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │          │          │  delete  │   emacs  │   goto   │          │  ←line   │  ↓para   │  →line   │   M-X    │          │                   ┃
-┃                │          │          │ all dots │ state map│   map    │          │          │          │          │          │          │                   ┃
+┃                │          │          │  delete  │   emacs  │   goto   │  expand  │  ←line   │  ↓para   │  →line   │   M-X    │          │                   ┃
+┃                │          │          │ all dots │ state map│   map    │  region  │          │          │          │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '  other │                   ┃
 ┃                │    win   │  search  │  →delete │  emacs   │   goto   │  repeat  │  ←char   │  ↓line   │  →char   │   M-x    │    place │                   ┃
