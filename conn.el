@@ -135,8 +135,8 @@ Defines default STATE for buffers matching REGEXP."
   :group 'conn)
 
 (defface conn-mark-face
-  '((default              (:inherit cursor :background "#dfa0f0"))
-    (((background light)) (:inherit cursor :background "#dfa0f0"))
+  '((default              (:inherit cursor :background "#b8a2f0"))
+    (((background light)) (:inherit cursor :background "#b8a2f0"))
     (((background dark))  (:inherit cursor :background "#a742b0")))
   "Face for mark."
   :group 'conn-marks)
@@ -227,7 +227,7 @@ Supported values are:
   :type '(list integer))
 
 (defface conn-dispatch-label-face
-  '((t (:background "#fab3ff" :foreground "black" :bold t)))
+  '((t (:background "#ff8bd1" :foreground "black" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn)
 
@@ -525,10 +525,11 @@ If BUFFER is nil check `current-buffer'."
                (keyboard-quit))
               ('help
                (internal-pop-keymap keymap 'overriding-terminal-local-map)
-               (setq cmd (let ((read-extended-command-predicate
-                                (lambda (symbol _)
-                                  (get symbol :conn-command-thing))))
-                           (read-extended-command)))
+               (save-window-excursion
+                 (setq cmd (let ((read-extended-command-predicate
+                                  (lambda (symbol _)
+                                    (get symbol :conn-command-thing))))
+                             (read-extended-command))))
                (internal-push-keymap keymap 'overriding-terminal-local-map))
               (_
                (setq cmd (thread-first
@@ -557,12 +558,14 @@ If BUFFER is nil check `current-buffer'."
           (_
            (goto-char (if isearch-forward (point-min) (point-max)))))
         (setq bound (if isearch-forward (point-max) (point-min)))
-        (cl-loop for match = (isearch-search-string isearch-string bound t)
-                 while match
-                 when (funcall isearch-filter-predicate
-                               (match-beginning 0) (match-end 0))
-                 collect (cons (conn--create-marker (match-beginning 0))
-                               (conn--create-marker (match-end 0))))))))
+        (let (result)
+          (while (isearch-search-string isearch-string bound t)
+            (when (funcall isearch-filter-predicate
+                           (match-beginning 0) (match-end 0))
+              (push (cons (conn--create-marker (match-beginning 0))
+                          (conn--create-marker (match-end 0)))
+                    result)))
+          (nreverse result))))))
 
 (defun conn--visible-matches (string &optional dir)
   (let (matches)
@@ -617,7 +620,6 @@ If BUFFER is nil check `current-buffer'."
     (mapc #'delete-overlay overlays)
     string))
 
-;; TODO: bipartite graph for labels to always alternate hands?
 (defun conn--create-label-strings (count &optional labels)
   (let* ((alphabet (thread-last
                      (seq-uniq conn-dispatch-label-characters)
@@ -1045,7 +1047,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'sexp (conn-individual-thing-handler 'sexp)
- 'up-list 'backward-up-list)
+ 'up-list 'down-list 'backward-up-list)
 
 (conn-register-thing whitespace
   :mark-key "SPC"
@@ -1560,15 +1562,16 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 
 (defun conn--create-dots (&rest bounds)
   (pcase-dolist (`(,start . ,end) bounds)
-    (with-current-buffer (if (markerp start)
-                             (marker-buffer start)
-                           (current-buffer))
-      (let* ((overlaps (conn--all-overlays #'conn-dotp start end))
-             (start (apply #'min start (mapcar #'overlay-start overlaps)))
-             (end (apply #'max end (mapcar #'overlay-end overlaps)))
-             (overlay (make-overlay start end nil nil t)))
-        (mapc #'conn--delete-dot overlaps)
-        (overlay-put overlay 'category 'conn--dot)))))
+    (unless (= start end)
+      (with-current-buffer (if (markerp start)
+                               (marker-buffer start)
+                             (current-buffer))
+        (let* ((overlaps (conn--all-overlays #'conn-dotp start end))
+               (start (apply #'min start (mapcar #'overlay-start overlaps)))
+               (end (apply #'max end (mapcar #'overlay-end overlaps)))
+               (overlay (make-overlay start end nil nil t)))
+          (mapc #'conn--delete-dot overlaps)
+          (overlay-put overlay 'category 'conn--dot))))))
 
 (defun conn--remove-dots (&optional start end)
   (mapc #'conn--delete-dot (conn--all-overlays #'conn-dotp start end)))
@@ -1754,8 +1757,8 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-previous-line-keys      "C-p")
 (conn-register-thing-commands
  'line (conn-sequential-thing-handler 'line)
- 'conn-forward-line-keys
- 'conn-backward-line-keys)
+ 'conn-next-line-keys
+ 'conn-previous-line-keys)
 
 ;;;;; Per State Buffer Colors
 
@@ -2108,9 +2111,6 @@ disabled.
                       (remove-hook 'conn-transition-hook hook)
                       (message "Error in transition hook %s" hook)))))))))))
 
-
-;;;;; State Definitions
-
 (defvar-keymap conn-common-map
   :doc "Keymap for bindings shared between dot and conn states.")
 
@@ -2222,8 +2222,8 @@ state."
   "w" 'conn-dispatch-kill
   "e" 'conn-dispatch-dot
   "g" 'conn-dispatch-grab
-  "t" 'conn-dispatch-transpose
   "y" 'conn-dispatch-yank
+  "r" 'conn-dispatch-transpose
   "c" 'conn-dispatch-copy)
 
 (defvar conn-dispatch-command-maps
@@ -2358,21 +2358,22 @@ state."
                (keyboard-quit))
               ('help
                (internal-pop-keymap keymap 'overriding-terminal-local-map)
-               (setq cmd (completing-read
-                          "Command: "
-                          (lambda (string pred action)
-                            (if (eq action 'metadata)
-                                `(metadata
-                                  ,(cons 'affixation-function
-                                         (conn--read-dispatch-command-affixation keymap))
-                                  (category . conn-dispatch-command))
-                              (complete-with-action action obarray string pred)))
-                          (lambda (sym)
-                            (and (functionp sym)
-                                 (and (not (eq sym 'help))
-                                      (or (get sym :conn-command-thing)
-                                          (where-is-internal sym (list keymap) t)))))
-                          t))
+               (save-window-excursion
+                 (setq cmd (completing-read
+                            "Command: "
+                            (lambda (string pred action)
+                              (if (eq action 'metadata)
+                                  `(metadata
+                                    ,(cons 'affixation-function
+                                           (conn--read-dispatch-command-affixation keymap))
+                                    (category . conn-dispatch-command))
+                                (complete-with-action action obarray string pred)))
+                            (lambda (sym)
+                              (and (functionp sym)
+                                   (and (not (eq sym 'help))
+                                        (or (get sym :conn-command-thing)
+                                            (where-is-internal sym (list keymap) t)))))
+                            t)))
                (internal-push-keymap keymap 'overriding-terminal-local-map))
               ((guard (where-is-internal cmd conn-dispatch-command-maps t))
                (setq action (unless (eq cmd action) cmd)
@@ -2459,17 +2460,18 @@ state."
 (defun conn--read-overlay-label (labels overlays)
   (let ((candidates (conn--label-overlays labels overlays)))
     (unwind-protect
-        (cl-loop
-         (pcase candidates
-           ('nil
-            (setq candidates
-                  (thread-last
-                    (conn--label-overlays labels overlays)
-                    (conn--narrow-labeled-overlays "char: (no matches)"))))
-           (`(,ov . nil)
-            (cl-return (overlay-get ov 'prefix-overlay)))
-           (_
-            (setq candidates (conn--narrow-labeled-overlays "char:" candidates)))))
+        (catch 'return
+          (while t
+           (pcase candidates
+             ('nil
+              (setq candidates
+                    (thread-last
+                      (conn--label-overlays labels overlays)
+                      (conn--narrow-labeled-overlays "char: (no matches)"))))
+             (`(,ov . nil)
+              (throw 'return (overlay-get ov 'prefix-overlay)))
+             (_
+              (setq candidates (conn--narrow-labeled-overlays "char:" candidates))))))
       (mapc #'delete-overlay candidates))))
 
 (defun conn-thing-dispatch (thing action &optional repeat)
@@ -2509,19 +2511,21 @@ seconds."
                                (< (abs (- (overlay-start a) (point)))
                                   (abs (- (overlay-start b) (point))))))
                 labels (conn--create-label-strings
-                        (cl-loop for (_ . ps) in prefix-ovs
-                                 sum (length ps))))
-          (cl-loop
-           (when (null labels)
-             (user-error "No matching candidates"))
-           (let* ((prefix (conn--read-overlay-label labels prefix-ovs))
-                  (window (overlay-get prefix 'window))
-                  (pt (overlay-start prefix)))
-             (funcall action window pt thing)
-             (unless repeat (cl-return)))
-           (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
-             (dolist (ov ovs)
-               (overlay-put ov 'face 'conn-read-string-match-face)))))
+                        (let ((sum 0))
+                          (dolist (p prefix-ovs sum)
+                            (setq sum (+ sum (length (cdr p))))))))
+          (catch 'return
+            (while t
+             (when (null labels)
+               (user-error "No matching candidates"))
+             (let* ((prefix (conn--read-overlay-label labels prefix-ovs))
+                    (window (overlay-get prefix 'window))
+                    (pt (overlay-start prefix)))
+               (funcall action window pt thing)
+               (unless repeat (throw 'return nil)))
+             (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
+               (dolist (ov ovs)
+                 (overlay-put ov 'face 'conn-read-string-match-face))))))
       (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
         (dolist (ov ovs)
           (delete-overlay ov))))))
@@ -3006,8 +3010,7 @@ between `point-min' and `point-max'."
           (forward-char)))
       (push end dots))
     (conn--remove-dots start end)
-    (cl-loop for (beg end) on dots by #'cddr
-             do (conn--create-dots (cons beg end)))))
+    (while dots (conn--create-dots (cons (pop dots) (pop dots))))))
 
 (defun conn-split-dots-on-regexp (regexp start end)
   "Split all dots in region START to END on regexp.
@@ -3097,9 +3100,11 @@ between `point-min' and `point-max'."
                      current-prefix-arg))
   (let* ((prop (intern (completing-read
                         "Property: "
-                        (cl-loop for prop in (text-properties-at (point))
-                                 by #'cddr
-                                 collect prop)
+                        (let ((props (text-properties-at (point)))
+                              result)
+                          (while props
+                            (push (prog1 (pop props) (pop props)) result))
+                          result)
                         nil t)))
          (vals (mapcar (lambda (s) (cons (message "%s" s) s))
                        (ensure-list (get-text-property (point) prop))))
@@ -3325,9 +3330,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
               (unless refine (push (overlay-end dot) dots))))
         (unless forward (isearch-repeat-backward))))
     (conn--remove-dots)
-    (cl-loop for (beg end) on dots by #'cddr
-             when (/= beg end)
-             do (conn--create-dots (cons beg end)))))
+    (while dots (conn--create-dots (cons (pop dots) (pop dots))))))
 
 (defun conn-isearch-refine-dots ()
   "Clear dots and add new dots at isearch matches within previous dots."
@@ -4177,7 +4180,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                     (goto-char beg)
                     (looking-at regexp))))
       (insert padding)
-      (setq end (1+ end)))
+      (cl-incf end))
     (insert region)
     (goto-char end)
     (conn--push-ephemeral-mark (+ (point) (length region)))))
@@ -5415,8 +5418,7 @@ dispatch on each contiguous component of the region."
    (let* ((prop (intern (completing-read
                          "Property: "
                          (cl-loop for prop in (text-properties-at (point))
-                                  by #'cddr
-                                  collect prop)
+                                  by #'cddr collect prop)
                          nil t)))
           (vals (mapcar (lambda (s) (cons (message "%s" s) s))
                         (ensure-list (get-text-property (point) prop))))
@@ -5857,7 +5859,7 @@ dispatch on each contiguous component of the region."
   "$"     'ispell-word
   "*"     'calc-dispatch
   ")"     'up-list
-  "("     'backward-up-list
+  "("     'down-list
   "["     'conn-kill-prepend-region
   "\""    'conn-insert-pair
   "<tab>" 'indent-region
@@ -6022,7 +6024,7 @@ dispatch on each contiguous component of the region."
   "C-x t s"   'tab-switch
   "C-x r a"   'conn-tab-to-register
   "C-x t a"   'conn-tab-to-register
-  "M-RET"     'conn-open-line-and-indent
+  "M-o"       'conn-open-line-and-indent
   "M-O"       'conn-pop-to-mark-command
   "M-U"       'conn-unpop-to-mark-command)
 
@@ -6246,8 +6248,10 @@ determine if `conn-local-mode' should be enabled."
   (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
-      ")" 'paredit-forward-up
-      "(" 'paredit-backward-up))
+      "O" 'paredit-forward-up
+      "U" 'paredit-backward-up
+      "(" 'paredit-backward-down
+      ")" 'paredit-forward-down))
 
   (conn-register-thing paredit-sexp
     :forward-op 'paredit-forward
