@@ -2243,7 +2243,9 @@ state."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (setq str (thing-at-point thing))))
+        (pcase (bounds-of-thing-at-point thing)
+          (`(,beg . ,end)
+           (setq str (filter-buffer-substring beg end))))))
     (if str
         (insert str)
       (user-error "No thing at point"))))
@@ -2252,11 +2254,11 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let ((str (thing-at-point thing)))
-          (progn
-            (kill-new str)
-            (message "Copied: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (kill-new (filter-buffer-substring beg end))
+         (message "Copied: %s" str))
+        (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-goto (window pt thing)
   (setq conn-this-command-thing thing)
