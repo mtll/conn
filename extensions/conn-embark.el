@@ -23,6 +23,7 @@
 
 (require 'conn)
 (require 'embark)
+(require 'outline)
 
 (defgroup conn-embark nil
   "Conn-mode states."
@@ -306,19 +307,10 @@ will navigate up out of a keymap."
 
 (defun conn-narrow-indirect-to-heading ()
   (interactive)
-  (let ((hidden (save-excursion
-                  (outline-end-of-heading)
-                  (outline-invisible-p)))
-        (buf (current-buffer)))
-    (save-restriction
-      (widen)
-      (outline-show-subtree)
-      (pcase (bounds-of-thing-at-point 'heading)
-        (`(,beg . ,end)
-         (conn--narrow-indirect beg end))))
-    (when hidden
-      (with-current-buffer buf
-        (outline-hide-subtree)))))
+  (outline-mark-subtree)
+  (conn--narrow-indirect (region-beginning)
+                         (region-end))
+  (outline-show-subtree))
 
 (keymap-set conn-mode-map "M-S-<iso-lefttab>"   'conn-complete-keys)
 (keymap-set conn-mode-map "C-M-S-<iso-lefttab>" 'conn-complete-conn-keys)
