@@ -4162,7 +4162,6 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/grab"
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
-    "\\[conn-wincontrol-clone-buffer]: clone; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
     "\\[text-scale-set]: scale; "
@@ -4272,7 +4271,6 @@ if ARG is anything else `other-tab-prefix'."
   "M-TAB"   'conn-wincontrol-scroll-down
   "a"       'conn-wincontrol-off
   "b"       'switch-to-buffer
-  "c"       'conn-wincontrol-clone-buffer
   "C"       'tab-bar-duplicate-tab
   "D"       'delete-other-windows
   "d"       'delete-window
@@ -4478,12 +4476,6 @@ When called interactively N is `last-command-event'."
 Uses `conn-swap-windows'."
   (interactive)
   (conn-swap-windows))
-
-(defun conn-wincontrol-clone-buffer ()
-  "Clone indirect buffer in a new window.
-Uses `clone-indirect-buffer-other-window'."
-  (interactive)
-  (clone-indirect-buffer-other-window nil t))
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
