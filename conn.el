@@ -703,6 +703,41 @@ If BUFFER is nil check `current-buffer'."
             (delete-overlay ov)))))))
 
 
+;;;; Advice
+
+(defun conn--define-key-advice (keymap key &rest _)
+  (when (or (memq keymap (mapcar #'cdr conn--state-maps))
+            (and (memq keymap (conn--without-conn-maps (current-active-maps)))
+                 (member (if (stringp key) (key-parse key) key)
+                         (mapcar #'symbol-value conn--aux-bindings))))
+    (cl-incf conn--aux-update-tick)))
+
+(defun conn--push-mark-ad (&rest _)
+  (unless conn--ephemeral-mark
+    (conn--push-ring-delete-duplicate 'conn--mark-ring (mark-marker)))
+  (setq conn--ephemeral-mark nil))
+
+(defun conn--save-ephemeral-mark-ad (&rest _)
+  (push conn--ephemeral-mark conn--saved-ephemeral-marks))
+
+(defun conn--restore-ephemeral-mark-ad (&rest _)
+  (setq-local conn--ephemeral-mark (pop conn--saved-ephemeral-marks)))
+
+(defun conn--setup-advice ()
+  (if conn-mode
+      (progn
+        (advice-add 'define-key :before #'conn--define-key-advice)
+        (advice-add 'push-mark :before #'conn--push-mark-ad)
+        (advice-add 'save-mark-and-excursion--save :before
+                    #'conn--save-ephemeral-mark-ad)
+        (advice-add 'save-mark-and-excursion--restore :after
+                    #'conn--restore-ephemeral-mark-ad))
+    (advice-remove 'define-key #'conn--define-key-advice)
+    (advice-remove 'push-mark #'conn--push-mark-ad)
+    (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
+    (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
+
+
 ;;;; Extensions
 
 (defvar conn--extensions nil)
@@ -982,6 +1017,117 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--get-this-command-thing ()
   (or conn-this-command-thing
       (get this-command :conn-command-thing)))
+
+;;;;; Thing Definitions
+
+(conn-register-thing page
+  :mark-key "p"
+  :forward-op 'forward-page)
+
+(conn-register-thing-commands
+ 'page (conn-individual-thing-handler 'page)
+ 'forward-page 'backward-page)
+
+(conn-register-thing dot
+  :beg-op (lambda () (conn-previous-dot 1))
+  :end-op (lambda () (conn-next-dot 1)))
+
+(conn-register-thing-commands
+ 'dot (conn-individual-thing-handler 'dot)
+ 'conn-next-dot 'conn-previous-dot)
+
+(conn-register-thing-commands
+ 'char nil
+ 'forward-char 'backward-char
+ 'conn-forward-char 'conn-backward-char)
+
+(conn-register-thing word
+  :forward-op 'forward-word)
+
+(conn-register-thing-commands
+ 'word (conn-sequential-thing-handler 'word)
+ 'forward-word 'backward-word)
+
+(conn-register-thing sexp
+  :forward-op 'forward-sexp)
+
+(conn-register-thing-commands
+ 'sexp (conn-sequential-thing-handler 'sexp)
+ 'forward-sexp 'backward-sexp)
+
+(conn-register-thing-commands
+ 'sexp (conn-individual-thing-handler 'sexp)
+ 'up-list 'backward-up-list)
+
+(conn-register-thing whitespace
+  :mark-key "SPC"
+  :forward-op 'forward-whitespace)
+
+(conn-register-thing-commands
+ 'whitespace (conn-individual-thing-handler 'whitespace)
+ 'forward-whitespace 'conn-backward-whitespace)
+
+(conn-register-thing sentence
+  :forward-op 'forward-sentence)
+
+(conn-register-thing-commands
+ 'sentence (conn-sequential-thing-handler 'sentence)
+ 'forward-sentence 'backward-sentence)
+
+(conn-register-thing paragraph
+  :forward-op 'forward-paragraph)
+
+(conn-register-thing-commands
+ 'paragraph (conn-sequential-thing-handler 'paragraph)
+ 'forward-paragraph 'backward-paragraph)
+
+(conn-register-thing-commands
+ 'defun (conn-sequential-thing-handler 'defun)
+ 'end-of-defun 'beginning-of-defun)
+
+(conn-register-thing buffer
+  :bounds-op (lambda () (cons (point-min) (point-max))))
+
+(conn-register-thing-commands
+ 'buffer (conn-individual-thing-handler 'buffer)
+ 'end-of-buffer 'beginning-of-buffer)
+
+(conn-register-thing line
+  :forward-op (lambda (N)
+                (cond ((> N 0)
+                       (forward-line N))
+                      ((< N 0)
+                       (let ((pt (point)))
+                         (beginning-of-line)
+                         (if (= pt (point))
+                             (forward-line N)
+                           (forward-line (1+ N))))))))
+
+(conn-register-thing-commands
+ 'line (conn-sequential-thing-handler 'line)
+ 'forward-line 'conn-backward-line)
+
+(conn-register-thing-commands
+ 'line 'conn-jump-handler
+ 'next-line 'previous-line)
+
+(conn-register-thing outer-line
+  :beg-op (lambda () (move-beginning-of-line nil))
+  :end-op (lambda () (move-end-of-line nil)))
+
+(conn-register-thing-commands
+ 'outer-line (conn-individual-thing-handler 'outer-line)
+ 'move-beginning-of-line 'move-end-of-line)
+
+(conn-register-thing inner-line
+  :beg-op 'back-to-indentation
+  :end-op 'conn--end-of-inner-line-1)
+
+(conn-register-thing-commands
+ 'inner-line (conn-individual-thing-handler 'inner-line)
+ 'back-to-indentation
+ 'conn-beginning-of-inner-line
+ 'conn-end-of-inner-line)
 
 
 ;;;; Macro Dispatch
@@ -1346,8 +1492,6 @@ The iterator must be the first argument in ARGLIST.
 
 ;;;; Dots
 
-;;;;; Dot Functions
-
 (defun conn--propertize-dot-candidates (dots)
   (mapcar
    (lambda (dot)
@@ -1479,44 +1623,9 @@ If BUFFER is nil use current buffer."
         result))))
 
 
-;;;; Advice
+;;;; States
 
-(defun conn--define-key-advice (keymap key &rest _)
-  (when (or (memq keymap (mapcar #'cdr conn--state-maps))
-            (and (memq keymap (conn--without-conn-maps (current-active-maps)))
-                 (member (if (stringp key) (key-parse key) key)
-                         (mapcar #'symbol-value conn--aux-bindings))))
-    (cl-incf conn--aux-update-tick)))
-
-(defun conn--push-mark-ad (&rest _)
-  (unless conn--ephemeral-mark
-    (conn--push-ring-delete-duplicate 'conn--mark-ring (mark-marker)))
-  (setq conn--ephemeral-mark nil))
-
-(defun conn--save-ephemeral-mark-ad (&rest _)
-  (push conn--ephemeral-mark conn--saved-ephemeral-marks))
-
-(defun conn--restore-ephemeral-mark-ad (&rest _)
-  (setq-local conn--ephemeral-mark (pop conn--saved-ephemeral-marks)))
-
-(defun conn--setup-advice ()
-  (if conn-mode
-      (progn
-        (advice-add 'define-key :before #'conn--define-key-advice)
-        (advice-add 'push-mark :before #'conn--push-mark-ad)
-        (advice-add 'save-mark-and-excursion--save :before
-                    #'conn--save-ephemeral-mark-ad)
-        (advice-add 'save-mark-and-excursion--restore :after
-                    #'conn--restore-ephemeral-mark-ad))
-    (advice-remove 'define-key #'conn--define-key-advice)
-    (advice-remove 'push-mark #'conn--push-mark-ad)
-    (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
-    (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
-
-
-;;;; State Functionality
-
-;;;;; Remapping Functions
+;;;;; Key Remapping
 
 (defun conn--modes-mark-map ()
   (setq conn--local-mark-thing-map (copy-keymap conn-mark-thing-map))
@@ -1679,7 +1788,7 @@ C-x, M-s and M-g into various state maps."
       (modify-all-frames-parameters
        `((cursor-color . ,conn--default-cursor-color))))))
 
-;;;;; Conn-Define-State Macro
+;;;;; State Definitions
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
@@ -1975,7 +2084,7 @@ disabled.
                 (run-hooks 'conn-transition-hook)))))))
 
 
-;;;; State Definitions
+;;;;; State Definitions
 
 (defvar-keymap conn-common-map
   :doc "Keymap for bindings shared between dot and conn states.")
@@ -2330,9 +2439,7 @@ state."
                     (conn--label-overlays labels overlays)
                     (conn--narrow-labeled-overlays "char: (no matches)"))))
            (`(,ov . nil)
-            (let ((prefix (overlay-get ov 'prefix-overlay)))
-              (cl-return (cons (overlay-get prefix 'window)
-                               (overlay-start prefix)))))
+            (cl-return (overlay-get ov 'prefix-overlay)))
            (_
             (setq candidates (conn--narrow-labeled-overlays "char:" candidates)))))
       (mapc #'delete-overlay candidates))))
@@ -2379,8 +2486,9 @@ seconds."
           (cl-loop
            (when (null labels)
              (user-error "No matching candidates"))
-           (pcase-let ((`(,window . ,pt)
-                        (conn--read-overlay-label labels prefix-ovs)))
+           (let* ((prefix (conn--read-overlay-label labels prefix-ovs))
+                  (window (overlay-get prefix 'window))
+                  (pt (overlay-start prefix)))
              (funcall action window pt thing)
              (unless repeat (cl-return)))
            (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
@@ -2449,7 +2557,11 @@ seconds."
 
 ;;;;; Expand
 
-(defvar conn-expansion-functions nil)
+(defvar conn-expansion-functions nil
+  "Functions which provide expansions for `conn-expand'.
+Functions should return a list of (BEGIN . END) pairs representing
+potential expansions.  Functions may return invalid expansions
+(e.g. nil, invalid regions, etc.) and they will be filtered out.")
 
 (defvar-local conn--current-expansions nil)
 
@@ -2459,15 +2571,17 @@ seconds."
 
 (defun conn--expansion-filter-regions (regions)
   (delete-dups
-   (seq-filter (pcase-lambda (`(,beg . ,end))
-                 (and beg end
-                      (/= beg end)
-                      (<= beg (region-beginning))
-                      (>= end (region-end))))
+   (seq-filter (lambda (reg)
+                 (pcase reg
+                   (`(,beg . ,end)
+                    (and beg end
+                         (/= beg end)
+                         (<= beg (region-beginning))
+                         (>= end (region-end))))))
                regions)))
 
 (defun conn--generate-expansions ()
-  (add-hook 'after-change-functions 'conn--expand-post-change-hook t)
+  (add-hook 'after-change-functions 'conn--expand-post-change-hook nil t)
   (thread-last
     (mapcan #'funcall conn-expansion-functions)
     (cons (cons (region-beginning) (region-end)))
@@ -2488,6 +2602,10 @@ seconds."
               conn--current-expansions)))
 
 (defun conn-expand (arg)
+  "Expend region by semantic units.
+
+If the region is active only the `point' is moved.
+Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "p")
   (unless (conn--valid-expansions-p)
     (setq conn--current-expansions (conn--generate-expansions)))
@@ -2523,6 +2641,11 @@ seconds."
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
 
 (defun conn-contract (arg)
+  "Contract region by semantic units.
+
+If the region is active only the `point' is moved.
+Expansions and contractions are provided by functions in
+`conn-expansion-functions'."
   (interactive "p")
   (unless (conn--valid-expansions-p)
     (setq conn--current-expansions (conn--generate-expansions)))
@@ -3183,6 +3306,58 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive)
   (conn-isearch-split-dots t))
 
+(defun conn-isearch-backward-symbol-at-point ()
+  "Isearch backward for symbol at point."
+  (interactive)
+  (funcall-interactively #'isearch-forward-symbol-at-point -1)
+  (isearch-repeat-backward))
+
+(defun conn-isearch-backward-thing (thing)
+  "Isearch forward for THING.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
+  (interactive (list (conn--read-thing-command)))
+  (pcase (bounds-of-thing-at-point thing)
+    (`(,beg . ,end) (conn-isearch-region-backward beg end))
+    (_              (user-error "No %s found" thing))))
+
+(defun conn-isearch-forward-thing (thing)
+  "Isearch backward for THING.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
+  (interactive (list (conn--read-thing-command)))
+  (pcase (bounds-of-thing-at-point thing)
+    (`(,beg . ,end) (conn-isearch-region-forward beg end))
+    (_              (user-error "No %s found" thing))))
+
+(defun conn-isearch-region-forward (beg end)
+  "Isearch forward for region from BEG to END.
+Interactively `region-beginning' and `region-end'."
+  (interactive (list (region-beginning)
+                     (region-end)))
+  (isearch-mode t)
+  (with-isearch-suspended
+   (setq isearch-new-string (buffer-substring-no-properties beg end)
+         isearch-new-message (mapconcat 'isearch-text-char-description
+                                        isearch-new-string ""))))
+
+(defun conn-isearch-region-backward (beg end)
+  "Isearch backward for region from BEG to END.
+Interactively `region-beginning' and `region-end'."
+  (interactive (list (region-beginning)
+                     (region-end)))
+  (isearch-mode nil)
+  (with-isearch-suspended
+   (setq isearch-new-string (buffer-substring-no-properties beg end)
+         isearch-new-message (mapconcat 'isearch-text-char-description
+                                        isearch-new-string ""))))
+
+(defun conn-isearch-exit-and-mark ()
+  "`isearch-exit' and set region to match."
+  (interactive)
+  (isearch-exit)
+  (conn--push-ephemeral-mark isearch-other-end))
+
 ;;;;; Editing Commands
 
 (defvar-local conn--mark-ring nil)
@@ -3332,12 +3507,6 @@ See `clone-indirect-buffer'."
   (interactive)
   (conn--narrow-indirect (point-min) (point)))
 
-(defun conn-isearch-backward-symbol-at-point ()
-  "Isearch backward for symbol at point."
-  (interactive)
-  (funcall-interactively #'isearch-forward-symbol-at-point -1)
-  (isearch-repeat-backward))
-
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
@@ -3357,46 +3526,6 @@ Interactively `region-beginning' and `region-end'."
                                     (regexp-quote (buffer-substring-no-properties beg end))
                                     'grep-regexp-history)))
     (occur search-string)))
-
-(defun conn-isearch-backward-thing (thing)
-  "Isearch forward for THING.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
-  (pcase (bounds-of-thing-at-point thing)
-    (`(,beg . ,end) (conn-isearch-region-backward beg end))
-    (_              (user-error "No %s found" thing))))
-
-(defun conn-isearch-forward-thing (thing)
-  "Isearch backward for THING.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
-  (pcase (bounds-of-thing-at-point thing)
-    (`(,beg . ,end) (conn-isearch-region-forward beg end))
-    (_              (user-error "No %s found" thing))))
-
-(defun conn-isearch-region-forward (beg end)
-  "Isearch forward for region from BEG to END.
-Interactively `region-beginning' and `region-end'."
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (isearch-mode t)
-  (with-isearch-suspended
-   (setq isearch-new-string (buffer-substring-no-properties beg end)
-         isearch-new-message (mapconcat 'isearch-text-char-description
-                                        isearch-new-string ""))))
-
-(defun conn-isearch-region-backward (beg end)
-  "Isearch backward for region from BEG to END.
-Interactively `region-beginning' and `region-end'."
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (isearch-mode nil)
-  (with-isearch-suspended
-   (setq isearch-new-string (buffer-substring-no-properties beg end)
-         isearch-new-message (mapconcat 'isearch-text-char-description
-                                        isearch-new-string ""))))
 
 (defun conn-org-tree-edit-insert-heading ()
   (interactive)
@@ -3859,12 +3988,6 @@ of deleting it."
       (funcall (conn-kill-region-keys) start end)
     (funcall (conn-delete-region-keys) start end))
   (funcall (conn-yank-keys)))
-
-(defun conn-isearch-exit-and-mark ()
-  "`isearch-exit' and set region to match."
-  (interactive)
-  (isearch-exit)
-  (conn--push-ephemeral-mark isearch-other-end))
 
 (defun conn--end-of-inner-line-1 ()
   (goto-char (line-end-position))
@@ -4662,119 +4785,36 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (back-to-indentation)
   (conn-emacs-state))
 
-;;;;; Thing Definitions
-
-(conn-register-thing page
-  :mark-key "p"
-  :forward-op 'forward-page)
-
-(conn-register-thing-commands
- 'page (conn-individual-thing-handler 'page)
- 'forward-page 'backward-page)
-
-(conn-register-thing dot
-  :beg-op (lambda () (conn-previous-dot 1))
-  :end-op (lambda () (conn-next-dot 1)))
-
-(conn-register-thing-commands
- 'dot (conn-individual-thing-handler 'dot)
- 'conn-next-dot 'conn-previous-dot)
-
-(conn-register-thing-commands
- 'char nil
- 'forward-char 'backward-char
- 'conn-forward-char 'conn-backward-char)
-
-(conn-register-thing word
-  :forward-op 'forward-word)
-
-(conn-register-thing-commands
- 'word (conn-sequential-thing-handler 'word)
- 'forward-word 'backward-word)
-
-(conn-register-thing sexp
-  :forward-op 'forward-sexp)
-
-(conn-register-thing-commands
- 'sexp (conn-sequential-thing-handler 'sexp)
- 'forward-sexp 'backward-sexp)
-
-(conn-register-thing-commands
- 'sexp (conn-individual-thing-handler 'sexp)
- 'up-list 'backward-up-list)
-
-(conn-register-thing whitespace
-  :mark-key "SPC"
-  :forward-op 'forward-whitespace)
-
-(conn-register-thing-commands
- 'whitespace (conn-individual-thing-handler 'whitespace)
- 'forward-whitespace 'conn-backward-whitespace)
-
-(conn-register-thing sentence
-  :forward-op 'forward-sentence)
-
-(conn-register-thing-commands
- 'sentence (conn-sequential-thing-handler 'sentence)
- 'forward-sentence 'backward-sentence)
-
-(conn-register-thing paragraph
-  :forward-op 'forward-paragraph)
-
-(conn-register-thing-commands
- 'paragraph (conn-sequential-thing-handler 'paragraph)
- 'forward-paragraph 'backward-paragraph)
-
-(conn-register-thing-commands
- 'defun (conn-sequential-thing-handler 'defun)
- 'end-of-defun 'beginning-of-defun)
-
-(conn-register-thing buffer
-  :bounds-op (lambda () (cons (point-min) (point-max))))
-
-(conn-register-thing-commands
- 'buffer (conn-individual-thing-handler 'buffer)
- 'end-of-buffer 'beginning-of-buffer)
-
-(conn-register-thing line
-  :forward-op (lambda (N)
-                (cond ((> N 0)
-                       (forward-line N))
-                      ((< N 0)
-                       (let ((pt (point)))
-                         (beginning-of-line)
-                         (if (= pt (point))
-                             (forward-line N)
-                           (forward-line (1+ N))))))))
-
-(conn-register-thing-commands
- 'line (conn-sequential-thing-handler 'line)
- 'forward-line 'conn-backward-line)
-
-(conn-register-thing-commands
- 'line 'conn-jump-handler
- 'next-line 'previous-line)
-
-(conn-register-thing outer-line
-  :beg-op (lambda () (move-beginning-of-line nil))
-  :end-op (lambda () (move-end-of-line nil)))
-
-(conn-register-thing-commands
- 'outer-line (conn-individual-thing-handler 'outer-line)
- 'move-beginning-of-line 'move-end-of-line)
-
-(conn-register-thing inner-line
-  :beg-op 'back-to-indentation
-  :end-op 'conn--end-of-inner-line-1)
-
-(conn-register-thing-commands
- 'inner-line (conn-individual-thing-handler 'inner-line)
- 'back-to-indentation
- 'conn-beginning-of-inner-line
- 'conn-end-of-inner-line)
-
 
-;;;; Transient Definitions
+;;;; Transients
+
+(defclass conn-transient-switches (transient-switches)
+  ((required :initarg :required :initform nil))
+  "Class used for sets of mutually exclusive command-line switches.
+Does not allow a null value.")
+
+(cl-defmethod transient-infix-read ((obj conn-transient-switches))
+  "Cycle through the mutually exclusive switches.
+The last value is \"don't use any of these switches\"."
+  (let ((choices (mapcar (apply-partially #'format (oref obj argument-format))
+                         (oref obj choices))))
+    (if-let ((value (oref obj value)))
+        (or (cadr (member value choices))
+            (when (oref obj required) (car choices)))
+      (car choices))))
+
+(cl-defmethod transient-format-value ((obj conn-transient-switches))
+  (with-slots (value argument-format choices) obj
+    (format
+     (propertize "%s" 'face 'transient-delimiter)
+     (mapconcat
+      (lambda (choice)
+        (propertize choice 'face
+                    (if (equal (format argument-format choice) value)
+                        'transient-argument
+                      'transient-inactive-value)))
+      choices
+      (propertize "|" 'face 'transient-delimiter)))))
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
@@ -4990,34 +5030,6 @@ the edit in the macro."
     ("n" "sort numeric fields" sort-numeric-fields)
     ("p" "sort paragraphs" sort-paragraphs)
     ("r" "sort regexp fields" sort-regexp-fields)]])
-
-(defclass conn-transient-switches (transient-switches)
-  ((required :initarg :required :initform nil))
-  "Class used for sets of mutually exclusive command-line switches.
-Does not allow a null value.")
-
-(cl-defmethod transient-infix-read ((obj conn-transient-switches))
-  "Cycle through the mutually exclusive switches.
-The last value is \"don't use any of these switches\"."
-  (let ((choices (mapcar (apply-partially #'format (oref obj argument-format))
-                         (oref obj choices))))
-    (if-let ((value (oref obj value)))
-        (or (cadr (member value choices))
-            (when (oref obj required) (car choices)))
-      (car choices))))
-
-(cl-defmethod transient-format-value ((obj conn-transient-switches))
-  (with-slots (value argument-format choices) obj
-    (format
-     (propertize "%s" 'face 'transient-delimiter)
-     (mapconcat
-      (lambda (choice)
-        (propertize choice 'face
-                    (if (equal (format argument-format choice) value)
-                        'transient-argument
-                      'transient-inactive-value)))
-      choices
-      (propertize "|" 'face 'transient-delimiter)))))
 
 (defun conn--set-macro-ring-head (macro)
   (interactive
