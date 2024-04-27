@@ -6141,8 +6141,9 @@ dispatch on each contiguous component of the region."
   "Maybe initialize `conn-local-mode' in current buffer.
 Check `conn-enable-in-buffer-hook' and `conn-disable-in-buffer-hook' to
 determine if `conn-local-mode' should be enabled."
-  (when (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
-             (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook))
+  (when (ignore-errors
+          (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
+               (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook)))
     (conn-local-mode 1)))
 
 ;;;###autoload
