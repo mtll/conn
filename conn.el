@@ -1947,20 +1947,19 @@ disabled.
          (interactive)
          (when conn-current-state
            (funcall (get conn-current-state :conn-transition-fn) :exit))
-         (funcall (get ',name :conn-transition-fn) :enter))
+         (funcall (get ',name :conn-transition-fn) :enter)
+         (conn--update-aux-map))
 
        (put ',name :conn-transition-fn
             (lambda (,enter)
-              (when (eq ,enter :exit) (setq ,enter nil))
-              (unless (and ,enter (eq conn-current-state ',name))
-                (if (not ,enter)
+              (when (xor ,name (and ,enter (not (eq ,enter :exit))))
+                (if ,name
                     (setq ,name nil
                           conn-current-state nil
                           conn-previous-state ',name)
-                  (setq conn-current-state ',name
-                        ,name t
-                        conn--local-mode-maps (alist-get conn-current-state
-                                                         conn--mode-maps))
+                  (setq ,name t
+                        conn-current-state ',name
+                        conn--local-mode-maps (alist-get ',name conn--mode-maps))
                   (when conn-lighter
                     (put-text-property 0 (length conn-lighter)
                                        'face ',lighter-face-name
@@ -6067,8 +6066,7 @@ dispatch on each contiguous component of the region."
         (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
-        (funcall (conn--default-state-for-buffer))
-        (run-with-timer 0.05 nil #'conn--update-aux-map))
+        (funcall (conn--default-state-for-buffer)))
     (without-restriction
       (conn--remove-dots))
     (when conn-current-state
