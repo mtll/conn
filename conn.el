@@ -2386,6 +2386,27 @@ Interactively defaults to the current region."
     (set-marker m1 nil)
     (set-marker m2 nil)))
 
+(defun conn-isearch-in-narrow-p (beg end)
+  (seq-find (pcase-lambda (`(,b . ,e))
+              (<= b beg end e))
+            conn-narrow-ring))
+
+(defun conn-isearch-narrow-ring-forward ()
+  (interactive)
+  (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
+                '((isearch-message-prefix . "[NARROW] ")))
+  (unwind-protect
+      (isearch-forward)
+    (remove-function isearch-filter-predicate 'conn-isearch-in-narrow-p)))
+
+(defun conn-isearch-narrow-ring-backward ()
+  (interactive)
+  (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
+                '((isearch-message-prefix . "[NARROW] ")))
+  (unwind-protect
+      (isearch-backward)
+    (remove-function isearch-filter-predicate 'conn-isearch-in-narrow-p)))
+
 ;;;;; Thing Dispatch
 
 (defvar-keymap conn-dispatch-base-command-map
@@ -5273,16 +5294,8 @@ the edit in the macro."
   "Transient menu for narrow ring function."
   [:description
    conn--narrow-ring-display
-   [("w" "Widen" widen)
-    ("c" "Clear" conn-clear-narrow-ring)
-    ("a" "Abort"
-     (lambda ()
-       (interactive)
-       (widen)
-       (pcase-let ((`(,point . ,mark) (oref transient-current-prefix scope)))
-         (goto-char point)
-         (set-mark mark)
-         (deactivate-mark))))
+   [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
+    ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
    [("n" "Next" conn-cycle-narrowings :transient t)
@@ -5292,7 +5305,17 @@ the edit in the macro."
        (conn-cycle-narrowings (- arg)))
      :transient t)
     ("d" "Pop" conn-pop-narrow-ring :transient t)
-    ("m" "Merge" conn-merge-narrow-ring :transient t)]]
+    ("m" "Merge" conn-merge-narrow-ring :transient t)]
+   [("w" "Widen" widen)
+    ("c" "Clear" conn-clear-narrow-ring)
+    ("a" "Abort"
+     (lambda ()
+       (interactive)
+       (widen)
+       (pcase-let ((`(,point . ,mark) (oref transient-current-prefix scope)))
+         (goto-char point)
+         (set-mark mark)
+         (deactivate-mark))))]]
   (interactive)
   (transient-setup 'conn-narrow-ring-prefix nil nil :scope (cons (point) (mark t))))
 
