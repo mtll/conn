@@ -2274,6 +2274,18 @@ state."
   "r" 'conn-dispatch-transpose
   "c" 'conn-dispatch-copy)
 
+(defvar conn-dispatch-command-descriptions
+  '((conn-dispatch-kill-append . "Kill Append")
+    (conn-dispatch-copy-append . "Copy Append")
+    (conn-dispatch-kill-prepend . "Kill Prepend")
+    (conn-dispatch-copy-prepend . "Copy Prepend")
+    (conn-dispatch-kill . "Kill")
+    (conn-dispatch-dot . "Dot")
+    (conn-dispatch-grab . "Grab")
+    (conn-dispatch-yank . "Yank")
+    (conn-dispatch-transpose . "Transpose")
+    (conn-dispatch-copy . "Copy")))
+
 (defvar conn-dispatch-command-maps
   (list conn-dispatch-base-command-map))
 
@@ -2486,14 +2498,18 @@ state."
                (internal-push-keymap keymap 'overriding-terminal-local-map))
               ((guard (where-is-internal cmd conn-dispatch-command-maps t))
                (setq action (unless (eq cmd action) cmd)
-                     cmd (thread-first
-                           (concat prompt (conn--stringify action))
-                           (read-key-sequence)
-                           (key-binding t))))
+                     cmd (conn--thread -it-
+                             (or (alist-get action conn-dispatch-command-descriptions)
+                                 (and action (symbol-name action)))
+                           (concat prompt -it-)
+                           (read-key-sequence -it-)
+                           (key-binding -it- t))))
               (_
                (setq cmd (thread-first
                            (concat prompt
-                                   (conn--stringify action " - ")
+                                   (or (alist-get action conn-dispatch-command-descriptions)
+                                       (and action (symbol-name action)))
+                                   " - "
                                    (propertize "Invalid dispatch command"
                                                'face 'error))
                            (read-key-sequence)
