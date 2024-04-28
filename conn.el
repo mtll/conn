@@ -2262,9 +2262,11 @@ state."
 
 ;;;;; Narrow Ring
 
-(defvar conn-narrow-ring-max 16)
+(defvar conn-narrow-ring-max 16
+  "Maximum number of narrowings to keep in `conn-narrow-ring'.")
 
-(defvar-local conn-narrow-ring nil)
+(defvar-local conn-narrow-ring nil
+  "Ring of recent narrowed regions.")
 
 (cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
   (narrow-ring nil :read-only t))
@@ -2305,11 +2307,13 @@ state."
                              (1+ (length conn-narrow-ring)))))))
 
 (defun conn-narrow-to-region (beg end &optional record)
+  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive (list (region-beginning) (region-end) t))
   (narrow-to-region beg end)
   (conn--narrow-ring-record beg end))
 
 (defun conn-cycle-narrowings (arg)
+  "Cycle to the ARGth region in `conn-narrow-ring'."
   (interactive "p")
   (unless conn-narrow-ring
     (user-error "Narrow ring empty"))
@@ -2332,6 +2336,7 @@ state."
          (narrow-to-region beg end))))))
 
 (defun conn-merge-narrow-ring ()
+  "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive)
   (let ((merged))
     (dolist (region conn-narrow-ring)
@@ -2361,10 +2366,13 @@ state."
                (length conn-narrow-ring)))))
 
 (defun conn-region-to-narrow-ring (beg end)
+  "Add the region from BEG to END to the narrow ring.
+Interactively defaults to the current region."
   (interactive (list (region-beginning) (region-end)))
   (conn--narrow-ring-record beg end))
 
 (defun conn-clear-narrow-ring ()
+  "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
   (pcase-dolist (`(,m1 . ,m2) conn-narrow-ring)
     (set-marker m1 nil)
@@ -2372,11 +2380,11 @@ state."
   (setq conn-narrow-ring nil))
 
 (defun conn-pop-narrow-ring ()
+  "Pop `conn-narrow-ring'."
   (interactive)
-  (pcase-let ((`(,m1 . ,m2) (car conn-narrow-ring)))
+  (pcase-let ((`(,m1 . ,m2) (pop conn-narrow-ring)))
     (set-marker m1 nil)
-    (set-marker m2 nil))
-  (setq conn-narrow-ring (pop conn-narrow-ring)))
+    (set-marker m2 nil)))
 
 ;;;;; Thing Dispatch
 
@@ -5244,7 +5252,7 @@ the edit in the macro."
      (propertize (format "[%s]" (length conn-narrow-ring))
                  'face 'transient-value)
      " - "
-     (when (length> kmacro-ring 1)
+     (when (length> conn-narrow-ring 2)
        (format "%s, "  (conn--format-narrowing
                         (car (last conn-narrow-ring)))))
      (pcase (car conn-narrow-ring)
@@ -5267,15 +5275,26 @@ the edit in the macro."
    conn--narrow-ring-display
    [("w" "Widen" widen)
     ("c" "Clear" conn-clear-narrow-ring)
+    ("a" "Abort"
+     (lambda ()
+       (interactive)
+       (widen)
+       (pcase-let ((`(,point . ,mark) (oref transient-current-prefix scope)))
+         (goto-char point)
+         (set-mark mark)
+         (deactivate-mark))))
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
-   [("m" "Merge" conn-merge-narrow-ring :transient t)
-    ("n" "Next" conn-cycle-narrowings :transient t)
+   [("n" "Next" conn-cycle-narrowings :transient t)
     ("p" "Previous"
      (lambda (arg)
        (interactive "p")
        (conn-cycle-narrowings (- arg)))
-     :transient t)]])
+     :transient t)
+    ("d" "Pop" conn-pop-narrow-ring :transient t)
+    ("m" "Merge" conn-merge-narrow-ring :transient t)]]
+  (interactive)
+  (transient-setup 'conn-narrow-ring-prefix nil nil :scope (cons (point) (mark t))))
 
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
