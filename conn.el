@@ -2260,6 +2260,10 @@ state."
 ;;;;; Thing Dispatch
 
 (defvar-keymap conn-dispatch-base-command-map
+  "[" 'conn-dispatch-kill-append
+  "a" 'conn-dispatch-copy-append
+  "]" 'conn-dispatch-kill-prepend
+  "p" 'conn-dispatch-copy-prepend
   "w" 'conn-dispatch-kill
   "e" 'conn-dispatch-dot
   "g" 'conn-dispatch-grab
@@ -2279,6 +2283,52 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
            (message "Killed: %s" str)))
+        (_ (user-error "No thing at point"))))))
+
+(defun conn-dispatch-kill-append (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str nil)
+           (delete-region beg end)
+           (message "Appended: %s" str)))
+        (_ (user-error "No thing at point"))))))
+
+(defun conn-dispatch-kill-prepend (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str t)
+           (delete-region beg end)
+           (message "Prepended: %s" str)))
+        (_ (user-error "No thing at point"))))))
+
+(defun conn-dispatch-copy-append (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str nil)
+           (message "Copy Appended: %s" str)))
+        (_ (user-error "No thing at point"))))))
+
+(defun conn-dispatch-copy-prepend (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str t)
+           (message "Copy Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-dot (window pt thing)
