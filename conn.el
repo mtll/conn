@@ -609,40 +609,45 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (let ((current-input-method conn--input-method)
+        (blink-matching-paren nil)
         (tick)
+        (chars)
         (timer (timer-create))
         (overlays))
     (timer-set-function
      timer (lambda ()
-             (if (equal tick (list (point)
-                                   (buffer-chars-modified-tick)
-                                   (current-buffer)
-                                   (selected-window)))
+             (if (and tick (= tick (buffer-chars-modified-tick))
+                      (not (equal "" (minibuffer-contents))))
                  (exit-minibuffer)
                (conn--reset-read-string-timer timer))))
     (unwind-protect
         (minibuffer-with-setup-hook
             (lambda ()
-              (add-hook 'after-change-functions
-                        (lambda (&rest _)
-                          (mapc #'delete-overlay overlays)
-                          (setq tick (list (point)
-                                           (buffer-chars-modified-tick)
-                                           (current-buffer)
-                                           (selected-window)))
-                          (conn--reset-read-string-timer timer)
-                          (when-let ((str (minibuffer-contents)))
-                            (with-selected-window (minibuffer-selected-window)
-                              (setq overlays (conn--read-string-preview-overlays
-                                              str dir all-windows)))))
-                        nil t)
+              (electric-pair-local-mode -1)
               (add-hook 'post-command-hook
-                        (lambda () (conn--reset-read-string-timer timer))
+                        (lambda ()
+                          (when (and tick (/= tick (buffer-chars-modified-tick)))
+                            (mapc #'delete-overlay overlays)
+                            (when-let ((str (minibuffer-contents)))
+                              (with-selected-window (minibuffer-selected-window)
+                                (setq overlays (conn--read-string-preview-overlays
+                                                str dir all-windows)))))
+                          (setq tick (buffer-chars-modified-tick))
+                          (conn--reset-read-string-timer timer))
                         nil t))
           (condition-case _
               (cons (read-string "string: " nil nil nil t) overlays)
-            (error (mapc #'delete-overlay overlays))))
-      (when timer (cancel-timer timer)))))
+            ((quit error)
+             (mapc #'delete-overlay overlays))))
+      ;; Idle timers wont be reset here so do it
+      ;; ourselves for the mark cursor.  Maybe we
+      ;; should use internal-timer-start-idle?
+      (cancel-timer conn--mark-cursor-timer)
+      (timer-set-idle-time conn--mark-cursor-timer
+                           conn-mark-update-delay
+                           conn-mark-update-delay)
+      (timer-activate conn--mark-cursor-timer)
+      (cancel-timer timer))))
 
 (defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
