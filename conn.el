@@ -4410,31 +4410,30 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
     "\\[conn-wincontrol-off]: quit; "
-    "\\[conn-wincontrol-heighten] "
-    "\\[conn-wincontrol-shorten] "
-    "\\[conn-wincontrol-widen] "
-    "\\[conn-wincontrol-narrow]: "
-    "heighten shorten widen narrow"
-    "\n"
     "\\[conn-wincontrol-windmove-up] "
     "\\[conn-wincontrol-windmove-down] "
     "\\[conn-wincontrol-windmove-left] "
     "\\[conn-wincontrol-windmove-right]: "
-    "move; "
-    "\\[conn-wincontrol-scroll-up] "
-    "\\[conn-wincontrol-scroll-down]: "
-    "scroll; "
+    "move"
+    "\n"
+    "\\[conn-wincontrol-heighten] "
+    "\\[conn-wincontrol-shorten] "
+    "\\[conn-wincontrol-widen] "
+    "\\[conn-wincontrol-narrow]: "
+    "heighten shorten widen narrow; "
     "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/grab; "
-    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
-    "\\[kill-buffer-and-window]: kill buf+win; "
+    "\\[kill-buffer-and-window]: kill buf+win"
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
     "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
+    "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
+    "\n"
     "\\[text-scale-set]: scale; "
+    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
     "\\[balance-windows] \\[maximize-window]: balance/max; "
-    "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo")))
+    "\\[previous-buffer] \\[next-buffer]: previous/next")))
 
 (defun conn--wincontrol-tab-format ()
   (substitute-command-keys
@@ -4484,7 +4483,10 @@ if ARG is anything else `other-tab-prefix'."
     (propertize "%d" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
-    "\\[conn-wincontrol-off]: quit")))
+    "\\[conn-wincontrol-off]: quit; "
+    "\\[conn-wincontrol-scroll-up] "
+    "\\[conn-wincontrol-scroll-down]: "
+    "scroll")))
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
@@ -4566,11 +4568,13 @@ if ARG is anything else `other-tab-prefix'."
   "q"       'conn-wincontrol-off
   "r"       'conn-wincontrol-split-right
   "s"       'conn-wincontrol-shorten
+  "t"       'previous-buffer
   "u"       'bury-buffer
   "U"       'unbury-buffer
   "v"       'conn-wincontrol-split-vertically
   "w"       'conn-wincontrol-widen
   "x"       'conn-wincontrol-swap-windows
+  "y"       'next-buffer
   "z"       'text-scale-set)
 
 (define-minor-mode conn-wincontrol-mode
