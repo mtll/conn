@@ -2310,7 +2310,7 @@ state."
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive (list (region-beginning) (region-end) t))
   (narrow-to-region beg end)
-  (conn--narrow-ring-record beg end))
+  (when record (conn--narrow-ring-record beg end)))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
@@ -4078,7 +4078,7 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (narrow-to-region (car bounds) (cdr bounds) t)
+    (conn-narrow-to-region (car bounds) (cdr bounds) t)
     (message "Narrowed to %s" thing)))
 
 (defun conn-narrow-indirect-to-thing (thing)
@@ -4093,7 +4093,7 @@ associated with that command (see `conn-register-thing')."
 (defun conn-narrow-to-visible ()
   "Narrow buffer to the visible portion of the selected window."
   (interactive)
-  (narrow-to-region (window-start) (window-end) t)
+  (conn-narrow-to-region (window-start) (window-end) t)
   (message "Narrowed to visible region"))
 
 (defun conn-narrow-indirect-to-visible ()
