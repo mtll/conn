@@ -989,10 +989,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
        ((null (mark t)))
        ((null conn--mark-cursor)
         (setq conn--mark-cursor (make-overlay (mark t) (1+ (mark t)) nil t nil))
-        (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
+        (overlay-put conn--mark-cursor 'category 'conn--mark-cursor)
+        (overlay-put conn--mark-cursor 'before-string
+                     (when (and (= (mark-marker) (point-max))
+                                (/= (point) (mark-marker)))
+                       (propertize " " 'face 'conn-mark-face))))
        (t
         (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
-        (overlay-put conn--mark-cursor 'after-string
+        (overlay-put conn--mark-cursor 'before-string
                      (when (and (= (mark-marker) (point-max))
                                 (/= (point) (mark-marker)))
                        (propertize " " 'face 'conn-mark-face))))))))
