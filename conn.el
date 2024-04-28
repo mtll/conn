@@ -602,17 +602,47 @@ If BUFFER is nil check `current-buffer'."
         (apply 'nconc ovs))
     (conn--read-string-preview-overlays-1 string dir)))
 
+(defun conn--reset-read-string-timer (timer)
+  (cancel-timer timer)
+  (timer-set-time timer (timer-relative-time nil conn-read-string-timeout))
+  (timer-activate timer))
+
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
-  (with-temp-message ""
-    (let* ((string (char-to-string (read-char "string: " t)))
-           (overlays (conn--read-string-preview-overlays string dir all-windows))
-           next-char)
-      (while (setq next-char (read-char (format "string: %s" string) t
-                                        conn-read-string-timeout))
-        (setq string (concat string (char-to-string next-char)))
-        (mapc #'delete-overlay overlays)
-        (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
-      (cons string overlays))))
+  (let ((current-input-method conn--input-method)
+        (tick)
+        (timer (timer-create))
+        (overlays))
+    (timer-set-function
+     timer (lambda ()
+             (if (equal tick (list (point)
+                                   (buffer-chars-modified-tick)
+                                   (current-buffer)
+                                   (selected-window)))
+                 (exit-minibuffer)
+               (conn--reset-read-string-timer timer))))
+    (unwind-protect
+        (minibuffer-with-setup-hook
+            (lambda ()
+              (add-hook 'after-change-functions
+                        (lambda (&rest _)
+                          (mapc #'delete-overlay overlays)
+                          (setq tick (list (point)
+                                           (buffer-chars-modified-tick)
+                                           (current-buffer)
+                                           (selected-window)))
+                          (conn--reset-read-string-timer timer)
+                          (when-let ((str (minibuffer-contents)))
+                            (with-selected-window (minibuffer-selected-window)
+                              (setq overlays (conn--read-string-preview-overlays
+                                              str dir all-windows)))))
+                        nil t)
+              (add-hook 'post-command-hook
+                        (lambda () (conn--reset-read-string-timer timer))
+                        nil t))
+          (condition-case _
+              (cons (read-string "string: " nil nil nil t) overlays)
+            (error (mapc #'delete-overlay overlays))))
+      (when timer (cancel-timer timer)))))
 
 (defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
@@ -2290,11 +2320,16 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-goto (window pt thing)
-  (setq conn-this-command-thing thing)
   (with-current-buffer (window-buffer window)
-    (push-mark nil t)
-    (select-window window)
-    (goto-char pt)))
+    (unless (= pt (point))
+      (push-mark nil t)
+      (select-window window)
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (goto-char beg)
+         (unless (region-active-p)
+           (conn--push-ephemeral-mark end)))))))
 
 (defun conn-dispatch-transpose (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
@@ -2542,18 +2577,6 @@ seconds."
       (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
         (dolist (ov ovs)
           (delete-overlay ov))))))
-
-(conn-set-command-handler
- (lambda (start)
-   (unless (or (null conn-this-command-thing)
-               (eq 'char conn-this-command-thing)
-               (= start (point)))
-     (pcase (bounds-of-thing-at-point conn-this-command-thing)
-       (`(,beg . ,end)
-        (goto-char beg)
-        (unless (region-active-p)
-          (conn--push-ephemeral-mark end))))))
- 'conn-thing-dispatch)
 
 (defun conn-goto-string-prompt (string)
   "Jump to STRING."
