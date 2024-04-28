@@ -483,7 +483,7 @@ If BUFFER is nil check `current-buffer'."
       (setq result (get (pop modes) property)))
     result))
 
-(defun conn--narrow-indirect (beg end)
+(defun conn--narrow-indirect (beg end &optional record)
   (let* ((line-beg (line-number-at-pos beg))
          (linenum  (- (line-number-at-pos end) line-beg))
          (name     (format "%s@%s+%s - %s"
@@ -494,7 +494,7 @@ If BUFFER is nil check `current-buffer'."
                              (substring 0 20))))
          (buffer   (clone-indirect-buffer-other-window name nil)))
     (pop-to-buffer buffer)
-    (narrow-to-region beg end)
+    (conn-narrow-to-region beg end record)
     (deactivate-mark)))
 
 (defvar-keymap conn-read-thing-command-mark-map
@@ -2260,6 +2260,124 @@ state."
 
 ;;;; Commands
 
+;;;;; Narrow Ring
+
+(defvar conn-narrow-ring-max 16)
+
+(defvar-local conn-narrow-ring nil)
+
+(cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
+  (narrow-ring nil :read-only t))
+
+(defun conn--make-narrow-register ()
+  (%conn--make-narrow-register
+   :narrow-ring
+   (mapcar (pcase-lambda (`(,beg . ,end))
+             (cons (copy-marker beg) (copy-marker end)))
+           conn-narrow-ring)))
+
+(cl-defmethod register-val-jump-to ((val conn-narrow-register) _arg)
+  (let ((ring (conn-narrow-register-narrow-ring val)))
+    (unless (eq (current-buffer) (marker-buffer (caar ring)))
+      (user-error "Markers do not point to this buffer"))
+    (setq conn-narrow-ring ring)))
+
+(cl-defmethod register-val-describe ((val conn-narrow-register) _arg)
+  (princ (format "Narrowings In:  %s" (thread-first
+                                        (conn-narrow-register-narrow-ring val)
+                                        (caar)
+                                        (marker-buffer)))))
+
+(defun conn-narrow-ring-to-register (register)
+  "Store narrow ring in REGISTER."
+  (interactive (list (register-read-with-preview "Tab to register: ")))
+  (set-register register (conn--make-narrow-register)))
+
+(defun conn--narrow-ring-record (beg end)
+  (unless (seq-find (pcase-lambda (`(,b . ,e))
+                      (and (= beg b) (= end e)))
+                    conn-narrow-ring)
+    (setq conn-narrow-ring
+          (seq-subseq (cons (cons (conn--create-marker beg)
+                                  (conn--create-marker end))
+                            conn-narrow-ring)
+                      0 (min conn-narrow-ring-max
+                             (1+ (length conn-narrow-ring)))))))
+
+(defun conn-narrow-to-region (beg end &optional record)
+  (interactive (list (region-beginning) (region-end) t))
+  (narrow-to-region beg end)
+  (conn--narrow-ring-record beg end))
+
+(defun conn-cycle-narrowings (arg)
+  (interactive "p")
+  (unless conn-narrow-ring
+    (user-error "Narrow ring empty"))
+  (if (= arg 0)
+      (conn-merge-narrow-ring)
+    (let (start)
+      (unless (ignore-errors
+                (and (= (point-min) (caar conn-narrow-ring))
+                     (= (point-max) (cdar conn-narrow-ring))))
+        (setq start (point)
+              arg (+ arg (if (< arg 0) 1 -1))))
+      (dotimes (_ (mod arg (length conn-narrow-ring)))
+        (setq conn-narrow-ring (nconc (cdr conn-narrow-ring)
+                                      (list (car conn-narrow-ring)))))
+      (pcase (car conn-narrow-ring)
+        (`(,beg . ,end)
+         (unless (or (null start)
+                     (<= beg start end))
+           (push-mark start t))
+         (narrow-to-region beg end))))))
+
+(defun conn-merge-narrow-ring ()
+  (interactive)
+  (let ((merged))
+    (dolist (region conn-narrow-ring)
+      (pcase-let ((`(,beg1 . ,end1) region))
+        (pcase (seq-find (lambda (r)
+                           (not (or (< (car r) (cdr r) beg1 end1)
+                                    (< beg1 end1 (car r) (cdr r)))))
+                         merged)
+          ((and cons `(,beg2 . ,end2))
+           (setcar cons (if (> beg1 beg2)
+                            (progn
+                              (set-marker beg1 nil)
+                              beg2)
+                          (set-marker beg2 nil)
+                          beg1))
+           (setcdr cons (if (> end1 end2)
+                            (progn
+                              (set-marker end2 nil)
+                              end1)
+                          (set-marker end1 nil)
+                          end2)))
+          ('nil
+           (push region merged)))))
+    (setq conn-narrow-ring (nreverse merged))
+    (when (called-interactively-p 'interactive)
+      (message "Narrow ring merged into %s region"
+               (length conn-narrow-ring)))))
+
+(defun conn-region-to-narrow-ring (beg end)
+  (interactive (list (region-beginning) (region-end)))
+  (conn--narrow-ring-record beg end))
+
+(defun conn-clear-narrow-ring ()
+  (interactive)
+  (pcase-dolist (`(,m1 . ,m2) conn-narrow-ring)
+    (set-marker m1 nil)
+    (set-marker m2 nil))
+  (setq conn-narrow-ring nil))
+
+(defun conn-pop-narrow-ring ()
+  (interactive)
+  (pcase-let ((`(,m1 . ,m2) (car conn-narrow-ring)))
+    (set-marker m1 nil)
+    (set-marker m2 nil))
+  (setq conn-narrow-ring (pop conn-narrow-ring)))
+
 ;;;;; Thing Dispatch
 
 (defvar-keymap conn-dispatch-base-command-map
@@ -3632,24 +3750,24 @@ With arg N, insert N newlines."
 (defun conn-narrow-to-end-of-buffer ()
   "Narrow to the region between `point' and `point-max'."
   (interactive)
-  (narrow-to-region (point) (point-max)))
+  (conn-narrow-to-region (point) (point-max) t))
 
-(defun conn-narrow-to-end-of-buffer-indirect ()
+(defun conn-narrow-to-end-of-buffer-indirect (&optional interactive)
   "Narrow to the region between `point' and `point-max' in an indirect buffer.
 See `clone-indirect-buffer'."
-  (interactive)
-  (conn--narrow-indirect (point) (point-max)))
+  (interactive (list t))
+  (conn--narrow-indirect (point) (point-max) interactive))
 
-(defun conn-narrow-to-beginning-of-buffer ()
+(defun conn-narrow-to-beginning-of-buffer (&optional interactive)
   "Narrow to the region between `point-min' and `point'."
-  (interactive)
-  (narrow-to-region (point-min) (point)))
+  (interactive (list t))
+  (conn-narrow-to-region (point-min) (point) interactive))
 
-(defun conn-narrow-to-beginning-of-buffer-indirect ()
+(defun conn-narrow-to-beginning-of-buffer-indirect (&optional interactive)
   "Narrow to the region between `point-min' and `point' in an indirect buffer.
 See `clone-indirect-buffer'."
-  (interactive)
-  (conn--narrow-indirect (point-min) (point)))
+  (interactive (list t))
+  (conn--narrow-indirect (point-min) (point) interactive))
 
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
@@ -3952,7 +4070,7 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command)))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (narrow-to-region (car bounds) (cdr bounds))
+    (narrow-to-region (car bounds) (cdr bounds) t)
     (message "Narrowed to %s" thing)))
 
 (defun conn-narrow-indirect-to-thing (thing)
@@ -3967,7 +4085,7 @@ associated with that command (see `conn-register-thing')."
 (defun conn-narrow-to-visible ()
   "Narrow buffer to the visible portion of the selected window."
   (interactive)
-  (narrow-to-region (window-start) (window-end))
+  (narrow-to-region (window-start) (window-end) t)
   (message "Narrowed to visible region"))
 
 (defun conn-narrow-indirect-to-visible ()
@@ -4078,8 +4196,8 @@ Immediately repeating this command pushes a mark."
         ((eq last-command 'conn-set-mark-command)
          (if (region-active-p)
              (progn
+               (push-mark nil t)
                (deactivate-mark)
-               (push-mark-command nil t)
                (message "Mark pushed and deactivated"))
            (activate-mark)
            (message "Mark activated")))
@@ -5113,6 +5231,52 @@ the edit in the macro."
     ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
+(defun conn--format-narrowing (narrowing)
+  (pcase-let ((`(,beg . ,end) narrowing))
+    (format "(%s . %s)"
+            (marker-position beg)
+            (marker-position end))))
+
+(defun conn--narrow-ring-display ()
+  (ignore-errors
+    (concat
+     (propertize "Narrow Ring: " 'face 'transient-heading)
+     (propertize (format "[%s]" (length conn-narrow-ring))
+                 'face 'transient-value)
+     " - "
+     (when (length> kmacro-ring 1)
+       (format "%s, "  (conn--format-narrowing
+                        (car (last conn-narrow-ring)))))
+     (pcase (car conn-narrow-ring)
+       ('nil (propertize "nil" 'face 'transient-value))
+       ((and reg `(,beg . ,end)
+             (guard (and (= (point-min) beg)
+                         (= (point-max) end))))
+        (propertize (conn--format-narrowing  reg)
+                    'face 'transient-value))
+       (reg
+        (propertize (conn--format-narrowing reg)
+                    'face 'bold)))
+     (when (cdr conn-narrow-ring)
+       (format ", %s"  (conn--format-narrowing
+                        (cadr conn-narrow-ring)))))))
+
+(transient-define-prefix conn-narrow-ring-prefix ()
+  "Transient menu for narrow ring function."
+  [:description
+   conn--narrow-ring-display
+   [("w" "Widen" widen)
+    ("c" "Clear" conn-clear-narrow-ring)
+    ("s" "Register Store" conn-narrow-ring-to-register :transient t)
+    ("l" "Register Load" conn-register-load :transient t)]
+   [("m" "Merge" conn-merge-narrow-ring :transient t)
+    ("n" "Next" conn-cycle-narrowings :transient t)
+    ("p" "Previous"
+     (lambda (arg)
+       (interactive "p")
+       (conn-cycle-narrowings (- arg)))
+     :transient t)]])
+
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
   ["Register Store:"
@@ -5769,7 +5933,7 @@ dispatch on each contiguous component of the region."
   "j"   'conn-join-lines
   "m"   'conn-macro-at-point-and-mark
   "N"   'conn-narrow-indirect-to-region
-  "n"   'narrow-to-region
+  "n"   'conn-narrow-to-region
   "o"   'conn-occur-region
   "p"   'conn-change-pair
   "r"   'conn-query-replace-regexp-region
@@ -5916,7 +6080,7 @@ dispatch on each contiguous component of the region."
   ";"   'comment-line
   "."   'conn-isearch-forward-thing
   ","   'conn-isearch-backward-thing
-  "b"   'regexp-builder
+  "b"   'conn-narrow-ring-prefix
   "c"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-prefix
@@ -6057,9 +6221,10 @@ dispatch on each contiguous component of the region."
   "s"     'conn-M-s-keys
   "U"     'conn-backward-sentence-keys
   "u"     'conn-backward-word-keys
-  "V"     'narrow-to-region
+  "V"     'conn-narrow-to-region
   "v"     'conn-toggle-mark-command
   "W"     'widen
+  "X"     'conn-cycle-narrowings
   "x"     'conn-C-x-keys
   "z"     'conn-exchange-mark-command)
 
@@ -6386,23 +6551,6 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing-commands
    'sexp (conn-individual-thing-handler 'paredit-sexp)
    'paredit-forward-up 'paredit-backward-up))
-
-(with-eval-after-load 'zones
-  (defvar zz-add-zone-anyway-p)
-  ;; Make this command add narrowings to izone var
-  (defun conn-narrow-to-thing (thing)
-    "Narrow to THING at point.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-    (interactive (list (conn--read-thing-command)))
-    (when-let ((bounds (bounds-of-thing-at-point thing)))
-      (let ((zz-add-zone-anyway-p t))
-        (narrow-to-region (car bounds) (cdr bounds)))))
-
-  (transient-append-suffix
-    'conn-register-prefix
-    '(0 0 -1)
-    '("z" "Izones" izones-to-register)))
 
 (with-eval-after-load 'edebug
   (defvar edebug-mode)
