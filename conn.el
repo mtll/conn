@@ -1908,6 +1908,9 @@ Also enable input methods when any `conn-input-method-overriding-mode' is on."
         (when (and conn--input-method (not current-input-method))
           (activate-input-method conn--input-method))
       (pcase (get conn-current-state :conn-suppress-input-method)
+        ((and 'nil (guard current-input-method))
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title))
         ((and 'nil (guard conn--input-method))
          (activate-input-method conn--input-method))
         ((guard (and current-input-method conn--input-method))
@@ -2430,7 +2433,7 @@ state."
       (delete-region (region-beginning) (region-end))
       (insert str2))))
 
-(defun conn--read-dispatch-command-affixation (keymap)
+(defun conn--make-dispatch-command-affixation (keymap)
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
       (mapcar
@@ -2471,7 +2474,7 @@ state."
                               (if (eq action 'metadata)
                                   `(metadata
                                     ,(cons 'affixation-function
-                                           (conn--read-dispatch-command-affixation keymap))
+                                           (conn--make-dispatch-command-affixation keymap))
                                     (category . conn-dispatch-command))
                                 (complete-with-action action obarray string pred)))
                             (lambda (sym)
