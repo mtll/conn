@@ -2335,9 +2335,9 @@ state."
            (push-mark start t))
          (narrow-to-region beg end))))))
 
-(defun conn-merge-narrow-ring ()
+(defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
-  (interactive)
+  (interactive (list t))
   (let ((merged))
     (dolist (region conn-narrow-ring)
       (pcase-let ((`(,beg1 . ,end1) region))
@@ -2346,22 +2346,12 @@ state."
                                     (< beg1 end1 (car r) (cdr r)))))
                          merged)
           ((and cons `(,beg2 . ,end2))
-           (setcar cons (if (> beg1 beg2)
-                            (progn
-                              (set-marker beg1 nil)
-                              beg2)
-                          (set-marker beg2 nil)
-                          beg1))
-           (setcdr cons (if (> end1 end2)
-                            (progn
-                              (set-marker end2 nil)
-                              end1)
-                          (set-marker end1 nil)
-                          end2)))
+           (setcar cons (if (> beg1 beg2) beg2 beg1))
+           (setcdr cons (if (> end1 end2) end1 end2)))
           ('nil
            (push region merged)))))
     (setq conn-narrow-ring (nreverse merged))
-    (when (called-interactively-p 'interactive)
+    (when (and interactive (not executing-kbd-macro))
       (message "Narrow ring merged into %s region"
                (length conn-narrow-ring)))))
 
@@ -2374,17 +2364,12 @@ Interactively defaults to the current region."
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
-  (pcase-dolist (`(,m1 . ,m2) conn-narrow-ring)
-    (set-marker m1 nil)
-    (set-marker m2 nil))
   (setq conn-narrow-ring nil))
 
 (defun conn-pop-narrow-ring ()
   "Pop `conn-narrow-ring'."
   (interactive)
-  (pcase-let ((`(,m1 . ,m2) (pop conn-narrow-ring)))
-    (set-marker m1 nil)
-    (set-marker m2 nil)))
+  (pop conn-narrow-ring))
 
 (defun conn-isearch-in-narrow-p (beg end)
   (seq-find (pcase-lambda (`(,b . ,e))
@@ -4108,7 +4093,7 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing-command) t))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (conn--narrow-indirect (car bounds) (cdr bounds) record)
+    (conn--narrow-indirect (car bounds) (cdr bounds) interactive)
     (message "Narrow indirect to %s" thing)))
 
 (defun conn-narrow-to-visible (&optional interactive)
@@ -5298,26 +5283,34 @@ the edit in the macro."
     ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
-   [("n" "Next" conn-cycle-narrowings :transient t)
-    ("p" "Previous"
+   [("a" "Abort Cycling"
+     (lambda ()
+       (interactive)
+       (widen)
+       (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring)
+                    (oref transient-current-prefix scope)))
+         (narrow-to-region min max)
+         (goto-char point)
+         (save-mark-and-excursion--restore mark)
+         (setq conn-narrow-ring narrow-ring))))
+    ("n" "Cycle Next" conn-cycle-narrowings :transient t)
+    ("p" "Cycle Previous"
      (lambda (arg)
        (interactive "p")
        (conn-cycle-narrowings (- arg)))
      :transient t)
-    ("d" "Pop" conn-pop-narrow-ring :transient t)
-    ("m" "Merge" conn-merge-narrow-ring :transient t)]
+    ("d" "Pop" conn-pop-narrow-ring :transient t)]
    [("w" "Widen" widen)
     ("c" "Clear" conn-clear-narrow-ring)
-    ("a" "Abort"
-     (lambda ()
-       (interactive)
-       (widen)
-       (pcase-let ((`(,point . ,mark) (oref transient-current-prefix scope)))
-         (goto-char point)
-         (set-mark mark)
-         (deactivate-mark))))]]
+    ("m" "Merge" conn-merge-narrow-ring :transient t)]]
   (interactive)
-  (transient-setup 'conn-narrow-ring-prefix nil nil :scope (cons (point) (mark t))))
+  (transient-setup
+   'conn-narrow-ring-prefix nil nil
+   :scope (list (point)
+                (save-mark-and-excursion--save)
+                (point-min)
+                (point-max)
+                (copy-sequence conn-narrow-ring))))
 
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
