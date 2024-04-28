@@ -3755,10 +3755,10 @@ With arg N, insert N newlines."
       (forward-line 1)
       (indent-according-to-mode))))
 
-(defun conn-narrow-to-end-of-buffer ()
+(defun conn-narrow-to-end-of-buffer (&optional interactive)
   "Narrow to the region between `point' and `point-max'."
-  (interactive)
-  (conn-narrow-to-region (point) (point-max) t))
+  (interactive (list t))
+  (conn-narrow-to-region (point) (point-max) interactive))
 
 (defun conn-narrow-to-end-of-buffer-indirect (&optional interactive)
   "Narrow to the region between `point' and `point-max' in an indirect buffer.
@@ -4071,43 +4071,43 @@ associated with that command (see `conn-register-thing')."
     (activate-mark t))
   (message "Marked %s" thing))
 
-(defun conn-narrow-to-thing (thing)
+(defun conn-narrow-to-thing (thing &optional interactive)
   "Narrow indirect buffer to THING at point.
 See `clone-indirect-buffer' for meaning of indirect buffer.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
+  (interactive (list (conn--read-thing-command) t))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (conn-narrow-to-region (car bounds) (cdr bounds) t)
+    (conn-narrow-to-region (car bounds) (cdr bounds) interactive)
     (message "Narrowed to %s" thing)))
 
-(defun conn-narrow-indirect-to-thing (thing)
+(defun conn-narrow-indirect-to-thing (thing &optional interactive)
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
+  (interactive (list (conn--read-thing-command) t))
   (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (conn--narrow-indirect (car bounds) (cdr bounds))
+    (conn--narrow-indirect (car bounds) (cdr bounds) record)
     (message "Narrow indirect to %s" thing)))
 
-(defun conn-narrow-to-visible ()
+(defun conn-narrow-to-visible (&optional interactive)
   "Narrow buffer to the visible portion of the selected window."
-  (interactive)
-  (conn-narrow-to-region (window-start) (window-end) t)
+  (interactive (list t))
+  (conn-narrow-to-region (window-start) (window-end) interactive)
   (message "Narrowed to visible region"))
 
-(defun conn-narrow-indirect-to-visible ()
+(defun conn-narrow-indirect-to-visible (&optional interactive)
   "Narrow indirect buffer to the visible portion of the selected window.
 See `clone-indirect-buffer'."
-  (interactive)
-  (conn--narrow-indirect (window-start) (window-end))
+  (interactive (list t))
+  (conn--narrow-indirect (window-start) (window-end) interactive)
   (message "Narrowed to visible region"))
 
-(defun conn-narrow-indirect-to-region (beg end)
+(defun conn-narrow-indirect-to-region (beg end &optional interactive)
   "Narrow to region from BEG to END in an indirect buffer in another window.
 See `clone-indirect-buffer' for meaning of indirect buffer."
-  (interactive (list (region-beginning) (region-end)))
-  (conn--narrow-indirect beg end))
+  (interactive (list (region-beginning) (region-end) t))
+  (conn--narrow-indirect beg end interactive))
 
 (defun conn--read-pair ()
   (pcase (conn--escapable-split-on-char
