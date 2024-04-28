@@ -2337,7 +2337,9 @@ state."
          (unless (or (null start)
                      (<= beg start end))
            (push-mark start t))
-         (narrow-to-region beg end))))))
+         (narrow-to-region beg end)
+         (goto-char (point-min))
+         (conn--push-ephemeral-mark (point-max)))))))
 
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
@@ -2359,11 +2361,15 @@ state."
       (message "Narrow ring merged into %s region"
                (length conn-narrow-ring)))))
 
-(defun conn-region-to-narrow-ring (beg end)
+(defun conn-region-to-narrow-ring (beg end &optional pulse)
   "Add the region from BEG to END to the narrow ring.
 Interactively defaults to the current region."
-  (interactive (list (region-beginning) (region-end)))
-  (conn--narrow-ring-record beg end))
+  (interactive (progn
+                 (deactivate-mark)
+                 (list (region-beginning) (region-end) t)))
+  (conn--narrow-ring-record beg end)
+  (when (and pulse (not executing-kbd-macro))
+    (pulse-momentary-highlight-region beg end 'region)))
 
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
@@ -2918,7 +2924,8 @@ Expansions are provided by functions in `conn-expansion-functions'."
                ('nil
                 (user-error "No more expansions")))))))
   (unless (or (region-active-p)
-              (not conn-expand-pulse-region))
+              (not conn-expand-pulse-region)
+              executing-kbd-macro)
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
 
 (defun conn-contract (arg)
@@ -2958,7 +2965,8 @@ Expansions and contractions are provided by functions in
                ('nil
                 (user-error "No more contractions")))))))
   (unless (or (region-active-p)
-              (not conn-expand-pulse-region))
+              (not conn-expand-pulse-region)
+              executing-kbd-macro)
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
 
 ;;;;; Dot Commands
@@ -4370,7 +4378,8 @@ If REGISTER is given copy to REGISTER instead."
     (if rectangle-mark-mode
         (copy-rectangle-as-kill start end)
       (copy-region-as-kill start end)))
-  (pulse-momentary-highlight-region start end))
+  (unless executing-kbd-macro
+    (pulse-momentary-highlight-region start end)))
 
 (defun conn-kill-region (&optional arg)
   "Kill region between START and END.
@@ -5214,14 +5223,14 @@ the edit in the macro."
    conn--kmacro-ring-display
    :if-not conn--in-kbd-macro-p
    [("i" "Insert Counter" kmacro-insert-counter)
-    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("c" "Set Counter" kmacro-set-counter :transient t)
     ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix :transient t)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("w" "Swap" kmacro-swap-ring :transient t)
     ("o" "Pop" kmacro-delete-ring-head :transient t)]]
-  ["Commands:"
+  ["Commands"
    :if-not conn--in-kbd-macro-p
    [("k" "Call Macro" kmacro-call-macro)
     ("a" "Append to Macro" (lambda ()
@@ -5234,26 +5243,34 @@ the edit in the macro."
     ("d" "Name Last Macro" kmacro-name-last-macro)]
    [("e" "Edit Macro" kmacro-edit-macro)
     ("E" "Edit Lossage" kmacro-edit-lossage)
-    ("m" "Kmacro to Register" kmacro-to-register)
+    ("s" "Register Save" kmacro-to-register)
     ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
     ("q" "Step Edit Macro" kmacro-step-edit-macro)]]
   [:if
    conn--in-kbd-macro-p
-   ["Commands:"
+   ["Commands"
     ("q" "Query" kbd-macro-query)
     ("d" "Redisplay" kmacro-redisplay)]
    [:description
     conn--kmacro-counter-display
     ("i" "Insert Counter" kmacro-insert-counter)
-    ("s" "Set Counter" kmacro-set-counter :transient t)
+    ("c" "Set Counter" kmacro-set-counter :transient t)
     ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
 (defun conn--format-narrowing (narrowing)
-  (pcase-let ((`(,beg . ,end) narrowing))
-    (format "(%s . %s)"
-            (marker-position beg)
-            (marker-position end))))
+  (if (long-line-optimizations-p)
+      (pcase-let ((`(,beg . ,end) narrowing))
+          (format "(%s . %s)"
+                  (marker-position beg)
+                  (marker-position end)))
+    (save-restriction
+      (widen)
+      (pcase-let ((`(,beg . ,end) narrowing))
+        (format "%s+%s"
+                (line-number-at-pos (marker-position beg) t)
+                (count-lines (marker-position beg)
+                             (marker-position end)))))))
 
 (defun conn--narrow-ring-display ()
   (ignore-errors
@@ -5304,16 +5321,15 @@ the edit in the macro."
        (conn-cycle-narrowings (- arg)))
      :transient t)
     ("d" "Pop" conn-pop-narrow-ring :transient t)]
-   [("w" "Widen" widen)
+   [("m" "Merge" conn-merge-narrow-ring :transient t)
+    ("w" "Widen" widen)
     ("c" "Clear" conn-clear-narrow-ring)
-    ("m" "Merge" conn-merge-narrow-ring :transient t)]]
+    ("v" "Add Region" conn-region-to-narrow-ring)]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
-   :scope (list (point)
-                (save-mark-and-excursion--save)
-                (point-min)
-                (point-max)
+   :scope (list (point) (save-mark-and-excursion--save)
+                (point-min) (point-max)
                 (copy-sequence conn-narrow-ring))))
 
 (transient-define-prefix conn-register-prefix ()
