@@ -4678,9 +4678,10 @@ if ARG is anything else `other-tab-prefix'."
   "D"       'delete-other-windows
   "d"       'delete-window
   "e"       'conn-tab-to-register
-  "f"       'toggle-frame-fullscreen
+  "F"       'toggle-frame-fullscreen
+  "f"       'previous-buffer
   "G"       'conn-tab-group
-  "g"       'conn-swap-buffers
+  "g"       'next-buffer
   "H"       'conn-wincontrol-help
   "h"       'conn-wincontrol-heighten
   "i"       'conn-wincontrol-windmove-up
@@ -4701,13 +4702,13 @@ if ARG is anything else `other-tab-prefix'."
   "q"       'conn-wincontrol-off
   "r"       'conn-wincontrol-split-right
   "s"       'conn-wincontrol-shorten
-  "t"       'previous-buffer
+  "t"       'conn-swap-buffers
   "u"       'bury-buffer
   "U"       'unbury-buffer
   "v"       'conn-wincontrol-split-vertically
   "w"       'conn-wincontrol-widen
   "x"       'conn-wincontrol-swap-windows
-  "y"       'next-buffer
+  "y"       nil
   "z"       'text-scale-set)
 
 (define-minor-mode conn-wincontrol-mode
