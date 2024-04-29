@@ -220,8 +220,8 @@ Supported values are:
   :type 'number)
 
 (defcustom conn-dispatch-label-characters
-  (list ?j ?f ?d ?k ?s ?g ?h ?l ?w ?e ?r
-        ?r ?t ?y ?u ?i ?o ?c ?v ?b ?n ?m)
+  (list "j" "f" "d" "k" "s" "g" "h" "l" "w" "e" "r"
+        "r" "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
   "Chars to use for dispatch leader overlays."
   :group 'conn
   :type '(list integer))
@@ -575,10 +575,11 @@ If BUFFER is nil check `current-buffer'."
           (if (eq dir 'backward) (point) (window-end))
         (goto-char (point-max))
         (while (search-backward string nil t)
-          (when (catch 'invisible
-                  (dotimes (i (- (match-end 0) (match-beginning 0)) t)
-                    (when (invisible-p (+ i (match-beginning 0)))
-                      (throw 'invisible nil))))
+          (unless (or (invisible-p (match-beginning 0))
+                      (< (next-single-char-property-change
+                          (match-beginning 0) 'invisible
+                          nil (match-end 0))
+                         (match-end 0)))
             (push (point) matches)))))
     matches))
 
@@ -665,9 +666,7 @@ If BUFFER is nil check `current-buffer'."
     string))
 
 (defun conn--create-label-strings (count &optional labels)
-  (let* ((alphabet (thread-last
-                     (seq-uniq conn-dispatch-label-characters)
-                     (mapcar #'string)))
+  (let* ((alphabet conn-dispatch-label-characters)
          (labels (or labels
                      (seq-subseq alphabet 0 (min count (length alphabet)))))
          (prefixes nil))
@@ -676,7 +675,7 @@ If BUFFER is nil check `current-buffer'."
                             (* (length prefixes)
                                (length alphabet)))))
       (push (pop labels) prefixes))
-    (if (null labels)
+    (if (and (null labels) (> count 0))
         (let ((new-labels))
           (dolist (a prefixes)
             (dolist (b alphabet)
@@ -2722,7 +2721,7 @@ Interactively defaults to the current region."
                                      (line-end-position)))))
                      ;; (max pt end) incase pt is point-max
                      ;; and end is point-max - 1.
-                     (ov (setq ov (make-overlay pt (max pt end)))))
+                     (ov (make-overlay pt (max pt end))))
                 (push ov overlays)
                 (overlay-put ov 'invisible t)
                 (overlay-put ov 'prefix-overlay p)
