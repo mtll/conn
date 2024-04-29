@@ -223,7 +223,7 @@ Supported values are:
 
 (defcustom conn-dispatch-label-characters
   (list "j" "f" "d" "k" "s" "g" "h" "l" "w" "e" "r"
-        "r" "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
+        "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
   "Chars to use for dispatch leader overlays."
   :group 'conn
   :type '(list integer))
@@ -642,15 +642,17 @@ If BUFFER is nil check `current-buffer'."
         (apply 'nconc ovs))
     (conn--read-string-preview-overlays-1 string dir)))
 
+;; This would be much simpler but read-char/event doesn't seem to allow
+;; any of the input-method keybindings (e.g. C-SPC, C-n/p/f/b, etc.)
 ;; (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
 ;;   (conn--with-input-method
 ;;     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-;;            (string (char-to-string (read-event prompt t)))
+;;            (string (char-to-string (read-char prompt t)))
 ;;            (overlays (conn--read-string-preview-overlays string dir all-windows))
 ;;            next-char)
 ;;       (condition-case _
 ;;           (progn
-;;             (while (setq next-char (read-event (format (concat prompt "%s") string) t
+;;             (while (setq next-char (read-char (format (concat prompt "%s") string) t
 ;;                                               conn-read-string-timeout))
 ;;               (setq string (concat string (char-to-string next-char)))
 ;;               (mapc #'delete-overlay overlays)
@@ -719,7 +721,7 @@ If BUFFER is nil check `current-buffer'."
     string))
 
 (defun conn--create-label-strings (count &optional labels)
-  (let* ((alphabet conn-dispatch-label-characters)
+  (let* ((alphabet (seq-uniq conn-dispatch-label-characters))
          (labels (or labels
                      (seq-subseq alphabet 0 (min count (length alphabet)))))
          (prefixes nil))
@@ -2585,7 +2587,7 @@ Interactively defaults to the current region."
   (yank))
 
 (defun conn-dispatch-yank (window pt thing)
-  (let ((str))
+  (let (str)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -2736,28 +2738,23 @@ Interactively defaults to the current region."
   (unwind-protect
       (let ((c (read-char prompt))
             (narrowed))
-        (condition-case err
-            (progn
-              (dolist (ov overlays)
-                (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-                    (when-let ((prefix (overlay-get ov 'prefix-overlay)))
-                      (overlay-put prefix 'face nil))
-                  (conn--thread -it-
-                      (overlay-get ov 'before-string)
-                    (substring -it- 1)
-                    (overlay-put ov 'before-string -it-))
-                  (when (overlay-get ov 'invisible)
-                    (move-overlay ov
-                                  (overlay-start ov)
-                                  (+ (overlay-start ov)
-                                     (min (length (overlay-get ov 'before-string))
-                                          (- (overlay-end ov)
-                                             (overlay-start ov))))))
-                  (push (copy-overlay ov) narrowed)))
-              narrowed)
-          ((quit error)
-           (mapc #'delete-overlay narrowed)
-           (signal (car err) (cdr err)))))
+        (dolist (ov overlays)
+          (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
+              (when-let ((prefix (overlay-get ov 'prefix-overlay)))
+                (overlay-put prefix 'face nil))
+            (conn--thread -it-
+                (overlay-get ov 'before-string)
+              (substring -it- 1)
+              (overlay-put ov 'before-string -it-))
+            (when (overlay-get ov 'invisible)
+              (move-overlay ov
+                            (overlay-start ov)
+                            (+ (overlay-start ov)
+                               (min (length (overlay-get ov 'before-string))
+                                    (- (overlay-end ov)
+                                       (overlay-start ov))))))
+            (push ov narrowed)))
+        (mapcar #'copy-overlay narrowed))
     (mapc #'delete-overlay overlays)))
 
 (defun conn--label-overlays (labels prefix-overlays)
@@ -2778,9 +2775,8 @@ Interactively defaults to the current region."
                                    (+ pt (length label))
                                    ;; Hack in case this match abuts an
                                    ;; invisible region.  This puts the
-                                   ;; label before the match, but it
-                                   ;; is better than an invisible
-                                   ;; label.
+                                   ;; label before the match, but its
+                                   ;; better than an invisible label.
                                    (if (invisible-p pt) (1- pt) (point-max))
                                    (pcase (next-single-char-property-change
                                            pt 'invisible nil (+ 1 pt (length label)))
@@ -2845,8 +2841,7 @@ seconds."
     (unwind-protect
         (progn
           (setf prefix-ovs (thread-last
-                             (conn--read-string-with-timeout-1 nil t)
-                             (cdr)
+                             (cdr (conn--read-string-with-timeout-1 nil t))
                              (seq-group-by (lambda (ov) (overlay-get ov 'window)))
                              (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
                 (alist-get (selected-window) prefix-ovs)
