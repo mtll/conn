@@ -668,32 +668,31 @@ If BUFFER is nil check `current-buffer'."
   (let* ((alphabet (thread-last
                      (seq-uniq conn-dispatch-label-characters)
                      (mapcar #'string)))
-         (labels (or labels (copy-sequence alphabet)))
+         (labels (or labels
+                     (seq-subseq alphabet 0 (min count (length alphabet)))))
          (prefixes nil))
     (while (and labels
                 (> count (+ (length labels)
                             (* (length prefixes)
                                (length alphabet)))))
       (push (pop labels) prefixes))
-    (cond ((null labels)
-           (let ((new-labels))
-             (dolist (a prefixes)
-               (dolist (b alphabet)
-                 (push (concat a b) new-labels)))
-             (conn--create-label-strings count new-labels)))
-          ((length< alphabet count)
-           (catch 'done
-             (let ((n (length labels)))
-               (setq labels (nreverse labels))
-               (dolist (prefix (nreverse prefixes))
-                 (dolist (c alphabet)
-                   (push (concat prefix c) labels)
-                   (when (= (cl-incf n) count)
-                     (throw 'done nil)))))))
-          (t (setq labels (seq-subseq labels 0 count))))
-    (dolist (l labels)
-      (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
-    (nreverse labels)))
+    (if (null labels)
+        (let ((new-labels))
+          (dolist (a prefixes)
+            (dolist (b alphabet)
+              (push (concat a b) new-labels)))
+          (conn--create-label-strings count new-labels))
+      (catch 'done
+        (let ((n (length labels)))
+          (setq labels (nreverse labels))
+          (dolist (prefix (nreverse prefixes))
+            (dolist (c alphabet)
+              (push (concat prefix c) labels)
+              (when (= (cl-incf n) count)
+                (throw 'done nil))))))
+      (dolist (l labels)
+        (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
+      (nreverse labels))))
 
 (defun conn--create-window-prompt-overlay (window label)
   (with-current-buffer (window-buffer window)
@@ -2697,31 +2696,21 @@ Interactively defaults to the current region."
           (with-current-buffer (window-buffer window)
             (dolist (p prefixes)
               (let* ((pt (overlay-end p))
-                     (prefix-length (- (overlay-start p)
-                                       (overlay-end p)))
                      (label (pop labels))
-                     (end (min (+ pt (length label))
-                               ;; Be sure not to make the
-                               ;; newline char invisible
-                               (save-excursion
-                                 (goto-char pt)
-                                 (line-end-position))))
-                     ;; Find any overlaps here so that we can
-                     ;; avoid making them invisible (or having
-                     ;; them make us invisible) later.
-                     (overlap (seq-filter (lambda (o)
-                                            (memq (overlay-get o 'category)
-                                                  '(conn-label-overlay
-                                                    conn-read-string-match)))
-                                          (overlays-in (- pt prefix-length 1)
-                                                       (1+ end))))
-                     (ov (make-overlay pt end)))
-                (when (null label)
-                  (error "Labels exhausted"))
-                (if (null overlap)
-                    (overlay-put ov 'invisible t)
-                  (mapc (lambda (o) (overlay-put o 'invisible nil)) overlap))
+                     (end (thread-last
+                            (overlays-in pt (+ pt (length label)))
+                            (seq-filter (lambda (ov)
+                                          (eq 'conn-read-string-match
+                                              (overlay-get ov 'category))))
+                            (mapcar 'overlay-start)
+                            (apply 'min
+                                   (+ pt (length label))
+                                   (save-excursion
+                                     (goto-char pt)
+                                     (line-end-position)))))
+                     (ov (setq ov (make-overlay pt end))))
                 (push ov overlays)
+                (overlay-put ov 'invisible t)
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
