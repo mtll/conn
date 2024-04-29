@@ -2705,12 +2705,17 @@ Interactively defaults to the current region."
                             (mapcar 'overlay-start)
                             (apply 'min
                                    (+ pt (length label))
+                                   ;; If we are at point-max this will
+                                   ;; cause end to be point-max - 1,
+                                   ;; fix this later on.
                                    (1- (next-single-char-property-change
                                         pt 'invisible nil (+ 1 pt (length label))))
                                    (save-excursion
                                      (goto-char pt)
                                      (line-end-position)))))
-                     (ov (setq ov (make-overlay pt end))))
+                     ;; (max pt end) incase pt is point-max
+                     ;; and end is point-max - 1.
+                     (ov (setq ov (make-overlay pt (max pt end)))))
                 (push ov overlays)
                 (overlay-put ov 'invisible t)
                 (overlay-put ov 'prefix-overlay p)
