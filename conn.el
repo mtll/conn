@@ -2384,7 +2384,14 @@ Interactively defaults to the current region."
 (defun conn-pop-narrow-ring ()
   "Pop `conn-narrow-ring'."
   (interactive)
-  (pop conn-narrow-ring))
+  (pcase (pop conn-narrow-ring)
+    ((and `(,beg . ,end)
+          (guard (= (point-min) beg))
+          (guard (= (point-max) end)))
+     (if conn-narrow-ring
+         (narrow-to-region (caar conn-narrow-ring)
+                           (cdar conn-narrow-ring))
+       (widen)))))
 
 (defun conn-isearch-in-narrow-p (beg end)
   (seq-find (pcase-lambda (`(,b . ,e))
