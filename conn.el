@@ -633,8 +633,10 @@ If BUFFER is nil check `current-buffer'."
                             (mapc #'delete-overlay overlays)
                             (when-let ((str (minibuffer-contents)))
                               (with-selected-window (minibuffer-selected-window)
-                                (setq overlays (conn--read-string-preview-overlays
-                                                str dir all-windows)))))
+                                (let ((case-fold-search
+                                       (not (seq-find 'char-uppercase-p str))))
+                                  (setq overlays (conn--read-string-preview-overlays
+                                                  str dir all-windows))))))
                           (setq tick (conn--read-string-tick))
                           (conn--reset-read-string-timer timer))
                         nil t))
