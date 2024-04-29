@@ -748,19 +748,38 @@ If BUFFER is nil check `current-buffer'."
         (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
       (nreverse labels))))
 
-(defun conn--create-window-prompt-overlay (window label)
-  (with-current-buffer (window-buffer window)
-    (let* ((beg (window-start window))
-           (overlay (make-overlay beg (window-end window))))
-      (ignore-errors
-        (goto-char beg)
-        (recenter 2))
-      (overlay-put overlay 'conn-overlay t)
-      (overlay-put overlay 'face 'shadow)
-      (overlay-put overlay 'window window)
-      (overlay-put overlay 'before-string
-                   (propertize label 'face 'conn-window-prompt-face))
-      overlay)))
+(defun conn--read-labels (things labels label-fn payload)
+  (let ((candidates (funcall label-fn labels things))
+        (prompt "char:"))
+    (catch 'return
+      (while t
+        (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
+          ('nil
+           (setq candidates (funcall label-fn labels overlays)
+                 prompt "char: (no matches)"))
+          (`(,it . nil)
+           (throw 'return (overlay-get it payload)))
+          (_
+           (setq prompt "char:")))))))
+
+(defun conn--create-window-label-overlays (labels windows)
+  (let ((scroll-margin 0)
+        win lbl overlays)
+    (while (and (setq win (pop windows))
+                (setq lbl (pop labels)))
+      (with-selected-window win
+        ;; This should be made smarter, but for now just recenter the
+        ;; window in order to avoid the label causing the point to go
+        ;; out of view and the window to scroll as a result.
+        (recenter 0)
+        (let ((overlay (make-overlay (window-start) (window-end))))
+          (overlay-put overlay 'conn-overlay t)
+          (overlay-put overlay 'face 'shadow)
+          (overlay-put overlay 'window win)
+          (overlay-put overlay 'before-string
+                       (propertize lbl 'face 'conn-window-prompt-face))
+          (push overlay overlays))))
+    overlays))
 
 (defun conn--all-visible-windows ()
   (let (wins)
@@ -771,25 +790,11 @@ If BUFFER is nil check `current-buffer'."
   (when (setq windows (seq-remove 'window-dedicated-p windows))
     (if (length= windows 1)
         (car windows)
-      (let ((overlays (seq-mapn #'conn--create-window-prompt-overlay
-                                windows (conn--create-label-strings (length windows)))))
-        (unwind-protect
-            (progn
-              (while (cdr overlays)
-                (let ((c (read-char "char:"))
-                      (next))
-                  (dolist (ov overlays)
-                    (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-                        (delete-overlay ov)
-                      (conn--thread -it-
-                          (overlay-get ov 'before-string)
-                        (substring -it- 1)
-                        (overlay-put ov 'before-string -it-))
-                      (push ov next)))
-                  (setq overlays next)))
-              (overlay-get (car overlays) 'window))
-          (dolist (ov overlays)
-            (delete-overlay ov)))))))
+      (conn--read-labels
+       windows
+       (conn--create-label-strings (length windows))
+       'conn--create-window-label-overlays
+       'window))))
 
 
 ;;;; Advice
@@ -2800,20 +2805,6 @@ Interactively defaults to the current region."
          (signal (car err) (cdr err))))
     overlays))
 
-(defun conn--read-overlay-label (labels overlays)
-  (let ((candidates (conn--label-overlays labels overlays))
-        (prompt "char:"))
-    (catch 'return
-      (while t
-        (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
-          ('nil
-           (setq candidates (conn--label-overlays labels overlays)
-                 prompt "char: (no matches)"))
-          (`(,ov . nil)
-           (throw 'return (overlay-get ov 'prefix-overlay)))
-          (narrowed
-           (setq prompt "char:")))))))
-
 (defun conn-thing-dispatch (thing action &optional repeat)
   "Begin dispatching ACTION on a THING.
 
@@ -2857,7 +2848,11 @@ seconds."
             (while t
              (when (null labels)
                (user-error "No matching candidates"))
-             (let* ((prefix (conn--read-overlay-label labels prefix-ovs))
+             (let* ((prefix (conn--read-labels
+                             prefix-ovs
+                             labels
+                             'conn--label-overlays
+                             'prefix-overlay))
                     (window (overlay-get prefix 'window))
                     (pt (overlay-start prefix)))
                (funcall action window pt thing)
@@ -4709,6 +4704,7 @@ if ARG is anything else `other-tab-prefix'."
   "M-`"     'other-frame
   "M-c"     'clone-frame
   "M-d"     'delete-frame
+  "C-u"     'conn-wincontrol-universal-arg
   "+"       'maximize-window
   "-"       'conn-wincontrol-invert-argument
   "."       'conn-wincontrol-digit-argument-reset
@@ -4851,6 +4847,10 @@ if ARG is anything else `other-tab-prefix'."
   (when (= (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (conn-wincontrol-mode 1)))
+
+(defun conn-wincontrol-universal-arg ()
+  (interactive)
+  (setq conn--wincontrol-arg (* 4 conn--wincontrol-arg)))
 
 (defun conn-wincontrol-digit-argument (N)
   "Append N to wincontrol prefix arg.
