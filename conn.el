@@ -66,6 +66,8 @@
 This keymap is active even in buffers which do not have
 `conn-local-mode' turned on.")
 
+(defvar-keymap conn-movement-map)
+
 ;;;;; Custom Variables
 
 (defgroup conn nil
@@ -371,6 +373,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar-local conn--mode-line-indicator "")
 
+(defvar conn--read-string-timeout-history nil)
+
 
 ;;;; Utilities
 
@@ -497,6 +501,19 @@ If BUFFER is nil check `current-buffer'."
     (conn-narrow-to-region beg end record)
     (deactivate-mark)))
 
+(defmacro conn--with-state (state &rest body)
+  (declare (indent 1))
+  (let ((saved-state (make-symbol "saved-state"))
+        (saved-prev-state (make-symbol "saved-prev-state")))
+    `(let ((,saved-state conn-current-state)
+           (,saved-prev-state conn-previous-state))
+       (unwind-protect
+           (progn
+             (,state)
+             ,@body)
+         (funcall ,saved-state)
+         (setq conn-previous-state ,saved-prev-state)))))
+
 (defvar-keymap conn-read-thing-command-mark-map
   "h" 'conn--local-mark-thing-map
   "C-h" 'help)
@@ -508,11 +525,17 @@ If BUFFER is nil check `current-buffer'."
     (when mark-map-keys
       (dolist (key mark-map-keys)
         (define-key keymap key conn--local-mark-thing-map)))
-    keymap))
+    (cond ((null conn-local-mode)
+           (make-composed-keymap (list keymap conn-movement-map)))
+          (conn-emacs-state
+           (make-composed-keymap
+            (list keymap)
+            (conn--with-state conn-state (current-active-maps))))
+          (t
+           keymap))))
 
 (defun conn--read-thing-command ()
-  (let ((keymap (make-composed-keymap (conn--read-thing-keymap)
-                                      conn-state-map))
+  (let ((keymap (conn--read-thing-keymap))
         (prompt (concat "Thing Command ("
                         (propertize "C-h" 'face 'help-key-binding)
                         " for commands): ")))
@@ -646,7 +669,8 @@ If BUFFER is nil check `current-buffer'."
                           (conn--reset-read-string-timer timer))
                         nil t))
           (condition-case _
-              (cons (read-string "string: " nil nil nil t) overlays)
+              (cons (read-string "string: " nil 'conn--read-string-timeout-history nil t)
+                    overlays)
             ((quit error)
              (mapc #'delete-overlay overlays))))
       ;; Idle timers wont be reset here so do it
@@ -925,7 +949,6 @@ Continuous handlers will mark all THINGs when moving over multiple
 THINGs at once unless `region-active-p'."
   (lambda (beg)
     (unless (or (region-active-p)
-                (= (point) beg)
                 (= 0 (prefix-numeric-value current-prefix-arg)))
       (let* ((dir (cl-signum (- (point) beg)))
              (dist (* dir (prefix-numeric-value current-prefix-arg))))
@@ -942,7 +965,7 @@ If one has already been created return it, otherwise create a new one.
 Discrete handlers will only mark the last THING when moving over
 multiple THINGs at once unless `region-active-p'."
   (lambda (beg)
-    (unless (or (= beg (point)) (region-active-p))
+    (unless (region-active-p)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
          (conn--push-ephemeral-mark (if (= (point) end) beg end)))
@@ -6155,65 +6178,31 @@ dispatch on each contiguous component of the region."
   "y"   'yank-in-context)
 
 (define-keymap
-  :keymap conn-dot-state-map
-  "M-<down-mouse-1>" 'conn-dot-at-click
-  "<return>"         'conn-dot-lines
-  "RET"              'conn-dot-lines
-  "<backspace>"      'conn-remove-dot-backward
-  "DEL"              'conn-remove-dot-backward
-  "C-p"              'conn-previous-dot
-  "C-n"              'conn-next-dot
-  "C-M-p"            'conn-first-dot
-  "C-M-n"            'conn-last-dot
-  "|"                'conn-shell-command-on-dots
-  "{"                'conn-first-dot
-  "}"                'conn-last-dot
-  "["                'conn-remove-dots-before
-  "]"                'conn-remove-dots-after
-  "="                'conn-dot-thing-at-point
-  "c"                'conn-split-dots-on-regexp
-  "D"                'conn-remove-all-dots
-  "d"                'conn-remove-dot-forward
-  "E"                'conn-dot-point
-  "e"                'conn-dot-region
-  "q"                'conn-dot-edit-map
-  "r"                conn-dot-region-map
-  "t"                'conn-dot-all-things-in-region
-  "y"                'conn-add-dots-matching-regexp)
-
-(define-keymap
-  :keymap conn-state-map
-  "C-t"   'conn-C-x-t-keys
-  "C-y"   'conn-yank-replace
-  "M-y"   'conn-completing-yank-replace
-  "|"     'shell-command-on-region
-  "="     'indent-relative
-  "$"     'ispell-word
-  "*"     'calc-dispatch
-  ")"     'up-list
-  "("     'down-list
-  "["     'conn-kill-prepend-region
-  "\""    'conn-insert-pair
-  "<tab>" 'indent-region
-  "TAB"   'indent-region
-  "]"     'conn-kill-append-region
-  "'"     'conn-other-place-prefix
-  "B"     'ibuffer
-  "C"     'conn-copy-region
-  "c"     'conn-C-c-keys
-  "d"     'conn-delete-char-keys
-  "E"     'conn-dot-region
-  "Q"     'conn-dot-edit-map
-  "q"     'conn-edit-map
-  "R"     conn-dot-region-map
-  "r"     'conn-region-map
-  "T"     'conn-dot-all-things-in-region
-  "w"     'conn-kill-region
-  "y"     'conn-yank-keys
-  "Y"     'yank-from-kill-ring)
+  :keymap conn-movement-map
+  ")" 'up-list
+  "(" 'down-list
+  "U" 'conn-backward-sentence-keys
+  "u" 'conn-backward-word-keys
+  "I" 'conn-backward-paragraph-keys
+  "i" 'conn-previous-line-keys
+  "J" 'conn-beginning-of-inner-line
+  "j" 'conn-backward-char
+  "K" 'conn-forward-paragraph-keys
+  "k" 'conn-next-line-keys
+  "L" 'conn-end-of-inner-line
+  "l" 'conn-forward-char
+  "M" 'conn-end-of-defun-keys
+  "m" 'conn-forward-sexp-keys
+  "N" 'conn-beginning-of-defun-keys
+  "n" 'conn-backward-sexp-keys
+  "O" 'conn-forward-sentence-keys
+  "o" 'conn-forward-word-keys
+  "<" 'conn-backward-line
+  ">" 'forward-line)
 
 (define-keymap
   :keymap conn-common-map
+  :parent conn-movement-map
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
@@ -6242,8 +6231,6 @@ dispatch on each contiguous component of the region."
   "/"     'undo-only
   ";"     'execute-extended-command
   ":"     'execute-extended-command-for-buffer
-  "<"     'conn-backward-line
-  ">"     'forward-line
   "?"     'undo-redo
   "`"     'conn-other-window
   "~"     'conn-swap-windows
@@ -6253,31 +6240,71 @@ dispatch on each contiguous component of the region."
   "g"     'conn-thing-dispatch
   "H"     'conn-expand
   "h"     'repeat
-  "I"     'conn-backward-paragraph-keys
-  "i"     'conn-previous-line-keys
-  "J"     'conn-beginning-of-inner-line
-  "j"     'conn-backward-char
-  "K"     'conn-forward-paragraph-keys
-  "k"     'conn-next-line-keys
-  "L"     'conn-end-of-inner-line
-  "l"     'conn-forward-char
-  "M"     'conn-end-of-defun-keys
-  "m"     'conn-forward-sexp-keys
-  "N"     'conn-beginning-of-defun-keys
-  "n"     'conn-backward-sexp-keys
-  "O"     'conn-forward-sentence-keys
-  "o"     'conn-forward-word-keys
   "P"     'conn-register-prefix
   "p"     'conn-register-load
   "s"     'conn-M-s-keys
-  "U"     'conn-backward-sentence-keys
-  "u"     'conn-backward-word-keys
   "V"     'conn-narrow-to-region
   "v"     'conn-toggle-mark-command
   "W"     'widen
   "X"     'conn-cycle-narrowings
   "x"     'conn-C-x-keys
   "z"     'conn-exchange-mark-command)
+
+(define-keymap
+  :keymap conn-state-map
+  "C-t"   'conn-C-x-t-keys
+  "C-y"   'conn-yank-replace
+  "M-y"   'conn-completing-yank-replace
+  "|"     'shell-command-on-region
+  "="     'indent-relative
+  "$"     'ispell-word
+  "*"     'calc-dispatch
+  "["     'conn-kill-prepend-region
+  "\""    'conn-insert-pair
+  "<tab>" 'indent-region
+  "TAB"   'indent-region
+  "]"     'conn-kill-append-region
+  "'"     'conn-other-place-prefix
+  "B"     'ibuffer
+  "C"     'conn-copy-region
+  "c"     'conn-C-c-keys
+  "d"     'conn-delete-char-keys
+  "E"     'conn-dot-region
+  "Q"     'conn-dot-edit-map
+  "q"     'conn-edit-map
+  "R"     conn-dot-region-map
+  "r"     'conn-region-map
+  "T"     'conn-dot-all-things-in-region
+  "w"     'conn-kill-region
+  "y"     'conn-yank-keys
+  "Y"     'yank-from-kill-ring)
+
+(define-keymap
+  :keymap conn-dot-state-map
+  "M-<down-mouse-1>" 'conn-dot-at-click
+  "<return>"         'conn-dot-lines
+  "RET"              'conn-dot-lines
+  "<backspace>"      'conn-remove-dot-backward
+  "DEL"              'conn-remove-dot-backward
+  "C-p"              'conn-previous-dot
+  "C-n"              'conn-next-dot
+  "C-M-p"            'conn-first-dot
+  "C-M-n"            'conn-last-dot
+  "|"                'conn-shell-command-on-dots
+  "{"                'conn-first-dot
+  "}"                'conn-last-dot
+  "["                'conn-remove-dots-before
+  "]"                'conn-remove-dots-after
+  "="                'conn-dot-thing-at-point
+  "c"                'conn-split-dots-on-regexp
+  "D"                'conn-remove-all-dots
+  "d"                'conn-remove-dot-forward
+  "E"                'conn-dot-point
+  "e"                'conn-dot-region
+  "q"                'conn-dot-edit-map
+  "r"                conn-dot-region-map
+  "t"                'conn-dot-all-things-in-region
+  "y"                'conn-add-dots-matching-regexp)
 
 (define-keymap
   :keymap conn-org-edit-state-map
