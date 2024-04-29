@@ -1795,8 +1795,8 @@ C-x, M-s and M-g into various state maps."
 (conn-define-remapping-command conn-end-of-defun-keys       "C-M-e")
 (conn-register-thing-commands
  'defun (conn-sequential-thing-handler 'defun)
- 'conn-forward-defun-keys
- 'conn-backward-defun-keys)
+ 'conn-end-of-defun-keys
+ 'conn-beginning-of-defun-keys)
 
 (conn-define-remapping-command conn-next-line-keys          "C-n")
 (conn-define-remapping-command conn-previous-line-keys      "C-p")
