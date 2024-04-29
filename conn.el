@@ -4,7 +4,7 @@
 ;; Description: A modal keybinding mode and keyboard macro enhancement
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4"))
+;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") (transient "0.6.0") (seq "2.24"))
 ;; Homepage: https://github.com/mtll/conn
 ;;
 ;; This program is free software; you can redistribute it and/or modify
