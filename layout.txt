@@ -25,8 +25,8 @@ Conn State:
 ┃                │  control │   map    │          │  state   │   thing  │          │          │          │          │          │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │           │          │   copy   │  narrow  │  ibuffer │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
-┃                      │           │          │  region  │  region  │          │          │          │   line   │   line   │          │                       ┃
+┃                      │           │  narrow  │   copy   │  narrow  │  ibuffer │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
+┃                      │           │  cycle   │  region  │  region  │          │          │          │   line   │   line   │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
 ┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
 ┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │  switch  │  ←sexp   │  →sexp   │ ←isearch │ →isearch │   undo   │                       ┃
