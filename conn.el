@@ -630,15 +630,6 @@ If BUFFER is nil check `current-buffer'."
         (apply 'nconc ovs))
     (conn--read-string-preview-overlays-1 string dir)))
 
-(defun conn--reset-read-string-timer (timer)
-  (cancel-timer timer)
-  (timer-set-time timer (timer-relative-time nil conn-read-string-timeout))
-  (timer-activate timer))
-
-(defun conn--read-string-tick ()
-  (list (point) (buffer-chars-modified-tick)
-        (current-buffer) (selected-window)))
-
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
     (let* ((string (char-to-string (read-char "string: " t)))
