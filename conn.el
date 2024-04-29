@@ -2402,6 +2402,10 @@ Interactively defaults to the current region."
       (isearch-backward)
     (remove-function isearch-filter-predicate 'conn-isearch-in-narrow-p)))
 
+(defun conn-dot-narrow-ring ()
+  (interactive)
+  (apply 'conn--create-dots conn-narrow-ring))
+
 ;;;;; Thing Dispatch
 
 (defvar-keymap conn-dispatch-base-command-map
@@ -5302,6 +5306,7 @@ the edit in the macro."
    conn--narrow-ring-display
    [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
     ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
+    ("e" "Dot Narrowings" conn-dot-narrow-ring)
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
    [("a" "Abort Cycling"
