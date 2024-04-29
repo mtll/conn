@@ -575,7 +575,11 @@ If BUFFER is nil check `current-buffer'."
           (if (eq dir 'backward) (point) (window-end))
         (goto-char (point-max))
         (while (search-backward string nil t)
-          (push (point) matches))))
+          (when (catch 'invisible
+                  (dotimes (i (- (match-end 0) (match-beginning 0)) t)
+                    (when (invisible-p (+ i (match-beginning 0)))
+                      (throw 'invisible nil))))
+            (push (point) matches)))))
     matches))
 
 (defun conn--read-string-preview-overlays-1 (string &optional dir)
@@ -4554,13 +4558,13 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-widen] "
     "\\[conn-wincontrol-narrow]: "
     "heighten shorten widen narrow; "
-    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: swap/grab; "
+    "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
     "\\[kill-buffer-and-window]: kill buf+win"
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
-    "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
+    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: transpose/yank; "
     "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
     "\n"
     "\\[text-scale-set]: scale; "
@@ -4692,7 +4696,7 @@ if ARG is anything else `other-tab-prefix'."
   "k"       'conn-wincontrol-windmove-down
   "l"       'conn-wincontrol-windmove-right
   "L"       'tab-next
-  "m"       'kill-buffer-and-window
+  "m"       nil
   "n"       'conn-wincontrol-narrow
   "N"       'tab-bar-new-tab
   "o"       'tear-off-window
@@ -4702,13 +4706,13 @@ if ARG is anything else `other-tab-prefix'."
   "q"       'conn-wincontrol-off
   "r"       'conn-wincontrol-split-right
   "s"       'conn-wincontrol-shorten
-  "t"       'conn-swap-buffers
+  "t"       'conn-wincontrol-swap-windows
   "u"       'bury-buffer
   "U"       'unbury-buffer
   "v"       'conn-wincontrol-split-vertically
   "w"       'conn-wincontrol-widen
-  "x"       'conn-wincontrol-swap-windows
-  "y"       nil
+  "x"       'kill-buffer-and-window
+  "y"       'conn-swap-buffers
   "z"       'text-scale-set)
 
 (define-minor-mode conn-wincontrol-mode
