@@ -58,11 +58,6 @@
   (conn-isearch-in-dot-toggle))
 
 (define-keymap
-  :keymap conn-dot-state-map
-  "M-," 'conn-isearch-backward-in-dots
-  "M-." 'conn-isearch-forward-in-dots)
-
-(define-keymap
   :keymap isearch-mode-map
   "C-y m" 'isearchp-yank-sexp-symbol-or-char
   "C-y o" 'isearchp-yank-word-or-char-forward
@@ -71,16 +66,15 @@
   "C-y k" 'isearchp-yank-line-forward
   "C-y l" 'isearchp-yank-char
   "M-o"   isearchp-filter-map
-  "C-z"   'conn-isearch-dispatch
-  "M-,"   'conn-isearch-in-dot-toggle)
+  "M-."   'conn-isearch-in-dot-toggle)
 
-;; isearchp-highlight-lighter forces redisplay,
-;; this is not desirable during keyboard macros.
-;; I don't know if this is reasonable to apply by default.
+;; isearchp-highlight-lighter forces redisplay, this
+;; is not desirable during keyboard macros.  I don't
+;; know if this is reasonable to apply by default.
 ;;
-;; (defun conn--unless-executing-kbd-macro () executing-kbd-macro)
+;; (defun conn--executing-kbd-macro-p () executing-kbd-macro)
 ;; (advice-add 'isearchp-highlight-lighter :before-until
-;;             'conn--unless-executing-kbd-macro)
+;;             'conn--executing-kbd-macro-p)
 
 (provide 'conn-isearch+)
 ;;; conn-isearch+.el ends here
