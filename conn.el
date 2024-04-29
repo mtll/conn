@@ -1347,10 +1347,11 @@ If any function returns a nil value then dispatch it halted.")
                 (funcall state)
                 (setq conn-previous-state prev-state)))))
          ((consp ret)
-          (unless (alist-get (current-buffer) buffer-states)
-            (setf (alist-get (current-buffer) buffer-states)
-                  (list conn-current-state conn-previous-state)))
-          (funcall transition)))
+          (when conn-local-mode
+            (unless (alist-get (current-buffer) buffer-states)
+              (setf (alist-get (current-buffer) buffer-states)
+                    (list conn-current-state conn-previous-state)))
+            (funcall transition))))
         ret))))
 
 (defun conn--dispatch-relocate-dots (iterator)
@@ -1438,7 +1439,7 @@ If any function returns a nil value then dispatch it halted.")
           (setq ret (funcall iterator state))))
       ret)))
 
-(defun conn--pulse-on-record (iterator)
+(defun conn--pulse-region-on-record (iterator)
   (lambda (state)
     (pcase (funcall iterator state)
       ((and `(,beg . ,end)
@@ -2642,9 +2643,8 @@ Interactively defaults to the current region."
 
 (defun conn--read-dispatch-command ()
   (let ((keymap (make-composed-keymap
-                 (append (list (conn--read-thing-keymap))
-                         conn-dispatch-command-maps
-                         (list conn-state-map))))
+                 (append conn-dispatch-command-maps
+                         (conn--read-thing-keymap))))
         (prompt (concat "Thing Dispatch "
                         "(" (propertize "C-h" 'face 'help-key-binding) " for commands): "))
         (action))
@@ -5419,7 +5419,7 @@ the edit in the macro."
     ("p" "sort paragraphs" sort-paragraphs)
     ("r" "sort regexp fields" sort-regexp-fields)]])
 
-(defun conn--set-macro-ring-head (macro)
+(defun conn--push-macro-ring (macro)
   (interactive
    (list (get-register (register-read-with-preview "Kmacro: "))))
   (unless (or (null macro)
@@ -5587,7 +5587,7 @@ dispatch on each contiguous component of the region."
       ("change" (conn--dispatch-change-region -it-))
       ("end" (conn--dispatch-at-end -it-))
       ("start" -it-))
-    (conn--pulse-on-record -it-)
+    (conn--pulse-region-on-record -it-)
     (if (member "windows" args) (conn--dispatch-save-windows -it-) -it-)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch -it- last-kbd-macro))
@@ -5649,7 +5649,7 @@ dispatch on each contiguous component of the region."
       ("change" (conn--dispatch-change-region -it-))
       ("end" (conn--dispatch-at-end -it-))
       ("start" -it-))
-    (conn--pulse-on-record -it-)
+    (conn--pulse-region-on-record -it-)
     (if (member "windows" args) (conn--dispatch-save-windows -it-) -it-)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch -it- last-kbd-macro))
@@ -5677,7 +5677,7 @@ dispatch on each contiguous component of the region."
       ("change" (conn--dispatch-change-region -it-))
       ("end" (conn--dispatch-at-end -it-))
       ("start" -it-))
-    (conn--pulse-on-record -it-)
+    (conn--pulse-region-on-record -it-)
     (if (member "windows" args) (conn--dispatch-save-windows -it-) -it-)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch -it- last-kbd-macro))
@@ -5717,7 +5717,7 @@ dispatch on each contiguous component of the region."
       ("change" (conn--dispatch-change-region -it-))
       ("end" (conn--dispatch-at-end -it-))
       ("start" -it-))
-    (conn--pulse-on-record -it-)
+    (conn--pulse-region-on-record -it-)
     (if (member "windows" args) (conn--dispatch-save-windows -it-) -it-)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch -it- last-kbd-macro))
@@ -5756,7 +5756,7 @@ dispatch on each contiguous component of the region."
       ("change" (conn--dispatch-change-region -it-))
       ("end" (conn--dispatch-at-end -it-))
       ("start" -it-))
-    (conn--pulse-on-record -it-)
+    (conn--pulse-region-on-record -it-)
     (if (member "windows" args) (conn--dispatch-save-windows -it-) -it-)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch -it- last-kbd-macro))
@@ -5802,7 +5802,7 @@ dispatch on each contiguous component of the region."
       ("change" (conn--dispatch-change-region -it-))
       ("end" (conn--dispatch-at-end -it-))
       ("start" -it-))
-    (conn--pulse-on-record -it-)
+    (conn--pulse-region-on-record -it-)
     (if (member "windows" args) (conn--dispatch-save-windows -it-) -it-)
     (pcase (transient-arg-value "last-kmacro=" args)
       ("apply" (conn--macro-dispatch -it- last-kbd-macro))
@@ -5835,7 +5835,7 @@ dispatch on each contiguous component of the region."
        (interactive)
        (kmacro-display last-kbd-macro t))
      :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
+    ("g" "Push Register" conn--push-macro-ring :transient t)]]
   [:description
    "Dispatch"
    [(conn--dispatch-suffix)
@@ -5890,7 +5890,7 @@ dispatch on each contiguous component of the region."
        (interactive)
        (kmacro-display last-kbd-macro t))
      :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
+    ("g" "Push Register" conn--push-macro-ring :transient t)]]
   ["Dispatch"
    [(conn--isearch-dispatch-suffix)
     (conn--dot-dispatch-suffix)]
@@ -5936,7 +5936,7 @@ dispatch on each contiguous component of the region."
        (interactive)
        (kmacro-display last-kbd-macro t))
      :transient t)
-    ("g" "Push Register" conn--set-macro-ring-head :transient t)]]
+    ("g" "Push Register" conn--push-macro-ring :transient t)]]
   ["Dispatch"
    [(conn--regions-dispatch-suffix)]
    [(conn--dispatch-macro-infix)
