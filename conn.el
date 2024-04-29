@@ -964,7 +964,7 @@ THINGs at once unless `region-active-p'."
 If one has already been created return it, otherwise create a new one.
 Discrete handlers will only mark the last THING when moving over
 multiple THINGs at once unless `region-active-p'."
-  (lambda (beg)
+  (lambda (_beg)
     (unless (region-active-p)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
@@ -1181,8 +1181,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'move-beginning-of-line 'move-end-of-line)
 
 (conn-register-thing inner-line
-  :beg-op 'back-to-indentation
-  :end-op 'conn--end-of-inner-line-1)
+  :bounds-op (lambda ()
+               (cons
+                (save-excursion
+                  (back-to-indentation)
+                  (point))
+                (save-excursion
+                  (conn--end-of-inner-line-1)
+                  (point)))))
 
 (conn-register-thing-commands
  'inner-line (conn-individual-thing-handler 'inner-line)
@@ -2577,11 +2583,12 @@ Interactively defaults to the current region."
       (push-mark nil t)
       (select-window window)
       (goto-char pt)
-      (pcase (bounds-of-thing-at-point thing)
-        (`(,beg . ,end)
-         (goto-char beg)
-         (unless (region-active-p)
-           (conn--push-ephemeral-mark end)))))))
+      (unless (eq thing 'char)
+        (pcase (bounds-of-thing-at-point thing)
+          (`(,beg . ,end)
+           (goto-char beg)
+           (unless (region-active-p)
+             (conn--push-ephemeral-mark end))))))))
 
 (defun conn-dispatch-transpose (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
@@ -2734,19 +2741,23 @@ Interactively defaults to the current region."
                             (mapcar 'overlay-start)
                             (apply 'min
                                    (+ pt (length label))
-                                   ;; If we are at point-max this will
-                                   ;; cause end to be point-max - 1,
-                                   ;; fix this later on.
-                                   (1- (next-single-char-property-change
-                                        pt 'invisible nil (+ 1 pt (length label))))
+                                   ;; Hack in case this match abuts an
+                                   ;; invisible region.  This puts the
+                                   ;; label before the match, but it
+                                   ;; is better than an invisible
+                                   ;; label.
+                                   (if (invisible-p pt) (1- pt) (point-max))
+                                   (pcase (next-single-char-property-change
+                                           pt 'invisible nil (+ 1 pt (length label)))
+                                     ((pred (= (point-max))) (point-max))
+                                     (end (1- end)))
                                    (save-excursion
                                      (goto-char pt)
                                      (line-end-position)))))
-                     ;; (max pt end) incase pt is point-max
-                     ;; and end is point-max - 1.
-                     (ov (make-overlay pt (max pt end))))
+                     (ov (make-overlay pt end)))
                 (push ov overlays)
-                (overlay-put ov 'invisible t)
+                (unless (invisible-p (1+ pt))
+                  (overlay-put ov 'invisible t))
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
@@ -6523,6 +6534,7 @@ determine if `conn-local-mode' should be enabled."
 
 (provide 'conn)
 
+
 ;;; Load Extensions
 
 (with-eval-after-load 'corfu
