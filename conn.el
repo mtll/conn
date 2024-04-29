@@ -2388,19 +2388,17 @@ Interactively defaults to the current region."
 
 (defun conn-isearch-narrow-ring-forward ()
   (interactive)
-  (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
-                '((isearch-message-prefix . "[NARROW] ")))
-  (unwind-protect
-      (isearch-forward)
-    (remove-function isearch-filter-predicate 'conn-isearch-in-narrow-p)))
+  (let ((isearch-filter-predicate isearch-filter-predicate))
+    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
+                  '((isearch-message-prefix . "[NARROW] ")))
+    (isearch-forward)))
 
 (defun conn-isearch-narrow-ring-backward ()
   (interactive)
-  (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
-                '((isearch-message-prefix . "[NARROW] ")))
-  (unwind-protect
-      (isearch-backward)
-    (remove-function isearch-filter-predicate 'conn-isearch-in-narrow-p)))
+  (let ((isearch-filter-predicate isearch-filter-predicate))
+    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
+                  '((isearch-message-prefix . "[NARROW] ")))
+    (isearch-backward)))
 
 (defun conn-dot-narrow-ring ()
   (interactive)
@@ -3517,22 +3515,6 @@ Meant to be used as `isearch-filter-predicate'."
   "Inverse of `conn-isearch-in-dot-p'."
   (not (conn-isearch-in-dot-p beg end)))
 
-(defun conn-isearch-in-dot-toggle ()
-  "Restrict isearch text within dots."
-  (interactive)
-  (if (advice-function-member-p #'conn-isearch-in-dot-p isearch-filter-predicate)
-      (advice-remove isearch-filter-predicate #'conn-isearch-in-dot-p)
-    (advice-add isearch-filter-predicate :after-while #'conn-isearch-in-dot-p
-                '((isearch-message-prefix . "[DOT] "))))
-  (isearch-update))
-
-(defun conn--isearch-add-dots-1 (&optional buffer)
-  (with-current-buffer (or buffer (current-buffer))
-    (when (advice-function-member-p #'conn-isearch-in-dot-p
-                                    isearch-filter-predicate)
-      (conn--remove-dots (point-min) (point-max)))
-    (apply #'conn--create-dots (conn--isearch-matches-in-buffer))))
-
 (defun conn-isearch-dot-match ()
   "Dot the current isearch match and repeat in current direction."
   (interactive)
@@ -3547,10 +3529,10 @@ Meant to be used as `isearch-filter-predicate'."
   (interactive)
   (if (or (not (boundp 'multi-isearch-buffer-list))
           (not multi-isearch-buffer-list))
-      (conn--isearch-add-dots-1 (current-buffer))
+      (apply #'conn--create-dots (conn--isearch-matches-in-buffer))
     (dolist (buf multi-isearch-buffer-list)
       (when buf
-        (conn--isearch-add-dots-1 buf))))
+        (apply #'conn--create-dots (conn--isearch-matches-in-buffer buf)))))
   (isearch-update))
 
 (defun conn-isearch-remove-dots (&optional partial-match)
