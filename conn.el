@@ -2733,27 +2733,32 @@ Interactively defaults to the current region."
       (internal-pop-keymap keymap 'overriding-terminal-local-map))))
 
 (defun conn--narrow-labeled-overlays (prompt overlays)
-  (let ((c (read-char prompt))
-        (narrowed))
-    (dolist (ov overlays)
-      (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-          (progn
-            (when-let ((prefix (overlay-get ov 'prefix-overlay)))
-              (overlay-put prefix 'face nil))
-            (delete-overlay ov))
-        (conn--thread -it-
-            (overlay-get ov 'before-string)
-          (substring -it- 1)
-          (overlay-put ov 'before-string -it-))
-        (when (overlay-get ov 'invisible)
-          (move-overlay ov
-                        (overlay-start ov)
-                        (+ (overlay-start ov)
-                           (min (length (overlay-get ov 'before-string))
-                                (- (overlay-end ov)
-                                   (overlay-start ov))))))
-        (push ov narrowed)))
-    narrowed))
+  (unwind-protect
+      (let ((c (read-char prompt))
+            (narrowed))
+        (condition-case err
+            (progn
+              (dolist (ov overlays)
+                (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
+                    (when-let ((prefix (overlay-get ov 'prefix-overlay)))
+                      (overlay-put prefix 'face nil))
+                  (conn--thread -it-
+                      (overlay-get ov 'before-string)
+                    (substring -it- 1)
+                    (overlay-put ov 'before-string -it-))
+                  (when (overlay-get ov 'invisible)
+                    (move-overlay ov
+                                  (overlay-start ov)
+                                  (+ (overlay-start ov)
+                                     (min (length (overlay-get ov 'before-string))
+                                          (- (overlay-end ov)
+                                             (overlay-start ov))))))
+                  (push (copy-overlay ov) narrowed)))
+              narrowed)
+          ((quit error)
+           (mapc #'delete-overlay narrowed)
+           (signal (car err) (cdr err)))))
+    (mapc #'delete-overlay overlays)))
 
 (defun conn--label-overlays (labels prefix-overlays)
   (let (overlays)
@@ -2788,6 +2793,7 @@ Interactively defaults to the current region."
                 (push ov overlays)
                 (unless (invisible-p (1+ pt))
                   (overlay-put ov 'invisible t))
+                (overlay-put p 'face 'conn-read-string-match-face)
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
@@ -2799,21 +2805,18 @@ Interactively defaults to the current region."
     overlays))
 
 (defun conn--read-overlay-label (labels overlays)
-  (let ((candidates (conn--label-overlays labels overlays)))
-    (unwind-protect
-        (catch 'return
-          (while t
-           (pcase candidates
-             ('nil
-              (setq candidates
-                    (thread-last
-                      (conn--label-overlays labels overlays)
-                      (conn--narrow-labeled-overlays "char: (no matches)"))))
-             (`(,ov . nil)
-              (throw 'return (overlay-get ov 'prefix-overlay)))
-             (_
-              (setq candidates (conn--narrow-labeled-overlays "char:" candidates))))))
-      (mapc #'delete-overlay candidates))))
+  (let ((candidates (conn--label-overlays labels overlays))
+        (prompt "char:"))
+    (catch 'return
+      (while t
+        (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
+          ('nil
+           (setq candidates (conn--label-overlays labels overlays)
+                 prompt "char: (no matches)"))
+          (`(,ov . nil)
+           (throw 'return (overlay-get ov 'prefix-overlay)))
+          (narrowed
+           (setq prompt "char:")))))))
 
 (defun conn-thing-dispatch (thing action &optional repeat)
   "Begin dispatching ACTION on a THING.
