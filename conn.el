@@ -2705,6 +2705,8 @@ Interactively defaults to the current region."
                             (mapcar 'overlay-start)
                             (apply 'min
                                    (+ pt (length label))
+                                   (1- (next-single-char-property-change
+                                        pt 'invisible nil (+ 1 pt (length label))))
                                    (save-excursion
                                      (goto-char pt)
                                      (line-end-position)))))
