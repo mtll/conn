@@ -760,7 +760,7 @@ If BUFFER is nil check `current-buffer'."
           (while t
             (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
               ('nil
-               (setq candidates (funcall label-fn labels overlays)
+               (setq candidates (funcall label-fn labels things)
                      prompt "char: (no matches)"))
               (`(,it . nil)
                (throw 'return (overlay-get it payload)))
@@ -2764,6 +2764,11 @@ Interactively defaults to the current region."
                                (min (length (overlay-get ov prop))
                                     (- (overlay-end ov)
                                        (overlay-start ov)))))
+              (with-current-buffer (overlay-buffer ov)
+                (thread-last
+                  (buffer-substring (overlay-start ov) (overlay-end ov))
+                  (seq-drop-while (lambda (c) (not (char-equal c ?\n))))
+                  (overlay-put ov 'after-string)))
               (push ov narrowed))))
         (mapcar #'copy-overlay narrowed))
     (mapc #'delete-overlay overlays)))
@@ -2787,10 +2792,10 @@ Interactively defaults to the current region."
                      (ov (make-overlay beg end)))
                 (push ov overlays)
                 (overlay-put p 'face 'conn-read-string-match-face)
-                (when (save-excursion
-                        (goto-char beg)
-                        (search-forward "\n" end t))
-                  (overlay-put ov 'after-string "\n"))
+                (thread-last
+                  (buffer-substring (overlay-start ov) (overlay-end ov))
+                  (seq-drop-while (lambda (c) (not (char-equal c ?\n))))
+                  (overlay-put ov 'after-string))
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
