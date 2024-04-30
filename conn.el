@@ -646,77 +646,22 @@ If BUFFER is nil check `current-buffer'."
         (apply 'nconc ovs))
     (conn--read-string-preview-overlays-1 string dir)))
 
-;; This would be much simpler but read-char/event doesn't seem to allow
-;; any of the input-method keybindings (e.g. C-SPC, C-n/p/f/b, etc.)
-;; (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
-;;   (conn--with-input-method
-;;     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-;;            (string (char-to-string (read-char prompt t)))
-;;            (overlays (conn--read-string-preview-overlays string dir all-windows))
-;;            next-char)
-;;       (condition-case _
-;;           (progn
-;;             (while (setq next-char (read-char (format (concat prompt "%s") string) t
-;;                                               conn-read-string-timeout))
-;;               (setq string (concat string (char-to-string next-char)))
-;;               (mapc #'delete-overlay overlays)
-;;               (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
-;;             (cons string overlays))
-;;         ((quit error)
-;;          (mapc #'delete-overlay overlays))))))
-
-(defun conn--reset-read-string-timer (timer)
-  (cancel-timer timer)
-  (timer-set-time timer (timer-relative-time nil conn-read-string-timeout))
-  (timer-activate timer))
-
-(defun conn--read-string-tick ()
-  (list (point) (buffer-chars-modified-tick)
-        (current-buffer) (selected-window)))
-
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
-    (let ((blink-matching-paren nil)
-          (timer (timer-create))
-          (tick)
-          (overlays))
-      (timer-set-function
-       timer (lambda ()
-               (if (and tick (equal tick (conn--read-string-tick))
-                        (not (equal "" (minibuffer-contents))))
-                   (exit-minibuffer)
-                 (conn--reset-read-string-timer timer))))
-      (unwind-protect
-          (minibuffer-with-setup-hook
-              (lambda ()
-                (electric-pair-local-mode -1)
-                (add-hook 'post-command-hook
-                          (lambda ()
-                            (when (and tick (not (equal tick (conn--read-string-tick))))
-                              (mapc #'delete-overlay overlays)
-                              (when-let ((str (minibuffer-contents)))
-                                (with-selected-window (minibuffer-selected-window)
-                                  (let ((case-fold-search
-                                         (not (seq-find 'char-uppercase-p str))))
-                                    (setq overlays (conn--read-string-preview-overlays
-                                                    str dir all-windows))))))
-                            (setq tick (conn--read-string-tick))
-                            (conn--reset-read-string-timer timer))
-                          nil t))
-            (condition-case _
-                (cons (read-string "string: " nil 'conn--read-string-timeout-history nil t)
-                      overlays)
-              ((quit error)
-               (mapc #'delete-overlay overlays))))
-        ;; Idle timers wont be reset here so do it
-        ;; manually for the mark cursor.  Maybe we
-        ;; should do internal-timer-start-idle?
-        (cancel-timer conn--mark-cursor-timer)
-        (timer-set-idle-time conn--mark-cursor-timer
-                             conn-mark-update-delay
-                             conn-mark-update-delay)
-        (timer-activate conn--mark-cursor-timer)
-        (cancel-timer timer)))))
+    (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+           (string (char-to-string (read-char prompt t)))
+           (overlays (conn--read-string-preview-overlays string dir all-windows))
+           next-char)
+      (condition-case _
+          (progn
+            (while (setq next-char (read-char (format (concat prompt "%s") string) t
+                                              conn-read-string-timeout))
+              (setq string (concat string (char-to-string next-char)))
+              (mapc #'delete-overlay overlays)
+              (setq overlays (conn--read-string-preview-overlays string dir all-windows)))
+            (cons string overlays))
+        ((quit error)
+         (mapc #'delete-overlay overlays))))))
 
 (defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
