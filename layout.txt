@@ -1,16 +1,16 @@
 Conn State:
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
 ┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │ Backspace    ┃
-┃  swap    │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │ →up list │  complex │ register │              ┃
-┃  window  │          │          │          │          │          │          │          │ dispatch │          │          │  command │ seperator│              ┃
+┃  swap    │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │  →down   │  complex │ register │              ┃
+┃  window  │          │          │          │          │          │          │          │ dispatch │          │   list   │  command │ seperator│              ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
 ┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
 ┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R  dot   │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │ dot edit │  widen   │   dot    │  region  │   dot    │   yank   │←sentence │  ↑para   │→sentence │ mark to  │          │          │ shell cmd┃
-┃    indent    │   map    │          │  region  │   map    │  things  │   read   │          │          │          │ register │          │          │ on region┃
+┃              │ dot edit │  widen   │   dot    │  region  │   dot    │   yank   │←sentence │  ↑para   │→sentence │ register │          │          │ shell cmd┃
+┃    indent    │   map    │          │  region  │   map    │  things  │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃    region    ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
 ┃              │   edit   │   kill   │          │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │   kill   │   kill   │  macro   ┃
@@ -65,8 +65,8 @@ Dot State:
 ┃                │  control │   map    │    dot   │  state   │   thing  │          │          │          │          │          │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │           │          │          │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
-┃                      │           │          │          │  region  │          │          │          │   line   │   line   │          │                       ┃
+┃                      │           │  narrow  │          │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
+┃                      │           │  cycle   │          │  region  │          │          │          │   line   │   line   │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
 ┃                      │ z         │ x        │ c  dot   │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
 ┃                      │   swap    │   C-x    │  split   │  toggle  │  switch  │  ←sexp   │  →sexp   │ ←isearch │ →isearch │   undo   │                       ┃
