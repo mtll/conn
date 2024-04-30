@@ -758,14 +758,15 @@ If BUFFER is nil check `current-buffer'."
     (unwind-protect
         (catch 'return
           (while t
-            (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
+            (pcase candidates
               ('nil
                (setq candidates (funcall label-fn labels things)
                      prompt "char: (no matches)"))
               (`(,it . nil)
                (throw 'return (overlay-get it payload)))
               (_
-               (setq prompt "char:")))))
+               (setq prompt "char:")))
+            (setq candidates (conn--narrow-labeled-overlays prompt candidates))))
       (mapcar #'delete-overlay candidates))))
 
 (defun conn--create-window-label-overlays (labels windows)
@@ -1324,7 +1325,7 @@ If any function returns a nil value then dispatch it halted.")
       (pcase state
         (:finalize
          (funcall iterator state)
-         (pcase-dolist (`(,_ . ,handle) dispatch-undo-handles)
+         (pcase-dolist (`(_ . ,handle) dispatch-undo-handles)
            (if conn-dispatch-error
                (cancel-change-group handle)
              (accept-change-group handle)
@@ -1412,7 +1413,7 @@ If any function returns a nil value then dispatch it halted.")
            (with-current-buffer buffer
              (apply 'conn--create-dots dots)))
          (dolist (list (list new-dots old-dots))
-           (pcase-dolist (`(,_ . ,dots) list)
+           (pcase-dolist (`(_ . ,dots) list)
              (pcase-dolist (`(,beg . ,end) dots)
                (set-marker beg nil)
                (set-marker end nil))))
@@ -1456,7 +1457,7 @@ If any function returns a nil value then dispatch it halted.")
            (pcase-dolist (`(,buffer . ,dots) old-dots)
              (with-current-buffer buffer
                (apply 'conn--create-dots dots))))
-         (pcase-dolist (`(,_ . ,dots) old-dots)
+         (pcase-dolist (`(_ . ,dots) old-dots)
            (pcase-dolist (`(,beg . ,end) dots)
              (set-marker beg nil)
              (set-marker end nil))))
@@ -1500,7 +1501,7 @@ If any function returns a nil value then dispatch it halted.")
 (defun conn--pulse-line-on-record (iterator)
   (lambda (state)
     (pcase (funcall iterator state)
-      ((and `(,beg . ,_)
+      ((and `(,beg . _)
             (guard (eq state :record))
             ret)
        (pulse-momentary-highlight-one-line beg 'conn-pulse-face)
@@ -2862,10 +2863,10 @@ seconds."
                     (pt (overlay-start prefix)))
                (funcall action window pt thing)
                (unless repeat (throw 'return nil)))
-             (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
+             (pcase-dolist (`(_ . ,ovs) prefix-ovs)
                (dolist (ov ovs)
                  (overlay-put ov 'face 'conn-read-string-match-face))))))
-      (pcase-dolist (`(,_ . ,ovs) prefix-ovs)
+      (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (dolist (ov ovs)
           (delete-overlay ov))))))
 
@@ -2951,10 +2952,10 @@ potential expansions.  Functions may return invalid expansions
 (defun conn--valid-expansions-p ()
   (or (and conn--current-expansions
            (region-active-p)
-           (seq-find (pcase-lambda (`(,beg . ,_))
+           (seq-find (pcase-lambda (`(,beg . _))
                        (= beg (region-beginning)))
                      conn--current-expansions)
-           (seq-find (pcase-lambda (`(,_ . ,end))
+           (seq-find (pcase-lambda (`(_ . ,end))
                        (= end (region-end)))
                      conn--current-expansions))
       (member (cons (region-beginning) (region-end))
@@ -2973,17 +2974,17 @@ Expansions are provided by functions in `conn-expansion-functions'."
     (dotimes (_ arg)
       (cond ((and (region-active-p)
                   (= (point) (region-end)))
-             (pcase (seq-find (pcase-lambda (`(,_ . ,end))
+             (pcase (seq-find (pcase-lambda (`(_ . ,end))
                                 (> end (point)))
                               conn--current-expansions)
-               (`(,_ . ,end) (goto-char end))
+               (`(_ . ,end) (goto-char end))
                ('nil         (user-error "No more expansions"))))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
-             (pcase (seq-find (pcase-lambda (`(,beg . ,_))
+             (pcase (seq-find (pcase-lambda (`(,beg . _))
                                 (< beg (point)))
                               conn--current-expansions)
-               (`(,beg . ,_) (goto-char beg))
+               (`(,beg . _) (goto-char beg))
                ('nil         (user-error "No more expansions"))))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
@@ -3014,17 +3015,17 @@ Expansions and contractions are provided by functions in
     (dotimes (_ arg)
       (cond ((and (region-active-p)
                   (= (point) (region-end)))
-             (pcase (seq-find (pcase-lambda (`(,_ . ,end))
+             (pcase (seq-find (pcase-lambda (`(_ . ,end))
                                 (< end (point)))
                               (reverse conn--current-expansions))
-               (`(,_ . ,end) (goto-char end))
+               (`(_ . ,end) (goto-char end))
                ('nil         (user-error "No more contractions"))))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
-             (pcase (seq-find (pcase-lambda (`(,beg . ,_))
+             (pcase (seq-find (pcase-lambda (`(,beg . _))
                                 (> beg (point)))
                               (reverse conn--current-expansions))
-               (`(,beg . ,_) (goto-char beg))
+               (`(,beg . _) (goto-char beg))
                ('nil         (user-error "No more contractions"))))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
@@ -5582,8 +5583,8 @@ before each iteration."
   :class 'transient-switch
   :key "se"
   :description "Excursions"
-  :argument "excursion"
-  :init-value (lambda (obj) (oset obj value "excursion")))
+  :argument "excursions"
+  :init-value (lambda (obj) (oset obj value "excursions")))
 
 (transient-define-argument conn--dispatch-save-restriction-infix ()
   "Save and restore the current restriction in each buffer during dispatch."
@@ -5622,7 +5623,7 @@ dispatch on each contiguous component of the region."
     (if (member "empty" args) -it- (conn--dispatch-skip-empty -it-))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5650,7 +5651,7 @@ dispatch on each contiguous component of the region."
     (conn--point-iterator -it- (member "reverse" args))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5684,7 +5685,7 @@ dispatch on each contiguous component of the region."
       ("remove" (conn--dispatch-remove-dots -it-)))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5712,7 +5713,7 @@ dispatch on each contiguous component of the region."
     (if (member "empty" args) -it- (conn--dispatch-skip-empty -it-))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5752,7 +5753,7 @@ dispatch on each contiguous component of the region."
     (conn--region-iterator -it- (not (member "reverse" args)))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5791,7 +5792,7 @@ dispatch on each contiguous component of the region."
     (conn--region-iterator -it- (member "reverse" args))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5837,7 +5838,7 @@ dispatch on each contiguous component of the region."
     (conn--region-iterator -it- (not (member "reverse" args)))
     (if (member "undo" args) (conn--dispatch-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--dispatch-save-restriction -it-) -it-)
-    (if (member "excursion" args) (conn--dispatch-save-excursion -it-) -it-)
+    (if (member "excursions" args) (conn--dispatch-save-excursion -it-) -it-)
     (pcase-exhaustive (transient-arg-value "state=" args)
       ("conn" (conn--dispatch-with-state -it- 'conn-state))
       ("emacs" (conn--dispatch-with-state -it- 'conn-emacs-state))
@@ -5874,12 +5875,12 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("g" "Push Register" conn--push-macro-ring :transient t)
     ("M" "Display"
      (lambda ()
        (interactive)
        (kmacro-display last-kbd-macro t))
-     :transient t)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]]
+     :transient t)]]
   [:description
    "Dispatch"
    [(conn--dispatch-suffix)
@@ -5929,12 +5930,12 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("g" "Push Register" conn--push-macro-ring :transient t)
     ("M" "Display"
      (lambda ()
        (interactive)
        (kmacro-display last-kbd-macro t))
-     :transient t)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]]
+     :transient t)]]
   ["Dispatch"
    [(conn--isearch-dispatch-suffix)
     (conn--dot-dispatch-suffix)]
@@ -5975,12 +5976,12 @@ dispatch on each contiguous component of the region."
      :transient transient--do-suspend)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("g" "Push Register" conn--push-macro-ring :transient t)
     ("M" "Display"
      (lambda ()
        (interactive)
        (kmacro-display last-kbd-macro t))
-     :transient t)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]]
+     :transient t)]]
   ["Dispatch"
    [(conn--regions-dispatch-suffix)]
    [(conn--dispatch-macro-infix)
@@ -6497,7 +6498,7 @@ dispatch on each contiguous component of the region."
         (setq-local conn-lighter (seq-copy conn-lighter))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
-        (pcase-dolist (`(,_ . ,hooks) conn-input-method-overriding-modes)
+        (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
           (dolist (hook hooks)
             (add-hook hook 'conn--activate-input-method nil t)))
         (add-hook 'pre-command-hook #'conn--mark-pre-command-hook nil t)
@@ -6518,7 +6519,7 @@ dispatch on each contiguous component of the region."
                 (assq-delete-all
                  'conn-mode-line-indicator-mode
                  mode-line-format))
-    (pcase-dolist (`(,_ . ,hooks) conn-input-method-overriding-modes)
+    (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
       (dolist (hook hooks)
         (remove-hook hook #'conn--activate-input-method t)))
     (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook t)
@@ -6654,10 +6655,10 @@ determine if `conn-local-mode' should be enabled."
   (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
-      "O" 'paredit-forward-up
-      "U" 'paredit-backward-up
-      "(" 'paredit-backward-down
-      ")" 'paredit-forward-down))
+      "O" 'paredit-forward-down
+      "U" 'paredit-backward-down
+      "(" 'paredit-backward-up
+      ")" 'paredit-forward-up))
 
   (conn-register-thing paredit-sexp
     :forward-op 'paredit-forward
