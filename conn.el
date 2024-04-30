@@ -722,11 +722,8 @@ If BUFFER is nil check `current-buffer'."
     (while (and (setq win (pop windows))
                 (setq lbl (pop labels)))
       (with-selected-window win
-        ;; This should be made smarter, but for now just recenter the
-        ;; window in order to avoid the label causing the point to go
-        ;; out of view and the window to scroll as a result.
-        (recenter 0)
         (let ((overlay (make-overlay (window-start) (window-end))))
+          (goto-char (window-start))
           (overlay-put overlay 'conn-overlay t)
           (overlay-put overlay 'face 'shadow)
           (overlay-put overlay 'window win)
@@ -744,11 +741,18 @@ If BUFFER is nil check `current-buffer'."
   (when (setq windows (seq-remove 'window-dedicated-p windows))
     (if (length= windows 1)
         (car windows)
-      (conn--read-labels
-       windows
-       (conn--create-label-strings (length windows))
-       'conn--create-window-label-overlays
-       'window))))
+      (let ((saved-pts (mapcar (lambda (window)
+                                 (cons window (window-point window)))
+                               windows)))
+        (unwind-protect
+            (conn--read-labels
+             windows
+             (conn--create-label-strings (length windows))
+             'conn--create-window-label-overlays
+             'window)
+          (mapc (pcase-lambda (`(,win . ,pt))
+                  (set-window-point win pt))
+                saved-pts))))))
 
 
 ;;;; Advice
