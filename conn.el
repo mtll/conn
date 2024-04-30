@@ -751,16 +751,18 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--read-labels (things labels label-fn payload)
   (let ((candidates (funcall label-fn labels things))
         (prompt "char:"))
-    (catch 'return
-      (while t
-        (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
-          ('nil
-           (setq candidates (funcall label-fn labels overlays)
-                 prompt "char: (no matches)"))
-          (`(,it . nil)
-           (throw 'return (overlay-get it payload)))
-          (_
-           (setq prompt "char:")))))))
+    (unwind-protect
+        (catch 'return
+          (while t
+            (pcase (setq candidates (conn--narrow-labeled-overlays prompt candidates))
+              ('nil
+               (setq candidates (funcall label-fn labels overlays)
+                     prompt "char: (no matches)"))
+              (`(,it . nil)
+               (throw 'return (overlay-get it payload)))
+              (_
+               (setq prompt "char:")))))
+      (mapcar #'delete-overlay candidates))))
 
 (defun conn--create-window-label-overlays (labels windows)
   (let ((scroll-margin 0)
@@ -2744,21 +2746,22 @@ Interactively defaults to the current region."
       (let ((c (read-char prompt))
             (narrowed))
         (dolist (ov overlays)
-          (if (not (eq c (aref (overlay-get ov 'before-string) 0)))
-              (when-let ((prefix (overlay-get ov 'prefix-overlay)))
-                (overlay-put prefix 'face nil))
-            (conn--thread -it-
-                (overlay-get ov 'before-string)
-              (substring -it- 1)
-              (overlay-put ov 'before-string -it-))
-            (when (overlay-get ov 'invisible)
-              (move-overlay ov
-                            (overlay-start ov)
-                            (+ (overlay-start ov)
-                               (min (length (overlay-get ov 'before-string))
-                                    (- (overlay-end ov)
-                                       (overlay-start ov))))))
-            (push ov narrowed)))
+          (let ((prop (if (overlay-get ov 'before-string) 'before-string 'display)))
+            (if (not (eq c (aref (overlay-get ov prop) 0)))
+                (when-let ((prefix (overlay-get ov 'prefix-overlay)))
+                  (overlay-put prefix 'face nil))
+              (conn--thread -it-
+                  (overlay-get ov prop)
+                (substring -it- 1)
+                (overlay-put ov prop -it-))
+              (when (overlay-get ov 'invisible)
+                (move-overlay ov
+                              (overlay-start ov)
+                              (+ (overlay-start ov)
+                                 (min (length (overlay-get ov 'before-string))
+                                      (- (overlay-end ov)
+                                         (overlay-start ov))))))
+              (push ov narrowed))))
         (mapcar #'copy-overlay narrowed))
     (mapc #'delete-overlay overlays)))
 
@@ -2770,37 +2773,31 @@ Interactively defaults to the current region."
             (dolist (p prefixes)
               (let* ((pt (overlay-end p))
                      (label (pop labels))
-                     (end (thread-last
-                            (overlays-in pt (+ pt (length label)))
-                            (seq-filter (lambda (ov)
-                                          (eq 'conn-read-string-match
-                                              (overlay-get ov 'category))))
-                            (mapcar 'overlay-start)
-                            (apply 'min
-                                   (+ pt (length label))
-                                   ;; Hack in case this match abuts an
-                                   ;; invisible region.  This puts the
-                                   ;; label before the match, but its
-                                   ;; better than an invisible label.
-                                   (if (invisible-p pt) (1- pt) (point-max))
-                                   (pcase (next-single-char-property-change
-                                           pt 'invisible nil (+ 1 pt (length label)))
-                                     ((pred (= (point-max))) (point-max))
-                                     (end (1- end)))
-                                   (save-excursion
-                                     (goto-char pt)
-                                     (line-end-position)))))
+                     (next (thread-last
+                             (overlays-in pt (+ pt (length label)))
+                             (seq-filter (lambda (ov)
+                                           (eq 'conn-read-string-match
+                                               (overlay-get ov 'category))))
+                             (mapcar 'overlay-start)
+                             (apply 'min (point-max))))
+                     (end (min next (+ pt (length label))))
                      (ov (make-overlay pt end)))
                 (push ov overlays)
-                (unless (invisible-p (1+ pt))
-                  (overlay-put ov 'invisible t))
                 (overlay-put p 'face 'conn-read-string-match-face)
+                (when (save-excursion
+                        (goto-char pt)
+                        (search-forward "\n" end t))
+                  (overlay-put ov 'after-string "\n"))
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'priority 3000)
                 (overlay-put ov 'conn-overlay t)
                 (overlay-put ov 'category 'conn-label-overlay)
                 (overlay-put ov 'window window)
-                (overlay-put ov 'before-string label)))))
+                (overlay-put ov (if (or (= pt next)
+                                        (= pt (point-max)))
+                                    'before-string
+                                  'display)
+                             label)))))
       (t (mapc #'delete-overlay overlays)
          (signal (car err) (cdr err))))
     overlays))
@@ -5289,14 +5286,14 @@ the edit in the macro."
     ("o" "Pop" kmacro-delete-ring-head :transient t)]]
   ["Commands"
    :if-not conn--in-kbd-macro-p
-   [("k" "Call Macro" kmacro-call-macro)
+   [("r" "Record Macro" kmacro-start-macro)
+    ("k" "Call Macro" kmacro-call-macro)
     ("a" "Append to Macro" (lambda ()
                              (interactive)
                              (kmacro-start-macro '(4))))
     ("A" "Append w/o Executing" (lambda ()
                                   (interactive)
                                   (kmacro-start-macro '(16))))
-    ("r" "Record Macro" kmacro-start-macro)
     ("d" "Name Last Macro" kmacro-name-last-macro)]
    [("e" "Edit Macro" kmacro-edit-macro)
     ("E" "Edit Lossage" kmacro-edit-lossage)
