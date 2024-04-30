@@ -602,6 +602,14 @@ If BUFFER is nil check `current-buffer'."
                     result)))
           (nreverse result))))))
 
+(defun conn--region-visible-p (beg end)
+  (not (or (invisible-p beg)
+           (catch 'result
+             (let (pt)
+               (while (< end (setq pt (next-single-char-property-change
+                                       beg 'invisible nil end)))
+                 (when (invisible-p pt) (throw 'result t))))))))
+
 (defun conn--visible-matches (string &optional dir)
   (let (matches)
     (save-excursion
@@ -610,11 +618,7 @@ If BUFFER is nil check `current-buffer'."
           (if (eq dir 'backward) (point) (window-end))
         (goto-char (point-max))
         (while (search-backward string nil t)
-          (unless (or (invisible-p (match-beginning 0))
-                      (< (next-single-char-property-change
-                          (match-beginning 0) 'invisible
-                          nil (match-end 0))
-                         (match-end 0)))
+          (when (conn--region-visible-p (match-beginning 0) (match-end 0))
             (push (point) matches)))))
     matches))
 
