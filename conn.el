@@ -6249,8 +6249,8 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap conn-movement-map
-  ")" 'up-list
-  "(" 'down-list
+  "(" 'backward-up-list
+  ")" 'down-list
   "U" 'conn-backward-sentence-keys
   "u" 'conn-backward-word-keys
   "I" 'conn-backward-paragraph-keys
