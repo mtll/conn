@@ -622,16 +622,14 @@ If BUFFER is nil check `current-buffer'."
             (push (point) matches)))))
     matches))
 
-(defun conn--read-string-preview-overlays-1 (string &optional dir)
-  (mapcar (pcase-lambda (pt)
-            (let ((ov (make-overlay pt (+ pt (length string)))))
-              (overlay-put ov 'conn-overlay t)
-              (overlay-put ov 'category 'conn-read-string-match)
-              (overlay-put ov 'face 'conn-read-string-match-face)
-              (overlay-put ov 'priority 1000)
-              (overlay-put ov 'window (selected-window))
-              ov))
-          (conn--visible-matches string dir)))
+(defun conn--read-string-preview-overlays-1 (pt length)
+  (let ((ov (make-overlay pt (+ pt length))))
+    (overlay-put ov 'conn-overlay t)
+    (overlay-put ov 'category 'conn-read-string-match)
+    (overlay-put ov 'face 'conn-read-string-match-face)
+    (overlay-put ov 'priority 1000)
+    (overlay-put ov 'window (selected-window))
+    ov))
 
 (defun conn--read-string-preview-overlays (string &optional dir all-windows)
   (if all-windows
@@ -640,11 +638,15 @@ If BUFFER is nil check `current-buffer'."
          (lambda (win)
            (with-selected-window win
              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-               (push (conn--read-string-preview-overlays-1 string dir)
+               (push (mapcar (lambda (pt)
+                               (conn--read-string-preview-overlays-1 pt (length string)))
+                             (conn--visible-matches string dir))
                      ovs))))
          'no-minibuf 'visible)
         (apply 'nconc ovs))
-    (conn--read-string-preview-overlays-1 string dir)))
+    (mapcar (lambda (pt)
+              (conn--read-string-preview-overlays-1 pt (length string)))
+            (conn--visible-matches string dir))))
 
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
@@ -2460,6 +2462,15 @@ Interactively defaults to the current region."
     (conn-dispatch-transpose . "Transpose")
     (conn-dispatch-copy . "Copy")))
 
+(defvar conn-thing-dispatch-default-actions
+  '((t . conn-dispatch-goto)))
+
+(defvar conn-thing-dispatch-readers-alist
+  '((inner-line . conn--thing-dispatch-read-inner-lines)
+    (outer-line . conn--thing-dispatch-read-lines)
+    (line . conn--thing-dispatch-read-lines)
+    (t . conn--thing-dispatch-read-string-timeout)))
+
 (defvar conn-dispatch-command-maps
   (list conn-dispatch-base-command-map))
 
@@ -2688,7 +2699,7 @@ Interactively defaults to the current region."
                                                'face 'error))
                            (read-key-sequence)
                            (key-binding t))))))
-          (cons (get cmd :conn-command-thing) action))
+          (cons cmd action))
       (internal-pop-keymap keymap 'overriding-terminal-local-map))))
 
 (defun conn--narrow-labeled-overlays (prompt overlays)
@@ -2730,8 +2741,9 @@ Interactively defaults to the current region."
                      (next (thread-last
                              (overlays-in beg (+ beg (length label)))
                              (seq-filter (lambda (ov)
-                                           (eq 'conn-read-string-match
-                                               (overlay-get ov 'category))))
+                                           (and (eq 'conn-read-string-match
+                                                    (overlay-get ov 'category))
+                                                (not (eq ov p)))))
                              (mapcar 'overlay-start)
                              (apply 'min (point-max))))
                      (end (min next (+ beg (length label))))
@@ -2756,7 +2768,54 @@ Interactively defaults to the current region."
          (signal (car err) (cdr err))))
     overlays))
 
-(defun conn-thing-dispatch (thing action &optional repeat)
+(defun conn--thing-dispatch-read-string-timeout ()
+  (cdr (conn--read-string-with-timeout-1 nil t)))
+
+(defun conn--thing-dispatch-read-lines ()
+  (let (ovs)
+    (walk-windows
+     (lambda (win)
+       (with-selected-window win
+         (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+           (save-excursion
+             (with-restriction (window-start) (window-end)
+               (goto-char (point-min))
+               (when (bolp)
+                 (push (conn--read-string-preview-overlays-1 (point) 0) ovs))
+               (while (/= (point) (point-max))
+                 (forward-line)
+                 (when (bolp)
+                   (push (conn--read-string-preview-overlays-1 (point) 0) ovs))))))))
+     'no-minibuf 'visible)
+    ovs))
+
+(defun conn--thing-dispatch-read-inner-lines ()
+  (let (ovs)
+    (walk-windows
+     (lambda (win)
+       (with-selected-window win
+         (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+           (save-excursion
+             (with-restriction (window-start) (window-end)
+               (goto-char (point-min))
+               (when (and (bolp)
+                          (progn
+                            (back-to-indentation)
+                            (not (eobp))))
+                 (push (conn--read-string-preview-overlays-1 (point) 0)
+                       ovs))
+               (while (/= (point) (point-max))
+                 (forward-line)
+                 (when (and (bolp)
+                            (progn
+                              (back-to-indentation)
+                              (not (eobp))))
+                   (push (conn--read-string-preview-overlays-1 (point) 0)
+                         ovs))))))))
+     'no-minibuf 'visible)
+    ovs))
+
+(defun conn-thing-dispatch (thing-command action &optional repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -2776,14 +2835,25 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive
-   (pcase-let ((`(,thing . ,action) (conn--read-dispatch-command)))
-     (list thing (or action 'conn-dispatch-goto) current-prefix-arg)))
+   (pcase-let ((`(,cmd . ,action) (conn--read-dispatch-command)))
+     (list cmd
+           (or action
+               (alist-get cmd conn-thing-dispatch-default-actions)
+               (alist-get (get cmd :conn-command-thing)
+                          conn-thing-dispatch-default-actions)
+               (alist-get t conn-thing-dispatch-default-actions))
+           current-prefix-arg)))
   (let* ((prefix-ovs)
-         (labels))
+         (labels)
+         (thing (or (get thing-command :conn-command-thing)
+                    (error "%s has no thing" thing-command))))
     (unwind-protect
         (progn
           (setf prefix-ovs (thread-last
-                             (cdr (conn--read-string-with-timeout-1 nil t))
+                             (or (alist-get thing-command conn-thing-dispatch-readers-alist)
+                                 (alist-get thing conn-thing-dispatch-readers-alist)
+                                 (alist-get t conn-thing-dispatch-readers-alist))
+                             (funcall)
                              (seq-group-by (lambda (ov) (overlay-get ov 'window)))
                              (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
                 (alist-get (selected-window) prefix-ovs)
@@ -5344,7 +5414,7 @@ the edit in the macro."
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
   ["Register Store:"
-   [("p" "Point" point-to-register)
+   [("v" "Point" point-to-register)
     ("m" "Macro" kmacro-to-register)
     ("t" "Tab" conn-tab-to-register)]
    [("f" "Frameset" frameset-to-register)
