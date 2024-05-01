@@ -3358,19 +3358,21 @@ If region is active remove all dots in region."
 (defun conn-remove-dot-forward (arg)
   "Remove nearest dot within the range `point' to `point-max'."
   (interactive "p")
-  (let ((dot (or (conn--dot-after-point (point))
-                 (when (conn--next-dot-1)
-                   (conn--previous-dot-1)))))
-    (while (and (> arg 1) dot)
-      (conn--delete-dot dot)
-      (setq dot (or (conn--dot-after-point (point))
-                    (when (conn--next-dot-1)
-                      (conn--previous-dot-1)))
-            arg (1- arg)))
-    (when dot
-      (goto-char (overlay-end dot))
-      (conn--push-ephemeral-mark (overlay-start dot))
-      (conn--delete-dot dot))))
+  (if (use-region-p)
+      (conn--remove-dots (region-beginning) (region-end))
+    (let ((dot (or (conn--dot-after-point (point))
+                   (when (conn--next-dot-1)
+                     (conn--previous-dot-1)))))
+      (while (and (> arg 1) dot)
+        (conn--delete-dot dot)
+        (setq dot (or (conn--dot-after-point (point))
+                      (when (conn--next-dot-1)
+                        (conn--previous-dot-1)))
+              arg (1- arg)))
+      (when dot
+        (goto-char (overlay-end dot))
+        (conn--push-ephemeral-mark (overlay-start dot))
+        (conn--delete-dot dot)))))
 
 (defun conn-dot-region (bounds)
   "Dot current region."
@@ -3512,8 +3514,8 @@ When called START is `region-beginning' and END is `region-end'."
 
 When called interactively operates within `region-bounds'."
   (interactive (list (region-beginning) (region-end)))
-  (conn--for-each-dot #'conn--delete-dot nil (point-min) start)
-  (conn--for-each-dot #'conn--delete-dot nil end (point-max)))
+  (conn--remove-dots (point-min) start)
+  (conn--remove-dots end (point-max)))
 
 (defun conn-split-region-on-regexp (regexp start end)
   "Split region from START to END into dots on REGEXP.
