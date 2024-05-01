@@ -2536,11 +2536,14 @@ Interactively defaults to the current region."
     (t . conn-dispatch-goto)))
 
 (defvar conn-thing-dispatch-readers-alist
-  '((inner-line . conn--thing-dispatch-read-inner-lines)
+  `((inner-line . conn--thing-dispatch-read-inner-lines)
     (outer-line . conn--thing-dispatch-read-lines)
     (line . conn--thing-dispatch-read-lines)
     (line-column . conn--thing-dispatch-read-column)
     (conn-forward-char . conn--thing-dispatch-read-column)
+    (sexp . ,(apply-partially 'conn--thing-dispatch-thing-with-prefix 'sexp 1 t))
+    (word . ,(apply-partially 'conn--thing-dispatch-thing-with-prefix 'word 1 t))
+    (paragraph . ,(apply-partially 'conn--thing-dispatch-read-all-things 'paragraph t))
     (t . conn--thing-dispatch-read-string-timeout)))
 
 (defvar conn-dispatch-command-maps
@@ -2868,6 +2871,69 @@ Interactively defaults to the current region."
 
 (defun conn--thing-dispatch-read-string-timeout ()
   (cdr (conn--read-string-with-timeout-1 nil t)))
+
+(defun conn--thing-dispatch-read-all-things-1 (thing)
+  (let ((forward-op (get thing 'forward-op))
+        ovs)
+    (save-excursion
+      (with-restriction (window-start) (window-end)
+        (goto-char (point-max))
+        (funcall forward-op -1)
+        (while (/= (point) (point-min))
+          (unless (invisible-p (point))
+            (push (conn--read-string-preview-overlays-1 (point) 0)
+                  ovs))
+          (funcall forward-op -1)))
+      (when (and (eq (point) (car (bounds-of-thing-at-point thing)))
+                 (not (invisible-p (point))))
+        (push (conn--read-string-preview-overlays-1 (point) 0)
+              ovs)))
+    ovs))
+
+(defun conn--thing-dispatch-read-all-things (thing &optional all-windows)
+  (let ((prefix ""))
+    (if (not all-windows)
+        (conn--thing-dispatch-read-all-things-1 thing prefix)
+      (let (ovs)
+        (walk-windows
+         (lambda (win)
+           (with-selected-window win
+             (push (conn--thing-dispatch-read-all-things-1 thing)
+                   ovs)))
+         'no-minibuf 'visible)
+        (apply 'nconc ovs)))))
+
+(defun conn--thing-dispatch-thing-with-prefix-1 (thing prefix)
+  (let (ovs)
+    (save-excursion
+      (goto-char (window-end))
+      (while (search-backward prefix (window-start) t)
+        (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
+          (when (and (eq (point) beg)
+                     (conn--region-visible-p beg end))
+            (push (conn--read-string-preview-overlays-1
+                   (point) (length prefix))
+                  ovs)))))
+    (nreverse ovs)))
+
+(defun conn--thing-dispatch-thing-with-prefix (thing prefix-length &optional all-windows)
+  (let ((prefix ""))
+    (conn--with-input-method
+      (while (length< prefix prefix-length)
+        (setq prefix (thread-last
+                       (read-char (concat "char: " prefix) t)
+                       (char-to-string)
+                       (concat prefix)))))
+    (if (not all-windows)
+        (conn--thing-dispatch-thing-with-prefix-1 thing prefix)
+      (let (ovs)
+        (walk-windows
+         (lambda (win)
+           (with-selected-window win
+             (push (conn--thing-dispatch-thing-with-prefix-1 thing prefix)
+                   ovs)))
+         'no-minibuf 'visible)
+        (apply 'nconc ovs)))))
 
 (defun conn--thing-dispatch-read-column ()
   (let ((column (current-column))
@@ -6787,6 +6853,7 @@ determine if `conn-local-mode' should be enabled."
       ")" 'paredit-forward-up))
 
   (conn-register-thing paredit-sexp
+    :parent sexp
     :forward-op paredit-forward
     :modes paredit-mode)
 
