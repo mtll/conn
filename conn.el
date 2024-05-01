@@ -1170,7 +1170,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-sexp 'backward-sexp)
 
 (conn-register-thing-commands
- 'sexp (conn-individual-thing-handler 'sexp)
+ 'list (conn-individual-thing-handler 'list)
  'up-list 'down-list 'backward-up-list)
 
 (conn-register-thing whitespace
@@ -2533,6 +2533,7 @@ Interactively defaults to the current region."
 
 (defvar conn-thing-dispatch-default-actions
   '((line-column . conn-dispatch-jump)
+    (list . conn-dispatch-jump)
     (t . conn-dispatch-goto)))
 
 (defvar conn-thing-dispatch-readers-alist
@@ -2540,7 +2541,7 @@ Interactively defaults to the current region."
     (outer-line . conn--thing-dispatch-read-lines)
     (line . conn--thing-dispatch-read-lines)
     (line-column . conn--thing-dispatch-read-column)
-    (conn-forward-char . conn--thing-dispatch-read-column)
+    (list . ,(apply-partially 'conn--thing-dispatch-read-all-things 'sexp))
     (sexp . ,(apply-partially 'conn--thing-dispatch-thing-with-prefix 'sexp 1 t))
     (word . ,(apply-partially 'conn--thing-dispatch-thing-with-prefix 'word 1 t))
     (paragraph . ,(apply-partially 'conn--thing-dispatch-read-all-things 'paragraph t))
@@ -2877,23 +2878,27 @@ Interactively defaults to the current region."
         ovs)
     (save-excursion
       (with-restriction (window-start) (window-end)
-        (goto-char (point-max))
-        (funcall forward-op -1)
-        (while (/= (point) (point-min))
-          (unless (invisible-p (point))
-            (push (conn--read-string-preview-overlays-1 (point) 0)
-                  ovs))
-          (funcall forward-op -1)))
-      (when (and (eq (point) (car (bounds-of-thing-at-point thing)))
-                 (not (invisible-p (point))))
-        (push (conn--read-string-preview-overlays-1 (point) 0)
-              ovs)))
-    ovs))
+        (ignore-errors
+          (save-excursion
+            (funcall forward-op -1)
+            (while (/= (point) (point-min))
+              (unless (invisible-p (point))
+                (cl-pushnew (point) ovs))
+              (funcall forward-op -1))))
+        (ignore-errors
+          (save-excursion
+            (while (/= (point) (point-max))
+              (funcall forward-op 1)
+              (unless (invisible-p (point))
+                (cl-pushnew (car (bounds-of-thing-at-point thing)) ovs)))))))
+    (mapcar (lambda (pt)
+              (conn--read-string-preview-overlays-1 pt 0))
+            ovs)))
 
 (defun conn--thing-dispatch-read-all-things (thing &optional all-windows)
   (let ((prefix ""))
     (if (not all-windows)
-        (conn--thing-dispatch-read-all-things-1 thing prefix)
+        (conn--thing-dispatch-read-all-things-1 thing)
       (let (ovs)
         (walk-windows
          (lambda (win)
@@ -6858,7 +6863,7 @@ determine if `conn-local-mode' should be enabled."
     :modes paredit-mode)
 
   (conn-register-thing-commands
-   'paredit-sexp (conn-sequential-thing-handler 'paredit-sexp)
+   'list (conn-sequential-thing-handler 'paredit-sexp)
    'paredit-forward
    'paredit-backward
    'paredit-forward-up
