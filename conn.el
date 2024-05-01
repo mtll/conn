@@ -6864,10 +6864,13 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing-commands
    'list (conn-sequential-thing-handler 'paredit-sexp)
-   'paredit-forward
-   'paredit-backward
    'paredit-forward-up
    'paredit-backward-up)
+
+  (conn-register-thing-commands
+   'sexp (conn-sequential-thing-handler 'paredit-sexp)
+   'paredit-forward
+   'paredit-backward)
 
   (conn-register-thing-commands
    'sexp (conn-individual-thing-handler 'paredit-sexp)
