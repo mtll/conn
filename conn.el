@@ -1046,13 +1046,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (put mmode-or-state :conn-hide-mark nil))
 
 (defun conn--mark-pre-command-hook ()
-  (setq conn-this-command-start (point)
-        conn-this-command-thing (conn--command-property :conn-command-thing)
-        conn-this-command-handler (conn--command-property :conn-mark-handler)))
+  (setq conn-this-command-start (point)))
 
 (defun conn--mark-post-command-hook ()
   (with-demoted-errors "error marking thing: %s"
-    (when conn-this-command-handler
+    (when-let ((conn-this-command-thing
+                (or conn-this-command-thing
+                    (conn--command-property :conn-command-thing)))
+               (conn-this-command-handler
+                (or conn-this-command-handler
+                    (conn--command-property :conn-mark-handler))))
       (funcall conn-this-command-handler conn-this-command-start)))
   (setq conn-this-command-handler nil
         conn-this-command-thing nil
