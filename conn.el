@@ -371,8 +371,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn--seperator-history nil
   "History var for `conn-set-register-seperator'.")
 
-(defvar-local conn--mode-line-indicator "")
-
 (defvar conn--read-string-timeout-history nil)
 
 
@@ -2023,10 +2021,6 @@ Buffers are strings matched using `buffer-match-p'."
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
-:INDICATOR is a mode-line construct that will be displayed on the left
-of the mode-line in state NAME.  Indicator is only displayed when
-`conn-mode-line-indicator-mode' is non-nil.
-
 :LIGHTER-FACE is the face for the conn mode-line lighter in NAME.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
@@ -2181,7 +2175,6 @@ disabled.
                     (buffer-face-set ',buffer-face-name))
                   (conn--activate-input-method)
                   (conn--update-cursor)
-                  (conn--update-mode-line-indicator)
                   (when (not executing-kbd-macro)
                     (force-mode-line-update)))
                 ,@body
@@ -2211,7 +2204,6 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
                  (((background light)) (:background "#00517d"))
                  (((background dark))  (:background "#b6d6e7")))
   :buffer-face ((t :inherit default))
-  :indicator " E "
   :cursor box
   :ephemeral-marks nil)
 
@@ -2229,7 +2221,6 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  (((background dark))  (:background "#eba4a4")))
   :buffer-face ((t :inherit default :background "#f7eee1"))
   :suppress-input-method t
-  :indicator " C "
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
@@ -2260,7 +2251,6 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
                  (((background light)) (:background "#267d00"))
                  (((background dark))  (:background "#b2e5a6")))
   :suppress-input-method t
-  :indicator " D "
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
@@ -2280,11 +2270,10 @@ state."
                  (((background light)) (:inherit mode-line :background "#f5c5ff"))
                  (((background dark))  (:inherit mode-line :background "#85508c")))
   :buffer-face ((t :inherit default :background "#fff6ff"))
-  :cursor-face ((default               (:background "#7d0077"))
+  :cursor-face ((default              (:background "#7d0077"))
                 (((background light)) (:background "#7d0077"))
                 (((background dark))  (:background "#f1b9ee")))
   :suppress-input-method t
-  :indicator (:propertize " O " face conn-org-edit-state-lighter-face)
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t
   :transitions (define-keymap
@@ -6602,20 +6591,10 @@ dispatch on each contiguous component of the region."
 
 ;;;; Mode Definition
 
-(defun conn--update-mode-line-indicator ()
-  "Update Conn mode-line indicator."
-  (setq conn--mode-line-indicator
-        (or (get conn-current-state :conn-indicator) "")))
-
 (defun conn-mode-buffer-predicate ()
   (seq-find (lambda (condition)
               (buffer-match-p condition (current-buffer)))
             conn-mode-buffers))
-
-(define-minor-mode conn-mode-line-indicator-mode
-  "Display Conn state indicator at the beginning of the mode line."
-  :group 'conn
-  :global t)
 
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
@@ -6625,13 +6604,6 @@ dispatch on each contiguous component of the region."
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
-        ;; Since eldoc clobbers mode-line-format structure we need to
-        ;; flatten the mode-line-format tree before searching it.
-        (unless (seq-contains-p (flatten-tree mode-line-format)
-                                'conn-mode-line-indicator-mode
-                                #'eq)
-          (push '(conn-mode-line-indicator-mode (:eval conn--mode-line-indicator))
-                mode-line-format))
         (setq conn-current-state nil
               conn-previous-state nil)
         (setq-local conn-lighter (seq-copy conn-lighter))
@@ -6654,10 +6626,6 @@ dispatch on each contiguous component of the region."
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
     (conn--clear-overlays)
-    (setq-local mode-line-format
-                (assq-delete-all
-                 'conn-mode-line-indicator-mode
-                 mode-line-format))
     (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
       (dolist (hook hooks)
         (remove-hook hook #'conn--activate-input-method t)))
