@@ -4489,8 +4489,7 @@ of line proper."
                              (point)))
                    (region-active-p)))
       (goto-char (line-end-position))
-      (setq conn-this-command-handler
-            'conn-individual-thing-handler))))
+      (setq conn-this-command-thing 'outer-line))))
 
 (defun conn-beginning-of-inner-line (&optional N)
   "Go to first non-whitespace character in line.
@@ -4507,8 +4506,7 @@ of line proper."
                              (point)))
                    (region-active-p)))
       (goto-char (line-beginning-position))
-      (setq conn-this-command-handler
-            'conn-individual-thing-handler))))
+      (setq conn-this-command-thing 'outer-line))))
 
 (defun conn-xref-definition-prompt ()
   "`xref-find-definitions' but always prompt."
