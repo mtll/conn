@@ -875,14 +875,11 @@ If BUFFER is nil check `current-buffer'."
 
        (when-let ((body-fn (get ',name :conn-feature-function)))
          (funcall body-fn nil)
-         (remove-hook 'conn--extensions body-fn)
-         (put ',name :conn-feature-function nil))
+         (remove-hook 'conn--extensions body-fn))
 
-       (let ((body-sym (make-symbol ,(conn--stringify name "-body-fn"))))
-         (fset body-sym (lambda (enable)
-                          (setq ,name (when enable t))
-                          ,@body))
-         (put ',name :conn-feature-function body-sym))
+       (put ',name :conn-feature-function (lambda (enable)
+                                            (setq ,name (when enable t))
+                                            ,@body))
 
        ',name)))
 
@@ -1491,7 +1488,6 @@ The iterator must be the first argument in ARGLIST.
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
   (declare (doc-string 3) (indent 2))
   (let ((iterator (car arglist))
-        (sym (make-symbol "loop-function-symbol"))
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
@@ -1500,7 +1496,6 @@ The iterator must be the first argument in ARGLIST.
               (undo-strong-limit most-positive-fixnum)
               (conn-macro-dispatch-p t)
               (conn-dispatch-error nil)
-              (,sym (make-symbol "kmacro-loop-function"))
               (,iterator (lambda (&optional state)
                            (pcase (funcall ,iterator (or state :loop))
                              (`(,beg . ,end)
@@ -1511,8 +1506,7 @@ The iterator must be the first argument in ARGLIST.
                               (and (run-hook-with-args-until-failure
                                     'conn-macro-dispatch-iterator-hook)
                                    t))))))
-         (fset ,sym ,iterator)
-         (advice-add 'kmacro-loop-setup-function :before-while ,sym)
+         (advice-add 'kmacro-loop-setup-function :before-while ,iterator)
          (unwind-protect
              (condition-case err
                  (progn
@@ -1522,7 +1516,7 @@ The iterator must be the first argument in ARGLIST.
                (t
                 (setq conn-dispatch-error err)
                 (signal (car err) (cdr err))))
-           (advice-remove 'kmacro-loop-setup-function ,sym)
+           (advice-remove 'kmacro-loop-setup-function ,iterator)
            (funcall ,iterator :finalize)
            (run-hook-wrapped 'conn-macro-dispatch-end-hook
                              (lambda (hook)
@@ -1554,13 +1548,12 @@ The iterator must be the first argument in ARGLIST.
 
 (conn--define-dispatcher conn--macro-dispatch-step-edit (iterator)
   (when (funcall iterator :record)
-    (let ((sym (make-symbol "kbd-terminate-hook"))
-          apply)
-      (fset sym (lambda () (setq apply kmacro-step-edit-replace)))
-      (add-hook 'kbd-macro-termination-hook sym)
+    (let* ((apply nil)
+           (hook (lambda () (setq apply kmacro-step-edit-replace))))
+      (add-hook 'kbd-macro-termination-hook hook)
       (unwind-protect
           (kmacro-step-edit-macro)
-        (remove-hook 'kbd-macro-termination-hook sym))
+        (remove-hook 'kbd-macro-termination-hook hook))
       (unless apply
         (user-error "Keyboard macro edit aborted")))
     (kmacro-call-macro 0)))
