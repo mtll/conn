@@ -4750,6 +4750,7 @@ if ARG is anything else `other-tab-prefix'."
 ;; A simple version of hyperbole's hycontrol-windows
 
 (defvar conn--wincontrol-arg 1)
+(defvar conn--wincontrol-arg-default t)
 (defvar conn--previous-scroll-conservatively)
 (defvar conn--wincontrol-help)
 (defvar conn--wincontrol-help-format)
@@ -4773,7 +4774,7 @@ if ARG is anything else `other-tab-prefix'."
     "\\<conn-wincontrol-map>"
     (propertize "Window: " 'face 'bold)
     "prefix arg: "
-    (propertize "%d" 'face 'transient-value) "; "
+    (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
     "\\[conn-wincontrol-off]: quit; "
@@ -4808,7 +4809,7 @@ if ARG is anything else `other-tab-prefix'."
     "\\<conn-wincontrol-map>"
     (propertize "Tab: " 'face 'bold)
     "prefix arg: "
-    (propertize "%d" 'face 'transient-value) "; "
+    (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
     "\\[conn-wincontrol-off]: quit; "
@@ -4827,7 +4828,7 @@ if ARG is anything else `other-tab-prefix'."
     "\\<conn-wincontrol-map>"
     (propertize "Frame: " 'face 'bold)
     "prefix arg: "
-    (propertize "%d" 'face 'transient-value) "; "
+    (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
     "\\[conn-wincontrol-off]: quit; "
@@ -4847,7 +4848,7 @@ if ARG is anything else `other-tab-prefix'."
     "\\<conn-wincontrol-map>"
     (propertize "WinControl: " 'face 'bold)
     "prefix arg: "
-    (propertize "%d" 'face 'transient-value) "; "
+    (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: help; "
     "\\[conn-wincontrol-off]: quit; "
@@ -4944,7 +4945,8 @@ if ARG is anything else `other-tab-prefix'."
   "w"       'conn-wincontrol-widen
   "x"       'kill-buffer-and-window
   "y"       'conn-swap-buffers
-  "z"       'text-scale-set)
+  "z"       'conn-wincontrol-zoom-out
+  "Z"       'conn-wincontrol-zoom-in)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
@@ -4976,16 +4978,19 @@ if ARG is anything else `other-tab-prefix'."
     ;; e.g. isearch or transient, turn wincontrol off.
     (conn-wincontrol-mode -1))
    ((not (zerop (minibuffer-depth)))
-    (conn-wincontrol-mode -1)
+    (conn--wincontrol-exit)
     (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
    (t (conn--wincontrol-message))))
 
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
         (resize-mini-windows t))
-    (message conn--wincontrol-help-format conn--wincontrol-arg)))
+    (message conn--wincontrol-help-format
+             (if conn--wincontrol-arg-default
+                 (format "[%s]" conn--wincontrol-arg)
+               conn--wincontrol-arg))))
 
-(defun conn--wincontrol-setup ()
+(defun conn--wincontrol-setup (&optional preserve-arg)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -4993,9 +4998,11 @@ if ARG is anything else `other-tab-prefix'."
         conn--wincontrol-help conn-wincontrol-initial-help
         conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
         eldoc-message-function #'ignore
-        scroll-conservatively 100
-        conn--wincontrol-arg (mod (prefix-numeric-value current-prefix-arg)
-                                  conn-wincontrol-arg-limit))
+        scroll-conservatively 100)
+  (unless preserve-arg
+    (setq conn--wincontrol-arg (mod (prefix-numeric-value current-prefix-arg)
+                                    conn-wincontrol-arg-limit)
+          conn--wincontrol-arg-default t))
   (conn-wincontrol-help)
   (dolist (state conn-states)
     (set-face-foreground (get state :conn-lighter-face)
@@ -5017,21 +5024,26 @@ if ARG is anything else `other-tab-prefix'."
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (conn-wincontrol-mode 1)))
+    (conn--wincontrol-setup t)))
 
 (defun conn-wincontrol-universal-arg ()
   (interactive)
   (setq conn--wincontrol-arg (mod (* 4 conn--wincontrol-arg)
-                                  conn-wincontrol-arg-limit)))
+                                  conn-wincontrol-arg-limit)
+        conn--wincontrol-arg-default nil))
 
 (defun conn-wincontrol-digit-argument (N)
   "Append N to wincontrol prefix arg.
 When called interactively N is `last-command-event'."
   (interactive (list (- (logand last-command-event ?\177) ?0)))
-  (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
-                (* 10 conn--wincontrol-arg))))
-    (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
-          this-command 'conn-wincontrol-digit-argument)))
+  (if conn--wincontrol-arg-default
+      (setq conn--wincontrol-arg N
+            this-command 'conn-wincontrol-digit-argument)
+    (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
+                  (* 10 conn--wincontrol-arg))))
+      (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
+            this-command 'conn-wincontrol-digit-argument)))
+  (setq conn--wincontrol-arg-default nil))
 
 (defun conn-wincontrol-invert-argument ()
   "Invert wincontrol prefix arg."
@@ -5063,6 +5075,14 @@ When called interactively N is `last-command-event'."
           ('tab    (conn--wincontrol-tab-format))
           ('frame  (conn--wincontrol-frame-format))
           (_       (conn--wincontrol-simple-format)))))
+
+(defun conn-wincontrol-zoom-in (arg)
+  (interactive "p")
+  (text-scale-increase arg))
+
+(defun conn-wincontrol-zoom-out (arg)
+  (interactive "p")
+  (text-scale-decrease arg))
 
 (defun conn-wincontrol-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
