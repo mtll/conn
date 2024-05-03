@@ -4749,8 +4749,8 @@ if ARG is anything else `other-tab-prefix'."
 
 ;; A simple version of hyperbole's hycontrol-windows
 
-(defvar conn--wincontrol-arg 1)
-(defvar conn--wincontrol-arg-default t)
+(defvar conn--wincontrol-arg nil)
+(defvar conn--wincontrol-arg-sign 1)
 (defvar conn--previous-scroll-conservatively)
 (defvar conn--wincontrol-help)
 (defvar conn--wincontrol-help-format)
@@ -4964,9 +4964,8 @@ if ARG is anything else `other-tab-prefix'."
   (conn-wincontrol-mode 1))
 
 (defun conn--wincontrol-pre-command ()
-  (when (null conn--wincontrol-arg)
-    (setq conn--wincontrol-arg 1))
-  (setq prefix-arg conn--wincontrol-arg)
+  (when conn--wincontrol-arg
+    (setq prefix-arg (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message nil)))
@@ -4986,9 +4985,9 @@ if ARG is anything else `other-tab-prefix'."
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message conn--wincontrol-help-format
-             (if conn--wincontrol-arg-default
-                 (format "[%s]" conn--wincontrol-arg)
-               conn--wincontrol-arg))))
+             (format (if conn--wincontrol-arg "%s" "[%s]")
+                     (* conn--wincontrol-arg-sign
+                        (or conn--wincontrol-arg 1))))))
 
 (defun conn--wincontrol-setup (&optional preserve-arg)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
@@ -5000,9 +4999,10 @@ if ARG is anything else `other-tab-prefix'."
         eldoc-message-function #'ignore
         scroll-conservatively 100)
   (unless preserve-arg
-    (setq conn--wincontrol-arg (mod (prefix-numeric-value current-prefix-arg)
-                                    conn-wincontrol-arg-limit)
-          conn--wincontrol-arg-default t))
+    (setq conn--wincontrol-arg (when current-prefix-arg
+                                 (mod (prefix-numeric-value current-prefix-arg)
+                                      conn-wincontrol-arg-limit))
+          conn--wincontrol-arg-sign 1))
   (conn-wincontrol-help)
   (dolist (state conn-states)
     (set-face-foreground (get state :conn-lighter-face)
@@ -5028,32 +5028,30 @@ if ARG is anything else `other-tab-prefix'."
 
 (defun conn-wincontrol-universal-arg ()
   (interactive)
-  (setq conn--wincontrol-arg (mod (* 4 conn--wincontrol-arg)
-                                  conn-wincontrol-arg-limit)
-        conn--wincontrol-arg-default nil))
+  (setq conn--wincontrol-arg (mod (* 4 (or conn--wincontrol-arg 1))
+                                  conn-wincontrol-arg-limit)))
 
 (defun conn-wincontrol-digit-argument (N)
   "Append N to wincontrol prefix arg.
 When called interactively N is `last-command-event'."
   (interactive (list (- (logand last-command-event ?\177) ?0)))
-  (if conn--wincontrol-arg-default
-      (setq conn--wincontrol-arg N
-            this-command 'conn-wincontrol-digit-argument)
-    (let ((arg (+ (if (>= conn--wincontrol-arg 0) N (- N))
-                  (* 10 conn--wincontrol-arg))))
-      (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)
-            this-command 'conn-wincontrol-digit-argument)))
-  (setq conn--wincontrol-arg-default nil))
+  (if conn--wincontrol-arg
+      (let ((arg (+ (if (>= (or conn--wincontrol-arg 1) 0) N (- N))
+                    (* 10 (or conn--wincontrol-arg 1)))))
+        (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)))
+    (setq conn--wincontrol-arg N))
+  (setq this-command 'conn-wincontrol-digit-argument))
 
 (defun conn-wincontrol-invert-argument ()
   "Invert wincontrol prefix arg."
   (interactive)
-  (setq conn--wincontrol-arg (- conn--wincontrol-arg)))
+  (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
 
 (defun conn-wincontrol-digit-argument-reset ()
   "Reset wincontrol prefix arg to 0."
   (interactive)
-  (setq conn--wincontrol-arg 0))
+  (setq conn--wincontrol-arg nil)
+  (setq conn--wincontrol-arg-sign 1))
 
 (defun conn-wincontrol-off ()
   "Exit `conn-wincontrol-mode'."
