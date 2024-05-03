@@ -34,7 +34,6 @@
 (require 'rect)
 (require 'isearch)
 (require 'repeat)
-(require 'hi-lock)
 (require 'kmacro)
 (require 'sort)
 (require 'subr-x)
@@ -2979,10 +2978,10 @@ seconds."
                              (seq-group-by (lambda (ov) (overlay-get ov 'window)))
                              (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
                 (alist-get (selected-window) prefix-ovs)
-                (sort (alist-get (selected-window) prefix-ovs)
-                      :lessp (lambda (a b)
-                               (< (abs (- (overlay-start a) (point)))
-                                  (abs (- (overlay-start b) (point))))))
+                (seq-sort (lambda (a b)
+                            (< (abs (- (overlay-start a) (point)))
+                               (abs (- (overlay-start b) (point)))))
+                          (alist-get (selected-window) prefix-ovs))
                 labels (conn--create-label-strings
                         (let ((sum 0))
                           (dolist (p prefix-ovs sum)
@@ -3844,6 +3843,43 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
+(defvar conn-recenter-positions
+  (list 'center 'top 'bottom))
+
+(defun conn-recenter-on-region ()
+  "Recenter the screen on the current region.
+
+Repeated invocations scroll the window according to the ordering
+of `conn-recenter-positions'."
+  (interactive)
+  (if (eq this-command last-command)
+      (put this-command :conn-positions
+           (let ((ps (get this-command :conn-positions)))
+             (append (cdr ps) (list (car ps)))))
+    (put this-command :conn-positions conn-recenter-positions))
+  (let ((beg (region-beginning))
+        (end (region-end)))
+    (pcase (car (get this-command :conn-positions))
+      ('center
+       (save-excursion
+         (forward-line
+          (if (> (point) (mark t))
+              (- (/ (count-lines beg end) 2))
+            (/ (count-lines beg end) 2)))
+         (recenter))
+       (when (not (pos-visible-in-window-p (point)))
+         (if (> (point) (mark t))
+             (recenter -1)
+           (recenter 0))))
+      ('top
+       (save-excursion
+         (goto-char beg)
+         (recenter 0)))
+      ('bottom
+       (save-excursion
+         (goto-char end)
+         (recenter -1))))))
+
 (defvar-local conn--mark-ring nil)
 (defvar-local conn--mark-unpop-ring nil)
 
@@ -4445,20 +4481,12 @@ With a prefix ARG `push-mark' without activating it."
   (delete-indentation nil start end)
   (indent-according-to-mode))
 
-(defun conn-highlight-region (start end)
+(defun conn-highlight-region ()
   "`highlight-phrase' in region from START and END."
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (let* ((regexp (regexp-quote (buffer-substring-no-properties start end)))
-         (hi-lock-auto-select-face t)
-         (face (hi-lock-read-face-name)))
-    (unless hi-lock-mode (hi-lock-mode 1))
-    (or (facep face) (setq face 'hi-yellow))
-    (hi-lock-set-pattern
-     regexp face nil nil
-     (if (and case-fold-search search-upper-case)
-         (isearch-no-upper-case-p regexp t)
-       case-fold-search))))
+  (interactive)
+  (minibuffer-with-setup-hook
+      (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
+    (call-interactively #'highlight-phrase)))
 
 (defun conn-yank-replace (start end &optional arg)
   "`yank' replacing region between START and END.
@@ -6435,6 +6463,7 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap conn-state-map
+  "C-l"   'conn-recenter-on-region
   "C-t"   'conn-C-x-t-keys
   "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
