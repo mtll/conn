@@ -621,13 +621,20 @@ If BUFFER is nil check `current-buffer'."
     (nreverse matches)))
 
 (defun conn--read-string-preview-overlays-1 (pt length)
-  (let ((ov (make-overlay pt (+ pt length))))
-    (overlay-put ov 'conn-overlay t)
-    (overlay-put ov 'category 'conn-read-string-match)
-    (overlay-put ov 'face 'conn-read-string-match-face)
-    (overlay-put ov 'priority 1000)
-    (overlay-put ov 'window (selected-window))
-    ov))
+  (let ((eol (save-excursion
+               (goto-char pt)
+               (line-end-position))))
+    (let ((ov (make-overlay pt (min (+ pt length) eol))))
+      (overlay-put ov 'conn-overlay t)
+      (overlay-put ov 'category 'conn-read-string-match)
+      (overlay-put ov 'face 'conn-read-string-match-face)
+      (overlay-put ov 'priority 2000)
+      (overlay-put ov 'window (selected-window))
+      (overlay-put ov 'after-string
+                   (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
+                               'face 'conn-read-string-match-face))
+      (overlay-put ov 'padding (overlay-get ov 'after-string))
+      ov)))
 
 (defun conn--visible-thing-prefix-matches (thing string &optional dir)
   (let (matches)
@@ -2745,7 +2752,8 @@ Interactively defaults to the current region."
           (let ((prop (if (overlay-get ov 'before-string) 'before-string 'display)))
             (if (not (eq c (aref (overlay-get ov prop) 0)))
                 (when-let ((prefix (overlay-get ov 'prefix-overlay)))
-                  (overlay-put prefix 'face nil))
+                  (overlay-put prefix 'face nil)
+                  (overlay-put prefix 'after-string nil))
               (conn--thread -it-
                   (overlay-get ov prop)
                 (substring -it- 1)
@@ -2785,6 +2793,7 @@ Interactively defaults to the current region."
                      (ov (make-overlay beg end)))
                 (push ov overlays)
                 (overlay-put p 'face 'conn-read-string-match-face)
+                (overlay-put p 'after-string (overlay-get p 'padding))
                 (thread-last
                   (buffer-substring (overlay-start ov) (overlay-end ov))
                   (seq-drop-while (lambda (c) (not (char-equal c ?\n))))
@@ -2881,7 +2890,7 @@ Interactively defaults to the current region."
         (goto-char (point-min))
         (while (/= (point) (point-max))
           (push (conn--read-string-preview-overlays-1
-                 (min (line-end-position) (+ (point) column)) 0)
+                 (min (line-end-position) (+ (point) column)) 1)
                 ovs)
           (forward-line))))
     ovs))
