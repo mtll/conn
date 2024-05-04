@@ -2857,7 +2857,8 @@ Interactively defaults to the current region."
                (while (/= (point) (point-max))
                  (forward-line)
                  (when (and (bolp)
-                            (<= (+ (point) (window-hscroll)) (line-end-position) (point-max))
+                            (<= (+ (point) (window-hscroll))
+                                (line-end-position) (point-max))
                             (goto-char (+ (point) (window-hscroll)))
                             (not (invisible-p (point)))
                             (not (invisible-p (1- (point)))))
@@ -3060,14 +3061,14 @@ Expansions are provided by functions in `conn-expansion-functions'."
                                 (> end (point)))
                               conn--current-expansions)
                (`(_ . ,end) (goto-char end))
-               ('nil         (user-error "No more expansions"))))
+               ('nil        (user-error "No more expansions"))))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
              (pcase (seq-find (pcase-lambda (`(,beg . _))
                                 (< beg (point)))
                               conn--current-expansions)
                (`(,beg . _) (goto-char beg))
-               ('nil         (user-error "No more expansions"))))
+               ('nil        (user-error "No more expansions"))))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
                                 (or (< beg (region-beginning))
@@ -3101,14 +3102,14 @@ Expansions and contractions are provided by functions in
                                 (< end (point)))
                               (reverse conn--current-expansions))
                (`(_ . ,end) (goto-char end))
-               ('nil         (user-error "No more contractions"))))
+               ('nil        (user-error "No more contractions"))))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
              (pcase (seq-find (pcase-lambda (`(,beg . _))
                                 (> beg (point)))
                               (reverse conn--current-expansions))
                (`(,beg . _) (goto-char beg))
-               ('nil         (user-error "No more contractions"))))
+               ('nil        (user-error "No more contractions"))))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
                                 (or (> beg (region-beginning))
@@ -4730,10 +4731,10 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-windmove-right]: "
     "move"
     "\n"
-    "\\[conn-wincontrol-heighten] "
-    "\\[conn-wincontrol-shorten] "
-    "\\[conn-wincontrol-widen] "
-    "\\[conn-wincontrol-narrow]: "
+    "\\[enlarge-window] "
+    "\\[shrink-window] "
+    "\\[enlarge-window-horizontally] "
+    "\\[shrink-window-horizontally]: "
     "heighten shorten widen narrow; "
     "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
     "\\[kill-buffer-and-window]: kill buf+win"
@@ -4744,7 +4745,7 @@ if ARG is anything else `other-tab-prefix'."
     "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: transpose/yank; "
     "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
     "\n"
-    "\\[text-scale-set]: scale; "
+    "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
     "\\[delete-window] \\[delete-other-windows]: delete win/other; "
     "\\[balance-windows] \\[maximize-window]: balance/max; "
     "\\[previous-buffer] \\[next-buffer]: previous/next")))
@@ -4865,7 +4866,7 @@ if ARG is anything else `other-tab-prefix'."
   "G"       'conn-tab-group
   "g"       'next-buffer
   "H"       'conn-wincontrol-help
-  "h"       'conn-wincontrol-heighten
+  "h"       'enlarge-window
   "i"       'conn-wincontrol-windmove-up
   "I"       'tab-bar-move-window-to-tab
   "j"       'conn-wincontrol-windmove-left
@@ -4875,7 +4876,7 @@ if ARG is anything else `other-tab-prefix'."
   "l"       'conn-wincontrol-windmove-right
   "L"       'tab-next
   "m"       nil
-  "n"       'conn-wincontrol-narrow
+  "n"       'shrink-window-horizontally
   "N"       'tab-bar-new-tab
   "o"       'tear-off-window
   "O"       'tab-bar-detach-tab
@@ -4883,12 +4884,12 @@ if ARG is anything else `other-tab-prefix'."
   "P"       'window-configuration-to-register
   "q"       'conn-wincontrol-off
   "r"       'conn-wincontrol-split-right
-  "s"       'conn-wincontrol-shorten
+  "s"       'shrink-window
   "t"       'conn-wincontrol-swap-windows
   "u"       'bury-buffer
   "U"       'unbury-buffer
   "v"       'conn-wincontrol-split-vertically
-  "w"       'conn-wincontrol-widen
+  "w"       'enlarge-window-horizontally
   "x"       'kill-buffer-and-window
   "y"       'conn-swap-buffers
   "z"       'conn-wincontrol-zoom-out
@@ -5041,26 +5042,6 @@ When called interactively N is `last-command-event'."
   (setq this-command 'conn-scroll-up)
   (let ((next-screen-context-lines arg))
     (conn-scroll-up)))
-
-(defun conn-wincontrol-widen ()
-  "`enlarge-window-horizontally' by `conn--wincontrol-arg' units.."
-  (interactive)
-  (enlarge-window-horizontally conn--wincontrol-arg))
-
-(defun conn-wincontrol-narrow ()
-  "`shrink-window-horizontally' by `conn--wincontrol-arg' units."
-  (interactive)
-  (shrink-window-horizontally conn--wincontrol-arg))
-
-(defun conn-wincontrol-heighten ()
-  "`enlarge-window' by `conn--wincontrol-arg' units."
-  (interactive)
-  (enlarge-window conn--wincontrol-arg))
-
-(defun conn-wincontrol-shorten ()
-  "`shrink-window' by `conn--wincontrol-arg' units."
-  (interactive)
-  (shrink-window conn--wincontrol-arg))
 
 (defun conn-wincontrol-windmove-up ()
   "`windmove-up'."
