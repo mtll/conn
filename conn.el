@@ -644,7 +644,7 @@ If BUFFER is nil check `current-buffer'."
         (goto-char (point-min))
         (while (search-forward string nil t)
           (when (and (conn--region-visible-p (match-beginning 0) (match-end 0))
-                     (eq (match-beginning 0) (car (bounds-of-thing-at-point thing))))
+                     (eql (match-beginning 0) (car (bounds-of-thing-at-point thing))))
             (push (match-beginning 0) matches)))))
     (nreverse matches)))
 
@@ -981,7 +981,7 @@ If BUFFER is nil check `current-buffer'."
 The mark trail handler pushes an ephemeral mark at the starting point
 of the movement command unless `region-active-p'."
   (unless (or (region-active-p)
-              (eq beg (point)))
+              (eql beg (point)))
     (conn--push-ephemeral-mark beg)))
 
 (defun conn-set-command-handler (handler &rest commands)
@@ -2749,7 +2749,7 @@ Interactively defaults to the current region."
             (narrowed))
         (dolist (ov overlays)
           (let ((prop (if (overlay-get ov 'before-string) 'before-string 'display)))
-            (if (not (eq c (aref (overlay-get ov prop) 0)))
+            (if (not (eql c (aref (overlay-get ov prop) 0)))
                 (when-let ((prefix (overlay-get ov 'prefix-overlay)))
                   (overlay-put prefix 'face nil)
                   (overlay-put prefix 'after-string nil))
@@ -2855,7 +2855,7 @@ Interactively defaults to the current region."
       (goto-char (window-end))
       (while (search-backward prefix (window-start) t)
         (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
-          (when (and (eq (point) beg)
+          (when (and (eql (point) beg)
                      (conn--region-visible-p beg end))
             (push (conn--read-string-preview-overlays-1
                    (point) (length prefix))
@@ -3960,7 +3960,7 @@ of `conn-recenter-positions'."
   "Run `query-replace' with the region as initial contents."
   (interactive)
   (save-mark-and-excursion
-    (unless (eq (point) (region-beginning))
+    (unless (eql (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook 'conn-yank-region-to-minibuffer
       (call-interactively #'query-replace))))
@@ -3970,7 +3970,7 @@ of `conn-recenter-positions'."
 Also ensure point is at start of region beforehand."
   (interactive)
   (save-mark-and-excursion
-    (unless (eq (point) (region-beginning))
+    (unless (eql (point) (region-beginning))
       (conn-exchange-mark-command))
     (minibuffer-with-setup-hook
         (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
