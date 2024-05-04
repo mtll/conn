@@ -2888,9 +2888,9 @@ Interactively defaults to the current region."
       (with-restriction (window-start) (window-end)
         (goto-char (point-min))
         (while (/= (point) (point-max))
-          (push (conn--read-string-preview-overlays-1
-                 (min (line-end-position) (+ (point) column)) 1)
-                ovs)
+          (let ((pt (min (line-end-position) (+ (point) column))))
+            (when (>= pt (+ (point) (window-hscroll)))
+              (push (conn--read-string-preview-overlays-1 pt 1) ovs)))
           (forward-line))))
     ovs))
 
@@ -2909,8 +2909,12 @@ Interactively defaults to the current region."
                  (forward-line)
                  (when (and (bolp)
                             (not (invisible-p (point)))
-                            (not (invisible-p (1- (point)))))
-                   (push (conn--read-string-preview-overlays-1 (point) 0) ovs))))))))
+                            (not (invisible-p (1- (point))))
+                            (<= (+ (point) (window-hscroll)) (line-end-position)))
+                   (push (conn--read-string-preview-overlays-1
+                          (min (+ (point) (window-hscroll)) (line-end-position))
+                          0)
+                         ovs))))))))
      'no-minibuf 'visible)
     ovs))
 
@@ -6481,7 +6485,7 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap conn-state-map
-  "C-l"   'conn-recenter-on-region
+  "C-M-l" 'conn-recenter-on-region
   "C-t"   'conn-C-x-t-keys
   "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
