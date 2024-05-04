@@ -60,11 +60,6 @@
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
 
-(defvar-keymap conn-mode-map
-  :doc "`conn-mode' keymap which is always active.
-This keymap is active even in buffers which do not have
-`conn-local-mode' turned on.")
-
 (defvar-keymap conn-movement-map)
 
 ;;;;; Custom Variables
@@ -601,11 +596,11 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--region-visible-p (beg end)
   (not (or (invisible-p beg)
-           (catch 'result
+           (catch 'return
              (let (pt)
                (while (< end (setq pt (next-single-char-property-change
                                        beg 'invisible nil end)))
-                 (when (invisible-p pt) (throw 'result t))))))))
+                 (when (invisible-p pt) (throw 'return t))))))))
 
 (defun conn--visible-matches (string &optional dir)
   (let (matches)
@@ -692,14 +687,14 @@ If BUFFER is nil check `current-buffer'."
             (dolist (b alphabet)
               (push (concat a b) new-labels)))
           (conn--create-label-strings count new-labels))
-      (catch 'done
+      (catch 'term
         (let ((n (length labels)))
           (setq labels (nreverse labels))
           (dolist (prefix (nreverse prefixes))
             (dolist (c alphabet)
               (push (concat prefix c) labels)
               (when (= (cl-incf n) count)
-                (throw 'done nil))))))
+                (throw 'term nil))))))
       (dolist (l labels)
         (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
       (nreverse labels))))
@@ -2937,7 +2932,7 @@ seconds."
                         (let ((sum 0))
                           (dolist (p prefix-ovs sum)
                             (setq sum (+ sum (length (cdr p))))))))
-          (catch 'return
+          (catch 'term
             (while t
               (when (null labels)
                 (user-error "No matching candidates"))
@@ -2949,7 +2944,7 @@ seconds."
                      (window (overlay-get prefix 'window))
                      (pt (overlay-start prefix)))
                 (funcall action window pt conn-this-command-thing)
-                (unless repeat (throw 'return nil)))
+                (unless repeat (throw 'term nil)))
               (pcase-dolist (`(_ . ,ovs) prefix-ovs)
                 (dolist (ov ovs)
                   (overlay-put ov 'face 'conn-read-string-match-face))))))
@@ -3574,7 +3569,7 @@ d deletes the remaining dots.
 k keeps the remaining dots."
   (interactive)
   (save-excursion
-    (catch 'keep
+    (catch 'keep-rest
       (conn--for-each-dot
        (let ((message (format "%s (%s)es; (%s)o; (%s)elete rest; (%s)eep rest"
                               (propertize "Delete:" 'face 'bold)
@@ -3593,7 +3588,7 @@ k keeps the remaining dots."
                       (?d (conn--delete-dot dot)
                           (setq rest t)
                           nil)
-                      (?k (throw 'keep nil))
+                      (?k (throw 'keep-rest nil))
                       (_ t))))))
        #'<))))
 
@@ -6527,24 +6522,14 @@ dispatch on each contiguous component of the region."
   "x"           'conn-C-x-keys
   "z"           'conn-exchange-mark-command)
 
-(defvar-keymap conn-ctl-x-r-map
-  "\\" 'conn-set-register-seperator
-  "."  'conn-last-macro-dispatch-to-register
-  ","  'conn-dot-state-to-register
-  "!"  'kmacro-to-register
-  "W"  'conn-unset-register)
-
-(defvar-keymap conn-c-x-4-map
-  "/" 'tab-bar-history-back
-  "?" 'tab-bar-history-forward
-  "-" 'conn-window-resize-map)
-
 (define-keymap
-  :keymap conn-mode-map
+  :keymap global-map
   "C-`"       'conn-other-window
   "C-S-w"     'delete-region
   "C-x /"     'tab-bar-history-back
-  "C-x 4"     conn-c-x-4-map
+  "C-x 4 /"   'tab-bar-history-back
+  "C-x 4 ?"   'tab-bar-history-forward
+  "C-x 4 -"   'conn-window-resize-map
   "C-x ?"     'tab-bar-history-forward
   "C-x n M-<" 'conn-narrow-to-beginning-of-buffer-indirect
   "C-x n <"   'conn-narrow-to-beginning-of-buffer
@@ -6555,7 +6540,11 @@ dispatch on each contiguous component of the region."
   "C-x n v"   'conn-narrow-to-visible
   "C-x n V"   'conn-narrow-indirect-to-visible
   "C-x n N"   'conn-narrow-indirect-to-region
-  "C-x r"     conn-ctl-x-r-map
+  "C-x r \\"  'conn-set-register-seperator
+  "C-x r ."   'conn-last-macro-dispatch-to-register
+  "C-x r ,"   'conn-dot-state-to-register
+  "C-x r !"   'kmacro-to-register
+  "C-x r W"   'conn-unset-register
   "C-x t j"   'conn-register-load
   "C-x t s"   'tab-switch
   "C-x r a"   'conn-tab-to-register
@@ -6653,7 +6642,6 @@ determine if `conn-local-mode' should be enabled."
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn-initialize-buffer
-  :keymap conn-mode-map
   :group 'conn
   (progn
     (conn--setup-keymaps)
