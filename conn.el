@@ -622,7 +622,7 @@ If BUFFER is nil check `current-buffer'."
       (overlay-put ov 'conn-overlay t)
       (overlay-put ov 'category 'conn-read-string-match)
       (overlay-put ov 'face 'conn-read-string-match-face)
-      (overlay-put ov 'priority 2000)
+      (overlay-put ov 'priority 2001)
       (overlay-put ov 'window (selected-window))
       (overlay-put ov 'after-string
                    (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
@@ -2624,19 +2624,23 @@ Interactively defaults to the current region."
                 (binding (where-is-internal fun
                                             (cons keymap (current-active-maps t))
                                             t))
-                (suffix (if (and binding (not (stringp binding)))
-                            (format " (%s)" (key-description binding))
-                          "")))
-           (put-text-property 0 (length suffix)
-                              'face 'help-key-binding suffix)
-           (list command-name "" suffix)))
+                (binding (if (and binding (not (stringp binding)))
+                             (format " {%s}" (key-description binding))
+                           ""))
+                (thing (format " (%s)" (or (get fun :conn-command-thing)
+                                          "action"))))
+           (put-text-property 0 (length binding)
+                              'face 'help-key-binding binding)
+           (put-text-property 0 (length thing)
+                              'face 'completions-annotations thing)
+           (list command-name "" (concat thing binding))))
        command-names))))
 
 (defun conn--dispatch-read-command ()
   (let ((keymap (make-composed-keymap
                  (append conn-dispatch-command-maps
                          (conn--read-thing-keymap))))
-        (prompt (concat "Thing Dispatch "
+        (prompt (concat "Dispatch on Thing "
                         "(" (propertize "C-h" 'face 'help-key-binding) " for commands): "))
         (action))
     (internal-push-keymap keymap 'overriding-terminal-local-map)
@@ -2845,18 +2849,19 @@ Interactively defaults to the current region."
            (save-excursion
              (with-restriction (window-start) (window-end)
                (goto-char (point-min))
-               (when (and (bolp) (not (invisible-p (point))))
-                 (push (conn--string-preview-overlays-1 (point) 0) ovs))
+               (when (and (bolp)
+                          (<= (+ (point) (window-hscroll)) (line-end-position))
+                          (goto-char (+ (point) (window-hscroll)))
+                          (not (invisible-p (point))))
+                 (push (conn--string-preview-overlays-1 (point) 1) ovs))
                (while (/= (point) (point-max))
                  (forward-line)
                  (when (and (bolp)
+                            (<= (+ (point) (window-hscroll)) (line-end-position) (point-max))
+                            (goto-char (+ (point) (window-hscroll)))
                             (not (invisible-p (point)))
-                            (not (invisible-p (1- (point))))
-                            (<= (+ (point) (window-hscroll)) (line-end-position)))
-                   (push (conn--string-preview-overlays-1
-                          (min (+ (point) (window-hscroll)) (line-end-position))
-                          0)
-                         ovs))))))))
+                            (not (invisible-p (1- (point)))))
+                   (push (conn--string-preview-overlays-1 (point) 1) ovs))))))))
      'no-minibuf 'visible)
     ovs))
 
@@ -2889,7 +2894,7 @@ Interactively defaults to the current region."
      'no-minibuf 'visible)
     ovs))
 
-(defun conn-dispatch-things (thing-command action &optional repeat)
+(defun conn-dispatch-on-things (thing-command action &optional repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -3653,7 +3658,7 @@ associated with that command (see `conn-register-thing')."
         (when (and (looking-back "\n" 1) arg)
           (delete-char 1))))))
 
-;;;;; Isearch commands
+;;;;; Isearch Commands
 
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
@@ -6407,7 +6412,7 @@ dispatch on each contiguous component of the region."
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "G"     'conn-M-g-keys
-  "g"     'conn-dispatch-things
+  "g"     'conn-dispatch-on-things
   "H"     'conn-expand
   "h"     'repeat
   "P"     'conn-register-prefix
@@ -6496,7 +6501,7 @@ dispatch on each contiguous component of the region."
   "C"           'org-toggle-comment
   "c"           'conn-C-c-keys
   "G"           'conn-M-g-keys
-  "g"           'conn-dispatch-things
+  "g"           'conn-dispatch-on-things
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
