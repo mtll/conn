@@ -1161,7 +1161,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;; Kmacro Apply
 
-(defvar conn-kmacro-apply-p nil
+(defvar conn-kmacro-applying-p nil
   "Non-nil during kmacro application.")
 
 (defvar conn-kmacro-apply-error nil
@@ -1442,7 +1442,7 @@ The iterator must be the first argument in ARGLIST.
        (let* ((undo-outer-limit nil)
               (undo-limit most-positive-fixnum)
               (undo-strong-limit most-positive-fixnum)
-              (conn-kmacro-apply-p t)
+              (conn-kmacro-applying-p t)
               (conn-kmacro-apply-error nil)
               (,iterator (lambda (&optional state)
                            (pcase (funcall ,iterator (or state :loop))
@@ -2416,7 +2416,7 @@ Interactively defaults to the current region."
 
 (defvar conn-dispatch-default-actions
   '((line-column . conn-dispatch-jump)
-    (list . conn-dispatch-jump)
+    (line . conn-dispatch-jump)
     (t . conn-dispatch-goto)))
 
 (defvar conn-dispatch-readers-alist
@@ -2424,7 +2424,9 @@ Interactively defaults to the current region."
     (outer-line . conn--dispatch-lines)
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
-    (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
+    (list . ,(lambda ()
+               (setq conn-this-command-thing 'sexp)
+               (conn--dispatch-all-things 'sexp)))
     (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
@@ -2653,21 +2655,22 @@ Interactively defaults to the current region."
               ('help
                (internal-pop-keymap keymap 'overriding-terminal-local-map)
                (save-window-excursion
-                 (setq cmd (completing-read
-                            "Command: "
-                            (lambda (string pred action)
-                              (if (eq action 'metadata)
-                                  `(metadata
-                                    ,(cons 'affixation-function
-                                           (conn--dispatch-make-command-affixation keymap))
-                                    (category . conn-dispatch-command))
-                                (complete-with-action action obarray string pred)))
-                            (lambda (sym)
-                              (and (functionp sym)
-                                   (and (not (eq sym 'help))
-                                        (or (get sym :conn-command-thing)
-                                            (where-is-internal sym (list keymap) t)))))
-                            t)))
+                 (setq cmd (intern
+                            (completing-read
+                             "Command: "
+                             (lambda (string pred action)
+                               (if (eq action 'metadata)
+                                   `(metadata
+                                     ,(cons 'affixation-function
+                                            (conn--dispatch-make-command-affixation keymap))
+                                     (category . conn-dispatch-command))
+                                 (complete-with-action action obarray string pred)))
+                             (lambda (sym)
+                               (and (functionp sym)
+                                    (and (not (eq sym 'help))
+                                         (or (get sym :conn-command-thing)
+                                             (where-is-internal sym (list keymap) t)))))
+                             t))))
                (internal-push-keymap keymap 'overriding-terminal-local-map))
               ((guard (where-is-internal cmd conn-dispatch-command-maps t))
                (setq action (unless (eq cmd action) cmd)
@@ -6119,14 +6122,6 @@ dispatch on each contiguous component of the region."
   "C-s" 'reb-next-match
   "C-r" 'reb-prev-match)
 
-(dolist (state conn-states)
-  (define-keymap
-    :keymap (conn-get-mode-map state 'conn-macro-dispatch-p)
-    "<remap> <kmacro-end-macro>"                'exit-recursive-edit
-    "<remap> <kmacro-end-or-call-macro>"        'exit-recursive-edit
-    "<remap> <kmacro-end-and-call-macro>"       'exit-recursive-edit
-    "<remap> <kmacro-end-or-call-macro-repeat>" 'exit-recursive-edit))
-
 (dolist (state '(conn-state conn-emacs-state conn-dot-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
@@ -6758,11 +6753,7 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing-commands
    'sexp 'conn-sequential-thing-handler
    'paredit-forward
-   'paredit-backward)
-
-  (conn-register-thing-commands
-   'sexp 'conn-individual-thing-handler
-   'paredit-forward-up 'paredit-backward-up))
+   'paredit-backward))
 
 (with-eval-after-load 'edebug
   (defvar edebug-mode)
