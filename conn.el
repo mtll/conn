@@ -316,7 +316,7 @@ dynamically.")
 
 (defvar conn-this-command-thing nil)
 
-(defvar conn-this-command-start nil
+(defvar conn-this-command-start (make-marker)
   "Start position for current mark movement command.")
 
 (defvar conn--prev-mark-even-if-inactive nil
@@ -1005,20 +1005,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (put mmode-or-state :conn-hide-mark nil))
 
 (defun conn--mark-pre-command-hook ()
-  (setq conn-this-command-start (point)))
+  (set-marker conn-this-command-start (point))
+  (setq conn-this-command-handler (conn--command-property :conn-mark-handler)
+        conn-this-command-thing (conn--command-property :conn-command-thing)))
 
 (defun conn--mark-post-command-hook ()
   (with-demoted-errors "error marking thing: %s"
-    (when-let ((conn-this-command-thing
-                (or conn-this-command-thing
-                    (conn--command-property :conn-command-thing)))
-               (conn-this-command-handler
-                (or conn-this-command-handler
-                    (conn--command-property :conn-mark-handler))))
-      (funcall conn-this-command-handler conn-this-command-start)))
-  (setq conn-this-command-handler nil
-        conn-this-command-thing nil
-        conn-this-command-start nil))
+    (when (and conn-local-mode
+               (eq (current-buffer) (marker-buffer conn-this-command-start))
+               conn-this-command-thing
+               conn-this-command-handler)
+      (funcall conn-this-command-handler conn-this-command-start))))
 
 (defun conn--setup-mark ()
   (when conn--mark-cursor-timer
@@ -1134,7 +1131,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
- 'next-line 'previous-line)
+ 'next-line 'previous-line
+ 'rectangle-next-line 'rectangle-previous-line)
 
 (conn-register-thing outer-line
   :beg-op (lambda () (move-beginning-of-line nil))
@@ -2561,7 +2559,8 @@ Interactively defaults to the current region."
 (defun conn-dispatch-goto (window pt thing)
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
-      (push-mark nil t)
+      (unless (region-active-p)
+        (push-mark nil t))
       (select-window window)
       (goto-char pt)
       (unless (eq thing 'char)
@@ -2570,7 +2569,8 @@ Interactively defaults to the current region."
 (defun conn-dispatch-jump (window pt _thing)
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
-      (push-mark nil t)
+      (unless (region-active-p)
+        (push-mark nil t))
       (select-window window)
       (goto-char pt))))
 
@@ -2828,15 +2828,15 @@ Interactively defaults to the current region."
         (apply 'nconc ovs)))))
 
 (defun conn--dispatch-columns ()
-  (let ((column (current-column))
+  (let ((col (current-column))
         ovs)
     (save-excursion
       (with-restriction (window-start) (window-end)
         (goto-char (point-min))
         (while (/= (point) (point-max))
-          (let ((pt (min (line-end-position) (+ (point) column))))
-            (when (>= pt (+ (point) (window-hscroll)))
-              (push (conn--string-preview-overlays-1 pt 1) ovs)))
+          (when (>= col (window-hscroll))
+            (move-to-column col)
+            (push (conn--string-preview-overlays-1 (point) 1) ovs))
           (forward-line))))
     ovs))
 
@@ -6590,8 +6590,8 @@ dispatch on each contiguous component of the region."
         (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
           (dolist (hook hooks)
             (add-hook hook 'conn--activate-input-method nil t)))
-        (add-hook 'pre-command-hook #'conn--mark-pre-command-hook nil t)
-        (add-hook 'post-command-hook #'conn--mark-post-command-hook nil t)
+        (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+        (add-hook 'post-command-hook #'conn--mark-post-command-hook)
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -6607,8 +6607,8 @@ dispatch on each contiguous component of the region."
     (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
       (dolist (hook hooks)
         (remove-hook hook #'conn--activate-input-method t)))
-    (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook t)
-    (remove-hook 'post-command-hook #'conn--mark-post-command-hook t)
+    (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+    (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
