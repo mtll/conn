@@ -5300,48 +5300,7 @@ The last value is \"don't use any of these switches\"."
       choices
       (propertize "|" 'face 'transient-delimiter)))))
 
-(defun conn-recursive-edit-kmacro (arg)
-  "Edit last keyboard macro inside a recursive edit.
-Press \\[exit-recursive-edit] to exit the recursive edit and abort
-the edit in the macro."
-  (interactive "P")
-  (save-mark-and-excursion
-    (save-window-excursion
-      (kmacro-edit-macro (not arg))
-      (when-let ((buffer (get-buffer "*Edit Macro*")))
-        (save-excursion
-          (goto-char (point-min))
-          (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
-            (goto-char (match-beginning 1))
-            (delete-region (match-beginning 1) (match-end 1))
-            (insert (substitute-command-keys "\\[exit-recursive-edit]"))))
-        (delete-other-windows)
-        (conn-local-mode 1)
-        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
-        (unwind-protect
-            (recursive-edit)
-          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
-          (kill-buffer buffer))))))
-
-(defun conn-recursive-edit-lossage ()
-  "Edit lossage macro inside a recursive edit.
-Press \\[exit-recursive-edit] to exit the recursive edit and abort
-the edit in the macro."
-  (interactive)
-  (save-mark-and-excursion
-    (save-window-excursion
-      (kmacro-edit-lossage)
-      (when-let ((buffer (get-buffer "*Edit Macro*")))
-        (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
-          (goto-char (match-beginning 1))
-          (delete-region (match-beginning 1) (match-end 1))
-          (insert (substitute-command-keys "\\[exit-recursive-edit]")))
-        (delete-other-windows)
-        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
-        (unwind-protect
-            (recursive-edit)
-          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
-          (kill-buffer buffer))))))
+;;;;; Kmacro Prefix
 
 (defun conn--kmacro-display (macro &optional trunc)
   (pcase macro
@@ -5447,148 +5406,50 @@ the edit in the macro."
     ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
-(defun conn--format-narrowing (narrowing)
-  (if (long-line-optimizations-p)
-      (pcase-let ((`(,beg . ,end) narrowing))
-          (format "(%s . %s)"
-                  (marker-position beg)
-                  (marker-position end)))
-    (save-restriction
-      (widen)
-      (pcase-let ((`(,beg . ,end) narrowing))
-        (format "%s+%s"
-                (line-number-at-pos (marker-position beg) t)
-                (count-lines (marker-position beg)
-                             (marker-position end)))))))
+;;;;; Kapply Prefix
 
-(defun conn--narrow-ring-display ()
-  (ignore-errors
-    (concat
-     (propertize "Narrow Ring: " 'face 'transient-heading)
-     (propertize (format "[%s]" (length conn-narrow-ring))
-                 'face 'transient-value)
-     " - "
-     (when (length> conn-narrow-ring 2)
-       (format "%s, "  (conn--format-narrowing
-                        (car (last conn-narrow-ring)))))
-     (pcase (car conn-narrow-ring)
-       ('nil (propertize "nil" 'face 'transient-value))
-       ((and reg `(,beg . ,end)
-             (guard (and (= (point-min) beg)
-                         (= (point-max) end))))
-        (propertize (conn--format-narrowing  reg)
-                    'face 'transient-value))
-       (reg
-        (propertize (conn--format-narrowing reg)
-                    'face 'bold)))
-     (when (cdr conn-narrow-ring)
-       (format ", %s"  (conn--format-narrowing
-                        (cadr conn-narrow-ring)))))))
+(defun conn-recursive-edit-kmacro (arg)
+  "Edit last keyboard macro inside a recursive edit.
+Press \\[exit-recursive-edit] to exit the recursive edit and abort
+the edit in the macro."
+  (interactive "P")
+  (save-mark-and-excursion
+    (save-window-excursion
+      (kmacro-edit-macro (not arg))
+      (when-let ((buffer (get-buffer "*Edit Macro*")))
+        (save-excursion
+          (goto-char (point-min))
+          (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
+            (goto-char (match-beginning 1))
+            (delete-region (match-beginning 1) (match-end 1))
+            (insert (substitute-command-keys "\\[exit-recursive-edit]"))))
+        (delete-other-windows)
+        (conn-local-mode 1)
+        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
+        (unwind-protect
+            (recursive-edit)
+          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
+          (kill-buffer buffer))))))
 
-(transient-define-prefix conn-narrow-ring-prefix ()
-  "Transient menu for narrow ring function."
-  [:description
-   conn--narrow-ring-display
-   [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
-    ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
-    ("e" "Dot Narrowings" conn-dot-narrow-ring)
-    ("s" "Register Store" conn-narrow-ring-to-register :transient t)
-    ("l" "Register Load" conn-register-load :transient t)]
-   [("a" "Abort Cycling"
-     (lambda ()
-       (interactive)
-       (widen)
-       (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring)
-                    (oref transient-current-prefix scope)))
-         (narrow-to-region min max)
-         (goto-char point)
-         (save-mark-and-excursion--restore mark)
-         (setq conn-narrow-ring narrow-ring))))
-    ("n" "Cycle Next" conn-cycle-narrowings :transient t)
-    ("p" "Cycle Previous"
-     (lambda (arg)
-       (interactive "p")
-       (conn-cycle-narrowings (- arg)))
-     :transient t)
-    ("d" "Pop" conn-pop-narrow-ring :transient t)]
-   [("m" "Merge" conn-merge-narrow-ring :transient t)
-    ("w" "Widen" widen)
-    ("c" "Clear" conn-clear-narrow-ring)
-    ("v" "Add Region" conn-region-to-narrow-ring)]]
+(defun conn-recursive-edit-lossage ()
+  "Edit lossage macro inside a recursive edit.
+Press \\[exit-recursive-edit] to exit the recursive edit and abort
+the edit in the macro."
   (interactive)
-  (transient-setup
-   'conn-narrow-ring-prefix nil nil
-   :scope (list (point) (save-mark-and-excursion--save)
-                (point-min) (point-max)
-                (copy-sequence conn-narrow-ring))))
-
-(transient-define-prefix conn-register-prefix ()
-  "Transient menu for register functions."
-  ["Register Store:"
-   [("v" "Point" point-to-register)
-    ("m" "Macro" kmacro-to-register)
-    ("t" "Tab" conn-tab-to-register)]
-   [("f" "Frameset" frameset-to-register)
-    ("r" "Rectangle" copy-rectangle-to-register)
-    ("w" "Window Configuration" window-configuration-to-register)]]
-  ["Register:"
-   [("l" "Load" conn-register-load)
-    ("u" "Unset" conn-unset-register :transient t)]
-   [("i" "Increment" increment-register :transient t)
-    ("s" "List" list-registers :transient t)]])
-
-(transient-define-infix conn--set-fill-column-infix ()
-  "Set `fill-column'."
-  :class 'transient-lisp-variable
-  :variable 'fill-column
-  :set-value (lambda (_ val) (set-fill-column val))
-  :reader (lambda (&rest _)
-            (read-number (format "Change fill-column from %s to: " fill-column)
-                         (current-column))))
-
-(transient-define-infix conn--set-fill-prefix-infix ()
-  "Toggle `fill-prefix'."
-  :class 'transient-lisp-variable
-  :set-value #'ignore
-  :variable 'fill-prefix
-  :reader (lambda (&rest _)
-            (set-fill-prefix)
-            (substring-no-properties fill-prefix)))
-
-(transient-define-infix conn--auto-fill-infix ()
-  "Toggle `auto-fill-function'."
-  :class 'transient-lisp-variable
-  :set-value #'ignore
-  :variable 'auto-fill-function
-  :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
-
-(transient-define-prefix conn-fill-prefix ()
-  "Transient menu for fill functions."
-  [["Fill:"
-    ("r" "Region" fill-region)
-    ("i" "Paragraph" fill-paragraph)
-    ("k" "Region as Paragraph" fill-region-as-paragraph)]
-   ["Options:"
-    ("c" "Column" conn--set-fill-column-infix)
-    ("p" "Prefix" conn--set-fill-prefix-infix)
-    ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
-
-(transient-define-infix conn--case-fold-infix ()
-  :class 'transient-lisp-variable
-  :variable 'sort-fold-case
-  :reader (lambda (&rest _)
-            (not sort-fold-case)))
-
-(transient-define-prefix conn-sort-prefix ()
-  "Transient menu for buffer sorting functions."
-  [["Sort Region: "
-    ("a" "sort pages" sort-pages)
-    ("c" "sort columns" sort-columns)
-    ("l" "sort lines" sort-lines)]
-   [("f" "case fold" conn--case-fold-infix)
-    ("n" "sort numeric fields" sort-numeric-fields)
-    ("p" "sort paragraphs" sort-paragraphs)
-    ("r" "sort regexp fields" sort-regexp-fields)]])
+  (save-mark-and-excursion
+    (save-window-excursion
+      (kmacro-edit-lossage)
+      (when-let ((buffer (get-buffer "*Edit Macro*")))
+        (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
+          (goto-char (match-beginning 1))
+          (delete-region (match-beginning 1) (match-end 1))
+          (insert (substitute-command-keys "\\[exit-recursive-edit]")))
+        (delete-other-windows)
+        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
+        (unwind-protect
+            (recursive-edit)
+          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
+          (kill-buffer buffer))))))
 
 (defun conn--push-macro-ring (macro)
   (interactive
@@ -6125,6 +5986,157 @@ dispatch on each contiguous component of the region."
   (unless iterator (user-error "No regions"))
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-regions-kapply-prefix nil nil :scope iterator))
+
+;;;;; Narrow Ring Transient
+
+(defun conn--format-narrowing (narrowing)
+  (if (long-line-optimizations-p)
+      (pcase-let ((`(,beg . ,end) narrowing))
+          (format "(%s . %s)"
+                  (marker-position beg)
+                  (marker-position end)))
+    (save-restriction
+      (widen)
+      (pcase-let ((`(,beg . ,end) narrowing))
+        (format "%s+%s"
+                (line-number-at-pos (marker-position beg) t)
+                (count-lines (marker-position beg)
+                             (marker-position end)))))))
+
+(defun conn--narrow-ring-display ()
+  (ignore-errors
+    (concat
+     (propertize "Narrow Ring: " 'face 'transient-heading)
+     (propertize (format "[%s]" (length conn-narrow-ring))
+                 'face 'transient-value)
+     " - "
+     (when (length> conn-narrow-ring 2)
+       (format "%s, "  (conn--format-narrowing
+                        (car (last conn-narrow-ring)))))
+     (pcase (car conn-narrow-ring)
+       ('nil (propertize "nil" 'face 'transient-value))
+       ((and reg `(,beg . ,end)
+             (guard (and (= (point-min) beg)
+                         (= (point-max) end))))
+        (propertize (conn--format-narrowing  reg)
+                    'face 'transient-value))
+       (reg
+        (propertize (conn--format-narrowing reg)
+                    'face 'bold)))
+     (when (cdr conn-narrow-ring)
+       (format ", %s"  (conn--format-narrowing
+                        (cadr conn-narrow-ring)))))))
+
+(transient-define-prefix conn-narrow-ring-prefix ()
+  "Transient menu for narrow ring function."
+  [:description
+   conn--narrow-ring-display
+   [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
+    ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
+    ("e" "Dot Narrowings" conn-dot-narrow-ring)
+    ("s" "Register Store" conn-narrow-ring-to-register :transient t)
+    ("l" "Register Load" conn-register-load :transient t)]
+   [("a" "Abort Cycling"
+     (lambda ()
+       (interactive)
+       (widen)
+       (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring)
+                    (oref transient-current-prefix scope)))
+         (narrow-to-region min max)
+         (goto-char point)
+         (save-mark-and-excursion--restore mark)
+         (setq conn-narrow-ring narrow-ring))))
+    ("n" "Cycle Next" conn-cycle-narrowings :transient t)
+    ("p" "Cycle Previous"
+     (lambda (arg)
+       (interactive "p")
+       (conn-cycle-narrowings (- arg)))
+     :transient t)
+    ("d" "Pop" conn-pop-narrow-ring :transient t)]
+   [("m" "Merge" conn-merge-narrow-ring :transient t)
+    ("w" "Widen" widen)
+    ("c" "Clear" conn-clear-narrow-ring)
+    ("v" "Add Region" conn-region-to-narrow-ring)]]
+  (interactive)
+  (transient-setup
+   'conn-narrow-ring-prefix nil nil
+   :scope (list (point) (save-mark-and-excursion--save)
+                (point-min) (point-max)
+                (copy-sequence conn-narrow-ring))))
+
+;;;;; Register Prefix
+
+(transient-define-prefix conn-register-prefix ()
+  "Transient menu for register functions."
+  ["Register Store:"
+   [("v" "Point" point-to-register)
+    ("m" "Macro" kmacro-to-register)
+    ("t" "Tab" conn-tab-to-register)]
+   [("f" "Frameset" frameset-to-register)
+    ("r" "Rectangle" copy-rectangle-to-register)
+    ("w" "Window Configuration" window-configuration-to-register)]]
+  ["Register:"
+   [("l" "Load" conn-register-load)
+    ("u" "Unset" conn-unset-register :transient t)]
+   [("i" "Increment" increment-register :transient t)
+    ("s" "List" list-registers :transient t)]])
+
+;;;;; Fill Prefix
+
+(transient-define-infix conn--set-fill-column-infix ()
+  "Set `fill-column'."
+  :class 'transient-lisp-variable
+  :variable 'fill-column
+  :set-value (lambda (_ val) (set-fill-column val))
+  :reader (lambda (&rest _)
+            (read-number (format "Change fill-column from %s to: " fill-column)
+                         (current-column))))
+
+(transient-define-infix conn--set-fill-prefix-infix ()
+  "Toggle `fill-prefix'."
+  :class 'transient-lisp-variable
+  :set-value #'ignore
+  :variable 'fill-prefix
+  :reader (lambda (&rest _)
+            (set-fill-prefix)
+            (substring-no-properties fill-prefix)))
+
+(transient-define-infix conn--auto-fill-infix ()
+  "Toggle `auto-fill-function'."
+  :class 'transient-lisp-variable
+  :set-value #'ignore
+  :variable 'auto-fill-function
+  :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
+
+(transient-define-prefix conn-fill-prefix ()
+  "Transient menu for fill functions."
+  [["Fill:"
+    ("r" "Region" fill-region)
+    ("i" "Paragraph" fill-paragraph)
+    ("k" "Region as Paragraph" fill-region-as-paragraph)]
+   ["Options:"
+    ("c" "Column" conn--set-fill-column-infix)
+    ("p" "Prefix" conn--set-fill-prefix-infix)
+    ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
+
+;;;;; Sort Prefix
+
+(transient-define-infix conn--case-fold-infix ()
+  :class 'transient-lisp-variable
+  :variable 'sort-fold-case
+  :reader (lambda (&rest _)
+            (not sort-fold-case)))
+
+(transient-define-prefix conn-sort-prefix ()
+  "Transient menu for buffer sorting functions."
+  [["Sort Region: "
+    ("a" "sort pages" sort-pages)
+    ("c" "sort columns" sort-columns)
+    ("l" "sort lines" sort-lines)]
+   [("f" "case fold" conn--case-fold-infix)
+    ("n" "sort numeric fields" sort-numeric-fields)
+    ("p" "sort paragraphs" sort-paragraphs)
+    ("r" "sort regexp fields" sort-regexp-fields)]])
 
 
 ;;;; Keymaps
