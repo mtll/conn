@@ -2849,7 +2849,9 @@ Interactively defaults to the current region."
       (with-restriction (window-start) (window-end)
         (goto-char (point-min))
         (while (/= (point) (point-max))
-          (when (>= col (window-hscroll))
+          (when (and (>= col (window-hscroll))
+                     (not (invisible-p (point)))
+                     (not (ignore-errors (invisible-p (1- (point))))))
             (move-to-column col)
             (push (conn--string-preview-overlays-1 (point) 1) ovs))
           (forward-line))))
@@ -5272,6 +5274,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;; Transients
 
+;;;;; Classes
+
 (defclass conn-transient-switches (transient-switches)
   ((required :initarg :required :initform nil))
   "Class used for sets of mutually exclusive command-line switches.
@@ -5987,7 +5991,7 @@ dispatch on each contiguous component of the region."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-regions-kapply-prefix nil nil :scope iterator))
 
-;;;;; Narrow Ring Transient
+;;;;; Narrow Ring Prefix
 
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)
