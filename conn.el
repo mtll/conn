@@ -4041,8 +4041,11 @@ When called interactively reads STRING with timeout
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (backward-char)
-                          (and (search-backward string nil t)
-                               (match-beginning 0)))
+                          (catch 'term
+                            (while (search-backward string nil t)
+                              (when (conn--region-visible-p (match-beginning 0)
+                                                            (match-end 0))
+                                (throw 'term (match-beginning 0))))))
                         (user-error "\"%s\" not found." string))))
       (goto-char pos))))
 
@@ -4071,8 +4074,11 @@ When called interactively reads STRING with timeout
   (with-restriction (window-start) (window-end)
     (when-let ((pos (or (save-excursion
                           (forward-char)
-                          (and (search-forward string nil t)
-                               (match-beginning 0)))
+                          (catch 'term
+                            (while (search-forward string nil t)
+                              (when (conn--region-visible-p (match-beginning 0)
+                                                            (match-end 0))
+                                (throw 'term (match-beginning 0))))))
                         (user-error "\"%s\" not found." string))))
       (goto-char pos))))
 
