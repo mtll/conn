@@ -2250,156 +2250,7 @@ state."
                  "F u" 'conn-emacs-state-overwrite-binary))
 
 
-;;;; Commands
-
-;;;;; Narrow Ring
-
-(defvar conn-narrow-ring-max 16
-  "Maximum number of narrowings to keep in `conn-narrow-ring'.")
-
-(defvar-local conn-narrow-ring nil
-  "Ring of recent narrowed regions.")
-
-(cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
-  (narrow-ring nil :read-only t))
-
-(defun conn--make-narrow-register ()
-  (%conn--make-narrow-register
-   :narrow-ring
-   (mapcar (pcase-lambda (`(,beg . ,end))
-             (cons (copy-marker beg) (copy-marker end)))
-           conn-narrow-ring)))
-
-(cl-defmethod register-val-jump-to ((val conn-narrow-register) _arg)
-  (let ((ring (conn-narrow-register-narrow-ring val)))
-    (unless (eq (current-buffer) (marker-buffer (caar ring)))
-      (user-error "Markers do not point to this buffer"))
-    (setq conn-narrow-ring ring)))
-
-(cl-defmethod register-val-describe ((val conn-narrow-register) _arg)
-  (princ (format "Narrowings In:  %s" (thread-first
-                                        (conn-narrow-register-narrow-ring val)
-                                        (caar)
-                                        (marker-buffer)))))
-
-(defun conn-narrow-ring-to-register (register)
-  "Store narrow ring in REGISTER."
-  (interactive (list (register-read-with-preview "Tab to register: ")))
-  (set-register register (conn--make-narrow-register)))
-
-(defun conn--narrow-ring-record (beg end)
-  (unless (seq-find (pcase-lambda (`(,b . ,e))
-                      (and (= beg b) (= end e)))
-                    conn-narrow-ring)
-    (setq conn-narrow-ring
-          (seq-subseq (cons (cons (conn--create-marker beg)
-                                  (conn--create-marker end))
-                            conn-narrow-ring)
-                      0 (min conn-narrow-ring-max
-                             (1+ (length conn-narrow-ring)))))))
-
-(defun conn-narrow-to-region (beg end &optional record)
-  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
-  (interactive (list (region-beginning) (region-end) t))
-  (narrow-to-region beg end)
-  (when record (conn--narrow-ring-record beg end)))
-
-(defun conn-cycle-narrowings (arg)
-  "Cycle to the ARGth region in `conn-narrow-ring'."
-  (interactive "p")
-  (unless conn-narrow-ring
-    (user-error "Narrow ring empty"))
-  (if (= arg 0)
-      (conn-merge-narrow-ring)
-    (let (start)
-      (unless (ignore-errors
-                (and (= (point-min) (caar conn-narrow-ring))
-                     (= (point-max) (cdar conn-narrow-ring))))
-        (setq start (point)
-              arg (+ arg (if (< arg 0) 1 -1))))
-      (dotimes (_ (mod arg (length conn-narrow-ring)))
-        (setq conn-narrow-ring (nconc (cdr conn-narrow-ring)
-                                      (list (car conn-narrow-ring)))))
-      (pcase (car conn-narrow-ring)
-        (`(,beg . ,end)
-         (unless (or (null start)
-                     (<= beg start end))
-           (push-mark start t))
-         (narrow-to-region beg end)
-         (goto-char (point-min))
-         (conn--push-ephemeral-mark (point-max)))))))
-
-(defun conn-merge-narrow-ring (&optional interactive)
-  "Merge overlapping narrowings in `conn-narrow-ring'."
-  (interactive (list t))
-  (let ((merged))
-    (dolist (region conn-narrow-ring)
-      (pcase-let ((`(,beg1 . ,end1) region))
-        (pcase (seq-find (lambda (r)
-                           (not (or (< (car r) (cdr r) beg1 end1)
-                                    (< beg1 end1 (car r) (cdr r)))))
-                         merged)
-          ((and cons `(,beg2 . ,end2))
-           (setcar cons (if (> beg1 beg2) beg2 beg1))
-           (setcdr cons (if (> end1 end2) end1 end2)))
-          ('nil
-           (push region merged)))))
-    (setq conn-narrow-ring (nreverse merged))
-    (when (and interactive (not executing-kbd-macro))
-      (message "Narrow ring merged into %s region"
-               (length conn-narrow-ring)))))
-
-(defun conn-region-to-narrow-ring (beg end &optional pulse)
-  "Add the region from BEG to END to the narrow ring.
-Interactively defaults to the current region."
-  (interactive (progn
-                 (deactivate-mark)
-                 (list (region-beginning) (region-end) t)))
-  (conn--narrow-ring-record beg end)
-  (when (and pulse (not executing-kbd-macro))
-    (pulse-momentary-highlight-region beg end 'region)))
-
-(defun conn-clear-narrow-ring ()
-  "Remove all narrowings from the `conn-narrow-ring'."
-  (interactive)
-  (setq conn-narrow-ring nil))
-
-(defun conn-pop-narrow-ring ()
-  "Pop `conn-narrow-ring'."
-  (interactive)
-  (pcase (pop conn-narrow-ring)
-    ((and `(,beg . ,end)
-          (guard (= (point-min) beg))
-          (guard (= (point-max) end)))
-     (if conn-narrow-ring
-         (narrow-to-region (caar conn-narrow-ring)
-                           (cdar conn-narrow-ring))
-       (widen)))))
-
-(defun conn-isearch-in-narrow-p (beg end)
-  (seq-find (pcase-lambda (`(,b . ,e))
-              (<= b beg end e))
-            conn-narrow-ring))
-
-(defun conn-isearch-narrow-ring-forward ()
-  (interactive)
-  (let ((isearch-filter-predicate isearch-filter-predicate))
-    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
-                  '((isearch-message-prefix . "[NARROW] ")))
-    (isearch-forward)))
-
-(defun conn-isearch-narrow-ring-backward ()
-  (interactive)
-  (let ((isearch-filter-predicate isearch-filter-predicate))
-    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
-                  '((isearch-message-prefix . "[NARROW] ")))
-    (isearch-backward)))
-
-(defun conn-dot-narrow-ring ()
-  (interactive)
-  (apply 'conn--create-dots conn-narrow-ring))
-
-;;;;; Thing Dispatch
+;;;; Thing Dispatch
 
 (defvar-keymap conn-dispatch-base-command-map
   "[" 'conn-dispatch-kill-append
@@ -2975,47 +2826,8 @@ seconds."
         (dolist (ov ovs)
           (delete-overlay ov))))))
 
-;;;;; Tab Registers
-
-(cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie)))
-  (cookie nil :read-only t))
-
-(defun conn--get-tab-index-by-cookie (cookie)
-  (seq-position (funcall tab-bar-tabs-function)
-                cookie
-                (lambda (tab c)
-                  (eq c (alist-get 'conn-tab-cookie tab)))))
-
-(defun conn--make-tab-register ()
-  (let* ((tabs (funcall tab-bar-tabs-function))
-         (current-tab (tab-bar--current-tab-find tabs)))
-    (%conn--make-tab-register
-     (or (alist-get 'conn-tab-cookie current-tab)
-         (setf (alist-get 'conn-tab-cookie (cdr current-tab))
-               (gensym "conn-tab-cookie"))))))
-
-(cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
-  (when-let ((index (conn--get-tab-index-by-cookie
-                     (conn-tab-register-cookie val))))
-    (tab-bar-select-tab (1+ index))))
-
-(cl-defmethod register-val-describe ((val conn-tab-register) _arg)
-  (princ (format "Tab:  %s"
-                 (when-let ((index (conn--get-tab-index-by-cookie
-                                    (conn-tab-register-cookie val))))
-                   (conn--thread -it-
-                       index
-                     (nth -it- (funcall tab-bar-tabs-function))
-                     (if (eq (car -it-) 'current-tab)
-                         (propertize "*CURRENT TAB*" 'face 'error)
-                       (alist-get 'name -it-)))))))
-
-(defun conn-tab-to-register (register)
-  "Store tab in REGISTER."
-  (interactive (list (register-read-with-preview "Tab to register: ")))
-  (set-register register (conn--make-tab-register)))
-
-;;;;; Expand
+
+;;;; Expand Region
 
 (defvar conn-expansion-functions nil
   "Functions which provide expansions for `conn-expand'.
@@ -3141,6 +2953,197 @@ Expansions and contractions are provided by functions in
               (not conn-expand-pulse-region)
               executing-kbd-macro)
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
+
+
+;;;; Narrow Ring
+
+(defvar conn-narrow-ring-max 16
+  "Maximum number of narrowings to keep in `conn-narrow-ring'.")
+
+(defvar-local conn-narrow-ring nil
+  "Ring of recent narrowed regions.")
+
+(cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
+  (narrow-ring nil :read-only t))
+
+(defun conn--make-narrow-register ()
+  (%conn--make-narrow-register
+   :narrow-ring
+   (mapcar (pcase-lambda (`(,beg . ,end))
+             (cons (copy-marker beg) (copy-marker end)))
+           conn-narrow-ring)))
+
+(cl-defmethod register-val-jump-to ((val conn-narrow-register) _arg)
+  (let ((ring (conn-narrow-register-narrow-ring val)))
+    (unless (eq (current-buffer) (marker-buffer (caar ring)))
+      (user-error "Markers do not point to this buffer"))
+    (setq conn-narrow-ring ring)))
+
+(cl-defmethod register-val-describe ((val conn-narrow-register) _arg)
+  (princ (format "Narrowings In:  %s" (thread-first
+                                        (conn-narrow-register-narrow-ring val)
+                                        (caar)
+                                        (marker-buffer)))))
+
+(defun conn-narrow-ring-to-register (register)
+  "Store narrow ring in REGISTER."
+  (interactive (list (register-read-with-preview "Tab to register: ")))
+  (set-register register (conn--make-narrow-register)))
+
+(defun conn--narrow-ring-record (beg end)
+  (unless (seq-find (pcase-lambda (`(,b . ,e))
+                      (and (= beg b) (= end e)))
+                    conn-narrow-ring)
+    (setq conn-narrow-ring
+          (seq-subseq (cons (cons (conn--create-marker beg)
+                                  (conn--create-marker end))
+                            conn-narrow-ring)
+                      0 (min conn-narrow-ring-max
+                             (1+ (length conn-narrow-ring)))))))
+
+(defun conn-narrow-to-region (beg end &optional record)
+  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
+  (interactive (list (region-beginning) (region-end) t))
+  (narrow-to-region beg end)
+  (when record (conn--narrow-ring-record beg end)))
+
+(defun conn-cycle-narrowings (arg)
+  "Cycle to the ARGth region in `conn-narrow-ring'."
+  (interactive "p")
+  (unless conn-narrow-ring
+    (user-error "Narrow ring empty"))
+  (if (= arg 0)
+      (conn-merge-narrow-ring)
+    (let (start)
+      (unless (ignore-errors
+                (and (= (point-min) (caar conn-narrow-ring))
+                     (= (point-max) (cdar conn-narrow-ring))))
+        (setq start (point)
+              arg (+ arg (if (< arg 0) 1 -1))))
+      (dotimes (_ (mod arg (length conn-narrow-ring)))
+        (setq conn-narrow-ring (nconc (cdr conn-narrow-ring)
+                                      (list (car conn-narrow-ring)))))
+      (pcase (car conn-narrow-ring)
+        (`(,beg . ,end)
+         (unless (or (null start)
+                     (<= beg start end))
+           (push-mark start t))
+         (narrow-to-region beg end)
+         (goto-char (point-min))
+         (conn--push-ephemeral-mark (point-max)))))))
+
+(defun conn-merge-narrow-ring (&optional interactive)
+  "Merge overlapping narrowings in `conn-narrow-ring'."
+  (interactive (list t))
+  (let ((merged))
+    (dolist (region conn-narrow-ring)
+      (pcase-let ((`(,beg1 . ,end1) region))
+        (pcase (seq-find (lambda (r)
+                           (not (or (< (car r) (cdr r) beg1 end1)
+                                    (< beg1 end1 (car r) (cdr r)))))
+                         merged)
+          ((and cons `(,beg2 . ,end2))
+           (setcar cons (if (> beg1 beg2) beg2 beg1))
+           (setcdr cons (if (> end1 end2) end1 end2)))
+          ('nil
+           (push region merged)))))
+    (setq conn-narrow-ring (nreverse merged))
+    (when (and interactive (not executing-kbd-macro))
+      (message "Narrow ring merged into %s region"
+               (length conn-narrow-ring)))))
+
+(defun conn-region-to-narrow-ring (beg end &optional pulse)
+  "Add the region from BEG to END to the narrow ring.
+Interactively defaults to the current region."
+  (interactive (progn
+                 (deactivate-mark)
+                 (list (region-beginning) (region-end) t)))
+  (conn--narrow-ring-record beg end)
+  (when (and pulse (not executing-kbd-macro))
+    (pulse-momentary-highlight-region beg end 'region)))
+
+(defun conn-clear-narrow-ring ()
+  "Remove all narrowings from the `conn-narrow-ring'."
+  (interactive)
+  (setq conn-narrow-ring nil))
+
+(defun conn-pop-narrow-ring ()
+  "Pop `conn-narrow-ring'."
+  (interactive)
+  (pcase (pop conn-narrow-ring)
+    ((and `(,beg . ,end)
+          (guard (= (point-min) beg))
+          (guard (= (point-max) end)))
+     (if conn-narrow-ring
+         (narrow-to-region (caar conn-narrow-ring)
+                           (cdar conn-narrow-ring))
+       (widen)))))
+
+(defun conn-isearch-in-narrow-p (beg end)
+  (seq-find (pcase-lambda (`(,b . ,e))
+              (<= b beg end e))
+            conn-narrow-ring))
+
+(defun conn-isearch-narrow-ring-forward ()
+  (interactive)
+  (let ((isearch-filter-predicate isearch-filter-predicate))
+    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
+                  '((isearch-message-prefix . "[NARROW] ")))
+    (isearch-forward)))
+
+(defun conn-isearch-narrow-ring-backward ()
+  (interactive)
+  (let ((isearch-filter-predicate isearch-filter-predicate))
+    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
+                  '((isearch-message-prefix . "[NARROW] ")))
+    (isearch-backward)))
+
+(defun conn-dot-narrow-ring ()
+  (interactive)
+  (apply 'conn--create-dots conn-narrow-ring))
+
+
+;;;; Commands
+
+;;;;; Tab Registers
+
+(cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie)))
+  (cookie nil :read-only t))
+
+(defun conn--get-tab-index-by-cookie (cookie)
+  (seq-position (funcall tab-bar-tabs-function)
+                cookie
+                (lambda (tab c)
+                  (eq c (alist-get 'conn-tab-cookie tab)))))
+
+(defun conn--make-tab-register ()
+  (let* ((tabs (funcall tab-bar-tabs-function))
+         (current-tab (tab-bar--current-tab-find tabs)))
+    (%conn--make-tab-register
+     (or (alist-get 'conn-tab-cookie current-tab)
+         (setf (alist-get 'conn-tab-cookie (cdr current-tab))
+               (gensym "conn-tab-cookie"))))))
+
+(cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
+  (when-let ((index (conn--get-tab-index-by-cookie
+                     (conn-tab-register-cookie val))))
+    (tab-bar-select-tab (1+ index))))
+
+(cl-defmethod register-val-describe ((val conn-tab-register) _arg)
+  (princ (format "Tab:  %s"
+                 (when-let ((index (conn--get-tab-index-by-cookie
+                                    (conn-tab-register-cookie val))))
+                   (conn--thread -it-
+                       index
+                     (nth -it- (funcall tab-bar-tabs-function))
+                     (if (eq (car -it-) 'current-tab)
+                         (propertize "*CURRENT TAB*" 'face 'error)
+                       (alist-get 'name -it-)))))))
+
+(defun conn-tab-to-register (register)
+  "Store tab in REGISTER."
+  (interactive (list (register-read-with-preview "Tab to register: ")))
+  (set-register register (conn--make-tab-register)))
 
 ;;;;; Dot Commands
 
@@ -4715,7 +4718,106 @@ if ARG is anything else `other-tab-prefix'."
     ('nil (other-window-prefix))
     (_    (other-tab-prefix))))
 
-;;;;;; Wincontrol Mode
+;;;;; Transition Functions
+
+(defun conn-emacs-state-and-complete ()
+  "Enter `conn-emacs-state' and call `completion-at-point'."
+  (interactive)
+  (conn-emacs-state)
+  (completion-at-point))
+
+(defun conn-dot-quit ()
+  "Pop state and clear all dots."
+  (interactive)
+  (conn--remove-dots)
+  (conn-pop-state))
+
+(defun conn-quoted-insert-overwrite ()
+  "Overwrite char after point using `quoted-insert'."
+  (interactive)
+  (save-excursion
+    (let ((overwrite-mode 'overwrite-mode-binary))
+      (message "%s" (propertize "Overwrite Char:"
+                                'face 'minibuffer-prompt))
+      (call-interactively #'quoted-insert))))
+
+(defun conn-emacs-state-open-line-above (&optional arg)
+  "Open line above and enter `conn-emacs-state'.
+
+If ARG is non-nil move up ARG lines before opening line."
+  (interactive "p")
+  (forward-line (- (1- arg)))
+  (move-beginning-of-line nil)
+  (insert "\n")
+  (forward-line -1)
+  ;; FIXME: see crux smart open line
+  (indent-according-to-mode)
+  (conn-emacs-state))
+
+(defun conn-emacs-state-open-line (&optional arg)
+  "Open line and enter `conn-emacs-state'.
+
+If ARG is non-nil move down ARG lines before opening line."
+  (interactive "p")
+  (move-end-of-line arg)
+  (newline-and-indent)
+  (conn-emacs-state))
+
+(defun conn-emacs-state-overwrite (&optional arg)
+  "Enter emacs state in `overwrite-mode'.
+`overwrite-mode' will be turned off when when emacs state is exited.
+If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
+  (interactive "P")
+  (let ((hook (make-symbol "emacs-state-overwrite-hook")))
+    (conn-emacs-state)
+    (fset hook (lambda ()
+                 (unless (eq conn-current-state 'conn-emacs-state)
+                   (overwrite-mode -1)
+                   (remove-hook 'conn-transition-hook hook))))
+    (add-hook 'conn-transition-hook hook)
+    (if arg
+        (binary-overwrite-mode 1)
+      (overwrite-mode 1))))
+
+(defun conn-emacs-state-overwrite-binary ()
+  "Enter emacs state in `binary-overwrite-mode'."
+  (interactive)
+  (conn-emacs-state-overwrite 1))
+
+(defun conn-change (start end &optional kill)
+  "Change region between START and END.
+If KILL is non-nil add region to the `kill-ring'.  When in
+`rectangle-mark-mode' defer to `string-rectangle'."
+  (interactive (list (region-beginning)
+                     (region-end)
+                     current-prefix-arg))
+  (cond ((and rectangle-mark-mode kill)
+         (copy-rectangle-as-kill start end)
+         (call-interactively #'string-rectangle))
+        (rectangle-mark-mode
+         (call-interactively #'string-rectangle))
+        (kill
+         (funcall (conn-kill-region-keys) start end)
+         (conn-emacs-state))
+        (t
+         (funcall (conn-delete-region-keys) start end)
+         (conn-emacs-state))))
+
+(defun conn-emacs-state-eol (&optional N)
+  "Move point to end of line and enter `conn-emacs-state'."
+  (interactive "P")
+  (end-of-line N)
+  (conn-emacs-state))
+
+(defun conn-emacs-state-bol (&optional N)
+  "Move point to beginning of line and enter `conn-emacs-state'."
+  (interactive "P")
+  (beginning-of-line N)
+  (back-to-indentation)
+  (conn-emacs-state))
+
+
+;;;; WinControl
 
 ;; A simple version of hyperbole's hycontrol-windows
 
@@ -5178,104 +5280,6 @@ If ARG is not +/-1 or 0 rotate windows in selected window parent window."
       (window-state-get window)
       (conn--wincontrol-reflect-window)
       (window-state-put window))))
-
-;;;;; Transition Functions
-
-(defun conn-emacs-state-and-complete ()
-  "Enter `conn-emacs-state' and call `completion-at-point'."
-  (interactive)
-  (conn-emacs-state)
-  (completion-at-point))
-
-(defun conn-dot-quit ()
-  "Pop state and clear all dots."
-  (interactive)
-  (conn--remove-dots)
-  (conn-pop-state))
-
-(defun conn-quoted-insert-overwrite ()
-  "Overwrite char after point using `quoted-insert'."
-  (interactive)
-  (save-excursion
-    (let ((overwrite-mode 'overwrite-mode-binary))
-      (message "%s" (propertize "Overwrite Char:"
-                                'face 'minibuffer-prompt))
-      (call-interactively #'quoted-insert))))
-
-(defun conn-emacs-state-open-line-above (&optional arg)
-  "Open line above and enter `conn-emacs-state'.
-
-If ARG is non-nil move up ARG lines before opening line."
-  (interactive "p")
-  (forward-line (- (1- arg)))
-  (move-beginning-of-line nil)
-  (insert "\n")
-  (forward-line -1)
-  ;; FIXME: see crux smart open line
-  (indent-according-to-mode)
-  (conn-emacs-state))
-
-(defun conn-emacs-state-open-line (&optional arg)
-  "Open line and enter `conn-emacs-state'.
-
-If ARG is non-nil move down ARG lines before opening line."
-  (interactive "p")
-  (move-end-of-line arg)
-  (newline-and-indent)
-  (conn-emacs-state))
-
-(defun conn-emacs-state-overwrite (&optional arg)
-  "Enter emacs state in `overwrite-mode'.
-`overwrite-mode' will be turned off when when emacs state is exited.
-If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
-  (interactive "P")
-  (let ((hook (make-symbol "emacs-state-overwrite-hook")))
-    (conn-emacs-state)
-    (fset hook (lambda ()
-                 (unless (eq conn-current-state 'conn-emacs-state)
-                   (overwrite-mode -1)
-                   (remove-hook 'conn-transition-hook hook))))
-    (add-hook 'conn-transition-hook hook)
-    (if arg
-        (binary-overwrite-mode 1)
-      (overwrite-mode 1))))
-
-(defun conn-emacs-state-overwrite-binary ()
-  "Enter emacs state in `binary-overwrite-mode'."
-  (interactive)
-  (conn-emacs-state-overwrite 1))
-
-(defun conn-change (start end &optional kill)
-  "Change region between START and END.
-If KILL is non-nil add region to the `kill-ring'.  When in
-`rectangle-mark-mode' defer to `string-rectangle'."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
-  (cond ((and rectangle-mark-mode kill)
-         (copy-rectangle-as-kill start end)
-         (call-interactively #'string-rectangle))
-        (rectangle-mark-mode
-         (call-interactively #'string-rectangle))
-        (kill
-         (funcall (conn-kill-region-keys) start end)
-         (conn-emacs-state))
-        (t
-         (funcall (conn-delete-region-keys) start end)
-         (conn-emacs-state))))
-
-(defun conn-emacs-state-eol (&optional N)
-  "Move point to end of line and enter `conn-emacs-state'."
-  (interactive "P")
-  (end-of-line N)
-  (conn-emacs-state))
-
-(defun conn-emacs-state-bol (&optional N)
-  "Move point to beginning of line and enter `conn-emacs-state'."
-  (interactive "P")
-  (beginning-of-line N)
-  (back-to-indentation)
-  (conn-emacs-state))
 
 
 ;;;; Transients
