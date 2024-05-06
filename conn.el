@@ -615,10 +615,10 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--region-visible-p (beg end)
   (not (or (invisible-p beg)
            (catch 'return
-             (let (pt)
-               (while (< end (setq pt (next-single-char-property-change
-                                       beg 'invisible nil end)))
-                 (when (invisible-p pt) (throw 'return t))))))))
+             (while-let ((pt (next-single-char-property-change
+                              beg 'invisible nil end))
+                         (_ (< end pt)))
+               (when (invisible-p pt) (throw 'return t)))))))
 
 (defun conn--visible-matches (string &optional dir)
   (let (matches)
@@ -666,12 +666,11 @@ If BUFFER is nil check `current-buffer'."
   (conn--with-input-method
     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
            (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir all-windows))
-           next-char)
+           (overlays (conn--string-preview-overlays string dir all-windows)))
       (condition-case _
           (progn
-            (while (setq next-char (read-char (format (concat prompt "%s") string) t
-                                              conn-read-string-timeout))
+            (while-let ((next-char (read-char (format (concat prompt "%s") string) t
+                                               conn-read-string-timeout)))
               (setq string (concat string (char-to-string next-char)))
               (mapc #'delete-overlay overlays)
               (setq overlays (conn--string-preview-overlays string dir all-windows)))
@@ -734,8 +733,8 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--create-window-labels (labels windows)
   (let ((scroll-margin 0)
         win lbl overlays)
-    (while (and (setq win (pop windows))
-                (setq lbl (pop labels)))
+    (while-let ((win (pop windows))
+                (lbl (pop labels)))
       (with-selected-window win
         (let ((overlay (make-overlay (window-start) (window-end))))
           (goto-char (window-start))
@@ -1544,8 +1543,8 @@ The iterator must be the first argument in ARGLIST.
 
 (defun conn--text-property-to-dots ()
   (goto-char (point-min))
-  (let (dots match)
-    (while (setq match (text-property-search-forward 'conn-dot-text))
+  (let (dots)
+    (while-let ((match (text-property-search-forward 'conn-dot-text)))
       (push (cons (prop-match-beginning match)
                   (prop-match-end match))
             dots))
@@ -3550,16 +3549,15 @@ between `point-min' and `point-max'."
       (with-restriction
           start end
         (goto-char (point-min))
-        (let (match)
-          (while (setq match (text-property-search-forward prop val t))
-            (cond ((null refine)
-                   (conn--create-dots (cons (prop-match-beginning match)
-                                            (prop-match-end match))))
-                  ((conn-isearch-in-dot-p (prop-match-beginning match)
-                                          (prop-match-end match))
-                   (push (cons (prop-match-beginning match)
-                               (prop-match-end match))
-                         new-dots)))))
+        (while-let ((match (text-property-search-forward prop val t)))
+          (cond ((null refine)
+                 (conn--create-dots (cons (prop-match-beginning match)
+                                          (prop-match-end match))))
+                ((conn-isearch-in-dot-p (prop-match-beginning match)
+                                        (prop-match-end match))
+                 (push (cons (prop-match-beginning match)
+                             (prop-match-end match))
+                       new-dots))))
         (when refine
           (conn--remove-dots start end)
           (apply #'conn--create-dots new-dots))))))
@@ -4848,7 +4846,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-off]: quit; "
     "\\[conn-wincontrol-windmove-up] "
     "\\[conn-wincontrol-windmove-down] "
@@ -4883,7 +4881,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-off]: quit; "
     "\\[tab-bar-move-window-to-tab]: win to new tab"
     "\n"
@@ -4902,7 +4900,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-off]: quit; "
     "\\[toggle-frame-fullscreen]: fullscreen; "
     "\\[clone-frame]: clone; "
@@ -4922,7 +4920,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: help; "
+    "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-off]: quit; "
     "\\[conn-wincontrol-scroll-up] "
     "\\[conn-wincontrol-scroll-down]: "
@@ -5829,9 +5827,8 @@ dispatch on each contiguous component of the region."
   (conn--thread -it-
       (save-excursion
         (goto-char (point-min))
-        (let (regions match)
-          (while (setq match (text-property-search-forward
-                              prop value t))
+        (let (regions)
+          (while-let ((match (text-property-search-forward prop value t)))
             (push (cons (prop-match-beginning match)
                         (prop-match-end match))
                   regions))
