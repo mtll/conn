@@ -670,7 +670,7 @@ If BUFFER is nil check `current-buffer'."
       (condition-case _
           (progn
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
-                                               conn-read-string-timeout)))
+                                              conn-read-string-timeout)))
               (setq string (concat string (char-to-string next-char)))
               (mapc #'delete-overlay overlays)
               (setq overlays (conn--string-preview-overlays string dir all-windows)))
@@ -6620,8 +6620,6 @@ dispatch on each contiguous component of the region."
         (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
           (dolist (hook hooks)
             (add-hook hook 'conn--activate-input-method nil t)))
-        (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
-        (add-hook 'post-command-hook #'conn--mark-post-command-hook)
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -6637,8 +6635,6 @@ dispatch on each contiguous component of the region."
     (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
       (dolist (hook hooks)
         (remove-hook hook #'conn--activate-input-method t)))
-    (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
-    (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
@@ -6669,6 +6665,8 @@ determine if `conn-local-mode' should be enabled."
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
+          (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+          (add-hook 'post-command-hook #'conn--mark-post-command-hook)
           (add-hook 'post-command-hook #'conn--update-aux-map)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
@@ -6676,6 +6674,8 @@ determine if `conn-local-mode' should be enabled."
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
+      (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+      (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
       (remove-hook 'post-command-hook #'conn--update-aux-map)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor)
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
