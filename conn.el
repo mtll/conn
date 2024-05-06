@@ -331,10 +331,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar-local conn--mark-cursor nil
   "`mark' cursor overlay.")
-(put 'conn--mark-cursor 'permanent-local t)
-(put 'conn--mark-cursor 'face 'conn-mark-face)
-(put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
-(put 'conn--mark-cursor 'conn-overlay t)
 
 ;;;;; Aux Map Variables
 
@@ -344,6 +340,7 @@ Used to restore previous value when `conn-mode' is disabled.")
   :prefix 'conn-mark-thing-map)
 
 (defvar conn--aux-update-tick 0)
+
 (defvar conn--aux-update-local-tick 0)
 
 (defvar-local conn--aux-map-history nil)
@@ -352,13 +349,34 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar conn--last-remapping nil)
 
-;;;;; Dot Overlay Properties
+;;;;; Overlay Category Properties
+
+;;;;;; Mark Cursor
+
+(put 'conn--mark-cursor 'permanent-local t)
+(put 'conn--mark-cursor 'face 'conn-mark-face)
+(put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
+(put 'conn--mark-cursor 'conn-overlay t)
+
+;;;;;; Dot Overlays
 
 (put 'conn--dot 'evaporate t)
 (put 'conn--dot 'priority conn-dot-overlay-priority)
 (put 'conn--dot 'face 'conn-dot-face)
 (put 'conn--dot 'evaporate t)
 (put 'conn--dot 'conn-overlay t)
+
+;;;;;; Read String Overlays
+
+(put 'conn-read-string-match 'conn-overlay t)
+(put 'conn-read-string-match 'face 'conn-read-string-match-face)
+(put 'conn-read-string-match 'priority 2001)
+
+;;;;;; Label Overlay
+
+(put 'conn-label-overlay 'face 'conn-read-string-match-face)
+(put 'conn-label-overlay 'priority 3000)
+(put 'conn-label-overlay 'conn-overlay t)
 
 ;;;;; Command Histories
 
@@ -619,10 +637,7 @@ If BUFFER is nil check `current-buffer'."
                (goto-char pt)
                (line-end-position))))
     (let ((ov (make-overlay pt (min (+ pt length) eol))))
-      (overlay-put ov 'conn-overlay t)
       (overlay-put ov 'category 'conn-read-string-match)
-      (overlay-put ov 'face 'conn-read-string-match-face)
-      (overlay-put ov 'priority 2001)
       (overlay-put ov 'window (selected-window))
       (overlay-put ov 'after-string
                    (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
@@ -758,11 +773,12 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Advice
 
-(defun conn--define-key-advice (keymap key &rest _)
+(defun conn--define-key-advice (keymap key def &rest _)
   (when (or (memq keymap (mapcar #'cdr conn--state-maps))
             (and (memq keymap (conn--without-conn-maps (current-active-maps)))
                  (member (if (stringp key) (key-parse key) key)
-                         (mapcar #'symbol-value conn--aux-bindings))))
+                         (mapcar #'symbol-value conn--aux-bindings)))
+            (and (symbolp def) (get def :conn-remapping-command)))
     (cl-incf conn--aux-update-tick)))
 
 (defun conn--push-mark-ad (&rest _)
@@ -1672,9 +1688,7 @@ If BUFFER is nil use current buffer."
     aux-map))
 
 (defun conn--update-aux-map (&optional force)
-  (when (and conn-local-mode
-             conn-current-state
-             (not conn-emacs-state))
+  (when (and conn-local-mode conn-current-state)
     (let ((active (conn--without-conn-maps (current-active-maps)))
           (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
       (cond
@@ -1727,6 +1741,7 @@ C-x, M-s and M-g into various state maps."
          ((and (pred commandp) cmd)
           (if interactive-p (call-interactively cmd) cmd))
          (_ (error "Key not bound to a command %s." ,name))))
+     (put ',name :conn-remapping-command t)
 
      ,(unless aux-map-omit
         `(cl-pushnew ',name conn--aux-bindings))))
@@ -2490,6 +2505,17 @@ Interactively defaults to the current region."
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
+(defun conn-dispatch-copy (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-new str)
+           (message "Copied: %s" str)))
+        (_ (user-error "No thing at point"))))))
+
 (defun conn-dispatch-copy-append (window pt thing)
   (with-selected-window window
     (save-excursion
@@ -2546,17 +2572,6 @@ Interactively defaults to the current region."
     (if str
         (insert str)
       (user-error "No thing at point"))))
-
-(defun conn-dispatch-copy (window pt thing)
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (bounds-of-thing-at-point thing)
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-new str)
-           (message "Copied: %s" str)))
-        (_ (user-error "No thing at point"))))))
 
 (defun conn-dispatch-goto (window pt thing)
   (with-current-buffer (window-buffer window)
@@ -2740,15 +2755,12 @@ Interactively defaults to the current region."
                      (end (min next (+ beg (length label))))
                      (ov (make-overlay beg end)))
                 (push ov overlays)
-                (overlay-put p 'face 'conn-read-string-match-face)
                 (overlay-put p 'after-string (overlay-get p 'padding))
                 (thread-last
                   (buffer-substring (overlay-start ov) (overlay-end ov))
                   (seq-drop-while (lambda (c) (not (char-equal c ?\n))))
                   (overlay-put ov 'after-string))
                 (overlay-put ov 'prefix-overlay p)
-                (overlay-put ov 'priority 3000)
-                (overlay-put ov 'conn-overlay t)
                 (overlay-put ov 'category 'conn-label-overlay)
                 (overlay-put ov 'window window)
                 (overlay-put ov (if (or (= beg next)
