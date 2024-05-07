@@ -6181,6 +6181,21 @@ dispatch on each contiguous component of the region."
     ("p" "sort paragraphs" sort-paragraphs)
     ("r" "sort regexp fields" sort-regexp-fields)]])
 
+;;;;; Case Prefix
+
+(transient-define-prefix conn-region-case-prefix ()
+  "Transient menu for case in region."
+  ["Change Case"
+   [("k" "kebab-case" conn-kebab-case-region)
+    ("a" "CapitalCase" conn-capital-case-region)
+    ("c" "camelCase" conn-camel-case-region)]
+   [("n" "Snake_Case" conn-capital-snake-case-region)
+    ("s" "snake_case" conn-snake-case-region)
+    ("w" "Individual Words" conn-case-to-words-region)]
+   [("u" "UPCASE" upcase-region)
+    ("c" "Capitalize" capitalize-region)
+    ("d" "downcase" downcase-region)]])
+
 
 ;;;; Keymaps
 
@@ -6216,7 +6231,7 @@ dispatch on each contiguous component of the region."
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "b"   'conn-command-at-point-and-mark
-  "c"   'conn-region-case-map
+  "c"   'conn-region-case-prefix
   "D"   'conn-duplicate-and-comment-region
   "d"   'conn-duplicate-region
   "e"   'eval-region
@@ -6353,17 +6368,6 @@ dispatch on each contiguous component of the region."
   :repeat t
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward)
-
-(defvar-keymap conn-region-case-map
-  :prefix 'conn-region-case-map
-  "m" 'conn-region-case-style-cycle
-  "k" 'conn-kebab-case-region
-  "i" 'conn-capital-case-region
-  "w" 'conn-case-to-words-region
-  "o" 'conn-camel-case-region
-  "l" 'conn-capital-snake-case-region
-  "j" 'conn-snake-case-region
-  "u" 'conn-region-case-dwim)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
