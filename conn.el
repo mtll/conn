@@ -467,20 +467,17 @@ Uses `read-regexp' to read the regexp."
                             buf))
                         (buffer-list))))))
 
-;; From misearch
-(defun conn--read-dot-buffers ()
+(defun conn--read-buffers (&optional predicate)
   "Return a list of buffers specified interactively, one by one."
-  (let* ((collection (mapcar #'buffer-name
-                             (seq-filter #'conn--dots-active-p (buffer-list))))
-         (init "")
-         (selected))
-    (while-let ((buf (completing-read "Buffer: " collection
-                                      (lambda (cand)
-                                        (not (member cand selected)))
-                                      t conn--dot-buffer-history))
+  (let* (selected)
+    (while-let ((buf (read-buffer "Buffer: " nil t
+                                  (pcase-lambda (`(,name . ,buf))
+                                    (and
+                                     (if predicate (funcall predicate buf) t)
+                                     (not (member name selected))))))
                 (_ (not (equal buf ""))))
       (push buf selected))
-    selected))
+    (nreverse selected)))
 
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
@@ -741,7 +738,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--create-window-labels (labels windows)
   (let ((scroll-margin 0)
-        win lbl overlays)
+        overlays)
     (while-let ((win (pop windows))
                 (lbl (pop labels)))
       (with-selected-window win
@@ -3224,7 +3221,7 @@ With a numerical prefix argument read buffers using `completing-read'."
   (cond ((consp multi-buffer)
          (mapc #'conn--clear-dots (conn--read-dot-buffers-regexp)))
         (multi-buffer
-         (mapc #'conn--clear-dots (conn--read-dot-buffers)))
+         (mapc #'conn--clear-dots (conn--read-buffers 'conn--dots-active-p)))
         (t (conn--remove-dots
             (conn--beginning-of-region-or-restriction)
             (conn--end-of-region-or-restriction))))
@@ -5680,7 +5677,7 @@ dispatch on each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -it-
       (pcase (transient-arg-value "buffers=" args)
-        ("one-by-one" (conn--read-dot-buffers))
+        ("one-by-one" (conn--read-buffers 'conn--dots-active-p))
         ("match-regexp" (conn--read-dot-buffers-regexp))
         (_ (list (current-buffer))))
     (mapcan (apply-partially 'conn--sorted-overlays
