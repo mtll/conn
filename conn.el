@@ -385,6 +385,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar conn--read-string-timeout-history nil)
 
+(defvar conn--dot-buffer-history nil)
+
 
 ;;;; Utilities
 
@@ -452,7 +454,7 @@ Used to restore previous value when `conn-mode' is disabled.")
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
 
 ;; From misearch
-(defun conn-read-dot-buffers-regexp ()
+(defun conn--read-dot-buffers-regexp ()
   "Return a list of buffers whose names match specified regexp.
 Uses `read-regexp' to read the regexp."
   ;; Most code from `multi-occur-in-matching-buffers'
@@ -466,12 +468,19 @@ Uses `read-regexp' to read the regexp."
                         (buffer-list))))))
 
 ;; From misearch
-(defun conn-read-dot-buffers ()
+(defun conn--read-dot-buffers ()
   "Return a list of buffers specified interactively, one by one."
-  ;; Most code from `multi-occur'.
   (let* ((collection (mapcar #'buffer-name
-                             (seq-filter #'conn--dots-active-p (buffer-list)))))
-    (completing-read-multiple "First buffer: " collection nil t)))
+                             (seq-filter #'conn--dots-active-p (buffer-list))))
+         (init "")
+         (selected))
+    (while-let ((buf (completing-read "Buffer: " collection
+                                      (lambda (cand)
+                                        (not (member cand selected)))
+                                      t conn--dot-buffer-history))
+                (_ (not (equal buf ""))))
+      (push buf selected))
+    selected))
 
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
@@ -1195,7 +1204,7 @@ If any function returns a nil value then dispatch it halted.")
 (defun conn--kapply-ensure-region-buffer (region)
   (when-let ((buffer (and region (marker-buffer (car region)))))
     (when (not (eq buffer (current-buffer)))
-      (pop-to-buffer buffer)
+      (pop-to-buffer-same-window buffer)
       (deactivate-mark t)
       (unless (eq buffer (window-buffer (selected-window)))
         (error "Could not pop to buffer %s" buffer))))
@@ -1204,7 +1213,7 @@ If any function returns a nil value then dispatch it halted.")
 (defun conn--kapply-ensure-overlay-buffer (dot)
   (when-let ((buffer (and dot (overlay-buffer dot))))
     (when (not (eq buffer (current-buffer)))
-      (pop-to-buffer buffer)
+      (pop-to-buffer-same-window buffer)
       (deactivate-mark t)
       (unless (eq buffer (window-buffer (selected-window)))
         (error "Could not pop to buffer %s" buffer))))
@@ -3213,9 +3222,9 @@ matches the expression.
 With a numerical prefix argument read buffers using `completing-read'."
   (interactive "P")
   (cond ((consp multi-buffer)
-         (mapc #'conn--clear-dots (conn-read-dot-buffers-regexp)))
+         (mapc #'conn--clear-dots (conn--read-dot-buffers-regexp)))
         (multi-buffer
-         (mapc #'conn--clear-dots (conn-read-dot-buffers)))
+         (mapc #'conn--clear-dots (conn--read-dot-buffers)))
         (t (conn--remove-dots
             (conn--beginning-of-region-or-restriction)
             (conn--end-of-region-or-restriction))))
@@ -3803,7 +3812,7 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-isearch-exit-and-mark ()
   "`isearch-exit' and set region to match."
   (interactive)
-  (isearch-exit)
+  (isearch-done)
   (conn--push-ephemeral-mark isearch-other-end))
 
 ;;;;; Editing Commands
@@ -5483,8 +5492,8 @@ MATCH-REGEXP means dispatch on buffers matching a regexp."
   :key "b"
   :argument "buffers="
   :argument-format "buffers=%s"
-  :argument-regexp "\\(buffers=\\(CRM\\|match-regexp\\)\\)"
-  :choices '("CRM" "match-regexp")
+  :argument-regexp "\\(buffers=\\(one-by-one\\|match-regexp\\)\\)"
+  :choices '("one-by-one" "match-regexp")
   :if 'conn--dots-active-p)
 
 (transient-define-argument conn--kapply-dots-infix ()
@@ -5670,9 +5679,9 @@ dispatch on each contiguous component of the region."
   :description "On Dots"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -it-
-      (pcase (transient-arg-value "buffer=" args)
-        ("CRM" (conn-read-dot-buffers))
-        ("match-regexp" (conn-read-dot-buffers-regexp))
+      (pcase (transient-arg-value "buffers=" args)
+        ("one-by-one" (conn--read-dot-buffers))
+        ("match-regexp" (conn--read-dot-buffers-regexp))
         (_ (list (current-buffer))))
     (mapcan (apply-partially 'conn--sorted-overlays
                              #'conn-dotp '< nil nil)
@@ -5787,7 +5796,7 @@ dispatch on each contiguous component of the region."
              (pcase (transient-arg-value "matches=" args)
                ("after" 'after)
                ("before" 'before))))
-        (isearch-exit))
+        (isearch-done))
     (conn--kapply-region-iterator -it- (member "reverse" args))
     (if (member "undo" args) (conn--kapply-merge-undo -it-) -it-)
     (if (member "restriction" args) (conn--kapply-save-restriction -it-) -it-)
