@@ -4164,7 +4164,7 @@ Repeated calls cycle through the actions in
       (funcall (car cycle)))))
 
 (defun conn-kebab-case-region ()
-  "Transform region text to capital-snake-case."
+  "Transform region text to kebab-case."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
@@ -4253,6 +4253,28 @@ Repeated calls cycle through the actions in
      (downcase-region (point-min) (1+ (point-min)))
      (while (re-search-forward "[-_]+" nil t)
        (replace-match "" nil nil))
+     (current-buffer))))
+
+(defun conn-case-to-words-region ()
+  "Transform region text to individual words."
+  (interactive)
+  (conn--apply-region-transform
+   (lambda ()
+     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
+       (replace-match "\\1 \\2" nil nil))
+     (goto-char (point-min))
+     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
+       (replace-match "\\1 \\2" nil nil))
+     (goto-char (point-min))
+     (while (re-search-forward "_" nil t)
+       (replace-match " " nil nil))
+     (goto-char (point-min))
+     (while (re-search-forward "-" nil t)
+       (replace-match " " nil nil))
+     (goto-char (point-min))
+     (while (re-search-forward " +" nil t)
+       (replace-match " " nil nil))
+     (downcase-region (point-min) (point-max))
      (current-buffer))))
 
 (defun conn-kill-append-region (beg end &optional register)
@@ -6337,6 +6359,7 @@ dispatch on each contiguous component of the region."
   "m" 'conn-region-case-style-cycle
   "k" 'conn-kebab-case-region
   "i" 'conn-capital-case-region
+  "w" 'conn-case-to-words-region
   "o" 'conn-camel-case-region
   "l" 'conn-capital-snake-case-region
   "j" 'conn-snake-case-region
