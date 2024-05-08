@@ -2298,15 +2298,13 @@ state."
     (t . conn-dispatch-goto)))
 
 (defvar conn-dispatch-readers-alist
-  `((conn-beginning-of-inner-line . conn--dispatch-inner-lines)
+  `((inner-line . conn--dispatch-inner-lines)
     (conn-end-of-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
     (outer-line . conn--dispatch-lines)
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
-    (list . ,(lambda ()
-               (setq conn-this-command-thing 'sexp)
-               (conn--dispatch-all-things 'sexp)))
+    (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
     (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
@@ -2660,7 +2658,7 @@ state."
                 (pcase (bounds-of-thing-at-point thing)
                   (`(,beg . ,_end) (cl-pushnew beg ovs)))))))))
     (mapcar (lambda (pt)
-              (conn--string-preview-overlays-1 pt 0))
+              (conn--string-preview-overlays-1 pt 0 thing))
             ovs)))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
