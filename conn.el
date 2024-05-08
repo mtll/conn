@@ -629,6 +629,13 @@ If BUFFER is nil check `current-buffer'."
                          (_ (< end pt)))
                (when (invisible-p pt) (throw 'return t)))))))
 
+(defun conn--string-no-upper-case-p (string)
+  (catch 'term
+    (dotimes (i (length string))
+      (let ((char (aref string i)))
+        (when (eq char (downcase char))
+          (throw 'term t))))))
+
 (defun conn--visible-matches (string &optional dir)
   (let (matches)
     (save-excursion
@@ -636,7 +643,7 @@ If BUFFER is nil check `current-buffer'."
           (if (eq dir 'forward)  (point) (window-start))
           (if (eq dir 'backward) (point) (window-end))
         (goto-char (point-min))
-        (let ((case-fold-search (not (seq-find 'char-uppercase-p string))))
+        (let ((case-fold-search (conn--string-no-upper-case-p string)))
           (while (search-forward string nil t)
             (when (conn--region-visible-p (match-beginning 0) (match-end 0))
               (push (match-beginning 0) matches))))))
@@ -698,8 +705,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--create-label-strings (count &optional labels)
   (let* ((alphabet (seq-uniq conn-dispatch-label-characters))
-         (labels (or labels
-                     (seq-subseq alphabet 0 (min count (length alphabet)))))
+         (labels (or labels (take count alphabet)))
          (prefixes nil))
     (while (and labels
                 (> count (+ (length labels)
@@ -1596,11 +1602,15 @@ The iterator must be the first argument in ARGLIST.
 
 (defun conn--dot-before-point (point)
   (unless (= point (point-min))
-    (seq-find #'conn-dotp (overlays-in (1- point) point))))
+    (catch 'term
+      (dolist (ov (overlays-in (1- point) point))
+        (when (conn-dotp ov) (throw 'term t))))))
 
 (defun conn--dot-after-point (point)
   (unless (= point (point-max))
-    (seq-find #'conn-dotp (overlays-in point (1+ point)))))
+    (catch 'term
+      (dolist (ov (overlays-in point (1+ point)))
+        (when (conn-dotp ov) (throw 'term t))))))
 
 (defun conn--for-each-dot (func &optional sort-predicate start end)
   "Apply FUNC to each dot.
@@ -1633,9 +1643,14 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 (defun conn--all-overlays (predicate &optional start end buffer)
   "Get all overlays between START and END satisfying PREDICATE."
   (with-current-buffer (or buffer (current-buffer))
-    (seq-filter predicate
-                (overlays-in (or start (conn--beginning-of-region-or-restriction))
-                             (or end   (conn--end-of-region-or-restriction))))))
+    (let* ((head (cons nil (overlays-in (or start (conn--beginning-of-region-or-restriction))
+                                        (or end   (conn--end-of-region-or-restriction)))))
+           (rest head))
+      (while-let ((ov (cadr rest)))
+        (unless (funcall predicate ov)
+          (setcdr rest (cddr rest)))
+        (pop rest))
+      (cdr head))))
 
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
@@ -1714,8 +1729,8 @@ If BUFFER is nil use current buffer."
                             (setf (alist-get key conn--aux-map-history nil nil #'equal)
                                   (conn--generate-aux-map active)))))
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
-                conn--aux-map-history (seq-take conn--aux-map-history
-                                                conn--aux-map-history-size)))))
+                conn--aux-map-history (take conn--aux-map-history-size
+                                            conn--aux-map-history)))))
       (setq conn--aux-update-local-tick conn--aux-update-tick
             conn--last-remapping current-remappings))))
 
@@ -2573,28 +2588,28 @@ state."
   (unwind-protect
       (let ((c (read-char prompt))
             (narrowed))
-        (dolist (ov overlays)
-          (let ((prop (if (overlay-get ov 'before-string) 'before-string 'display)))
-            (if (not (eql c (aref (overlay-get ov prop) 0)))
-                (when-let ((prefix (overlay-get ov 'prefix-overlay)))
-                  (overlay-put prefix 'face nil)
-                  (overlay-put prefix 'after-string nil))
-              (conn--thread -it->
-                  (overlay-get ov prop)
-                (substring -it-> 1)
-                (overlay-put ov prop -it->))
-              (move-overlay ov
-                            (overlay-start ov)
-                            (+ (overlay-start ov)
-                               (min (length (overlay-get ov prop))
-                                    (- (overlay-end ov)
-                                       (overlay-start ov)))))
-              (with-current-buffer (overlay-buffer ov)
-                (thread-last
-                  (buffer-substring (overlay-start ov) (overlay-end ov))
-                  (seq-drop-while (lambda (c) (not (char-equal c ?\n))))
-                  (overlay-put ov 'after-string)))
-              (push ov narrowed))))
+        (save-current-buffer
+          (dolist (ov overlays)
+            (set-buffer (overlay-buffer ov))
+            (let ((prop (if (overlay-get ov 'before-string) 'before-string 'display)))
+              (if (not (eql c (aref (overlay-get ov prop) 0)))
+                  (when-let ((prefix (overlay-get ov 'prefix-overlay)))
+                    (overlay-put prefix 'face nil)
+                    (overlay-put prefix 'after-string nil))
+                (conn--thread -it->
+                    (overlay-get ov prop)
+                  (substring -it-> 1)
+                  (overlay-put ov prop -it->))
+                (move-overlay ov
+                              (overlay-start ov)
+                              (+ (overlay-start ov)
+                                 (min (length (overlay-get ov prop))
+                                      (- (overlay-end ov)
+                                         (overlay-start ov)))))
+                (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
+                  (when-let ((pos (string-search "\n" after-str)))
+                    (overlay-put ov 'after-string (substring after-str pos))))
+                (push ov narrowed)))))
         (mapcar #'copy-overlay narrowed))
     (mapc #'delete-overlay overlays)))
 
@@ -2607,21 +2622,22 @@ state."
               (let* ((beg (overlay-end p))
                      (label (pop labels))
                      (next (thread-last
-                             (overlays-in beg (+ beg (length label)))
-                             (seq-filter (lambda (ov)
-                                           (and (eq 'conn-read-string-match
-                                                    (overlay-get ov 'category))
-                                                (not (eq ov p)))))
+                             (conn--all-overlays
+                              (lambda (ov)
+                                (and (eq 'conn-read-string-match
+                                         (overlay-get ov 'category))
+                                     (not (eq ov p))))
+                              beg (+ beg (length label)))
                              (mapcar 'overlay-start)
                              (apply 'min (point-max))))
                      (end (min next (+ beg (length label))))
                      (ov (make-overlay beg end)))
                 (push ov overlays)
                 (overlay-put p 'after-string (overlay-get p 'padding))
-                (thread-last
-                  (buffer-substring (overlay-start ov) (overlay-end ov))
-                  (seq-drop-while (lambda (c) (not (char-equal c ?\n))))
-                  (overlay-put ov 'after-string))
+                (overlay-put p 'face 'conn-read-string-match-face)
+                (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
+                  (when-let ((pos (string-search "\n" after-str)))
+                    (overlay-put ov 'after-string (substring after-str pos))))
                 (overlay-put ov 'prefix-overlay p)
                 (overlay-put ov 'category 'conn-label-overlay)
                 (overlay-put ov 'window window)
@@ -2647,17 +2663,18 @@ state."
             (funcall forward-op -1)
             (while (/= (point) (point-min))
               (unless (invisible-p (point))
-                (cl-pushnew (point) ovs))
+                (push (point) ovs))
               (funcall forward-op -1))))
         (ignore-errors
           (save-excursion
             (while (/= (point) (point-max))
               (funcall forward-op 1)
               (unless (invisible-p (point))
-                (pcase (bounds-of-thing-at-point thing)
-                  (`(,beg . ,_end) (cl-pushnew beg ovs)))))))))
+                (when-let ((beg (car (bounds-of-thing-at-point thing)))
+                           (_ (/= beg (car ovs))))
+                  (push beg ovs))))))))
     (mapcar (lambda (pt)
-              (conn--string-preview-overlays-1 pt 0 thing))
+              (conn--string-preview-overlays-1 pt 1 thing))
             ovs)))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
@@ -2672,7 +2689,7 @@ state."
       (apply 'nconc ovs))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
-  (let ((case-fold-search (not (seq-find 'char-uppercase-p prefix)))
+  (let ((case-fold-search (conn--string-no-upper-case-p prefix))
         (things (ensure-list things))
         ovs)
     (save-excursion
@@ -2681,9 +2698,9 @@ state."
         (dolist (thing things)
           (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
             (when (and (eql (point) beg)
-                       (conn--region-visible-p beg end))
-              (cl-pushnew (list (point) (length prefix) thing) ovs
-                          :key #'car))))))
+                       (conn--region-visible-p beg end)
+                       (not (eql (point) (caar ovs))))
+              (push (list (point) (length prefix) thing) ovs))))))
     (mapcar (apply-partially 'apply 'conn--string-preview-overlays-1)
             ovs)))
 
@@ -4083,7 +4100,7 @@ When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
    (list (conn--read-string-with-timeout 'backward)))
-  (let ((case-fold-search (not (seq-find 'char-uppercase-p string))))
+  (let ((case-fold-search (conn--string-no-upper-case-p string)))
     (with-restriction (window-start) (window-end)
       (when-let ((pos (or (save-excursion
                             (backward-char)
@@ -4118,7 +4135,7 @@ When called interactively reads STRING with timeout
   (interactive
    (list (conn--read-string-with-timeout 'forward)))
   (with-restriction (window-start) (window-end)
-    (let ((case-fold-search (not (seq-find 'char-uppercase-p string))))
+    (let ((case-fold-search (conn--string-no-upper-case-p string)))
       (when-let ((pos (or (save-excursion
                             (forward-char)
                             (catch 'term
