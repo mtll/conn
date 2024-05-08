@@ -642,11 +642,12 @@ If BUFFER is nil check `current-buffer'."
               (push (match-beginning 0) matches))))))
     (nreverse matches)))
 
-(defun conn--string-preview-overlays-1 (pt length)
+(defun conn--string-preview-overlays-1 (pt length &optional thing)
   (let ((eol (save-excursion
                (goto-char pt)
                (line-end-position))))
     (let ((ov (make-overlay pt (min (+ pt length) eol))))
+      (overlay-put ov 'thing thing)
       (overlay-put ov 'category 'conn-read-string-match)
       (overlay-put ov 'window (selected-window))
       (overlay-put ov 'after-string
@@ -2294,7 +2295,6 @@ state."
 
 (defvar conn-dispatch-default-actions
   '((line-column . conn-dispatch-jump)
-    (line . conn-dispatch-jump)
     (t . conn-dispatch-goto)))
 
 (defvar conn-dispatch-readers-alist
@@ -2305,7 +2305,7 @@ state."
     (list . ,(lambda ()
                (setq conn-this-command-thing 'sexp)
                (conn--dispatch-all-things 'sexp)))
-    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
+    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
     (t . conn--dispatch-chars)))
@@ -2668,26 +2668,27 @@ state."
       (walk-windows
        (lambda (win)
          (with-selected-window win
-           (push (conn--dispatch-all-things-1 thing)
-                 ovs)))
+           (push (conn--dispatch-all-things-1 thing) ovs)))
        'no-minibuf 'visible)
       (apply 'nconc ovs))))
 
-(defun conn--dispatch-things-with-prefix-1 (thing prefix)
+(defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (not (seq-find 'char-uppercase-p prefix)))
+        (things (ensure-list things))
         ovs)
     (save-excursion
       (goto-char (window-end))
       (while (search-backward prefix (window-start) t)
-        (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
-          (when (and (eql (point) beg)
-                     (conn--region-visible-p beg end))
-            (push (conn--string-preview-overlays-1
-                   (point) (length prefix))
-                  ovs)))))
-    (nreverse ovs)))
+        (dolist (thing things)
+          (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
+            (when (and (eql (point) beg)
+                       (conn--region-visible-p beg end))
+              (cl-pushnew (list (point) (length prefix) thing) ovs
+                          :key #'car))))))
+    (mapcar (apply-partially 'apply 'conn--string-preview-overlays-1)
+            ovs)))
 
-(defun conn--dispatch-things-with-prefix (thing prefix-length &optional all-windows)
+(defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix ""))
     (conn--with-input-method
       (while (length< prefix prefix-length)
@@ -2696,13 +2697,12 @@ state."
                        (char-to-string)
                        (concat prefix)))))
     (if (not all-windows)
-        (conn--dispatch-things-with-prefix-1 thing prefix)
+        (conn--dispatch-things-with-prefix-1 things prefix)
       (let (ovs)
         (walk-windows
          (lambda (win)
            (with-selected-window win
-             (push (conn--dispatch-things-with-prefix-1 thing prefix)
-                   ovs)))
+             (push (conn--dispatch-things-with-prefix-1 things prefix) ovs)))
          'no-minibuf 'visible)
         (apply 'nconc ovs)))))
 
@@ -2800,7 +2800,6 @@ seconds."
      (list cmd
            (or action (conn-dispatch-default-action cmd))
            current-prefix-arg)))
-  (setq conn-this-command-thing (get thing-command :conn-command-thing))
   (let* ((prefix-ovs)
          (labels))
     (unwind-protect
@@ -2830,6 +2829,9 @@ seconds."
                               'prefix-overlay))
                      (window (overlay-get prefix 'window))
                      (pt (overlay-start prefix)))
+                (setq conn-this-command-thing
+                      (or (overlay-get prefix 'thing)
+                          (get thing-command :conn-command-thing)))
                 (funcall action window pt conn-this-command-thing)
                 (unless repeat (throw 'term nil)))
               (pcase-dolist (`(_ . ,ovs) prefix-ovs)
