@@ -2298,7 +2298,9 @@ state."
     (t . conn-dispatch-goto)))
 
 (defvar conn-dispatch-readers-alist
-  `((inner-line . conn--dispatch-inner-lines)
+  `((conn-beginning-of-inner-line . conn--dispatch-inner-lines)
+    (conn-end-of-inner-line . conn--dispatch-inner-lines-end)
+    (move-end-of-line . conn--dispatch-lines-end)
     (outer-line . conn--dispatch-lines)
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
@@ -2747,7 +2749,29 @@ state."
      'no-minibuf 'visible)
     ovs))
 
-(defun conn--dispatch-inner-lines ()
+(defun conn--dispatch-lines-end ()
+  (let (ovs)
+    (walk-windows
+     (lambda (win)
+       (with-selected-window win
+         (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+           (save-excursion
+             (with-restriction (window-start) (window-end)
+               (goto-char (point-min))
+               (move-end-of-line nil)
+               (when (and (eolp) (not (invisible-p (point))))
+                 (push (conn--string-preview-overlays-1 (point) 1) ovs))
+               (while (/= (point) (point-max))
+                 (forward-line)
+                 (move-end-of-line nil)
+                 (when (and (eolp)
+                            (not (invisible-p (point)))
+                            (not (invisible-p (1- (point)))))
+                   (push (conn--string-preview-overlays-1 (point) 1) ovs))))))))
+     'no-minibuf 'visible)
+    ovs))
+
+(defun conn--dispatch-inner-lines (&optional end)
   (let (ovs)
     (walk-windows
      (lambda (win)
@@ -2758,7 +2782,9 @@ state."
                (goto-char (point-min))
                (when (and (bolp)
                           (progn
-                            (back-to-indentation)
+                            (if end
+                                (conn--end-of-inner-line-1)
+                              (back-to-indentation))
                             (not (eobp)))
                           (not (invisible-p (point))))
                  (push (conn--string-preview-overlays-1 (point) 1)
@@ -2767,7 +2793,9 @@ state."
                  (forward-line)
                  (when (and (bolp)
                             (progn
-                              (back-to-indentation)
+                              (if end
+                                  (conn--end-of-inner-line-1)
+                                (back-to-indentation))
                               (not (eobp)))
                             (not (invisible-p (point)))
                             (not (invisible-p (1- (point)))))
@@ -2775,6 +2803,9 @@ state."
                          ovs))))))))
      'no-minibuf 'visible)
     ovs))
+
+(defun conn--dispatch-inner-lines-end ()
+  (conn--dispatch-inner-lines t))
 
 (defun conn-dispatch-on-things (thing-command action &optional repeat)
   "Begin dispatching ACTION on a THING.
