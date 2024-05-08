@@ -618,7 +618,7 @@ If BUFFER is nil check `current-buffer'."
                   result))
           (when (and (= (match-beginning 0) (match-end 0))
                      (not (if isearch-forward (eobp) (bobp))))
-	    (forward-char (if isearch-forward 1 -1))))
+            (forward-char (if isearch-forward 1 -1))))
         (nreverse result)))))
 
 (defun conn--region-visible-p (beg end)
@@ -939,12 +939,12 @@ If BUFFER is nil check `current-buffer'."
   (unless (or (region-active-p)
               (= 0 (prefix-numeric-value current-prefix-arg)))
     (let* ((dir (cl-signum (- (point) beg)))
-           (dist (* dir (prefix-numeric-value current-prefix-arg))))
+           (dist (* dir (prefix-numeric-value current-prefix-arg)))
+           (bounds (bounds-of-thing-at-point conn-this-command-thing)))
       (save-excursion
-        (when (> (abs dist) 1)
-          (forward-thing conn-this-command-thing (- (+ dist (- dir)))))
-        (funcall (or (get conn-this-command-thing (if (> dir 0) 'beginning-op 'end-op))
-                     (lambda () (forward-thing conn-this-command-thing (- dir)))))
+        (goto-char beg)
+        (forward-thing conn-this-command-thing dir)
+        (forward-thing conn-this-command-thing (- dir))
         (conn--push-ephemeral-mark)))))
 
 (defun conn-individual-thing-handler (_beg)
@@ -1755,18 +1755,18 @@ C-x, M-s and M-g into various state maps."
      ,(unless aux-map-omit
         `(cl-pushnew ',name conn--aux-bindings))))
 
-(conn-define-remapping-command conn-C-x-keys                "C-x")
-(conn-define-remapping-command conn-C-c-keys                "C-c")
-(conn-define-remapping-command conn-M-s-keys                "M-s")
-(conn-define-remapping-command conn-M-g-keys                "M-g")
-(conn-define-remapping-command conn-C-x-4-keys              "C-x 4")
-(conn-define-remapping-command conn-C-x-5-keys              "C-x 5")
-(conn-define-remapping-command conn-C-x-t-keys              "C-x t")
-(conn-define-remapping-command conn-delete-char-keys        "C-d")
-(conn-define-remapping-command conn-yank-keys               "C-y")
-(conn-define-remapping-command conn-kill-region-keys        "C-w")
-(conn-define-remapping-command conn-backward-delete-keys    "DEL")
-(conn-define-remapping-command conn-delete-region-keys      "C-S-w" t)
+(conn-define-remapping-command conn-C-x-keys             "C-x")
+(conn-define-remapping-command conn-C-c-keys             "C-c")
+(conn-define-remapping-command conn-M-s-keys             "M-s")
+(conn-define-remapping-command conn-M-g-keys             "M-g")
+(conn-define-remapping-command conn-C-x-4-keys           "C-x 4")
+(conn-define-remapping-command conn-C-x-5-keys           "C-x 5")
+(conn-define-remapping-command conn-C-x-t-keys           "C-x t")
+(conn-define-remapping-command conn-delete-char-keys     "C-d")
+(conn-define-remapping-command conn-yank-keys            "C-y")
+(conn-define-remapping-command conn-kill-region-keys     "C-w")
+(conn-define-remapping-command conn-backward-delete-keys "DEL")
+(conn-define-remapping-command conn-delete-region-keys   "C-S-w" t)
 
 (conn-define-remapping-command conn-forward-sexp-keys       "C-M-f")
 (conn-define-remapping-command conn-backward-sexp-keys      "C-M-b")
@@ -6821,12 +6821,31 @@ determine if `conn-local-mode' should be enabled."
     :modes paredit-mode)
 
   (conn-register-thing-commands
-   'list 'conn-sequential-thing-handler
+   'sexp 'conn-individual-thing-handler
+   'paredit-forward-down
+   'paredit-backward-down)
+
+  (conn-register-thing-commands
+   'list
+   (lambda (beg)
+     (pcase (save-excursion
+              (goto-char beg)
+              (bounds-of-thing-at-point 'list))
+       (`(,beg . ,end)
+        (conn--push-ephemeral-mark (if (= (point) beg) end beg)))))
    'paredit-forward-up
    'paredit-backward-up)
 
   (conn-register-thing-commands
-   'sexp 'conn-sequential-thing-handler
+   'sexp
+   (lambda (beg)
+     (pcase (save-excursion
+              (goto-char beg)
+              (bounds-of-thing-at-point 'list))
+       (`(,b1 . ,e1)
+        (if (< b1 (point) e1)
+            (conn-sequential-thing-handler beg)
+          (conn-individual-thing-handler beg)))))
    'paredit-forward
    'paredit-backward))
 
