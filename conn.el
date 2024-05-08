@@ -1669,9 +1669,7 @@ If BUFFER is nil use current buffer."
         result))))
 
 
-;;;; States
-
-;;;;; Key Remapping
+;;;; Key Remapping
 
 (defun conn--modes-mark-map ()
   (setq conn--local-mark-thing-map (copy-keymap conn-mark-thing-map))
@@ -1813,6 +1811,9 @@ C-x, M-s and M-g into various state maps."
  'line 'conn-sequential-thing-handler
  'conn-next-line-keys
  'conn-previous-line-keys)
+
+
+;;;; States
 
 ;;;;; Per State Buffer Colors
 
@@ -3079,16 +3080,16 @@ Expansions and contractions are provided by functions in
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
-  (let ((merged))
+  (let (merged)
     (dolist (region conn-narrow-ring)
       (pcase-let ((`(,beg1 . ,end1) region))
-        (pcase (seq-find (lambda (r)
-                           (not (or (< (car r) (cdr r) beg1 end1)
-                                    (< beg1 end1 (car r) (cdr r)))))
+        (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
+                           (not (or (< ,beg2 ,end2 beg1 end1)
+                                    (< beg1 end1 ,beg2 ,end2))))
                          merged)
           ((and cons `(,beg2 . ,end2))
-           (setcar cons (if (> beg1 beg2) beg2 beg1))
-           (setcdr cons (if (> end1 end2) end1 end2)))
+           (setcar cons (min beg1 beg2))
+           (setcdr cons (max end1 end2)))
           ('nil
            (push region merged)))))
     (setq conn-narrow-ring (nreverse merged))
