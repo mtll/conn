@@ -595,7 +595,8 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
-    (let (bound)
+    (let ((case-fold-search isearch-case-fold-search)
+          bound result)
       (save-excursion
         (pcase restrict
           ('after
@@ -609,14 +610,16 @@ If BUFFER is nil check `current-buffer'."
           (_
            (goto-char (if isearch-forward (point-min) (point-max)))))
         (setq bound (if isearch-forward (point-max) (point-min)))
-        (let (result)
-          (while (isearch-search-string isearch-string bound t)
-            (when (funcall isearch-filter-predicate
-                           (match-beginning 0) (match-end 0))
-              (push (cons (conn--create-marker (match-beginning 0))
-                          (conn--create-marker (match-end 0)))
-                    result)))
-          (nreverse result))))))
+        (while (isearch-search-string isearch-string bound t)
+          (when (funcall isearch-filter-predicate
+                         (match-beginning 0) (match-end 0))
+            (push (cons (conn--create-marker (match-beginning 0))
+                        (conn--create-marker (match-end 0)))
+                  result))
+          (when (and (= (match-beginning 0) (match-end 0))
+                     (not (if isearch-forward (eobp) (bobp))))
+	    (forward-char (if isearch-forward 1 -1))))
+        (nreverse result)))))
 
 (defun conn--region-visible-p (beg end)
   (not (or (invisible-p beg)
