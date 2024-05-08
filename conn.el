@@ -6845,7 +6845,8 @@ determine if `conn-local-mode' should be enabled."
        (`(,b1 . ,e1)
         (if (< b1 (point) e1)
             (conn-sequential-thing-handler beg)
-          (conn-individual-thing-handler beg)))))
+          (conn-individual-thing-handler beg)))
+       (_ (conn-sequential-thing-handler beg))))
    'paredit-forward
    'paredit-backward))
 
