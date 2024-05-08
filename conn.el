@@ -6842,10 +6842,17 @@ determine if `conn-local-mode' should be enabled."
      (pcase (save-excursion
               (goto-char beg)
               (bounds-of-thing-at-point 'list))
+       ((and `(,b1 . ,e1)
+             (guard (< b1 (point) e1)))
+        (conn-sequential-thing-handler beg))
        (`(,b1 . ,e1)
-        (if (< b1 (point) e1)
-            (conn-sequential-thing-handler beg)
-          (conn-individual-thing-handler beg)))
+        (save-excursion
+          (let ((dir (if (> (- (point) beg)) 1 -1)))
+            (while (if (> dir 0)
+                       (> (point) beg)
+                     (< (point) beg))
+              (forward-thing 'sexp (- dir))))
+          (conn--push-ephemeral-mark)))
        (_ (conn-sequential-thing-handler beg))))
    'paredit-forward
    'paredit-backward))
