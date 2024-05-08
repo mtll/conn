@@ -25,66 +25,6 @@
 (require 'embark)
 (require 'outline)
 
-(defgroup conn-embark nil
-  "Conn-mode states."
-  :prefix "conn-"
-  :group 'conn)
-
-(defcustom conn-embark-alt-default-action-overrides
-  '((symbol . describe-symbol)
-    (defun . comment-defun)
-    (identifier . xref-find-references))
-  "`embark-default-action-overrides' for alternate actions."
-  :type '(alist :key-type (choice (symbol :tag "Type")
-                                  (cons (symbol :tag "Type")
-                                        (symbol :tag "Command")))
-                :value-type (function :tag "Default action"))
-  :group 'conn-embark)
-
-(defcustom conn-embark-alt-key "M-RET"
-  "Key for embark-alt-dwim."
-  :type 'string
-  :group 'conn-embark)
-
-(defun conn-embark-alt--default-action (type)
-  "`embark--default-action' for alt actions"
-  (or (alist-get (cons type embark--command) conn-embark-alt-default-action-overrides
-                 nil nil #'equal)
-      (alist-get type conn-embark-alt-default-action-overrides)
-      (alist-get t conn-embark-alt-default-action-overrides)
-      (keymap-lookup (embark--raw-action-keymap type) conn-embark-alt-key)))
-
-;;;###autoload
-(defun conn-embark-alt-dwim (&optional arg)
-  "alternate `embark-dwim'."
-  (interactive "P")
-  (if-let ((targets (embark--targets)))
-      (let* ((target
-              (or (nth
-                   (if (or (null arg) (minibufferp))
-                       0
-                     (mod (prefix-numeric-value arg) (length targets)))
-                   targets)))
-             (type (plist-get target :type))
-             (default-action (conn-embark-alt--default-action type))
-             (action (or (command-remapping default-action) default-action)))
-        (unless action
-          (user-error "No alt action for %s targets" type))
-        (when (and arg (minibufferp)) (setq embark--toggle-quit t))
-        (embark--act action
-                     (if (and (eq default-action embark--command)
-                              (not (memq default-action
-                                         embark-multitarget-actions)))
-                         (embark--orig-target target)
-                       target)
-                     (embark--quit-p action)))
-    (user-error "No target found.")))
-
-;;;###autoload
-(defun conn-embark-dwim-either (&optional arg)
-  (interactive "P")
-  (if arg (conn-embark-alt-dwim) (embark-dwim)))
-
 (defun conn-narrow-indirect-to-heading ()
   (interactive)
   (outline-mark-subtree)
