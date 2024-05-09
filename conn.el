@@ -3158,6 +3158,7 @@ Interactively defaults to the current region."
             conn-narrow-ring))
 
 (defun conn-isearch-narrow-ring-forward ()
+  "`isearch-forward' restricted to regions in `conn-narrow-ring'."
   (interactive)
   (let ((isearch-filter-predicate isearch-filter-predicate))
     (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
@@ -3165,6 +3166,7 @@ Interactively defaults to the current region."
     (isearch-forward)))
 
 (defun conn-isearch-narrow-ring-backward ()
+  "`isearch-backward' restricted to regions in `conn-narrow-ring'."
   (interactive)
   (let ((isearch-filter-predicate isearch-filter-predicate))
     (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
@@ -3172,6 +3174,7 @@ Interactively defaults to the current region."
     (isearch-backward)))
 
 (defun conn-dot-narrow-ring ()
+  "Dot regions in `conn-narrow-ring'."
   (interactive)
   (apply 'conn--create-dots conn-narrow-ring))
 
@@ -5767,7 +5770,7 @@ dispatch on each contiguous component of the region."
         (_ (conn--kmacro-apply -it-> count))))))
 
 (transient-define-suffix conn--kapply-point-and-mark-suffix (args)
-  "Dispatch on the current point and mark."
+  "Apply keyboard macro at the `point' and then the `mark'."
   :transient 'transient--do-exit
   :key "v"
   :description "On Point and Mark"
@@ -5898,7 +5901,7 @@ dispatch on each contiguous component of the region."
       (_ (conn--kmacro-apply -it->)))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
-  "Dispatch on current isearch matches."
+  "Apply keyboard macro on current isearch matches."
   :transient 'transient--do-exit
   :key "m"
   :description "On Matches"
@@ -5937,7 +5940,7 @@ dispatch on each contiguous component of the region."
       (_ (conn--kmacro-apply -it->)))))
 
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
-  "Dispatch on regions of text with a text property."
+  "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
   :key "t"
   :description "On Text Prop"
@@ -5982,7 +5985,7 @@ dispatch on each contiguous component of the region."
       (_ (conn--kmacro-apply -it->)))))
 
 (transient-define-prefix conn-kapply-prefix ()
-  "Transient menu for macro dispatch on regions."
+  "Transient menu for keyboard macro application on regions."
   [:description
    conn--kmacro-ring-display
    [("c" "Set Counter" kmacro-set-counter :transient t)
@@ -6033,7 +6036,7 @@ dispatch on each contiguous component of the region."
   (transient-setup 'conn-kapply-prefix))
 
 (transient-define-prefix conn-isearch-kapply-prefix ()
-  "Transient menu for macro dispatch on regions."
+  "Transient menu for keyboard macro application on isearch matches."
   [:description
    conn--kmacro-ring-display
    [("c" "Set Counter"
@@ -6084,7 +6087,7 @@ dispatch on each contiguous component of the region."
   (transient-setup 'conn-isearch-kapply-prefix))
 
 (transient-define-prefix conn-regions-kapply-prefix (iterator)
-  "Transient menu for macro dispatch on regions."
+  "Transient menu for keyboard macro application on regions."
   [:description
    conn--kmacro-ring-display
    [("c" "Set Counter" kmacro-set-counter :transient t)
@@ -6262,6 +6265,7 @@ dispatch on each contiguous component of the region."
 ;;;;; Sort Prefix
 
 (transient-define-infix conn--case-fold-infix ()
+  "Toggle `sort-fold-case'."
   :class 'transient-lisp-variable
   :variable 'sort-fold-case
   :reader (lambda (&rest _)
