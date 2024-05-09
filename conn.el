@@ -200,7 +200,7 @@ Supported values are:
   :group 'conn
   :type '(repeat symbol))
 
-(defcustom conn-read-pair-split-char " "
+(defcustom conn-read-pair-split-char "\t"
   "String on which to split `conn-insert-pair' brackets."
   :group 'conn
   :type 'string)
@@ -805,7 +805,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--push-mark-ad (&rest _)
   (unless conn--ephemeral-mark
-    (conn--push-ring-delete-duplicate 'conn--mark-ring (mark-marker)))
+    (conn--push-ring-delete-duplicate 'conn-mark-ring (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--save-ephemeral-mark-ad (&rest _)
@@ -3889,11 +3889,13 @@ Interactively `region-beginning' and `region-end'."
 ;;;;; Editing Commands
 
 (defun conn-shell-command-on-region (&optional arg)
+  "Like `shell-command-on-region' but inverts the meaning of ARG."
   (interactive "P")
   (let ((current-prefix-arg (not arg)))
     (call-interactively 'shell-command-on-region)))
 
 (defun conn-yank-lines-as-rectangle ()
+  "Yank the lines of the previous kill as if they were a rectangle."
   (interactive)
   (rectangle--insert-for-yank
    (with-temp-buffer
@@ -3937,8 +3939,8 @@ of `conn-recenter-positions'."
          (goto-char end)
          (recenter -1))))))
 
-(defvar-local conn--mark-ring nil)
-(defvar-local conn--mark-unpop-ring nil)
+(defvar-local conn-mark-ring nil)
+(defvar-local conn-mark-unpop-ring nil)
 
 (defun conn--push-ring-delete-duplicate (ring location)
   (let ((old (nth mark-ring-max (symbol-value ring)))
@@ -3952,34 +3954,44 @@ of `conn-recenter-positions'."
       (set-marker old nil))))
 
 (defun conn-pop-to-mark-command ()
+  "Like `pop-to-mark-command' but uses `conn-mark-ring'.
+Unfortunately conn adds many uninteresting marks to the `mark-ring',
+so `conn-mark-ring' and the functions `conn-pop-to-mark-command' and
+`conn-unpop-to-mark-command' are provided which attempt to filter out
+uninstersting marks."
   (interactive)
   (cond ((null (mark t))
          (user-error "No mark set in this buffer"))
-        ((null conn--mark-ring)
+        ((null conn-mark-ring)
          (user-error "No marks to unpop"))
         ((or conn--ephemeral-mark
              (= (point) (mark t)))
-         (conn--push-ring-delete-duplicate 'conn--mark-unpop-ring (point))
-         (let ((conn--mark-ring conn--mark-ring))
-           (push-mark (car conn--mark-ring)))
-         (pop conn--mark-ring)
+         (conn--push-ring-delete-duplicate 'conn-mark-unpop-ring (point))
+         (let ((conn-mark-ring conn-mark-ring))
+           (push-mark (car conn-mark-ring)))
+         (pop conn-mark-ring)
          (goto-char (mark t)))
         (t
-         (conn--push-ring-delete-duplicate 'conn--mark-unpop-ring (point))
+         (conn--push-ring-delete-duplicate 'conn-mark-unpop-ring (point))
          (goto-char (mark t))))
   (deactivate-mark))
 
 (defun conn-unpop-to-mark-command ()
+  "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring'.
+Unfortunately conn adds many uninteresting marks to the `mark-ring',
+so `conn-mark-ring' and the functions `conn-pop-to-mark-command' and
+`conn-unpop-to-mark-command' are provided which attempt to filter out
+uninstersting marks."
   (interactive)
   (cond ((null (mark t))
          (user-error "No mark set in this buffer"))
-        ((null conn--mark-unpop-ring)
+        ((null conn-mark-unpop-ring)
          (user-error "No marks to unpop"))
         ((= (point) (mark t))
-         (push-mark (pop conn--mark-unpop-ring))
+         (push-mark (pop conn-mark-unpop-ring))
          (goto-char (mark t)))
         (t
-         (conn--push-ring-delete-duplicate 'conn--mark-ring (point))
+         (conn--push-ring-delete-duplicate 'conn-mark-ring (point))
          (goto-char (mark t))))
   (deactivate-mark))
 
