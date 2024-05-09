@@ -3888,6 +3888,11 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
+(defun conn-shell-command-on-region (&optional arg)
+  (interactive "P")
+  (let ((current-prefix-arg (not arg)))
+    (call-interactively 'shell-command-on-region)))
+
 (defun conn-yank-lines-as-rectangle ()
   (interactive)
   (rectangle--insert-for-yank
@@ -6330,7 +6335,6 @@ dispatch on each contiguous component of the region."
   ","   'conn-isearch-region-backward
   "."   'conn-isearch-region-forward
   ";"   'comment-or-uncomment-region
-  "|"   'shell-command-on-region
   "["   'conn-delete-pair
   "a c" 'align-current
   "a e" 'align-entire
@@ -6588,7 +6592,7 @@ dispatch on each contiguous component of the region."
   "C-t"   'conn-C-x-t-keys
   "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
-  "|"     'shell-command-on-region
+  "|"     'conn-shell-command-on-region
   "="     'indent-relative
   "$"     'ispell-word
   "*"     'calc-dispatch
