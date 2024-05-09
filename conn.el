@@ -1667,8 +1667,8 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
-  (when (overlayp overlay)
-    (eq (overlay-get overlay 'category) 'conn--dot)))
+  (and (overlayp overlay)
+       (eq (overlay-get overlay 'category) 'conn--dot)))
 
 (defun conn--clear-dots (&optional buffer)
   "Delete all dots in BUFFERS."
@@ -2572,9 +2572,9 @@ state."
                                  (complete-with-action action obarray string pred)))
                              (lambda (sym)
                                (and (functionp sym)
-                                    (and (not (eq sym 'help))
-                                         (or (get sym :conn-command-thing)
-                                             (where-is-internal sym (list keymap) t)))))
+                                    (not (eq sym 'help))
+                                    (or (get sym :conn-command-thing)
+                                        (where-is-internal sym (list keymap) t))))
                              t))))
                (internal-push-keymap keymap 'overriding-terminal-local-map))
               ((guard (where-is-internal cmd conn-dispatch-command-maps t))
@@ -3053,10 +3053,12 @@ Expansions and contractions are provided by functions in
     (setq conn-narrow-ring ring)))
 
 (cl-defmethod register-val-describe ((val conn-narrow-register) _arg)
-  (princ (format "Narrowings In:  %s" (thread-first
-                                        (conn-narrow-register-narrow-ring val)
-                                        (caar)
-                                        (marker-buffer)))))
+  (thread-last
+    (conn-narrow-register-narrow-ring val)
+    (caar)
+    (marker-buffer)
+    (format "Narrowings In:  %s")
+    (princ)))
 
 (defun conn-narrow-ring-to-register (register)
   "Store narrow ring in REGISTER."
@@ -3153,9 +3155,10 @@ Interactively defaults to the current region."
        (widen)))))
 
 (defun conn-isearch-in-narrow-p (beg end)
-  (seq-find (pcase-lambda (`(,b . ,e))
-              (<= b beg end e))
-            conn-narrow-ring))
+  (catch 'term
+    (dolist (narrowing conn-narrow-ring)
+      (when (<= (car narrowing) beg end (cdr narrowing))
+        (throw 'term t)))))
 
 (defun conn-isearch-narrow-ring-forward ()
   "`isearch-forward' restricted to regions in `conn-narrow-ring'."
@@ -5947,8 +5950,12 @@ dispatch on each contiguous component of the region."
   (interactive
    (let* ((prop (intern (completing-read
                          "Property: "
-                         (cl-loop for prop in (text-properties-at (point))
-                                  by #'cddr collect prop)
+                         (let* ((props (text-properties-at (point)))
+                                (rest props))
+                           (while rest
+                             (setcdr rest (cddr rest))
+                             (pop rest))
+                           props)
                          nil t)))
           (vals (mapcar (lambda (s) (cons (message "%s" s) s))
                         (ensure-list (get-text-property (point) prop))))
