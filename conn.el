@@ -1660,9 +1660,9 @@ Optionally between START and END and sorted by SORT-PREDICATE."
                                         (or end   (conn--end-of-region-or-restriction)))))
            (rest head))
       (while-let ((ov (cadr rest)))
-        (unless (funcall predicate ov)
-          (setcdr rest (cddr rest)))
-        (pop rest))
+        (if (funcall predicate ov)
+            (pop rest)
+          (setcdr rest (cddr rest))))
       (cdr head))))
 
 (defun conn-dotp (overlay)
