@@ -1236,6 +1236,11 @@ If any function returns a nil value then dispatch it halted.")
         (error "Could not pop to buffer %s" buffer))))
   dot)
 
+(defun conn--kapply-infinite-iterator ()
+  (lambda (state)
+    (unless (eq state :finalize)
+      (cons (point) (mark t)))))
+
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
   (dolist (reg regions)
@@ -1279,14 +1284,14 @@ If any function returns a nil value then dispatch it halted.")
       (_
        (conn--kapply-ensure-overlay-buffer (pop dots))))))
 
-(defun conn--kapply-merge-undo (iterator)
+(defun conn--kapply-merge-undo (iterator &optional undo-after-error)
   (let (kapply-undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) kapply-undo-handles)
-           (if conn-kmacro-apply-error
+           (if (and conn-kmacro-apply-error undo-after-error)
                (cancel-change-group handle)
              (accept-change-group handle)
              (undo-amalgamate-change-group handle))))
@@ -1490,7 +1495,7 @@ The iterator must be the first argument in ARGLIST.
                              (`(,beg . ,end)
                               (goto-char beg)
                               (conn--push-ephemeral-mark end)
-                              (set-marker beg nil)
+                              (when (markerp beg) (set-marker beg nil))
                               (when (markerp end) (set-marker end nil))
                               (and (run-hook-with-args-until-failure
                                     'conn-kmacro-apply-iterator-hook)
@@ -1511,7 +1516,7 @@ The iterator must be the first argument in ARGLIST.
                              (lambda (hook)
                                (ignore-errors (funcall hook)))))))))
 
-(conn--define-kapply conn--kmacro-apply (iterator &optional macro)
+(conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
     ((pred kmacro-p)
      (funcall macro 0))
@@ -1524,18 +1529,18 @@ The iterator must be the first argument in ARGLIST.
            (recursive-edit)
          (if (not defining-kbd-macro)
              (user-error "Not defining keyboard macro")
-           (kmacro-end-macro 0)))))))
+           (kmacro-end-macro (or count 0))))))))
 
-(conn--define-kapply conn--kmacro-apply-append (iterator &optional skip-exec)
+(conn--define-kapply conn--kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
     (kmacro-start-macro (if skip-exec '(16) '(4)))
     (unwind-protect
         (recursive-edit)
       (when (not defining-kbd-macro)
         (user-error "Not defining keyboard macro"))
-      (kmacro-end-macro 0))))
+      (kmacro-end-macro (or count 0)))))
 
-(conn--define-kapply conn--kmacro-apply-step-edit (iterator)
+(conn--define-kapply conn--kmacro-apply-step-edit (iterator &optional count)
   (when (funcall iterator :record)
     (let* ((apply nil)
            (hook (lambda () (setq apply kmacro-step-edit-replace))))
@@ -1545,7 +1550,7 @@ The iterator must be the first argument in ARGLIST.
         (remove-hook 'kbd-macro-termination-hook hook))
       (unless apply
         (user-error "Keyboard macro edit aborted")))
-    (kmacro-call-macro 0)))
+    (kmacro-call-macro (or count 0))))
 
 
 ;;;; Dots
@@ -2954,18 +2959,18 @@ Expansions are provided by functions in `conn-expansion-functions'."
     (dotimes (_ arg)
       (cond ((and (region-active-p)
                   (= (point) (region-end)))
-             (pcase (seq-find (pcase-lambda (`(_ . ,end))
-                                (> end (point)))
-                              conn--current-expansions)
-               (`(_ . ,end) (goto-char end))
-               ('nil        (user-error "No more expansions"))))
+             (catch 'term
+               (pcase-dolist (`(_ . ,end) conn--current-expansions)
+                 (when (> end (point))
+                   (throw 'term (goto-char end))))
+               (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
-             (pcase (seq-find (pcase-lambda (`(,beg . _))
-                                (< beg (point)))
-                              conn--current-expansions)
-               (`(,beg . _) (goto-char beg))
-               ('nil        (user-error "No more expansions"))))
+             (catch 'term
+               (pcase-dolist (`(,beg . _) conn--current-expansions)
+                 (when (< beg (point))
+                   (throw 'term (goto-char beg))))
+               (user-error "No more expansions")))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
                                 (or (< beg (region-beginning))
@@ -2995,18 +3000,18 @@ Expansions and contractions are provided by functions in
     (dotimes (_ arg)
       (cond ((and (region-active-p)
                   (= (point) (region-end)))
-             (pcase (seq-find (pcase-lambda (`(_ . ,end))
-                                (< end (point)))
-                              (reverse conn--current-expansions))
-               (`(_ . ,end) (goto-char end))
-               ('nil        (user-error "No more contractions"))))
+             (catch 'term
+               (pcase-dolist (`(_ . ,end) conn--current-expansions)
+                 (when (< end (point))
+                   (throw 'term (goto-char end))))
+               (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
-             (pcase (seq-find (pcase-lambda (`(,beg . _))
-                                (> beg (point)))
-                              (reverse conn--current-expansions))
-               (`(,beg . _) (goto-char beg))
-               ('nil        (user-error "No more contractions"))))
+             (catch 'term
+               (pcase-dolist (`(,beg . _) conn--current-expansions)
+                 (when (> beg (point))
+                   (throw 'term (goto-char beg))))
+               (user-error "No more expansions")))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
                                 (or (> beg (region-beginning))
@@ -3876,6 +3881,13 @@ Interactively `region-beginning' and `region-end'."
   (conn--push-ephemeral-mark isearch-other-end))
 
 ;;;;; Editing Commands
+
+(defun conn-yank-lines-as-rectangle ()
+  (interactive)
+  (rectangle--insert-for-yank
+   (with-temp-buffer
+     (yank)
+     (string-lines (buffer-string)))))
 
 (defvar conn-recenter-positions
   (list 'center 'top 'bottom))
@@ -5628,7 +5640,7 @@ BEFORE means only those matches before, and including, the current match."
   :class 'conn-transient-switches
   :required t
   :description "In State"
-  :key "i"
+  :key "g"
   :argument "state="
   :argument-format "state=%s"
   :argument-regexp "\\(state=\\(emacs\\|conn\\|dot\\)\\)"
@@ -5702,7 +5714,7 @@ before each iteration."
   :argument "windows")
 
 (transient-define-suffix conn--kapply-suffix (args)
-  "Dispatch on the current region.
+  "Apply keyboard macro on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
 dispatch on each contiguous component of the region."
   :transient 'transient--do-exit
@@ -5713,7 +5725,7 @@ dispatch on each contiguous component of the region."
       (region-bounds)
     (conn--kapply-region-iterator -it-> (member "reverse" args))
     (if (member "empty" args) -it-> (conn--kapply-skip-empty -it->))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5727,10 +5739,32 @@ dispatch on each contiguous component of the region."
     (conn--kapply-pulse-region -it->)
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
+
+(transient-define-suffix conn--kapply-iterate-suffix (args)
+  "Apply keyboard macro a specified number of times."
+  :transient 'transient--do-exit
+  :key "i"
+  :description "Iterate"
+  (interactive (list (transient-args transient-current-command)))
+  (let ((count (read-number "Iterations: " 0)))
+    (conn--thread -it->
+        (conn--kapply-infinite-iterator)
+      (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+      (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
+      (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
+      (pcase-exhaustive (transient-arg-value "state=" args)
+        ("conn" (conn--kapply-with-state -it-> 'conn-state))
+        ("emacs" (conn--kapply-with-state -it-> 'conn-emacs-state))
+        ("dot" (conn--kapply-with-state -it-> 'conn-dot-state)))
+      (pcase (transient-arg-value "last-kmacro=" args)
+        ("apply" (conn--kmacro-apply -it-> count last-kbd-macro))
+        ("append" (conn--kmacro-apply-append -it-> count))
+        ("step-edit" (conn--kmacro-apply-step-edit -it-> count))
+        (_ (conn--kmacro-apply -it-> count))))))
 
 (transient-define-suffix conn--kapply-point-and-mark-suffix (args)
   "Dispatch on the current point and mark."
@@ -5741,7 +5775,7 @@ dispatch on each contiguous component of the region."
   (conn--thread -it->
       (list (point) (mark t))
     (conn--kapply-point-iterator -it-> (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5750,13 +5784,13 @@ dispatch on each contiguous component of the region."
       ("dot" (conn--kapply-with-state -it-> 'conn-dot-state)))
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
 
 (transient-define-suffix conn--kapply-dot-suffix (args)
-  "Dispatch on dots in the selected buffers."
+  "Apply keyboard macro on dots in the selected buffers."
   :transient 'transient--do-exit
   :if 'conn--dots-active-p
   :key "d"
@@ -5775,7 +5809,7 @@ dispatch on each contiguous component of the region."
       ("keep" (conn--kapply-stationary-dots -it->))
       ("to-region" (conn--kapply-relocate-dots -it->))
       ("remove" (conn--kapply-remove-dots -it->)))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5789,12 +5823,13 @@ dispatch on each contiguous component of the region."
     (conn--kapply-pulse-region -it->)
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
 
 (transient-define-suffix conn--kapply-regions-suffix (iterator args)
+  "Apply keyboard macro on regions."
   :transient 'transient--do-exit
   :key "r"
   :description "On Regions"
@@ -5803,7 +5838,7 @@ dispatch on each contiguous component of the region."
   (conn--thread -it->
       (funcall iterator (member "reverse" args))
     (if (member "empty" args) -it-> (conn--kapply-skip-empty -it->))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5817,7 +5852,7 @@ dispatch on each contiguous component of the region."
     (conn--kapply-pulse-region -it->)
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
@@ -5843,7 +5878,7 @@ dispatch on each contiguous component of the region."
             (forward-line))
           regions))
     (conn--kapply-region-iterator -it-> (not (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5857,7 +5892,7 @@ dispatch on each contiguous component of the region."
     (conn--kapply-pulse-region -it->)
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
@@ -5882,7 +5917,7 @@ dispatch on each contiguous component of the region."
                ("before" 'before))))
         (isearch-done))
     (conn--kapply-region-iterator -it-> (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5896,7 +5931,7 @@ dispatch on each contiguous component of the region."
     (conn--kapply-pulse-region -it->)
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
@@ -5927,7 +5962,7 @@ dispatch on each contiguous component of the region."
                   regions))
           regions))
     (conn--kapply-region-iterator -it-> (not (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo -it->) -it->)
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
     (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5941,7 +5976,7 @@ dispatch on each contiguous component of the region."
     (conn--kapply-pulse-region -it->)
     (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
     (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> last-kbd-macro))
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
       ("append" (conn--kmacro-apply-append -it->))
       ("step-edit" (conn--kmacro-apply-step-edit -it->))
       (_ (conn--kmacro-apply -it->)))))
@@ -5978,7 +6013,8 @@ dispatch on each contiguous component of the region."
     (conn--kapply-dot-suffix)
     (conn--kapply-lines-suffix)
     (conn--kapply-point-and-mark-suffix)
-    (conn--kapply-text-property-suffix)]
+    (conn--kapply-text-property-suffix)
+    (conn--kapply-iterate-suffix)]
    [(conn--kapply-macro-infix)
     (conn--kapply-region-infix)
     (conn--kapply-state-infix)
@@ -6459,7 +6495,8 @@ dispatch on each contiguous component of the region."
   "V"   'conn-narrow-indirect-to-visible
   "v"   'conn-narrow-to-visible
   "w"   'query-replace
-  "y"   'yank-in-context)
+  "y"   'yank-in-context
+  "Y"   'conn-yank-lines-as-rectangle)
 
 (define-keymap
   :keymap conn-movement-map
