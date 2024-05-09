@@ -462,10 +462,8 @@ Uses `read-regexp' to read the regexp."
   (let ((bufregexp
          (read-regexp "Search in buffers whose names match regexp")))
     (when bufregexp
-      (delq nil (mapcar (lambda (buf)
-                          (when (string-match bufregexp (buffer-name buf))
-                            buf))
-                        (buffer-list))))))
+      (cl-loop for buf in (buffer-list)
+               when (buffer-match-p bufregexp buf) collect buf))))
 
 (defun conn--read-buffers (&optional predicate)
   "Return a list of buffers specified interactively, one by one."
@@ -670,15 +668,13 @@ If BUFFER is nil check `current-buffer'."
          (lambda (win)
            (with-selected-window win
              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-               (push (mapcar (lambda (pt)
-                               (conn--string-preview-overlays-1 pt (length string)))
-                             (conn--visible-matches string dir))
+               (push (cl-loop for pt in (conn--visible-matches string)
+                              collect (conn--string-preview-overlays-1 pt (length string))) 
                      ovs))))
          'no-minibuf 'visible)
         (apply 'nconc ovs))
-    (mapcar (lambda (pt)
-              (conn--string-preview-overlays-1 pt (length string)))
-            (conn--visible-matches string dir))))
+    (cl-loop for pt in (conn--visible-matches string dir)
+             collect (conn--string-preview-overlays-1 pt (length string)))))
 
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
@@ -773,18 +769,17 @@ If BUFFER is nil check `current-buffer'."
   (when (setq windows (seq-remove 'window-dedicated-p windows))
     (if (length= windows 1)
         (car windows)
-      (let ((saved-pts (mapcar (lambda (window)
-                                 (cons window (window-point window)))
-                               windows)))
+      (let (saved-pts)
+        (dolist (win windows)
+          (push (cons win (window-point win)) saved-pts))
         (unwind-protect
             (conn--read-labels
              windows
              (conn--create-label-strings (length windows))
              'conn--create-window-labels
              'window)
-          (mapc (pcase-lambda (`(,win . ,pt))
-                  (set-window-point win pt))
-                saved-pts))))))
+          (pcase-dolist (`(,win . ,pt) saved-pts)
+            (set-window-point win pt)))))))
 
 
 ;;;; Advice
@@ -1258,11 +1253,12 @@ If any function returns a nil value then dispatch it halted.")
        (conn--kapply-ensure-region-buffer (pop regions))))))
 
 (defun conn--kapply-point-iterator (points &optional reverse)
-  (setq points (mapcar (lambda (pt)
-                         (if (markerp pt)
-                             pt
-                           (conn--create-marker pt)))
-                       (if reverse (nreverse points) points)))
+  (setq points (cl-loop for pt in (if reverse
+                                      (nreverse points)
+                                    points)
+                        collect (if (markerp pt)
+                                    pt
+                                  (conn--create-marker pt))))
   (lambda (state)
     (pcase state
       (:finalize
@@ -1556,16 +1552,17 @@ The iterator must be the first argument in ARGLIST.
 ;;;; Dots
 
 (defun conn--propertize-dot-candidates (dots)
-  (mapcar
-   (lambda (dot)
-     (with-current-buffer (overlay-buffer dot)
+  (save-current-buffer
+    (cl-loop
+     for dot in dots collect
+     (progn
+       (set-buffer (overlay-buffer dot))
        (let* ((beg (overlay-start dot))
               (end (overlay-end dot))
               (str (substring (buffer-substring beg end)
                               0 (min 120 (- end beg)))))
          (add-text-properties 0 1 `(conn-dot-cand ,dot) str)
-         (cons str dot))))
-   dots))
+         (cons str dot))))))
 
 (defun conn--completing-read-dot (dots)
   (let ((table (conn--propertize-dot-candidates dots)))
@@ -1617,13 +1614,13 @@ The iterator must be the first argument in ARGLIST.
   (unless (= point (point-min))
     (catch 'term
       (dolist (ov (overlays-in (1- point) point))
-        (when (conn-dotp ov) (throw 'term t))))))
+        (when (conn-dotp ov) (throw 'term ov))))))
 
 (defun conn--dot-after-point (point)
   (unless (= point (point-max))
     (catch 'term
       (dolist (ov (overlays-in point (1+ point)))
-        (when (conn-dotp ov) (throw 'term t))))))
+        (when (conn-dotp ov) (throw 'term ov))))))
 
 (defun conn--for-each-dot (func &optional sort-predicate start end)
   "Apply FUNC to each dot.
@@ -1638,17 +1635,17 @@ Optionally between START and END and sorted by SORT-PREDICATE."
   (delete-overlay dot))
 
 (defun conn--create-dots (&rest bounds)
-  (pcase-dolist (`(,start . ,end) bounds)
-    (unless (= start end)
-      (with-current-buffer (if (markerp start)
-                               (marker-buffer start)
-                             (current-buffer))
-        (let* ((overlaps (conn--all-overlays #'conn-dotp start end))
-               (start (apply #'min start (mapcar #'overlay-start overlaps)))
-               (end (apply #'max end (mapcar #'overlay-end overlaps)))
-               (overlay (make-overlay start end nil nil t)))
-          (mapc #'conn--delete-dot overlaps)
-          (overlay-put overlay 'category 'conn--dot))))))
+  (save-current-buffer
+    (cl-loop
+     for (start . end) in bounds
+     do (unless (= start end)
+          (when (markerp start) (set-buffer (marker-buffer start)))
+          (let* ((overlaps (conn--all-overlays #'conn-dotp start end))
+                 (start (apply #'min start (mapcar #'overlay-start overlaps)))
+                 (end (apply #'max end (mapcar #'overlay-end overlaps)))
+                 (overlay (make-overlay start end nil nil t)))
+            (mapc #'conn--delete-dot overlaps)
+            (overlay-put overlay 'category 'conn--dot))))))
 
 (defun conn--remove-dots (&optional start end)
   (mapc #'conn--delete-dot (conn--all-overlays #'conn-dotp start end)))
@@ -1656,14 +1653,9 @@ Optionally between START and END and sorted by SORT-PREDICATE."
 (defun conn--all-overlays (predicate &optional start end buffer)
   "Get all overlays between START and END satisfying PREDICATE."
   (with-current-buffer (or buffer (current-buffer))
-    (let* ((head (cons nil (overlays-in (or start (conn--beginning-of-region-or-restriction))
-                                        (or end   (conn--end-of-region-or-restriction)))))
-           (rest head))
-      (while-let ((ov (cadr rest)))
-        (if (funcall predicate ov)
-            (pop rest)
-          (setcdr rest (cddr rest))))
-      (cdr head))))
+    (cl-loop for ov in (overlays-in (or start (conn--beginning-of-region-or-restriction))
+                                    (or end   (conn--end-of-region-or-restriction)))
+             when (funcall predicate ov) collect ov)))
 
 (defun conn-dotp (overlay)
   "Return t if OVERLAY is a dot."
@@ -2525,23 +2517,22 @@ state."
 (defun conn--dispatch-make-command-affixation (keymap)
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
-      (mapcar
-       (lambda (command-name)
-         (let* ((fun (and (stringp command-name) (intern-soft command-name)))
-                (binding (where-is-internal fun
-                                            (cons keymap (current-active-maps t))
-                                            t))
-                (binding (if (and binding (not (stringp binding)))
-                             (format " {%s}" (key-description binding))
-                           ""))
-                (thing (format " (%s)" (or (get fun :conn-command-thing)
-                                          "action"))))
-           (put-text-property 0 (length binding)
-                              'face 'help-key-binding binding)
-           (put-text-property 0 (length thing)
-                              'face 'completions-annotations thing)
-           (list command-name "" (concat thing binding))))
-       command-names))))
+      (cl-loop
+       for command-name in command-names collect
+       (let* ((fun (and (stringp command-name) (intern-soft command-name)))
+              (binding (where-is-internal fun
+                                          (cons keymap (current-active-maps t))
+                                          t))
+              (binding (if (and binding (not (stringp binding)))
+                           (format " {%s}" (key-description binding))
+                         ""))
+              (thing (format " (%s)" (or (get fun :conn-command-thing)
+                                         "action"))))
+         (put-text-property 0 (length binding)
+                            'face 'help-key-binding binding)
+         (put-text-property 0 (length thing)
+                            'face 'completions-annotations thing)
+         (list command-name "" (concat thing binding)))))))
 
 (defun conn--dispatch-read-command ()
   (let ((keymap (make-composed-keymap
@@ -2686,9 +2677,8 @@ state."
                 (when-let ((beg (car (bounds-of-thing-at-point thing)))
                            (_ (/= beg (car ovs))))
                   (push beg ovs))))))))
-    (mapcar (lambda (pt)
-              (conn--string-preview-overlays-1 pt 1 thing))
-            ovs)))
+    (cl-loop for pt in ovs collect
+             (conn--string-preview-overlays-1 pt 1 thing))))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (if (not all-windows)
@@ -2714,8 +2704,8 @@ state."
                        (conn--region-visible-p beg end)
                        (not (eql (point) (caar ovs))))
               (push (list (point) (length prefix) thing) ovs))))))
-    (mapcar (apply-partially 'apply 'conn--string-preview-overlays-1)
-            ovs)))
+    (cl-loop for ov in ovs collect
+             (apply 'conn--string-preview-overlays-1 ov))))
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix ""))
@@ -3042,9 +3032,8 @@ Expansions and contractions are provided by functions in
 (defun conn--make-narrow-register ()
   (%conn--make-narrow-register
    :narrow-ring
-   (mapcar (pcase-lambda (`(,beg . ,end))
-             (cons (copy-marker beg) (copy-marker end)))
-           conn-narrow-ring)))
+   (cl-loop for (beg . end) in conn-narrow-ring
+            collect (cons (copy-marker beg) (copy-marker end)))))
 
 (cl-defmethod register-val-jump-to ((val conn-narrow-register) _arg)
   (let ((ring (conn-narrow-register-narrow-ring val)))
@@ -3248,11 +3237,11 @@ buffers completing read DOT."
   "Sort all dots in the current buffer by the text they contain.
 Obeys `sort-case-fold'."
   (interactive)
-  (let* ((sort-lists (mapcar (lambda (dot)
-                               (let ((key (cons (overlay-start dot)
-                                                (overlay-end dot))))
-                                 (cons key key)))
-                             (conn--sorted-overlays #'conn-dotp '>)))
+  (let* ((sort-lists
+          (cl-loop for dot in (conn--sorted-overlays #'conn-dotp '>)
+                   collect (let ((key (cons (overlay-start dot)
+                                            (overlay-end dot))))
+                             (cons key key))))
          (old (reverse sort-lists))
          (case-fold-search sort-fold-case))
     (when sort-lists
@@ -3620,7 +3609,7 @@ between `point-min' and `point-max'."
                             (push (prog1 (pop props) (pop props)) result))
                           result)
                         nil t)))
-         (vals (mapcar (lambda (s) (cons (message "%s" s) s))
+         (vals (mapcar (lambda (s) (cons (format "%s" s) s))
                        (ensure-list (get-text-property (point) prop))))
          (val (alist-get (completing-read "Value: " vals) vals
                          nil nil #'string=))
@@ -5361,12 +5350,11 @@ See `tab-close'."
             (alist-get 'pixel-width params) pwidth
             (alist-get 'total-height params) theight
             (alist-get 'total-width params) twidth))
-    (append (mapcar (lambda (elem)
-                      (pcase elem
-                        ('vc 'hc)
-                        ('hc 'vc)
-                        (_ elem)))
-                    params)
+    (append (cl-loop for elem in params
+                     collect (pcase elem
+                               ('vc 'hc)
+                               ('hc 'vc)
+                               (_ elem)))
             (mapcar 'conn--wincontrol-reflect-window windows))))
 
 ;; FIXME: vertical columns shrink horizontally when reversed for some reason
@@ -5379,9 +5367,8 @@ See `tab-close'."
             (car windows) (assq-delete-all 'last (car windows))))
     (append params
             (if recursive
-                (mapcar (lambda (win)
-                          (conn--wincontrol-reverse-window win t))
-                        windows)
+                (cl-loop for win in windows collect
+                         (conn--wincontrol-reverse-window win t))
               windows))))
 
 (defun conn-wincontrol-reverse (arg)
@@ -5967,14 +5954,10 @@ dispatch on each contiguous component of the region."
   (interactive
    (let* ((prop (intern (completing-read
                          "Property: "
-                         (let* ((props (text-properties-at (point)))
-                                (rest props))
-                           (while rest
-                             (setcdr rest (cddr rest))
-                             (pop rest))
-                           props)
+                         (cl-loop for prop in (text-properties-at (point))
+                                  by #'cddr collect prop)
                          nil t)))
-          (vals (mapcar (lambda (s) (cons (message "%s" s) s))
+          (vals (mapcar (lambda (s) (cons (format "%s" s) s))
                         (ensure-list (get-text-property (point) prop))))
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
