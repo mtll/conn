@@ -789,6 +789,12 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Advice
 
+(defun conn--repeat-advice (&rest app)
+  (unwind-protect
+      (apply app)
+    (setq conn-this-command-thing (get this-command :conn-command-thing)
+          conn-this-command-handler (get this-command :conn-mark-handler))))
+
 (defun conn--define-key-advice (keymap key def &rest _)
   (when (or (memq keymap (mapcar #'cdr conn--state-maps))
             (and (memq keymap (conn--without-conn-maps (current-active-maps)))
@@ -811,12 +817,14 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
+        (advice-add 'repeat :around #'conn--repeat-advice)
         (advice-add 'define-key :before #'conn--define-key-advice)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad))
+    (advice-remove 'repeat #'conn--repeat-advice)
     (advice-remove 'define-key #'conn--define-key-advice)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
