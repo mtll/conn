@@ -489,17 +489,25 @@ Uses `read-regexp' to read the regexp."
     (set-marker marker pos buffer)
     marker))
 
+(if (version< "30" emacs-version)
+    (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents)
+  (defun conn--derived-mode-all-parents (mode)
+    (let ((modes (list mode)))
+      (while-let ((parent (get mode 'derived-mode-parent)))
+        (push parent modes)
+        (setq mode parent))
+      (nreverse modes))))
+
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
   (let* ((modes (conn--thread -mode->
                     'major-mode
                   (buffer-local-value -mode-> (or buffer (current-buffer)))
-                  (derived-mode-all-parents -mode->)))
-         result)
-    (while (and modes (not result))
-      (setq result (get (pop modes) property)))
-    result))
+                  (conn--derived-mode-all-parents -mode->))))
+    (catch 'term
+      (dolist (mode modes)
+        (when (get mode property) (throw 'term (get mode property)))))))
 
 (defun conn--narrow-indirect (beg end &optional record)
   (let* ((line-beg (line-number-at-pos beg))
@@ -1694,7 +1702,7 @@ If BUFFER is nil use current buffer."
   (let (selectors)
     (dolist (mode local-minor-modes)
       (setq selectors (nconc (get mode :conn-mode-things) selectors)))
-    (dolist (mode (derived-mode-all-parents major-mode))
+    (dolist (mode (conn--derived-mode-all-parents major-mode))
       (setq selectors (nconc (get mode :conn-mode-things) selectors)))
     (when selectors
       (setq selectors (nreverse selectors))
@@ -1892,7 +1900,7 @@ C-x, M-s and M-g into various state maps."
                        (setf (alist-get major-mode maps)
                              (make-sparse-keymap)))))
           (push (cons state map) conn--major-mode-maps)))
-    (let ((mmodes (reverse (derived-mode-all-parents major-mode))))
+    (let ((mmodes (reverse (conn--derived-mode-all-parents major-mode))))
       (pcase-dolist (`(,state . ,maps) conn--mode-maps)
         (dolist (mode mmodes)
           (let ((map (or (alist-get mode maps)
