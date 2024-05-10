@@ -1070,6 +1070,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Thing Definitions
 
+(conn-register-thing-commands
+ 'symbol 'conn-individual-thing-handler
+ 'forward-symbol 'conn-backward-symbol)
+
 (conn-register-thing page
   :mark-key "p"
   :forward-op forward-page)
@@ -2318,8 +2322,9 @@ state."
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
     (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
-    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
+    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
+    (symbol . ,(apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
     (t . conn--dispatch-chars)))
 
@@ -3839,6 +3844,11 @@ Interactively `region-beginning' and `region-end'."
   (conn--push-ephemeral-mark isearch-other-end))
 
 ;;;;; Editing Commands
+
+(defun conn-backward-symbol (arg)
+  "`forward-symbol' in reverse."
+  (interactive "p")
+  (forward-symbol (- arg)))
 
 (defun conn-shell-command-on-region (&optional arg)
   "Like `shell-command-on-region' but inverts the meaning of ARG."
@@ -6471,9 +6481,11 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap conn-movement-map
+  "U" 'conn-backward-symbol
+  "O" 'forward-symbol
   "(" 'backward-up-list
   ")" 'down-list
-  "U" 'conn-backward-sentence-keys
+  "{" 'conn-backward-sentence-keys
   "u" 'conn-backward-word-keys
   "I" 'conn-backward-paragraph-keys
   "i" 'conn-previous-line-keys
@@ -6487,7 +6499,7 @@ dispatch on each contiguous component of the region."
   "m" 'conn-forward-sexp-keys
   "N" 'conn-beginning-of-defun-keys
   "n" 'conn-backward-sexp-keys
-  "O" 'conn-forward-sentence-keys
+  "}" 'conn-forward-sentence-keys
   "o" 'conn-forward-word-keys
   "<" 'conn-backward-line
   ">" 'forward-line)
@@ -6876,8 +6888,8 @@ determine if `conn-local-mode' should be enabled."
   (dolist (state '(conn-state conn-dot-state))
     (define-keymap
       :keymap (conn-get-mode-map state 'paredit-mode)
-      "O" 'paredit-forward-down
-      "U" 'paredit-backward-down
+      "}" 'paredit-forward-down
+      "{" 'paredit-backward-down
       "(" 'paredit-backward-up
       ")" 'paredit-forward-up))
 
