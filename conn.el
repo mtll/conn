@@ -467,15 +467,14 @@ Uses `read-regexp' to read the regexp."
 
 (defun conn--read-buffers (&optional predicate)
   "Return a list of buffers specified interactively, one by one."
-  (let* (selected)
-    (while-let ((buf (read-buffer "Buffer: " nil t
+  (cl-loop with selected = nil
+           for buf = (read-buffer "Buffer: " nil t
                                   (pcase-lambda (`(,name . ,buf))
                                     (and
                                      (if predicate (funcall predicate buf) t)
-                                     (not (member name selected))))))
-                (_ (not (equal buf ""))))
-      (push buf selected))
-    (nreverse selected)))
+                                     (not (member name selected)))))
+           until (equal buf "") do (push buf selected)
+           finally (cl-return selected)))
 
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
@@ -489,6 +488,7 @@ Uses `read-regexp' to read the regexp."
     (set-marker marker pos buffer)
     marker))
 
+(declare-function conn--derived-mode-all-parents "conn.el")
 (if (version< "30" emacs-version)
     (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents)
   (defun conn--derived-mode-all-parents (mode)
@@ -628,12 +628,11 @@ If BUFFER is nil check `current-buffer'."
         (nreverse result)))))
 
 (defun conn--region-visible-p (beg end)
-  (not (or (invisible-p beg)
-           (catch 'return
-             (while-let ((pt (next-single-char-property-change
-                              beg 'invisible nil end))
-                         (_ (< end pt)))
-               (when (invisible-p pt) (throw 'return t)))))))
+  (and (not (invisible-p beg))
+       (cl-loop for pt = (next-single-char-property-change
+                          beg 'invisible nil end)
+                while (and pt (< end pt))
+                never (invisible-p pt))))
 
 (defun conn--string-no-upper-case-p (string)
   (catch 'term
@@ -2434,10 +2433,10 @@ state."
       (goto-char pt)
       (pcase (bounds-of-thing-at-point thing)
         ('nil (user-error "No thing at point"))
-        ((and `(,beg . ,end) reg)
-         (if-let ((dot (conn--dot-after-point beg))
-                  (_ (and (= beg (overlay-start dot))
-                          (= end (overlay-end dot)))))
+        ((and `(,beg . ,end) reg
+              (let dot (conn--dot-after-point beg)))
+         (if (and (= beg (overlay-start dot))
+                  (= end (overlay-end dot)))
              (conn--delete-dot dot)
            (conn--create-dots reg)))))))
 
@@ -2682,9 +2681,8 @@ state."
             (while (/= (point) (point-max))
               (funcall forward-op 1)
               (unless (invisible-p (point))
-                (when-let ((beg (car (bounds-of-thing-at-point thing)))
-                           (_ (/= beg (car ovs))))
-                  (push beg ovs))))))))
+                (let ((beg (car (bounds-of-thing-at-point thing))))
+                  (when (/= beg (car ovs)) (push beg ovs)))))))))
     (cl-loop for pt in ovs collect
              (conn--string-preview-overlays-1 pt 1 thing))))
 
@@ -4821,10 +4819,10 @@ Otherwise behave like `other-window'."
                                   (if all-frames
                                       (conn--all-visible-windows)
                                     (window-list nil 'no-mini))))
-           (_ (or all-frames
-                  (not (length< other-windows
-                                conn-other-window-prompt-threshold))))
-           (win (conn--prompt-for-window other-windows)))
+           (win (and (or all-frames
+                         (not (length< other-windows
+                                       conn-other-window-prompt-threshold)))
+                     (conn--prompt-for-window other-windows))))
       (progn
         (select-frame-set-input-focus (window-frame win))
         (select-window win))
@@ -5890,9 +5888,9 @@ dispatch on each contiguous component of the region."
           (goto-char beg)
           (move-beginning-of-line 1)
           (while (< (point) end)
-            (when-let ((eol (line-end-position))
-                       (_ (or emptyp (not (= (point) eol)))))
-              (push (cons (point) eol) regions))
+            (let ((eol (line-end-position)))
+              (when (or emptyp (not (= (point) eol)))
+                (push (cons (point) eol) regions)))
             (forward-line))
           regions))
     (conn--kapply-region-iterator -it-> (not (member "reverse" args)))
