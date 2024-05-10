@@ -1070,6 +1070,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Thing Definitions
 
+(conn-register-thing symbol
+  :forward-op forward-symbol)
+
 (conn-register-thing-commands
  'symbol 'conn-individual-thing-handler
  'forward-symbol 'conn-backward-symbol)
@@ -2328,7 +2331,7 @@ state."
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
     (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
-    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
+    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
     (symbol . ,(apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
@@ -2467,8 +2470,10 @@ state."
         (push-mark nil t))
       (select-window window)
       (goto-char pt)
-      (unless (eq thing 'char)
-        (setq conn-this-command-handler 'conn-individual-thing-handler)))))
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (conn--push-ephemeral-mark end)
+         (unless (= pt beg) (goto-char beg)))))))
 
 (defun conn-dispatch-jump (window pt _thing)
   (with-current-buffer (window-buffer window)
@@ -2666,22 +2671,21 @@ state."
 (defun conn--dispatch-all-things-1 (thing)
   (let ((forward-op (get thing 'forward-op))
         ovs)
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (ignore-errors
-          (save-excursion
-            (funcall forward-op -1)
-            (while (/= (point) (point-min))
-              (unless (invisible-p (point))
-                (push (point) ovs))
-              (funcall forward-op -1))))
-        (ignore-errors
-          (save-excursion
-            (while (/= (point) (point-max))
-              (funcall forward-op 1)
-              (unless (invisible-p (point))
-                (let ((beg (car (bounds-of-thing-at-point thing))))
-                  (when (/= beg (car ovs)) (push beg ovs)))))))))
+    (with-restriction (window-start) (window-end)
+      (ignore-errors
+        (save-excursion
+          (funcall forward-op -1)
+          (while (/= (point) (point-min))
+            (unless (invisible-p (point))
+              (push (point) ovs))
+            (funcall forward-op -1))))
+      (ignore-errors
+        (save-excursion
+          (while (/= (point) (point-max))
+            (funcall forward-op 1)
+            (unless (invisible-p (point))
+              (let ((beg (car (bounds-of-thing-at-point thing))))
+                (when (/= beg (car ovs)) (push beg ovs))))))))
     (cl-loop for pt in ovs collect
              (conn--make-preview-overlay pt 1 thing))))
 
