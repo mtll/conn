@@ -216,7 +216,7 @@ Supported values are:
   :type 'number)
 
 (defcustom conn-dispatch-label-characters
-  (list "j" "f" "d" "k" "s" "g" "h" "l" "w" "e" "r"
+  (list "f" "j" "d" "k" "s" "g" "h" "l" "w" "e" "r"
         "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
   "Chars to use for dispatch leader overlays."
   :group 'conn
@@ -3792,12 +3792,6 @@ Interactively PARTIAL-MATCH is the prefix argument."
   (interactive)
   (conn-isearch-split-dots t))
 
-(defun conn-isearch-backward-symbol-at-point ()
-  "Isearch backward for symbol at point."
-  (interactive)
-  (funcall-interactively #'isearch-forward-symbol-at-point -1)
-  (isearch-repeat-backward))
-
 (defun conn-isearch-backward-thing (thing)
   "Isearch forward for THING.
 Interactively prompt for the keybinding of a command and use THING
@@ -6293,11 +6287,11 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
+  "s" 'conn-isearch-region-forward
+  "r" 'conn-isearch-region-backward
   "DEL" 'conn-delete-region-keys
   "$"   'ispell-region
   "*"   'calc-grab-region
-  ","   'conn-isearch-region-backward
-  "."   'conn-isearch-region-forward
   ";"   'comment-or-uncomment-region
   "["   'conn-delete-pair
   "a c" 'align-current
@@ -6306,7 +6300,6 @@ dispatch on each contiguous component of the region."
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
-  "b"   'conn-command-at-point-and-mark
   "c"   'conn-region-case-prefix
   "D"   'conn-duplicate-and-comment-region
   "d"   'conn-duplicate-region
@@ -6319,8 +6312,8 @@ dispatch on each contiguous component of the region."
   "n"   'conn-narrow-to-region
   "o"   'conn-occur-region
   "p"   'conn-change-pair
-  "r"   'conn-query-replace-regexp-region
-  "s"   'conn-sort-prefix
+  "x"   'conn-query-replace-regexp-region
+  "<"   'conn-sort-prefix
   "u"   'conn-insert-pair
   "v"   'vc-region-history
   "w"   'conn-query-replace-region
@@ -6409,22 +6402,21 @@ dispatch on each contiguous component of the region."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  ","     'xref-go-back
-  "."     'xref-go-forward
-  "<"     'pop-global-mark
-  "TAB"   'conn-isearch-backward-symbol
-  "M-TAB" 'conn-isearch-forward-symbol
-  "0"     'xref-find-references
-  "x"     'conn-xref-definition-prompt
-  "a"     'xref-find-apropos
-  "i"     'imenu
-  "o"     'occur
-  "l"     'locate
-  "h ,"   'conn-highlight-region
-  "s B"   'multi-isearch-buffers-regexp
-  "s F"   'multi-isearch-files-regexp
-  "s b"   'multi-isearch-buffers
-  "s f"   'multi-isearch-files)
+  ","   'xref-go-back
+  "."   'xref-go-forward
+  "s"   'conn-isearch-forward-thing
+  "r"   'conn-isearch-backward-thing
+  "0"   'xref-find-references
+  "x"   'conn-xref-definition-prompt
+  "a"   'xref-find-apropos
+  "i"   'imenu
+  "o"   'occur
+  "l"   'locate
+  "h ," 'conn-highlight-region
+  "m B" 'multi-isearch-buffers-regexp
+  "m F" 'multi-isearch-files-regexp
+  "m b" 'multi-isearch-buffers
+  "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-goto-map
   "Y" 'pop-global-mark
@@ -6526,8 +6518,8 @@ dispatch on each contiguous component of the region."
   "SPC"   'conn-set-mark-command
   "_"     'repeat-complex-command
   "+"     'conn-set-register-seperator
-  ","     'isearch-backward
-  "."     'isearch-forward
+  ","     'conn-goto-string-backward
+  "."     'conn-goto-string-forward
   "/"     'undo-only
   ";"     'execute-extended-command
   ":"     'execute-extended-command-for-buffer
