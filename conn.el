@@ -598,29 +598,28 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
-    (let ((case-fold-search isearch-case-fold-search)
-          bound result)
-      (save-excursion
-        (pcase restrict
-          ('after
-           (unless isearch-forward
-             (isearch-repeat 'forward))
-           (goto-char isearch-other-end))
-          ('before
-           (when isearch-forward
-             (isearch-repeat 'backward))
-           (goto-char isearch-other-end))
-          (_
-           (goto-char (if isearch-forward (point-min) (point-max)))))
-        (setq bound (if isearch-forward (point-max) (point-min)))
-        (cl-loop while (isearch-search-string isearch-string bound t)
-                 when (funcall isearch-filter-predicate
-                               (match-beginning 0) (match-end 0))
-                 collect (cons (conn--create-marker (match-beginning 0))
-                               (conn--create-marker (match-end 0)))
-                 when (and (= (match-beginning 0) (match-end 0))
-                           (not (if isearch-forward (eobp) (bobp))))
-                 do (conn--create-marker (match-beginning 0)))))))
+    (save-excursion
+      (pcase restrict
+        ('after
+         (unless isearch-forward
+           (isearch-repeat 'forward))
+         (goto-char isearch-other-end))
+        ('before
+         (when isearch-forward
+           (isearch-repeat 'backward))
+         (goto-char isearch-other-end))
+        (_
+         (goto-char (if isearch-forward (point-min) (point-max)))))
+      (cl-loop with bound = (if isearch-forward (point-max) (point-min))
+               with case-fold-search = isearch-case-fold-search
+               while (isearch-search-string isearch-string bound t)
+               when (funcall isearch-filter-predicate
+                             (match-beginning 0) (match-end 0))
+               collect (cons (conn--create-marker (match-beginning 0))
+                             (conn--create-marker (match-end 0)))
+               when (and (= (match-beginning 0) (match-end 0))
+                         (not (if isearch-forward (eobp) (bobp))))
+               do (conn--create-marker (match-beginning 0))))))
 
 (defun conn--region-visible-p (beg end)
   (and (not (invisible-p beg))
@@ -756,11 +755,6 @@ If BUFFER is nil check `current-buffer'."
                        (propertize lbl 'face 'conn-window-prompt-face))
           (push overlay overlays))))
     overlays))
-
-(defun conn--all-visible-windows ()
-  (let (wins)
-    (walk-windows (lambda (win) (push win wins)) 'nomini 'visible)
-    wins))
 
 (defun conn--prompt-for-window (windows)
   (when (setq windows (seq-remove 'window-dedicated-p windows))
@@ -2680,13 +2674,9 @@ state."
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (if (not all-windows)
       (conn--dispatch-all-things-1 thing)
-    (let (ovs)
-      (walk-windows
-       (lambda (win)
-         (with-selected-window win
-           (push (conn--dispatch-all-things-1 thing) ovs)))
-       'no-minibuf 'visible)
-      (apply 'nconc ovs))))
+    (cl-loop for win in (window-list-1 nil nil 'visible)
+             nconc (with-selected-window win
+                     (conn--dispatch-all-things-1 thing)))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))
@@ -2714,13 +2704,9 @@ state."
                        (concat prefix)))))
     (if (not all-windows)
         (conn--dispatch-things-with-prefix-1 things prefix)
-      (let (ovs)
-        (walk-windows
-         (lambda (win)
-           (with-selected-window win
-             (push (conn--dispatch-things-with-prefix-1 things prefix) ovs)))
-         'no-minibuf 'visible)
-        (apply 'nconc ovs)))))
+      (cl-loop for win in (window-list-1 nil nil 'visible)
+               nconc (with-selected-window win
+                       (conn--dispatch-things-with-prefix-1 things prefix))))))
 
 (defun conn--dispatch-columns ()
   (let ((col (current-column))
@@ -2739,84 +2725,73 @@ state."
 
 (defun conn--dispatch-lines ()
   (let (ovs)
-    (walk-windows
-     (lambda (win)
-       (with-selected-window win
-         (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-           (save-excursion
-             (with-restriction (window-start) (window-end)
-               (goto-char (point-min))
-               (when (and (bolp)
-                          (<= (+ (point) (window-hscroll)) (line-end-position))
-                          (goto-char (+ (point) (window-hscroll)))
-                          (not (invisible-p (point))))
-                 (push (conn--make-preview-overlay (point) 1) ovs))
-               (while (/= (point) (point-max))
-                 (forward-line)
-                 (when (and (bolp)
-                            (<= (+ (point) (window-hscroll))
-                                (line-end-position) (point-max))
-                            (goto-char (+ (point) (window-hscroll)))
-                            (not (invisible-p (point)))
-                            (not (invisible-p (1- (point)))))
-                   (push (conn--make-preview-overlay (point) 1) ovs))))))))
-     'no-minibuf 'visible)
-    ovs))
+    (dolist (win (window-list-1 nil nil 'visible) ovs)
+      (with-selected-window win
+        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+          (save-excursion
+            (with-restriction (window-start) (window-end)
+              (goto-char (point-min))
+              (when (and (bolp)
+                         (<= (+ (point) (window-hscroll)) (line-end-position))
+                         (goto-char (+ (point) (window-hscroll)))
+                         (not (invisible-p (point))))
+                (push (conn--make-preview-overlay (point) 1) ovs))
+              (while (/= (point) (point-max))
+                (forward-line)
+                (when (and (bolp)
+                           (<= (+ (point) (window-hscroll))
+                               (line-end-position) (point-max))
+                           (goto-char (+ (point) (window-hscroll)))
+                           (not (invisible-p (point)))
+                           (not (invisible-p (1- (point)))))
+                  (push (conn--make-preview-overlay (point) 1) ovs))))))))))
 
 (defun conn--dispatch-lines-end ()
   (let (ovs)
-    (walk-windows
-     (lambda (win)
-       (with-selected-window win
-         (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-           (save-excursion
-             (with-restriction (window-start) (window-end)
-               (goto-char (point-min))
-               (move-end-of-line nil)
-               (when (and (eolp) (not (invisible-p (point))))
-                 (push (conn--make-preview-overlay (point) 1) ovs))
-               (while (/= (point) (point-max))
-                 (forward-line)
-                 (move-end-of-line nil)
-                 (when (and (eolp)
-                            (not (invisible-p (point)))
-                            (not (invisible-p (1- (point)))))
-                   (push (conn--make-preview-overlay (point) 1) ovs))))))))
-     'no-minibuf 'visible)
-    ovs))
+    (dolist (win (window-list-1 nil nil 'visible) ovs)
+      (with-selected-window win
+        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+          (save-excursion
+            (with-restriction (window-start) (window-end)
+              (goto-char (point-min))
+              (move-end-of-line nil)
+              (when (and (eolp) (not (invisible-p (point))))
+                (push (conn--make-preview-overlay (point) 1) ovs))
+              (while (/= (point) (point-max))
+                (forward-line)
+                (move-end-of-line nil)
+                (when (and (eolp)
+                           (not (invisible-p (point)))
+                           (not (invisible-p (1- (point)))))
+                  (push (conn--make-preview-overlay (point) 1) ovs))))))))))
 
 (defun conn--dispatch-inner-lines (&optional end)
   (let (ovs)
-    (walk-windows
-     (lambda (win)
-       (with-selected-window win
-         (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-           (save-excursion
-             (with-restriction (window-start) (window-end)
-               (goto-char (point-min))
-               (when (and (bolp)
-                          (progn
-                            (if end
-                                (conn--end-of-inner-line-1)
-                              (back-to-indentation))
-                            (not (eobp)))
-                          (not (invisible-p (point))))
-                 (push (conn--make-preview-overlay (point) 1)
-                       ovs))
-               (while (/= (point) (point-max))
-                 (forward-line)
-                 (when (and (bolp)
-                            (progn
-                              (if end
-                                  (conn--end-of-inner-line-1)
-                                (back-to-indentation))
-                              (not (eobp)))
-                            (not (invisible-p (point)))
-                            (not (invisible-p (1- (point)))))
-                   (push (conn--make-preview-overlay (point) 1)
-                         ovs))))))))
-     'no-minibuf 'visible)
-    ovs))
+    (dolist (win (window-list-1 nil nil 'visible) ovs)
+      (with-selected-window win
+        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+          (save-excursion
+            (with-restriction (window-start) (window-end)
+              (goto-char (point-min))
+              (when (and (bolp)
+                         (progn
+                           (if end
+                               (conn--end-of-inner-line-1)
+                             (back-to-indentation))
+                           (not (eobp)))
+                         (not (invisible-p (point))))
+                (push (conn--make-preview-overlay (point) 1) ovs))
+              (while (/= (point) (point-max))
+                (forward-line)
+                (when (and (bolp)
+                           (progn
+                             (if end
+                                 (conn--end-of-inner-line-1)
+                               (back-to-indentation))
+                             (not (eobp)))
+                           (not (invisible-p (point)))
+                           (not (invisible-p (1- (point)))))
+                  (push (conn--make-preview-overlay (point) 1) ovs))))))))))
 
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
@@ -4783,7 +4758,7 @@ selected window will be the window containing the current buffer."
   (interactive "P")
   (when-let ((win1 (selected-window))
              (win2 (conn--prompt-for-window
-                    (remove win1 (conn--all-visible-windows)))))
+                    (remove win1 (window-list-1 nil 'nomini 'visible)))))
     (window-swap-states win1 win2)
     (when no-select
       (select-window win1)
@@ -4802,7 +4777,7 @@ Otherwise behave like `other-window'."
   (interactive "P")
   (if-let ((other-windows (remove (selected-window)
                                   (if all-frames
-                                      (conn--all-visible-windows)
+                                      (window-list-1 nil 'nomini 'visible)
                                     (window-list nil 'no-mini))))
            (win (and (or all-frames
                          (not (length< other-windows
