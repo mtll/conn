@@ -392,7 +392,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (eval-and-compile
   (defmacro conn--thread (needle form &rest forms)
-    (declare (indent 2))
+    (declare (indent 2)
+             (debug (symbolp form body)))
     (if forms
         `(let ((,needle ,form))
            (conn--thread ,needle ,@forms))
@@ -400,14 +401,11 @@ Used to restore previous value when `conn-mode' is disabled.")
 
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (conn--thread -it->
-        (lambda (e)
-          (pcase e
-            ((pred stringp) e)
-            ('nil "")
-            ((pred symbolp) (symbol-name e))))
-      (mapcar -it-> symbols-or-strings)
-      (apply #'concat -it->)))
+    (cl-loop for s in symbols-or-strings
+             concat (pcase s
+                      ((pred stringp) s)
+                      ('nil "")
+                      ((pred symbolp) (symbol-name s)))))
 
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
@@ -2610,8 +2608,9 @@ state."
                                       (- (overlay-end ov)
                                          (overlay-start ov)))))
                 (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
-                  (when-let ((pos (string-search "\n" after-str)))
-                    (overlay-put ov 'after-string (substring after-str pos))))
+                  (if-let ((pos (string-search "\n" after-str)))
+                      (overlay-put ov 'after-string (substring after-str pos))
+                    (overlay-put ov 'after-string nil)))
                 (push ov narrowed)))))
         (mapcar #'copy-overlay narrowed))
     (mapc #'delete-overlay overlays)))
@@ -6178,7 +6177,18 @@ dispatch on each contiguous component of the region."
     ("e" "Dot Narrowings" conn-dot-narrow-ring)
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
-   [("a" "Abort Cycling"
+   [("m" "Merge" conn-merge-narrow-ring :transient t)
+    ("w" "Widen" widen)
+    ("c" "Clear" conn-clear-narrow-ring)
+    ("v" "Add Region" conn-region-to-narrow-ring)]
+   [("n" "Cycle Next" conn-cycle-narrowings :transient t)
+    ("p" "Cycle Previous"
+     (lambda (arg)
+       (interactive "p")
+       (conn-cycle-narrowings (- arg)))
+     :transient t)
+    ("d" "Pop" conn-pop-narrow-ring :transient t)
+    ("a" "Abort Cycling"
      (lambda ()
        (interactive)
        (widen)
@@ -6187,18 +6197,7 @@ dispatch on each contiguous component of the region."
          (narrow-to-region min max)
          (goto-char point)
          (save-mark-and-excursion--restore mark)
-         (setq conn-narrow-ring narrow-ring))))
-    ("n" "Cycle Next" conn-cycle-narrowings :transient t)
-    ("p" "Cycle Previous"
-     (lambda (arg)
-       (interactive "p")
-       (conn-cycle-narrowings (- arg)))
-     :transient t)
-    ("d" "Pop" conn-pop-narrow-ring :transient t)]
-   [("m" "Merge" conn-merge-narrow-ring :transient t)
-    ("w" "Widen" widen)
-    ("c" "Clear" conn-clear-narrow-ring)
-    ("v" "Add Region" conn-region-to-narrow-ring)]]
+         (setq conn-narrow-ring narrow-ring))))]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
