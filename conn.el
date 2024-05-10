@@ -740,37 +740,40 @@ If BUFFER is nil check `current-buffer'."
       (mapcar #'delete-overlay candidates))))
 
 (defun conn--create-window-labels (labels windows)
-  (let ((scroll-margin 0)
-        overlays)
-    (while-let ((win (pop windows))
-                (lbl (pop labels)))
-      (with-selected-window win
-        (let ((overlay (make-overlay (window-start) (window-end))))
-          (goto-char (window-start))
-          (forward-line)
-          (overlay-put overlay 'conn-overlay t)
-          (overlay-put overlay 'face 'shadow)
-          (overlay-put overlay 'window win)
-          (overlay-put overlay 'before-string
-                       (propertize lbl 'face 'conn-window-prompt-face))
-          (push overlay overlays))))
-    overlays))
+  (cl-loop with scroll-margin = 0
+           for win in windows
+           for lbl in labels
+           collect (with-selected-window win
+                     (let ((overlay (make-overlay (window-start) (window-end))))
+                       (goto-char (window-start))
+                       (forward-line)
+                       (overlay-put overlay 'conn-overlay t)
+                       (overlay-put overlay 'face 'shadow)
+                       (overlay-put overlay 'window win)
+                       (overlay-put overlay 'before-string
+                                    (propertize lbl 'face 'conn-window-prompt-face))
+                       overlay))))
 
 (defun conn--prompt-for-window (windows)
   (when (setq windows (seq-remove 'window-dedicated-p windows))
     (if (length= windows 1)
         (car windows)
-      (let (saved-pts)
-        (dolist (win windows)
-          (push (cons win (window-point win)) saved-pts))
+      (let ((window-state
+             (cl-loop for win in windows
+                      collect (list (window-point win)
+                                    (window-vscroll win)
+                                    (window-hscroll win)))))
         (unwind-protect
             (conn--read-labels
              windows
              (conn--create-label-strings (length windows))
              'conn--create-window-labels
              'window)
-          (pcase-dolist (`(,win . ,pt) saved-pts)
-            (set-window-point win pt)))))))
+          (cl-loop for win in windows
+                   for (pt vscroll hscroll) in window-state do
+                   (set-window-point win pt)
+                   (set-window-hscroll win hscroll)
+                   (set-window-vscroll win vscroll)))))))
 
 
 ;;;; Advice
