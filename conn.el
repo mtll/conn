@@ -1110,7 +1110,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-sexp 'backward-sexp)
 
 (conn-register-thing-commands
- 'list 'conn-individual-thing-handler
+ 'list
+ (lambda (beg)
+   (pcase (save-excursion
+            (goto-char beg)
+            (bounds-of-thing-at-point 'list))
+     (`(,b . ,e)
+      (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
  'up-list 'down-list 'backward-up-list)
 
 (conn-register-thing whitespace
@@ -6909,8 +6915,8 @@ determine if `conn-local-mode' should be enabled."
      (pcase (save-excursion
               (goto-char beg)
               (bounds-of-thing-at-point 'list))
-       (`(,beg . ,end)
-        (conn--push-ephemeral-mark (if (= (point) beg) end beg)))))
+       (`(,b . ,e)
+        (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
    'paredit-forward-up
    'paredit-backward-up)
 
