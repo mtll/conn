@@ -467,13 +467,12 @@ Uses `read-regexp' to read the regexp."
 
 (defun conn--read-buffers (&optional predicate)
   "Return a list of buffers specified interactively, one by one."
-  (cl-loop with selected = nil
-           for buf = (read-buffer "Buffer: " nil t
+  (cl-loop for buf = (read-buffer "Buffer: " nil t
                                   (pcase-lambda (`(,name . ,buf))
                                     (and
                                      (if predicate (funcall predicate buf) t)
                                      (not (member name selected)))))
-           until (equal buf "") do (push buf selected)
+           until (equal buf "") collect buf into selected
            finally (cl-return selected)))
 
 (defun conn--beginning-of-region-or-restriction ()
@@ -501,13 +500,13 @@ Uses `read-regexp' to read the regexp."
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
-  (let* ((modes (conn--thread -mode->
-                    'major-mode
-                  (buffer-local-value -mode-> (or buffer (current-buffer)))
-                  (conn--derived-mode-all-parents -mode->))))
-    (catch 'term
-      (dolist (mode modes)
-        (when (get mode property) (throw 'term (get mode property)))))))
+  (catch 'term
+    (dolist (mode (conn--thread -mode->
+                      'major-mode
+                    (buffer-local-value -mode-> (or buffer (current-buffer)))
+                    (conn--derived-mode-all-parents -mode->)))
+      (when-let ((prop (get mode property)))
+        (throw 'term prop)))))
 
 (defun conn--narrow-indirect (beg end &optional record)
   (let* ((line-beg (line-number-at-pos beg))
@@ -616,16 +615,14 @@ If BUFFER is nil check `current-buffer'."
           (_
            (goto-char (if isearch-forward (point-min) (point-max)))))
         (setq bound (if isearch-forward (point-max) (point-min)))
-        (while (isearch-search-string isearch-string bound t)
-          (when (funcall isearch-filter-predicate
-                         (match-beginning 0) (match-end 0))
-            (push (cons (conn--create-marker (match-beginning 0))
-                        (conn--create-marker (match-end 0)))
-                  result))
-          (when (and (= (match-beginning 0) (match-end 0))
-                     (not (if isearch-forward (eobp) (bobp))))
-            (forward-char (if isearch-forward 1 -1))))
-        (nreverse result)))))
+        (cl-loop while (isearch-search-string isearch-string bound t)
+                 when (funcall isearch-filter-predicate
+                               (match-beginning 0) (match-end 0))
+                 collect (cons (conn--create-marker (match-beginning 0))
+                               (conn--create-marker (match-end 0)))
+                 when (and (= (match-beginning 0) (match-end 0))
+                           (not (if isearch-forward (eobp) (bobp))))
+                 do (conn--create-marker (match-beginning 0)))))))
 
 (defun conn--region-visible-p (beg end)
   (and (not (invisible-p beg))
@@ -635,53 +632,48 @@ If BUFFER is nil check `current-buffer'."
                 never (invisible-p pt))))
 
 (defun conn--string-no-upper-case-p (string)
-  (catch 'term
-    (dotimes (i (length string))
-      (let ((char (aref string i)))
-        (when (eq char (downcase char))
-          (throw 'term t))))))
+  (cl-loop for char across string
+           always (eq char (downcase char))))
 
 (defun conn--visible-matches (string &optional dir)
-  (let (matches)
-    (save-excursion
-      (with-restriction
-          (if (eq dir 'forward)  (point) (window-start))
-          (if (eq dir 'backward) (point) (window-end))
-        (goto-char (point-min))
-        (let ((case-fold-search (conn--string-no-upper-case-p string)))
-          (while (search-forward string nil t)
-            (when (conn--region-visible-p (match-beginning 0) (match-end 0))
-              (push (match-beginning 0) matches))))))
-    (nreverse matches)))
+  (save-excursion
+    (with-restriction
+        (if (eq dir 'forward)  (point) (window-start))
+        (if (eq dir 'backward) (point) (window-end))
+      (goto-char (point-min))
+      (let ((case-fold-search (conn--string-no-upper-case-p string))
+            matches)
+        (while (search-forward string nil t)
+          (when (conn--region-visible-p (match-beginning 0) (match-end 0))
+            (push (match-beginning 0) matches)))
+        (nreverse matches)))))
 
-(defun conn--string-preview-overlays-1 (pt length &optional thing)
-  (let ((eol (save-excursion
-               (goto-char pt)
-               (line-end-position))))
-    (let ((ov (make-overlay pt (min (+ pt length) eol))))
-      (overlay-put ov 'thing thing)
-      (overlay-put ov 'category 'conn-read-string-match)
-      (overlay-put ov 'window (selected-window))
-      (overlay-put ov 'after-string
-                   (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
-                               'face 'conn-read-string-match-face))
-      (overlay-put ov 'padding (overlay-get ov 'after-string))
-      ov)))
+(defun conn--make-preview-overlay (pt length &optional thing)
+  (let* ((eol (save-excursion
+                (goto-char pt)
+                (line-end-position)))
+         (ov (make-overlay pt (min (+ pt length) eol))))
+    (overlay-put ov 'thing thing)
+    (overlay-put ov 'category 'conn-read-string-match)
+    (overlay-put ov 'window (selected-window))
+    (overlay-put ov 'after-string
+                 (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
+                             'face 'conn-read-string-match-face))
+    (overlay-put ov 'padding (overlay-get ov 'after-string))
+    ov))
+
+(defun conn--string-preview-overlays-1 (win string)
+  (with-selected-window win
+    (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+      (cl-loop for pt in (conn--visible-matches string)
+               collect (conn--make-preview-overlay pt (length string))))))
 
 (defun conn--string-preview-overlays (string &optional dir all-windows)
   (if all-windows
-      (let (ovs)
-        (walk-windows
-         (lambda (win)
-           (with-selected-window win
-             (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-               (push (cl-loop for pt in (conn--visible-matches string)
-                              collect (conn--string-preview-overlays-1 pt (length string))) 
-                     ovs))))
-         'no-minibuf 'visible)
-        (apply 'nconc ovs))
+      (cl-loop for win in (window-list-1 nil nil 'visible)
+               nconc (conn--string-preview-overlays-1 win string))
     (cl-loop for pt in (conn--visible-matches string dir)
-             collect (conn--string-preview-overlays-1 pt (length string)))))
+             collect (conn--make-preview-overlay pt (length string)))))
 
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
@@ -1596,7 +1588,7 @@ The iterator must be the first argument in ARGLIST.
   (declare (indent 1))
   `(unwind-protect
        (progn
-         (mapc 'conn--dot-to-text-property ,(ensure-list dots))
+         (mapc #'conn--dot-to-text-property ,(ensure-list dots))
          ,(macroexp-progn body))
      (conn--text-property-to-dots)))
 
@@ -2639,7 +2631,7 @@ state."
                                          (overlay-get ov 'category))
                                      (not (eq ov p))))
                               beg (+ beg (length label)))
-                             (mapcar 'overlay-start)
+                             (mapcar #'overlay-start)
                              (apply 'min (point-max))))
                      (end (min next (+ beg (length label))))
                      (ov (make-overlay beg end)))
@@ -2684,7 +2676,7 @@ state."
                 (let ((beg (car (bounds-of-thing-at-point thing))))
                   (when (/= beg (car ovs)) (push beg ovs)))))))))
     (cl-loop for pt in ovs collect
-             (conn--string-preview-overlays-1 pt 1 thing))))
+             (conn--make-preview-overlay pt 1 thing))))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (if (not all-windows)
@@ -2711,7 +2703,7 @@ state."
                        (not (eql (point) (caar ovs))))
               (push (list (point) (length prefix) thing) ovs))))))
     (cl-loop for ov in ovs collect
-             (apply 'conn--string-preview-overlays-1 ov))))
+             (apply 'conn--make-preview-overlay ov))))
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix ""))
@@ -2742,7 +2734,7 @@ state."
                      (not (invisible-p (point)))
                      (not (ignore-errors (invisible-p (1- (point))))))
             (move-to-column col)
-            (push (conn--string-preview-overlays-1 (point) 1) ovs))
+            (push (conn--make-preview-overlay (point) 1) ovs))
           (forward-line))))
     ovs))
 
@@ -2759,7 +2751,7 @@ state."
                           (<= (+ (point) (window-hscroll)) (line-end-position))
                           (goto-char (+ (point) (window-hscroll)))
                           (not (invisible-p (point))))
-                 (push (conn--string-preview-overlays-1 (point) 1) ovs))
+                 (push (conn--make-preview-overlay (point) 1) ovs))
                (while (/= (point) (point-max))
                  (forward-line)
                  (when (and (bolp)
@@ -2768,7 +2760,7 @@ state."
                             (goto-char (+ (point) (window-hscroll)))
                             (not (invisible-p (point)))
                             (not (invisible-p (1- (point)))))
-                   (push (conn--string-preview-overlays-1 (point) 1) ovs))))))))
+                   (push (conn--make-preview-overlay (point) 1) ovs))))))))
      'no-minibuf 'visible)
     ovs))
 
@@ -2783,14 +2775,14 @@ state."
                (goto-char (point-min))
                (move-end-of-line nil)
                (when (and (eolp) (not (invisible-p (point))))
-                 (push (conn--string-preview-overlays-1 (point) 1) ovs))
+                 (push (conn--make-preview-overlay (point) 1) ovs))
                (while (/= (point) (point-max))
                  (forward-line)
                  (move-end-of-line nil)
                  (when (and (eolp)
                             (not (invisible-p (point)))
                             (not (invisible-p (1- (point)))))
-                   (push (conn--string-preview-overlays-1 (point) 1) ovs))))))))
+                   (push (conn--make-preview-overlay (point) 1) ovs))))))))
      'no-minibuf 'visible)
     ovs))
 
@@ -2810,7 +2802,7 @@ state."
                               (back-to-indentation))
                             (not (eobp)))
                           (not (invisible-p (point))))
-                 (push (conn--string-preview-overlays-1 (point) 1)
+                 (push (conn--make-preview-overlay (point) 1)
                        ovs))
                (while (/= (point) (point-max))
                  (forward-line)
@@ -2822,7 +2814,7 @@ state."
                               (not (eobp)))
                             (not (invisible-p (point)))
                             (not (invisible-p (1- (point)))))
-                   (push (conn--string-preview-overlays-1 (point) 1)
+                   (push (conn--make-preview-overlay (point) 1)
                          ovs))))))))
      'no-minibuf 'visible)
     ovs))
@@ -2957,15 +2949,13 @@ Expansions are provided by functions in `conn-expansion-functions'."
                   (= (point) (region-end)))
              (catch 'term
                (pcase-dolist (`(_ . ,end) conn--current-expansions)
-                 (when (> end (point))
-                   (throw 'term (goto-char end))))
+                 (when (> end (point)) (throw 'term (goto-char end))))
                (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
              (catch 'term
                (pcase-dolist (`(,beg . _) conn--current-expansions)
-                 (when (< beg (point))
-                   (throw 'term (goto-char beg))))
+                 (when (< beg (point)) (throw 'term (goto-char beg))))
                (user-error "No more expansions")))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
@@ -2998,15 +2988,13 @@ Expansions and contractions are provided by functions in
                   (= (point) (region-end)))
              (catch 'term
                (pcase-dolist (`(_ . ,end) conn--current-expansions)
-                 (when (< end (point))
-                   (throw 'term (goto-char end))))
+                 (when (< end (point)) (throw 'term (goto-char end))))
                (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-beginning)))
              (catch 'term
                (pcase-dolist (`(,beg . _) conn--current-expansions)
-                 (when (> beg (point))
-                   (throw 'term (goto-char beg))))
+                 (when (> beg (point)) (throw 'term (goto-char beg))))
                (user-error "No more expansions")))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
@@ -3150,10 +3138,8 @@ Interactively defaults to the current region."
        (widen)))))
 
 (defun conn-isearch-in-narrow-p (beg end)
-  (catch 'term
-    (dolist (narrowing conn-narrow-ring)
-      (when (<= (car narrowing) beg end (cdr narrowing))
-        (throw 'term t)))))
+  (cl-loop for narrowing in conn-narrow-ring
+           thereis (<= (car narrowing) beg end (cdr narrowing))))
 
 (defun conn-isearch-narrow-ring-forward ()
   "`isearch-forward' restricted to regions in `conn-narrow-ring'."
@@ -3861,7 +3847,7 @@ Interactively `region-beginning' and `region-end'."
   (isearch-mode t)
   (with-isearch-suspended
    (setq isearch-new-string (buffer-substring-no-properties beg end)
-         isearch-new-message (mapconcat 'isearch-text-char-description
+         isearch-new-message (mapconcat #'isearch-text-char-description
                                         isearch-new-string ""))))
 
 (defun conn-isearch-region-backward (beg end)
@@ -3872,7 +3858,7 @@ Interactively `region-beginning' and `region-end'."
   (isearch-mode nil)
   (with-isearch-suspended
    (setq isearch-new-string (buffer-substring-no-properties beg end)
-         isearch-new-message (mapconcat 'isearch-text-char-description
+         isearch-new-message (mapconcat #'isearch-text-char-description
                                         isearch-new-string ""))))
 
 (defun conn-isearch-exit-and-mark ()
@@ -5361,7 +5347,7 @@ See `tab-close'."
                                ('vc 'hc)
                                ('hc 'vc)
                                (_ elem)))
-            (mapcar 'conn--wincontrol-reflect-window windows))))
+            (mapcar #'conn--wincontrol-reflect-window windows))))
 
 ;; FIXME: vertical columns shrink horizontally when reversed for some reason
 (defun conn--wincontrol-reverse-window (state &optional recursive)
