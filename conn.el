@@ -5403,7 +5403,9 @@ When called interactively N is `last-command-event'."
   (setq this-command 'conn-scroll-down)
   (with-selected-window (other-window-for-scrolling)
     (let ((next-screen-context-lines arg))
-      (conn-scroll-down))))
+      (funcall (or (command-remapping #'scroll-down-command)
+                   (command-remapping #'conn-scroll-down)
+                   #'conn-scroll-down)))))
 
 (defun conn-wincontrol-other-window-scroll-up (arg)
   "Scroll down with ARG `next-screen-context-lines'."
@@ -5411,7 +5413,9 @@ When called interactively N is `last-command-event'."
   (setq this-command 'conn-scroll-up)
   (with-selected-window (other-window-for-scrolling)
     (let ((next-screen-context-lines arg))
-      (conn-scroll-up))))
+      (funcall (or (command-remapping #'scroll-up-command)
+                   (command-remapping #'conn-scroll-up)
+                   #'conn-scroll-up)))))
 
 (defun conn-wincontrol-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
