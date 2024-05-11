@@ -4865,18 +4865,6 @@ Otherwise behave like `other-window'."
         (select-window win))
     (other-window 1)))
 
-(defun conn-other-place-prefix (&optional arg)
-  "One of `other-window-prefix', `other-tab-prefix' or `other-frame-prefix'.
-If ARG is nil `other-window-prefix',
-if ARG is \\[universal-argument] `other-frame-prefix',
-if ARG is anything else `other-tab-prefix'."
-  (interactive "P")
-  (pcase arg
-    ((pred consp) (other-frame-prefix))
-    ('nil         (other-window-prefix))
-    ('-           (other-tab-prefix))
-    (_            (conn-other-window-prompt-prefix))))
-
 ;;;;; Transition Functions
 
 (defun conn-emacs-state-and-complete ()
@@ -6385,6 +6373,13 @@ dispatch on each contiguous component of the region."
 
 ;;;; Keymaps
 
+(defvar-keymap conn-other-place-prefix-map
+  :prefix 'conn-other-place-prefix-map
+  "w" 'other-window-prefix
+  "t" 'other-tab-prefix
+  "f" 'other-frame-prefix
+  "s" 'conn-other-window-prompt-prefix)
+
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
   "C-s" 'reb-next-match
@@ -6679,7 +6674,7 @@ dispatch on each contiguous component of the region."
   "<tab>" 'indent-region
   "TAB"   'indent-region
   "]"     'conn-kill-append-region
-  "'"     'conn-other-place-prefix
+  "'"     'conn-other-place-prefix-map
   "B"     'ibuffer
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
