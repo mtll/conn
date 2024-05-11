@@ -2342,6 +2342,8 @@ state."
     (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
     (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(symbol sexp) 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
+    (conn-backward-symbol . ,(apply-partially 'conn--dispatch-all-things 'symbol t))
+    (backward-word . ,(apply-partially 'conn--dispatch-all-things 'word t))
     (symbol . ,(apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
     (t . conn--dispatch-chars)))
@@ -4978,6 +4980,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar conn--wincontrol-help-format)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
+(defvar conn--wincontrol-initial-window nil)
+
+(defvar conn--wincontrol-initial-winconf nil)
+
 (defcustom conn-wincontrol-initial-help 'window
   "Initial help message printed during `conn-wincontrol-mode'."
   :group 'conn
@@ -4999,7 +5005,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
-    "\\[conn-wincontrol-off]: quit; "
+    "\\[conn-wincontrol-quit]: quit; "
     "\\[conn-wincontrol-windmove-up] "
     "\\[conn-wincontrol-windmove-down] "
     "\\[conn-wincontrol-windmove-left] "
@@ -5034,7 +5040,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
-    "\\[conn-wincontrol-off]: quit; "
+    "\\[conn-wincontrol-quit]: quit; "
     "\\[tab-bar-move-window-to-tab]: win to new tab"
     "\n"
     "\\[conn-tab-to-register]: store; "
@@ -5053,7 +5059,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
-    "\\[conn-wincontrol-off]: quit; "
+    "\\[conn-wincontrol-quit]: quit; "
     "\\[toggle-frame-fullscreen]: fullscreen; "
     "\\[clone-frame]: clone; "
     "\\[undelete-frame]: undelete"
@@ -5073,7 +5079,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
-    "\\[conn-wincontrol-off]: quit; "
+    "\\[conn-wincontrol-quit]: quit; "
     "\\[conn-wincontrol-scroll-up] "
     "\\[conn-wincontrol-scroll-down]: "
     "scroll")))
@@ -5089,7 +5095,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-7"     'conn-swap-windows
   "C-8"     'conn-tab-to-register
   "C-9"     'tab-close
-  "C-g"     'conn-wincontrol-off
+  "C-g"     'conn-wincontrol-quit
   "C-M-0"   'kill-buffer-and-window
   "C-M-d"   'delete-other-frames
   "M-1"     'iconify-or-deiconify-frame
@@ -5130,7 +5136,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "SPC"     'conn-wincontrol-scroll-up
   "M-<tab>" 'conn-wincontrol-scroll-down
   "M-TAB"   'conn-wincontrol-scroll-down
-  "a"       'conn-wincontrol-off
+  "A"       'conn-wincontrol-abort
+  "Q"       'conn-wincontrol-abort
+  "a"       'conn-wincontrol-quit-to-initial-win
   "b"       'switch-to-buffer
   "C"       'tab-bar-duplicate-tab
   "D"       'delete-other-windows
@@ -5157,7 +5165,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O"       'tab-bar-detach-tab
   "p"       'conn-register-load
   "P"       'window-configuration-to-register
-  "q"       'conn-wincontrol-off
+  "q"       'conn-wincontrol-quit
   "r"       'conn-wincontrol-split-right
   "s"       'shrink-window
   "t"       'conn-wincontrol-swap-windows
@@ -5211,7 +5219,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                      (* conn--wincontrol-arg-sign
                         (or conn--wincontrol-arg 1))))))
 
-(defun conn--wincontrol-setup (&optional preserve-arg)
+(defun conn--wincontrol-setup (&optional preserve-state)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -5220,11 +5228,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
         eldoc-message-function #'ignore
         scroll-conservatively 100)
-  (unless preserve-arg
+  (unless preserve-state
     (setq conn--wincontrol-arg (when current-prefix-arg
                                  (mod (prefix-numeric-value current-prefix-arg)
                                       conn-wincontrol-arg-limit))
-          conn--wincontrol-arg-sign 1))
+          conn--wincontrol-arg-sign 1
+          conn--wincontrol-initial-window (selected-window)
+          conn--wincontrol-initial-winconf (current-window-configuration)))
   (conn-wincontrol-help)
   (dolist (state conn-states)
     (set-face-foreground (get state :conn-lighter-face)
@@ -5275,10 +5285,24 @@ When called interactively N is `last-command-event'."
   (setq conn--wincontrol-arg nil)
   (setq conn--wincontrol-arg-sign 1))
 
-(defun conn-wincontrol-off ()
+(defun conn-wincontrol-quit ()
   "Exit `conn-wincontrol-mode'."
   (interactive)
   (conn-wincontrol-mode -1))
+
+(defun conn-wincontrol-abort ()
+  "Exit `conn-wincontrol-mode'."
+  (interactive)
+  (conn-wincontrol-mode -1)
+  (when conn--wincontrol-initial-winconf
+    (set-window-configuration conn--wincontrol-initial-winconf)))
+
+(defun conn-wincontrol-quit-to-initial-win ()
+  "Exit `conn-wincontrol-mode' and select initial window."
+  (interactive)
+  (conn-wincontrol-mode -1)
+  (when (window-live-p conn--wincontrol-initial-window)
+    (select-window conn--wincontrol-initial-window)))
 
 (defun conn-wincontrol-help (&optional interactive)
   "Cycle to the next `conn-wincontrol-mode' help message."
