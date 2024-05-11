@@ -2246,7 +2246,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "f"       'conn-emacs-state
                  "\\"      'conn-kapply-prefix
                  "t"       'conn-change
-                 ","       conn-emacs-transitions-map
+                 "h"       conn-emacs-transitions-map
                  "M-TAB"   'conn-emacs-state-and-complete
                  "M-<tab>" 'conn-emacs-state-and-complete))
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
@@ -2292,7 +2292,7 @@ state."
   :ephemeral-marks t
   :transitions (define-keymap
                  "f" 'conn-emacs-state
-                 "," conn-emacs-transitions-map))
+                 "h" conn-emacs-transitions-map))
 
 
 ;;;; Thing Dispatch
@@ -6713,12 +6713,12 @@ dispatch on each contiguous component of the region."
   "?"     'undo-redo
   "`"     'conn-other-window
   "~"     'conn-swap-windows
+  ","     'repeat
   "a"     'conn-wincontrol
   "b"     'switch-to-buffer
   "G"     'conn-M-g-keys
   "g"     'conn-dispatch-on-things
   "H"     'conn-expand
-  "h"     'repeat
   "P"     'conn-register-prefix
   "p"     'conn-register-load
   "s"     'conn-M-s-keys
