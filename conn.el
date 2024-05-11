@@ -6622,16 +6622,17 @@ dispatch on each contiguous component of the region."
   "C-6"   'conn-swap-buffers
   "C-7"   'conn-swap-windows
   "C-8"   'conn-tab-to-register
-  "C-9"   'tab-close
+  "C-9"   'quit-window
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
   "C-+"   'maximize-window
-  "M-V" 'conn-wincontrol-maximize-vertically
-  "M-R" 'conn-wincontrol-maximize-horizontally
-  "M-0"   'quit-window
+  "M-V"   'conn-wincontrol-maximize-vertically
+  "M-R"   'conn-wincontrol-maximize-horizontally
+  "M-0"   'tab-close
   "M-1"   'delete-other-windows-vertically
-  "M-2"   'make-frame-command
+  "M-2"   'tab-new
+  "M-3"   'make-frame-command
   "M-7"   'kill-this-buffer
   "M-8"   'tear-off-window
   "M-9"   'tab-detach
