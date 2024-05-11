@@ -5339,6 +5339,25 @@ When called interactively N is `last-command-event'."
   (interactive "p")
   (text-scale-decrease arg))
 
+(defun conn-wincontrol-windmove-up ()
+  "`windmove-up'."
+  (interactive)
+  (windmove-up))
+
+(defun conn-wincontrol-windmove-down ()
+  "`windmove-down'."
+  (interactive)
+  (windmove-down))
+
+(defun conn-wincontrol-windmove-right ()
+  "`windmove-right'."
+  (interactive)
+  (windmove-right))
+
+(defun conn-wincontrol-windmove-left ()
+  (interactive)
+  (windmove-left))
+
 (defun conn-wincontrol-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
   (interactive "p")
