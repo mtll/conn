@@ -127,7 +127,7 @@ Defines default STATE for buffers matching REGEXP."
 
 (defface conn-pulse-face
   '((default (:inherit conn-dot-face)))
-  "Face for dispatch pulse."
+  "Face for kapply pulse."
   :group 'conn)
 
 (defface conn-mark-face
@@ -1208,17 +1208,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "Non-nil during kmacro application.")
 
 (defvar conn-kmacro-apply-error nil
-  "If non-nil contains the error encountered during macro dispatch.")
+  "If non-nil contains the error encountered during macro application.")
 
 (defvar conn-kmacro-apply-end-hook nil
-  "Hook run after macro dispatch has completed.")
+  "Hook run after macro application has completed.")
 
 (defvar conn-kmacro-apply-start-hook nil
-  "Hook run before macro dispatch begins.")
+  "Hook run before macro application begins.")
 
 (defvar conn-kmacro-apply-iterator-hook nil
-  "Hook run during each iteration of macro dispatch.
-If any function returns a nil value then dispatch it halted.")
+  "Hook run during each iteration of macro application.
+If any function returns a nil value then macro application it halted.")
 
 (defun conn--kapply-ensure-region-buffer (region)
   (when-let ((buffer (and region (marker-buffer (car region)))))
@@ -1479,7 +1479,7 @@ If any function returns a nil value then dispatch it halted.")
          (funcall iterator state))))))
 
 (defmacro conn--define-kapply (name arglist &rest body)
-  "Define a macro dispatcher.
+  "Define a macro application function.
 The iterator must be the first argument in ARGLIST.
 
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
@@ -2242,7 +2242,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
 
 (conn-define-state conn-dot-state
   "Activate `conn-dot-state' in the current buffer.
-A `conn-mode' state for dispatching keyboard macros on buffer regions.
+A `conn-mode' state for applying keyboard macros on buffer regions.
 
 See `conn-dot-state-transition-map' for keybindings to enter other states
 from dot state.  See `conn-dot-state-map' for commands bound by dot state."
@@ -2251,8 +2251,8 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
                  (((background dark))  (:inherit mode-line :background "#4f7555")))
   :buffer-face ((t :inherit default :background "#f6fff9"))
   :cursor-face ((default               (:background "#267d00"))
-                 (((background light)) (:background "#267d00"))
-                 (((background dark))  (:background "#b2e5a6")))
+                (((background light)) (:background "#267d00"))
+                (((background dark))  (:background "#b2e5a6")))
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
@@ -2436,7 +2436,8 @@ state."
         ('nil (user-error "No thing at point"))
         ((and `(,beg . ,end) reg
               (let dot (conn--dot-after-point beg)))
-         (if (and (= beg (overlay-start dot))
+         (if (and dot
+                  (= beg (overlay-start dot))
                   (= end (overlay-end dot)))
              (conn--delete-dot dot)
            (conn--create-dots reg)))))))
@@ -2882,6 +2883,7 @@ seconds."
              collect (conn--make-preview-overlay beg (- end beg)))))
 
 (defun conn-dispatch-isearch ()
+  "Jump to an isearch match with dispatch labels."
   (interactive)
   (let* ((prefix-ovs (conn--dispatch-isearch-matches))
          (count (length prefix-ovs))
@@ -2900,7 +2902,7 @@ seconds."
             (pcase-dolist (`(_ . ,ovs) labels)
               (dolist (ov ovs) (delete-overlay ov)))))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-          (dolist (ov ovs) (delete-overlay ov))))))
+        (dolist (ov ovs) (delete-overlay ov))))))
 
 
 ;;;; Expand Region
