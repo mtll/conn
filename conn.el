@@ -5159,7 +5159,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "n"       'shrink-window-horizontally
   "N"       'tab-bar-new-tab
   "o"       'conn-next-window
-  "O"       'tab-bar-detach-tab
+  "O"       'tear-off-window
   "p"       'conn-register-load
   "P"       'window-configuration-to-register
   "q"       'conn-wincontrol-quit
@@ -5169,6 +5169,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "S"       'conn-wincontrol-isearch-other-window
   "t"       'conn-wincontrol-transpose-window
   "u"       'conn-previous-window
+  "U"       'tab-bar-detach-tab
   "v"       'conn-wincontrol-split-vertically
   "w"       'enlarge-window-horizontally
   "x"       'kill-buffer-and-window
