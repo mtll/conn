@@ -4866,9 +4866,9 @@ if ARG is \\[universal-argument] `other-frame-prefix',
 if ARG is anything else `other-tab-prefix'."
   (interactive "P")
   (pcase arg
-    ('(4) (other-frame-prefix))
-    ('nil (other-window-prefix))
-    (_    (other-tab-prefix))))
+    ((pred consp) (other-frame-prefix))
+    ('nil         (other-window-prefix))
+    (_            (other-tab-prefix))))
 
 ;;;;; Transition Functions
 
@@ -4979,9 +4979,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar conn--wincontrol-help)
 (defvar conn--wincontrol-help-format)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
-
 (defvar conn--wincontrol-initial-window nil)
-
 (defvar conn--wincontrol-initial-winconf nil)
 
 (defcustom conn-wincontrol-initial-help 'window
@@ -5288,21 +5286,24 @@ When called interactively N is `last-command-event'."
 (defun conn-wincontrol-quit ()
   "Exit `conn-wincontrol-mode'."
   (interactive)
-  (conn-wincontrol-mode -1))
+  (when conn-wincontrol-mode
+    (conn-wincontrol-mode -1)))
 
 (defun conn-wincontrol-abort ()
   "Exit `conn-wincontrol-mode'."
   (interactive)
-  (conn-wincontrol-mode -1)
-  (when conn--wincontrol-initial-winconf
-    (set-window-configuration conn--wincontrol-initial-winconf)))
+  (when conn-wincontrol-mode
+    (conn-wincontrol-mode -1)
+    (when conn--wincontrol-initial-winconf
+      (set-window-configuration conn--wincontrol-initial-winconf))))
 
 (defun conn-wincontrol-quit-to-initial-win ()
   "Exit `conn-wincontrol-mode' and select initial window."
   (interactive)
-  (conn-wincontrol-mode -1)
-  (when (window-live-p conn--wincontrol-initial-window)
-    (select-window conn--wincontrol-initial-window)))
+  (when conn-wincontrol-mode
+    (conn-wincontrol-mode -1)
+    (when (window-live-p conn--wincontrol-initial-window)
+      (select-window conn--wincontrol-initial-window))))
 
 (defun conn-wincontrol-help (&optional interactive)
   "Cycle to the next `conn-wincontrol-mode' help message."
@@ -5398,22 +5399,21 @@ See `tab-close'."
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state)))
     (let* ((height  (alist-get 'normal-height params))
-           (width   (alist-get 'normal-width params))
-           (pheight (* (alist-get 'pixel-width params) (/ height width)))
-           (theight (* (alist-get 'total-width params) (/ height width)))
+           (width   (alist-get 'normal-width  params))
+           (pheight (* (alist-get 'pixel-width  params) (/ height width)))
+           (theight (* (alist-get 'total-width  params) (/ height width)))
            (pwidth  (* (alist-get 'pixel-height params) (/ height width)))
            (twidth  (* (alist-get 'total-height params) (/ height width))))
-      (setf (alist-get 'normal-width params)  height
+      (setf (alist-get 'normal-width  params) height
             (alist-get 'normal-height params) width
-            (alist-get 'pixel-height params) pheight
-            (alist-get 'pixel-width params) pwidth
-            (alist-get 'total-height params) theight
-            (alist-get 'total-width params) twidth))
-    (append (cl-loop for elem in params
-                     collect (pcase elem
-                               ('vc 'hc)
-                               ('hc 'vc)
-                               (_ elem)))
+            (alist-get 'pixel-height  params) pheight
+            (alist-get 'pixel-width   params) pwidth
+            (alist-get 'total-height  params) theight
+            (alist-get 'total-width   params) twidth))
+    (append (cl-loop for elem in params collect (pcase elem
+                                                  ('vc 'hc)
+                                                  ('hc 'vc)
+                                                  (_   elem)))
             (mapcar #'conn--wincontrol-reflect-window windows))))
 
 ;; FIXME: vertical columns shrink horizontally when reversed for some reason
@@ -5445,9 +5445,8 @@ If ARG is negative reverse windows recursively."
 (defun conn-wincontrol-reflect (arg)
   "Rotate windows in frame root window.
 If ARG is not +/-1 or 0 rotate windows in selected window parent window."
-  (interactive "p")
-  (let ((window (unless (or (= arg 0) (= (abs arg) 1))
-                  (window-parent (selected-window)))))
+  (interactive "P")
+  (let ((window (when arg (window-parent (selected-window)))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reflect-window)
@@ -6610,6 +6609,7 @@ dispatch on each contiguous component of the region."
   "C-0"   'delete-window
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
+  "C-+"   'maximize-window
   "M-0"   'quit-window
   "M-1"   'delete-other-windows-vertically
   "M-2"   'make-frame-command
