@@ -5137,6 +5137,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "a"       'conn-wincontrol-quit-to-initial-win
   "b"       'switch-to-buffer
   "C"       'tab-bar-duplicate-tab
+  "c"       'conn-wincontrol-mru-window
   "d"       'delete-window
   "e"       'conn-tab-to-register
   "F"       'toggle-frame-fullscreen
@@ -5371,6 +5372,10 @@ When called interactively N is `last-command-event'."
   (setq this-command 'conn-scroll-up)
   (let ((next-screen-context-lines arg))
     (conn-scroll-up)))
+
+(defun conn-wincontrol-mru-window ()
+  (interactive)
+  (select-window (get-mru-window 0 nil t t)))
 
 (defun conn-wincontrol-transpose-window ()
   "Prompt for window and swap current window and other window."
