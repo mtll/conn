@@ -2201,6 +2201,14 @@ disabled.
 (defvar-keymap conn-common-map
   :doc "Keymap for bindings shared between dot and conn states.")
 
+(defvar-keymap conn-emacs-transitions-map
+  "e" 'conn-emacs-state-open-line-above
+  "d" 'conn-emacs-state-open-line
+  "f" 'conn-emacs-state-eol
+  "s" 'conn-emacs-state-bol
+  "v" 'conn-emacs-state-overwrite
+  "b" 'conn-emacs-state-overwrite-binary)
+
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
@@ -2238,12 +2246,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "f"       'conn-emacs-state
                  "\\"      'conn-kapply-prefix
                  "t"       'conn-change
-                 "F i"     'conn-emacs-state-open-line-above
-                 "F k"     'conn-emacs-state-open-line
-                 "F l"     'conn-emacs-state-eol
-                 "F j"     'conn-emacs-state-bol
-                 "F o"     'conn-emacs-state-overwrite
-                 "F u"     'conn-emacs-state-overwrite-binary
+                 ","       conn-emacs-transitions-map
                  "M-TAB"   'conn-emacs-state-and-complete
                  "M-<tab>" 'conn-emacs-state-and-complete))
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
@@ -2288,13 +2291,8 @@ state."
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t
   :transitions (define-keymap
-                 "f"   'conn-emacs-state
-                 "F i" 'conn-emacs-state-open-line-above
-                 "F k" 'conn-emacs-state-open-line
-                 "F l" 'conn-emacs-state-eol
-                 "F j" 'conn-emacs-state-bol
-                 "F o" 'conn-emacs-state-overwrite
-                 "F u" 'conn-emacs-state-overwrite-binary))
+                 "f" 'conn-emacs-state
+                 "," conn-emacs-transitions-map))
 
 
 ;;;; Thing Dispatch
@@ -5430,7 +5428,8 @@ When called interactively N is `last-command-event'."
 
 (defun conn-wincontrol-mru-window ()
   (interactive)
-  (select-window (get-mru-window 0 nil t t)))
+  (when-let ((mru (get-mru-window 0 nil t t)))
+    (select-window mru)))
 
 (defun conn-wincontrol-transpose-window ()
   "Prompt for window and swap current window and other window."
@@ -6628,8 +6627,6 @@ dispatch on each contiguous component of the region."
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
   ";"   'comment-line
-  "."   'conn-isearch-forward-thing
-  ","   'conn-isearch-backward-thing
   "b"   'conn-narrow-ring-prefix
   "c"   'conn-copy-thing
   "i"   'clone-indirect-buffer
@@ -6710,8 +6707,6 @@ dispatch on each contiguous component of the region."
   "SPC"   'conn-set-mark-command
   "_"     'repeat-complex-command
   "+"     'conn-set-register-seperator
-  ","     'conn-goto-string-backward
-  "."     'conn-goto-string-forward
   "/"     'undo-only
   ";"     'execute-extended-command
   ":"     'execute-extended-command-for-buffer
