@@ -1070,6 +1070,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Thing Definitions
 
+(conn-register-thing region
+  :bounds-op (lambda ()
+               (cons (region-beginning) (region-end))))
+
+(conn-register-thing-commands
+ 'region nil
+ 'conn-toggle-mark-command
+ 'conn-set-mark-command)
+
 (conn-register-thing symbol
   :forward-op forward-symbol)
 
@@ -4417,6 +4426,16 @@ associated with that command (see `conn-register-thing')."
     (activate-mark t))
   (message "Marked %s" thing))
 
+(defun conn-copy-thing (thing &optional register)
+  "Copy THING at point."
+  (interactive (list (conn--read-thing-command)
+                     (when current-prefix-arg
+                       (register-read-with-preview "Register: "))))
+  (pcase (bounds-of-thing-at-point thing)
+    (`(,beg . ,end)
+     (conn-copy-region beg end register)
+     (pulse-momentary-highlight-region beg end))))
+
 (defun conn-narrow-to-thing (thing &optional interactive)
   "Narrow indirect buffer to THING at point.
 See `clone-indirect-buffer' for meaning of indirect buffer.
@@ -6494,7 +6513,8 @@ dispatch on each contiguous component of the region."
   "."   'conn-isearch-forward-thing
   ","   'conn-isearch-backward-thing
   "b"   'conn-narrow-ring-prefix
-  "c"   'clone-indirect-buffer
+  "c"   'conn-copy-thing
+  "i"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-prefix
   "h"   'conn-mark-thing-map
