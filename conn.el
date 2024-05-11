@@ -2332,7 +2332,7 @@ state."
   '((line-column . conn-dispatch-jump)
     (t . conn-dispatch-goto)))
 
-(defvar conn-dispatch-readers-alist
+(defvar conn-dispatch-finders-alist
   `((inner-line . conn--dispatch-inner-lines)
     (conn-end-of-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
@@ -2340,7 +2340,7 @@ state."
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
     (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
-    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
+    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(symbol sexp) 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
     (symbol . ,(apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
     (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
@@ -2349,15 +2349,15 @@ state."
 (defvar conn-dispatch-command-maps
   (list conn-dispatch-base-command-map))
 
-(defun conn-dispatch-reader (command)
+(defun conn-dispatch-finder (command)
   (let ((thing (get command :conn-command-thing)))
-    (or (alist-get command conn-dispatch-readers-alist)
+    (or (alist-get command conn-dispatch-finders-alist)
         (catch 'return
           (while thing
-            (when-let ((reader (alist-get thing conn-dispatch-readers-alist)))
+            (when-let ((reader (alist-get thing conn-dispatch-finders-alist)))
               (throw 'return reader))
             (setq thing (conn--thing-parent thing))))
-        (alist-get t conn-dispatch-readers-alist))))
+        (alist-get t conn-dispatch-finders-alist))))
 
 (defun conn-dispatch-default-action (command)
   (let ((thing (get command :conn-command-thing)))
@@ -2377,6 +2377,8 @@ state."
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
+           (when (or (looking-at " ") (looking-back " "))
+             (fixup-whitespace))
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2389,6 +2391,8 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
            (delete-region beg end)
+           (when (or (looking-at " ") (looking-back " "))
+             (fixup-whitespace))
            (message "Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2401,6 +2405,8 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
            (delete-region beg end)
+           (when (or (looking-at " ") (looking-back " "))
+             (fixup-whitespace))
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2457,7 +2463,9 @@ state."
       (goto-char pt)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (kill-region beg end))
+         (kill-region beg end)
+         (when (or (looking-at " ") (looking-back " "))
+           (fixup-whitespace)))
         (_ (user-error "No thing at point")))))
   (yank))
 
@@ -2853,7 +2861,7 @@ seconds."
     (unwind-protect
         (progn
           (setf prefix-ovs (thread-last
-                             (conn-dispatch-reader thing-command)
+                             (conn-dispatch-finder thing-command)
                              (funcall)
                              (seq-group-by (lambda (ov) (overlay-get ov 'window)))
                              (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
