@@ -341,7 +341,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar conn--aux-update-tick 0)
 
-(defvar conn--aux-update-local-tick 0)
+(defvar-local conn--aux-update-local-tick 0)
 
 (defvar-local conn--aux-map-history nil)
 
@@ -787,8 +787,7 @@ If BUFFER is nil check `current-buffer'."
   (when (or (memq keymap (mapcar #'cdr conn--state-maps))
             (and (memq keymap (conn--without-conn-maps (current-active-maps)))
                  (member (if (stringp key) (key-parse key) key)
-                         (mapcar #'symbol-value conn--aux-bindings)))
-            (and (symbolp def) (get def :conn-remapping-command)))
+                         (mapcar #'symbol-value conn--aux-bindings))))
     (cl-incf conn--aux-update-tick)))
 
 (defun conn--push-mark-ad (&rest _)
@@ -1742,8 +1741,10 @@ If BUFFER is nil use current buffer."
             force)
         (let ((aux-map (conn--generate-aux-map active))
               (key (cons conn-current-state active)))
-          (setf (alist-get conn-current-state conn--aux-maps) aux-map
-                conn--aux-map-history (list (cons key aux-map)))))
+          (setf conn--aux-maps (list (cons conn-current-state aux-map))
+                conn--aux-map-history (list (cons key aux-map))
+                conn--last-remapping current-remappings
+                conn--aux-update-local-tick conn--aux-update-tick)))
        (t
         (let* ((key (cons conn-current-state active))
                (aux-map (or (alist-get key conn--aux-map-history nil nil #'equal)
@@ -1751,9 +1752,7 @@ If BUFFER is nil use current buffer."
                                   (conn--generate-aux-map active)))))
           (setf (alist-get conn-current-state conn--aux-maps) aux-map
                 conn--aux-map-history (take conn--aux-map-history-size
-                                            conn--aux-map-history)))))
-      (setq conn--aux-update-local-tick conn--aux-update-tick
-            conn--last-remapping current-remappings))))
+                                            conn--aux-map-history))))))))
 
 (defmacro conn-define-remapping-command (name from-keys &optional aux-map-omit)
   "Define a command NAME that remaps to FROM-KEYS.
@@ -6847,6 +6846,7 @@ dispatch on each contiguous component of the region."
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
+        (add-hook 'post-command-hook #'conn--update-aux-map nil t)
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
@@ -6862,6 +6862,7 @@ dispatch on each contiguous component of the region."
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor t)
+    (remove-hook 'post-command-hook #'conn--update-aux-map t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
@@ -6890,7 +6891,6 @@ determine if `conn-local-mode' should be enabled."
                 mark-even-if-inactive t)
           (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
           (add-hook 'post-command-hook #'conn--mark-post-command-hook)
-          (add-hook 'post-command-hook #'conn--update-aux-map)
           (add-hook 'window-configuration-change-hook #'conn--update-cursor)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
@@ -6899,7 +6899,6 @@ determine if `conn-local-mode' should be enabled."
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
       (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
       (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
-      (remove-hook 'post-command-hook #'conn--update-aux-map)
       (remove-hook 'window-configuration-change-hook #'conn--update-cursor)
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
