@@ -4858,7 +4858,7 @@ Otherwise behave like `other-window'."
                                     (window-list nil 'no-mini))))
            (win (and (or all-frames
                          (not (length< other-windows
-                                       conn-other-window-prompt-threshold)))
+                                       (1- conn-other-window-prompt-threshold))))
                      (conn--prompt-for-window other-windows))))
       (progn
         (select-frame-set-input-focus (window-frame win))
