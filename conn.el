@@ -3202,8 +3202,9 @@ Interactively defaults to the current region."
 
 ;;;;; Tab Registers
 
-(cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie)))
-  (cookie nil :read-only t))
+(cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie frame)))
+  (cookie nil :read-only t)
+  (frame nil :read-only t))
 
 (defun conn--get-tab-index-by-cookie (cookie)
   (seq-position (funcall tab-bar-tabs-function)
@@ -3217,23 +3218,30 @@ Interactively defaults to the current region."
     (%conn--make-tab-register
      (or (alist-get 'conn-tab-cookie current-tab)
          (setf (alist-get 'conn-tab-cookie (cdr current-tab))
-               (gensym "conn-tab-cookie"))))))
+               (gensym "conn-tab-cookie")))
+     (selected-frame))))
 
 (cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
-  (when-let ((index (conn--get-tab-index-by-cookie
-                     (conn-tab-register-cookie val))))
+  (when-let ((frame (conn-tab-register-frame val))
+             (index (and (frame-live-p frame)
+                         (with-selected-frame (conn-tab-register-frame val)
+                           (conn--get-tab-index-by-cookie
+                            (conn-tab-register-cookie val))))))
+    (select-frame-set-input-focus frame)
     (tab-bar-select-tab (1+ index))))
 
 (cl-defmethod register-val-describe ((val conn-tab-register) _arg)
   (princ (format "Tab:  %s"
-                 (when-let ((index (conn--get-tab-index-by-cookie
-                                    (conn-tab-register-cookie val))))
-                   (conn--thread -it->
-                       index
-                     (nth -it-> (funcall tab-bar-tabs-function))
-                     (if (eq (car -it->) 'current-tab)
-                         (propertize "*CURRENT TAB*" 'face 'error)
-                       (alist-get 'name -it->)))))))
+                 (if (eq (selected-frame) (conn-tab-register-frame val))
+                     (when-let ((index (conn--get-tab-index-by-cookie
+                                        (conn-tab-register-cookie val))))
+                       (conn--thread -it->
+                           index
+                         (nth -it-> (funcall tab-bar-tabs-function))
+                         (if (eq (car -it->) 'current-tab)
+                             (propertize "*CURRENT TAB*" 'face 'error)
+                           (alist-get 'name -it->))))
+                   "on another frame"))))
 
 (defun conn-tab-to-register (register)
   "Store tab in REGISTER."
@@ -6340,8 +6348,7 @@ dispatch on each contiguous component of the region."
   "Toggle `sort-fold-case'."
   :class 'transient-lisp-variable
   :variable 'sort-fold-case
-  :reader (lambda (&rest _)
-            (not sort-fold-case)))
+  :reader (lambda (&rest _) (not sort-fold-case)))
 
 (transient-define-prefix conn-sort-prefix ()
   "Transient menu for buffer sorting functions."
