@@ -5006,8 +5006,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-quit]: quit; "
-    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]"
-    " maximize vert/horiz"
+    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
+    "max vert/horiz"
     "\n"
     "\\[enlarge-window] "
     "\\[shrink-window] "
@@ -5015,18 +5015,19 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[shrink-window-horizontally]: "
     "heighten shorten widen narrow; "
     "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
-    "\\[kill-buffer-and-window]: kill buf+win"
+    "\\[kill-buffer-and-window]: kill buf+win; "
+    "\\[conn-wincontrol-mru-window]: last win"
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
-    "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank"
+    "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank; "
     "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
     "\n"
     "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
     "\\[delete-window] \\[delete-other-windows]: delete win/other; "
     "\\[balance-windows] \\[maximize-window]: balance/max; "
-    "\\[previous-buffer] \\[next-buffer]: previous/next")))
+    "\\[previous-buffer] \\[next-buffer]: previous/next buffer")))
 
 (defun conn--wincontrol-tab-format ()
   (substitute-command-keys
@@ -5126,13 +5127,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "<next>"  'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "<right>" 'conn-wincontrol-windmove-right
-  "<tab>"   'conn-wincontrol-scroll-up
   "<up>"    'conn-wincontrol-windmove-up
-  "TAB"     'conn-wincontrol-scroll-up
+  "<tab>"   'conn-wincontrol-other-window-scroll-up
+  "TAB"     'conn-wincontrol-other-window-scroll-up
   "DEL"     'conn-wincontrol-scroll-down
   "SPC"     'conn-wincontrol-scroll-up
-  "M-<tab>" 'conn-wincontrol-scroll-down
-  "M-TAB"   'conn-wincontrol-scroll-down
+  "M-<tab>" 'conn-wincontrol-other-window-scroll-down
+  "M-TAB"   'conn-wincontrol-other-window-scroll-down
+  "C-s"     'conn-wincontrol-isearch
+  "C-r"     'conn-wincontrol-isearch-backward
   ","       'conn-wincontrol-maximize-horizontally
   "a"       'conn-wincontrol-quit-to-initial-win
   "b"       'switch-to-buffer
@@ -5163,7 +5166,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "P"       'window-configuration-to-register
   "q"       'conn-wincontrol-quit
   "r"       'conn-wincontrol-split-right
+  "R"       'conn-wincontrol-isearch-other-window-backward
   "s"       'shrink-window
+  "S"       'conn-wincontrol-isearch-other-window
   "t"       'conn-wincontrol-transpose-window
   "u"       'conn-previous-window
   "v"       'conn-wincontrol-split-vertically
@@ -5318,6 +5323,40 @@ When called interactively N is `last-command-event'."
           ('frame  (conn--wincontrol-frame-format))
           (_       (conn--wincontrol-simple-format)))))
 
+(defun conn-wincontrol-isearch (arg)
+  (interactive "P")
+  (when conn-wincontrol-mode
+    (conn--wincontrol-exit)
+    (unwind-protect
+        (isearch-forward arg)
+      (conn--wincontrol-setup t))))
+
+(defun conn-wincontrol-isearch-backward (arg)
+  (interactive "P")
+  (when conn-wincontrol-mode
+    (conn--wincontrol-exit)
+    (unwind-protect
+        (isearch-backward arg)
+      (conn--wincontrol-setup t))))
+
+(defun conn-wincontrol-isearch-other-window (arg)
+  (interactive "P")
+  (when conn-wincontrol-mode
+    (conn--wincontrol-exit)
+    (unwind-protect
+        (with-selected-window (other-window-for-scrolling)
+          (isearch-forward arg))
+      (conn--wincontrol-setup t))))
+
+(defun conn-wincontrol-isearch-other-window-backward (arg)
+  (interactive "P")
+  (when conn-wincontrol-mode
+    (conn--wincontrol-exit)
+    (unwind-protect
+        (with-selected-window (other-window-for-scrolling)
+          (isearch-backward arg))
+      (conn--wincontrol-setup t))))
+
 (defun conn-next-window ()
   (interactive)
   (other-window 1))
@@ -5358,6 +5397,22 @@ When called interactively N is `last-command-event'."
 (defun conn-wincontrol-windmove-left ()
   (interactive)
   (windmove-left))
+
+(defun conn-wincontrol-other-window-scroll-down (arg)
+  "Scroll down with ARG `next-screen-context-lines'."
+  (interactive "p")
+  (setq this-command 'conn-scroll-down)
+  (with-selected-window (other-window-for-scrolling)
+    (let ((next-screen-context-lines arg))
+      (conn-scroll-down))))
+
+(defun conn-wincontrol-other-window-scroll-up (arg)
+  "Scroll down with ARG `next-screen-context-lines'."
+  (interactive "p")
+  (setq this-command 'conn-scroll-up)
+  (with-selected-window (other-window-for-scrolling)
+    (let ((next-screen-context-lines arg))
+      (conn-scroll-up))))
 
 (defun conn-wincontrol-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
