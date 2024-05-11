@@ -5165,11 +5165,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "P"       'window-configuration-to-register
   "q"       'conn-wincontrol-quit
   "r"       'conn-wincontrol-split-right
+  "R"       'conn-wincontrol-maximize-horizontally
   "s"       'shrink-window
   "t"       'conn-wincontrol-swap-windows
   "u"       'bury-buffer
   "U"       'unbury-buffer
   "v"       'conn-wincontrol-split-vertically
+  "V"       'conn-wincontrol-maximize-vertically
   "w"       'enlarge-window-horizontally
   "x"       'kill-buffer-and-window
   "y"       'conn-swap-buffers
@@ -5386,6 +5388,14 @@ Uses `split-window-right'."
 See `tab-close'."
   (interactive)
   (tab-bar-close-tab))
+
+(defun conn-wincontrol-maximize-horizontally ()
+  (interactive)
+  (enlarge-window-horizontally (window-max-delta nil t)))
+
+(defun conn-wincontrol-maximize-vertically ()
+  (interactive)
+  (enlarge-window (window-max-delta)))
 
 (defun conn--wincontrol-split-window-state (state)
   (let (params windows)
@@ -6610,6 +6620,8 @@ dispatch on each contiguous component of the region."
   "C--"   'shrink-window-if-larger-than-buffer
   "C-="   'balance-windows
   "C-+"   'maximize-window
+  "M-V" 'conn-wincontrol-maximize-vertically
+  "M-R" 'conn-wincontrol-maximize-horizontally
   "M-0"   'quit-window
   "M-1"   'delete-other-windows-vertically
   "M-2"   'make-frame-command
