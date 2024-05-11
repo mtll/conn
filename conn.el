@@ -615,11 +615,10 @@ If BUFFER is nil check `current-buffer'."
                while (isearch-search-string isearch-string bound t)
                when (funcall isearch-filter-predicate
                              (match-beginning 0) (match-end 0))
-               collect (cons (conn--create-marker (match-beginning 0))
-                             (conn--create-marker (match-end 0)))
+               collect (cons (match-beginning 0) (match-end 0))
                when (and (= (match-beginning 0) (match-end 0))
                          (not (if isearch-forward (eobp) (bobp))))
-               do (conn--create-marker (match-beginning 0))))))
+               do (forward-char (if isearch-forward 1 -1))))))
 
 (defun conn--region-visible-p (beg end)
   (and (not (invisible-p beg))
@@ -2872,13 +2871,36 @@ seconds."
                       (or (overlay-get prefix 'thing)
                           (get thing-command :conn-command-thing)))
                 (funcall action window pt conn-this-command-thing)
-                (unless repeat (throw 'term nil)))
-              (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-                (dolist (ov ovs)
-                  (overlay-put ov 'face 'conn-read-string-match-face))))))
+                (unless repeat (throw 'term nil))))))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (dolist (ov ovs)
           (delete-overlay ov))))))
+
+(defun conn--dispatch-isearch-matches ()
+  (with-restriction (window-start) (window-end)
+    (cl-loop for (beg . end) in (conn--isearch-matches)
+             collect (conn--make-preview-overlay beg (- end beg)))))
+
+(defun conn-dispatch-isearch ()
+  (interactive)
+  (let* ((prefix-ovs (conn--dispatch-isearch-matches))
+         (count (length prefix-ovs))
+         (prefix-ovs (seq-group-by (lambda (ov) (overlay-get ov 'window))
+                                   prefix-ovs)))
+    (unwind-protect
+        (let ((labels (conn--create-label-strings count)))
+          (unwind-protect
+              (let* ((prefix (conn--read-labels prefix-ovs
+                                                labels
+                                                'conn--dispatch-label-overlays
+                                                'prefix-overlay))
+                     (pt (overlay-start prefix)))
+                (isearch-done)
+                (goto-char pt))
+            (pcase-dolist (`(_ . ,ovs) labels)
+              (dolist (ov ovs) (delete-overlay ov)))))
+      (pcase-dolist (`(_ . ,ovs) prefix-ovs)
+          (dolist (ov ovs) (delete-overlay ov))))))
 
 
 ;;;; Expand Region
@@ -5898,18 +5920,21 @@ dispatch on each contiguous component of the region."
   :description "On Matches"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -it->
-      (prog1
-          (if (bound-and-true-p multi-isearch-buffer-list)
-              (mapcan 'conn--isearch-matches
-                      (append
-                       (remq (current-buffer) multi-isearch-buffer-list)
-                       (list (current-buffer))))
-            (conn--isearch-matches
-             (current-buffer)
-             (pcase (transient-arg-value "matches=" args)
-               ("after" 'after)
-               ("before" 'before))))
-        (isearch-done))
+      (let ((matches
+             (if (bound-and-true-p multi-isearch-buffer-list)
+                 (mapcan 'conn--isearch-matches
+                         (append
+                          (remq (current-buffer) multi-isearch-buffer-list)
+                          (list (current-buffer))))
+               (conn--isearch-matches
+                (current-buffer)
+                (pcase (transient-arg-value "matches=" args)
+                  ("after" 'after)
+                  ("before" 'before))))))
+        (isearch-done)
+        (cl-loop for (beg . end) in matches
+                 collect (cons (conn--create-marker beg)
+                               (conn--create-marker end))))
     (conn--kapply-region-iterator -it-> (member "reverse" args))
     (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
     (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
