@@ -5006,11 +5006,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-quit]: quit; "
-    "\\[conn-wincontrol-windmove-up] "
-    "\\[conn-wincontrol-windmove-down] "
-    "\\[conn-wincontrol-windmove-left] "
-    "\\[conn-wincontrol-windmove-right]: "
-    "move"
+    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]"
+    " maximize vert/horiz"
     "\n"
     "\\[enlarge-window] "
     "\\[shrink-window] "
@@ -5023,7 +5020,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
-    "\\[conn-wincontrol-swap-windows] \\[conn-swap-buffers]: transpose/yank; "
+    "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank"
     "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
     "\n"
     "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
@@ -5095,7 +5092,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-7"     'conn-swap-windows
   "C-8"     'conn-tab-to-register
   "C-9"     'tab-close
-  "C-g"     'conn-wincontrol-quit
+  "C-g"     'conn-wincontrol-abort
   "C-M-0"   'kill-buffer-and-window
   "C-M-d"   'delete-other-frames
   "M-1"     'iconify-or-deiconify-frame
@@ -5136,47 +5133,42 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "SPC"     'conn-wincontrol-scroll-up
   "M-<tab>" 'conn-wincontrol-scroll-down
   "M-TAB"   'conn-wincontrol-scroll-down
-  "A"       'conn-wincontrol-abort
-  "Q"       'conn-wincontrol-abort
+  ","       'conn-wincontrol-maximize-horizontally
   "a"       'conn-wincontrol-quit-to-initial-win
   "b"       'switch-to-buffer
   "C"       'tab-bar-duplicate-tab
-  "D"       'delete-other-windows
   "d"       'delete-window
   "e"       'conn-tab-to-register
   "F"       'toggle-frame-fullscreen
-  "f"       'previous-buffer
+  "f"       'conn-goto-window
   "G"       'conn-tab-group
-  "g"       'next-buffer
+  "g"       'delete-other-windows
   "H"       'conn-wincontrol-help
   "h"       'enlarge-window
-  "i"       'conn-wincontrol-windmove-up
-  "I"       'tab-bar-move-window-to-tab
-  "j"       'conn-wincontrol-windmove-left
-  "J"       'tab-previous
+  "i"       'tab-next
+  "j"       'previous-buffer
+  "J"       'bury-buffer
+  "k"       'tab-previous
   "K"       'conn-wincontrol-tab-close
-  "k"       'conn-wincontrol-windmove-down
-  "l"       'conn-wincontrol-windmove-right
-  "L"       'tab-next
-  "m"       nil
+  "l"       'next-buffer
+  "L"       'unbury-buffer
+  "M"       'tab-bar-move-window-to-tab
+  "m"       'conn-wincontrol-maximize-vertically
   "n"       'shrink-window-horizontally
   "N"       'tab-bar-new-tab
-  "o"       'tear-off-window
+  "o"       'conn-next-window
   "O"       'tab-bar-detach-tab
   "p"       'conn-register-load
   "P"       'window-configuration-to-register
   "q"       'conn-wincontrol-quit
   "r"       'conn-wincontrol-split-right
-  "R"       'conn-wincontrol-maximize-horizontally
   "s"       'shrink-window
-  "t"       'conn-wincontrol-swap-windows
-  "u"       'bury-buffer
-  "U"       'unbury-buffer
+  "t"       'conn-wincontrol-transpose-window
+  "u"       'conn-previous-window
   "v"       'conn-wincontrol-split-vertically
-  "V"       'conn-wincontrol-maximize-vertically
   "w"       'enlarge-window-horizontally
   "x"       'kill-buffer-and-window
-  "y"       'conn-swap-buffers
+  "y"       'conn-wincontrol-yank-window
   "z"       'conn-wincontrol-zoom-out
   "Z"       'conn-wincontrol-zoom-in)
 
@@ -5325,6 +5317,20 @@ When called interactively N is `last-command-event'."
           ('frame  (conn--wincontrol-frame-format))
           (_       (conn--wincontrol-simple-format)))))
 
+(defun conn-next-window ()
+  (interactive)
+  (other-window 1))
+
+(defun conn-previous-window ()
+  (interactive)
+  (other-window -1))
+
+(defun conn-goto-window (window)
+  (interactive
+   (list (conn--prompt-for-window
+          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+  (select-window window))
+
 (defun conn-wincontrol-zoom-in (arg)
   (interactive "p")
   (text-scale-increase arg))
@@ -5347,31 +5353,15 @@ When called interactively N is `last-command-event'."
   (let ((next-screen-context-lines arg))
     (conn-scroll-up)))
 
-(defun conn-wincontrol-windmove-up ()
-  "`windmove-up'."
+(defun conn-wincontrol-transpose-window ()
+  "Prompt for window and swap current window and other window."
   (interactive)
-  (windmove-up))
+  (window-swap-states nil (get-mru-window 0 nil t t)))
 
-(defun conn-wincontrol-windmove-down ()
-  "`windmove-down'."
+(defun conn-wincontrol-yank-window ()
   (interactive)
-  (windmove-down))
-
-(defun conn-wincontrol-windmove-right ()
-  "`windmove-right'."
-  (interactive)
-  (windmove-right))
-
-(defun conn-wincontrol-windmove-left ()
-  "`windmove-left'."
-  (interactive)
-  (windmove-left))
-
-(defun conn-wincontrol-swap-windows ()
-  "Prompt for window and swap current window and other window.
-Uses `conn-swap-windows'."
-  (interactive)
-  (conn-swap-windows))
+  (save-selected-window
+    (window-swap-states nil (get-mru-window 0 nil t t))))
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
