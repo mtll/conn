@@ -4821,6 +4821,12 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Window Commands
 
+(defun conn-other-window-prompt-prefix ()
+  (interactive)
+  (display-buffer-override-next-command
+   (lambda (buffer _)
+     (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse))))
+
 (defun conn-swap-windows (&optional no-select)
   "Swap selected window and another window.
 If NO-SELECT is non-nil the window containing the buffer in the other
@@ -4868,7 +4874,8 @@ if ARG is anything else `other-tab-prefix'."
   (pcase arg
     ((pred consp) (other-frame-prefix))
     ('nil         (other-window-prefix))
-    (_            (other-tab-prefix))))
+    ('-           (other-tab-prefix))
+    (_            (conn-other-window-prompt-prefix))))
 
 ;;;;; Transition Functions
 
