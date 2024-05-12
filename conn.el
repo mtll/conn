@@ -2207,11 +2207,11 @@ disabled.
   :doc "Keymap for bindings shared between dot and conn states.")
 
 (defvar-keymap conn-emacs-transitions-map
-  "e" 'conn-emacs-state-open-line-above
-  "d" 'conn-emacs-state-open-line
-  "f" 'conn-emacs-state-eol
-  "s" 'conn-emacs-state-bol
-  "v" 'conn-emacs-state-overwrite
+  "i" 'conn-emacs-state-open-line-above
+  "k" 'conn-emacs-state-open-line
+  "l" 'conn-emacs-state-eol
+  "j" 'conn-emacs-state-bol
+  "o" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary)
 
 (conn-define-state conn-emacs-state
@@ -2251,7 +2251,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  "f"       'conn-emacs-state
                  "\\"      'conn-kapply-prefix
                  "t"       'conn-change
-                 "h"       conn-emacs-transitions-map
+                 "g"       conn-emacs-transitions-map
                  "M-TAB"   'conn-emacs-state-and-complete
                  "M-<tab>" 'conn-emacs-state-and-complete))
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
@@ -2297,7 +2297,7 @@ state."
   :ephemeral-marks t
   :transitions (define-keymap
                  "f" 'conn-emacs-state
-                 "h" conn-emacs-transitions-map))
+                 "g" conn-emacs-transitions-map))
 
 
 ;;;; Thing Dispatch
@@ -2310,9 +2310,11 @@ state."
   "w" 'conn-dispatch-kill
   "e" 'conn-dispatch-dot
   "g" 'conn-dispatch-grab
-  "y" 'conn-dispatch-yank
+  "f" 'conn-dispatch-yank
   "r" 'conn-dispatch-transpose
   "c" 'conn-dispatch-copy
+  "s" 'conn-dispatch-yank-replace
+  "d" 'conn-dispatch-grab-replace
   "t" 'conn-dispatch-goto
   "q" 'conn-dispatch-jump)
 
@@ -2328,7 +2330,9 @@ state."
     (conn-dispatch-transpose . "Transpose")
     (conn-dispatch-copy . "Copy")
     (conn-dispatch-goto . "Goto")
-    (conn-dispatch-jump . "Jump")))
+    (conn-dispatch-jump . "Jump")
+    (conn-dispatch-yank-replace . "Yank Replace")
+    (conn-dispatch-grab-replace . "Grab Replace")))
 
 (defvar conn-dispatch-default-actions
   '((line-column . conn-dispatch-jump)
@@ -2465,6 +2469,30 @@ state."
                   (= end (overlay-end dot)))
              (conn--delete-dot dot)
            (conn--create-dots reg)))))))
+
+(defun conn-dispatch-yank-replace (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (copy-region-as-kill beg end)
+         (conn-dispatch-fixup-whitespace))
+        (_ (user-error "No thing at point")))))
+  (delete-region (region-beginning) (region-end))
+  (yank))
+
+(defun conn-dispatch-grab-replace (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (kill-region beg end)
+         (conn-dispatch-fixup-whitespace))
+        (_ (user-error "No thing at point")))))
+  (delete-region (region-beginning) (region-end))
+  (yank))
 
 (defun conn-dispatch-grab (window pt thing)
   (with-selected-window window
@@ -3920,7 +3948,7 @@ Interactively `region-beginning' and `region-end'."
                      (region-end)))
   (comment-normalize-vars)
   (if (comment-only-p beg end)
-      (uncomment-region)
+      (uncomment-region beg end)
     (let ((comment-empty-lines t))
       (comment-region beg end))))
 
@@ -4300,24 +4328,25 @@ Repeated calls cycle through the actions in
            (append (cdr cycle) (list (car cycle))))
       (funcall (car cycle)))))
 
-(conn-register-thing subword
-  :forward-op subword-forward)
-
 (defun conn--buffer-to-words ()
-  (save-excursion
-    (goto-char (point-min))
-    (while (re-search-forward "\\W+" nil t)
-      (replace-match " "))
-    (goto-char (point-min))
-    (subword-forward 1)
-    (while (/= (point) (point-max))
-      (unless (looking-at " ")
-        (insert " "))
-      (subword-forward 1))
-    (goto-char (point-min))
-    (delete-horizontal-space)
-    (goto-char (point-max))
-    (delete-horizontal-space)))
+  (let ((subword-p (and (boundp 'subword-mode) subword-mode)))
+    (subword-mode 1)
+    (unwind-protect
+        (save-excursion
+          (goto-char (point-min))
+          (while (re-search-forward "\\W+" nil t)
+            (replace-match " "))
+          (goto-char (point-min))
+          (forward-word 1)
+          (while (/= (point) (point-max))
+            (unless (looking-at " ")
+              (insert " "))
+            (forward-word 1))
+          (goto-char (point-min))
+          (delete-horizontal-space)
+          (goto-char (point-max))
+          (delete-horizontal-space))
+      (unless subword-p (subword-mode -1)))))
 
 (defun conn-kebab-case-region ()
   (interactive)
@@ -6501,8 +6530,8 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
-  "h" 'conn-contract
-  "H" 'conn-expand)
+  "H" 'conn-contract
+  "h" 'conn-expand)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -6700,7 +6729,6 @@ dispatch on each contiguous component of the region."
   "M-8"   'tear-off-window
   "M-9"   'tab-detach
   "C-M-0" 'kill-buffer-and-window
-  "SPC"   'conn-set-mark-command
   "_"     'repeat-complex-command
   "+"     'conn-set-register-seperator
   "/"     'undo-only
@@ -6710,11 +6738,11 @@ dispatch on each contiguous component of the region."
   "`"     'conn-other-window
   "~"     'conn-swap-windows
   ","     'repeat
+  "SPC"   'conn-dispatch-on-things
   "a"     'conn-wincontrol
-  "b"     'switch-to-buffer
-  "G"     'conn-M-g-keys
-  "g"     'conn-dispatch-on-things
-  "H"     'conn-expand
+  "b"     'conn-set-mark-command
+  "g"     'conn-M-g-keys
+  "h"     'conn-expand
   "P"     'conn-register-prefix
   "p"     'conn-register-load
   "s"     'conn-M-s-keys
@@ -6797,11 +6825,10 @@ dispatch on each contiguous component of the region."
   "?"           'undo-redo
   "q s"         'org-sort
   "q c"         'org-columns
-  "b"           'switch-to-buffer
+  "b"           'conn-dispatch-on-things
   "C"           'org-toggle-comment
   "c"           'conn-C-c-keys
   "G"           'conn-M-g-keys
-  "g"           'conn-dispatch-on-things
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
