@@ -2336,6 +2336,7 @@ state."
 
 (defvar conn-dispatch-default-actions
   '((line-column . conn-dispatch-jump)
+    (char . conn-dispatch-jump)
     (t . conn-dispatch-goto)))
 
 (defvar conn-dispatch-finders-alist
