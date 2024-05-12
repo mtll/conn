@@ -1407,10 +1407,8 @@ If any function returns a nil value then macro application it halted.")
          (funcall iterator state))
         (_
          (if primed
-             (push (cons (conn--create-marker (region-beginning)
-                                              (current-buffer))
-                         (conn--create-marker (region-end)
-                                              (current-buffer)))
+             (push (cons (conn--create-marker (region-beginning))
+                         (conn--create-marker (region-end)))
                    (alist-get (current-buffer) new-dots))
            (setq primed t))
          (pcase (funcall iterator state)
@@ -1884,29 +1882,25 @@ C-x, M-s and M-g into various state maps."
 
 ;;;;; Per State Cursor Colors
 
-(defvar conn--default-cursor-color)
-
-(defun conn--cursor-color-setup (&rest _)
+(defun conn--cursor-color-hook (&rest _)
   (let ((state (buffer-local-value 'conn-current-state
                                    (window-buffer (selected-window)))))
     (set-frame-parameter
      nil 'cursor-color
      (or (ignore-errors (face-background (get state :conn-cursor-face)))
-         conn--default-cursor-color))))
+         (face-background 'cursor)))))
 
 (conn-define-extension conn-cursor-colors
   "Cursor background face for states."
   (if conn-cursor-colors
       (progn
-        (setq conn--default-cursor-color (frame-parameter nil 'cursor-color))
-        (conn--cursor-color-setup)
-        (add-hook 'conn-transition-hook 'conn--cursor-color-setup)
-        (add-hook 'window-state-change-functions 'conn--cursor-color-setup))
-    (remove-hook 'conn-transition-hook 'conn--cursor-color-setup)
-    (remove-hook 'window-state-change-functions 'conn--cursor-color-setup)
-    (when (boundp 'conn--default-cursor-color)
-      (modify-all-frames-parameters
-       `((cursor-color . ,conn--default-cursor-color))))))
+        (conn--cursor-color-hook)
+        (add-hook 'conn-transition-hook 'conn--cursor-color-hook)
+        (add-hook 'window-state-change-functions 'conn--cursor-color-hook))
+    (remove-hook 'conn-transition-hook 'conn--cursor-color-hook)
+    (remove-hook 'window-state-change-functions 'conn--cursor-color-hook)
+    (modify-all-frames-parameters
+     `((cursor-color . ,(face-background 'cursor))))))
 
 ;;;;; State Definitions
 
@@ -2348,7 +2342,7 @@ state."
     (line . conn--dispatch-lines)
     (line-column . conn--dispatch-columns)
     (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
-    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(symbol sexp) 1 t))
+    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
     (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
     (conn-backward-symbol . ,(apply-partially 'conn--dispatch-all-things 'symbol t))
     (backward-word . ,(apply-partially 'conn--dispatch-all-things 'word t))
@@ -2379,6 +2373,14 @@ state."
             (setq thing (conn--thing-parent thing))))
         (alist-get t conn-dispatch-default-actions))))
 
+(defun conn-dispatch-fixup-whitespace ()
+  (when (or (looking-at " ") (looking-back " " 1))
+    (fixup-whitespace))
+  (when (save-excursion
+          (beginning-of-line)
+          (looking-at "\\s)*\n"))
+    (join-line)))
+
 (defun conn-dispatch-kill (window pt thing)
   (with-selected-window window
     (save-excursion
@@ -2387,8 +2389,7 @@ state."
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
-           (when (or (looking-at " ") (looking-back " " 1))
-             (fixup-whitespace))
+           (conn-dispatch-fixup-whitespace)
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2401,8 +2402,7 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
            (delete-region beg end)
-           (when (or (looking-at " ") (looking-back " " 1))
-             (fixup-whitespace))
+           (conn-dispatch-fixup-whitespace)
            (message "Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2415,8 +2415,7 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
            (delete-region beg end)
-           (when (or (looking-at " ") (looking-back " " 1))
-             (fixup-whitespace))
+           (conn-dispatch-fixup-whitespace)
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2474,8 +2473,7 @@ state."
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
          (kill-region beg end)
-         (when (or (looking-at " ") (looking-back " " 1))
-           (fixup-whitespace)))
+         (conn-dispatch-fixup-whitespace))
         (_ (user-error "No thing at point")))))
   (yank))
 
@@ -5704,19 +5702,20 @@ the edit in the macro."
     (save-window-excursion
       (kmacro-edit-macro (not arg))
       (when-let ((buffer (get-buffer "*Edit Macro*")))
-        (save-excursion
-          (goto-char (point-min))
-          (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
-            (goto-char (match-beginning 1))
-            (delete-region (match-beginning 1) (match-end 1))
-            (insert (substitute-command-keys "\\[exit-recursive-edit]"))))
-        (delete-other-windows)
-        (conn-local-mode 1)
-        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
-        (unwind-protect
-            (recursive-edit)
-          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
-          (kill-buffer buffer))))))
+        (with-current-buffer buffer
+          (save-excursion
+            (goto-char (point-min))
+            (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
+              (goto-char (match-beginning 1))
+              (delete-region (match-beginning 1) (match-end 1))
+              (insert (substitute-command-keys "\\[exit-recursive-edit]"))))
+          (delete-other-windows)
+          (conn-local-mode 1)
+          (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
+          (unwind-protect
+              (recursive-edit)
+            (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
+            (kill-buffer buffer)))))))
 
 (defun conn-recursive-edit-lossage ()
   "Edit lossage macro inside a recursive edit.
@@ -5727,16 +5726,17 @@ the edit in the macro."
     (save-window-excursion
       (kmacro-edit-lossage)
       (when-let ((buffer (get-buffer "*Edit Macro*")))
-        (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
-          (goto-char (match-beginning 1))
-          (delete-region (match-beginning 1) (match-end 1))
-          (insert (substitute-command-keys "\\[exit-recursive-edit]")))
-        (delete-other-windows)
-        (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
-        (unwind-protect
-            (recursive-edit)
-          (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
-          (kill-buffer buffer))))))
+        (with-current-buffer buffer
+          (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
+            (goto-char (match-beginning 1))
+            (delete-region (match-beginning 1) (match-end 1))
+            (insert (substitute-command-keys "\\[exit-recursive-edit]")))
+          (delete-other-windows)
+          (advice-add 'edmacro-finish-edit :after 'exit-recursive-edit)
+          (unwind-protect
+              (recursive-edit)
+            (advice-remove 'edmacro-finish-edit 'exit-recursive-edit)
+            (kill-buffer buffer)))))))
 
 (defun conn--push-macro-ring (macro)
   (interactive
