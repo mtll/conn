@@ -4250,8 +4250,8 @@ When called interactively reads STRING with timeout
 (defun conn--apply-region-transform (transform-func)
   "Apply TRANSFORM-FUNC to region contents.
 Handles rectangular regions."
-  (save-excursion
-    (let* ((case-fold-search nil))
+  (save-mark-and-excursion
+    (let ((case-fold-search nil))
       (if (null rectangle-mark-mode)
           (with-restriction
               (region-beginning) (region-end)
@@ -4300,119 +4300,82 @@ Repeated calls cycle through the actions in
            (append (cdr cycle) (list (car cycle))))
       (funcall (car cycle)))))
 
+(conn-register-thing subword
+  :forward-op subword-forward)
+
+(defun conn--buffer-to-words ()
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward "\\W+" nil t)
+      (replace-match " "))
+    (goto-char (point-min))
+    (subword-forward 1)
+    (while (/= (point) (point-max))
+      (unless (looking-at " ")
+        (insert " "))
+      (subword-forward 1))
+    (goto-char (point-min))
+    (delete-horizontal-space)
+    (goto-char (point-max))
+    (delete-horizontal-space)))
+
 (defun conn-kebab-case-region ()
-  "Transform region text to kebab-case."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
-     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
-       (replace-match "\\1-\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "\\1-\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "_" nil t)
-       (replace-match "-" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "-+" nil t)
-       (replace-match "-" nil nil))
+     (conn--buffer-to-words)
      (downcase-region (point-min) (point-max))
-     (current-buffer))))
+     (while (re-search-forward " " nil t)
+       (replace-match "-")))))
 
 (defun conn-capital-snake-case-region ()
   "Transform region text to Capital_Snake_Case."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
-     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
-     (goto-char (point-min))
-     (while (search-forward "-" nil t)
-       (replace-match "_" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "_+" nil t)
-       (replace-match "_" nil nil))
+     (conn--buffer-to-words)
+     (downcase-region (point-min) (point-max))
      (capitalize-region (point-min) (point-max))
-     (current-buffer))))
+     (while (re-search-forward " " nil t)
+       (replace-match "_")))))
 
 (defun conn-snake-case-region ()
   "Transform region text to snake_case."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
-     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "-" nil t)
-       (replace-match "_" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "_+" nil t)
-       (replace-match "_" nil nil))
+     (conn--buffer-to-words)
      (downcase-region (point-min) (point-max))
-     (current-buffer))))
+     (while (re-search-forward " " nil t)
+       (replace-match "_")))))
 
 (defun conn-capital-case-region ()
   "Transform region text to CapitalCase."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
-     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
+     (conn--buffer-to-words)
+     (downcase-region (point-min) (point-max))
      (capitalize-region (point-min) (point-max))
-     (goto-char (point-min))
-     (while (re-search-forward "[-_]+" nil t)
-       (replace-match "" nil nil))
-     (current-buffer))))
+     (while (re-search-forward " " nil t)
+       (replace-match "")))))
 
 (defun conn-camel-case-region ()
   "Transform region text to camelCase."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
-     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "\\1_\\2" nil nil))
+     (conn--buffer-to-words)
      (capitalize-region (point-min) (point-max))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "" nil nil))
      (downcase-region (point-min) (1+ (point-min)))
-     (while (re-search-forward "[-_]+" nil t)
-       (replace-match "" nil nil))
-     (current-buffer))))
+     (goto-char (point-min))
+     (while (re-search-forward " " nil t)
+       (replace-match "")))))
 
 (defun conn-case-to-words-region ()
   "Transform region text to individual words."
   (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (while (re-search-forward "\\([a-z0-9]\\)\\([A-Z]\\)" nil t)
-       (replace-match "\\1 \\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "\\([A-Z]+\\)\\([A-Z][a-z]\\)" nil t)
-       (replace-match "\\1 \\2" nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "_" nil t)
-       (replace-match " " nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward "-" nil t)
-       (replace-match " " nil nil))
-     (goto-char (point-min))
-     (while (re-search-forward " +" nil t)
-       (replace-match " " nil nil))
-     (downcase-region (point-min) (point-max))
-     (current-buffer))))
+  (conn--apply-region-transform 'conn--buffer-to-words))
 
 (defun conn-kill-append-region (beg end &optional register)
   "Kill region from BEG to END and append it to most recent kill.
@@ -6468,7 +6431,7 @@ dispatch on each contiguous component of the region."
   ["Change Case"
    [("k" "kebab-case" conn-kebab-case-region)
     ("a" "CapitalCase" conn-capital-case-region)
-    ("c" "camelCase" conn-camel-case-region)]
+    ("m" "camelCase" conn-camel-case-region)]
    [("n" "Snake_Case" conn-capital-snake-case-region)
     ("s" "snake_case" conn-snake-case-region)
     ("w" "Individual Words" conn-case-to-words-region)]
