@@ -783,7 +783,7 @@ If BUFFER is nil check `current-buffer'."
     (setq conn-this-command-thing (get this-command :conn-command-thing)
           conn-this-command-handler (get this-command :conn-mark-handler))))
 
-(defun conn--define-key-advice (keymap key def &rest _)
+(defun conn--define-key-advice (keymap key &rest _)
   (when (or (memq keymap (mapcar #'cdr conn--state-maps))
             (and (memq keymap (conn--without-conn-maps (current-active-maps)))
                  (member (if (stringp key) (key-parse key) key)
@@ -2376,7 +2376,7 @@ state."
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
-           (when (or (looking-at " ") (looking-back " "))
+           (when (or (looking-at " ") (looking-back " " 1))
              (fixup-whitespace))
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
@@ -2390,7 +2390,7 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
            (delete-region beg end)
-           (when (or (looking-at " ") (looking-back " "))
+           (when (or (looking-at " ") (looking-back " " 1))
              (fixup-whitespace))
            (message "Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
@@ -2404,7 +2404,7 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
            (delete-region beg end)
-           (when (or (looking-at " ") (looking-back " "))
+           (when (or (looking-at " ") (looking-back " " 1))
              (fixup-whitespace))
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
@@ -2463,7 +2463,7 @@ state."
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
          (kill-region beg end)
-         (when (or (looking-at " ") (looking-back " "))
+         (when (or (looking-at " ") (looking-back " " 1))
            (fixup-whitespace)))
         (_ (user-error "No thing at point")))))
   (yank))
@@ -4829,7 +4829,7 @@ there's a region, all lines that region covers will be duplicated."
 (defun conn-other-window-prompt-prefix ()
   (interactive)
   (display-buffer-override-next-command
-   (lambda (buffer _)
+   (lambda (_ _)
      (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse))))
 
 (defun conn-swap-windows (&optional no-select)
@@ -5193,8 +5193,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn-wincontrol-mode 1))
 
 (defun conn--wincontrol-pre-command ()
-  (when conn--wincontrol-arg
-    (setq prefix-arg (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
+  (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
+    (setq prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message nil)))
@@ -5516,22 +5516,26 @@ See `tab-close'."
               windows))))
 
 (defun conn-wincontrol-reverse (arg)
-  "Reflect windows in frame root window.
-If ARG is not +/-1 or 0 reflect windows in selected window parent window.
-If ARG is negative reverse windows recursively."
-  (interactive "p")
-  (let ((window (unless (or (= arg 0) (= (abs arg) 1))
-                  (window-parent (selected-window)))))
+  "Reverse order of windows in ARGth parent window.
+When ARG is nil the root window is used."
+  (interactive "P")
+  (let ((window
+         (when arg
+           (cl-loop for win = (selected-window) then (window-parent win)
+                    repeat (abs arg) while win finally (cl-return win)))))
     (thread-first
       (window-state-get window)
-      (conn--wincontrol-reverse-window (< arg 0))
+      (conn--wincontrol-reverse-window (and arg (< arg 0)))
       (window-state-put window))))
 
 (defun conn-wincontrol-reflect (arg)
-  "Rotate windows in frame root window.
-If ARG is not +/-1 or 0 rotate windows in selected window parent window."
+  "Rotate all window arrangements within ARGth parent window of `selected-window'.
+When ARG is nil the root window is used."
   (interactive "P")
-  (let ((window (when arg (window-parent (selected-window)))))
+  (let ((window
+         (when arg
+           (cl-loop for win = (selected-window) then (window-parent win)
+                    repeat (abs arg) while win finally (cl-return win)))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reflect-window)
