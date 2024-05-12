@@ -138,9 +138,9 @@ Defines default STATE for buffers matching REGEXP."
   :group 'conn-marks)
 
 (defface conn-window-prompt-face
-  '((default              (:height 5.0 :foreground "#d00000"))
-    (((background light)) (:height 5.0 :foreground "#d00000"))
-    (((background dark))  (:height 5.0 :foreground "#7c0000")))
+  '((default              (:height 2.5 :foreground "#d00000"))
+    (((background light)) (:height 2.5 :foreground "#d00000"))
+    (((background dark))  (:height 2.5 :foreground "#7c0000")))
   "Face for conn window prompt overlay."
   :group 'conn-mode)
 
@@ -218,7 +218,14 @@ Supported values are:
 (defcustom conn-dispatch-label-characters
   (list "f" "j" "d" "k" "s" "g" "h" "l" "w" "e" "r"
         "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
-  "Chars to use for dispatch leader overlays."
+  "Chars to use for dispatch label overlays."
+  :group 'conn
+  :type '(list integer))
+
+(defcustom conn-window-label-characters
+  (list "j" "k" "l" "u" "i" "o" "d" "s" "g" "h" "w"
+        "e" "r" "t" "y" "c" "v" "b" "n" "f" "m")
+  "Chars to use for window label overlays."
   :group 'conn
   :type '(list integer))
 
@@ -694,9 +701,8 @@ If BUFFER is nil check `current-buffer'."
     (mapc #'delete-overlay overlays)
     string))
 
-(defun conn--create-label-strings (count &optional labels)
-  (let* ((alphabet (seq-uniq conn-dispatch-label-characters))
-         (labels (or labels (take count alphabet)))
+(defun conn--create-label-strings (count alphabet &optional labels)
+  (let* ((labels (or labels (take count alphabet)))
          (prefixes nil))
     (while (and labels
                 (> count (+ (length labels)
@@ -708,7 +714,9 @@ If BUFFER is nil check `current-buffer'."
           (dolist (a prefixes)
             (dolist (b alphabet)
               (push (concat a b) new-labels)))
-          (conn--create-label-strings count new-labels))
+          (conn--create-label-strings count
+                                      conn-dispatch-label-characters
+                                      new-labels))
       (catch 'term
         (let ((n (length labels)))
           (setq labels (nreverse labels))
@@ -754,7 +762,9 @@ If BUFFER is nil check `current-buffer'."
                        overlay))))
 
 (defun conn--prompt-for-window (windows)
-  (when (setq windows (seq-remove 'window-dedicated-p windows))
+  (when (setq windows (seq-sort (lambda (a b)
+                                  (> (window-use-time a) (window-use-time b)))
+                                (seq-remove 'window-dedicated-p windows)))
     (if (length= windows 1)
         (car windows)
       (let ((window-state
@@ -765,7 +775,8 @@ If BUFFER is nil check `current-buffer'."
         (unwind-protect
             (conn--read-labels
              windows
-             (conn--create-label-strings (length windows))
+             (conn--create-label-strings (length windows)
+                                         conn-window-label-characters)
              'conn--create-window-labels
              'window)
           (cl-loop for win in windows
@@ -2872,7 +2883,8 @@ seconds."
                 labels (conn--create-label-strings
                         (let ((sum 0))
                           (dolist (p prefix-ovs sum)
-                            (setq sum (+ sum (length (cdr p))))))))
+                            (setq sum (+ sum (length (cdr p))))))
+                        conn-dispatch-label-characters))
           (catch 'term
             (while t
               (when (null labels)
@@ -2906,7 +2918,8 @@ seconds."
          (prefix-ovs (seq-group-by (lambda (ov) (overlay-get ov 'window))
                                    prefix-ovs)))
     (unwind-protect
-        (let ((labels (conn--create-label-strings count)))
+        (let ((labels (conn--create-label-strings
+                       count conn-dispatch-label-characters)))
           (unwind-protect
               (let* ((prefix (conn--read-labels prefix-ovs
                                                 labels
