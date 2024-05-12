@@ -174,7 +174,7 @@ Defines default STATE for buffers matching REGEXP."
   :type '(repeat symbol)
   :group 'conn-marks)
 
-(defcustom conn-other-window-prompt-threshold 4
+(defcustom conn-other-window-prompt-threshold 5
   "Number of windows before conn-other-window prompts for window."
   :type 'integer
   :group conn-mode)
@@ -6636,11 +6636,13 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
-  "r DEL" 'delete-rectangle
-  "*"     'calc-grab-rectangle
-  "+"     'calc-grab-sum-down
-  "_"     'calc-grab-sum-across
-  "y"     'yank-rectangle)
+  "r DEL"       'delete-rectangle
+  "*"           'calc-grab-rectangle
+  "+"           'calc-grab-sum-down
+  "_"           'calc-grab-sum-across
+  "y"           'yank-rectangle
+  "DEL"         'clear-rectangle
+  "<backspace>" 'clear-rectangle)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
@@ -6742,7 +6744,7 @@ dispatch on each contiguous component of the region."
   "SPC"   'conn-dispatch-on-things
   "a"     'conn-wincontrol
   "b"     'conn-set-mark-command
-  "g"     'conn-M-g-keys
+  "G"     'conn-M-g-keys
   "h"     'conn-expand
   "P"     'conn-register-prefix
   "p"     'conn-register-load
@@ -6765,12 +6767,11 @@ dispatch on each contiguous component of the region."
   "$"     'ispell-word
   "*"     'calc-dispatch
   "["     'conn-kill-prepend-region
-  "\""    'conn-insert-pair
+  "'"     'conn-insert-pair
   "<tab>" 'indent-region
   "TAB"   'indent-region
   "]"     'conn-kill-append-region
-  "'"     'conn-other-place-prefix-map
-  "B"     'ibuffer
+  "."     'conn-other-place-prefix-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
