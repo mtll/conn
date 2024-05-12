@@ -3915,6 +3915,15 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
+(defun conn-comment-or-uncomment-region-and-empty (beg end)
+  (interactive (list (region-beginning)
+                     (region-end)))
+  (comment-normalize-vars)
+  (if (comment-only-p beg end)
+      (uncomment-region)
+    (let ((comment-empty-lines t))
+      (comment-region beg end))))
+
 (defun conn-backward-symbol (arg)
   "`forward-symbol' in reverse."
   (interactive "p")
@@ -4830,6 +4839,7 @@ there's a region, all lines that region covers will be duplicated."
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
+  (comment-normalize-vars)
   (save-mark-and-excursion
     (conn-duplicate-region beg end arg)
     (comment-region (region-beginning)
@@ -6499,6 +6509,7 @@ dispatch on each contiguous component of the region."
   "$"   'ispell-region
   "*"   'calc-grab-region
   ";"   'comment-or-uncomment-region
+  ":"   'conn-comment-or-uncomment-region-and-empty
   "["   'conn-delete-pair
   "a c" 'align-current
   "a e" 'align-entire
@@ -7100,33 +7111,35 @@ determine if `conn-local-mode' should be enabled."
    'paredit-forward-down
    'paredit-backward-down)
 
+  (defun conn-paredit-list-handler (beg)
+    (pcase (save-excursion
+             (goto-char beg)
+             (ignore-errors (bounds-of-thing-at-point 'list)))
+      (`(,b . ,e)
+       (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
+
   (conn-register-thing-commands
-   'list
-   (lambda (beg)
-     (pcase (save-excursion
-              (goto-char beg)
-              (ignore-errors (bounds-of-thing-at-point 'list)))
-       (`(,b . ,e)
-        (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
+   'list 'conn-paredit-list-handler
    'paredit-forward-up
    'paredit-backward-up)
 
+  (defun conn-paredit-sexp-handler (beg)
+    (pcase (save-excursion
+             (goto-char beg)
+             (ignore-errors (bounds-of-thing-at-point 'list)))
+      ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
+       (conn-sequential-thing-handler beg))
+      ((and `(,b1 . ,_) (guard (/= beg b1)))
+       (save-excursion
+         (cond ((> (point) beg)
+                (while (> (point) beg) (forward-thing 'sexp -1)))
+               ((< (point) beg)
+                (while (< (point) beg) (forward-thing 'sexp 1))))
+         (conn--push-ephemeral-mark)))
+      (_ (conn-sequential-thing-handler beg))))
+
   (conn-register-thing-commands
-   'sexp
-   (lambda (beg)
-     (pcase (save-excursion
-              (goto-char beg)
-              (ignore-errors (bounds-of-thing-at-point 'list)))
-       ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
-        (conn-sequential-thing-handler beg))
-       ((and `(,b1 . ,_) (guard (/= beg b1)))
-        (save-excursion
-          (cond ((> (point) beg)
-                 (while (> (point) beg) (forward-thing 'sexp -1)))
-                ((< (point) beg)
-                 (while (< (point) beg) (forward-thing 'sexp 1))))
-          (conn--push-ephemeral-mark)))
-       (_ (conn-sequential-thing-handler beg))))
+   'sexp 'conn-paredit-sexp-handler
    'paredit-forward
    'paredit-backward))
 
