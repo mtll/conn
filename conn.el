@@ -4542,17 +4542,25 @@ When called interactively inserts STRING at `point' and `mark'."
       (goto-char end)
       (insert close)
       (goto-char beg)
-      (insert open))))
+      (insert-before-markers open))))
 
-(defun conn-change-pair (brackets arg)
-  "Call `conn-delete-pair' with ARG then call `conn-insert-pair' with STRING."
+(defun conn-change-pair-outward (brackets arg)
+  "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
   (interactive (list (conn--read-pair) current-prefix-arg))
-  (conn-delete-pair (or arg 1))
+  (conn-delete-pair-outward (or arg 1))
   (conn-insert-pair brackets
                     (region-beginning)
                     (region-end)))
 
-(defun conn-delete-pair (arg)
+(defun conn-change-pair-inward (brackets arg)
+  "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
+  (interactive (list (conn--read-pair) current-prefix-arg))
+  (conn-delete-pair-inward (or arg 1))
+  (conn-insert-pair brackets
+                    (region-beginning)
+                    (region-end)))
+
+(defun conn-delete-pair-inward (arg)
   "Delete ARG chars at `point' and `mark'."
   (interactive "p")
   (save-mark-and-excursion
@@ -4560,6 +4568,15 @@ When called interactively inserts STRING at `point' and `mark'."
       (when end (exchange-point-and-mark t))
       (delete-region (point) (+ (point) arg))
       (delete-region (- (mark-marker) arg) (mark-marker)))))
+
+(defun conn-delete-pair-outward (arg)
+  "Delete ARG chars at `point' and `mark'."
+  (interactive "p")
+  (save-mark-and-excursion
+    (let ((end (> (point) (mark-marker))))
+      (when end (exchange-point-and-mark t))
+      (delete-region (- (point) arg) (point))
+      (delete-region (mark-marker) (+ (mark-marker) arg)))))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -6495,7 +6512,6 @@ dispatch on each contiguous component of the region."
   "*"   'calc-grab-region
   ";"   'comment-or-uncomment-region
   ":"   'conn-comment-or-uncomment-region-and-empty
-  "["   'conn-delete-pair
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -6507,13 +6523,11 @@ dispatch on each contiguous component of the region."
   "d"   'conn-duplicate-region
   "e"   'eval-region
   "g"   'conn-rgrep-region
-  "I"   'indent-rigidly
   "j"   'conn-join-lines
-  "m"   'conn-macro-at-point-and-mark
+  "I"   'indent-rigidly
   "N"   'conn-narrow-indirect-to-region
   "n"   'conn-narrow-to-region
   "o"   'conn-occur-region
-  "p"   'conn-change-pair
   "x"   'conn-query-replace-regexp-region
   "<"   'conn-sort-prefix
   "u"   'conn-insert-pair
@@ -6629,9 +6643,7 @@ dispatch on each contiguous component of the region."
   "x" 'conn-xref-definition-prompt
   "s" 'xref-find-apropos
   "," 'xref-go-back
-  "." 'xref-go-forward
-  ">" 'next-error
-  "<" 'previous-error)
+  "." 'xref-go-forward)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
@@ -6660,8 +6672,13 @@ dispatch on each contiguous component of the region."
   "k"     'conn-emacs-state-open-line
   "l"     'conn-emacs-state-eol
   "j"     'conn-emacs-state-bol
-  "v"     'conn-emacs-state-overwrite
-  "b"     'conn-emacs-state-overwrite-binary)
+  "t"     'conn-emacs-state-overwrite
+  "b"     'conn-emacs-state-overwrite-binary
+  "c o"   'conn-change-pair-inward
+  "c u"   'conn-change-pair-outward
+  "c j"   'conn-delete-pair-inward
+  "c l"   'conn-delete-pair-outward
+  "c i"   'conn-insert-pair)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
