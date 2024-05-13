@@ -2206,14 +2206,6 @@ disabled.
 (defvar-keymap conn-common-map
   :doc "Keymap for bindings shared between dot and conn states.")
 
-(defvar-keymap conn-emacs-transitions-map
-  "i" 'conn-emacs-state-open-line-above
-  "k" 'conn-emacs-state-open-line
-  "l" 'conn-emacs-state-eol
-  "j" 'conn-emacs-state-bol
-  "o" 'conn-emacs-state-overwrite
-  "b" 'conn-emacs-state-overwrite-binary)
-
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
@@ -2249,11 +2241,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "f"       'conn-emacs-state
-                 "\\"      'conn-kapply-prefix
-                 "t"       'conn-change
-                 "g"       conn-emacs-transitions-map
-                 "M-TAB"   'conn-emacs-state-and-complete
-                 "M-<tab>" 'conn-emacs-state-and-complete))
+                 "t"       'conn-change))
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
 (conn-define-state conn-dot-state
@@ -2273,7 +2261,6 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
-                 "\\" 'conn-kapply-prefix
                  "f"  'conn-state
                  "Q"  'conn-dot-quit))
 
@@ -2295,9 +2282,7 @@ state."
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t
-  :transitions (define-keymap
-                 "f" 'conn-emacs-state
-                 "g" conn-emacs-transitions-map))
+  :transitions (define-keymap "f" 'conn-emacs-state))
 
 
 ;;;; Thing Dispatch
@@ -3944,6 +3929,20 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
+(defun conn-open-line (arg)
+  (interactive "p")
+  (move-end-of-line arg)
+  (newline-and-indent))
+
+(defun conn-open-line-above (arg)
+  (interactive "p")
+  (forward-line (- (1- arg)))
+  (move-beginning-of-line nil)
+  (insert "\n")
+  (forward-line -1)
+  ;; FIXME: see crux smart open line
+  (indent-according-to-mode))
+
 (defun conn-comment-or-uncomment-region-and-empty (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
@@ -4714,14 +4713,6 @@ for the meaning of prefix ARG."
     (user-error
      (unless (string-search "access aborted" (error-message-string err))
        (insert-register reg (not arg))))))
-
-(defun conn-kill-whole-line (&optional arg)
-  "Kill current line but exclude the trailing newline.
-With prefix ARG, kill that many lines starting from the current line."
-  (interactive "P")
-  (cond (arg (kill-whole-line (prefix-numeric-value arg)))
-        ((and (bolp) (eolp)) (delete-line))
-        (t (kill-whole-line 0))))
 
 (defun conn-unset-register (register)
   "Unset REGISTER."
@@ -6612,14 +6603,8 @@ dispatch on each contiguous component of the region."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  ","   'xref-go-back
-  "."   'xref-go-forward
   "s"   'conn-isearch-forward-thing
   "r"   'conn-isearch-backward-thing
-  "0"   'xref-find-references
-  "x"   'conn-xref-definition-prompt
-  "a"   'xref-find-apropos
-  "i"   'imenu
   "o"   'occur
   "l"   'locate
   "h ," 'conn-highlight-region
@@ -6629,8 +6614,14 @@ dispatch on each contiguous component of the region."
   "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-goto-map
-  "Y" 'pop-global-mark
+  "b" 'conn-narrow-ring-prefix
+  "o" 'pop-global-mark
   "k" 'goto-line
+  "r" 'xref-find-references
+  "x" 'conn-xref-definition-prompt
+  "s" 'xref-find-apropos
+  "," 'xref-go-back
+  "." 'xref-go-forward
   ">" 'next-error
   "<" 'previous-error)
 
@@ -6649,13 +6640,27 @@ dispatch on each contiguous component of the region."
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward)
 
+(defvar-keymap conn-misc-edit-map
+  :prefix 'conn-misc-edit-map
+  "TAB"   'conn-emacs-state-and-complete
+  "<tab>" 'conn-emacs-state-and-complete
+  "h"     'conn-register-prefix
+  "o"     'conn-open-line-and-indent
+  "n"     'conn-open-line-above
+  "m"     'conn-open-line
+  "i"     'conn-emacs-state-open-line-above
+  "k"     'conn-emacs-state-open-line
+  "l"     'conn-emacs-state-eol
+  "j"     'conn-emacs-state-bol
+  "v"     'conn-emacs-state-overwrite
+  "b"     'conn-emacs-state-overwrite-binary)
+
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
   "RET" 'whitespace-cleanup
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
   ";"   'comment-line
-  "b"   'conn-narrow-ring-prefix
   "c"   'conn-copy-thing
   "i"   'clone-indirect-buffer
   "d"   'duplicate-dwim
@@ -6709,6 +6714,7 @@ dispatch on each contiguous component of the region."
   :keymap conn-common-map
   :parent conn-movement-map
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
+  "\\"    'conn-kapply-prefix
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
   "C-3"   'split-window-right
@@ -6744,9 +6750,8 @@ dispatch on each contiguous component of the region."
   "SPC"   'conn-dispatch-on-things
   "a"     'conn-wincontrol
   "b"     'conn-set-mark-command
-  "G"     'conn-M-g-keys
+  "g"     'conn-M-g-keys
   "h"     'conn-expand
-  "P"     'conn-register-prefix
   "p"     'conn-register-load
   "s"     'conn-M-s-keys
   "V"     'conn-narrow-to-region
@@ -6767,14 +6772,15 @@ dispatch on each contiguous component of the region."
   "$"     'ispell-word
   "*"     'calc-dispatch
   "["     'conn-kill-prepend-region
-  "'"     'conn-insert-pair
+  "\""     'conn-insert-pair
   "<tab>" 'indent-region
   "TAB"   'indent-region
   "]"     'conn-kill-append-region
-  "."     'conn-other-place-prefix-map
+  "'"     'conn-other-place-prefix-map
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
+  "e"     'conn-misc-edit-map
   "E"     'conn-dot-region
   "Q"     'conn-dot-edit-map
   "q"     'conn-edit-map
@@ -6830,7 +6836,8 @@ dispatch on each contiguous component of the region."
   "b"           'conn-dispatch-on-things
   "C"           'org-toggle-comment
   "c"           'conn-C-c-keys
-  "G"           'conn-M-g-keys
+  "e"           'conn-misc-edit-map
+  "g"           'conn-M-g-keys
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
@@ -6844,7 +6851,6 @@ dispatch on each contiguous component of the region."
   "n"           'org-forward-element
   "N"           'org-toggle-narrow-to-subtree
   "O"           'org-next-block
-  "P"           'conn-register-prefix
   "p"           'conn-register-load
   "s"           'conn-M-s-keys
   "T"           'org-todo
