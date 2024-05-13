@@ -240,6 +240,9 @@ Supported values are:
   :group 'conn
   :type '(list symbol))
 
+(defvar conn-window-label-sort-function 'conn--sort-window-mru
+  "Sort function for window labels when prompting for a window.")
+
 ;;;;; State Variables
 
 (defvar conn-states nil)
@@ -761,9 +764,12 @@ If BUFFER is nil check `current-buffer'."
                                     (propertize lbl 'face 'conn-window-prompt-face))
                        overlay))))
 
+(defun conn--sort-window-mru (a b)
+  "Sort windows for most to least recently used."
+  (> (window-use-time a) (window-use-time b)))
+
 (defun conn--prompt-for-window (windows)
-  (when (setq windows (seq-sort (lambda (a b)
-                                  (> (window-use-time a) (window-use-time b)))
+  (when (setq windows (seq-sort conn-window-label-sort-function
                                 (seq-remove 'window-dedicated-p windows)))
     (if (length= windows 1)
         (car windows)
@@ -6613,9 +6619,15 @@ dispatch on each contiguous component of the region."
   "m b" 'multi-isearch-buffers
   "m f" 'multi-isearch-files)
 
+(defvar-keymap conn-pop-mark-repeat-map
+  :repeat t
+  "o" 'conn-pop-to-mark-command
+  "u" 'conn-unpop-to-mark-command)
+
 (defvar-keymap conn-goto-map
-  "b" 'conn-narrow-ring-prefix
-  "o" 'pop-global-mark
+  "l" 'pop-global-mark
+  "o" 'conn-pop-to-mark-command
+  "u" 'conn-unpop-to-mark-command
   "k" 'goto-line
   "r" 'xref-find-references
   "x" 'conn-xref-definition-prompt
@@ -6644,6 +6656,7 @@ dispatch on each contiguous component of the region."
   :prefix 'conn-misc-edit-map
   "TAB"   'conn-emacs-state-and-complete
   "<tab>" 'conn-emacs-state-and-complete
+  "r"     'conn-narrow-ring-prefix
   "h"     'conn-register-prefix
   "o"     'conn-open-line-and-indent
   "n"     'conn-open-line-above
@@ -6746,7 +6759,7 @@ dispatch on each contiguous component of the region."
   "?"     'undo-redo
   "`"     'conn-other-window
   "~"     'conn-swap-windows
-  ","     'repeat
+  "."     'repeat
   "SPC"   'conn-dispatch-on-things
   "a"     'conn-wincontrol
   "b"     'conn-set-mark-command
@@ -6888,10 +6901,7 @@ dispatch on each contiguous component of the region."
   "C-x t j"   'conn-register-load
   "C-x t s"   'tab-switch
   "C-x r a"   'conn-tab-to-register
-  "C-x t a"   'conn-tab-to-register
-  "M-o"       'conn-open-line-and-indent
-  "M-O"       'conn-pop-to-mark-command
-  "M-U"       'conn-unpop-to-mark-command)
+  "C-x t a"   'conn-tab-to-register)
 
 (defun conn--setup-keymaps ()
   (if conn-mode
