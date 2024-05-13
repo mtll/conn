@@ -4993,7 +4993,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (beginning-of-line N)
-  (back-to-indentation)
+  (conn-emacs-state))
+
+(defun conn-emacs-state-eoil (&optional N)
+  "Move point to end of line and enter `conn-emacs-state'."
+  (interactive "P")
+  (conn-end-of-inner-line N)
+  (conn-emacs-state))
+
+(defun conn-emacs-state-boil (&optional N)
+  "Move point to beginning of line and enter `conn-emacs-state'."
+  (interactive "P")
+  (conn-beginning-of-inner-line N)
   (conn-emacs-state))
 
 
@@ -6670,8 +6681,10 @@ dispatch on each contiguous component of the region."
   "m"     'conn-open-line
   "i"     'conn-emacs-state-open-line-above
   "k"     'conn-emacs-state-open-line
-  "l"     'conn-emacs-state-eol
-  "j"     'conn-emacs-state-bol
+  "l"     'conn-emacs-state-eoil
+  "L"     'conn-emacs-state-eol
+  "j"     'conn-emacs-state-boil
+  "J"     'conn-emacs-state-bol
   "t"     'conn-emacs-state-overwrite
   "b"     'conn-emacs-state-overwrite-binary
   "c o"   'conn-change-pair-inward
