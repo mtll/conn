@@ -5158,11 +5158,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "g"       'delete-other-windows
   "H"       'conn-wincontrol-help
   "h"       'enlarge-window
-  "i"       'tab-next
+  "i"       'tab-new
+  "I"       'tab-next
   "j"       'previous-buffer
   "J"       'bury-buffer
-  "k"       'tab-previous
-  "K"       'conn-wincontrol-tab-close
+  "k"       'tab-close
+  "K"       'tab-previous
   "l"       'next-buffer
   "L"       'unbury-buffer
   "M"       'tab-bar-move-window-to-tab
@@ -5178,12 +5179,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "R"       'conn-wincontrol-isearch-other-window-backward
   "s"       'shrink-window
   "S"       'conn-wincontrol-isearch-other-window
-  "t"       'conn-wincontrol-transpose-window
+  "t"       'tab-switch
   "u"       'conn-previous-window
   "U"       'tab-bar-detach-tab
   "v"       'conn-wincontrol-split-vertically
   "w"       'enlarge-window-horizontally
-  "x"       'kill-buffer-and-window
+  "x"       'conn-wincontrol-transpose-window
   "y"       'conn-wincontrol-yank-window
   "z"       'conn-wincontrol-zoom-out
   "Z"       'conn-wincontrol-zoom-in)
@@ -5635,12 +5636,6 @@ The last value is \"don't use any of these switches\"."
 
 (defun conn--in-kbd-macro-p ()
   (or defining-kbd-macro executing-kbd-macro))
-
-(defun conn--kmacro-ring-empty-p ()
-  ;; Avoid the messages kmacro-ring-empty-p dispays
-  (while (and (null last-kbd-macro) kmacro-ring)
-    (kmacro-pop-ring1))
-  (null last-kbd-macro))
 
 (transient-define-infix conn--set-counter-format-infix ()
   "Set `kmacro-counter-format'."
@@ -6493,8 +6488,8 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
-  "s" 'conn-isearch-region-forward
-  "r" 'conn-isearch-region-backward
+  "s"   'conn-isearch-region-forward
+  "r"   'conn-isearch-region-backward
   "DEL" 'conn-delete-region-keys
   "$"   'ispell-region
   "*"   'calc-grab-region
@@ -6524,7 +6519,8 @@ dispatch on each contiguous component of the region."
   "u"   'conn-insert-pair
   "v"   'vc-region-history
   "w"   'conn-query-replace-region
-  "y"   'yank-rectangle)
+  "y"   'yank-rectangle
+  "Y"   'conn-yank-lines-as-rectangle)
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
@@ -6653,7 +6649,6 @@ dispatch on each contiguous component of the region."
   "?" 'tab-bar-history-forward)
 
 (defvar-keymap conn-misc-edit-map
-  :prefix 'conn-misc-edit-map
   "TAB"   'conn-emacs-state-and-complete
   "<tab>" 'conn-emacs-state-and-complete
   "r"     'conn-narrow-ring-prefix
@@ -6695,8 +6690,7 @@ dispatch on each contiguous component of the region."
   "V"   'conn-narrow-indirect-to-visible
   "v"   'conn-narrow-to-visible
   "w"   'query-replace
-  "y"   'yank-in-context
-  "Y"   'conn-yank-lines-as-rectangle)
+  "y"   'yank-in-context)
 
 (define-keymap
   :keymap conn-movement-map
@@ -6793,7 +6787,7 @@ dispatch on each contiguous component of the region."
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
-  "e"     'conn-misc-edit-map
+  "e"     conn-misc-edit-map
   "E"     'conn-dot-region
   "Q"     'conn-dot-edit-map
   "q"     'conn-edit-map
@@ -6849,7 +6843,7 @@ dispatch on each contiguous component of the region."
   "b"           'conn-dispatch-on-things
   "C"           'org-toggle-comment
   "c"           'conn-C-c-keys
-  "e"           'conn-misc-edit-map
+  "e"           conn-misc-edit-map
   "g"           'conn-M-g-keys
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
@@ -6900,7 +6894,6 @@ dispatch on each contiguous component of the region."
   "C-x r W"   'conn-unset-register
   "C-x t j"   'conn-register-load
   "C-x t s"   'tab-switch
-  "C-x r a"   'conn-tab-to-register
   "C-x t a"   'conn-tab-to-register)
 
 (defun conn--setup-keymaps ()
