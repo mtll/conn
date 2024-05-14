@@ -1511,22 +1511,23 @@ The iterator must be the first argument in ARGLIST.
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
-       (let* ((undo-outer-limit nil)
-              (undo-limit most-positive-fixnum)
-              (undo-strong-limit most-positive-fixnum)
-              (conn-kmacro-applying-p t)
-              (conn-kmacro-apply-error nil)
-              (,iterator (lambda (&optional state)
-                           (pcase (funcall ,iterator (or state :loop))
-                             (`(,beg . ,end)
-                              (goto-char beg)
-                              (conn--push-ephemeral-mark end)
-                              (when (markerp beg) (set-marker beg nil))
-                              (when (markerp end) (set-marker end nil))
-                              (and (run-hook-with-args-until-failure
-                                    'conn-kmacro-apply-iterator-hook)
-                                   t))))))
-         (advice-add 'kmacro-loop-setup-function :before-while ,iterator)
+       (cl-letf* ((undo-outer-limit nil)
+                  (undo-limit most-positive-fixnum)
+                  (undo-strong-limit most-positive-fixnum)
+                  (conn-kmacro-applying-p t)
+                  (conn-kmacro-apply-error nil)
+                  (kmacro-loopfn (symbol-function 'kmacro-loop-setup-function))
+                  (,iterator (lambda (&optional state)
+                               (pcase (funcall ,iterator (or state :loop))
+                                 (`(,beg . ,end)
+                                  (goto-char beg)
+                                  (conn--push-ephemeral-mark end)
+                                  (when (markerp beg) (set-marker beg nil))
+                                  (when (markerp end) (set-marker end nil))
+                                  (and (run-hook-with-args-until-failure
+                                        'conn-kmacro-apply-iterator-hook)
+                                       (funcall kmacro-loopfn))))))
+                  ((symbol-function 'kmacro-loop-setup-function) ,iterator))
          (unwind-protect
              (condition-case err
                  (progn
@@ -1536,7 +1537,6 @@ The iterator must be the first argument in ARGLIST.
                (t
                 (setq conn-kmacro-apply-error err)
                 (signal (car err) (cdr err))))
-           (advice-remove 'kmacro-loop-setup-function ,iterator)
            (funcall ,iterator :finalize)
            (run-hook-wrapped 'conn-kmacro-apply-end-hook
                              (lambda (hook)
@@ -1545,9 +1545,9 @@ The iterator must be the first argument in ARGLIST.
 (conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
     ((pred kmacro-p)
-     (funcall macro 0))
+     (funcall macro (or count 0)))
     ((or (pred stringp) (pred vectorp))
-     (kmacro-call-macro 0 nil nil macro))
+     (kmacro-call-macro (or count 0) nil nil macro))
     ('nil
      (when (funcall iterator :record)
        (kmacro-start-macro nil)
@@ -4369,7 +4369,6 @@ Repeated calls cycle through the actions in
   (conn--apply-region-transform
    (lambda ()
      (conn--buffer-to-words)
-     (downcase-region (point-min) (point-max))
      (capitalize-region (point-min) (point-max))
      (while (re-search-forward " " nil t)
        (replace-match "_")))))
@@ -4390,7 +4389,6 @@ Repeated calls cycle through the actions in
   (conn--apply-region-transform
    (lambda ()
      (conn--buffer-to-words)
-     (downcase-region (point-min) (point-max))
      (capitalize-region (point-min) (point-max))
      (while (re-search-forward " " nil t)
        (replace-match "")))))
@@ -6373,7 +6371,11 @@ dispatch on each contiguous component of the region."
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
    [("m" "Merge" conn-merge-narrow-ring :transient t)
-    ("w" "Widen" widen)
+    ("w" "Widen"
+     (lambda ()
+       (interactive)
+       (widen)
+       (conn-recenter-on-region)))
     ("c" "Clear" conn-clear-narrow-ring)
     ("v" "Add Region" conn-region-to-narrow-ring)]
    [("n" "Cycle Next" conn-cycle-narrowings :transient t)
@@ -6515,7 +6517,6 @@ dispatch on each contiguous component of the region."
   "`" 'conn-other-window)
 
 (defvar-keymap conn-region-map
-  :prefix 'conn-region-map
   "s"   'conn-isearch-region-forward
   "r"   'conn-isearch-region-backward
   "DEL" 'conn-delete-region-keys
@@ -6542,7 +6543,8 @@ dispatch on each contiguous component of the region."
   "x"   'conn-query-replace-regexp-region
   "<"   'conn-sort-prefix
   "u"   'conn-insert-pair
-  "v"   'vc-region-history
+  "v"   'conn-region-to-narrow-ring
+  "V"   'vc-region-history
   "w"   'conn-query-replace-region
   "y"   'yank-rectangle
   "Y"   'conn-yank-lines-as-rectangle)
@@ -6687,6 +6689,7 @@ dispatch on each contiguous component of the region."
   "J"     'conn-emacs-state-bol
   "t"     'conn-emacs-state-overwrite
   "b"     'conn-emacs-state-overwrite-binary
+  "v"     'conn-region-to-narrow-ring
   "c o"   'conn-change-pair-inward
   "c u"   'conn-change-pair-outward
   "c j"   'conn-delete-pair-inward
@@ -6822,7 +6825,7 @@ dispatch on each contiguous component of the region."
   "Q"     'conn-dot-edit-map
   "q"     'conn-edit-map
   "R"     conn-dot-region-map
-  "r"     'conn-region-map
+  "r"     conn-region-map
   "T"     'conn-dot-all-things-in-region
   "w"     'conn-kill-region
   "y"     'conn-yank-keys
