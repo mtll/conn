@@ -942,10 +942,9 @@ If BUFFER is nil check `current-buffer'."
     (when-let ((binding (plist-get rest :mark-key)))
       `((let ((mark-command (conn--thing-bounds-command ,thing)))
            ,(if-let ((modes (plist-get rest :modes)))
-                `(dolist (mode (ensure-list ',modes))
-                   (setf (alist-get ,binding (get mode :conn-mode-things)
-                                    nil nil #'equal)
-                         mark-command))
+                `(dolist (mode (ensure-list ,modes))
+                   (keymap-set (conn-get-mode-things-map mode)
+                               ,binding mark-command))
               `(keymap-set conn-mark-thing-map ,binding mark-command))))))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
@@ -1719,31 +1718,16 @@ If BUFFER is nil use current buffer."
 
 ;;;; Key Remapping
 
-(defun conn--modes-mark-map ()
-  (setq conn--local-mark-thing-map (copy-keymap conn-mark-thing-map))
-  (let (selectors)
-    (dolist (mode local-minor-modes)
-      (setq selectors (nconc (get mode :conn-mode-things) selectors)))
-    (dolist (mode (conn--derived-mode-all-parents major-mode))
-      (setq selectors (nconc (get mode :conn-mode-things) selectors)))
-    (when selectors
-      (setq selectors (nreverse selectors))
-      (pcase-dolist (`(,binding . ,command) selectors)
-        (keymap-set conn--local-mark-thing-map binding command))))
-  conn--local-mark-thing-map)
-
 (defun conn--generate-aux-map (keymaps)
   (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
                        (make-sparse-keymap)))
-        (state-map (list (alist-get conn-current-state conn--state-maps))))
+        (state-map (list (alist-get conn-current-state conn--state-maps)
+                         (conn-get-local-map conn-current-state))))
     (conn--without-conn-maps
       (dolist (sentinal conn--aux-bindings)
         (when-let ((def (lookup-key keymaps (symbol-value sentinal) t)))
           (dolist (key (where-is-internal sentinal state-map nil t))
             (define-key aux-map key def)))))
-    (let ((mark-map (conn--modes-mark-map)))
-      (dolist (key (where-is-internal 'conn-mark-thing-map state-map nil t t))
-        (define-key aux-map key mark-map)))
     aux-map))
 
 (defun conn--update-aux-map (&optional force)
@@ -1912,19 +1896,21 @@ C-x, M-s and M-g into various state maps."
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
-  (if (get major-mode :conn-inhibit-inherit-maps)
-      (pcase-dolist (`(,state . ,maps) conn--mode-maps)
-        (let ((map (or (alist-get major-mode maps)
-                       (setf (alist-get major-mode maps)
-                             (make-sparse-keymap)))))
-          (push (cons state map) conn--major-mode-maps)))
-    (let ((mmodes (reverse (conn--derived-mode-all-parents major-mode))))
-      (pcase-dolist (`(,state . ,maps) conn--mode-maps)
-        (dolist (mode mmodes)
-          (let ((map (or (alist-get mode maps)
-                         (setf (alist-get mode maps)
-                               (make-sparse-keymap)))))
-            (push (cons state map) conn--major-mode-maps)))))))
+  (let ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
+                    (list major-mode)
+                  (nreverse (conn--derived-mode-all-parents major-mode))))
+        mark-map-keys mode-map)
+    (dolist (state conn-states)
+      (setq mark-map-keys
+            (where-is-internal 'conn-mark-thing-map
+                               (list (alist-get state conn--state-maps)
+                                     (conn-get-local-map state))))
+      (dolist (mode mmodes)
+        (setq mode-map (conn-get-mode-map state mode))
+        (push (cons state mode-map) conn--major-mode-maps)
+        (when-let (mark-map (conn-get-mode-things-map mode))
+          (dolist (key mark-map-keys)
+            (define-key mode-map key mark-map)))))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
   "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
@@ -1946,6 +1932,20 @@ in STATE and return it."
   (or (alist-get mode (alist-get state conn--mode-maps))
       (setf (alist-get mode (alist-get state conn--mode-maps))
             (make-sparse-keymap))))
+
+(defun conn-get-mode-things-map (mode)
+  "Get MODE keymap for STATE things.
+If one does not exists assign a new sparse keymap for MODE things
+in STATE and return it."
+  (or (get mode :conn-mode-things)
+      (put mode :conn-mode-things (make-sparse-keymap))))
+
+(defun conn-get-local-map (state)
+  "Get local keymap for STATE in current buffer.
+If one does not exists assign a new sparse keymap for STATE
+and return it."
+  (or (alist-get state conn--local-maps)
+      (setf (alist-get state conn--local-maps) (make-sparse-keymap))))
 
 (defun conn-input-method-overriding-mode (mode &rest hooks)
   "Make a MODE ignore `conn-mode' input method supression.
@@ -7146,11 +7146,12 @@ determine if `conn-local-mode' should be enabled."
    'paredit-backward-down)
 
   (defun conn-paredit-list-handler (beg)
-    (pcase (save-excursion
-             (goto-char beg)
-             (ignore-errors (bounds-of-thing-at-point 'list)))
-      (`(,b . ,e)
-       (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
+    (unless (region-active-p)
+      (pcase (save-excursion
+               (goto-char beg)
+               (ignore-errors (bounds-of-thing-at-point 'list)))
+        (`(,b . ,e)
+         (conn--push-ephemeral-mark (if (< (point) beg) e b))))))
 
   (conn-register-thing-commands
    'list 'conn-paredit-list-handler
@@ -7158,19 +7159,20 @@ determine if `conn-local-mode' should be enabled."
    'paredit-backward-up)
 
   (defun conn-paredit-sexp-handler (beg)
-    (pcase (save-excursion
-             (goto-char beg)
-             (ignore-errors (bounds-of-thing-at-point 'list)))
-      ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
-       (conn-sequential-thing-handler beg))
-      ((and `(,b1 . ,_) (guard (/= beg b1)))
-       (save-excursion
-         (cond ((> (point) beg)
-                (while (> (point) beg) (forward-thing 'sexp -1)))
-               ((< (point) beg)
-                (while (< (point) beg) (forward-thing 'sexp 1))))
-         (conn--push-ephemeral-mark)))
-      (_ (conn-sequential-thing-handler beg))))
+    (unless (region-active-p)
+      (pcase (save-excursion
+               (goto-char beg)
+               (ignore-errors (bounds-of-thing-at-point 'list)))
+        ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
+         (conn-sequential-thing-handler beg))
+        ((and `(,b1 . ,_) (guard (/= beg b1)))
+         (save-excursion
+           (cond ((> (point) beg)
+                  (while (> (point) beg) (forward-thing 'sexp -1)))
+                 ((< (point) beg)
+                  (while (< (point) beg) (forward-thing 'sexp 1))))
+           (conn--push-ephemeral-mark)))
+        (_ (conn-sequential-thing-handler beg)))))
 
   (conn-register-thing-commands
    'sexp 'conn-paredit-sexp-handler
