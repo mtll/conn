@@ -2247,7 +2247,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
-                 "f"       'conn-emacs-state
+                 "e"       'conn-emacs-state
                  "t"       'conn-change))
 (set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
 
@@ -2301,14 +2301,14 @@ state."
   "p" 'conn-dispatch-copy-prepend
   "w" 'conn-dispatch-kill
   "e" 'conn-dispatch-dot
-  "g" 'conn-dispatch-grab
-  "f" 'conn-dispatch-yank
-  "r" 'conn-dispatch-transpose
+  "s" 'conn-dispatch-grab
+  "y" 'conn-dispatch-yank
+  "x" 'conn-dispatch-transpose
   "c" 'conn-dispatch-copy
-  "s" 'conn-dispatch-yank-replace
+  "f" 'conn-dispatch-yank-replace
   "d" 'conn-dispatch-grab-replace
-  "t" 'conn-dispatch-goto
-  "q" 'conn-dispatch-jump)
+  "g" 'conn-dispatch-goto
+  "z" 'conn-dispatch-jump)
 
 (defvar conn-dispatch-command-descriptions
   '((conn-dispatch-kill-append . "Kill Append")
@@ -6788,7 +6788,7 @@ dispatch on each contiguous component of the region."
   "`"     'conn-other-window
   "~"     'conn-swap-windows
   "."     'repeat
-  "SPC"   'conn-dispatch-on-things
+  "f"     'conn-dispatch-on-things
   "a"     'conn-wincontrol
   "b"     'conn-set-mark-command
   "g"     'conn-M-g-keys
@@ -6821,7 +6821,7 @@ dispatch on each contiguous component of the region."
   "C"     'conn-copy-region
   "c"     'conn-C-c-keys
   "d"     'conn-delete-char-keys
-  "e"     conn-misc-edit-map
+  "b"     conn-misc-edit-map
   "E"     'conn-dot-region
   "Q"     'conn-dot-edit-map
   "q"     'conn-edit-map
