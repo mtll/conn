@@ -895,8 +895,9 @@ If BUFFER is nil check `current-buffer'."
          (pcase (bounds-of-thing-at-point ',thing)
            (`(,beg . ,end)
             (goto-char beg)
-            (conn--push-ephemeral-mark end)))
-         (activate-mark))
+            (conn--push-ephemeral-mark end)
+            (activate-mark))
+           (_ (user-error "Point not in %s" ',thing))))
        (put ',name :conn-command-thing ',thing)
        ',name)))
 
