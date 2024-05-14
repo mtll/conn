@@ -53,7 +53,7 @@
 
 (conn-register-thing inner-loop
   :modes conn--ts-modes
-  :mark-key "p"
+  :mark-key "l"
   :bounds-op (lambda ()
                (evil-textobj-tree-sitter--thing-at-point-bounds "loop.inner")))
 
@@ -88,7 +88,7 @@
                (evil-textobj-tree-sitter--thing-at-point-bounds "parameter.inner")))
 
 (conn-register-thing function    :modes conn--ts-modes :mark-key "F")
-(conn-register-thing loop        :modes conn--ts-modes :mark-key "P")
+(conn-register-thing loop        :modes conn--ts-modes :mark-key "L")
 (conn-register-thing conditional :modes conn--ts-modes :mark-key "I")
 (conn-register-thing assignment  :modes conn--ts-modes :mark-key "A")
 (conn-register-thing class       :modes conn--ts-modes :mark-key "C")
