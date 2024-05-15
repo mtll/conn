@@ -295,6 +295,8 @@ nil `conn-local-mode' will be not enabled in the buffer.")
 
 (defvar conn--transition-maps nil)
 
+(defvar conn--default-cursor-color nil)
+
 ;;;;; Mark Variables
 
 (defvar conn-this-command-handler nil
@@ -940,17 +942,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (setq conn--ephemeral-mark t)
   nil)
 
-(defun conn--update-cursor ()
+(defun conn--update-cursor (&rest _frame)
   (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
       (setq cursor-type cursor)
     (setq cursor-type t))
   (when conn-cursor-colors
     (set-cursor-color (or (conn--thread -it->
-                              (window-buffer (selected-window))
+                            (window-buffer (selected-window))
                             (buffer-local-value 'conn-current-state -it->)
                             (get -it-> :conn-cursor-face)
                             (ignore-errors (face-background -it->)))
-                          (face-background 'cursor)))))
+                          conn--default-cursor-color))))
 
 (defun conn--hide-mark-cursor-p (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
@@ -4830,8 +4832,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help]: cycle help; "
     "\\[conn-wincontrol-quit]: quit; "
-    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
-    "max vert/horiz"
+    "\\[conn-wincontrol-mru-window]: last win"
     "\n"
     "\\[enlarge-window] "
     "\\[shrink-window] "
@@ -4839,8 +4840,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[shrink-window-horizontally]: "
     "heighten shorten widen narrow; "
     "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
-    "\\[kill-buffer-and-window]: kill buf+win; "
-    "\\[conn-wincontrol-mru-window]: last win"
+    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
+    "max vert/horiz"
     "\n"
     "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
@@ -6812,20 +6813,26 @@ determine if `conn-local-mode' should be enabled."
     (conn--setup-advice)
     (if conn-mode
         (progn
+          (setq conn--default-cursor-color (face-background 'cursor))
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
           (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
                 mark-even-if-inactive t)
           (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
           (add-hook 'post-command-hook #'conn--mark-post-command-hook)
-          (add-hook 'window-configuration-change-hook #'conn--update-cursor)
+          (add-hook 'window-selection-change-functions #'conn--update-cursor)
+          (add-hook 'window-buffer-change-functions #'conn--update-cursor)
+          (add-hook 'minibuffer-setup-hook #'conn--update-cursor)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
       (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
+      (set-cursor-color conn--default-cursor-color)
       (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
       (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
-      (remove-hook 'window-configuration-change-hook #'conn--update-cursor)
+      (remove-hook 'window-selection-change-functions #'conn--update-cursor)
+      (remove-hook 'window-buffer-change-functions #'conn--update-cursor)
+      (remove-hook 'minibuffer-setup-hook #'conn--update-cursor)
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
 (provide 'conn)
