@@ -2148,7 +2148,7 @@ from dot state.  See `conn-dot-state-map' for commands bound by dot state."
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
-                 "f"  'conn-state
+                 "c"  'conn-state
                  "Q"  'conn-dot-quit))
 
 (conn-define-state conn-org-edit-state
@@ -4163,22 +4163,6 @@ Handles rectangular regions."
              (goto-char (point-min))
              (funcall transform-func)))
          (region-beginning) (region-end))))))
-
-(defun conn-region-case-dwim ()
-  "Cycle case in region.
-
-not (or downcase Capitalize UPCASE) ->
-downcase -> Capitalize -> UPCASE -> downcase."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (let ((str (buffer-string)))
-       (cond ((string= str (capitalize str))
-              (upcase-region (point-min) (point-max)))
-             ((string= str (downcase str))
-              (capitalize-region (point-min) (point-max)))
-             (t (downcase-region (point-min) (point-max)))))
-     (current-buffer))))
 
 (defun conn--buffer-to-words ()
   (let ((subword-p (and (boundp 'subword-mode) subword-mode)))
@@ -6208,10 +6192,11 @@ dispatch on each contiguous component of the region."
     ("r" "Rectangle" copy-rectangle-to-register)
     ("w" "Window Configuration" window-configuration-to-register)]]
   ["Register:"
+   [("e" "Set Seperator" conn-set-register-seperator)
+    ("i" "Increment" increment-register :transient t)
+    ("s" "List" list-registers :transient t)]
    [("l" "Load" conn-register-load)
-    ("u" "Unset" conn-unset-register :transient t)]
-   [("i" "Increment" increment-register :transient t)
-    ("s" "List" list-registers :transient t)]])
+    ("u" "Unset" conn-unset-register :transient t)]])
 
 ;;;;; Fill Prefix
 
@@ -6337,9 +6322,8 @@ dispatch on each contiguous component of the region."
   "N"   'conn-narrow-indirect-to-region
   "n"   'conn-narrow-to-region
   "o"   'conn-occur-region
-  "x"   'conn-query-replace-regexp-region
   "<"   'conn-sort-prefix
-  "u"   'conn-insert-pair
+  "u"   'conn-query-replace-regexp-region
   "v"   'conn-region-to-narrow-ring
   "V"   'vc-region-history
   "w"   'conn-query-replace-region
@@ -6471,8 +6455,6 @@ dispatch on each contiguous component of the region."
 (defvar-keymap conn-misc-edit-map
   "TAB"   'conn-emacs-state-and-complete
   "<tab>" 'conn-emacs-state-and-complete
-  "r"     'conn-narrow-ring-prefix
-  "h"     'conn-register-prefix
   "o"     'conn-open-line-and-indent
   "n"     'conn-open-line-above
   "m"     'conn-open-line
@@ -6511,13 +6493,11 @@ dispatch on each contiguous component of the region."
   "N"   'conn-narrow-indirect-to-thing
   "n"   'conn-narrow-to-thing
   "o"   'transpose-words
-  "p"   'conn-kmacro-prefix
+  "u"   'query-replace-regexp
   "q"   'indent-for-tab-command
-  "r"   'query-replace-regexp
-  "u"   'conn-mark-thing
-  "V"   'conn-narrow-indirect-to-visible
-  "v"   'conn-narrow-to-visible
+  "r"   'conn-kmacro-prefix
   "w"   'query-replace
+  "v"   'conn-mark-thing
   "y"   'yank-in-context)
 
 (define-keymap
@@ -6585,11 +6565,12 @@ dispatch on each contiguous component of the region."
   "g"     'conn-M-g-keys
   "h"     'conn-expand
   "p"     'conn-register-load
+  "P"     'conn-register-prefix
   "s"     'conn-M-s-keys
   "V"     'conn-narrow-to-region
   "v"     'conn-toggle-mark-command
   "W"     'widen
-  "X"     'conn-cycle-narrowings
+  "X"     'conn-narrow-ring-prefix
   "x"     'conn-C-x-keys
   "z"     'conn-exchange-mark-command)
 
@@ -6640,7 +6621,6 @@ dispatch on each contiguous component of the region."
   "["                'conn-remove-dots-before
   "]"                'conn-remove-dots-after
   "="                'conn-dot-thing-at-point
-  "c"                'conn-split-dots-on-regexp
   "D"                'conn-remove-all-dots
   "d"                'conn-remove-dot-forward
   "E"                'conn-dot-point
@@ -6648,6 +6628,7 @@ dispatch on each contiguous component of the region."
   "q"                'conn-dot-edit-map
   "r"                conn-dot-region-map
   "t"                'conn-dot-all-things-in-region
+  "x"                'conn-split-dots-on-regexp
   "y"                'conn-add-dots-matching-regexp)
 
 (define-keymap
