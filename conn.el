@@ -3042,8 +3042,12 @@ Expansions and contractions are provided by functions in
                                   (< beg1 end1 beg2 end2))))
                        merged)
         ((and cons `(,beg2 . ,end2))
-         (setcar cons (if (< beg1 beg2) beg1 beg2))
-         (setcdr cons (if (> end1 end2) end1 end2)))
+         (setcar cons (if (< beg1 beg2)
+                          (prog1 beg1 (set-marker beg2 nil))
+                        (prog1 beg2 (set-marker beg1 nil))))
+         (setcdr cons (if (> end1 end2)
+                          (prog1 end1 (set-marker end2 nil))
+                        (prog1 end2 (set-marker end1 nil)))))
         ('nil
          (push region merged))))
     (setq conn-narrow-ring (nreverse merged))
@@ -3064,6 +3068,9 @@ Interactively defaults to the current region."
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
+  (cl-loop for (beg . end) in conn-narrow-ring do
+           (set-marker beg nil)
+           (set-marker end nil))
   (setq conn-narrow-ring nil))
 
 (defun conn-pop-narrow-ring ()
@@ -3076,7 +3083,9 @@ Interactively defaults to the current region."
      (if conn-narrow-ring
          (narrow-to-region (caar conn-narrow-ring)
                            (cdar conn-narrow-ring))
-       (widen)))))
+       (widen))
+     (set-marker beg nil)
+     (set-marker end nil))))
 
 (defun conn-isearch-in-narrow-p (beg end)
   (cl-loop for narrowing in conn-narrow-ring
@@ -6172,13 +6181,19 @@ dispatch on each contiguous component of the region."
          (narrow-to-region min max)
          (goto-char point)
          (save-mark-and-excursion--restore mark)
-         (setq conn-narrow-ring narrow-ring))))]]
+         (conn-clear-narrow-ring)
+         (setq conn-narrow-ring
+               (cl-loop for (beg . end) in narrow-ring
+                        collect (cons (conn--create-marker beg)
+                                      (conn--create-marker end)))))))]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
    :scope (list (point) (save-mark-and-excursion--save)
                 (point-min) (point-max)
-                (copy-sequence conn-narrow-ring))))
+                (cl-loop for (beg . end) in conn-narrow-ring
+                         collect (cons (marker-position beg)
+                                       (marker-position end))))))
 
 ;;;;; Register Prefix
 
@@ -6467,6 +6482,7 @@ dispatch on each contiguous component of the region."
   "t"     'conn-emacs-state-overwrite
   "b"     'conn-emacs-state-overwrite-binary
   "v"     'conn-region-to-narrow-ring
+  "x"     'conn-narrow-ring-prefix
   "c o"   'conn-change-pair-inward
   "c u"   'conn-change-pair-outward
   "c j"   'conn-delete-pair-inward
