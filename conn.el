@@ -3042,8 +3042,8 @@ Expansions and contractions are provided by functions in
                                   (< beg1 end1 beg2 end2))))
                        merged)
         ((and cons `(,beg2 . ,end2))
-         (setcar cons (min beg1 beg2))
-         (setcdr cons (max end1 end2)))
+         (setcar cons (if (< beg1 beg2) beg1 beg2))
+         (setcdr cons (if (> end1 end2) end1 end2)))
         ('nil
          (push region merged))))
     (setq conn-narrow-ring (nreverse merged))
