@@ -6586,6 +6586,7 @@ dispatch on each contiguous component of the region."
   "a"     'conn-wincontrol
   "g"     'conn-M-g-keys
   "h"     'conn-expand
+  "H"     conn-mark-thing-map
   "p"     'conn-register-load
   "P"     'conn-register-prefix
   "s"     'conn-M-s-keys
