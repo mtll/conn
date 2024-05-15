@@ -6826,7 +6826,6 @@ determine if `conn-local-mode' should be enabled."
           (add-hook 'post-command-hook #'conn--mark-post-command-hook)
           (add-hook 'window-selection-change-functions #'conn--update-cursor)
           (add-hook 'window-buffer-change-functions #'conn--update-cursor)
-          (add-hook 'minibuffer-setup-hook #'conn--update-cursor)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
@@ -6837,7 +6836,6 @@ determine if `conn-local-mode' should be enabled."
       (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
       (remove-hook 'window-selection-change-functions #'conn--update-cursor)
       (remove-hook 'window-buffer-change-functions #'conn--update-cursor)
-      (remove-hook 'minibuffer-setup-hook #'conn--update-cursor)
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
 (provide 'conn)
