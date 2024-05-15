@@ -3036,17 +3036,16 @@ Expansions and contractions are provided by functions in
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
   (let (merged)
-    (dolist (region conn-narrow-ring)
-      (pcase-let ((`(,beg1 . ,end1) region))
-        (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
-                           (not (or (< beg2 end2 beg1 end1)
-                                    (< beg1 end1 beg2 end2))))
-                         merged)
-          ((and cons `(,beg2 . ,end2))
-           (setcar cons (min beg1 beg2))
-           (setcdr cons (max end1 end2)))
-          ('nil
-           (push region merged)))))
+    (pcase-dolist ((and region `(,beg1 . ,end1)) conn-narrow-ring)
+      (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
+                         (not (or (< beg2 end2 beg1 end1)
+                                  (< beg1 end1 beg2 end2))))
+                       merged)
+        ((and cons `(,beg2 . ,end2))
+         (setcar cons (min beg1 beg2))
+         (setcdr cons (max end1 end2)))
+        ('nil
+         (push region merged))))
     (setq conn-narrow-ring (nreverse merged))
     (when (and interactive (not executing-kbd-macro))
       (message "Narrow ring merged into %s region"
@@ -6333,7 +6332,10 @@ dispatch on each contiguous component of the region."
   "c"   'conn-region-case-prefix
   "D"   'conn-duplicate-and-comment-region
   "d"   'conn-duplicate-region
-  "e"   'eval-region
+  "e l" 'conn-dot-region-forward
+  "e j" 'conn-dot-region-backward
+  "e o" 'conn-remove-dots-outside-region
+  "e c" 'conn-split-region-on-regexp
   "g"   'conn-rgrep-region
   "j"   'conn-join-lines
   "I"   'indent-rigidly
