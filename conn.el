@@ -832,7 +832,9 @@ If BUFFER is nil check `current-buffer'."
          (pcase (bounds-of-thing-at-point ',thing)
            (`(,beg . ,end)
             (goto-char beg)
-            (conn--push-ephemeral-mark end))
+            (conn--push-ephemeral-mark end)
+            (unless executing-kbd-macro
+              (pulse-momentary-highlight-region beg end 'region)))
            (_ (user-error "Point not in %s" ',thing))))
        (put ',name :conn-command-thing ',thing)
        ',name)))
@@ -1594,13 +1596,11 @@ The iterator must be the first argument in ARGLIST.
       (dolist (ov (overlays-in point (1+ point)))
         (when (conn-dotp ov) (throw 'term ov))))))
 
-(defun conn--for-each-dot (func &optional sort-predicate start end)
-  "Apply FUNC to each dot.
-Optionally between START and END and sorted by SORT-PREDICATE."
-  (when-let ((dots (if sort-predicate
-                       (conn--sorted-overlays #'conn-dotp sort-predicate start end)
-                     (conn--all-overlays #'conn-dotp start end))))
-    (mapc func dots)))
+(defun conn--all-dots (&optional sort-predicate start end)
+  "All dots in region START to END sorted by SORT-PREDICATE."
+  (if sort-predicate
+      (conn--sorted-overlays #'conn-dotp sort-predicate start end)
+    (conn--all-overlays #'conn-dotp start end)))
 
 (defun conn--delete-dot (dot)
   (overlay-put dot 'dot nil)
@@ -3464,13 +3464,11 @@ between `point-min' and `point-max'."
   (interactive (list (read-regexp "Regexp" "[[:blank:]]")
                      (conn--beginning-of-region-or-restriction)
                      (conn--end-of-region-or-restriction)))
-  (conn--for-each-dot
-   (lambda (dot)
-     (let ((start (overlay-start dot))
-           (end (overlay-end dot)))
-       (conn--delete-dot dot)
-       (conn-split-region-on-regexp regexp start end)))
-   nil start end))
+  (dolist (dot (conn--all-dots nil start end))
+    (let ((start (overlay-start dot))
+          (end (overlay-end dot)))
+      (conn--delete-dot dot)
+      (conn-split-region-on-regexp regexp start end))))
 
 (defun conn--previous-dot-1 ()
   "Perform one iteration for `conn-previous-dot-end'."
@@ -3580,20 +3578,18 @@ between `point-min' and `point-max'."
   (interactive (list (read-regexp "Regexp" "[[:blank:]]+")
                      (conn--beginning-of-region-or-restriction)
                      (conn--end-of-region-or-restriction)))
-  (conn--for-each-dot
-   (lambda (dot)
-     (let ((start (overlay-start dot))
-           (end (overlay-end dot)))
-       (goto-char start)
-       (when (looking-at regexp)
-         (setq start (match-end 0)))
-       (goto-char end)
-       (when (looking-back regexp start t)
-         (setq end (match-beginning 0)))
-       (if (>= start end)
-           (conn--delete-dot dot)
-         (move-overlay dot start end))))
-   '> start end))
+  (dolist (dot (conn--all-dots '> start end))
+    (let ((start (overlay-start dot))
+          (end (overlay-end dot)))
+      (goto-char start)
+      (when (looking-at regexp)
+        (setq start (match-end 0)))
+      (goto-char end)
+      (when (looking-back regexp start t)
+        (setq end (match-beginning 0)))
+      (if (>= start end)
+          (conn--delete-dot dot)
+        (move-overlay dot start end)))))
 
 (defun conn-query-remove-dots ()
   "Prompt to delete each dot.
@@ -3604,27 +3600,25 @@ k keeps the remaining dots."
   (interactive)
   (save-excursion
     (catch 'keep-rest
-      (conn--for-each-dot
-       (let ((message (format "%s (%s)es; (%s)o; (%s)elete rest; (%s)eep rest"
-                              (propertize "Delete:" 'face 'bold)
-                              (propertize "y" 'face 'help-key-binding)
-                              (propertize "n" 'face 'help-key-binding)
-                              (propertize "d" 'face 'help-key-binding)
-                              (propertize "k" 'face 'help-key-binding)))
-             rest)
-         (lambda (dot)
-           (goto-char (overlay-start dot))
-           (if rest
-               (conn--delete-dot dot)
-             (while (pcase (read-char message)
-                      (?y (conn--delete-dot dot) nil)
-                      (?n nil)
-                      (?d (conn--delete-dot dot)
-                          (setq rest t)
-                          nil)
-                      (?k (throw 'keep-rest nil))
-                      (_ t))))))
-       #'<))))
+      (let ((message (format "%s (%s)es; (%s)o; (%s)elete rest; (%s)eep rest"
+                             (propertize "Delete:" 'face 'bold)
+                             (propertize "y" 'face 'help-key-binding)
+                             (propertize "n" 'face 'help-key-binding)
+                             (propertize "d" 'face 'help-key-binding)
+                             (propertize "k" 'face 'help-key-binding)))
+            delete-rest)
+        (dolist (dot (conn--all-dots '<))
+          (goto-char (overlay-start dot))
+          (if delete-rest
+              (conn--delete-dot dot)
+            (while (pcase (read-char message)
+                     (?y (conn--delete-dot dot) nil)
+                     (?n nil)
+                     (?d (conn--delete-dot dot)
+                         (setq delete-rest t)
+                         nil)
+                     (?k (throw 'keep-rest nil))
+                     (_ t)))))))))
 
 (defun conn-remove-dots-after (point)
   "Clear all dots after POINT."
@@ -4317,7 +4311,8 @@ associated with that command (see `conn-register-thing')."
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end)
      (conn-copy-region beg end register)
-     (pulse-momentary-highlight-region beg end))))
+     (unless executing-kbd-macro
+       (pulse-momentary-highlight-region beg end)))))
 
 (defun conn-narrow-to-thing (thing &optional interactive)
   "Narrow indirect buffer to THING at point.
