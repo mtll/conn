@@ -36,8 +36,8 @@
 (require 'repeat)
 (require 'kmacro)
 (require 'sort)
-(require 'subr-x)
 (eval-when-compile
+  (require 'subr-x)
   (require 'cl-lib))
 
 
@@ -183,22 +183,6 @@ Defines default STATE for buffers matching REGEXP."
   :group 'conn
   :type 'symbol)
 
-(defcustom conn-region-case-style-actions
-  (list 'conn-kebab-case-region
-        'conn-capital-snake-case-region
-        'conn-snake-case-region
-        'conn-capital-case-region
-        'conn-camel-case-region)
-  "List of actions cycled through by `conn-region-case-style-cycle'.
-Supported values are:
-`conn-kebab-case-region'
-`conn-capital-snake-case-region'
-`conn-snake-case-region'
-`conn-capital-case-region'
-`conn-camel-case-region'."
-  :group 'conn
-  :type '(repeat symbol))
-
 (defcustom conn-read-pair-split-char "\t"
   "String on which to split `conn-insert-pair' brackets."
   :group 'conn
@@ -332,8 +316,6 @@ dynamically.")
   "Previous value of `mark-even-if-inactive'.
 Used to restore previous value when `conn-mode' is disabled.")
 
-(defvar-local conn--local-mark-thing-map (make-sparse-keymap))
-
 (defvar-local conn--ephemeral-mark nil)
 
 (defvar conn--saved-ephemeral-marks nil)
@@ -345,8 +327,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar conn--aux-bindings nil)
 
-(defvar-keymap conn-mark-thing-map
-  :prefix 'conn-mark-thing-map)
+(defvar-keymap conn-mark-thing-map)
 
 (defvar conn--aux-update-tick 0)
 
@@ -418,7 +399,15 @@ Used to restore previous value when `conn-mode' is disabled.")
 
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (intern (apply #'conn--stringify symbols-or-strings))))
+    (intern (apply #'conn--stringify symbols-or-strings)))
+
+  (defun conn--string-fill (string col)
+    (with-temp-buffer
+      (insert string)
+      (let ((fill-column col)
+            (adaptive-fill-mode nil))
+        (fill-region (point-min) (point-max)))
+      (buffer-string))))
 
 (defmacro conn--without-conn-maps (&rest body)
   (declare (indent 0))
@@ -555,16 +544,20 @@ If BUFFER is nil check `current-buffer'."
      (conn--activate-input-method)))
 
 (defvar-keymap conn-read-thing-command-mark-map
-  "h" 'conn--local-mark-thing-map
+  "h"   conn-mark-thing-map
   "C-h" 'help)
 
 (defun conn--read-thing-keymap ()
   (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
-         (mark-map-keys (where-is-internal 'conn--local-mark-thing-map
-                                           (list keymap))))
-    (when mark-map-keys
-      (dolist (key mark-map-keys)
-        (define-key keymap key conn--local-mark-thing-map)))
+         (thing-map-mark-keys (where-is-internal conn-mark-thing-map (list keymap))))
+    (when thing-map-mark-keys
+      (dolist (mark-map-key
+               (where-is-internal
+                conn-mark-thing-map
+                (list (alist-get conn-current-state conn--state-maps))))
+        (let ((mark-map (keymap-lookup nil (key-description mark-map-key))))
+          (dolist (key thing-map-mark-keys)
+            (define-key keymap key mark-map)))))
     (cond ((null conn-local-mode)
            (make-composed-keymap (list keymap conn-movement-map)))
           (conn-emacs-state
@@ -844,8 +837,7 @@ If BUFFER is nil check `current-buffer'."
          (pcase (bounds-of-thing-at-point ',thing)
            (`(,beg . ,end)
             (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (activate-mark))
+            (conn--push-ephemeral-mark end))
            (_ (user-error "Point not in %s" ',thing))))
        (put ',name :conn-command-thing ',thing)
        ',name)))
@@ -1717,7 +1709,7 @@ C-x, M-s and M-g into various state maps."
   `(progn
      (defcustom ,name
        (key-parse ,from-keys)
-       ,(string-fill
+       ,(conn--string-fill
          (conn--stringify
           "Key sequence for `" name "' to remap.\n"
           "Set this variable to change `" name "''s remapping.  "
@@ -1727,7 +1719,7 @@ C-x, M-s and M-g into various state maps."
        :group 'conn-key-remappings)
 
      (defun ,name (&optional interactive-p)
-       ,(string-fill
+       ,(conn--string-fill
          (conn--stringify
           "Conn remapping command.  "
           "Conn will remap this command to the value of `" name "'.  "
@@ -1807,21 +1799,22 @@ C-x, M-s and M-g into various state maps."
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
-  (let ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
-                    (list major-mode)
-                  (nreverse (conn--derived-mode-all-parents major-mode))))
-        mark-map-keys mode-map)
+  (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
+                     (list major-mode)
+                   (nreverse (conn--derived-mode-all-parents major-mode))))
+         mark-map-keys mode-map)
     (dolist (state conn-states)
       (setq mark-map-keys
-            (where-is-internal 'conn-mark-thing-map
+            (where-is-internal conn-mark-thing-map
                                (list (alist-get state conn--state-maps)
                                      (conn-get-local-map state))))
       (dolist (mode mmodes)
         (setq mode-map (conn-get-mode-map state mode))
         (push (cons state mode-map) conn--major-mode-maps)
-        (when-let (mark-map (conn-get-mode-things-map mode))
-          (dolist (key mark-map-keys)
-            (define-key mode-map key mark-map)))))))
+        (let ((mark-map (conn-get-mode-things-map mode)))
+          (when (cdr mark-map)
+            (dolist (key mark-map-keys)
+              (define-key mode-map key mark-map))))))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
   "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
@@ -2013,7 +2006,7 @@ disabled.
          ,(conn--stringify "Keymap active in `" name "'."))
 
        (defvar ,transition-map-name ,transitions
-         ,(string-fill (conn--stringify
+         ,(conn--string-fill (conn--stringify
                         "Keymap for commands that transition from `"
                         name "' to other states.")
                        70))
@@ -4206,25 +4199,6 @@ downcase -> Capitalize -> UPCASE -> downcase."
               (capitalize-region (point-min) (point-max)))
              (t (downcase-region (point-min) (point-max)))))
      (current-buffer))))
-
-(defun conn-region-case-style-cycle ()
-  "Change case style of region in a smart way.
-Repeated calls cycle through the actions in
-`conn-region-case-style-actions'."
-  (interactive)
-  (if (eq this-command last-command)
-      (let ((cycle (get this-command :conn-cycle-state)))
-        (put this-command :conn-cycle-state
-             (append (cdr cycle) (list (car cycle))))
-        (funcall (car cycle)))
-    (put this-command :conn-cycle-state
-         (append (cdr conn-region-case-style-actions)
-                 (list (car conn-region-case-style-actions))))
-    (funcall (car conn-region-case-style-actions))
-    (let ((cycle (get this-command :conn-cycle-state)))
-      (put this-command :conn-cycle-state
-           (append (cdr cycle) (list (car cycle))))
-      (funcall (car cycle)))))
 
 (defun conn--buffer-to-words ()
   (let ((subword-p (and (boundp 'subword-mode) subword-mode)))
@@ -6598,7 +6572,7 @@ dispatch on each contiguous component of the region."
   "i"   'clone-indirect-buffer
   "d"   'duplicate-dwim
   "f"   'conn-fill-prefix
-  "h"   'conn-mark-thing-map
+  "h"   conn-mark-thing-map
   "I"   'copy-from-above-command
   "j"   'join-line
   "k"   'transpose-lines
