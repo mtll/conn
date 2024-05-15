@@ -541,28 +541,18 @@ If BUFFER is nil check `current-buffer'."
      (conn--activate-input-method)))
 
 (defvar-keymap conn-read-thing-command-mark-map
-  "h"   conn-mark-thing-map
   "C-h" 'help)
 
 (defun conn--read-thing-keymap ()
-  (let* ((keymap (copy-keymap conn-read-thing-command-mark-map))
-         (thing-map-mark-keys (where-is-internal conn-mark-thing-map (list keymap))))
-    (when thing-map-mark-keys
-      (dolist (mark-map-key
-               (where-is-internal
-                conn-mark-thing-map
-                (list (alist-get conn-current-state conn--state-maps))))
-        (let ((mark-map (keymap-lookup nil (key-description mark-map-key))))
-          (dolist (key thing-map-mark-keys)
-            (define-key keymap key mark-map)))))
-    (cond ((null conn-local-mode)
-           (make-composed-keymap (list keymap conn-movement-map)))
-          (conn-emacs-state
-           (make-composed-keymap
-            (list keymap)
-            (conn--with-state conn-state (current-active-maps))))
-          (t
-           keymap))))
+  (cond ((null conn-local-mode)
+         (make-composed-keymap conn-read-thing-command-mark-map
+                               conn-movement-map))
+        (conn-emacs-state
+         (make-composed-keymap
+          (list conn-read-thing-command-mark-map)
+          (conn--with-state conn-state (current-active-maps))))
+        (t
+         conn-read-thing-command-mark-map)))
 
 (defun conn--read-thing-command ()
   (let ((keymap (conn--read-thing-keymap))
@@ -2215,6 +2205,7 @@ state."
 (defvar conn-dispatch-finders-alist
   `((inner-line . conn--dispatch-inner-lines)
     (conn-end-of-inner-line . conn--dispatch-inner-lines-end)
+    (heading . ,(apply-partially 'conn--dispatch-all-things 'heading))
     (move-end-of-line . conn--dispatch-lines-end)
     (outer-line . conn--dispatch-lines)
     (line . conn--dispatch-lines)
@@ -6998,12 +6989,21 @@ determine if `conn-local-mode' should be enabled."
                    (unless (outline-on-heading-p)
                      (outline-up-heading 1))
                    (outline-mark-subtree)
-                   (cons (region-beginning) (region-end)))))
+                   (cons (region-beginning) (region-end))))
+    :forward-op (lambda (N)
+                  (cond ((< N 0)
+                         (dotimes (_ (abs N))
+                           (outline-previous-heading)))
+                        ((> N 0)
+                         (dotimes (_ N)
+                           (outline-next-heading))))))
 
   (conn-register-thing-commands
    'heading 'conn-individual-thing-handler
    'outline-up-heading
    'outline-next-heading
+   'outline-next-visible-heading
+   'outline-previous-visible-heading
    'outline-previous-heading
    'outline-forward-same-level
    'outline-backward-same-level))
