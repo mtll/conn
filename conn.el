@@ -173,11 +173,6 @@ Defines default STATE for buffers matching REGEXP."
   :type '(repeat symbol)
   :group 'conn-marks)
 
-(defcustom conn-other-window-prompt-threshold 5
-  "Number of windows before conn-other-window prompts for window."
-  :type 'integer
-  :group conn-mode)
-
 (defcustom conn-completion-region-quote-function 'regexp-quote
   "Function used to quote region strings for consult search functions."
   :group 'conn
@@ -2852,15 +2847,14 @@ potential expansions.  Functions may return invalid expansions
   (remove-hook 'after-change-functions 'conn--expand-post-change-hook t))
 
 (defun conn--expand-filter-regions (regions)
-  (delete-dups
-   (seq-filter (lambda (reg)
-                 (pcase reg
-                   (`(,beg . ,end)
-                    (and beg end
-                         (/= beg end)
-                         (<= beg (region-beginning))
-                         (>= end (region-end))))))
-               regions)))
+  (let (result)
+    (pcase-dolist ((and reg `(,beg . ,end)) regions)
+      (when (and beg end
+                 (/= beg end)
+                 (<= beg (region-beginning))
+                 (>= end (region-end)))
+        (cl-pushnew reg result :test #'equal)))
+    result))
 
 (defun conn--expand-create-expansions ()
   (add-hook 'after-change-functions 'conn--expand-post-change-hook nil t)
@@ -3002,11 +2996,10 @@ Expansions and contractions are provided by functions in
                       (and (= beg b) (= end e)))
                     conn-narrow-ring)
     (setq conn-narrow-ring
-          (seq-subseq (cons (cons (conn--create-marker beg)
-                                  (conn--create-marker end))
-                            conn-narrow-ring)
-                      0 (min conn-narrow-ring-max
-                             (1+ (length conn-narrow-ring)))))))
+          (take conn-narrow-ring-max
+                (cons (cons (conn--create-marker beg)
+                            (conn--create-marker end))
+                      conn-narrow-ring)))))
 
 (defun conn-narrow-to-region (beg end &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
@@ -3955,12 +3948,6 @@ uninstersting marks."
          (goto-char (mark t))))
   (deactivate-mark))
 
-(defun conn-toggle-sort-fold-case ()
-  "Toggle the value of `sort-fold-case'."
-  (interactive)
-  (message "Sort fold case: %s"
-           (setq sort-fold-case (not sort-fold-case))))
-
 (defvar-local conn--minibuffer-initial-region nil)
 
 (defun conn--yank-region-to-minibuffer-hook ()
@@ -4510,13 +4497,6 @@ With a prefix ARG `push-mark' without activating it."
   (delete-indentation nil start end)
   (indent-according-to-mode))
 
-(defun conn-highlight-region ()
-  "`highlight-phrase' in region from START and END."
-  (interactive)
-  (minibuffer-with-setup-hook
-      (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
-    (call-interactively #'highlight-phrase)))
-
 (defun conn-yank-replace (start end &optional arg)
   "`yank' replacing region between START and END.
 If called interactively uses the region between point and mark.
@@ -4573,12 +4553,6 @@ of line proper."
                    (region-active-p)))
       (goto-char (line-beginning-position))
       (setq conn-this-command-thing 'outer-line))))
-
-(defun conn-xref-definition-prompt ()
-  "`xref-find-definitions' but always prompt."
-  (interactive)
-  (let ((current-prefix-arg t))
-    (call-interactively #'xref-find-definitions)))
 
 ;; register-load from consult
 (defun conn-register-load (reg &optional arg)
@@ -4723,44 +4697,6 @@ there's a region, all lines that region covers will be duplicated."
   (display-buffer-override-next-command
    (lambda (_ _)
      (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse))))
-
-(defun conn-swap-windows (&optional no-select)
-  "Swap selected window and another window.
-If NO-SELECT is non-nil the window containing the buffer in the other
-window will be selected at the end of this command.  Otherwise the
-selected window will be the window containing the current buffer."
-  (interactive "P")
-  (when-let ((win1 (selected-window))
-             (win2 (conn--prompt-for-window
-                    (remove win1 (window-list-1 nil 'nomini 'visible)))))
-    (window-swap-states win1 win2)
-    (when no-select
-      (select-window win1)
-      (select-frame-set-input-focus (window-frame win1)))))
-
-(defun conn-swap-buffers ()
-  "Swap the buffers of the selected window and another window."
-  (interactive)
-  (conn-swap-windows t))
-
-(defun conn-other-window (&optional all-frames)
-  "Select other window.
-When the number of windows is greater than or equal to
-`conn-other-window-prompt-threshold' prompt for the window to select.
-Otherwise behave like `other-window'."
-  (interactive "P")
-  (if-let ((other-windows (remove (selected-window)
-                                  (if all-frames
-                                      (window-list-1 nil 'nomini 'visible)
-                                    (window-list nil 'no-mini))))
-           (win (and (or all-frames
-                         (not (length< other-windows
-                                       (1- conn-other-window-prompt-threshold))))
-                     (conn--prompt-for-window other-windows))))
-      (progn
-        (select-frame-set-input-focus (window-frame win))
-        (select-window win))
-    (other-window 1)))
 
 ;;;;; Transition Functions
 
@@ -4990,8 +4926,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-1"     'delete-other-windows
   "C-2"     'split-window-below
   "C-3"     'split-window-right
-  "C-6"     'conn-swap-buffers
-  "C-7"     'conn-swap-windows
   "C-8"     'conn-tab-to-register
   "C-9"     'tab-close
   "C-g"     'conn-wincontrol-abort
@@ -6364,8 +6298,8 @@ dispatch on each contiguous component of the region."
   :prefix 'conn-other-place-prefix-map
   "w" 'other-window-prefix
   "t" 'other-tab-prefix
-  "f" 'other-frame-prefix
-  "s" 'conn-other-window-prompt-prefix)
+  "f" 'conn-other-window-prompt-prefix
+  "r" 'other-frame-prefix)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
@@ -6380,7 +6314,7 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
-  "`" 'conn-other-window)
+  "`" 'other-window)
 
 (defvar-keymap conn-region-map
   "s"   'conn-isearch-region-forward
@@ -6502,7 +6436,6 @@ dispatch on each contiguous component of the region."
   "r"   'conn-isearch-backward-thing
   "o"   'occur
   "l"   'locate
-  "h ," 'conn-highlight-region
   "m B" 'multi-isearch-buffers-regexp
   "m F" 'multi-isearch-files-regexp
   "m b" 'multi-isearch-buffers
@@ -6519,7 +6452,6 @@ dispatch on each contiguous component of the region."
   "u" 'conn-unpop-to-mark-command
   "k" 'goto-line
   "r" 'xref-find-references
-  "x" 'conn-xref-definition-prompt
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward)
@@ -6626,8 +6558,6 @@ dispatch on each contiguous component of the region."
   "C-3"   'split-window-right
   "C-4"   'conn-C-x-4-keys
   "C-5"   'conn-C-x-5-keys
-  "C-6"   'conn-swap-buffers
-  "C-7"   'conn-swap-windows
   "C-8"   'conn-tab-to-register
   "C-9"   'quit-window
   "C-0"   'delete-window
@@ -6651,8 +6581,7 @@ dispatch on each contiguous component of the region."
   ";"     'execute-extended-command
   ":"     'execute-extended-command-for-buffer
   "?"     'undo-redo
-  "`"     'conn-other-window
-  "~"     'conn-swap-windows
+  "`"     'other-window
   "."     'repeat
   "f"     'conn-dispatch-on-things
   "a"     'conn-wincontrol
@@ -6770,7 +6699,7 @@ dispatch on each contiguous component of the region."
 
 (define-keymap
   :keymap global-map
-  "C-`"       'conn-other-window
+  "C-`"       'other-window
   "C-S-w"     'delete-region
   "C-x /"     'tab-bar-history-back
   "C-x 4 /"   'tab-bar-history-back
