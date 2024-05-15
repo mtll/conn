@@ -4868,7 +4868,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\n"
     "\\[conn-tab-to-register]: store; "
     "\\[tab-previous] \\[tab-next]: next/prev; "
-    "\\[tab-bar-new-tab] \\[tab-bar-duplicate-tab] \\[conn-wincontrol-tab-close]: "
+    "\\[conn-wincontrol-tab-new] \\[tab-bar-duplicate-tab] \\[conn-wincontrol-tab-close]: "
     "new/clone/kill; "
     "\\[conn-tab-group]: group; "
     "\\[tab-bar-detach-tab]: tear off")))
@@ -4972,11 +4972,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "g"       'delete-other-windows
   "H"       'conn-wincontrol-help
   "h"       'enlarge-window
-  "i"       'tab-new
+  "i"       'conn-wincontrol-tab-new
   "I"       'tab-next
   "j"       'previous-buffer
   "J"       'bury-buffer
-  "k"       'tab-close
+  "k"       'conn-wincontrol-tab-close
   "K"       'tab-previous
   "l"       'next-buffer
   "L"       'unbury-buffer
@@ -5289,6 +5289,11 @@ Uses `split-window-right'."
 See `tab-close'."
   (interactive)
   (tab-bar-close-tab))
+
+(defun conn-wincontrol-tab-new ()
+  "Create a new tab."
+  (interactive)
+  (tab-new))
 
 (defun conn-wincontrol-maximize-horizontally ()
   (interactive)
