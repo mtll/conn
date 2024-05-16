@@ -4827,7 +4827,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :group 'conn
   :type 'integer)
 
-(defun conn--wincontrol-window-format ()
+(defun conn--wincontrol-window-format-1 ()
   (substitute-command-keys
    (concat
     "\\<conn-wincontrol-map>"
@@ -4835,29 +4835,49 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: cycle help; "
+    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
     "\\[conn-wincontrol-quit]: quit; "
-    "\\[conn-wincontrol-mru-window]: last win"
+    "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
     "\n"
     "\\[enlarge-window] "
     "\\[shrink-window] "
     "\\[enlarge-window-horizontally] "
     "\\[shrink-window-horizontally]: "
     "heighten shorten widen narrow; "
-    "\\[unbury-buffer] \\[bury-buffer]: un/bury; "
-    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
-    "max vert/horiz"
+    "\\[previous-buffer] \\[next-buffer] \\[conn-previous-window] \\[conn-next-window]"
+    ": prev/next buffer/win"
     "\n"
-    "\\[conn-register-load] \\[window-configuration-to-register]: load/store; "
+    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
     "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
     "split vert/right; "
     "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank; "
-    "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
+    "\\[conn-wincontrol-mru-window]: last win")))
+
+(defun conn--wincontrol-window-format-2 ()
+  (substitute-command-keys
+   (concat
+    "\\<conn-wincontrol-map>"
+    (propertize "Window: " 'face 'bold)
+    "prefix arg: "
+    (propertize "%s" 'face 'transient-value) "; "
+    "\\[conn-wincontrol-digit-argument-reset]: reset; "
+    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
+    "\\[conn-wincontrol-quit]: quit; "
+    "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom"
     "\n"
-    "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
-    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
+    "\\[conn-wincontrol-other-window-scroll-down] \\[conn-wincontrol-other-window-scroll-up]"
+    ": scroll other; "
+    "\\[conn-wincontrol-isearch-other-window] \\[conn-wincontrol-isearch-other-window-backward]"
+    ": isearch other; "
+    "\\[conn-wincontrol-isearch] \\[conn-wincontrol-isearch-backward]"
+    ": isearch; "
+    "\\[unbury-buffer] \\[bury-buffer]: un/bury"
+    "\n"
+    "\\[shrink-window-if-larger-than-buffer]: shrink win to buf; "
     "\\[balance-windows] \\[maximize-window]: balance/max; "
-    "\\[previous-buffer] \\[next-buffer]: previous/next buffer")))
+    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
+    "max vert/horiz; "
+    "\\[conn-register-load] \\[window-configuration-to-register]: load/store")))
 
 (defun conn--wincontrol-tab-format ()
   (substitute-command-keys
@@ -4867,15 +4887,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: cycle help; "
+    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
     "\\[conn-wincontrol-quit]: quit; "
-    "\\[tab-bar-move-window-to-tab]: win to new tab"
+    "\\[conn-tab-to-register]: store"
     "\n"
-    "\\[conn-tab-to-register]: store; "
+    "\\[tab-bar-move-window-to-tab]: win to new tab; "
     "\\[tab-previous] \\[tab-next]: next/prev; "
     "\\[conn-wincontrol-tab-new] \\[tab-bar-duplicate-tab] \\[conn-wincontrol-tab-close]: "
     "new/clone/kill; "
-    "\\[conn-tab-group]: group; "
     "\\[tab-bar-detach-tab]: tear off")))
 
 (defun conn--wincontrol-frame-format ()
@@ -4886,7 +4905,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: cycle help; "
+    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
     "\\[conn-wincontrol-quit]: quit; "
     "\\[toggle-frame-fullscreen]: fullscreen; "
     "\\[clone-frame]: clone; "
@@ -4906,7 +4925,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "prefix arg: "
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help]: cycle help; "
+    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
     "\\[conn-wincontrol-quit]: quit; "
     "\\[conn-wincontrol-scroll-up] "
     "\\[conn-wincontrol-scroll-down]: "
@@ -4931,7 +4950,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-c"     'clone-frame
   "M-d"     'delete-frame
   "C-u"     'conn-wincontrol-universal-arg
-  "+"       'maximize-window
   "-"       'conn-wincontrol-invert-argument
   "."       'conn-wincontrol-digit-argument-reset
   "/"       'tab-bar-history-back
@@ -4973,9 +4991,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "e"       'conn-tab-to-register
   "F"       'toggle-frame-fullscreen
   "f"       'conn-goto-window
-  "G"       'conn-tab-group
   "g"       'delete-other-windows
-  "H"       'conn-wincontrol-help
+  "C-f"     'conn-wincontrol-help
+  "C-b"     'conn-wincontrol-help-backward
+  "H"       'maximize-window
   "h"       'enlarge-window
   "i"       'conn-wincontrol-tab-new
   "I"       'tab-next
@@ -5054,7 +5073,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
   (setq conn--previous-scroll-conservatively scroll-conservatively
-        conn--wincontrol-help conn-wincontrol-initial-help
         conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
         eldoc-message-function #'ignore
         scroll-conservatively 100)
@@ -5062,6 +5080,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (setq conn--wincontrol-arg (when current-prefix-arg
                                  (mod (prefix-numeric-value current-prefix-arg)
                                       conn-wincontrol-arg-limit))
+          conn--wincontrol-help conn-wincontrol-initial-help
           conn--wincontrol-arg-sign 1
           conn--wincontrol-initial-window (selected-window)
           conn--wincontrol-initial-winconf (current-window-configuration)))
@@ -5142,13 +5161,33 @@ When called interactively N is `last-command-event'."
   (interactive (list t))
   (when interactive
     (setq conn--wincontrol-help (pcase conn--wincontrol-help
-                                  ('window 'tab)
-                                  ('tab    'frame)
-                                  ('frame  nil)
-                                  (_       'window))))
+                                  ('window-1 'window-2)
+                                  ('window-2 'tab)
+                                  ('tab      'frame)
+                                  ('frame    nil)
+                                  (_         'window-1))))
   (setq conn--wincontrol-help-format
         (pcase conn--wincontrol-help
-          ('window (conn--wincontrol-window-format))
+          ('window-1 (conn--wincontrol-window-format-1))
+          ('window-2 (conn--wincontrol-window-format-2))
+          ('tab    (conn--wincontrol-tab-format))
+          ('frame  (conn--wincontrol-frame-format))
+          (_       (conn--wincontrol-simple-format)))))
+
+(defun conn-wincontrol-help-backward (&optional interactive)
+  "Cycle to the next `conn-wincontrol-mode' help message."
+  (interactive (list t))
+  (when interactive
+    (setq conn--wincontrol-help (pcase conn--wincontrol-help
+                                  ('window-1 nil)
+                                  ('window-2 'window-1)
+                                  ('tab      'window-2)
+                                  ('frame    'tab)
+                                  (_         'frame))))
+  (setq conn--wincontrol-help-format
+        (pcase conn--wincontrol-help
+          ('window-1 (conn--wincontrol-window-format-1))
+          ('window-2 (conn--wincontrol-window-format-2))
           ('tab    (conn--wincontrol-tab-format))
           ('frame  (conn--wincontrol-frame-format))
           (_       (conn--wincontrol-simple-format)))))
