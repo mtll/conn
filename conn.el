@@ -834,49 +834,41 @@ If BUFFER is nil check `current-buffer'."
 (defmacro conn-register-thing (thing &rest rest)
   "Register a new THING.
 
-\(fn THING &key FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-KEY EXPAND-KEY)"
+\(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-KEY)"
   (declare (indent 1))
-  (unless (seq-find (lambda (thing)
-                      (and thing
-                           (or (intern-soft (format "forward-%s" thing))
-                               (get thing 'forward-op)
-                               (memq :forward-op rest)
-                               (get thing 'bounds-of-thing-at-point)
-                               (memq :bounds-op rest)
-                               (and (or (get thing 'beginning-op)
-                                        (memq :beg-op rest))
-                                    (or (get thing 'end-op)
-                                        (memq :end-op rest))))))
-                    (list thing (plist-get rest :parent)))
-    (error "%s definition requires at least one of: %s, %s, or (%s and %s)"
-           thing :forward-op :bounds-op :beg-op :end-op))
-  (macroexp-progn
-   (nconc
-    `((intern ,(symbol-name thing)))
-    (when-let ((parent (plist-get rest :parent)))
-      `((put ',thing :conn-thing-parent ',parent)
-        (put ',thing 'forward-op
-             (or (get ',parent 'forward-op)
-                 (intern-soft (format "forward-%s" ',parent))))
-        (put ',thing 'bounds-of-thing-at-point
-             (get ',parent 'bounds-of-thing-at-point))
-        (put ',thing 'beginning-op (get ',parent 'beginning-op))
-        (put ',thing 'end-op (get ',parent 'end-op))))
-    (when-let ((forward (plist-get rest :forward-op)))
-      `((put ',thing 'forward-op ',forward)))
-    (when-let ((beg (plist-get rest :beg-op)))
-      `((put ',thing 'beginning-op ',beg)))
-    (when-let ((end (plist-get rest :end-op)))
-      `((put ',thing 'end-op ',end)))
-    (when-let ((bounds (plist-get rest :bounds-op)))
-      `((put ',thing 'bounds-of-thing-at-point ',bounds)))
-    (when-let ((binding (plist-get rest :mark-key)))
-      `((let ((mark-command (conn--thing-bounds-command ,thing)))
-           ,(if-let ((modes (plist-get rest :modes)))
-                `(dolist (mode (ensure-list ,modes))
-                   (keymap-set (conn-get-mode-things-map mode)
-                               ,binding mark-command))
-              `(keymap-set conn-mark-thing-map ,binding mark-command))))))))
+  (let ((modes-sym (gensym "modes"))
+        (modes (ensure-list (plist-get rest :modes))))
+    `(let ((,modes-sym (ensure-list ,modes)))
+       ,(macroexp-progn
+         (nconc
+          `((intern ,(symbol-name thing)))
+          (when-let ((finder (plist-get rest :finder)))
+            `((put ',thing :conn-dispatch-finder
+                   ,(if modes
+                        `(lambda ()
+                           (when (memq major-mode ,modes-sym)
+                             (funcall ,finder)))
+                      finder))))
+          (when-let ((action (plist-get rest :default-action)))
+            `((put ',thing :conn-dispatch-default-action ,action)))
+          (when-let ((forward (plist-get rest :forward-op)))
+            `((put ',thing 'forward-op ,forward)))
+          (when-let ((beg (plist-get rest :beg-op)))
+            `((put ',thing 'beginning-op ,beg)))
+          (when-let ((end (plist-get rest :end-op)))
+            `((put ',thing 'end-op ,end)))
+          (when-let ((bounds (plist-get rest :bounds-op)))
+            `((put ',thing 'bounds-of-thing-at-point ,bounds)))
+          (when-let ((binding (plist-get rest :mark-key)))
+            `((let ((mark-command (conn--thing-bounds-command ,thing))
+                    (binding ,binding))
+                ,(if modes
+                     `(progn
+                        (put ',thing :conn-thing-modes ,modes-sym)
+                        (dolist (mode ,modes-sym)
+                          (keymap-set (conn-get-mode-things-map mode)
+                                      binding mark-command)))
+                   `(keymap-set conn-mark-thing-map binding mark-command))))))))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
@@ -1020,6 +1012,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (or conn-this-command-thing
       (get this-command :conn-command-thing)))
 
+(defun conn-set-command-finder (command finder)
+  (put command :conn-dispatch-finder finder))
+
 ;;;;; Thing Definitions
 
 (conn-register-thing region
@@ -1032,7 +1027,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'conn-set-mark-command)
 
 (conn-register-thing symbol
-  :forward-op forward-symbol)
+  :forward-op 'forward-symbol
+  :finder (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
 
 (conn-register-thing-commands
  'symbol 'conn-individual-thing-handler
@@ -1040,7 +1036,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing page
   :mark-key "p"
-  :forward-op forward-page)
+  :forward-op 'forward-page)
 
 (conn-register-thing-commands
  'page 'conn-individual-thing-handler
@@ -1048,7 +1044,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing dot
   :beg-op (lambda () (conn-previous-dot 1))
-  :end-op (lambda () (conn-next-dot 1)))
+  :end-op (lambda () (conn-next-dot 1))
+  :finder (apply-partially 'conn--dispatch-all-things 'dot))
 
 (conn-register-thing-commands
  'dot 'conn-individual-thing-handler
@@ -1060,18 +1057,23 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'conn-forward-char 'conn-backward-char)
 
 (conn-register-thing word
-  :forward-op forward-word)
+  :forward-op 'forward-word
+  :finder (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
 
 (conn-register-thing-commands
  'word 'conn-sequential-thing-handler
  'forward-word 'backward-word)
 
 (conn-register-thing sexp
-  :forward-op forward-sexp)
+  :forward-op 'forward-sexp
+  :finder (apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
 
 (conn-register-thing-commands
  'sexp 'conn-sequential-thing-handler
  'forward-sexp 'backward-sexp)
+
+(conn-register-thing list
+  :finder (apply-partially 'conn--dispatch-all-things 'sexp))
 
 (conn-register-thing-commands
  'list
@@ -1085,21 +1087,22 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing whitespace
   :mark-key "SPC"
-  :forward-op forward-whitespace)
+  :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
  'whitespace 'conn-individual-thing-handler
  'forward-whitespace 'conn-backward-whitespace)
 
 (conn-register-thing sentence
-  :forward-op forward-sentence)
+  :forward-op 'forward-sentence)
 
 (conn-register-thing-commands
  'sentence 'conn-sequential-thing-handler
  'forward-sentence 'backward-sentence)
 
 (conn-register-thing paragraph
-  :forward-op forward-paragraph)
+  :forward-op 'forward-paragraph
+  :finder (apply-partially 'conn--dispatch-all-things 'paragraph t))
 
 (conn-register-thing-commands
  'paragraph 'conn-sequential-thing-handler
@@ -1108,6 +1111,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing-commands
  'defun 'conn-sequential-thing-handler
  'end-of-defun 'beginning-of-defun)
+
+(conn-register-thing char
+  :default-action 'conn-dispatch-jump)
 
 (conn-register-thing buffer
   :bounds-op (lambda () (cons (point-min) (point-max))))
@@ -1125,13 +1131,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          (beginning-of-line)
                          (if (= pt (point))
                              (forward-line N)
-                           (forward-line (1+ N))))))))
+                           (forward-line (1+ N)))))))
+  :finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'line 'conn-sequential-thing-handler
  'forward-line 'conn-backward-line)
 
-(conn-register-thing line-column :parent line)
+(conn-register-thing line-column
+  :finder 'conn--dispatch-columns
+  :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
@@ -1140,7 +1149,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing outer-line
   :beg-op (lambda () (move-beginning-of-line nil))
-  :end-op (lambda () (move-end-of-line nil)))
+  :end-op (lambda () (move-end-of-line nil))
+  :finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'outer-line 'conn-individual-thing-handler
@@ -1154,7 +1164,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (point))
                 (save-excursion
                   (conn--end-of-inner-line-1)
-                  (point)))))
+                  (point))))
+  :finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
  'inner-line 'conn-individual-thing-handler
@@ -2165,7 +2176,7 @@ state."
 
 ;;;; Thing Dispatch
 
-(defvar-keymap conn-dispatch-base-command-map
+(defvar-keymap conn-dispatch-command-maps
   "[" 'conn-dispatch-kill-append
   "a" 'conn-dispatch-copy-append
   "]" 'conn-dispatch-kill-prepend
@@ -2197,50 +2208,35 @@ state."
     (conn-dispatch-yank-replace . "Yank Replace")
     (conn-dispatch-grab-replace . "Grab Replace")))
 
-(defvar conn-dispatch-default-actions
-  '((line-column . conn-dispatch-jump)
-    (char . conn-dispatch-jump)
-    (t . conn-dispatch-goto)))
+(defvar conn-dispatch-default-finder 'conn--dispatch-chars)
 
-(defvar conn-dispatch-finders-alist
-  `((inner-line . conn--dispatch-inner-lines)
-    (conn-end-of-inner-line . conn--dispatch-inner-lines-end)
-    (heading . ,(apply-partially 'conn--dispatch-all-things 'heading))
-    (move-end-of-line . conn--dispatch-lines-end)
-    (outer-line . conn--dispatch-lines)
-    (line . conn--dispatch-lines)
-    (line-column . conn--dispatch-columns)
-    (list . ,(apply-partially 'conn--dispatch-all-things 'sexp))
-    (sexp . ,(apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
-    (word . ,(apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
-    (conn-backward-symbol . ,(apply-partially 'conn--dispatch-all-things 'symbol t))
-    (backward-word . ,(apply-partially 'conn--dispatch-all-things 'word t))
-    (symbol . ,(apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
-    (paragraph . ,(apply-partially 'conn--dispatch-all-things 'paragraph t))
-    (t . conn--dispatch-chars)))
-
-(defvar conn-dispatch-command-maps
-  (list conn-dispatch-base-command-map))
+(defvar conn-dispatch-default-action 'conn-dispatch-goto)
 
 (defun conn-dispatch-finder (command)
-  (let ((thing (get command :conn-command-thing)))
-    (or (alist-get command conn-dispatch-finders-alist)
-        (catch 'return
-          (while thing
-            (when-let ((reader (alist-get thing conn-dispatch-finders-alist)))
-              (throw 'return reader))
-            (setq thing (conn--thing-parent thing))))
-        (alist-get t conn-dispatch-finders-alist))))
+  (or (get command :conn-dispatch-finder)
+      (get (get command :conn-command-thing) :conn-dispatch-finder)
+      conn-dispatch-default-finder))
 
 (defun conn-dispatch-default-action (command)
-  (let ((thing (get command :conn-command-thing)))
-    (or (alist-get command conn-dispatch-default-actions)
-        (catch 'return
-          (while thing
-            (when-let ((reader (alist-get thing conn-dispatch-default-actions)))
-              (throw 'return reader))
-            (setq thing (conn--thing-parent thing))))
-        (alist-get t conn-dispatch-default-actions))))
+  (or (get command :conn-dispatch-default-action)
+      (get (get command :conn-command-thing) :conn-dispatch-default-action)
+      conn-dispatch-default-action))
+
+(conn-set-command-finder
+ 'conn-end-of-inner-line
+ 'conn--dispatch-inner-lines-end)
+
+(conn-set-command-finder
+ 'move-end-of-line
+ 'conn--dispatch-lines-end)
+
+(conn-set-command-finder
+ 'conn-backward-symbol
+ (apply-partially 'conn--dispatch-all-things 'symbol t))
+
+(conn-set-command-finder
+ 'backward-word
+ (apply-partially 'conn--dispatch-all-things 'word t))
 
 (defun conn-dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -2882,16 +2878,16 @@ Expansions are provided by functions in `conn-expansion-functions'."
       (conn-contract (- arg))
     (dotimes (_ arg)
       (cond ((and (region-active-p)
-                  (= (point) (region-end)))
-             (catch 'term
-               (pcase-dolist (`(_ . ,end) conn--current-expansions)
-                 (when (> end (point)) (throw 'term (goto-char end))))
-               (user-error "No more expansions")))
-            ((and (region-active-p)
                   (= (point) (region-beginning)))
              (catch 'term
                (pcase-dolist (`(,beg . _) conn--current-expansions)
                  (when (< beg (point)) (throw 'term (goto-char beg))))
+               (user-error "No more expansions")))
+            ((and (region-active-p)
+                  (= (point) (region-end)))
+             (catch 'term
+               (pcase-dolist (`(_ . ,end) conn--current-expansions)
+                 (when (> end (point)) (throw 'term (goto-char end))))
                (user-error "No more expansions")))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
@@ -2899,7 +2895,7 @@ Expansions are provided by functions in `conn-expansion-functions'."
                                     (> end (region-end))))
                               conn--current-expansions)
                (`(,beg . ,end)
-                (goto-char (if (= (point) (region-end)) end beg))
+                (goto-char (if (= (point) (region-beginning)) beg end))
                 (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
                ('nil
                 (user-error "No more expansions")))))))
@@ -2921,16 +2917,16 @@ Expansions and contractions are provided by functions in
       (conn-expand (- arg))
     (dotimes (_ arg)
       (cond ((and (region-active-p)
-                  (= (point) (region-end)))
-             (catch 'term
-               (pcase-dolist (`(_ . ,end) conn--current-expansions)
-                 (when (< end (point)) (throw 'term (goto-char end))))
-               (user-error "No more expansions")))
-            ((and (region-active-p)
                   (= (point) (region-beginning)))
              (catch 'term
                (pcase-dolist (`(,beg . _) conn--current-expansions)
                  (when (> beg (point)) (throw 'term (goto-char beg))))
+               (user-error "No more expansions")))
+            ((and (region-active-p)
+                  (= (point) (region-end)))
+             (catch 'term
+               (pcase-dolist (`(_ . ,end) conn--current-expansions)
+                 (when (< end (point)) (throw 'term (goto-char end))))
                (user-error "No more expansions")))
             (t
              (pcase (seq-find (pcase-lambda (`(,beg . ,end))
@@ -2938,7 +2934,7 @@ Expansions and contractions are provided by functions in
                                     (< end (region-end))))
                               (reverse conn--current-expansions))
                (`(,beg . ,end)
-                (goto-char (if (= (point) (region-end)) end beg))
+                (goto-char (if (= (point) (region-beginning)) beg end))
                 (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
                ('nil
                 (user-error "No more contractions")))))))
@@ -6846,10 +6842,10 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-forward-sentence "org")
 
   (conn-register-thing org-paragraph
-    :parent paragraph
-    :forward-op org-forward-paragraph
-    :expand-key "I"
-    :modes org-mode)
+    :finder (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
+    :forward-op 'org-forward-paragraph
+    :mark-key "I"
+    :modes 'org-mode)
 
   (conn-register-thing-commands
    'org-paragraph 'conn-sequential-thing-handler
@@ -6860,7 +6856,7 @@ determine if `conn-local-mode' should be enabled."
                   (if (>= arg 0)
                       (org-forward-sentence arg)
                     (org-backward-sentence (abs arg))))
-    :expand-key "{"
+    :mark-key "{"
     :modes 'org-mode)
 
   (conn-register-thing-commands
@@ -6868,10 +6864,32 @@ determine if `conn-local-mode' should be enabled."
    'org-forward-sentence 'org-backward-sentence)
 
   (conn-register-thing org-element
-    :expand-key "K"
-    :beg-op org-backward-element
-    :end-op org-forward-element
-    :modes org-mode)
+    :mark-key "m"
+    :beg-op 'org-backward-element
+    :end-op 'org-forward-element
+    :modes 'org-mode)
+
+  (conn-register-thing-commands
+   'org-element 'conn-individual-thing-handler
+   'org-forward-element
+   'org-backward-element
+   'org-next-visible-heading
+   'org-previous-visible-heading
+   'org-forward-heading-same-level
+   'org-backward-heading-same-level
+   'org-up-element
+   'org-up-heading)
+
+  (conn-register-thing org-heading
+    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
+    :forward-op 'org-next-visible-heading
+    :modes 'org-mode
+    :mark-key "H")
+
+  (conn-register-thing-commands
+   'org-heading 'conn-sequential-thing-handler
+   'org-next-visible-heading
+   'org-previous-visible-heading)
 
   (conn-register-thing-commands
    'org-element 'conn-individual-thing-handler
@@ -6926,12 +6944,12 @@ determine if `conn-local-mode' should be enabled."
       ")" 'paredit-forward-up))
 
   (conn-register-thing paredit-sexp
-    :parent sexp
-    :forward-op paredit-forward
-    :modes paredit-mode)
+    :forward-op 'paredit-forward
+    :finder (apply-partially 'conn--dispatch-things-with-prefix
+                             '(paredit-sexp symbol) 1 t))
 
   (conn-register-thing-commands
-   'sexp 'conn-individual-thing-handler
+   'paredit-sexp 'conn-individual-thing-handler
    'paredit-forward-down
    'paredit-backward-down)
 
@@ -6965,7 +6983,7 @@ determine if `conn-local-mode' should be enabled."
         (_ (conn-sequential-thing-handler beg)))))
 
   (conn-register-thing-commands
-   'sexp 'conn-paredit-sexp-handler
+   'paredit-sexp 'conn-paredit-sexp-handler
    'paredit-forward
    'paredit-backward))
 
@@ -6979,11 +6997,14 @@ determine if `conn-local-mode' should be enabled."
 
 (with-eval-after-load 'outline
   (declare-function outline-mark-subtree "outline")
+  (declare-function outline-next-heading "outline")
+  (declare-function outline-previous-heading "outline")
   (declare-function outline-on-heading-p "outline")
   (declare-function outline-up-heading "outline")
 
   (conn-register-thing heading
     :mark-key "H"
+    :finder (apply-partially 'conn--dispatch-all-things 'heading t)
     :bounds-op (lambda ()
                  (save-mark-and-excursion
                    (unless (outline-on-heading-p)
@@ -7010,8 +7031,9 @@ determine if `conn-local-mode' should be enabled."
 
 (with-eval-after-load 'treesit
   (conn-register-thing treesit-defun
-    :parent defun
-    :forward-op treesit-end-of-defun)
+    :forward-op 'treesit-end-of-defun
+    :finder (apply-partially 'conn--dispatch-all-things
+                             'treesit-defun))
 
   (conn-register-thing-commands
    'treesit-defun 'conn-individual-thing-handler
