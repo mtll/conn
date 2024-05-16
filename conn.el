@@ -924,18 +924,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (setq conn--ephemeral-mark t)
   nil)
 
-(defun conn--update-cursor (&rest _frame)
-  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
-      (setq cursor-type cursor)
-    (setq cursor-type t))
-  (when conn-cursor-colors
-    (set-cursor-color (or (conn--thread -it->
-                            (window-buffer (selected-window))
-                            (buffer-local-value 'conn-current-state -it->)
-                            (get -it-> :conn-cursor-face)
-                            (ignore-errors (face-background -it->)))
-                          conn--default-cursor-color))))
-
 (defun conn--hide-mark-cursor-p (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
     (or (when-let ((hide (get conn-current-state :conn-hide-mark)))
@@ -995,10 +983,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (when conn--mark-cursor-timer
     (cancel-timer conn--mark-cursor-timer)
     (setq conn--mark-cursor-timer nil))
-  (when conn-mode
-    (setq conn--mark-cursor-timer
-          (run-with-idle-timer conn-mark-update-delay
-                               t #'conn--mark-cursor-timer-func))))
+  (if conn-mode
+      (progn
+        (setq conn--mark-cursor-timer
+              (run-with-idle-timer conn-mark-update-delay
+                                   t #'conn--mark-cursor-timer-func)
+              conn--prev-mark-even-if-inactive mark-even-if-inactive
+              mark-even-if-inactive t)
+        (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+        (add-hook 'post-command-hook #'conn--mark-post-command-hook))
+    (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
+    (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+    (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
 (defun conn--delete-mark-cursor ()
   (save-restriction
@@ -1939,6 +1935,28 @@ Buffers are strings matched using `buffer-match-p'."
       (string (setf (alist-get var conn-buffer-default-state-alist
                                nil nil #'equal)
                     state)))))
+
+(defun conn--update-cursor (&rest _frame)
+  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
+      (setq cursor-type cursor)
+    (setq cursor-type t))
+  (when conn-cursor-colors
+    (set-cursor-color (or (conn--thread -it->
+                            (window-buffer (selected-window))
+                            (buffer-local-value 'conn-current-state -it->)
+                            (get -it-> :conn-cursor-face)
+                            (ignore-errors (face-background -it->)))
+                          conn--default-cursor-color))))
+
+(defun conn--setup-cursor ()
+  (if conn-mode
+      (progn
+        (setq conn--default-cursor-color (face-background 'cursor))
+        (add-hook 'window-selection-change-functions #'conn--update-cursor)
+        (add-hook 'window-buffer-change-functions #'conn--update-cursor))
+    (remove-hook 'window-selection-change-functions #'conn--update-cursor)
+    (remove-hook 'window-buffer-change-functions #'conn--update-cursor)
+    (set-cursor-color conn--default-cursor-color)))
 
 (defmacro conn-define-state (name doc &rest body)
   "Define a conn state NAME.
@@ -6804,26 +6822,14 @@ determine if `conn-local-mode' should be enabled."
     (conn--setup-keymaps)
     (conn--setup-mark)
     (conn--setup-advice)
+    (conn--setup-cursor)
     (if conn-mode
         (progn
-          (setq conn--default-cursor-color (face-background 'cursor))
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
-          (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
-                mark-even-if-inactive t)
-          (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
-          (add-hook 'post-command-hook #'conn--mark-post-command-hook)
-          (add-hook 'window-selection-change-functions #'conn--update-cursor)
-          (add-hook 'window-buffer-change-functions #'conn--update-cursor)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
-      (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
-      (set-cursor-color conn--default-cursor-color)
-      (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
-      (remove-hook 'post-command-hook #'conn--mark-post-command-hook)
-      (remove-hook 'window-selection-change-functions #'conn--update-cursor)
-      (remove-hook 'window-buffer-change-functions #'conn--update-cursor)
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
 (provide 'conn)
