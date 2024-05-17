@@ -1495,19 +1495,23 @@ The iterator must be the first argument in ARGLIST.
      (when (funcall iterator :record)
        (kmacro-start-macro nil)
        (unwind-protect
-           (recursive-edit)
-         (if (not defining-kbd-macro)
-             (user-error "Not defining keyboard macro")
-           (kmacro-end-macro (or count 0))))))))
+           (progn
+             (recursive-edit)
+             (when (not defining-kbd-macro)
+               (user-error "Not defining keyboard macro")))
+         (when defining-kbd-macro (kmacro-end-macro nil)))
+       (kmacro-call-macro (or count 0))))))
 
 (conn--define-kapply conn--kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
     (kmacro-start-macro (if skip-exec '(16) '(4)))
     (unwind-protect
-        (recursive-edit)
-      (when (not defining-kbd-macro)
-        (user-error "Not defining keyboard macro"))
-      (kmacro-end-macro (or count 0)))))
+        (progn
+          (recursive-edit)
+          (when (not defining-kbd-macro)
+            (user-error "Not defining keyboard macro")))
+      (when defining-kbd-macro (kmacro-end-macro nil)))
+    (kmacro-call-macro (or count 0))))
 
 (conn--define-kapply conn--kmacro-apply-step-edit (iterator &optional count)
   (when (funcall iterator :record)
