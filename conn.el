@@ -2405,8 +2405,12 @@ state."
       (goto-char pt)
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (conn--push-ephemeral-mark end)
-         (unless (= pt beg) (goto-char beg)))))))
+         (unless (region-active-p)
+           (if (= (point) end)
+               (conn--push-ephemeral-mark beg)
+             (conn--push-ephemeral-mark end)))
+         (unless (or (= pt beg) (= pt end))
+           (goto-char beg)))))))
 
 (defun conn-dispatch-jump (window pt _thing)
   (with-current-buffer (window-buffer window)
@@ -4978,8 +4982,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "TAB"     'conn-wincontrol-other-window-scroll-up
   "DEL"     'conn-wincontrol-scroll-down
   "SPC"     'conn-wincontrol-scroll-up
-  "M-<tab>" 'conn-wincontrol-other-window-scroll-down
-  "M-TAB"   'conn-wincontrol-other-window-scroll-down
+  "`"       'conn-wincontrol-other-window-scroll-down
   "C-s"     'conn-wincontrol-isearch
   "C-r"     'conn-wincontrol-isearch-backward
   ","       'conn-wincontrol-maximize-horizontally
