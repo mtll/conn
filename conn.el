@@ -194,7 +194,7 @@ Defines default STATE for buffers matching REGEXP."
   :type 'number)
 
 (defcustom conn-dispatch-label-characters
-  (list "f" "j" "d" "k" "s" "g" "h" "l" "w" "e" "r"
+  (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e" "r"
         "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
   "Chars to use for dispatch label overlays."
   :group 'conn
@@ -647,39 +647,52 @@ If BUFFER is nil check `current-buffer'."
     (overlay-put ov 'padding (overlay-get ov 'after-string))
     ov))
 
-(defun conn--string-preview-overlays-1 (win string)
-  (with-selected-window win
-    (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-      (cl-loop for pt in (conn--visible-matches string)
-               collect (conn--make-preview-overlay pt (length string))))))
+(defun conn--preview-get-windows (in-windows)
+  (cl-loop for win in (pcase-exhaustive in-windows
+                        ('nil (list (selected-window)))
+                        ('t (window-list-1 nil nil 'visible))
+                        ((pred listp)
+                         (cl-loop for win in (window-list-1 nil nil 'visible)
+                                  when (memq (buffer-local-value
+                                              'major-mode (window-buffer win))
+                                             in-windows)
+                                  collect win))
+                        ((pred functionp)
+                         (cl-loop for win in (window-list-1 nil nil 'visible)
+                                  when (funcall in-windows win) collect win)))
+           unless (memq (buffer-local-value 'major-mode (window-buffer win))
+                        conn-dispatch-thing-ignored-modes)
+           collect win))
 
-(defun conn--string-preview-overlays (string &optional dir all-windows)
-  (if all-windows
-      (cl-loop for win in (window-list-1 nil nil 'visible)
-               nconc (conn--string-preview-overlays-1 win string))
+(defun conn--string-preview-overlays-1 (win string &optional dir)
+  (with-selected-window win
     (cl-loop for pt in (conn--visible-matches string dir)
              collect (conn--make-preview-overlay pt (length string)))))
 
-(defun conn--read-string-with-timeout-1 (&optional dir all-windows)
+(defun conn--string-preview-overlays (string &optional dir in-windows)
+  (cl-loop for win in (conn--preview-get-windows in-windows)
+           nconc (conn--string-preview-overlays-1 win string dir)))
+
+(defun conn--read-string-with-timeout-1 (&optional dir in-windows)
   (conn--with-input-method
     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
            (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir all-windows)))
+           (overlays (conn--string-preview-overlays string dir in-windows)))
       (condition-case _
           (progn
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                               conn-read-string-timeout)))
               (setq string (concat string (char-to-string next-char)))
               (mapc #'delete-overlay overlays)
-              (setq overlays (conn--string-preview-overlays string dir all-windows)))
+              (setq overlays (conn--string-preview-overlays string dir in-windows)))
             (message nil)
             (cons string overlays))
         ((quit error)
          (mapc #'delete-overlay overlays))))))
 
-(defun conn--read-string-with-timeout (&optional dir all-windows)
+(defun conn--read-string-with-timeout (&optional dir in-windows)
   (pcase-let ((`(,string . ,overlays)
-               (conn--read-string-with-timeout-1 dir all-windows)))
+               (conn--read-string-with-timeout-1 dir in-windows)))
     (mapc #'delete-overlay overlays)
     string))
 
@@ -843,12 +856,7 @@ If BUFFER is nil check `current-buffer'."
          (nconc
           `((intern ,(symbol-name thing)))
           (when-let ((finder (plist-get rest :finder)))
-            `((put ',thing :conn-dispatch-finder
-                   ,(if modes
-                        `(lambda ()
-                           (when (memq major-mode ,modes-sym)
-                             (funcall ,finder)))
-                      finder))))
+            `((put ',thing :conn-dispatch-finder ,finder)))
           (when-let ((action (plist-get rest :default-action)))
             `((put ',thing :conn-dispatch-default-action ,action)))
           (when-let ((forward (plist-get rest :forward-op)))
@@ -2630,12 +2638,10 @@ state."
     (cl-loop for pt in ovs collect
              (conn--make-preview-overlay pt 1 thing))))
 
-(defun conn--dispatch-all-things (thing &optional all-windows)
-  (if (not all-windows)
-      (conn--dispatch-all-things-1 thing)
-    (cl-loop for win in (window-list-1 nil nil 'visible)
-             nconc (with-selected-window win
-                     (conn--dispatch-all-things-1 thing)))))
+(defun conn--dispatch-all-things (thing &optional in-windows)
+  (cl-loop for win in (conn--preview-get-windows in-windows)
+           nconc (with-selected-window win
+                   (conn--dispatch-all-things-1 thing))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))
@@ -2653,7 +2659,7 @@ state."
     (cl-loop for ov in ovs collect
              (apply 'conn--make-preview-overlay ov))))
 
-(defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
+(defun conn--dispatch-things-with-prefix (things prefix-length &optional in-windows)
   (let ((prefix ""))
     (conn--with-input-method
       (while (length< prefix prefix-length)
@@ -2661,11 +2667,9 @@ state."
                        (read-char (concat "char: " prefix) t)
                        (char-to-string)
                        (concat prefix)))))
-    (if (not all-windows)
-        (conn--dispatch-things-with-prefix-1 things prefix)
-      (cl-loop for win in (window-list-1 nil nil 'visible)
-               nconc (with-selected-window win
-                       (conn--dispatch-things-with-prefix-1 things prefix))))))
+    (cl-loop for win in (conn--preview-get-windows in-windows)
+             nconc (with-selected-window win
+                     (conn--dispatch-things-with-prefix-1 things prefix)))))
 
 (defun conn--dispatch-columns ()
   (let ((col (current-column))
@@ -6917,6 +6921,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing org-element
     :mark-key "m"
+    :finder (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
     :beg-op 'org-backward-element
     :end-op 'org-forward-element
     :modes 'org-mode)
@@ -6934,6 +6939,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing org-heading
     :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
+    :finder (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
     :forward-op 'org-next-visible-heading
     :modes 'org-mode
     :mark-key "H")
