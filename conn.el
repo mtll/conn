@@ -849,34 +849,30 @@ If BUFFER is nil check `current-buffer'."
 
 \(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-KEY)"
   (declare (indent 1))
-  (let ((modes-sym (gensym "modes"))
-        (modes (ensure-list (plist-get rest :modes))))
-    `(let ((,modes-sym (ensure-list ,modes)))
-       ,(macroexp-progn
-         (nconc
-          `((intern ,(symbol-name thing)))
-          (when-let ((finder (plist-get rest :finder)))
-            `((put ',thing :conn-dispatch-finder ,finder)))
-          (when-let ((action (plist-get rest :default-action)))
-            `((put ',thing :conn-dispatch-default-action ,action)))
-          (when-let ((forward (plist-get rest :forward-op)))
-            `((put ',thing 'forward-op ,forward)))
-          (when-let ((beg (plist-get rest :beg-op)))
-            `((put ',thing 'beginning-op ,beg)))
-          (when-let ((end (plist-get rest :end-op)))
-            `((put ',thing 'end-op ,end)))
-          (when-let ((bounds (plist-get rest :bounds-op)))
-            `((put ',thing 'bounds-of-thing-at-point ,bounds)))
-          (when-let ((binding (plist-get rest :mark-key)))
-            `((let ((mark-command (conn--thing-bounds-command ,thing))
-                    (binding ,binding))
-                ,(if modes
-                     `(progn
-                        (put ',thing :conn-thing-modes ,modes-sym)
-                        (dolist (mode ,modes-sym)
-                          (keymap-set (conn-get-mode-things-map mode)
-                                      binding mark-command)))
-                   `(keymap-set conn-mark-thing-map binding mark-command))))))))))
+  (macroexp-progn
+   (nconc
+    `((intern ,(symbol-name thing)))
+    (when-let ((finder (plist-get rest :finder)))
+      `((put ',thing :conn-dispatch-finder ,finder)))
+    (when-let ((action (plist-get rest :default-action)))
+      `((put ',thing :conn-dispatch-default-action ,action)))
+    (when-let ((forward (plist-get rest :forward-op)))
+      `((put ',thing 'forward-op ,forward)))
+    (when-let ((beg (plist-get rest :beg-op)))
+      `((put ',thing 'beginning-op ,beg)))
+    (when-let ((end (plist-get rest :end-op)))
+      `((put ',thing 'end-op ,end)))
+    (when-let ((bounds (plist-get rest :bounds-op)))
+      `((put ',thing 'bounds-of-thing-at-point ,bounds)))
+    (when-let ((binding (plist-get rest :mark-key)))
+      `((let ((mark-command (conn--thing-bounds-command ,thing))
+              (binding ,binding))
+          ,(if (plist-get rest :modes)
+               `(dolist (mode (put ',thing :conn-thing-modes
+                                   (ensure-list ,(plist-get rest :modes))))
+                  (keymap-set (conn-get-mode-things-map mode)
+                              binding mark-command))
+             `(keymap-set conn-mark-thing-map binding mark-command))))))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
