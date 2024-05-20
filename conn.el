@@ -1017,9 +1017,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Thing Definitions
 
-(conn-register-thing region
-  :bounds-op (lambda ()
-               (cons (region-beginning) (region-end))))
+(conn-register-thing url :mark-key "!")
+(conn-register-thing email :mark-key "@")
+(conn-register-thing uuid :mark-key "$")
+(conn-register-thing string :mark-key "\"")
+(conn-register-thing filename :mark-key "/")
 
 (conn-register-thing-commands
  'region nil
@@ -1114,9 +1116,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing char
   :default-action 'conn-dispatch-jump)
-
-(conn-register-thing buffer
-  :bounds-op (lambda () (cons (point-min) (point-max))))
 
 (conn-register-thing-commands
  'buffer 'conn-individual-thing-handler
@@ -2892,6 +2891,19 @@ potential expansions.  Functions may return invalid expansions
       (member (cons (region-beginning) (region-end))
               conn--current-expansions)))
 
+(defun conn-expand-exchange ()
+  "Move point to the other end of the current expansion."
+  (interactive)
+  (if (region-active-p)
+      (cl-loop for (beg . end) in (reverse conn--current-expansions)
+               when (and (= (point) beg)
+                         (/= (mark t) end))
+               do (cl-return (goto-char end))
+               when (and (= (point) end)
+                         (/= (mark t) beg))
+               do (cl-return (goto-char beg)))
+    (conn-exchange-mark-command)))
+
 (defun conn-expand (arg)
   "Expend region by semantic units.
 
@@ -2945,13 +2957,13 @@ Expansions and contractions are provided by functions in
       (cond ((and (region-active-p)
                   (= (point) (region-beginning)))
              (catch 'term
-               (pcase-dolist (`(,beg . _) conn--current-expansions)
+               (pcase-dolist (`(,beg . _) (reverse conn--current-expansions))
                  (when (> beg (point)) (throw 'term (goto-char beg))))
                (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-end)))
              (catch 'term
-               (pcase-dolist (`(_ . ,end) conn--current-expansions)
+               (pcase-dolist (`(_ . ,end) (reverse conn--current-expansions))
                  (when (< end (point)) (throw 'term (goto-char end))))
                (user-error "No more expansions")))
             (t
@@ -3706,6 +3718,10 @@ associated with that command (see `conn-register-thing')."
           (delete-char 1))))))
 
 ;;;;; Isearch Commands
+
+(defun conn-isearch-project-buffers (project)
+  (interactive (list (project-current)))
+  (multi-isearch-buffers (project-buffers project)))
 
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
@@ -6404,6 +6420,7 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
+  "z" 'conn-expand-exchange
   "H" 'conn-contract
   "h" 'conn-expand)
 
@@ -6489,6 +6506,7 @@ dispatch on each contiguous component of the region."
   "r"   'conn-isearch-backward-thing
   "o"   'occur
   "l"   'locate
+  "m p" 'conn-isearch-project-buffers
   "m B" 'multi-isearch-buffers-regexp
   "m F" 'multi-isearch-files-regexp
   "m b" 'multi-isearch-buffers
@@ -6631,7 +6649,7 @@ dispatch on each contiguous component of the region."
   ";"     'execute-extended-command
   ":"     'execute-extended-command-for-buffer
   "?"     'undo-redo
-  "`"     'other-window
+  "C-`"   'other-window
   "."     'repeat
   "f"     'conn-dispatch-on-things
   "a"     'conn-wincontrol
@@ -6956,16 +6974,16 @@ determine if `conn-local-mode' should be enabled."
    'org-up-element
    'org-up-heading)
 
-  (keymap-set (conn-get-mode-map 'conn-state 'org-mode)
-              "T" 'conn-org-edit-state)
-
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'org-mode)
+    "`" 'conn-org-edit-state
     "^" 'org-up-element
     ")" 'org-next-visible-heading
     "(" 'org-previous-visible-heading
-    "N" 'org-backward-paragraph
-    "M" 'org-forward-paragraph))
+    "N" 'org-backward-element
+    "M" 'org-forward-element
+    "I" 'org-backward-paragraph
+    "K" 'org-forward-paragraph))
 
 (with-eval-after-load 'polymode
   (defvar polymode-move-these-vars-from-old-buffer)
