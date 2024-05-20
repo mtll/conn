@@ -150,7 +150,7 @@ THING BEG and END are bound in BODY."
   (defvar embark-multitarget-actions)
   (defvar embark-keymap-alist)
 
-  (defun conn-dispatch-grep-candidates (cands)
+  (defun conn-kapply-grep-candidates (cands)
     (thread-last
       (mapcar (lambda (cand)
                 (pcase-let ((`(,line-pos (,beg . ,end) . _)
@@ -158,12 +158,12 @@ THING BEG and END are bound in BODY."
                   (cons (+ line-pos beg) (+ line-pos end))))
               cands)
       (apply-partially 'conn--region-iterator)
-      (funcall-interactively 'conn-regions-dispatch-prefix)))
-  (add-to-list 'embark-multitarget-actions 'conn-dispatch-grep-candidates)
+      (funcall-interactively 'conn-regions-kapply-prefix)))
+  (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
-  (defun conn-dispatch-location-candidates (cands)
+  (defun conn-kapply-location-candidates (cands)
     (funcall-interactively
-     'conn-regions-dispatch-prefix
+     'conn-regions-kapply-prefix
      (let ((lines (mapcar (lambda (cand)
                             (car (consult--get-location cand)))
                           cands)))
@@ -177,11 +177,11 @@ THING BEG and END are bound in BODY."
                (cons line (save-excursion
                             (goto-char line)
                             (conn--create-marker (line-end-position)))))))))))
-  (add-to-list 'embark-multitarget-actions 'conn-dispatch-location-candidates)
+  (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
     :parent embark-general-map
-    "\\" 'conn-dispatch-location-candidates
+    "\\" 'conn-kapply-location-candidates
     "D"   'conn-dot-consult-location-candidate
     "c"   '("clone-indirect-buffer" .
             conn-clone-indirect-buffer-location-candidate))
@@ -190,7 +190,7 @@ THING BEG and END are bound in BODY."
 
   (defvar-keymap conn-embark-consult-grep-map
     :parent embark-general-map
-    "\\" 'conn-dispatch-grep-candidates
+    "\\" 'conn-kapply-grep-candidates
     "D"   'conn-dot-consult-grep-candidate)
   (cl-pushnew 'conn-embark-consult-grep-map
               (alist-get 'consult-grep embark-keymap-alist)))
