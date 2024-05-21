@@ -315,23 +315,23 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;; Key Remapping
 
-(defvar conn-yank-keys "C-y")
-(defvar conn-kill-region-keys "C-w")
-(defvar conn-delete-region-keys "C-S-w")
-(defvar conn-forward-sexp-keys "C-M-f")
-(defvar conn-backward-sexp-keys "C-M-b")
-(defvar conn-backward-paragraph-keys "M-{")
-(defvar conn-forward-paragraph-keys "M-}")
-(defvar conn-beginning-of-defun-keys "C-M-a")
-(defvar conn-end-of-defun-keys "C-M-e")
-(defvar conn-next-line-keys "C-n")
-(defvar conn-previous-line-keys "C-p")
-(defvar conn-forward-word-keys "M-f")
-(defvar conn-backward-word-keys "M-b")
-(defvar conn-backward-sentence-keys "M-a")
-(defvar conn-forward-sentence-keys "M-e")
-(defvar conn-backward-delete-char-keys "DEL")
-(defvar conn-delete-char-keys "C-d")
+(defvar conn-yank-keys (key-parse "C-y"))
+(defvar conn-kill-region-keys (key-parse "C-w"))
+(defvar conn-delete-region-keys (key-parse "C-S-w"))
+(defvar conn-forward-sexp-keys (key-parse "C-M-f"))
+(defvar conn-backward-sexp-keys (key-parse "C-M-b"))
+(defvar conn-backward-paragraph-keys (key-parse "M-{"))
+(defvar conn-forward-paragraph-keys (key-parse "M-}"))
+(defvar conn-beginning-of-defun-keys (key-parse "C-M-a"))
+(defvar conn-end-of-defun-keys (key-parse "C-M-e"))
+(defvar conn-next-line-keys (key-parse "C-n"))
+(defvar conn-previous-line-keys (key-parse "C-p"))
+(defvar conn-forward-word-keys (key-parse "M-f"))
+(defvar conn-backward-word-keys (key-parse "M-b"))
+(defvar conn-backward-sentence-keys (key-parse "M-a"))
+(defvar conn-forward-sentence-keys (key-parse "M-e"))
+(defvar conn-backward-delete-char-keys (key-parse "DEL"))
+(defvar conn-delete-char-keys (key-parse "C-d"))
 
 (defvar-keymap conn-mark-thing-map)
 
@@ -423,7 +423,7 @@ Used to restore previous value when `conn-mode' is disabled.")
      nil
      :filter ,(lambda (&rest _)
                 (conn--without-conn-maps
-                  (keymap-lookup nil ,from-keys t)))))
+                  (key-binding ,from-keys t)))))
 
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
@@ -4386,13 +4386,13 @@ of deleting it."
                      current-prefix-arg))
   (if arg
       (funcall (conn--without-conn-maps
-                 (keymap-lookup nil conn-kill-region-keys))
+                 (key-binding conn-kill-region-keys t))
                start end)
     (funcall (conn--without-conn-maps
-               (keymap-lookup nil conn-delete-region-keys))
+               (key-binding conn-delete-region-keys t))
              start end))
   (funcall (conn--without-conn-maps
-             (keymap-lookup nil conn-yank-keys))))
+             (key-binding conn-yank-keys t))))
 
 (defun conn--end-of-inner-line-1 ()
   (goto-char (line-end-position))
@@ -4494,7 +4494,7 @@ If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
          (call-interactively (conn--without-conn-maps
-                               (keymap-lookup nil conn-backward-delete-char-keys))))
+                               (key-binding conn-backward-delete-char-keys t))))
         ((numberp arg)
          (conn--thread -it->
              (concat "Kill "
@@ -4503,7 +4503,8 @@ If ARG is a numeric prefix argument kill region to a register."
            (register-read-with-preview -it->)
            (copy-to-register -it-> nil nil t t)))
         (t (call-interactively
-            (conn--without-conn-maps (keymap-lookup nil conn-kill-region-keys))))))
+            (conn--without-conn-maps
+              (key-binding conn-kill-region-keys t))))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
@@ -4664,12 +4665,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (call-interactively #'string-rectangle))
         (kill
          (funcall (conn--without-conn-maps
-                    (keymap-lookup nil conn-kill-region-keys))
+                    (key-binding conn-kill-region-keys t))
                   start end)
          (conn-emacs-state))
         (t
          (funcall (conn--without-conn-maps
-                    (keymap-lookup nil conn-delete-region-keys))
+                    (key-binding conn-delete-region-keys t))
                   start end)
          (conn-emacs-state))))
 
@@ -6541,7 +6542,7 @@ dispatch on each contiguous component of the region."
   :keymap conn-state-map
   "C-M-l" 'conn-recenter-on-region
   "C-t"   (conn-remapping-command "C-x t")
-  conn-yank-keys   'conn-yank-replace
+  "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
   "|"     'conn-shell-command-on-region
   "="     'indent-relative
@@ -6641,7 +6642,7 @@ dispatch on each contiguous component of the region."
 (define-keymap
   :keymap global-map
   "C-`"       'other-window
-  conn-delete-region-keys     'delete-region
+  "C-S-w"     'delete-region
   "C-x /"     'tab-bar-history-back
   "C-x 4 /"   'tab-bar-history-back
   "C-x 4 ?"   'tab-bar-history-forward
