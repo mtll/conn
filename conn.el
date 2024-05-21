@@ -84,11 +84,6 @@
   :prefix "conn-"
   :group 'conn)
 
-(defgroup conn-key-remappings nil
-  "Conn-mode states."
-  :prefix "conn-"
-  :group 'conn)
-
 (defcustom conn-mark-update-delay 0.1
   "Update delay for mark cursor display."
   :type '(number :tag "seconds")
@@ -283,8 +278,6 @@ nil `conn-local-mode' will be not enabled in the buffer.")
 
 (defvar conn--state-maps nil)
 
-(defvar-local conn--aux-maps nil)
-
 (defvar-local conn--local-maps nil)
 
 (defvar-local conn--major-mode-maps nil)
@@ -320,21 +313,27 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar-local conn--mark-cursor nil
   "`mark' cursor overlay.")
 
-;;;;; Aux Map Variables
+;;;;; Key Remapping
 
-(defvar conn--aux-bindings nil)
+(defvar conn-yank-keys "C-y")
+(defvar conn-kill-region-keys "C-w")
+(defvar conn-delete-region-keys "C-S-w")
+(defvar conn-forward-sexp-keys "C-M-f")
+(defvar conn-backward-sexp-keys "C-M-b")
+(defvar conn-backward-paragraph-keys "M-{")
+(defvar conn-forward-paragraph-keys "M-}")
+(defvar conn-beginning-of-defun-keys "C-M-a")
+(defvar conn-end-of-defun-keys "C-M-e")
+(defvar conn-next-line-keys "C-n")
+(defvar conn-previous-line-keys "C-p")
+(defvar conn-forward-word-keys "M-f")
+(defvar conn-backward-word-keys "M-b")
+(defvar conn-backward-sentence-keys "M-a")
+(defvar conn-forward-sentence-keys "M-e")
+(defvar conn-backward-delete-char-keys "DEL")
+(defvar conn-delete-char-keys "C-d")
 
 (defvar-keymap conn-mark-thing-map)
-
-(defvar conn--aux-update-tick 0)
-
-(defvar-local conn--aux-update-local-tick 0)
-
-(defvar-local conn--aux-map-history nil)
-
-(defvar conn--aux-map-history-size 8)
-
-(defvar conn--last-remapping nil)
 
 ;;;;; Overlay Category Properties
 
@@ -414,10 +413,17 @@ Used to restore previous value when `conn-mode' is disabled.")
                                        conn--local-mode-maps
                                        conn--major-mode-maps
                                        conn--local-maps
-                                       conn--aux-maps
                                        conn--state-maps)
                                      #'eq)))
      ,(macroexp-progn body)))
+
+(defmacro conn-remapping-command (from-keys &optional default)
+  ``(menu-item
+     ""
+     ,',default
+     :filter ,(lambda (&rest _)
+                (conn--without-conn-maps
+                  (keymap-lookup nil ,from-keys t)))))
 
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
@@ -792,13 +798,6 @@ If BUFFER is nil check `current-buffer'."
     (setq conn-this-command-thing (get this-command :conn-command-thing)
           conn-this-command-handler (get this-command :conn-mark-handler))))
 
-(defun conn--define-key-advice (keymap key &rest _)
-  (when (or (memq keymap (mapcar #'cdr conn--state-maps))
-            (and (memq keymap (conn--without-conn-maps (current-active-maps)))
-                 (member (if (stringp key) (key-parse key) key)
-                         (mapcar #'symbol-value conn--aux-bindings))))
-    (cl-incf conn--aux-update-tick)))
-
 (defun conn--push-mark-ad (&rest _)
   (unless conn--ephemeral-mark
     (conn--push-ring-delete-duplicate 'conn-mark-ring (mark-marker)))
@@ -814,14 +813,12 @@ If BUFFER is nil check `current-buffer'."
   (if conn-mode
       (progn
         (advice-add 'repeat :around #'conn--repeat-advice)
-        (advice-add 'define-key :before #'conn--define-key-advice)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad))
     (advice-remove 'repeat #'conn--repeat-advice)
-    (advice-remove 'define-key #'conn--define-key-advice)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
@@ -1665,135 +1662,6 @@ If BUFFER is nil use current buffer."
         result))))
 
 
-;;;; Key Remapping
-
-(defun conn--generate-aux-map (keymaps)
-  (let ((aux-map (setf (alist-get conn-current-state conn--aux-maps)
-                       (make-sparse-keymap)))
-        (state-map (list (alist-get conn-current-state conn--state-maps)
-                         (conn-get-local-map conn-current-state))))
-    (conn--without-conn-maps
-      (dolist (sentinal conn--aux-bindings)
-        (when-let ((def (lookup-key keymaps (symbol-value sentinal) t)))
-          (dolist (key (where-is-internal sentinal state-map nil t))
-            (define-key aux-map key def)))))
-    aux-map))
-
-(defun conn--update-aux-map (&optional force)
-  (when (and conn-local-mode conn-current-state)
-    (let ((active (conn--without-conn-maps (current-active-maps)))
-          (current-remappings (mapcar #'symbol-value conn--aux-bindings)))
-      (cond
-       ((or (/= conn--aux-update-local-tick conn--aux-update-tick)
-            (not (equal conn--last-remapping current-remappings))
-            force)
-        (let ((aux-map (conn--generate-aux-map active))
-              (key (cons conn-current-state active)))
-          (setf conn--aux-maps (list (cons conn-current-state aux-map))
-                conn--aux-map-history (list (cons key aux-map))
-                conn--last-remapping current-remappings
-                conn--aux-update-local-tick conn--aux-update-tick)))
-       (t
-        (let* ((key (cons conn-current-state active))
-               (aux-map (or (alist-get key conn--aux-map-history nil nil #'equal)
-                            (setf (alist-get key conn--aux-map-history nil nil #'equal)
-                                  (conn--generate-aux-map active)))))
-          (setf (alist-get conn-current-state conn--aux-maps) aux-map
-                conn--aux-map-history (take conn--aux-map-history-size
-                                            conn--aux-map-history))))))))
-
-(defmacro conn-define-remapping-command (name from-keys &optional aux-map-omit)
-  "Define a command NAME that remaps to FROM-KEYS.
-Placing NAME in a keymap will cause conn to remap it to the
-result of FROM-KEYS.  For example conn uses this to map C-c,
-C-x, M-s and M-g into various state maps."
-  `(progn
-     (defcustom ,name
-       (key-parse ,from-keys)
-       ,(conn--string-fill
-         (conn--stringify
-          "Key sequence for `" name "' to remap.\n"
-          "Set this variable to change `" name "''s remapping.  "
-          "The key sequence must satisfy `key-valid-p'.")
-         70)
-       :type 'string
-       :group 'conn-key-remappings)
-
-     (defun ,name (&optional interactive-p)
-       ,(conn--string-fill
-         (conn--stringify
-          "Conn remapping command.  "
-          "Conn will remap this command to the value of `" name "'.  "
-          "If this function is called interactively it will `user-error'.  "
-          "If called from Emacs lisp it will `call-interactively' "
-          "the binding of the key sequence in `" name "'.")
-         70)
-       (interactive "p")
-       (pcase (conn--without-conn-maps (key-binding ,name t))
-         ((and (pred commandp) cmd)
-          (if interactive-p (call-interactively cmd) cmd))
-         (_ (error "Key not bound to a command %s." ,name))))
-     (put ',name :conn-remapping-command t)
-
-     ,(unless aux-map-omit
-        `(cl-pushnew ',name conn--aux-bindings))))
-
-(conn-define-remapping-command conn-C-x-keys             "C-x")
-(conn-define-remapping-command conn-C-c-keys             "C-c")
-(conn-define-remapping-command conn-M-s-keys             "M-s")
-(conn-define-remapping-command conn-M-g-keys             "M-g")
-(conn-define-remapping-command conn-C-x-4-keys           "C-x 4")
-(conn-define-remapping-command conn-C-x-5-keys           "C-x 5")
-(conn-define-remapping-command conn-C-x-t-keys           "C-x t")
-(conn-define-remapping-command conn-delete-char-keys     "C-d")
-(conn-define-remapping-command conn-yank-keys            "C-y")
-(conn-define-remapping-command conn-kill-region-keys     "C-w")
-(conn-define-remapping-command conn-backward-delete-keys "DEL")
-(conn-define-remapping-command conn-delete-region-keys   "C-S-w" t)
-
-(conn-define-remapping-command conn-forward-sexp-keys       "C-M-f")
-(conn-define-remapping-command conn-backward-sexp-keys      "C-M-b")
-(conn-register-thing-commands
- 'sexp 'conn-sequential-thing-handler
- 'conn-forward-sexp-keys
- 'conn-backward-sexp-keys)
-
-(conn-define-remapping-command conn-forward-word-keys       "M-f")
-(conn-define-remapping-command conn-backward-word-keys      "M-b")
-(conn-register-thing-commands
- 'word 'conn-sequential-thing-handler
- 'conn-forward-word-keys
- 'conn-backward-word-keys)
-
-(conn-define-remapping-command conn-forward-paragraph-keys  "M-}")
-(conn-define-remapping-command conn-backward-paragraph-keys "M-{")
-(conn-register-thing-commands
- 'paragraph 'conn-sequential-thing-handler
- 'conn-forward-paragraph-keys
- 'conn-backward-paragraph-keys)
-
-(conn-define-remapping-command conn-forward-sentence-keys   "M-e")
-(conn-define-remapping-command conn-backward-sentence-keys  "M-a")
-(conn-register-thing-commands
- 'sentence 'conn-sequential-thing-handler
- 'conn-forward-sentence-keys
- 'conn-backward-sentence-keys)
-
-(conn-define-remapping-command conn-beginning-of-defun-keys "C-M-a")
-(conn-define-remapping-command conn-end-of-defun-keys       "C-M-e")
-(conn-register-thing-commands
- 'defun 'conn-sequential-thing-handler
- 'conn-end-of-defun-keys
- 'conn-beginning-of-defun-keys)
-
-(conn-define-remapping-command conn-next-line-keys          "C-n")
-(conn-define-remapping-command conn-previous-line-keys      "C-p")
-(conn-register-thing-commands
- 'line 'conn-sequential-thing-handler
- 'conn-next-line-keys
- 'conn-previous-line-keys)
-
-
 ;;;; States
 
 ;;;;; State Definitions
@@ -2090,8 +1958,7 @@ disabled.
          (interactive)
          (when conn-current-state
            (funcall (get conn-current-state :conn-transition-fn) :exit))
-         (funcall (get ',name :conn-transition-fn) :enter)
-         (conn--update-aux-map))
+         (funcall (get ',name :conn-transition-fn) :enter))
 
        (put ',name :conn-transition-fn
             (lambda (,enter)
@@ -3719,10 +3586,6 @@ associated with that command (see `conn-register-thing')."
 
 ;;;;; Isearch Commands
 
-(defun conn-isearch-project-buffers (project)
-  (interactive (list (project-current)))
-  (multi-isearch-buffers (project-buffers project)))
-
 (defun conn-isearch-in-dot-p (beg end)
   "Whether or not region from BEG to END is entirely within a dot.
 Meant to be used as `isearch-filter-predicate'."
@@ -4524,9 +4387,14 @@ of deleting it."
                      (region-end)
                      current-prefix-arg))
   (if arg
-      (funcall (conn-kill-region-keys) start end)
-    (funcall (conn-delete-region-keys) start end))
-  (funcall (conn-yank-keys)))
+      (funcall (conn--without-conn-maps
+                 (keymap-lookup nil conn-kill-region-keys))
+               start end)
+    (funcall (conn--without-conn-maps
+               (keymap-lookup nil conn-delete-region-keys))
+             start end))
+  (funcall (conn--without-conn-maps
+             (keymap-lookup nil conn-yank-keys))))
 
 (defun conn--end-of-inner-line-1 ()
   (goto-char (line-end-position))
@@ -4627,7 +4495,8 @@ the region instead of killing it.
 If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
-         (call-interactively (conn-backward-delete-keys)))
+         (call-interactively (conn--without-conn-maps
+                               (keymap-lookup nil conn-backward-delete-char-keys))))
         ((numberp arg)
          (conn--thread -it->
              (concat "Kill "
@@ -4635,7 +4504,8 @@ If ARG is a numeric prefix argument kill region to a register."
                      "to register:")
            (register-read-with-preview -it->)
            (copy-to-register -it-> nil nil t t)))
-        (t (call-interactively (conn-kill-region-keys)))))
+        (t (call-interactively
+            (conn--without-conn-maps (keymap-lookup nil conn-kill-region-keys))))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
@@ -4795,10 +4665,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (rectangle-mark-mode
          (call-interactively #'string-rectangle))
         (kill
-         (funcall (conn-kill-region-keys) start end)
+         (funcall (conn--without-conn-maps
+                    (keymap-lookup nil conn-kill-region-keys))
+                  start end)
          (conn-emacs-state))
         (t
-         (funcall (conn-delete-region-keys) start end)
+         (funcall (conn--without-conn-maps
+                    (keymap-lookup nil conn-delete-region-keys))
+                  start end)
          (conn-emacs-state))))
 
 (defun conn-emacs-state-eol (&optional N)
@@ -6386,7 +6260,7 @@ dispatch on each contiguous component of the region."
 (defvar-keymap conn-region-map
   "s"   'conn-isearch-region-forward
   "r"   'conn-isearch-region-backward
-  "DEL" 'conn-delete-region-keys
+  "DEL" (conn-remapping-command conn-kill-region-keys)
   "$"   'ispell-region
   "*"   'calc-grab-region
   ";"   'comment-or-uncomment-region
@@ -6506,7 +6380,6 @@ dispatch on each contiguous component of the region."
   "r"   'conn-isearch-backward-thing
   "o"   'occur
   "l"   'locate
-  "m p" 'conn-isearch-project-buffers
   "m B" 'multi-isearch-buffers-regexp
   "m F" 'multi-isearch-files-regexp
   "m b" 'multi-isearch-buffers
@@ -6597,22 +6470,22 @@ dispatch on each contiguous component of the region."
   "O" 'forward-symbol
   "(" 'backward-up-list
   ")" 'down-list
-  "{" 'conn-backward-sentence-keys
-  "u" 'conn-backward-word-keys
-  "I" 'conn-backward-paragraph-keys
-  "i" 'conn-previous-line-keys
+  "{" (conn-remapping-command conn-backward-sentence-keys)
+  "u" (conn-remapping-command conn-backward-word-keys)
+  "I" (conn-remapping-command conn-backward-paragraph-keys)
+  "i" (conn-remapping-command conn-previous-line-keys)
   "J" 'conn-beginning-of-inner-line
   "j" 'conn-backward-char
-  "K" 'conn-forward-paragraph-keys
-  "k" 'conn-next-line-keys
+  "K" (conn-remapping-command conn-forward-paragraph-keys)
+  "k" (conn-remapping-command conn-next-line-keys)
   "L" 'conn-end-of-inner-line
   "l" 'conn-forward-char
-  "M" 'conn-end-of-defun-keys
-  "m" 'conn-forward-sexp-keys
-  "N" 'conn-beginning-of-defun-keys
-  "n" 'conn-backward-sexp-keys
-  "}" 'conn-forward-sentence-keys
-  "o" 'conn-forward-word-keys
+  "M" (conn-remapping-command conn-end-of-defun-keys)
+  "m" (conn-remapping-command conn-forward-sexp-keys)
+  "N" (conn-remapping-command conn-beginning-of-defun-keys)
+  "n" (conn-remapping-command conn-backward-sexp-keys)
+  "}" (conn-remapping-command conn-forward-sentence-keys)
+  "o" (conn-remapping-command conn-forward-word-keys)
   "<" 'conn-backward-line
   ">" 'forward-line)
 
@@ -6624,8 +6497,8 @@ dispatch on each contiguous component of the region."
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
   "C-3"   'split-window-right
-  "C-4"   'conn-C-x-4-keys
-  "C-5"   'conn-C-x-5-keys
+  "C-4"   (conn-remapping-command "C-x 4")
+  "C-5"   (conn-remapping-command "C-x 5")
   "C-8"   'conn-tab-to-register
   "C-9"   'quit-window
   "C-0"   'delete-window
@@ -6649,42 +6522,42 @@ dispatch on each contiguous component of the region."
   ";"     'execute-extended-command
   ":"     'execute-extended-command-for-buffer
   "?"     'undo-redo
-  "C-`"   'other-window
+  "`"     'other-window
   "."     'repeat
   "f"     'conn-dispatch-on-things
   "a"     'conn-wincontrol
-  "g"     'conn-M-g-keys
+  "g"     (conn-remapping-command "M-g")
   "h"     'conn-expand
   "H"     conn-mark-thing-map
   "p"     'conn-register-load
   "P"     'conn-register-prefix
-  "s"     'conn-M-s-keys
+  "s"     (conn-remapping-command "M-s")
   "V"     'conn-narrow-to-region
   "v"     'conn-toggle-mark-command
   "W"     'widen
   "X"     'conn-narrow-ring-prefix
-  "x"     'conn-C-x-keys
+  "x"     (conn-remapping-command "C-x")
   "z"     'conn-exchange-mark-command)
 
 (define-keymap
   :keymap conn-state-map
   "C-M-l" 'conn-recenter-on-region
-  "C-t"   'conn-C-x-t-keys
-  "C-y"   'conn-yank-replace
+  "C-t"   (conn-remapping-command "C-x t")
+  conn-yank-keys   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
   "|"     'conn-shell-command-on-region
   "="     'indent-relative
   "$"     'ispell-word
   "*"     'calc-dispatch
   "["     'conn-kill-prepend-region
-  "\""     'conn-insert-pair
+  "\""    'conn-insert-pair
   "<tab>" 'indent-region
   "TAB"   'indent-region
   "]"     'conn-kill-append-region
   "'"     'conn-other-place-prefix-map
   "C"     'conn-copy-region
-  "c"     'conn-C-c-keys
-  "d"     'conn-delete-char-keys
+  "c"     (conn-remapping-command "C-c")
+  "d"     (conn-remapping-command conn-delete-char-keys)
   "b"     conn-misc-edit-map
   "E"     'conn-dot-region
   "Q"     'conn-dot-edit-map
@@ -6693,7 +6566,7 @@ dispatch on each contiguous component of the region."
   "r"     conn-region-map
   "T"     'conn-dot-all-things-in-region
   "w"     'conn-kill-region
-  "y"     'conn-yank-keys
+  "y"     (conn-remapping-command conn-yank-keys)
   "Y"     'yank-from-kill-ring)
 
 (define-keymap
@@ -6740,9 +6613,9 @@ dispatch on each contiguous component of the region."
   "q c"         'org-columns
   "b"           'conn-dispatch-on-things
   "C"           'org-toggle-comment
-  "c"           'conn-C-c-keys
+  "c"           (conn-remapping-command "C-c")
   "e"           conn-misc-edit-map
-  "g"           'conn-M-g-keys
+  "g"           (conn-remapping-command "M-g")
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
@@ -6757,20 +6630,20 @@ dispatch on each contiguous component of the region."
   "N"           'org-toggle-narrow-to-subtree
   "O"           'org-next-block
   "p"           'conn-register-load
-  "s"           'conn-M-s-keys
+  "s"           (conn-remapping-command "M-s")
   "T"           'org-todo
   "t"           'org-sparse-tree
   "U"           'org-previous-block
   "u"           'org-up-element
   "W"           'widen
   "w"           'org-refile
-  "x"           'conn-C-x-keys
+  "x"           (conn-remapping-command "C-x")
   "z"           'conn-exchange-mark-command)
 
 (define-keymap
   :keymap global-map
   "C-`"       'other-window
-  "C-S-w"     'delete-region
+  conn-delete-region-keys     'delete-region
   "C-x /"     'tab-bar-history-back
   "C-x 4 /"   'tab-bar-history-back
   "C-x 4 ?"   'tab-bar-history-forward
@@ -6798,7 +6671,6 @@ dispatch on each contiguous component of the region."
   (if conn-mode
       (progn
         (cl-pushnew 'conn--state-maps emulation-mode-map-alists)
-        (cl-pushnew 'conn--aux-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--major-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-mode-maps emulation-mode-map-alists)
@@ -6814,7 +6686,6 @@ dispatch on each contiguous component of the region."
       (set-keymap-parent goto-map nil))
     (setq emulation-mode-map-alists
           (seq-difference '(conn--state-maps
-                            conn--aux-maps
                             conn--local-maps
                             conn--major-mode-maps
                             conn--local-mode-maps
@@ -6849,7 +6720,6 @@ dispatch on each contiguous component of the region."
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
-        (add-hook 'post-command-hook #'conn--update-aux-map nil t)
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
@@ -6865,7 +6735,6 @@ dispatch on each contiguous component of the region."
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor t)
-    (remove-hook 'post-command-hook #'conn--update-aux-map t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
@@ -6976,7 +6845,7 @@ determine if `conn-local-mode' should be enabled."
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'org-mode)
-    "`" 'conn-org-edit-state
+    "=" 'conn-org-edit-state
     "^" 'org-up-element
     ")" 'org-next-visible-heading
     "(" 'org-previous-visible-heading
