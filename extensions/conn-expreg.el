@@ -28,14 +28,13 @@
 (require 'conn)
 (require 'expreg)
 
-(defun conn--expreg-expansions ()
+;;;###autoload
+(defun conn-expreg-expansions ()
   (save-mark-and-excursion
     (activate-mark)
     (mapcan (lambda (fn) (save-excursion
                            (mapcar #'cdr (funcall fn))))
             expreg-functions)))
-
-(cl-pushnew 'conn--expreg-expansions conn-expansion-functions)
 
 (provide 'conn-expreg)
 ;;; conn-expreg.el ends here

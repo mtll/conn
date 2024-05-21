@@ -28,7 +28,8 @@
 (require 'conn)
 (require 'expand-region)
 
-(defun conn--er-expansions ()
+;;;###autoload
+(defun conn-er-expansions ()
   (save-mark-and-excursion
     (cl-loop
      with expansions = (list (cons (region-beginning) (region-end))) do
@@ -58,8 +59,6 @@
        (when (and (= best-start (point-min))
                   (= best-end (point-max)))
          (cl-return expansions))))))
-
-(cl-pushnew 'conn--er-expansions conn-expansion-functions)
 
 (provide 'conn-expand-region)
 ;;; conn-expand-region.el ends here
