@@ -417,10 +417,10 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn-remapping-command (from-keys &optional default)
+(defmacro conn-remapping-command (from-keys)
   ``(menu-item
      ""
-     ,',default
+     nil
      :filter ,(lambda (&rest _)
                 (conn--without-conn-maps
                   (keymap-lookup nil ,from-keys t)))))
@@ -880,24 +880,22 @@ If BUFFER is nil check `current-buffer'."
 (defun conn-sequential-thing-handler (beg)
   (unless (or (region-active-p)
               (= 0 (prefix-numeric-value current-prefix-arg)))
-    (condition-case _
-        (let* ((dir (pcase (- (point) beg)
-                      (0 0)
-                      ((and n (guard (> n 0))) 1)
-                      ((and n (guard (< n 0))) -1))))
-          (save-excursion
-            (goto-char beg)
-            (forward-thing conn-this-command-thing dir)
-            (forward-thing conn-this-command-thing (- dir))
-            (conn--push-ephemeral-mark)))
-      ((user-error scan-error)))))
+    (ignore-errors
+      (let* ((dir (pcase (- (point) beg)
+                    (0 0)
+                    ((and n (guard (> n 0))) 1)
+                    ((and n (guard (< n 0))) -1))))
+        (save-excursion
+          (goto-char beg)
+          (forward-thing conn-this-command-thing dir)
+          (forward-thing conn-this-command-thing (- dir))
+          (conn--push-ephemeral-mark))))))
 
 (defun conn-individual-thing-handler (_beg)
   (unless (region-active-p)
     (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
       (`(,beg . ,end)
-       (conn--push-ephemeral-mark (if (= (point) end) beg end)))
-      (_ (conn--push-ephemeral-mark (point))))))
+       (conn--push-ephemeral-mark (if (= (point) end) beg end))))))
 
 (defun conn-jump-handler (beg)
   "Mark trail handler.
