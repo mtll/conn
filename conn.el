@@ -3707,6 +3707,100 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
+(defun conn-replace-in-thing (thing from-string to-string &optional direction)
+  (interactive
+   (let* ((thing (conn--read-thing-command))
+          (dir (pcase current-prefix-arg
+                 ('nil 0)
+                 ('- -1)
+                 ((pred consp) 1)
+                 ((pred (> 0)) 1)
+                 ((pred (< 0)) -1)
+                 (_ 0)))
+          (common
+           (query-replace-read-args
+	    (concat "Query replace"
+                    (pcase dir (-1 " backward") (1 " forward") (_ "")))
+	    nil)))
+     (list thing (nth 0 common) (nth 1 common) dir)))
+  (save-window-excursion
+    (save-excursion
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (with-restriction beg end
+           (perform-replace from-string to-string t nil nil nil nil
+                            (if (= direction 1) (point) (point-min))
+                            (if (= direction -1) (point) (point-max))
+                            (= direction -1))))
+        ('nil (user-error "No %s at point" thing))))))
+
+(defun conn-regexp-replace-in-thing (thing from-string to-string &optional direction)
+  (interactive
+   (let* ((thing (conn--read-thing-command))
+          (dir (pcase current-prefix-arg
+                 ('nil 0)
+                 ('- -1)
+                 ((pred consp) 1)
+                 ((pred (> 0)) 1)
+                 ((pred (< 0)) -1)
+                 (_ 0)))
+          (common
+           (query-replace-read-args
+	    (concat "Query replace"
+                    (pcase dir (-1 " backward") (1 " forward") (_ "")))
+	    t)))
+     (list thing (nth 0 common) (nth 1 common) dir)))
+  (save-window-excursion
+    (save-excursion
+      (pcase (bounds-of-thing-at-point thing)
+        (`(,beg . ,end)
+         (with-restriction beg end
+           (perform-replace from-string to-string t t nil nil nil
+                            (if (= direction 1) (point) (point-min))
+                            (if (= direction -1) (point) (point-max))
+                            (= direction -1))))
+        ('nil (user-error "No %s at point" thing))))))
+
+(defun conn-replace-region-in-thing (thing from-string to-string &optional direction)
+  (interactive
+   (let* ((thing (conn--read-thing-command))
+          (dir (pcase current-prefix-arg
+                 ('nil 0)
+                 ('- -1)
+                 ((pred consp) 1)
+                 ((pred (> 0)) 1)
+                 ((pred (< 0)) -1)
+                 (_ 0)))
+          (common
+           (minibuffer-with-setup-hook
+               'conn-yank-region-to-minibuffer
+             (query-replace-read-args
+	      (concat "Query replace"
+                      (pcase dir (-1 " backward") (1 " forward") (_ "")))
+	      nil))))
+     (list thing (nth 0 common) (nth 1 common) dir)))
+  (conn-replace-in-thing thing from-string to-string direction))
+
+(defun conn-regexp-replace-region-in-thing (thing from-string to-string &optional direction)
+  (interactive
+   (let* ((thing (conn--read-thing-command))
+          (dir (pcase current-prefix-arg
+                 ('nil 0)
+                 ('- -1)
+                 ((pred consp) 1)
+                 ((pred (> 0)) 1)
+                 ((pred (< 0)) -1)
+                 (_ 0)))
+          (common
+           (minibuffer-with-setup-hook
+               'conn-yank-region-to-minibuffer
+             (query-replace-read-args
+	      (concat "Query replace"
+                      (pcase dir (-1 " backward") (1 " forward") (_ "")))
+	      nil))))
+     (list thing (nth 0 common) (nth 1 common) dir)))
+  (conn-regexp-replace-in-thing thing from-string to-string direction))
+
 (defun conn-open-line (arg)
   (interactive "p")
   (move-end-of-line arg)
@@ -6284,10 +6378,10 @@ dispatch on each contiguous component of the region."
   "n"   'conn-narrow-to-region
   "o"   'conn-occur-region
   "<"   'conn-sort-prefix
-  "u"   'conn-query-replace-regexp-region
+  "w"   'conn-replace-region-in-thing
+  "u"   'conn-regexp-replace-region-in-thing
   "v"   'conn-region-to-narrow-ring
   "V"   'vc-region-history
-  "w"   'conn-query-replace-region
   "y"   'yank-rectangle
   "Y"   'conn-yank-lines-as-rectangle)
 
@@ -6441,6 +6535,8 @@ dispatch on each contiguous component of the region."
   "RET" 'whitespace-cleanup
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
+  "w"   'conn-replace-in-thing
+  "u"   'conn-regexp-replace-in-thing
   ";"   'comment-line
   "c"   'conn-copy-thing
   "i"   'clone-indirect-buffer
@@ -6456,10 +6552,8 @@ dispatch on each contiguous component of the region."
   "N"   'conn-narrow-indirect-to-thing
   "n"   'conn-narrow-to-thing
   "o"   'transpose-words
-  "u"   'query-replace-regexp
   "q"   'indent-for-tab-command
   "r"   'conn-kmacro-prefix
-  "w"   'query-replace
   "v"   'conn-mark-thing
   "y"   'yank-in-context)
 
