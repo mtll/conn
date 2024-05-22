@@ -1018,6 +1018,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing string :mark-key "\"")
 (conn-register-thing filename :mark-key "/")
 
+(conn-register-thing after-point
+  :bounds-op (lambda () (cons (point) (point-max)))
+  :mark-key ">")
+
+(conn-register-thing before-point
+  :bounds-op (lambda () (cons (point-min) (point)))
+  :mark-key "<")
+
 (conn-register-thing-commands
  'region nil
  'conn-toggle-mark-command
@@ -3707,99 +3715,69 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
-(defun conn-replace-in-thing (thing from-string to-string &optional direction)
+(defun conn-replace-in-thing (thing from-string to-string &optional delimited)
   (interactive
    (let* ((thing (conn--read-thing-command))
-          (dir (pcase current-prefix-arg
-                 ('nil 0)
-                 ('- -1)
-                 ((pred consp) 1)
-                 ((pred (> 0)) 1)
-                 ((pred (< 0)) -1)
-                 (_ 0)))
           (common
            (query-replace-read-args
-	    (concat "Query replace"
-                    (pcase dir (-1 " backward") (1 " forward") (_ "")))
-	    nil)))
-     (list thing (nth 0 common) (nth 1 common) dir)))
+            (concat "Query replace"
+                    (if current-prefix-arg
+                        (if (eq current-prefix-arg '-) " backward" " word")
+                      ""))
+            nil)))
+     (cons thing (take 3 common))))
   (save-window-excursion
     (save-excursion
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (with-restriction beg end
-           (perform-replace from-string to-string t nil nil nil nil
-                            (if (= direction 1) (point) (point-min))
-                            (if (= direction -1) (point) (point-max))
-                            (= direction -1))))
+         (perform-replace from-string to-string t nil delimited nil nil beg end
+                          (= (point) end)))
         ('nil (user-error "No %s at point" thing))))))
 
-(defun conn-regexp-replace-in-thing (thing from-string to-string &optional direction)
+(defun conn-regexp-replace-in-thing (thing from-string to-string &optional delimited)
   (interactive
    (let* ((thing (conn--read-thing-command))
-          (dir (pcase current-prefix-arg
-                 ('nil 0)
-                 ('- -1)
-                 ((pred consp) 1)
-                 ((pred (> 0)) 1)
-                 ((pred (< 0)) -1)
-                 (_ 0)))
           (common
            (query-replace-read-args
-	    (concat "Query replace"
-                    (pcase dir (-1 " backward") (1 " forward") (_ "")))
-	    t)))
-     (list thing (nth 0 common) (nth 1 common) dir)))
+            (concat "Query replace regexp"
+                    (if current-prefix-arg
+                        (if (eq current-prefix-arg '-) " backward" " word")
+                      ""))
+            t)))
+     (cons thing (take 3 common))))
   (save-window-excursion
     (save-excursion
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (with-restriction beg end
-           (perform-replace from-string to-string t t nil nil nil
-                            (if (= direction 1) (point) (point-min))
-                            (if (= direction -1) (point) (point-max))
-                            (= direction -1))))
+         (perform-replace from-string to-string t t delimited nil nil beg end
+                          (= (point) end)))
         ('nil (user-error "No %s at point" thing))))))
 
-(defun conn-replace-region-in-thing (thing from-string to-string &optional direction)
+(defun conn-replace-region-in-thing (thing from-string to-string &optional delimited)
   (interactive
    (let* ((thing (conn--read-thing-command))
-          (dir (pcase current-prefix-arg
-                 ('nil 0)
-                 ('- -1)
-                 ((pred consp) 1)
-                 ((pred (> 0)) 1)
-                 ((pred (< 0)) -1)
-                 (_ 0)))
           (common
-           (minibuffer-with-setup-hook
-               'conn-yank-region-to-minibuffer
-             (query-replace-read-args
-	      (concat "Query replace"
-                      (pcase dir (-1 " backward") (1 " forward") (_ "")))
-	      nil))))
-     (list thing (nth 0 common) (nth 1 common) dir)))
-  (conn-replace-in-thing thing from-string to-string direction))
+           (query-replace-read-args
+            (concat "Query replace"
+                    (if current-prefix-arg
+                        (if (eq current-prefix-arg '-) " backward" " word")
+                      ""))
+            nil)))
+     (cons thing (take 3 common))))
+  (conn-replace-in-thing thing from-string to-string delimited (= (point) end)))
 
-(defun conn-regexp-replace-region-in-thing (thing from-string to-string &optional direction)
+(defun conn-regexp-replace-region-in-thing (thing from-string to-string &optional delimited)
   (interactive
    (let* ((thing (conn--read-thing-command))
-          (dir (pcase current-prefix-arg
-                 ('nil 0)
-                 ('- -1)
-                 ((pred consp) 1)
-                 ((pred (> 0)) 1)
-                 ((pred (< 0)) -1)
-                 (_ 0)))
           (common
-           (minibuffer-with-setup-hook
-               'conn-yank-region-to-minibuffer
-             (query-replace-read-args
-	      (concat "Query replace"
-                      (pcase dir (-1 " backward") (1 " forward") (_ "")))
-	      nil))))
-     (list thing (nth 0 common) (nth 1 common) dir)))
-  (conn-regexp-replace-in-thing thing from-string to-string direction))
+           (query-replace-read-args
+            (concat "Query replace regexp"
+                    (if current-prefix-arg
+                        (if (eq current-prefix-arg '-) " backward" " word")
+                      ""))
+            t)))
+     (cons thing (take 3 common))))
+  (conn-regexp-replace-in-thing thing from-string to-string delimited (= (point) end)))
 
 (defun conn-open-line (arg)
   (interactive "p")
@@ -6590,8 +6568,8 @@ dispatch on each contiguous component of the region."
   "C-1"   'delete-other-windows
   "C-2"   'split-window-below
   "C-3"   'split-window-right
-  "C-4"   (conn-remapping-command "C-x 4")
-  "C-5"   (conn-remapping-command "C-x 5")
+  "C-4"   (conn-remapping-command (key-parse "C-x 4"))
+  "C-5"   (conn-remapping-command (key-parse "C-x 5"))
   "C-8"   'conn-tab-to-register
   "C-9"   'quit-window
   "C-0"   'delete-window
@@ -6619,23 +6597,23 @@ dispatch on each contiguous component of the region."
   "."     'repeat
   "f"     'conn-dispatch-on-things
   "a"     'conn-wincontrol
-  "g"     (conn-remapping-command "M-g")
+  "g"     (conn-remapping-command (key-parse "M-g"))
   "h"     'conn-expand
   "H"     conn-mark-thing-map
   "p"     'conn-register-load
   "P"     'conn-register-prefix
-  "s"     (conn-remapping-command "M-s")
+  "s"     (conn-remapping-command (key-parse "M-s"))
   "V"     'conn-narrow-to-region
   "v"     'conn-toggle-mark-command
   "W"     'widen
   "X"     'conn-narrow-ring-prefix
-  "x"     (conn-remapping-command "C-x")
+  "x"     (conn-remapping-command (key-parse "C-x"))
   "z"     'conn-exchange-mark-command)
 
 (define-keymap
   :keymap conn-state-map
   "C-M-l" 'conn-recenter-on-region
-  "C-t"   (conn-remapping-command "C-x t")
+  "C-t"   (conn-remapping-command (key-parse "C-x t"))
   "C-y"   'conn-yank-replace
   "M-y"   'conn-completing-yank-replace
   "|"     'conn-shell-command-on-region
@@ -6649,7 +6627,7 @@ dispatch on each contiguous component of the region."
   "]"     'conn-kill-append-region
   "'"     'conn-other-place-prefix-map
   "C"     'conn-copy-region
-  "c"     (conn-remapping-command "C-c")
+  "c"     (conn-remapping-command (key-parse "C-c"))
   "d"     (conn-remapping-command conn-delete-char-keys)
   "b"     conn-misc-edit-map
   "E"     'conn-dot-region
@@ -6706,9 +6684,9 @@ dispatch on each contiguous component of the region."
   "q c"         'org-columns
   "b"           'conn-dispatch-on-things
   "C"           'org-toggle-comment
-  "c"           (conn-remapping-command "C-c")
+  "c"           (conn-remapping-command (key-parse "C-c"))
   "e"           conn-misc-edit-map
-  "g"           (conn-remapping-command "M-g")
+  "g"           (conn-remapping-command (key-parse "M-g"))
   "i"           'org-backward-heading-same-level
   "I"           'org-metaup
   "J"           'org-metaleft
@@ -6723,14 +6701,14 @@ dispatch on each contiguous component of the region."
   "N"           'org-toggle-narrow-to-subtree
   "O"           'org-next-block
   "p"           'conn-register-load
-  "s"           (conn-remapping-command "M-s")
+  "s"           (conn-remapping-command (key-parse "M-s"))
   "T"           'org-todo
   "t"           'org-sparse-tree
   "U"           'org-previous-block
   "u"           'org-up-element
   "W"           'widen
   "w"           'org-refile
-  "x"           (conn-remapping-command "C-x")
+  "x"           (conn-remapping-command (key-parse "C-x"))
   "z"           'conn-exchange-mark-command)
 
 (define-keymap
