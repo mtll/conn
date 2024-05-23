@@ -1025,7 +1025,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         conn-this-command-thing (conn--command-property :conn-command-thing)))
 
 (defun conn--mark-post-command-hook ()
-  (when deactivate-mark
+  (when (and deactivate-mark
+             (null undo-auto--this-command-amalgamating))
     (conn--deactivate-mark-hook))
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
