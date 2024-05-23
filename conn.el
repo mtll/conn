@@ -826,6 +826,56 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Mark
 
+(defvar-local conn-region-ring nil)
+
+(defvar conn-region-ring-max 16)
+
+(defun conn--region-equal (region)
+  (pcase-let ((`(,pt . ,mark) region))
+    (and (= (min pt mark) (min (point) (mark t)))
+         (= (max pt mark) (max (point) (mark t))))))
+
+(defun conn--deactivate-mark-hook ()
+  (pcase (seq-find 'conn--region-equal conn-region-ring)
+    ((and (pred consp) reg)
+     (unless (= (car reg) (point))
+       (set-marker (car reg) (point))
+       (set-marker (cdr reg) (mark t)))
+     (setq conn-region-ring (cons reg (delete reg conn-region-ring))))
+    (_
+     (setq conn-region-ring
+           (cons (cons (point-marker) (copy-marker (mark-marker)))
+                 (take (1- conn-region-ring-max) conn-region-ring))))))
+
+(defun conn-pop-region-ring (arg)
+  (interactive "p")
+  (unless conn-region-ring
+    (user-error "Region ring empty"))
+  (if (< arg 0)
+      (conn-unpop-region-ring (abs arg))
+    (dotimes (_ (1- arg))
+      (setq conn-region-ring (nconc (cdr conn-region-ring) (list reg))))
+    (pcase-exhaustive (car conn-region-ring)
+      ((and `(,pt . ,mark) reg)
+       (goto-char pt)
+       (conn--push-ephemeral-mark mark)
+       (setq conn-region-ring (nconc (cdr conn-region-ring) (list reg)))))))
+
+(defun conn-unpop-region-ring (arg)
+  (interactive "p")
+  (unless conn-region-ring
+    (user-error "Region ring empty"))
+  (if (< arg 0)
+      (conn-pop-region-ring (abs arg))
+    (dotimes (_ (1- arg))
+      (setq conn-region-ring (nconc (last conn-region-ring)
+                                    (butlast conn-region-ring))))
+    (pcase-exhaustive (car conn-region-ring)
+      ((and `(,pt . ,mark) reg)
+       (goto-char pt)
+       (conn--push-ephemeral-mark mark)
+       (setq conn-region-ring (nconc (cdr conn-region-ring) (list reg)))))))
+
 (defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
     `(progn
@@ -1017,6 +1067,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing uuid :mark-key "$")
 (conn-register-thing string :mark-key "\"")
 (conn-register-thing filename :mark-key "/")
+
+(conn-register-thing region
+  :bounds-op (lambda ()
+               (cons (region-beginning) (region-end))))
 
 (conn-register-thing after-point
   :bounds-op (lambda () (cons (point) (point-max)))
@@ -6298,7 +6352,7 @@ dispatch on each contiguous component of the region."
     ("m" "camelCase" conn-camel-case-region)]
    [("n" "Snake_Case" conn-capital-snake-case-region)
     ("s" "snake_case" conn-snake-case-region)
-    ("w" "Individual Words" conn-case-to-words-region)]
+    ("w" "individual words" conn-case-to-words-region)]
    [("u" "UPCASE" upcase-region)
     ("c" "Capitalize" capitalize-region)
     ("d" "downcase" downcase-region)]])
@@ -6461,7 +6515,14 @@ dispatch on each contiguous component of the region."
   "o" 'conn-pop-to-mark-command
   "u" 'conn-unpop-to-mark-command)
 
+(defvar-keymap conn-region-ring-repeat-map
+  :repeat t
+  "v" 'conn-pop-region-ring
+  "x" 'conn-unpop-region-ring)
+
 (defvar-keymap conn-goto-map
+  "v" 'conn-pop-region-ring
+  "x" 'conn-unpop-region-ring
   "l" 'pop-global-mark
   "o" 'conn-pop-to-mark-command
   "u" 'conn-unpop-to-mark-command
@@ -6787,6 +6848,7 @@ dispatch on each contiguous component of the region."
         (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
           (dolist (hook hooks)
             (add-hook hook 'conn--activate-input-method nil t)))
+        (add-hook 'deactivate-mark-hook #'conn--deactivate-mark-hook nil t)
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -6802,6 +6864,7 @@ dispatch on each contiguous component of the region."
     (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
       (dolist (hook hooks)
         (remove-hook hook #'conn--activate-input-method t)))
+    (remove-hook 'deactivate-mark-hook #'conn--deactivate-mark-hook t)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
