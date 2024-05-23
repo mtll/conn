@@ -836,16 +836,17 @@ If BUFFER is nil check `current-buffer'."
          (= (max pt mark) (max (point) (mark t))))))
 
 (defun conn--deactivate-mark-hook ()
-  (pcase (seq-find 'conn--region-equal conn-region-ring)
-    ((and (pred consp) reg)
-     (unless (= (car reg) (point))
-       (set-marker (car reg) (point))
-       (set-marker (cdr reg) (mark t)))
-     (setq conn-region-ring (cons reg (delete reg conn-region-ring))))
-    (_
-     (setq conn-region-ring
-           (cons (cons (point-marker) (copy-marker (mark-marker)))
-                 (take (1- conn-region-ring-max) conn-region-ring))))))
+  (when (and (mark t) (/= (point) (mark t)))
+    (pcase (seq-find 'conn--region-equal conn-region-ring)
+      ((and (pred consp) reg)
+       (unless (= (car reg) (point))
+         (set-marker (car reg) (point))
+         (set-marker (cdr reg) (mark t)))
+       (setq conn-region-ring (cons reg (delete reg conn-region-ring))))
+      (_
+       (setq conn-region-ring
+             (cons (cons (point-marker) (copy-marker (mark-marker)))
+                   (take (1- conn-region-ring-max) conn-region-ring)))))))
 
 (defun conn-pop-region-ring (arg)
   (interactive "p")
@@ -854,12 +855,14 @@ If BUFFER is nil check `current-buffer'."
   (if (< arg 0)
       (conn-unpop-region-ring (abs arg))
     (dotimes (_ (1- arg))
-      (setq conn-region-ring (nconc (cdr conn-region-ring) (list reg))))
+      (setq conn-region-ring (nconc (cdr conn-region-ring)
+                                    (list (car conn-region-ring)))))
     (pcase-exhaustive (car conn-region-ring)
       ((and `(,pt . ,mark) reg)
        (goto-char pt)
        (conn--push-ephemeral-mark mark)
-       (setq conn-region-ring (nconc (cdr conn-region-ring) (list reg)))))))
+       (setq conn-region-ring (nconc (cdr conn-region-ring)
+                                     (list reg)))))))
 
 (defun conn-unpop-region-ring (arg)
   (interactive "p")
@@ -870,11 +873,11 @@ If BUFFER is nil check `current-buffer'."
     (dotimes (_ (1- arg))
       (setq conn-region-ring (nconc (last conn-region-ring)
                                     (butlast conn-region-ring))))
-    (pcase-exhaustive (car conn-region-ring)
+    (pcase-exhaustive (car (last conn-region-ring))
       ((and `(,pt . ,mark) reg)
        (goto-char pt)
        (conn--push-ephemeral-mark mark)
-       (setq conn-region-ring (nconc (cdr conn-region-ring) (list reg)))))))
+       (setq conn-region-ring (nconc (list reg) (butlast conn-region-ring)))))))
 
 (defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
@@ -1022,6 +1025,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         conn-this-command-thing (conn--command-property :conn-command-thing)))
 
 (defun conn--mark-post-command-hook ()
+  (when deactivate-mark
+    (conn--deactivate-mark-hook))
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
              conn-this-command-thing
@@ -3769,7 +3774,7 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
-(defun conn-replace-in-thing (thing from-string to-string &optional delimited)
+(defun conn-replace-in-thing (thing from-string to-string &optional delimited backward)
   (interactive
    (let* ((thing (conn--read-thing-command))
           (common
@@ -3779,16 +3784,15 @@ Interactively `region-beginning' and `region-end'."
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
             nil)))
-     (cons thing (take 3 common))))
+     (cons thing common)))
   (save-window-excursion
     (save-excursion
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (perform-replace from-string to-string t nil delimited nil nil beg end
-                          (= (point) end)))
+         (perform-replace from-string to-string t nil delimited nil nil beg end backward))
         ('nil (user-error "No %s at point" thing))))))
 
-(defun conn-regexp-replace-in-thing (thing from-string to-string &optional delimited)
+(defun conn-regexp-replace-in-thing (thing from-string to-string &optional delimited backward)
   (interactive
    (let* ((thing (conn--read-thing-command))
           (common
@@ -3798,16 +3802,15 @@ Interactively `region-beginning' and `region-end'."
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
             t)))
-     (cons thing (take 3 common))))
+     (cons thing common)))
   (save-window-excursion
     (save-excursion
       (pcase (bounds-of-thing-at-point thing)
         (`(,beg . ,end)
-         (perform-replace from-string to-string t t delimited nil nil beg end
-                          (= (point) end)))
+         (perform-replace from-string to-string t t delimited nil nil beg end backward))
         ('nil (user-error "No %s at point" thing))))))
 
-(defun conn-replace-region-in-thing (thing from-string to-string &optional delimited)
+(defun conn-replace-region-in-thing (thing from-string to-string &optional delimited backward)
   (interactive
    (let* ((thing (conn--read-thing-command))
           (common
@@ -3817,10 +3820,10 @@ Interactively `region-beginning' and `region-end'."
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
             nil)))
-     (cons thing (take 3 common))))
-  (conn-replace-in-thing thing from-string to-string delimited (= (point) end)))
+     (cons thing common)))
+  (conn-replace-in-thing thing from-string to-string delimited backward))
 
-(defun conn-regexp-replace-region-in-thing (thing from-string to-string &optional delimited)
+(defun conn-regexp-replace-region-in-thing (thing from-string to-string &optional delimited backward)
   (interactive
    (let* ((thing (conn--read-thing-command))
           (common
@@ -3830,8 +3833,8 @@ Interactively `region-beginning' and `region-end'."
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
             t)))
-     (cons thing (take 3 common))))
-  (conn-regexp-replace-in-thing thing from-string to-string delimited (= (point) end)))
+     (cons thing common)))
+  (conn-regexp-replace-in-thing thing from-string to-string delimited backward))
 
 (defun conn-open-line (arg)
   (interactive "p")
