@@ -1024,10 +1024,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (setq conn-this-command-handler (conn--command-property :conn-mark-handler)
         conn-this-command-thing (conn--command-property :conn-command-thing)))
 
+(defvar conn--last-command-amalgamating nil)
+
 (defun conn--mark-post-command-hook ()
-  (when (and deactivate-mark
+  (when (and (or deactivate-mark conn--last-command-amalgamating)
              (null undo-auto--this-command-amalgamating))
     (conn--deactivate-mark-hook))
+  (setq conn--last-command-amalgamating undo-auto--this-command-amalgamating)
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
              conn-this-command-thing
@@ -1843,11 +1846,11 @@ is on or when `conn-input-method-always' is t."
             (conn--input-method
              (:propertize ("" conn--input-method-title)
                           help-echo (concat
-                                     ,(purecopy "Current input method: ")
+                                     "Current input method: "
                                      conn--input-method
-                                     ,(purecopy "\n\
+                                     "\n\
 mouse-2: Disable input method\n\
-mouse-3: Describe current input method"))
+mouse-3: Describe current input method")
                           local-map ,mode-line-input-method-map
                           mouse-face mode-line-highlight))
             ,(propertize
@@ -3815,12 +3818,14 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (let* ((thing (conn--read-thing-command))
           (common
-           (query-replace-read-args
-            (concat "Query replace"
-                    (if current-prefix-arg
-                        (if (eq current-prefix-arg '-) " backward" " word")
-                      ""))
-            nil)))
+           (minibuffer-with-setup-hook
+               'conn-yank-region-to-minibuffer
+             (query-replace-read-args
+              (concat "Query replace"
+                      (if current-prefix-arg
+                          (if (eq current-prefix-arg '-) " backward" " word")
+                        ""))
+              nil))))
      (cons thing common)))
   (conn-replace-in-thing thing from-string to-string delimited backward))
 
@@ -3829,10 +3834,12 @@ Interactively `region-beginning' and `region-end'."
    (let* ((thing (conn--read-thing-command))
           (common
            (query-replace-read-args
-            (concat "Query replace regexp"
-                    (if current-prefix-arg
-                        (if (eq current-prefix-arg '-) " backward" " word")
-                      ""))
+            (minibuffer-with-setup-hook
+                'conn-yank-region-to-minibuffer
+              (concat "Query replace regexp"
+                      (if current-prefix-arg
+                          (if (eq current-prefix-arg '-) " backward" " word")
+                        "")))
             t)))
      (cons thing common)))
   (conn-regexp-replace-in-thing thing from-string to-string delimited backward))
