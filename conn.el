@@ -1282,11 +1282,11 @@ If any function returns a nil value then macro application it halted.")
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
-  (dolist (reg regions)
-    (unless (markerp (car reg))
-      (setcar reg (conn--create-marker (car reg))))
-    (unless (markerp (cdr reg))
-      (setcdr reg (conn--create-marker (cdr reg)))))
+  (pcase-dolist ((and reg `(,beg . ,end)) regions)
+    (unless (markerp beg)
+      (setcar reg (conn--create-marker beg)))
+    (unless (markerp end)
+      (setcdr reg (conn--create-marker end))))
   (lambda (state)
     (pcase state
       (:finalize
@@ -1874,11 +1874,13 @@ mouse-3: Describe current input method")
 Modes are symbols tested against `major-mode'.
 Buffers are strings matched using `buffer-match-p'."
   (dolist (var (ensure-list modes-or-buffers))
-    (cl-etypecase var
-      (symbol (put var :conn-default-state state))
-      (string (setf (alist-get var conn-buffer-default-state-alist
-                               nil nil #'equal)
-                    state)))))
+    (pcase var
+      ((pred symbolp)
+       (put var :conn-default-state state))
+      ((pred stringp)
+       (setf (alist-get var conn-buffer-default-state-alist
+                        nil nil #'equal)
+             state)))))
 
 (defun conn--update-cursor (&rest _frame)
   (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
@@ -4722,6 +4724,13 @@ there's a region, all lines that region covers will be duplicated."
    (lambda (_ _)
      (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse))))
 
+(defun conn-this-window-prefix ()
+  (interactive)
+  (display-buffer-override-next-command
+   'display-buffer-same-window
+   nil "[current-window]")
+  (message "Display next command buffer in current window..."))
+
 ;;;;; Transition Functions
 
 (defun conn-emacs-state-and-complete ()
@@ -6373,6 +6382,7 @@ dispatch on each contiguous component of the region."
 
 (defvar-keymap conn-other-place-prefix-map
   :prefix 'conn-other-place-prefix-map
+  "c" 'this-window-prefix
   "w" 'other-window-prefix
   "t" 'other-tab-prefix
   "f" 'conn-other-window-prompt-prefix
