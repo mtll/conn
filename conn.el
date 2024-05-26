@@ -3,6 +3,7 @@
 ;; Filename: conn.el
 ;; Description: A modal keybinding mode and keyboard macro enhancement
 ;; Author: David Feller
+;; Keywords: convenience, editing
 ;; Version: 0.1
 ;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") (transient "0.6.0") (seq "2.24"))
 ;; Homepage: https://github.com/mtll/conn
@@ -938,8 +939,8 @@ If BUFFER is nil check `current-buffer'."
         (1 (conn-individual-thing-handler beg))
         ((let dir (pcase (- (point) beg)
                     (0 0)
-                    ((and n (pred (< 0))) 1)
-                    ((and n (pred (> 0))) -1)))
+                    ((pred (< 0)) 1)
+                    ((pred (> 0)) -1)))
          (save-excursion
            (goto-char beg)
            (forward-thing conn-this-command-thing dir)
