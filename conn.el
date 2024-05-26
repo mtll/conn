@@ -931,18 +931,20 @@ If BUFFER is nil check `current-buffer'."
   (apply 'conn-set-command-handler handler commands))
 
 (defun conn-sequential-thing-handler (beg)
-  (unless (or (region-active-p)
-              (= 0 (prefix-numeric-value current-prefix-arg)))
+  (unless (region-active-p)
     (ignore-errors
-      (let* ((dir (pcase (- (point) beg)
+      (pcase (abs (prefix-numeric-value current-prefix-arg))
+        (0)
+        (1 (conn-individual-thing-handler beg))
+        ((let dir (pcase (- (point) beg)
                     (0 0)
-                    ((and n (guard (> n 0))) 1)
-                    ((and n (guard (< n 0))) -1))))
-        (save-excursion
-          (goto-char beg)
-          (forward-thing conn-this-command-thing dir)
-          (forward-thing conn-this-command-thing (- dir))
-          (conn--push-ephemeral-mark))))))
+                    ((and n (pred (< 0))) 1)
+                    ((and n (pred (> 0))) -1)))
+         (save-excursion
+           (goto-char beg)
+           (forward-thing conn-this-command-thing dir)
+           (forward-thing conn-this-command-thing (- dir))
+           (conn--push-ephemeral-mark)))))))
 
 (defun conn-individual-thing-handler (_beg)
   (unless (region-active-p)
@@ -1324,40 +1326,40 @@ If any function returns a nil value then macro application it halted.")
       (_
        (conn--kapply-ensure-overlay-buffer (pop dots))))))
 
-(defun conn--kapply-merge-undo (iterator &optional undo-after-error)
-  (let (kapply-undo-handles)
+(defun conn--kapply-merge-undo (iterator &optional undo-on-error)
+  (let (undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
-         (pcase-dolist (`(_ . ,handle) kapply-undo-handles)
-           (if (and conn-kmacro-apply-error undo-after-error)
+         (pcase-dolist (`(_ . ,handle) undo-handles)
+           (if (and conn-kmacro-apply-error undo-on-error)
                (cancel-change-group handle)
              (accept-change-group handle)
              (undo-amalgamate-change-group handle))))
         (_
          (prog1
              (funcall iterator state)
-           (unless (alist-get (current-buffer) kapply-undo-handles)
+           (unless (alist-get (current-buffer) undo-handles)
              (activate-change-group
-              (setf (alist-get (current-buffer) kapply-undo-handles)
+              (setf (alist-get (current-buffer) undo-handles)
                     (prepare-change-group))))))))))
 
 (defun conn--kapply-save-excursion (iterator)
-  (let (kapply-saved-excursions)
+  (let (saved-excursions)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
-         (pcase-dolist (`(,buffer ,pt . ,saved) kapply-saved-excursions)
+         (pcase-dolist (`(,buffer ,pt . ,saved) saved-excursions)
            (with-current-buffer buffer
              (goto-char pt)
              (set-marker pt nil)
              (save-mark-and-excursion--restore saved))))
         (_
          (prog1 (funcall iterator state)
-           (unless (alist-get (current-buffer) kapply-saved-excursions)
-             (setf (alist-get (current-buffer) kapply-saved-excursions)
+           (unless (alist-get (current-buffer) saved-excursions)
+             (setf (alist-get (current-buffer) saved-excursions)
                    (cons (point-marker) (save-mark-and-excursion--save))))))))))
 
 (defun conn--kapply-save-restriction (iterator)
@@ -1430,13 +1432,13 @@ If any function returns a nil value then macro application it halted.")
                    (alist-get (current-buffer) new-dots))
            (setq primed t))
          (pcase (funcall iterator state)
-           ((and (pred conn-dotp) dot)
-            (let* ((buffer (overlay-buffer dot))
-                   (beg (conn--create-marker (overlay-start dot) buffer))
-                   (end (conn--create-marker (overlay-end dot) buffer)))
-              (conn--delete-dot dot)
-              (push (cons beg end) (alist-get buffer old-dots))
-              (cons (copy-marker beg) (copy-marker end))))
+           ((and (pred conn-dotp) dot
+                 (let buffer (overlay-buffer dot))
+                 (let beg (conn--create-marker (overlay-start dot) buffer))
+                 (let end (conn--create-marker (overlay-end dot) buffer)))
+            (conn--delete-dot dot)
+            (push (cons beg end) (alist-get buffer old-dots))
+            (cons (copy-marker beg) (copy-marker end)))
            (ret ret)))))))
 
 (defun conn--kapply-stationary-dots (iterator)
@@ -5786,7 +5788,7 @@ before each iteration."
 (transient-define-suffix conn--kapply-suffix (args)
   "Apply keyboard macro on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
-dispatch on each contiguous component of the region."
+apply to each contiguous component of the region."
   :transient 'transient--do-exit
   :key "r"
   :description "On Regions"
@@ -7039,11 +7041,6 @@ determine if `conn-local-mode' should be enabled."
       "(" 'paredit-backward-up
       ")" 'paredit-forward-up))
 
-  (conn-register-thing paredit-sexp
-    :forward-op 'paredit-forward
-    :finder (apply-partially 'conn--dispatch-things-with-prefix
-                             '(paredit-sexp symbol) 1 t))
-
   (conn-register-thing-commands
    'paredit-sexp 'conn-individual-thing-handler
    'paredit-forward-down
@@ -7079,7 +7076,7 @@ determine if `conn-local-mode' should be enabled."
         (_ (conn-sequential-thing-handler beg)))))
 
   (conn-register-thing-commands
-   'paredit-sexp 'conn-paredit-sexp-handler
+   'sexp 'conn-paredit-sexp-handler
    'paredit-forward
    'paredit-backward))
 
