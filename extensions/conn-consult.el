@@ -105,6 +105,54 @@ THING BEG and END are bound in BODY."
   (consult-find nil (funcall conn-completion-region-quote-function
                              (buffer-substring-no-properties beg end))))
 
+(defun conn-consult--isearch-matches (&optional buffer)
+  (with-current-buffer (or buffer (current-buffer))
+    (save-excursion
+      (goto-char (if isearch-forward (point-min) (point-max)))
+      (cl-loop with bound = (if isearch-forward (point-max) (point-min))
+               with case-fold-search = isearch-case-fold-search
+               with cand-idx = 0
+               while (isearch-search-string isearch-string bound t)
+               when (funcall isearch-filter-predicate
+                             (match-beginning 0) (match-end 0))
+               collect (let ((line (line-number-at-pos (match-beginning 0) consult-line-numbers-widen)))
+                         (save-excursion
+                           (goto-char (match-beginning 0))
+                           (consult--location-candidate
+                            (consult--buffer-substring
+                             (line-beginning-position)
+                             (progn
+                               (goto-char (match-end 0))
+                               (line-end-position)))
+                            (cons (current-buffer) (match-beginning 0))
+                            line (prog1 cand-idx (cl-incf cand-idx)))))
+               when (and (= (match-beginning 0) (match-end 0))
+                         (not (if isearch-forward (eobp) (bobp))))
+               do (forward-char (if isearch-forward 1 -1))))))
+
+;;;###autoload
+(defun conn-consult-isearch-matches ()
+  (interactive)
+  (let* ((curr-line (line-number-at-pos (point) consult-line-numbers-widen))
+         (candidates (consult--slow-operation "Collecting matches..."
+                       (if (bound-and-true-p multi-isearch-buffer-list)
+                           (mapcan 'conn-consult--isearch-matches multi-isearch-buffer-list)
+                         (conn-consult--isearch-matches)))))
+    (isearch-done t)
+    (consult--read
+     candidates
+     :prompt "Go to line: "
+     :annotate (consult--line-prefix curr-line)
+     :category 'consult-location
+     :sort nil
+     :require-match t
+     :add-history (list (thing-at-point 'symbol) isearch-string)
+     :history '(:input consult--line-multi-history)
+     :lookup #'consult--line-match
+     :default (car candidates)
+     :state (consult--location-state candidates)
+     :group #'consult--line-multi-group)))
+
 ;;;###autoload
 (defvar-keymap conn-consult-region-search-map
   :prefix 'conn-consult-region-search-map
@@ -118,6 +166,7 @@ THING BEG and END are bound in BODY."
 (keymap-set conn-region-map "o" 'conn-consult-line-region)
 (keymap-set conn-region-map "g" 'conn-consult-ripgrep-region)
 (keymap-set conn-region-map "h" 'conn-consult-region-search-map)
+(keymap-set isearch-mode-map "M-s o" 'conn-consult-isearch-matches)
 (keymap-global-set "M-s T" 'conn-consult-thing)
 
 (provide 'conn-consult)
