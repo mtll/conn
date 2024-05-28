@@ -121,9 +121,8 @@ THING BEG and END are bound in BODY."
                            (consult--location-candidate
                             (consult--buffer-substring
                              (line-beginning-position)
-                             (progn
-                               (goto-char (match-end 0))
-                               (line-end-position)))
+                             (line-end-position)
+                             'fontify)
                             (cons (current-buffer) (match-beginning 0))
                             line (prog1 cand-idx (cl-incf cand-idx)))))
                when (and (= (match-beginning 0) (match-end 0))
