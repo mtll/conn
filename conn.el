@@ -936,7 +936,6 @@ If BUFFER is nil check `current-buffer'."
     (ignore-errors
       (pcase (abs (prefix-numeric-value current-prefix-arg))
         (0)
-        (1 (conn-individual-thing-handler beg))
         ((let dir (pcase (- (point) beg)
                     (0 0)
                     ((pred (< 0)) 1)
@@ -6407,39 +6406,39 @@ apply to each contiguous component of the region."
   "`" 'other-window)
 
 (defvar-keymap conn-region-map
-  "s"   'conn-isearch-region-forward
-  "r"   'conn-isearch-region-backward
+  "s" 'conn-isearch-region-forward
+  "r" 'conn-isearch-region-backward
   "DEL" (conn-remapping-command conn-kill-region-keys)
-  "$"   'ispell-region
-  "*"   'calc-grab-region
-  ";"   'comment-or-uncomment-region
-  ":"   'conn-comment-or-uncomment-region-and-empty
+  "$" 'ispell-region
+  "*" 'calc-grab-region
+  ";" 'comment-or-uncomment-region
+  ":" 'conn-comment-or-uncomment-region-and-empty
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
-  "c"   'conn-region-case-prefix
-  "D"   'conn-duplicate-and-comment-region
-  "d"   'conn-duplicate-region
+  "c" 'conn-region-case-prefix
+  "D" 'conn-duplicate-and-comment-region
+  "d" 'conn-duplicate-region
   "e l" 'conn-dot-region-forward
   "e j" 'conn-dot-region-backward
   "e o" 'conn-remove-dots-outside-region
   "e c" 'conn-split-region-on-regexp
-  "g"   'conn-rgrep-region
-  "j"   'conn-join-lines
-  "I"   'indent-rigidly
-  "N"   'conn-narrow-indirect-to-region
-  "n"   'conn-narrow-to-region
-  "o"   'conn-occur-region
-  "<"   'conn-sort-prefix
-  "w"   'conn-replace-region-in-thing
-  "u"   'conn-regexp-replace-region-in-thing
-  "v"   'conn-region-to-narrow-ring
-  "V"   'vc-region-history
-  "y"   'yank-rectangle
-  "Y"   'conn-yank-lines-as-rectangle)
+  "g" 'conn-rgrep-region
+  "j" 'conn-join-lines
+  "I" 'indent-rigidly
+  "N" 'conn-narrow-indirect-to-region
+  "n" 'conn-narrow-to-region
+  "o" 'conn-occur-region
+  "<" 'conn-sort-prefix
+  "w" 'conn-replace-region-in-thing
+  "u" 'conn-regexp-replace-region-in-thing
+  "v" 'conn-region-to-narrow-ring
+  "V" 'vc-region-history
+  "y" 'yank-rectangle
+  "Y" 'conn-yank-lines-as-rectangle)
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
@@ -6464,7 +6463,7 @@ apply to each contiguous component of the region."
 (defvar-keymap conn-dot-remove-repeat-map
   :repeat t
   "DEL" 'conn-remove-dot-backward
-  "d"   'conn-remove-dot-forward)
+  "d" 'conn-remove-dot-forward)
 
 (defvar-keymap conn-dot-movement-repeat-map
   :repeat t
@@ -6476,21 +6475,21 @@ apply to each contiguous component of the region."
   :doc "Dot this map."
   "RET" 'conn-dot-lines
   "DEL" 'conn-remove-dot-backward
-  "["   'conn-remove-dots-before
-  "]"   'conn-remove-dots-after
-  "{"   'conn-first-dot
-  "}"   'conn-last-dot
-  "l"   'conn-next-dot
-  "j"   'conn-previous-dot
-  "c"   'conn-split-dots-on-regexp
-  "D"   'conn-remove-all-dots
-  "d"   'conn-remove-dot-forward
-  "p"   'conn-dot-text-property
-  "q"   'conn-query-remove-dots
-  "r"   'conn-add-dots-matching-regexp
-  "s"   'conn-sort-dots
-  "t"   'conn-dot-trim-regexp
-  "w"   'conn-add-dots-matching-literal)
+  "[" 'conn-remove-dots-before
+  "]" 'conn-remove-dots-after
+  "{" 'conn-first-dot
+  "}" 'conn-last-dot
+  "l" 'conn-next-dot
+  "j" 'conn-previous-dot
+  "c" 'conn-split-dots-on-regexp
+  "D" 'conn-remove-all-dots
+  "d" 'conn-remove-dot-forward
+  "p" 'conn-dot-text-property
+  "q" 'conn-query-remove-dots
+  "r" 'conn-add-dots-matching-regexp
+  "s" 'conn-sort-dots
+  "t" 'conn-dot-trim-regexp
+  "w" 'conn-add-dots-matching-literal)
 
 (defvar-keymap conn-dot-region-repeat-map
   :repeat t
@@ -6511,13 +6510,13 @@ apply to each contiguous component of the region."
 (define-keymap
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
-  "C-TAB"      'conn-isearch-dot-match
-  "C-<tab>"    'conn-isearch-dot-match
-  "M-\\"       'conn-isearch-kapply-prefix
-  "M-E"        'conn-isearch-add-dots
-  "M-R"        'conn-isearch-refine-dots
-  "M-W"        'conn-isearch-remove-dots
-  "M-S"        'conn-isearch-split-dots)
+  "C-TAB" 'conn-isearch-dot-match
+  "C-<tab>" 'conn-isearch-dot-match
+  "M-\\" 'conn-isearch-kapply-prefix
+  "M-E" 'conn-isearch-add-dots
+  "M-R" 'conn-isearch-refine-dots
+  "M-W" 'conn-isearch-remove-dots
+  "M-S" 'conn-isearch-split-dots)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'compilation-mode)
@@ -6525,10 +6524,10 @@ apply to each contiguous component of the region."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  "s"   'conn-isearch-forward-thing
-  "r"   'conn-isearch-backward-thing
-  "o"   'occur
-  "l"   'locate
+  "s" 'conn-isearch-forward-thing
+  "r" 'conn-isearch-backward-thing
+  "o" 'occur
+  "l" 'locate
   "m B" 'multi-isearch-buffers-regexp
   "m F" 'multi-isearch-files-regexp
   "m b" 'multi-isearch-buffers
@@ -6558,12 +6557,12 @@ apply to each contiguous component of the region."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
-  "r DEL"       'delete-rectangle
-  "*"           'calc-grab-rectangle
-  "+"           'calc-grab-sum-down
-  "_"           'calc-grab-sum-across
-  "y"           'yank-rectangle
-  "DEL"         'clear-rectangle
+  "r DEL" 'delete-rectangle
+  "*" 'calc-grab-rectangle
+  "+" 'calc-grab-sum-down
+  "_" 'calc-grab-sum-across
+  "y" 'yank-rectangle
+  "DEL" 'clear-rectangle
   "<backspace>" 'clear-rectangle)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
@@ -6572,53 +6571,53 @@ apply to each contiguous component of the region."
   "?" 'tab-bar-history-forward)
 
 (defvar-keymap conn-misc-edit-map
-  "TAB"   'conn-emacs-state-and-complete
+  "TAB" 'conn-emacs-state-and-complete
   "<tab>" 'conn-emacs-state-and-complete
-  "o"     'conn-open-line-and-indent
-  "n"     'conn-open-line-above
-  "m"     'conn-open-line
-  "i"     'conn-emacs-state-open-line-above
-  "k"     'conn-emacs-state-open-line
-  "l"     'conn-emacs-state-eoil
-  "L"     'conn-emacs-state-eol
-  "j"     'conn-emacs-state-boil
-  "J"     'conn-emacs-state-bol
-  "t"     'conn-emacs-state-overwrite
-  "b"     'conn-emacs-state-overwrite-binary
-  "v"     'conn-region-to-narrow-ring
-  "x"     'conn-narrow-ring-prefix
-  "c o"   'conn-change-pair-inward
-  "c u"   'conn-change-pair-outward
-  "c j"   'conn-delete-pair-inward
-  "c l"   'conn-delete-pair-outward
-  "c i"   'conn-insert-pair)
+  "o" 'conn-open-line-and-indent
+  "n" 'conn-open-line-above
+  "m" 'conn-open-line
+  "i" 'conn-emacs-state-open-line-above
+  "k" 'conn-emacs-state-open-line
+  "l" 'conn-emacs-state-eoil
+  "L" 'conn-emacs-state-eol
+  "j" 'conn-emacs-state-boil
+  "J" 'conn-emacs-state-bol
+  "t" 'conn-emacs-state-overwrite
+  "b" 'conn-emacs-state-overwrite-binary
+  "v" 'conn-region-to-narrow-ring
+  "x" 'conn-narrow-ring-prefix
+  "c o" 'conn-change-pair-inward
+  "c u" 'conn-change-pair-outward
+  "c j" 'conn-delete-pair-inward
+  "c l" 'conn-delete-pair-outward
+  "c i" 'conn-insert-pair)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
   "RET" 'whitespace-cleanup
   "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
-  "w"   'conn-replace-in-thing
-  "u"   'conn-regexp-replace-in-thing
-  ";"   'comment-line
-  "c"   'conn-copy-thing
-  "i"   'clone-indirect-buffer
-  "d"   'duplicate-dwim
-  "f"   'conn-fill-prefix
-  "h"   conn-mark-thing-map
-  "I"   'copy-from-above-command
-  "j"   'join-line
-  "k"   'transpose-lines
-  "K"   'transpose-paragraphs
-  "l"   'transpose-chars
-  "m"   'transpose-sexps
-  "N"   'conn-narrow-indirect-to-thing
-  "n"   'conn-narrow-to-thing
-  "o"   'transpose-words
-  "q"   'indent-for-tab-command
-  "r"   'conn-kmacro-prefix
-  "v"   'conn-mark-thing
-  "y"   'yank-in-context)
+  "w" 'conn-replace-in-thing
+  "u" 'conn-regexp-replace-in-thing
+  ";" 'comment-line
+  "c" 'conn-copy-thing
+  "i" 'clone-indirect-buffer
+  "d" 'duplicate-dwim
+  "f" 'conn-fill-prefix
+  "h" conn-mark-thing-map
+  "I" 'copy-from-above-command
+  "j" 'join-line
+  "k" 'transpose-lines
+  "K" 'transpose-paragraphs
+  "l" 'transpose-chars
+  "m" 'transpose-sexps
+  "N" 'conn-narrow-indirect-to-thing
+  "n" 'conn-narrow-to-thing
+  "o" 'transpose-words
+  "q" 'indent-for-tab-command
+  "r" 'conn-kmacro-prefix
+  "v" 'conn-mark-thing
+  "y" 'yank-in-context)
 
 (define-keymap
   :keymap conn-movement-map
@@ -6649,179 +6648,179 @@ apply to each contiguous component of the region."
   :keymap conn-common-map
   :parent conn-movement-map
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
-  "\\"    'conn-kapply-prefix
-  "C-1"   'delete-other-windows
-  "C-2"   'split-window-below
-  "C-3"   'split-window-right
-  "C-4"   (conn-remapping-command (key-parse "C-x 4"))
-  "C-5"   (conn-remapping-command (key-parse "C-x 5"))
-  "C-8"   'conn-tab-to-register
-  "C-9"   'quit-window
-  "C-0"   'delete-window
-  "C--"   'shrink-window-if-larger-than-buffer
-  "C-="   'balance-windows
-  "C-+"   'maximize-window
-  "M-V"   'conn-wincontrol-maximize-vertically
-  "M-R"   'conn-wincontrol-maximize-horizontally
-  "M-0"   'tab-close
-  "M-1"   'delete-other-windows-vertically
-  "M-2"   'tab-new
-  "M-3"   'make-frame-command
-  "M-7"   'kill-this-buffer
-  "M-8"   'tear-off-window
-  "M-9"   'tab-detach
+  "\\" 'conn-kapply-prefix
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-4" (conn-remapping-command (key-parse "C-x 4"))
+  "C-5" (conn-remapping-command (key-parse "C-x 5"))
+  "C-8" 'conn-tab-to-register
+  "C-9" 'quit-window
+  "C-0" 'delete-window
+  "C--" 'shrink-window-if-larger-than-buffer
+  "C-=" 'balance-windows
+  "C-+" 'maximize-window
+  "M-V" 'conn-wincontrol-maximize-vertically
+  "M-R" 'conn-wincontrol-maximize-horizontally
+  "M-0" 'tab-close
+  "M-1" 'delete-other-windows-vertically
+  "M-2" 'tab-new
+  "M-3" 'make-frame-command
+  "M-7" 'kill-this-buffer
+  "M-8" 'tear-off-window
+  "M-9" 'tab-detach
   "C-M-0" 'kill-buffer-and-window
-  "SPC"   'conn-set-mark-command
-  "_"     'repeat-complex-command
-  "+"     'conn-set-register-seperator
-  "/"     'undo-only
-  ";"     'execute-extended-command
-  ":"     'execute-extended-command-for-buffer
-  "?"     'undo-redo
-  "`"     'other-window
-  "."     'repeat
-  "f"     'conn-dispatch-on-things
-  "a"     'conn-wincontrol
-  "g"     (conn-remapping-command (key-parse "M-g"))
-  "h"     'conn-expand
-  "H"     conn-mark-thing-map
-  "p"     'conn-register-load
-  "P"     'conn-register-prefix
-  "s"     (conn-remapping-command (key-parse "M-s"))
-  "V"     'conn-narrow-to-region
-  "v"     'conn-toggle-mark-command
-  "W"     'widen
-  "X"     'conn-narrow-ring-prefix
-  "x"     (conn-remapping-command (key-parse "C-x"))
-  "z"     'conn-exchange-mark-command)
+  "SPC" 'conn-set-mark-command
+  "_" 'repeat-complex-command
+  "+" 'conn-set-register-seperator
+  "/" 'undo-only
+  ";" 'execute-extended-command
+  ":" 'execute-extended-command-for-buffer
+  "?" 'undo-redo
+  "`" 'other-window
+  "." 'repeat
+  "f" 'conn-dispatch-on-things
+  "a" 'conn-wincontrol
+  "g" (conn-remapping-command (key-parse "M-g"))
+  "h" 'conn-expand
+  "H" conn-mark-thing-map
+  "p" 'conn-register-load
+  "P" 'conn-register-prefix
+  "s" (conn-remapping-command (key-parse "M-s"))
+  "V" 'conn-narrow-to-region
+  "v" 'conn-toggle-mark-command
+  "W" 'widen
+  "X" 'conn-narrow-ring-prefix
+  "x" (conn-remapping-command (key-parse "C-x"))
+  "z" 'conn-exchange-mark-command)
 
 (define-keymap
   :keymap conn-state-map
   "C-M-l" 'conn-recenter-on-region
-  "C-t"   (conn-remapping-command (key-parse "C-x t"))
-  "C-y"   'conn-yank-replace
-  "M-y"   'conn-completing-yank-replace
-  "|"     'conn-shell-command-on-region
-  "="     'indent-relative
-  "$"     'ispell-word
-  "*"     'calc-dispatch
-  "["     'conn-kill-prepend-region
-  "\""    'conn-insert-pair
+  "C-t" (conn-remapping-command (key-parse "C-x t"))
+  "C-y" 'conn-yank-replace
+  "M-y" 'conn-completing-yank-replace
+  "|" 'conn-shell-command-on-region
+  "=" 'indent-relative
+  "$" 'ispell-word
+  "*" 'calc-dispatch
+  "[" 'conn-kill-prepend-region
+  "\"" 'conn-insert-pair
   "<tab>" 'indent-region
-  "TAB"   'indent-region
-  "]"     'conn-kill-append-region
-  "'"     'conn-other-place-prefix-map
-  "C"     'conn-copy-region
-  "c"     (conn-remapping-command (key-parse "C-c"))
-  "d"     (conn-remapping-command conn-delete-char-keys)
-  "b"     conn-misc-edit-map
-  "E"     'conn-dot-region
-  "Q"     'conn-dot-edit-map
-  "q"     'conn-edit-map
-  "R"     conn-dot-region-map
-  "r"     conn-region-map
-  "T"     'conn-dot-all-things-in-region
-  "w"     'conn-kill-region
-  "y"     (conn-remapping-command conn-yank-keys)
-  "Y"     'yank-from-kill-ring)
+  "TAB" 'indent-region
+  "]" 'conn-kill-append-region
+  "'" 'conn-other-place-prefix-map
+  "C" 'conn-copy-region
+  "c" (conn-remapping-command (key-parse "C-c"))
+  "d" (conn-remapping-command conn-delete-char-keys)
+  "b" conn-misc-edit-map
+  "E" 'conn-dot-region
+  "Q" 'conn-dot-edit-map
+  "q" 'conn-edit-map
+  "R" conn-dot-region-map
+  "r" conn-region-map
+  "T" 'conn-dot-all-things-in-region
+  "w" 'conn-kill-region
+  "y" (conn-remapping-command conn-yank-keys)
+  "Y" 'yank-from-kill-ring)
 
 (define-keymap
   :keymap conn-dot-state-map
   "M-<down-mouse-1>" 'conn-dot-at-click
-  "<return>"         'conn-dot-lines
-  "RET"              'conn-dot-lines
-  "<backspace>"      'conn-remove-dot-backward
-  "DEL"              'conn-remove-dot-backward
-  "C-p"              'conn-previous-dot
-  "C-n"              'conn-next-dot
-  "C-M-p"            'conn-first-dot
-  "C-M-n"            'conn-last-dot
-  "|"                'conn-shell-command-on-dots
-  "{"                'conn-first-dot
-  "}"                'conn-last-dot
-  "["                'conn-remove-dots-before
-  "]"                'conn-remove-dots-after
-  "="                'conn-dot-thing-at-point
-  "D"                'conn-remove-all-dots
-  "d"                'conn-remove-dot-forward
-  "E"                'conn-dot-point
-  "e"                'conn-dot-region
-  "q"                'conn-dot-edit-map
-  "r"                conn-dot-region-map
-  "t"                'conn-dot-all-things-in-region
-  "x"                'conn-split-dots-on-regexp
-  "y"                'conn-add-dots-matching-regexp)
+  "<return>" 'conn-dot-lines
+  "RET" 'conn-dot-lines
+  "<backspace>" 'conn-remove-dot-backward
+  "DEL" 'conn-remove-dot-backward
+  "C-p" 'conn-previous-dot
+  "C-n" 'conn-next-dot
+  "C-M-p" 'conn-first-dot
+  "C-M-n" 'conn-last-dot
+  "|" 'conn-shell-command-on-dots
+  "{" 'conn-first-dot
+  "}" 'conn-last-dot
+  "[" 'conn-remove-dots-before
+  "]" 'conn-remove-dots-after
+  "=" 'conn-dot-thing-at-point
+  "D" 'conn-remove-all-dots
+  "d" 'conn-remove-dot-forward
+  "E" 'conn-dot-point
+  "e" 'conn-dot-region
+  "q" 'conn-dot-edit-map
+  "r" conn-dot-region-map
+  "t" 'conn-dot-all-things-in-region
+  "x" 'conn-split-dots-on-regexp
+  "y" 'conn-add-dots-matching-regexp)
 
 (define-keymap
   :keymap conn-org-edit-state-map
-  "SPC"         'conn-scroll-up
+  "SPC" 'conn-scroll-up
   "<backspace>" 'conn-scroll-down
-  "DEL"         'conn-scroll-down
-  "."           'point-to-register
-  "/"           'undo-only
-  ";"           'execute-extended-command
-  ":"           'execute-extended-command-for-buffer
-  "*"           'conn-org-tree-edit-insert-heading
-  "<"           'org-promote-subtree
-  ">"           'org-demote-subtree
-  "?"           'undo-redo
-  "q s"         'org-sort
-  "q c"         'org-columns
-  "b"           'conn-dispatch-on-things
-  "C"           'org-toggle-comment
-  "c"           (conn-remapping-command (key-parse "C-c"))
-  "e"           conn-misc-edit-map
-  "g"           (conn-remapping-command (key-parse "M-g"))
-  "i"           'org-backward-heading-same-level
-  "I"           'org-metaup
-  "J"           'org-metaleft
-  "j"           'org-previous-visible-heading
-  "k"           'org-forward-heading-same-level
-  "K"           'org-metadown
-  "L"           'org-metaright
-  "l"           'org-next-visible-heading
-  "M"           'org-mark-subtree
-  "m"           'org-backward-element
-  "n"           'org-forward-element
-  "N"           'org-toggle-narrow-to-subtree
-  "O"           'org-next-block
-  "p"           'conn-register-load
-  "s"           (conn-remapping-command (key-parse "M-s"))
-  "T"           'org-todo
-  "t"           'org-sparse-tree
-  "U"           'org-previous-block
-  "u"           'org-up-element
-  "W"           'widen
-  "w"           'org-refile
-  "x"           (conn-remapping-command (key-parse "C-x"))
-  "z"           'conn-exchange-mark-command)
+  "DEL" 'conn-scroll-down
+  "." 'point-to-register
+  "/" 'undo-only
+  ";" 'execute-extended-command
+  ":" 'execute-extended-command-for-buffer
+  "*" 'conn-org-tree-edit-insert-heading
+  "<" 'org-promote-subtree
+  ">" 'org-demote-subtree
+  "?" 'undo-redo
+  "q s" 'org-sort
+  "q c" 'org-columns
+  "b" 'conn-dispatch-on-things
+  "C" 'org-toggle-comment
+  "c" (conn-remapping-command (key-parse "C-c"))
+  "e" conn-misc-edit-map
+  "g" (conn-remapping-command (key-parse "M-g"))
+  "i" 'org-backward-heading-same-level
+  "I" 'org-metaup
+  "J" 'org-metaleft
+  "j" 'org-previous-visible-heading
+  "k" 'org-forward-heading-same-level
+  "K" 'org-metadown
+  "L" 'org-metaright
+  "l" 'org-next-visible-heading
+  "M" 'org-mark-subtree
+  "m" 'org-backward-element
+  "n" 'org-forward-element
+  "N" 'org-toggle-narrow-to-subtree
+  "O" 'org-next-block
+  "p" 'conn-register-load
+  "s" (conn-remapping-command (key-parse "M-s"))
+  "T" 'org-todo
+  "t" 'org-sparse-tree
+  "U" 'org-previous-block
+  "u" 'org-up-element
+  "W" 'widen
+  "w" 'org-refile
+  "x" (conn-remapping-command (key-parse "C-x"))
+  "z" 'conn-exchange-mark-command)
 
 (define-keymap
   :keymap global-map
-  "C-`"       'other-window
-  "C-S-w"     'delete-region
-  "C-x /"     'tab-bar-history-back
-  "C-x 4 /"   'tab-bar-history-back
-  "C-x 4 ?"   'tab-bar-history-forward
-  "C-x 4 -"   'conn-window-resize-map
-  "C-x ?"     'tab-bar-history-forward
+  "C-`" 'other-window
+  "C-S-w" 'delete-region
+  "C-x /" 'tab-bar-history-back
+  "C-x 4 /" 'tab-bar-history-back
+  "C-x 4 ?" 'tab-bar-history-forward
+  "C-x 4 -" 'conn-window-resize-map
+  "C-x ?" 'tab-bar-history-forward
   "C-x n M-<" 'conn-narrow-to-beginning-of-buffer-indirect
-  "C-x n <"   'conn-narrow-to-beginning-of-buffer
+  "C-x n <" 'conn-narrow-to-beginning-of-buffer
   "C-x n M->" 'conn-narrow-to-end-of-buffer-indirect
-  "C-x n >"   'conn-narrow-to-end-of-buffer
-  "C-x n t"   'conn-narrow-to-thing
-  "C-x n T"   'conn-narrow-indirect-to-thing
-  "C-x n v"   'conn-narrow-to-visible
-  "C-x n V"   'conn-narrow-indirect-to-visible
-  "C-x n N"   'conn-narrow-indirect-to-region
-  "C-x r \\"  'conn-set-register-seperator
-  "C-x r ."   'conn-last-macro-dispatch-to-register
-  "C-x r ,"   'conn-dot-state-to-register
-  "C-x r !"   'kmacro-to-register
-  "C-x r W"   'conn-unset-register
-  "C-x t j"   'conn-register-load
-  "C-x t s"   'tab-switch
-  "C-x t a"   'conn-tab-to-register)
+  "C-x n >" 'conn-narrow-to-end-of-buffer
+  "C-x n t" 'conn-narrow-to-thing
+  "C-x n T" 'conn-narrow-indirect-to-thing
+  "C-x n v" 'conn-narrow-to-visible
+  "C-x n V" 'conn-narrow-indirect-to-visible
+  "C-x n N" 'conn-narrow-indirect-to-region
+  "C-x r \\" 'conn-set-register-seperator
+  "C-x r ." 'conn-last-macro-dispatch-to-register
+  "C-x r ," 'conn-dot-state-to-register
+  "C-x r !" 'kmacro-to-register
+  "C-x r W" 'conn-unset-register
+  "C-x t j" 'conn-register-load
+  "C-x t s" 'tab-switch
+  "C-x t a" 'conn-tab-to-register)
 
 (defun conn--setup-keymaps ()
   (if conn-mode
