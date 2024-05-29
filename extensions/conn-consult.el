@@ -137,7 +137,7 @@ THING BEG and END are bound in BODY."
                        (if (bound-and-true-p multi-isearch-buffer-list)
                            (mapcan 'conn-consult--isearch-matches multi-isearch-buffer-list)
                          (conn-consult--isearch-matches)))))
-    (isearch-done t)
+    (isearch-done)
     (consult--read
      candidates
      :prompt "Go to line: "
