@@ -4376,8 +4376,7 @@ associated with that command (see `conn-register-thing')."
   (interactive (conn--read-thing-region))
   (goto-char end)
   (conn--push-ephemeral-mark beg)
-  (activate-mark t)
-  (message "Marked %s" thing))
+  (activate-mark t))
 
 (defun conn-copy-thing (beg end &optional register)
   "Copy THING at point."
