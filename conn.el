@@ -548,7 +548,8 @@ If BUFFER is nil check `current-buffer'."
      (conn--activate-input-method)))
 
 (defvar-keymap conn-read-thing-command-mark-map
-  "C-h" 'help)
+  "C-h" 'help
+  "." 'reset-arg)
 
 (defun conn--read-thing-keymap ()
   (cond ((null conn-local-mode)
@@ -591,6 +592,62 @@ If BUFFER is nil check `current-buffer'."
           (get cmd :conn-command-thing))
       (message nil)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))))
+
+(defun conn--read-thing-region ()
+  (let ((keymap (conn--read-thing-keymap))
+        (prompt (concat "Thing Command "
+                        (propertize "%s" 'face 'transient-value)
+                        " ("
+                        (propertize "C-h" 'face 'help-key-binding)
+                        " for commands): %s"))
+        invalid keys cmd thing-arg thing-sign)
+    (internal-push-keymap keymap 'overriding-terminal-local-map)
+    (unwind-protect
+        (while (progn
+                 (setq keys (read-key-sequence
+                             (format prompt
+                                     (cond (thing-arg
+                                            (* (if thing-sign -1 1) thing-arg))
+                                           (thing-sign "[-1]")
+                                           (t "[1]"))
+                                     (if invalid
+                                         (propertize "Not a valid thing command"
+                                                     'face 'error)
+                                       "")))
+                       cmd (key-binding keys t)
+                       invalid nil)
+                 (not (get cmd :conn-command-thing)))
+          (pcase cmd
+            ('keyboard-quit
+             (keyboard-quit))
+            ('help
+             (internal-pop-keymap keymap 'overriding-terminal-local-map)
+             (save-window-excursion
+               (setq cmd (let ((read-extended-command-predicate
+                                (lambda (symbol _)
+                                  (get symbol :conn-command-thing))))
+                           (read-extended-command))))
+             (internal-push-keymap keymap 'overriding-terminal-local-map))
+            ('digit-argument
+             (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+               (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+            ('reset-arg
+             (setq thing-arg nil))
+            ('negative-argument
+             (setq thing-sign (not thing-sign)))
+            (_
+             (setq invalid t))))
+      (message nil)
+      (internal-pop-keymap keymap 'overriding-terminal-local-map))
+    (save-mark-and-excursion
+      (let ((this-command cmd)
+            (current-prefix-arg thing-arg)
+            (conn-this-command-start (point-marker))
+            (conn-this-command-handler (get cmd :conn-mark-handler))
+            (conn-this-command-thing (get cmd :conn-command-thing)))
+        (call-interactively cmd)
+        (funcall conn-this-command-handler conn-this-command-start))
+      (list (region-beginning) (region-end)))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -3782,9 +3839,9 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
-(defun conn-replace-in-thing (thing from-string to-string &optional delimited backward)
+(defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((thing (conn--read-thing-command))
+   (let* ((region (conn--read-thing-region))
           (common
            (query-replace-read-args
             (concat "Query replace"
@@ -3792,17 +3849,14 @@ Interactively `region-beginning' and `region-end'."
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
             nil)))
-     (cons thing common)))
+     (append region common)))
   (save-window-excursion
     (save-excursion
-      (pcase (bounds-of-thing-at-point thing)
-        (`(,beg . ,end)
-         (perform-replace from-string to-string t nil delimited nil nil beg end backward))
-        ('nil (user-error "No %s at point" thing))))))
+      (perform-replace from-string to-string t nil delimited nil nil beg end backward))))
 
-(defun conn-regexp-replace-in-thing (thing from-string to-string &optional delimited backward)
+(defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((thing (conn--read-thing-command))
+   (let* ((region (conn--read-thing-region))
           (common
            (query-replace-read-args
             (concat "Query replace regexp"
@@ -3810,17 +3864,14 @@ Interactively `region-beginning' and `region-end'."
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
             t)))
-     (cons thing common)))
+     (append region common)))
   (save-window-excursion
     (save-excursion
-      (pcase (bounds-of-thing-at-point thing)
-        (`(,beg . ,end)
-         (perform-replace from-string to-string t t delimited nil nil beg end backward))
-        ('nil (user-error "No %s at point" thing))))))
+      (perform-replace from-string to-string t t delimited nil nil beg end backward))))
 
-(defun conn-replace-region-in-thing (thing from-string to-string &optional delimited backward)
+(defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((thing (conn--read-thing-command))
+   (let* ((region (conn--read-thing-region))
           (common
            (minibuffer-with-setup-hook
                'conn-yank-region-to-minibuffer
@@ -3830,12 +3881,12 @@ Interactively `region-beginning' and `region-end'."
                           (if (eq current-prefix-arg '-) " backward" " word")
                         ""))
               nil))))
-     (cons thing common)))
-  (conn-replace-in-thing thing from-string to-string delimited backward))
+     (append region common)))
+  (conn-replace-in-thing beg end from-string to-string delimited backward))
 
-(defun conn-regexp-replace-region-in-thing (thing from-string to-string &optional delimited backward)
+(defun conn-regexp-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((thing (conn--read-thing-command))
+   (let* ((region (conn--read-thing-region))
           (common
            (query-replace-read-args
             (minibuffer-with-setup-hook
@@ -3845,8 +3896,8 @@ Interactively `region-beginning' and `region-end'."
                           (if (eq current-prefix-arg '-) " backward" " word")
                         "")))
             t)))
-     (cons thing common)))
-  (conn-regexp-replace-in-thing thing from-string to-string delimited backward))
+     (append region common)))
+  (conn-replace-in-thing beg end from-string to-string delimited backward))
 
 (defun conn-open-line (arg)
   (interactive "p")
@@ -4318,46 +4369,41 @@ interactively."
                    (_ (filter-buffer-substring beg end t)))
                  t)))
 
-(defun conn-mark-thing (thing)
+(defun conn-mark-thing (beg end)
   "Mark THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
-  (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (goto-char (cdr bounds))
-    (conn--push-ephemeral-mark (car bounds))
-    (activate-mark t))
+  (interactive (conn--read-thing-region))
+  (goto-char end)
+  (conn--push-ephemeral-mark beg)
+  (activate-mark t)
   (message "Marked %s" thing))
 
-(defun conn-copy-thing (thing &optional register)
+(defun conn-copy-thing (beg end &optional register)
   "Copy THING at point."
-  (interactive (list (conn--read-thing-command)
-                     (when current-prefix-arg
-                       (register-read-with-preview "Register: "))))
-  (pcase (bounds-of-thing-at-point thing)
-    (`(,beg . ,end)
-     (conn-copy-region beg end register)
-     (unless executing-kbd-macro
-       (pulse-momentary-highlight-region beg end)))))
+  (interactive (append (conn--read-thing-region)
+                       (when current-prefix-arg
+                         (list (register-read-with-preview "Register: ")))))
+  (conn-copy-region beg end register)
+  (unless executing-kbd-macro
+    (pulse-momentary-highlight-region beg end)))
 
-(defun conn-narrow-to-thing (thing &optional interactive)
+(defun conn-narrow-to-thing (beg end &optional interactive)
   "Narrow indirect buffer to THING at point.
 See `clone-indirect-buffer' for meaning of indirect buffer.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command) t))
-  (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (conn-narrow-to-region (car bounds) (cdr bounds) interactive)
-    (message "Narrowed to %s" thing)))
+  (interactive (append (conn--read-thing-region) (list t)))
+  (conn-narrow-to-region beg end interactive)
+  (message "Narrowed to region"))
 
-(defun conn-narrow-indirect-to-thing (thing &optional interactive)
+(defun conn-narrow-indirect-to-thing (beg end &optional interactive)
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command) t))
-  (when-let ((bounds (bounds-of-thing-at-point thing)))
-    (conn--narrow-indirect (car bounds) (cdr bounds) interactive)
-    (message "Narrow indirect to %s" thing)))
+  (interactive (append (conn--read-thing-region) (list t)))
+  (conn--narrow-indirect beg end interactive)
+  (message "Narrow indirect to region"))
 
 (defun conn-narrow-to-visible (&optional interactive)
   "Narrow buffer to the visible portion of the selected window."
