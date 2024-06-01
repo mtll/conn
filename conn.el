@@ -646,7 +646,8 @@ If BUFFER is nil check `current-buffer'."
             (conn-this-command-handler (get cmd :conn-mark-handler))
             (conn-this-command-thing (get cmd :conn-command-thing)))
         (call-interactively cmd)
-        (funcall conn-this-command-handler conn-this-command-start))
+        (when conn-this-command-handler
+          (funcall conn-this-command-handler conn-this-command-start)))
       (list (region-beginning) (region-end)))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
@@ -945,9 +946,7 @@ If BUFFER is nil check `current-buffer'."
          (pcase (bounds-of-thing-at-point ',thing)
            (`(,beg . ,end)
             (goto-char beg)
-            (conn--push-ephemeral-mark end)
-            (unless executing-kbd-macro
-              (pulse-momentary-highlight-region beg end 'region)))
+            (conn--push-ephemeral-mark end))
            (_ (user-error "Point not in %s" ',thing))))
        (put ',name :conn-command-thing ',thing)
        ',name)))
@@ -1140,11 +1139,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   :bounds-op (lambda ()
                (cons (region-beginning) (region-end))))
 
-(conn-register-thing after-point
+(conn-register-thing buffer-after-point
   :bounds-op (lambda () (cons (point) (point-max)))
   :mark-key ">")
 
-(conn-register-thing before-point
+(conn-register-thing buffer-before-point
   :bounds-op (lambda () (cons (point-min) (point)))
   :mark-key "<")
 
