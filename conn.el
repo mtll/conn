@@ -549,6 +549,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defvar-keymap conn-read-thing-command-mark-map
   "C-h" 'help
+  "h" conn-mark-thing-map
   "." 'reset-arg)
 
 (defun conn--read-thing-keymap ()
@@ -5071,7 +5072,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s"     'conn-wincontrol-isearch
   "C-r"     'conn-wincontrol-isearch-backward
   ","       'conn-wincontrol-maximize-horizontally
-  "a"       'conn-wincontrol-quit-to-initial-win
+  ";"       'conn-wincontrol-quit-to-initial-win
   "b"       'switch-to-buffer
   "C"       'tab-bar-duplicate-tab
   "c"       'conn-wincontrol-mru-window
@@ -6718,13 +6719,13 @@ apply to each contiguous component of the region."
   "_" 'repeat-complex-command
   "+" 'conn-set-register-seperator
   "/" 'undo-only
-  ";" 'execute-extended-command
-  ":" 'execute-extended-command-for-buffer
+  "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "?" 'undo-redo
   "`" 'other-window
   "." 'repeat
   "f" 'conn-dispatch-on-things
-  "a" 'conn-wincontrol
+  ";" 'conn-wincontrol
   "g" (conn-remapping-command (key-parse "M-g"))
   "h" 'conn-expand
   "H" conn-mark-thing-map
@@ -6802,8 +6803,8 @@ apply to each contiguous component of the region."
   "DEL" 'conn-scroll-down
   "." 'point-to-register
   "/" 'undo-only
-  ";" 'execute-extended-command
-  ":" 'execute-extended-command-for-buffer
+  "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
   "*" 'conn-org-tree-edit-insert-heading
   "<" 'org-promote-subtree
   ">" 'org-demote-subtree
