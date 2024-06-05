@@ -4523,7 +4523,7 @@ When called interactively inserts STRING at `point' and `mark'."
   (save-mark-and-excursion
     (goto-char beg)
     (conn--push-ephemeral-mark end)
-    (conn-delete-pair-outward pair arg)))
+    (conn-delete-pair-outward arg)))
 
 (defun conn-delete-pair-inside-thing (beg end pair arg)
   (interactive
@@ -4532,7 +4532,7 @@ When called interactively inserts STRING at `point' and `mark'."
   (save-mark-and-excursion
     (goto-char beg)
     (conn--push-ephemeral-mark end)
-    (conn-delete-pair-inward pair arg)))
+    (conn-delete-pair-inward arg)))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
