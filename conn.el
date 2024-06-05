@@ -1792,8 +1792,6 @@ If BUFFER is nil use current buffer."
 
 ;;;; States
 
-;;;;; State Definitions
-
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
@@ -4443,16 +4441,16 @@ See `clone-indirect-buffer' for meaning of indirect buffer."
                (cons (car -it->) (nreverse (cadr -it->)))))
     (_ (user-error "Unknown pair format."))))
 
-(defun conn-insert-pair (brackets beg end)
+(defun conn-insert-pair (beg end brackets)
   "Insert BRACKETS at BEG and END.
 Brackets are matched using `insert-pair-alist'.  If BRACKETS contains
 `conn-read-pair-split-char' then split BRACKETS on
 `conn-read-pair-split-char' and use the first part as the beginning
 brackets and the second part as the end brackets.
 When called interactively inserts STRING at `point' and `mark'."
-  (interactive (list (conn--read-pair)
-                     (region-beginning)
-                     (region-end)))
+  (interactive (list (region-beginning)
+                     (region-end)
+                     (conn--read-pair)))
   (save-mark-and-excursion
     (pcase-let ((`(,open . ,close) brackets))
       (goto-char end)
@@ -4460,21 +4458,26 @@ When called interactively inserts STRING at `point' and `mark'."
       (goto-char beg)
       (insert-before-markers open))))
 
+(defun conn-surround-thing (beg end brackets)
+  (interactive (append (conn--read-thing-region)
+                       (list (conn--read-pair))))
+  (conn-insert-pair beg end brackets))
+
 (defun conn-change-pair-outward (brackets arg)
   "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
-  (interactive (list (conn--read-pair) current-prefix-arg))
-  (conn-delete-pair-outward (or arg 1))
-  (conn-insert-pair brackets
-                    (region-beginning)
-                    (region-end)))
+  (interactive (list (conn--read-pair) (prefix-numeric-value current-prefix-arg)))
+  (conn-delete-pair-outward arg)
+  (conn-insert-pair (region-beginning)
+                    (region-end)
+                    brackets))
 
 (defun conn-change-pair-inward (brackets arg)
   "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
   (interactive (list (conn--read-pair) current-prefix-arg))
   (conn-delete-pair-inward (or arg 1))
-  (conn-insert-pair brackets
-                    (region-beginning)
-                    (region-end)))
+  (conn-insert-pair (region-beginning)
+                    (region-end)
+                    brackets))
 
 (defun conn-delete-pair-inward (arg)
   "Delete ARG chars at `point' and `mark'."
@@ -4493,6 +4496,43 @@ When called interactively inserts STRING at `point' and `mark'."
       (when end (exchange-point-and-mark t))
       (delete-region (- (point) arg) (point))
       (delete-region (mark-marker) (+ (mark-marker) arg)))))
+
+(defun conn-change-pair-outside-thing (beg end pair arg)
+  (interactive
+   (append (conn--read-thing-region)
+           (list (conn--read-pair)
+                 current-prefix-arg)))
+  (save-mark-and-excursion
+    (goto-char beg)
+    (conn--push-ephemeral-mark end)
+    (conn-change-pair-outward pair arg)))
+
+(defun conn-change-pair-inside-thing (beg end pair arg)
+  (interactive
+   (append (conn--read-thing-region)
+           (list (conn--read-pair) current-prefix-arg)))
+  (save-mark-and-excursion
+    (goto-char beg)
+    (conn--push-ephemeral-mark end)
+    (conn-change-pair-inward pair arg)))
+
+(defun conn-delete-pair-outside-thing (beg end pair arg)
+  (interactive
+   (append (conn--read-thing-region)
+           (list (conn--read-pair) current-prefix-arg)))
+  (save-mark-and-excursion
+    (goto-char beg)
+    (conn--push-ephemeral-mark end)
+    (conn-delete-pair-outward pair arg)))
+
+(defun conn-delete-pair-inside-thing (beg end pair arg)
+  (interactive
+   (append (conn--read-thing-region)
+           (list (conn--read-pair) current-prefix-arg)))
+  (save-mark-and-excursion
+    (goto-char beg)
+    (conn--push-ephemeral-mark end)
+    (conn-delete-pair-inward pair arg)))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -5259,9 +5299,9 @@ When called interactively N is `last-command-event'."
         (pcase conn--wincontrol-help
           ('window-1 (conn--wincontrol-window-format-1))
           ('window-2 (conn--wincontrol-window-format-2))
-          ('tab    (conn--wincontrol-tab-format))
-          ('frame  (conn--wincontrol-frame-format))
-          (_       (conn--wincontrol-simple-format)))))
+          ('tab      (conn--wincontrol-tab-format))
+          ('frame    (conn--wincontrol-frame-format))
+          (_         (conn--wincontrol-simple-format)))))
 
 (defun conn-wincontrol-help-backward (&optional interactive)
   "Cycle to the next `conn-wincontrol-mode' help message."
@@ -5277,9 +5317,9 @@ When called interactively N is `last-command-event'."
         (pcase conn--wincontrol-help
           ('window-1 (conn--wincontrol-window-format-1))
           ('window-2 (conn--wincontrol-window-format-2))
-          ('tab    (conn--wincontrol-tab-format))
-          ('frame  (conn--wincontrol-frame-format))
-          (_       (conn--wincontrol-simple-format)))))
+          ('tab      (conn--wincontrol-tab-format))
+          ('frame    (conn--wincontrol-frame-format))
+          (_         (conn--wincontrol-simple-format)))))
 
 (defun conn-wincontrol-isearch (arg)
   (interactive "P")
@@ -6451,8 +6491,8 @@ apply to each contiguous component of the region."
   "`" 'other-window)
 
 (defvar-keymap conn-region-map
-  "s" 'conn-isearch-region-forward
-  "r" 'conn-isearch-region-backward
+  "f" 'conn-isearch-region-forward
+  "b" 'conn-isearch-region-backward
   "DEL" (conn-remapping-command conn-kill-region-keys)
   "$" 'ispell-region
   "*" 'calc-grab-region
@@ -6477,6 +6517,11 @@ apply to each contiguous component of the region."
   "N" 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
   "o" 'conn-occur-region
+  "r o" 'conn-change-pair-inward
+  "r u" 'conn-change-pair-outward
+  "r j" 'conn-delete-pair-inward
+  "r l" 'conn-delete-pair-outward
+  "r i" 'conn-insert-pair
   "<" 'conn-sort-prefix
   "w" 'conn-replace-region-in-thing
   "u" 'conn-regexp-replace-region-in-thing
@@ -6631,11 +6676,11 @@ apply to each contiguous component of the region."
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
-  "c o" 'conn-change-pair-inward
-  "c u" 'conn-change-pair-outward
-  "c j" 'conn-delete-pair-inward
-  "c l" 'conn-delete-pair-outward
-  "c i" 'conn-insert-pair)
+  "r o" 'conn-change-pair-inside-thing
+  "r u" 'conn-change-pair-outside-thing
+  "r j" 'conn-delete-pair-inside-thing
+  "r l" 'conn-delete-pair-outside-thing
+  "r i" 'conn-surround-thing)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
