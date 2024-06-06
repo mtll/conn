@@ -109,8 +109,9 @@
   :group 'conn-states)
 
 (defcustom conn-buffer-default-state-alist nil
-  "Alist of the form ((REGEXP . STATE) ...).
-Defines default STATE for buffers matching REGEXP."
+  "Alist of the form ((CONDITION . STATE) ...).
+Elements specify default STATE for buffers matching CONDITION.
+CONDITION has the same meaning as in `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
@@ -1921,24 +1922,9 @@ mouse-3: Describe current input method")
 
 (defun conn--default-state-for-buffer (&optional buffer)
   "Get default state for BUFFER."
-  (or (pcase (alist-get (current-buffer) conn-buffer-default-state-alist)
-        ((and (pred stringp) str)
-         (buffer-match-p str))
-        ((and (pred functionp) fn)
-         (funcall fn (or buffer (current-buffer)))))
-      (conn--derived-mode-property :conn-default-state buffer)
+  (or (alist-get (current-buffer) conn-buffer-default-state-alist
+                 nil nil #'buffer-match-p)
       conn-default-state))
-
-(defun set-default-conn-state (regexps-or-predicates state)
-  (dolist (var (ensure-list regexps-or-predicates))
-    (pcase var
-      ((or (pred functionp) (pred stringp))
-       (setf (alist-get var conn-buffer-default-state-alist)
-             state)))))
-
-(defun set-default-conn-state-for-mode (modes state)
-  (dolist (mode (ensure-list modes))
-    (put mode :conn-default-state state)))
 
 (defun conn--update-cursor (&rest _frame)
   (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
@@ -2154,7 +2140,13 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :transitions (define-keymap
                  "e"       'conn-emacs-state
                  "t"       'conn-change))
-(set-default-conn-state-for-mode '(prog-mode text-mode conf-mode) 'conn-state)
+
+(add-to-list 'conn-buffer-default-state-alist
+             '((derived-mode . prog-mode) . conn-state))
+(add-to-list 'conn-buffer-default-state-alist
+             '((derived-mode . text-mode) . conn-state))
+(add-to-list 'conn-buffer-default-state-alist
+             '((derived-mode . conf-mode) . conn-state))
 
 (conn-define-state conn-dot-state
   "Activate `conn-dot-state' in the current buffer.
