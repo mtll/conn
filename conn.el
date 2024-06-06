@@ -541,8 +541,8 @@ If BUFFER is nil check `current-buffer'."
        (progn
          (when conn--input-method
            (let ((input-method-activate-hook
-                (remove 'conn--activate-input-method
-                        input-method-activate-hook)))
+                  (remove 'conn--activate-input-method
+                          input-method-activate-hook)))
              (activate-input-method conn--input-method)))
          ,@body)
      (conn--activate-input-method)))
@@ -960,7 +960,7 @@ If BUFFER is nil check `current-buffer'."
   (macroexp-progn
    (nconc
     `((intern ,(symbol-name thing)))
-    (when-let ((finder (plist-get rest :finder)))
+    (when-let ((finder (plist-get rest :dispatch-provider)))
       `((put ',thing :conn-dispatch-finder ,finder)))
     (when-let ((action (plist-get rest :default-action)))
       `((put ',thing :conn-dispatch-default-action ,action)))
@@ -1155,7 +1155,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing symbol
   :forward-op 'forward-symbol
-  :finder (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
+  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
 
 (conn-register-thing-commands
  'symbol 'conn-individual-thing-handler
@@ -1172,7 +1172,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing dot
   :beg-op (lambda () (conn-previous-dot 1))
   :end-op (lambda () (conn-next-dot 1))
-  :finder (apply-partially 'conn--dispatch-all-things 'dot))
+  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'dot))
 
 (conn-register-thing-commands
  'dot 'conn-individual-thing-handler
@@ -1185,7 +1185,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing word
   :forward-op 'forward-word
-  :finder (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
+  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
 
 (conn-register-thing-commands
  'word 'conn-sequential-thing-handler
@@ -1193,14 +1193,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing sexp
   :forward-op 'forward-sexp
-  :finder (apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
+  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
 
 (conn-register-thing-commands
  'sexp 'conn-sequential-thing-handler
  'forward-sexp 'backward-sexp)
 
 (conn-register-thing list
-  :finder (apply-partially 'conn--dispatch-all-things 'sexp))
+  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'sexp))
 
 (conn-register-thing-commands
  'list
@@ -1229,7 +1229,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing paragraph
   :forward-op 'forward-paragraph
-  :finder (apply-partially 'conn--dispatch-all-things 'paragraph t))
+  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'paragraph t))
 
 (conn-register-thing-commands
  'paragraph 'conn-sequential-thing-handler
@@ -1256,14 +1256,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          (if (= pt (point))
                              (forward-line N)
                            (forward-line (1+ N)))))))
-  :finder 'conn--dispatch-lines)
+  :dispatch-provider 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'line 'conn-sequential-thing-handler
  'forward-line 'conn-backward-line)
 
 (conn-register-thing line-column
-  :finder 'conn--dispatch-columns
+  :dispatch-provider 'conn--dispatch-columns
   :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
@@ -1274,7 +1274,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing outer-line
   :beg-op (lambda () (move-beginning-of-line nil))
   :end-op (lambda () (move-end-of-line nil))
-  :finder 'conn--dispatch-lines)
+  :dispatch-provider 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'outer-line 'conn-individual-thing-handler
@@ -1289,7 +1289,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (save-excursion
                   (conn--end-of-inner-line-1)
                   (point))))
-  :finder 'conn--dispatch-inner-lines)
+  :dispatch-provider 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
  'inner-line 'conn-individual-thing-handler
@@ -1921,23 +1921,24 @@ mouse-3: Describe current input method")
 
 (defun conn--default-state-for-buffer (&optional buffer)
   "Get default state for BUFFER."
-  (or (alist-get (current-buffer) conn-buffer-default-state-alist
-                 nil nil #'buffer-match-p)
+  (or (pcase (alist-get (current-buffer) conn-buffer-default-state-alist)
+        ((and (pred stringp) str)
+         (buffer-match-p str))
+        ((and (pred functionp) fn)
+         (funcall fn (or buffer (current-buffer)))))
       (conn--derived-mode-property :conn-default-state buffer)
       conn-default-state))
 
-(defun set-default-conn-state (modes-or-buffers state)
-  "Set default STATE for each MODES-OR-BUFFERS.
-Modes are symbols tested against `major-mode'.
-Buffers are strings matched using `buffer-match-p'."
-  (dolist (var (ensure-list modes-or-buffers))
+(defun set-default-conn-state (regexps-or-predicates state)
+  (dolist (var (ensure-list regexps-or-predicates))
     (pcase var
-      ((pred symbolp)
-       (put var :conn-default-state state))
-      ((pred stringp)
-       (setf (alist-get var conn-buffer-default-state-alist
-                        nil nil #'equal)
+      ((or (pred functionp) (pred stringp))
+       (setf (alist-get var conn-buffer-default-state-alist)
              state)))))
+
+(defun set-default-conn-state-for-mode (modes state)
+  (dolist (mode (ensure-list modes))
+    (put mode :conn-default-state state)))
 
 (defun conn--update-cursor (&rest _frame)
   (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
@@ -1945,7 +1946,7 @@ Buffers are strings matched using `buffer-match-p'."
     (setq cursor-type t))
   (when conn-cursor-colors
     (set-cursor-color (or (conn--thread -it->
-                            (window-buffer (selected-window))
+                              (window-buffer (selected-window))
                             (buffer-local-value 'conn-current-state -it->)
                             (get -it-> :conn-cursor-face)
                             (ignore-errors (face-background -it->)))
@@ -2026,9 +2027,9 @@ disabled.
 
        (defvar ,transition-map-name ,transitions
          ,(conn--string-fill (conn--stringify
-                        "Keymap for commands that transition from `"
-                        name "' to other states.")
-                       70))
+                              "Keymap for commands that transition from `"
+                              name "' to other states.")
+                             70))
 
        (defface ,lighter-face-name
          ',lighter-face
@@ -2130,8 +2131,8 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
                  (((background light)) (:inherit mode-line :background "#cae1ff"))
                  (((background dark))  (:inherit mode-line :background "#49739f")))
   :cursor-face ((default               (:background "#00517d"))
-                 (((background light)) (:background "#00517d"))
-                 (((background dark))  (:background "#b6d6e7")))
+                (((background light)) (:background "#00517d"))
+                (((background dark))  (:background "#b6d6e7")))
   :cursor box
   :ephemeral-marks nil)
 
@@ -2145,15 +2146,15 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  (((background light)) (:inherit mode-line :background "#f3bdbd"))
                  (((background dark))  (:inherit mode-line :background "#8c3c3c")))
   :cursor-face ((default               (:background "#7d0002"))
-                 (((background light)) (:background "#7d0002"))
-                 (((background dark))  (:background "#eba4a4")))
+                (((background light)) (:background "#7d0002"))
+                (((background dark))  (:background "#eba4a4")))
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
                  "e"       'conn-emacs-state
                  "t"       'conn-change))
-(set-default-conn-state '(prog-mode text-mode conf-mode) 'conn-state)
+(set-default-conn-state-for-mode '(prog-mode text-mode conf-mode) 'conn-state)
 
 (conn-define-state conn-dot-state
   "Activate `conn-dot-state' in the current buffer.
@@ -6292,9 +6293,9 @@ apply to each contiguous component of the region."
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)
       (pcase-let ((`(,beg . ,end) narrowing))
-          (format "(%s . %s)"
-                  (marker-position beg)
-                  (marker-position end)))
+        (format "(%s . %s)"
+                (marker-position beg)
+                (marker-position end)))
     (save-restriction
       (widen)
       (pcase-let ((`(,beg . ,end) narrowing))
@@ -7028,7 +7029,7 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-forward-sentence "org")
 
   (conn-register-thing org-paragraph
-    :finder (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
+    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
     :forward-op 'org-forward-paragraph
     :mark-key "I"
     :modes 'org-mode)
@@ -7051,7 +7052,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing org-element
     :mark-key "m"
-    :finder (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
+    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
     :beg-op 'org-backward-element
     :end-op 'org-forward-element
     :modes 'org-mode)
@@ -7069,7 +7070,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing org-heading
     :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
-    :finder (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
+    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
     :forward-op 'org-next-visible-heading
     :modes 'org-mode
     :mark-key "H")
@@ -7187,7 +7188,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing heading
     :mark-key "H"
-    :finder (apply-partially 'conn--dispatch-all-things 'heading t)
+    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
     :bounds-op (lambda ()
                  (save-mark-and-excursion
                    (unless (outline-on-heading-p)
@@ -7215,8 +7216,8 @@ determine if `conn-local-mode' should be enabled."
 (with-eval-after-load 'treesit
   (conn-register-thing treesit-defun
     :forward-op 'treesit-end-of-defun
-    :finder (apply-partially 'conn--dispatch-all-things
-                             'treesit-defun))
+    :dispatch-provider (apply-partially 'conn--dispatch-all-things
+                                        'treesit-defun))
 
   (conn-register-thing-commands
    'treesit-defun 'conn-individual-thing-handler
