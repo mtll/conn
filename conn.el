@@ -261,12 +261,8 @@ Each element may be either a symbol or a list of the form
          special-mode)
     t))
 
-(defvar conn-mode-buffers
-  '("\\*Edit Macro\\*"))
-
 (defvar conn-enable-in-buffer-hook
-  (list (apply-partially 'easy-mmode--globalized-predicate-p conn-in-modes)
-        'conn-mode-buffer-predicate)
+  (list (lambda () (easy-mmode--globalized-predicate-p conn-in-modes)))
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
 Each function is run without any arguments and if any of them return
 non-nil `conn-local-mode' will be enabled in the buffer.")
@@ -6884,11 +6880,6 @@ apply to each contiguous component of the region."
 
 
 ;;;; Mode Definition
-
-(defun conn-mode-buffer-predicate ()
-  (seq-find (lambda (condition)
-              (buffer-match-p condition (current-buffer)))
-            conn-mode-buffers))
 
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
