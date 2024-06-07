@@ -4763,7 +4763,7 @@ there's a region, all lines that region covers will be duplicated."
     (?f (other-frame-prefix))
     (?t (other-tab-prefix))
     (?p (conn-other-window-prompt-prefix))
-    (?p (conn-this-window-prefix))))
+    (?c (conn-this-window-prefix))))
 
 (defun conn-other-window-prompt-prefix ()
   (interactive)
