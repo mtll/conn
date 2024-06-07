@@ -29,6 +29,7 @@
 
 ;;;; Requires
 
+(require 'easy-mmode)
 (require 'compat)
 (require 'transient)
 (require 'thingatpt)
