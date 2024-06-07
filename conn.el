@@ -419,13 +419,13 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn-remapping-command (from-keys)
-  ``(menu-item
-     ""
-     nil
-     :filter ,(lambda (&rest _)
-                (conn--without-conn-maps
-                  (key-binding ,from-keys t)))))
+(defun conn-remapping-command (from-keys)
+  `(menu-item
+    ""
+    nil
+    :filter ,(lambda (&rest _)
+               (conn--without-conn-maps
+                 (key-binding from-keys t)))))
 
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
@@ -564,37 +564,6 @@ If BUFFER is nil check `current-buffer'."
         (t
          conn-read-thing-command-mark-map)))
 
-(defun conn--read-thing-command ()
-  (let ((keymap (conn--read-thing-keymap))
-        (prompt (concat "Thing Command ("
-                        (propertize "C-h" 'face 'help-key-binding)
-                        " for commands): ")))
-    (internal-push-keymap keymap 'overriding-terminal-local-map)
-    (unwind-protect
-        (let ((cmd (key-binding (read-key-sequence prompt) t)))
-          (while (not (get cmd :conn-command-thing))
-            (pcase cmd
-              ('keyboard-quit
-               (keyboard-quit))
-              ('help
-               (internal-pop-keymap keymap 'overriding-terminal-local-map)
-               (save-window-excursion
-                 (setq cmd (let ((read-extended-command-predicate
-                                  (lambda (symbol _)
-                                    (get symbol :conn-command-thing))))
-                             (read-extended-command))))
-               (internal-push-keymap keymap 'overriding-terminal-local-map))
-              (_
-               (setq cmd (thread-first
-                           (concat prompt
-                                   (propertize "Not a valid thing command"
-                                               'face 'error))
-                           (read-key-sequence)
-                           (key-binding t))))))
-          (get cmd :conn-command-thing))
-      (message nil)
-      (internal-pop-keymap keymap 'overriding-terminal-local-map))))
-
 (defun conn--read-thing-region ()
   (let ((keymap (conn--read-thing-keymap))
         (prompt (concat "Thing Command "
@@ -650,7 +619,7 @@ If BUFFER is nil check `current-buffer'."
         (call-interactively cmd)
         (when conn-this-command-handler
           (funcall conn-this-command-handler conn-this-command-start)))
-      (list (region-beginning) (region-end)))))
+      (list (get cmd :conn-command-thing) (region-beginning) (region-end)))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -1922,7 +1891,8 @@ mouse-3: Describe current input method")
 
 (defun conn--default-state-for-buffer (&optional buffer)
   "Get default state for BUFFER."
-  (or (alist-get (current-buffer) conn-buffer-default-state-alist
+  (or (alist-get (or buffer (current-buffer))
+                 conn-buffer-default-state-alist
                  nil nil #'buffer-match-p)
       conn-default-state))
 
@@ -2970,6 +2940,100 @@ Expansions and contractions are provided by functions in
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
 
 
+;;;; Surround Thing
+
+(defun conn--read-pair ()
+  (pcase (conn--escapable-split-on-char
+          (minibuffer-with-setup-hook
+              (lambda ()
+                (when (boundp 'electric-pair-mode)
+                  (electric-pair-mode -1)))
+            (read-string "Pair: " nil 'conn-pair-history))
+          conn-read-pair-split-char)
+    (`(,front ,back . nil) (cons front back))
+    (`(,str) (conn--thread -it->
+                 (lambda (char)
+                   (pcase (alist-get char insert-pair-alist)
+                     (`(,close . nil) (list char close))
+                     (`(,open ,close) (list open close))
+                     (_               (list char char))))
+               (seq-map -it-> str)
+               (apply #'seq-mapn 'string -it->)
+               (cons (car -it->) (nreverse (cadr -it->)))))
+    (_ (user-error "Unknown pair format."))))
+
+(defun conn-insert-pair (beg end)
+  (save-mark-and-excursion
+    (pcase-let ((`(,open . ,close) (conn--read-pair)))
+      (goto-char end)
+      (insert close)
+      (goto-char beg)
+      (insert-before-markers open))))
+
+(defun conn-change-pair-outward (arg)
+  "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
+  (conn-delete-pair-outward arg)
+  (conn-insert-pair (region-beginning) (region-end)))
+
+(defun conn-change-pair-inward (arg)
+  "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
+  (conn-delete-pair-inward arg)
+  (conn-insert-pair (region-beginning) (region-end)))
+
+(defun conn-delete-pair-inward (arg)
+  "Delete ARG chars at `point' and `mark'."
+  (save-mark-and-excursion
+    (let ((end (> (point) (mark-marker))))
+      (when end (exchange-point-and-mark t))
+      (delete-region (point) (+ (point) arg))
+      (delete-region (- (mark-marker) arg) (mark-marker)))))
+
+(defun conn-delete-pair-outward (arg)
+  "Delete ARG chars at `point' and `mark'."
+  (save-mark-and-excursion
+    (let ((end (> (point) (mark-marker))))
+      (when end (exchange-point-and-mark t))
+      (delete-region (- (point) arg) (point))
+      (delete-region (mark-marker) (+ (mark-marker) arg)))))
+
+(defun conn--surround-region (action beg end arg)
+  (pcase action
+    ('surround (conn-insert-pair beg end))
+    ('delete
+     (pcase (car (read-multiple-choice
+                  "Direction:" `((?i "inward" "Delete surrounding chars inward")
+                                 (?o "outward" "Delete surrounding chars outward"))))
+       (?i (conn-delete-pair-inward arg))
+       (?o (conn-delete-pair-outward arg))))
+    ('change
+     (pcase (car (read-multiple-choice
+                  "Direction:" `((?i "inward" "Change surrounding chars inward")
+                                 (?o "outward" "Change surrounding chars outward"))))
+       (?i (conn-change-pair-inward arg))
+       (?o (conn-change-pair-outward arg))))))
+(put 'region :conn-thing-surrounder 'conn--surround-region)
+
+(defun conn--surround-thing (action beg end arg)
+  (pcase action
+    ('surround (conn-insert-pair beg end))
+    ('delete (conn-delete-pair-inward arg))
+    ('change (conn-change-pair-inward arg))))
+
+(defun conn-surround-thing (thing beg end arg)
+  (interactive (append (conn--read-thing-region)
+                       (list (prefix-numeric-value current-prefix-arg))))
+  (funcall (or (get thing :conn-thing-surrounder)
+               'conn--surround-thing)
+           (pcase (car (read-multiple-choice
+                        "Direction:" `((?s "surround")
+                                       (?d "delete")
+                                       (?c "change"))))
+             (?s 'surround)
+             (?d 'delete)
+             (?c 'change))
+           beg end arg))
+
+
 ;;;; Narrow Ring
 
 (defvar conn-narrow-ring-max 16
@@ -3662,14 +3726,14 @@ k keeps the remaining dots."
   "Dot THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
+  (interactive (list (car (conn--read-thing-region))))
   (conn--create-dots (bounds-of-thing-at-point thing)))
 
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
+  (interactive (list (car (conn--read-thing-region))))
   (unless thing
     (error "Unknown thing command"))
   (save-excursion
@@ -3786,7 +3850,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
   "Isearch forward for THING.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
+  (interactive (list (car (conn--read-thing-region))))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-backward beg end))
     (_              (user-error "No %s found" thing))))
@@ -3795,7 +3859,7 @@ associated with that command (see `conn-register-thing')."
   "Isearch backward for THING.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing-command)))
+  (interactive (list (car (conn--read-thing-region))))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-forward beg end))
     (_              (user-error "No %s found" thing))))
@@ -3832,7 +3896,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (conn--read-thing-region))
+   (let* ((region (cdr (conn--read-thing-region)))
           (common
            (query-replace-read-args
             (concat "Query replace"
@@ -3847,7 +3911,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (conn--read-thing-region))
+   (let* ((region (cdr (conn--read-thing-region)))
           (common
            (query-replace-read-args
             (concat "Query replace regexp"
@@ -3862,7 +3926,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (conn--read-thing-region))
+   (let* ((region (cdr (conn--read-thing-region)))
           (common
            (minibuffer-with-setup-hook
                'conn-yank-region-to-minibuffer
@@ -3877,7 +3941,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-regexp-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (conn--read-thing-region))
+   (let* ((region (cdr (conn--read-thing-region)))
           (common
            (query-replace-read-args
             (minibuffer-with-setup-hook
@@ -4364,14 +4428,14 @@ interactively."
   "Mark THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (conn--read-thing-region))
+  (interactive (cdr (conn--read-thing-region)))
   (goto-char end)
   (conn--push-ephemeral-mark beg)
   (activate-mark t))
 
 (defun conn-copy-thing (beg end &optional register)
   "Copy THING at point."
-  (interactive (append (conn--read-thing-region)
+  (interactive (append (cdr (conn--read-thing-region))
                        (when current-prefix-arg
                          (list (register-read-with-preview "Register: ")))))
   (conn-copy-region beg end register)
@@ -4383,7 +4447,7 @@ associated with that command (see `conn-register-thing')."
 See `clone-indirect-buffer' for meaning of indirect buffer.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (append (conn--read-thing-region) (list t)))
+  (interactive (append (cdr (conn--read-thing-region)) (list t)))
   (conn-narrow-to-region beg end interactive)
   (message "Narrowed to region"))
 
@@ -4391,7 +4455,7 @@ associated with that command (see `conn-register-thing')."
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (append (conn--read-thing-region) (list t)))
+  (interactive (append (cdr (conn--read-thing-region)) (list t)))
   (conn--narrow-indirect beg end interactive)
   (message "Narrow indirect to region"))
 
@@ -4413,119 +4477,6 @@ See `clone-indirect-buffer'."
 See `clone-indirect-buffer' for meaning of indirect buffer."
   (interactive (list (region-beginning) (region-end) t))
   (conn--narrow-indirect beg end interactive))
-
-(defun conn--read-pair ()
-  (pcase (conn--escapable-split-on-char
-          (minibuffer-with-setup-hook
-              (lambda ()
-                (when (boundp 'electric-pair-mode)
-                  (electric-pair-mode -1)))
-            (read-string "Pair: " nil 'conn-pair-history))
-          conn-read-pair-split-char)
-    (`(,front ,back . nil) (cons front back))
-    (`(,str) (conn--thread -it->
-                 (lambda (char)
-                   (pcase (alist-get char insert-pair-alist)
-                     (`(,close . nil) (list char close))
-                     (`(,open ,close) (list open close))
-                     (_               (list char char))))
-               (seq-map -it-> str)
-               (apply #'seq-mapn 'string -it->)
-               (cons (car -it->) (nreverse (cadr -it->)))))
-    (_ (user-error "Unknown pair format."))))
-
-(defun conn-insert-pair (beg end brackets)
-  "Insert BRACKETS at BEG and END.
-Brackets are matched using `insert-pair-alist'.  If BRACKETS contains
-`conn-read-pair-split-char' then split BRACKETS on
-`conn-read-pair-split-char' and use the first part as the beginning
-brackets and the second part as the end brackets.
-When called interactively inserts STRING at `point' and `mark'."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (conn--read-pair)))
-  (save-mark-and-excursion
-    (pcase-let ((`(,open . ,close) brackets))
-      (goto-char end)
-      (insert close)
-      (goto-char beg)
-      (insert-before-markers open))))
-
-(defun conn-surround-thing (beg end brackets)
-  (interactive (append (conn--read-thing-region)
-                       (list (conn--read-pair))))
-  (conn-insert-pair beg end brackets))
-
-(defun conn-change-pair-outward (brackets arg)
-  "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
-  (interactive (list (conn--read-pair) (prefix-numeric-value current-prefix-arg)))
-  (conn-delete-pair-outward arg)
-  (conn-insert-pair (region-beginning)
-                    (region-end)
-                    brackets))
-
-(defun conn-change-pair-inward (brackets arg)
-  "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
-  (interactive (list (conn--read-pair) current-prefix-arg))
-  (conn-delete-pair-inward (or arg 1))
-  (conn-insert-pair (region-beginning)
-                    (region-end)
-                    brackets))
-
-(defun conn-delete-pair-inward (arg)
-  "Delete ARG chars at `point' and `mark'."
-  (interactive "p")
-  (save-mark-and-excursion
-    (let ((end (> (point) (mark-marker))))
-      (when end (exchange-point-and-mark t))
-      (delete-region (point) (+ (point) arg))
-      (delete-region (- (mark-marker) arg) (mark-marker)))))
-
-(defun conn-delete-pair-outward (arg)
-  "Delete ARG chars at `point' and `mark'."
-  (interactive "p")
-  (save-mark-and-excursion
-    (let ((end (> (point) (mark-marker))))
-      (when end (exchange-point-and-mark t))
-      (delete-region (- (point) arg) (point))
-      (delete-region (mark-marker) (+ (mark-marker) arg)))))
-
-(defun conn-change-pair-outside-thing (beg end pair arg)
-  (interactive
-   (append (conn--read-thing-region)
-           (list (conn--read-pair)
-                 current-prefix-arg)))
-  (save-mark-and-excursion
-    (goto-char beg)
-    (conn--push-ephemeral-mark end)
-    (conn-change-pair-outward pair arg)))
-
-(defun conn-change-pair-inside-thing (beg end pair arg)
-  (interactive
-   (append (conn--read-thing-region)
-           (list (conn--read-pair) current-prefix-arg)))
-  (save-mark-and-excursion
-    (goto-char beg)
-    (conn--push-ephemeral-mark end)
-    (conn-change-pair-inward pair arg)))
-
-(defun conn-delete-pair-outside-thing (beg end pair arg)
-  (interactive
-   (append (conn--read-thing-region)
-           (list (conn--read-pair) current-prefix-arg)))
-  (save-mark-and-excursion
-    (goto-char beg)
-    (conn--push-ephemeral-mark end)
-    (conn-delete-pair-outward arg)))
-
-(defun conn-delete-pair-inside-thing (beg end pair arg)
-  (interactive
-   (append (conn--read-thing-region)
-           (list (conn--read-pair) current-prefix-arg)))
-  (save-mark-and-excursion
-    (goto-char beg)
-    (conn--push-ephemeral-mark end)
-    (conn-delete-pair-inward arg)))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -6510,11 +6461,6 @@ apply to each contiguous component of the region."
   "N" 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
   "o" 'conn-occur-region
-  "r o" 'conn-change-pair-inward
-  "r u" 'conn-change-pair-outward
-  "r j" 'conn-delete-pair-inward
-  "r l" 'conn-delete-pair-outward
-  "r i" 'conn-insert-pair
   "<" 'conn-sort-prefix
   "w" 'conn-replace-region-in-thing
   "u" 'conn-regexp-replace-region-in-thing
@@ -6669,11 +6615,9 @@ apply to each contiguous component of the region."
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
-  "r o" 'conn-change-pair-inside-thing
-  "r u" 'conn-change-pair-outside-thing
-  "r j" 'conn-delete-pair-inside-thing
-  "r l" 'conn-delete-pair-outside-thing
-  "r i" 'conn-surround-thing)
+  "r t" 'conn-thing-change-pair
+  "r d" 'conn-thing-delete-pair
+  "r s" 'conn-surround-thing)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
@@ -6788,7 +6732,7 @@ apply to each contiguous component of the region."
   "$" 'ispell-word
   "*" 'calc-dispatch
   "[" 'conn-kill-prepend-region
-  "\"" 'conn-insert-pair
+  "\"" 'conn-surround-thing
   "<tab>" 'indent-region
   "TAB" 'indent-region
   "]" 'conn-kill-append-region
