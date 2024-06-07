@@ -4750,6 +4750,21 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Window Commands
 
+(defun conn-other-place-prefix ()
+  (interactive)
+  (pcase (car (read-multiple-choice
+               "Place:"
+               '((?w "window")
+                 (?f "frame")
+                 (?t "tab")
+                 (?p "prompt")
+                 (?c "current window"))))
+    (?w (other-window-prefix))
+    (?f (other-frame-prefix))
+    (?t (other-tab-prefix))
+    (?p (conn-other-window-prompt-prefix))
+    (?p (conn-this-window-prefix))))
+
 (defun conn-other-window-prompt-prefix ()
   (interactive)
   (display-buffer-override-next-command
@@ -6412,14 +6427,6 @@ apply to each contiguous component of the region."
 
 ;;;; Keymaps
 
-(defvar-keymap conn-other-place-prefix-map
-  :prefix 'conn-other-place-prefix-map
-  "c" 'this-window-prefix
-  "w" 'other-window-prefix
-  "t" 'other-tab-prefix
-  "f" 'conn-other-window-prompt-prefix
-  "r" 'other-frame-prefix)
-
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
   "C-s" 'reb-next-match
@@ -6737,7 +6744,7 @@ apply to each contiguous component of the region."
   "<tab>" 'indent-region
   "TAB" 'indent-region
   "]" 'conn-kill-append-region
-  "'" 'conn-other-place-prefix-map
+  "'" 'conn-other-place-prefix
   "C" 'conn-copy-region
   "c" (conn-remapping-command (key-parse "C-c"))
   "d" (conn-remapping-command conn-delete-char-keys)
