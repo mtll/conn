@@ -205,7 +205,7 @@ THING BEG and END are bound in BODY."
                              (consult--grep-position cand)))
                   (cons (+ line-pos beg) (+ line-pos end))))
               cands)
-      (apply-partially 'conn--region-iterator)
+      (apply-partially 'conn--kapply-region-iterator)
       (funcall-interactively 'conn-regions-kapply-prefix)))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
