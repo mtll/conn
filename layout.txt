@@ -17,12 +17,12 @@ Conn State:
 ┃              │    map   │  region  │  state   │   map    │  region  │          │          │          │          │   load   │  append  │  prepend │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │          │          │          │   dot    │          │   mark   │  ←line   │  ↓para   │  →line   │   M-X    │  insert  │                   ┃
-┃                │          │          │          │  region  │          │   map    │          │          │          │          │   pair   │                   ┃
+┃                │   M-X    │          │          │   dot    │          │   mark   │  ←line   │  ↓para   │  →line   │          │ surround │                   ┃
+┃                │          │          │          │  region  │          │   map    │          │          │          │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ ' other  │                   ┃
-┃                │    win   │  search  │  →delete │  thing   │   goto   │  expand  │  ←char   │  ↓line   │  →char   │   M-x    │   place  │                   ┃
-┃                │  control │   map    │          │ dispatch │   map    │  region  │          │          │          │          │   map    │                   ┃
+┃                │   M-x    │  search  │  →delete │  thing   │   goto   │  expand  │  ←char   │  ↓line   │  →char   │   win    │   place  │                   ┃
+┃                │          │   map    │          │ dispatch │   map    │  region  │          │          │          │ control  │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │  narrow  │   copy   │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
@@ -57,12 +57,12 @@ Dot State:
 ┃              │    map   │   dot    │  region  │   map    │  things  │  regexp  │          │          │          │   load   │  before  │   after  │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │          │          │  delete  │          │          │   mark   │  ←line   │  ↓para   │  →line   │   M-X    │          │                   ┃
+┃                │   M-X    │          │  delete  │          │          │   mark   │  ←line   │  ↓para   │  →line   │          │          │                   ┃
 ┃                │          │          │ all dots │          │          │   map    │          │          │          │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ ' other  │                   ┃
-┃                │    win   │  search  │  →delete │  thing   │   goto   │  expand  │  ←char   │  ↓line   │  →char   │   M-x    │   place  │                   ┃
-┃                │  control │   map    │    dot   │ dispatch │   map    │  region  │          │          │          │          │   map    │                   ┃
+┃                │   M-x    │  search  │  →delete │  thing   │   goto   │  expand  │  ←char   │  ↓line   │  →char   │   win    │   place  │                   ┃
+┃                │          │   map    │    dot   │ dispatch │   map    │  region  │          │          │          │ control  │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │  narrow  │          │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
