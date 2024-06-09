@@ -4051,11 +4051,11 @@ of `conn-recenter-positions'."
       (when (and old (not (memq old conn-mark-ring-left)))
         (set-marker old nil)))))
 
-(defun conn-pop-to-mark-command ()
+(defun conn-mark-ring-backward ()
   "Like `pop-to-mark-command' but uses `conn-mark-ring-right'.
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring-right' and the functions `conn-pop-to-mark-command' and
-`conn-unpop-to-mark-command' are provided which attempt to filter out
+so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
+`conn-mark-ring-forward' are provided which attempt to filter out
 uninstersting marks."
   (interactive)
   (cond ((null (mark t))
@@ -4074,11 +4074,11 @@ uninstersting marks."
          (goto-char (mark t))))
   (deactivate-mark))
 
-(defun conn-unpop-to-mark-command ()
+(defun conn-mark-ring-forward ()
   "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring-right'.
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring-right' and the functions `conn-pop-to-mark-command' and
-`conn-unpop-to-mark-command' are provided which attempt to filter out
+so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
+`conn-mark-ring-forward' are provided which attempt to filter out
 uninstersting marks."
   (interactive)
   (cond ((null (mark t))
@@ -6575,13 +6575,13 @@ apply to each contiguous component of the region."
 
 (defvar-keymap conn-pop-mark-repeat-map
   :repeat t
-  "o" 'conn-pop-to-mark-command
-  "u" 'conn-unpop-to-mark-command)
+  "o" 'conn-mark-ring-backward
+  "u" 'conn-mark-ring-forward)
 
 (defvar-keymap conn-goto-map
   "l" 'pop-global-mark
-  "o" 'conn-pop-to-mark-command
-  "u" 'conn-unpop-to-mark-command
+  "o" 'conn-mark-ring-backward
+  "u" 'conn-mark-ring-forward
   "k" 'goto-line
   "r" 'xref-find-references
   "s" 'xref-find-apropos
