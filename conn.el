@@ -29,6 +29,7 @@
 
 ;;;; Requires
 
+(require 'replace)
 (require 'easy-mmode)
 (require 'compat)
 (require 'transient)
@@ -371,6 +372,10 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn--read-string-timeout-history nil)
 
 (defvar conn--dot-buffer-history nil)
+
+(defvar conn--read-string-history nil)
+
+(defvar conn--read-regexp-history nil)
 
 
 ;;;; Utilities
@@ -815,6 +820,33 @@ If BUFFER is nil check `current-buffer'."
                    (set-window-point win pt)
                    (set-window-hscroll win hscroll)
                    (set-window-vscroll win vscroll)))))))
+
+(defun conn--read-from-with-preview (prompt &optional regexp-flag default bounds)
+  (minibuffer-with-setup-hook
+      (minibuffer-lazy-highlight-setup
+       :case-fold case-fold-search
+       :filter (when bounds
+                 (lambda (beg end)
+                   (and (<= (car bounds) beg (cdr bounds))
+                        (<= (car bounds) end (cdr bounds)))))
+       :highlight query-replace-lazy-highlight
+       :regexp regexp-flag
+       :regexp-function (or replace-regexp-function
+                            (and replace-char-fold
+	                         (not regexp-flag)
+	                         #'char-fold-to-regexp))
+       :transform (lambda (string)
+                    (when (and case-fold-search search-upper-case)
+	              (setq isearch-case-fold-search
+                            (isearch-no-upper-case-p string regexp-flag)))
+                    string))
+    (if regexp-flag
+        (read-regexp (format-prompt prompt (and (length> (ensure-list default) 0)
+                                                (query-replace-descr default)))
+                     (ensure-list default) 'conn--read-regexp-history)
+      (read-string (format-prompt prompt (and (length> (ensure-list default) 0)
+                                              (query-replace-descr default)))
+                   nil 'conn--read-string-history default))))
 
 
 ;;;; Advice
@@ -3237,6 +3269,52 @@ Interactively defaults to the current region."
 
 ;;;;; Dot Commands
 
+(defun conn-dot-regexp-in-region (beg end regexp)
+  (interactive (list (region-beginning)
+                     (region-end)
+                     (conn--read-from-with-preview "Regexp" t)))
+  (save-excursion
+    (with-restriction beg end
+      (goto-char beg)
+      (while (search-forward regexp end t)
+        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
+
+(defun conn-dot-regexp-in-thing (beg end regexp)
+  (interactive
+   (append (cdr (conn--read-thing-region))
+           (list (conn--read-from-with-preview
+                  "Regexp" t
+                  (buffer-substring-no-properties
+                   (region-beginning) (region-end))))))
+  (save-excursion
+    (with-restriction beg end
+      (goto-char beg)
+      (while (search-forward regexp end t)
+        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
+
+(defun conn-dot-occurances-in-region (beg end string)
+  (interactive (list (region-beginning)
+                     (region-end)
+                     (conn--read-from-with-preview "String")))
+  (save-excursion
+    (with-restriction beg end
+      (goto-char beg)
+      (while (search-forward string end t)
+        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
+
+(defun conn-dot-occurances-in-thing (beg end string)
+  (interactive
+   (append (cdr (conn--read-thing-region))
+           (list (conn--read-from-with-preview
+                  "Regexp" t
+                  (buffer-substring-no-properties
+                   (region-beginning) (region-end))))))
+  (save-excursion
+    (with-restriction beg end
+      (goto-char beg)
+      (while (search-forward string end t)
+        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
+
 (defun conn-transpose-region-and-dot (dot)
   "Tranpose region and DOT.
 When called interactively and there are multiple dots in the current
@@ -3445,53 +3523,25 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
   (when (called-interactively-p 'interactive)
     (message "Region skipped backward")))
 
-(defun conn-add-dots-matching-literal (string &optional start end refine)
-  "Dot all occurrences of STRING in region from START to END.
-If REFINE is non-nil only dot occurrences in dots.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (read-string "String: "
-                                  (ignore-errors
-                                    (list (buffer-substring-no-properties
-                                           (region-beginning)
-                                           (region-end)))))
-                     (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)
-                     current-prefix-arg))
-  (conn-add-dots-matching-regexp (regexp-quote string) start end refine))
-
-(defun conn-add-dots-matching-regexp (regexp &optional start end refine)
-  "Dot things matching REGEXP in region from START to END.
-If REFINE is non-nil only dot thing withing dots in
-region from START to END.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (read-regexp "Regexp: "
-                                  (list ""
-                                        (ignore-errors
-                                          (list (regexp-quote
-                                                 (buffer-substring-no-properties
-                                                  (region-beginning)
-                                                  (region-end)))))))
-                     (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)
-                     current-prefix-arg))
-  (setq start (or start (point-min))
-        end (or end (point-max)))
+(defun conn-refine-dots (beg end regexp)
+  (interactive
+   (pcase-let ((`(,_ ,beg ,end) (conn--read-thing-region))
+               (regexp (read-regexp "Regexp: "
+                                    (list ""
+                                          (ignore-errors
+                                            (list (regexp-quote
+                                                   (buffer-substring-no-properties
+                                                    (region-beginning)
+                                                    (region-end)))))))))
+     (list beg end regexp)))
   (let (new-dots)
     (save-excursion
-      (goto-char start)
+      (goto-char beg)
       (while (re-search-forward regexp end t)
-        (cond
-         ((not refine)
-          (conn--create-dots (cons (match-beginning 0) (match-end 0))))
-         ((conn-isearch-in-dot-p (match-beginning 0) (match-end 0))
-          (push (cons (match-beginning 0) (match-end 0)) new-dots))))
-      (when refine
-        (conn--remove-dots start end)
-        (apply #'conn--create-dots new-dots)))))
+        (when (conn-isearch-in-dot-p (match-beginning 0) (match-end 0))
+          (push (cons (match-beginning 0) (match-end 0)) new-dots)))
+      (conn--remove-dots beg end)
+      (apply #'conn--create-dots new-dots))))
 
 (defun conn-dot-lines (start end)
   "Dot each line in region from START to END.
@@ -3889,14 +3939,21 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (cdr (conn--read-thing-region)))
-          (common
-           (query-replace-read-args
-            (concat "Query replace"
-                    (if current-prefix-arg
-                        (if (eq current-prefix-arg '-) " backward" " word")
-                      ""))
-            nil)))
+   (cl-letf* ((region (cdr (conn--read-thing-region)))
+              ((symbol-function 'replace--region-filter)
+               (lambda (_bounds)
+                 (pcase-let ((`(,beg ,end) region))
+                   (lambda (b e)
+                     (and (<= beg b end) (<= beg e end))))))
+              ((symbol-function 'use-region-p)
+               (lambda () t))
+              (common
+               (query-replace-read-args
+                (concat "Query replace"
+                        (if current-prefix-arg
+                            (if (eq current-prefix-arg '-) " backward" " word")
+                          ""))
+                nil)))
      (append region common)))
   (save-window-excursion
     (save-excursion
@@ -3904,14 +3961,21 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (cdr (conn--read-thing-region)))
-          (common
-           (query-replace-read-args
-            (concat "Query replace regexp"
-                    (if current-prefix-arg
-                        (if (eq current-prefix-arg '-) " backward" " word")
-                      ""))
-            t)))
+   (cl-letf* ((region (cdr (conn--read-thing-region)))
+              ((symbol-function 'replace--region-filter)
+               (lambda (_bounds)
+                 (pcase-let ((`(,beg ,end) region))
+                   (lambda (b e)
+                     (and (<= beg b end) (<= beg e end))))))
+              ((symbol-function 'use-region-p)
+               (lambda () t))
+              (common
+               (query-replace-read-args
+                (concat "Query replace regexp"
+                        (if current-prefix-arg
+                            (if (eq current-prefix-arg '-) " backward" " word")
+                          ""))
+                t)))
      (append region common)))
   (save-window-excursion
     (save-excursion
@@ -3919,31 +3983,45 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (cdr (conn--read-thing-region)))
-          (common
-           (minibuffer-with-setup-hook
-               'conn-yank-region-to-minibuffer
-             (query-replace-read-args
-              (concat "Query replace"
-                      (if current-prefix-arg
-                          (if (eq current-prefix-arg '-) " backward" " word")
-                        ""))
-              nil))))
+   (cl-letf* ((region (cdr (conn--read-thing-region)))
+              ((symbol-function 'replace--region-filter)
+               (lambda (_bounds)
+                 (pcase-let ((`(,beg ,end) region))
+                   (lambda (b e)
+                     (and (<= beg b end) (<= beg e end))))))
+              ((symbol-function 'use-region-p)
+               (lambda () t))
+              (common
+               (minibuffer-with-setup-hook
+                   'conn-yank-region-to-minibuffer
+                 (query-replace-read-args
+                  (concat "Query replace"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  nil))))
      (append region common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
 (defun conn-regexp-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (let* ((region (cdr (conn--read-thing-region)))
-          (common
-           (query-replace-read-args
-            (minibuffer-with-setup-hook
-                'conn-yank-region-to-minibuffer
-              (concat "Query replace regexp"
-                      (if current-prefix-arg
-                          (if (eq current-prefix-arg '-) " backward" " word")
-                        "")))
-            t)))
+   (cl-letf* ((region (cdr (conn--read-thing-region)))
+              ((symbol-function 'replace--region-filter)
+               (lambda (_bounds)
+                 (pcase-let ((`(,beg ,end) region))
+                   (lambda (b e)
+                     (and (<= beg b end) (<= beg e end))))))
+              ((symbol-function 'use-region-p)
+               (lambda () t))
+              (common
+               (minibuffer-with-setup-hook
+                   'conn-yank-region-to-minibuffer
+                 (query-replace-read-args
+                  (concat "Query replace regexp"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  t))))
      (append region common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
@@ -5782,7 +5860,7 @@ region before each iteration.  CHANGE means delete the region
 before each iteration."
   :class 'conn-transient-switches
   :required t
-  :key "w"
+  :key "t"
   :description "Regions"
   :argument "region="
   :argument-format "region=%s"
@@ -5800,7 +5878,7 @@ before each iteration."
 (transient-define-argument conn--kapply-empty-infix ()
   "Include empty regions in dispatch."
   :class 'transient-switch
-  :key "u"
+  :key "r"
   :description "Include Empty"
   :argument "empty")
 
@@ -5835,12 +5913,96 @@ before each iteration."
   :description "Windows"
   :argument "windows")
 
+(transient-define-suffix conn--kapply-regexp-suffix (args)
+  :transient 'transient--do-exit
+  :key "u"
+  :description "On Regexp"
+  (interactive (list (transient-args transient-current-command)))
+  (conn--thread -it->
+      (pcase-let* ((`(,thing ,beg ,end) (conn--read-thing-region))
+                   (regexp (conn--read-from-with-preview
+                            "Regexp" t
+                            (unless (eq thing 'region)
+                              (buffer-substring-no-properties
+                               (region-beginning)
+                               (region-end)))
+                            (cons beg end)))
+                   (regions))
+        (save-excursion
+          (with-restriction beg end
+            (goto-char beg)
+            (while (re-search-forward regexp nil t)
+              (push (cons (match-beginning 0) (match-end 0)) regions))))
+        regions)
+    (conn--kapply-region-iterator -it-> (not (member "reverse" args)))
+    (if (member "empty" args) -it-> (conn--kapply-skip-empty -it->))
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
+    (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
+    (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--kapply-with-state -it-> 'conn-state))
+      ("emacs" (conn--kapply-with-state -it-> 'conn-emacs-state))
+      ("dot" (conn--kapply-with-state -it-> 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--kapply-change-region -it->))
+      ("end" (conn--kapply-at-end -it->))
+      ("start" -it->))
+    (conn--kapply-pulse-region -it->)
+    (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
+      ("append" (conn--kmacro-apply-append -it->))
+      ("step-edit" (conn--kmacro-apply-step-edit -it->))
+      (_ (conn--kmacro-apply -it->)))))
+
+(transient-define-suffix conn--kapply-string-suffix (args)
+  :transient 'transient--do-exit
+  :key "w"
+  :description "On String"
+  (interactive (list (transient-args transient-current-command)))
+  (conn--thread -it->
+      (pcase-let* ((`(,thing ,beg ,end) (conn--read-thing-region))
+                   (string (conn--read-from-with-preview
+                            "String" nil
+                            (unless (eq thing 'region)
+                              (buffer-substring-no-properties
+                               (region-beginning)
+                               (region-end)))
+                            (cons beg end)))
+                   (regions))
+        (save-excursion
+          (with-restriction beg end
+            (goto-char beg)
+            (while (search-forward string nil t)
+              (push (cons (match-beginning 0) (match-end 0)) regions))))
+        regions)
+    (conn--kapply-region-iterator -it-> (not (member "reverse" args)))
+    (if (member "empty" args) -it-> (conn--kapply-skip-empty -it->))
+    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
+    (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
+    (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--kapply-with-state -it-> 'conn-state))
+      ("emacs" (conn--kapply-with-state -it-> 'conn-emacs-state))
+      ("dot" (conn--kapply-with-state -it-> 'conn-dot-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--kapply-change-region -it->))
+      ("end" (conn--kapply-at-end -it->))
+      ("start" -it->))
+    (conn--kapply-pulse-region -it->)
+    (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
+      ("append" (conn--kmacro-apply-append -it->))
+      ("step-edit" (conn--kmacro-apply-step-edit -it->))
+      (_ (conn--kmacro-apply -it->)))))
+
 (transient-define-suffix conn--kapply-suffix (args)
   "Apply keyboard macro on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :transient 'transient--do-exit
-  :key "r"
+  :key "v"
   :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -it->
@@ -5888,29 +6050,6 @@ apply to each contiguous component of the region."
         ("step-edit" (conn--kmacro-apply-step-edit -it-> count))
         (_ (conn--kmacro-apply -it-> count))))))
 
-(transient-define-suffix conn--kapply-point-and-mark-suffix (args)
-  "Apply keyboard macro at the `point' and then the `mark'."
-  :transient 'transient--do-exit
-  :key "v"
-  :description "On Point and Mark"
-  (interactive (list (transient-args transient-current-command)))
-  (conn--thread -it->
-      (list (point) (mark t))
-    (conn--kapply-point-iterator -it-> (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo -it-> t) -it->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -it->) -it->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -it->) -it->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state -it-> 'conn-state))
-      ("emacs" (conn--kapply-with-state -it-> 'conn-emacs-state))
-      ("dot" (conn--kapply-with-state -it-> 'conn-dot-state)))
-    (if (member "windows" args) (conn--kapply-save-windows -it->) -it->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply -it-> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -it->))
-      ("step-edit" (conn--kmacro-apply-step-edit -it->))
-      (_ (conn--kmacro-apply -it->)))))
-
 (transient-define-suffix conn--kapply-dot-suffix (args)
   "Apply keyboard macro on dots in the selected buffers."
   :transient 'transient--do-exit
@@ -5953,7 +6092,7 @@ apply to each contiguous component of the region."
 (transient-define-suffix conn--kapply-regions-suffix (iterator args)
   "Apply keyboard macro on regions."
   :transient 'transient--do-exit
-  :key "r"
+  :key "v"
   :description "On Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
@@ -6064,7 +6203,7 @@ apply to each contiguous component of the region."
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
-  :key "t"
+  :key "x"
   :description "On Text Prop"
   (interactive
    (let* ((prop (intern (completing-read
@@ -6137,7 +6276,8 @@ apply to each contiguous component of the region."
    [(conn--kapply-suffix)
     (conn--kapply-dot-suffix)
     (conn--kapply-lines-suffix)
-    (conn--kapply-point-and-mark-suffix)
+    (conn--kapply-regexp-suffix)
+    (conn--kapply-string-suffix)
     (conn--kapply-text-property-suffix)
     (conn--kapply-iterate-suffix)]
    [(conn--kapply-macro-infix)
@@ -6528,10 +6668,11 @@ apply to each contiguous component of the region."
   "d" 'conn-remove-dot-forward
   "p" 'conn-dot-text-property
   "q" 'conn-query-remove-dots
-  "r" 'conn-add-dots-matching-regexp
+  "r" 'conn-refine-dots
   "s" 'conn-sort-dots
   "t" 'conn-dot-trim-regexp
-  "w" 'conn-add-dots-matching-literal)
+  "w" 'conn-dot-occurances-in-thing
+  "u" 'conn-dot-regexp-in-thing)
 
 (defvar-keymap conn-dot-region-repeat-map
   :repeat t
@@ -6544,6 +6685,8 @@ apply to each contiguous component of the region."
 
 (defvar-keymap conn-dot-region-map
   :parent conn-region-map
+  "w" 'conn-dot-occurances-in-region
+  "u" 'conn-dot-regexp-in-region
   "l" 'conn-dot-region-forward
   "j" 'conn-dot-region-backward
   "o" 'conn-remove-dots-outside-region
@@ -6780,7 +6923,7 @@ apply to each contiguous component of the region."
   "r" conn-dot-region-map
   "t" 'conn-dot-all-things-in-region
   "x" 'conn-split-dots-on-regexp
-  "y" 'conn-add-dots-matching-regexp)
+  "y" 'conn-refine-dots)
 
 (define-keymap
   :keymap conn-org-edit-state-map
