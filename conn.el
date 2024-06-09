@@ -827,7 +827,15 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--push-mark-ad (&rest _)
   (unless conn--ephemeral-mark
-    (conn--push-ring-delete-duplicate 'conn-mark-ring (mark-marker)))
+    (conn--push-mark-ring-right (mark-marker)))
+  (setq conn--ephemeral-mark nil))
+
+(defun conn--pop-mark-ad (&rest _)
+  (unless conn--ephemeral-mark
+    (conn--push-mark-ring-left (mark-marker)))
+  (setq conn--ephemeral-mark t))
+
+(defun conn--set-mark-ad (&rest _)
   (setq conn--ephemeral-mark nil))
 
 (defun conn--save-ephemeral-mark-ad (&rest _)
@@ -841,11 +849,15 @@ If BUFFER is nil check `current-buffer'."
       (progn
         (advice-add 'repeat :around #'conn--repeat-advice)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
+        (advice-add 'pop-mark :before #'conn--pop-mark-ad)
+        (advice-add 'set-mark :before #'conn--set-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad))
+    (advice-remove 'set-mark #'conn--set-mark-ad)
     (advice-remove 'repeat #'conn--repeat-advice)
+    (advice-remove 'pop-mark #'conn--pop-mark-ad)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
@@ -1000,9 +1012,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defvar conn--last-command-amalgamating nil)
 
 (defun conn--mark-post-command-hook ()
-  (when (and (or deactivate-mark conn--last-command-amalgamating)
-             (null undo-auto--this-command-amalgamating))
-    (conn--deactivate-mark-hook))
   (setq conn--last-command-amalgamating undo-auto--this-command-amalgamating)
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
@@ -4015,59 +4024,72 @@ of `conn-recenter-positions'."
          (goto-char end)
          (recenter -1))))))
 
-(defvar-local conn-mark-ring nil)
-(defvar-local conn-mark-unpop-ring nil)
+(defvar-local conn-mark-ring-right nil)
+(defvar-local conn-mark-ring-left nil)
 
-(defun conn--push-ring-delete-duplicate (ring location)
-  (let ((old (nth mark-ring-max (symbol-value ring)))
-        (history-delete-duplicates t))
-    (add-to-history ring
-                    (pcase location
-                      ((pred markerp) (copy-marker location))
-                      ((pred numberp) (conn--create-marker location)))
-                    mark-ring-max)
-    (when (and old (not (memq old (symbol-value ring))))
-      (set-marker old nil))))
+(defun conn--push-mark-ring-right (location)
+  (unless (or (seq-contains-p conn-mark-ring-right location #'=)
+              (seq-contains-p conn-mark-ring-left location #'=))
+    (let ((old (nth mark-ring-max conn-mark-ring-right)))
+      (setq conn-mark-ring-right
+            (cons (pcase location
+                    ((pred markerp) (copy-marker location))
+                    ((pred numberp) (conn--create-marker location)))
+                  (take (1- mark-ring-max) conn-mark-ring-right)))
+      (when (and old (not (memq old conn-mark-ring-right)))
+        (set-marker old nil)))))
+
+(defun conn--push-mark-ring-left (location)
+  (unless (or (seq-contains-p conn-mark-ring-left location #'=)
+              (seq-contains-p conn-mark-ring-right location #'=))
+    (let ((old (nth mark-ring-max conn-mark-ring-left)))
+      (setq conn-mark-ring-left
+            (cons (pcase location
+                    ((pred markerp) (copy-marker location))
+                    ((pred numberp) (conn--create-marker location)))
+                  (take (1- mark-ring-max) conn-mark-ring-left)))
+      (when (and old (not (memq old conn-mark-ring-left)))
+        (set-marker old nil)))))
 
 (defun conn-pop-to-mark-command ()
-  "Like `pop-to-mark-command' but uses `conn-mark-ring'.
+  "Like `pop-to-mark-command' but uses `conn-mark-ring-right'.
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring' and the functions `conn-pop-to-mark-command' and
+so `conn-mark-ring-right' and the functions `conn-pop-to-mark-command' and
 `conn-unpop-to-mark-command' are provided which attempt to filter out
 uninstersting marks."
   (interactive)
   (cond ((null (mark t))
          (user-error "No mark set in this buffer"))
-        ((null conn-mark-ring)
+        ((null conn-mark-ring-right)
          (user-error "No marks to unpop"))
         ((or conn--ephemeral-mark
              (= (point) (mark t)))
-         (conn--push-ring-delete-duplicate 'conn-mark-unpop-ring (point))
-         (let ((conn-mark-ring conn-mark-ring))
-           (push-mark (car conn-mark-ring)))
-         (pop conn-mark-ring)
+         (conn--push-mark-ring-left (point))
+         (let ((conn-mark-ring-right conn-mark-ring-right))
+           (push-mark (car conn-mark-ring-right)))
+         (pop conn-mark-ring-right)
          (goto-char (mark t)))
         (t
-         (conn--push-ring-delete-duplicate 'conn-mark-unpop-ring (point))
+         (conn--push-mark-ring-left (point))
          (goto-char (mark t))))
   (deactivate-mark))
 
 (defun conn-unpop-to-mark-command ()
-  "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring'.
+  "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring-right'.
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring' and the functions `conn-pop-to-mark-command' and
+so `conn-mark-ring-right' and the functions `conn-pop-to-mark-command' and
 `conn-unpop-to-mark-command' are provided which attempt to filter out
 uninstersting marks."
   (interactive)
   (cond ((null (mark t))
          (user-error "No mark set in this buffer"))
-        ((null conn-mark-unpop-ring)
+        ((null conn-mark-ring-left)
          (user-error "No marks to unpop"))
         ((= (point) (mark t))
-         (push-mark (pop conn-mark-unpop-ring))
+         (push-mark (pop conn-mark-ring-left))
          (goto-char (mark t)))
         (t
-         (conn--push-ring-delete-duplicate 'conn-mark-ring (point))
+         (conn--push-mark-ring-right (point))
          (goto-char (mark t))))
   (deactivate-mark))
 
@@ -6873,7 +6895,6 @@ apply to each contiguous component of the region."
         (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
           (dolist (hook hooks)
             (add-hook hook 'conn--activate-input-method nil t)))
-        (add-hook 'deactivate-mark-hook #'conn--deactivate-mark-hook nil t)
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -6888,7 +6909,6 @@ apply to each contiguous component of the region."
     (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
       (dolist (hook hooks)
         (remove-hook hook #'conn--activate-input-method t)))
-    (remove-hook 'deactivate-mark-hook #'conn--deactivate-mark-hook t)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
