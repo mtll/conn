@@ -2959,23 +2959,25 @@ Expansions and contractions are provided by functions in
                (cons (car -it->) (nreverse (cadr -it->)))))
     (_ (user-error "Unknown pair format."))))
 
-(defun conn-insert-pair (beg end)
-  (save-mark-and-excursion
-    (pcase-let ((`(,open . ,close) (conn--read-pair)))
-      (goto-char end)
-      (insert close)
-      (goto-char beg)
-      (insert-before-markers open))))
+(defun conn-insert-pair ()
+  (let ((beg (region-beginning))
+        (end (region-end)))
+    (save-mark-and-excursion
+      (pcase-let ((`(,open . ,close) (conn--read-pair)))
+        (goto-char end)
+        (insert close)
+        (goto-char beg)
+        (insert-before-markers open)))))
 
 (defun conn-change-pair-outward (arg)
   "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
   (conn-delete-pair-outward arg)
-  (conn-insert-pair (region-beginning) (region-end)))
+  (conn-insert-pair))
 
 (defun conn-change-pair-inward (arg)
   "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
   (conn-delete-pair-inward arg)
-  (conn-insert-pair (region-beginning) (region-end)))
+  (conn-insert-pair))
 
 (defun conn-delete-pair-inward (arg)
   "Delete ARG chars at `point' and `mark'."
@@ -2993,9 +2995,9 @@ Expansions and contractions are provided by functions in
       (delete-region (- (point) arg) (point))
       (delete-region (mark-marker) (+ (mark-marker) arg)))))
 
-(defun conn--surround-region (action beg end arg)
+(defun conn--surround-region (action _beg _end arg)
   (pcase action
-    ('surround (conn-insert-pair beg end))
+    ('surround (conn-insert-pair))
     ('delete
      (pcase (car (read-multiple-choice
                   "Direction:" `((?i "inward" "Delete surrounding chars inward")
@@ -3011,10 +3013,13 @@ Expansions and contractions are provided by functions in
 (put 'region :conn-thing-surrounder 'conn--surround-region)
 
 (defun conn--surround-thing (action beg end arg)
-  (pcase action
-    ('surround (conn-insert-pair beg end))
-    ('delete (conn-delete-pair-inward arg))
-    ('change (conn-change-pair-inward arg))))
+  (save-mark-and-excursion
+    (goto-char beg)
+    (conn--push-ephemeral-mark end)
+    (pcase action
+      ('surround (conn-insert-pair))
+      ('delete (conn-delete-pair-inward arg))
+      ('change (conn-change-pair-inward arg)))))
 
 (defun conn-surround-thing (thing beg end arg)
   (interactive (append (conn--read-thing-region)
@@ -6619,9 +6624,7 @@ apply to each contiguous component of the region."
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
-  "r t" 'conn-thing-change-pair
-  "r d" 'conn-thing-delete-pair
-  "r s" 'conn-surround-thing)
+  "s" 'conn-surround-thing)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
@@ -6652,12 +6655,13 @@ apply to each contiguous component of the region."
 
 (define-keymap
   :keymap conn-movement-map
-  "U" 'conn-backward-symbol
+  "o" (conn-remapping-command conn-forward-word-keys)
   "O" 'forward-symbol
+  "U" 'conn-backward-symbol
+  "u" (conn-remapping-command conn-backward-word-keys)
   "(" 'backward-up-list
   ")" 'down-list
   "{" (conn-remapping-command conn-backward-sentence-keys)
-  "u" (conn-remapping-command conn-backward-word-keys)
   "I" (conn-remapping-command conn-backward-paragraph-keys)
   "i" (conn-remapping-command conn-previous-line-keys)
   "J" 'conn-beginning-of-inner-line
@@ -6671,7 +6675,6 @@ apply to each contiguous component of the region."
   "N" (conn-remapping-command conn-beginning-of-defun-keys)
   "n" (conn-remapping-command conn-backward-sexp-keys)
   "}" (conn-remapping-command conn-forward-sentence-keys)
-  "o" (conn-remapping-command conn-forward-word-keys)
   "<" 'conn-backward-line
   ">" 'forward-line)
 
@@ -6905,8 +6908,7 @@ apply to each contiguous component of the region."
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
-    (without-restriction
-      (conn--remove-dots))
+    (without-restriction (conn--remove-dots))
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
     (conn--clear-overlays)
@@ -7150,7 +7152,8 @@ determine if `conn-local-mode' should be enabled."
 
 (with-eval-after-load 'treesit
   (conn-register-thing treesit-defun
-    :forward-op 'treesit-end-of-defun
+    :beg-op 'treesit-beginning-of-defun
+    :end-op 'treesit-end-of-defun
     :dispatch-provider (apply-partially 'conn--dispatch-all-things
                                         'treesit-defun))
 
