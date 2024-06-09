@@ -853,59 +853,6 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Mark
 
-(defvar-local conn-region-ring nil)
-
-(defvar conn-region-ring-max 16)
-
-(defun conn--region-equal (region)
-  (pcase-let ((`(,pt . ,mark) region))
-    (and (= (min pt mark) (min (point) (mark t)))
-         (= (max pt mark) (max (point) (mark t))))))
-
-(defun conn--deactivate-mark-hook ()
-  (when (and (mark t) (/= (point) (mark t)))
-    (pcase (seq-find 'conn--region-equal conn-region-ring)
-      ((and (pred consp) reg)
-       (unless (= (car reg) (point))
-         (set-marker (car reg) (point))
-         (set-marker (cdr reg) (mark t)))
-       (setq conn-region-ring (cons reg (delete reg conn-region-ring))))
-      (_
-       (setq conn-region-ring
-             (cons (cons (point-marker) (copy-marker (mark-marker)))
-                   (take (1- conn-region-ring-max) conn-region-ring)))))))
-
-(defun conn-pop-region-ring (arg)
-  (interactive "p")
-  (unless conn-region-ring
-    (user-error "Region ring empty"))
-  (if (< arg 0)
-      (conn-unpop-region-ring (abs arg))
-    (dotimes (_ (1- arg))
-      (setq conn-region-ring (nconc (cdr conn-region-ring)
-                                    (list (car conn-region-ring)))))
-    (pcase-exhaustive (car conn-region-ring)
-      ((and `(,pt . ,mark) reg)
-       (goto-char pt)
-       (conn--push-ephemeral-mark mark)
-       (setq conn-region-ring (nconc (cdr conn-region-ring)
-                                     (list reg)))))))
-
-(defun conn-unpop-region-ring (arg)
-  (interactive "p")
-  (unless conn-region-ring
-    (user-error "Region ring empty"))
-  (if (< arg 0)
-      (conn-pop-region-ring (abs arg))
-    (dotimes (_ (1- arg))
-      (setq conn-region-ring (nconc (last conn-region-ring)
-                                    (butlast conn-region-ring))))
-    (pcase-exhaustive (car (last conn-region-ring))
-      ((and `(,pt . ,mark) reg)
-       (goto-char pt)
-       (conn--push-ephemeral-mark mark)
-       (setq conn-region-ring (nconc (list reg) (butlast conn-region-ring)))))))
-
 (defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
     `(progn
@@ -6609,14 +6556,7 @@ apply to each contiguous component of the region."
   "o" 'conn-pop-to-mark-command
   "u" 'conn-unpop-to-mark-command)
 
-(defvar-keymap conn-region-ring-repeat-map
-  :repeat t
-  "v" 'conn-pop-region-ring
-  "x" 'conn-unpop-region-ring)
-
 (defvar-keymap conn-goto-map
-  "v" 'conn-pop-region-ring
-  "x" 'conn-unpop-region-ring
   "l" 'pop-global-mark
   "o" 'conn-pop-to-mark-command
   "u" 'conn-unpop-to-mark-command
