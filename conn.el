@@ -2960,13 +2960,15 @@ Expansions and contractions are provided by functions in
 
 (defun conn-change-pair-outward (arg)
   "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
-  (conn-delete-pair-outward arg)
-  (conn-insert-pair))
+  (atomic-change-group
+    (conn-delete-pair-outward arg)
+    (conn-insert-pair)))
 
 (defun conn-change-pair-inward (arg)
   "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
-  (conn-delete-pair-inward arg)
-  (conn-insert-pair))
+  (atomic-change-group
+    (conn-delete-pair-inward arg)
+    (conn-insert-pair)))
 
 (defun conn-delete-pair-inward (arg)
   "Delete ARG chars at `point' and `mark'."
@@ -3016,9 +3018,9 @@ Expansions and contractions are provided by functions in
   (funcall (or (get thing :conn-thing-surrounder)
                'conn--surround-thing)
            (pcase (car (read-multiple-choice
-                        "Direction:" `((?s "surround")
-                                       (?d "delete")
-                                       (?c "change"))))
+                        "Action:" `((?s "surround")
+                                    (?d "delete")
+                                    (?c "change"))))
              (?s 'surround)
              (?d 'delete)
              (?c 'change))
