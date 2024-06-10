@@ -1085,18 +1085,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn-bounds-of-things (thing arg)
   (save-mark-and-excursion
-    (let* ((this-command (or (get thing 'forward-op)
-                             (if (< arg 0)
-                                 (get thing 'beginning-op)
-                               (get thing 'end-op))
-                             (error "Thing not defined")))
-           (current-prefix-arg arg)
-           (conn-this-command-start (point-marker))
-           (conn-this-command-handler (get this-command :conn-mark-handler))
-           (conn-this-command-thing thing))
+    (pcase-let* ((current-prefix-arg arg)
+                 (this-command (or (get thing 'forward-op)
+                                   (prog1 (get thing 'beginning-op)
+                                     (setq current-prefix-arg (- current-prefix-arg)))
+                                   (error "Thing not defined")))
+                 (conn-this-command-start (point-marker))
+                 (conn-this-command-handler (get this-command :conn-mark-handler))
+                 (conn-this-command-thing thing)
+                 (`(,beg . ,end) (bounds-of-thing-at-point thing)))
+      (goto-char beg)
       (call-interactively this-command)
-      (funcall conn-this-command-handler conn-this-command-start))
-    (cons (region-beginning) (region-end))))
+      (funcall conn-this-command-handler conn-this-command-start)
+      (cons (region-beginning) (if (< arg 0) end (region-end))))))
 
 ;;;;; Thing Definitions
 
@@ -1105,6 +1106,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing uuid :mark-key "$")
 (conn-register-thing string :mark-key "\"")
 (conn-register-thing filename :mark-key "/")
+
+(defun conn-forward-defun (N)
+  (interactive "p")
+  (if (< N 0)
+      (beginning-of-defun (abs N))
+    (end-of-defun N)))
+
+(conn-register-thing defun
+  :forward-op 'conn-forward-defun)
 
 (conn-register-thing region
   :bounds-op (lambda ()
@@ -1207,7 +1217,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'defun 'conn-sequential-thing-handler
- 'end-of-defun 'beginning-of-defun)
+ 'end-of-defun 'beginning-of-defun
+ 'conn-forward-defun)
 
 (conn-register-thing char
   :default-action 'conn-dispatch-jump)
@@ -2233,7 +2244,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
@@ -2245,7 +2256,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
@@ -2258,7 +2269,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
@@ -2271,7 +2282,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-new str)
@@ -2282,7 +2293,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
@@ -2293,7 +2304,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
@@ -2304,7 +2315,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         ('nil (user-error "No thing at point"))
         ((and `(,beg . ,end) reg
               (let dot (conn--dot-after-point beg)))
@@ -2318,7 +2329,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (copy-region-as-kill beg end)
          (conn-dispatch-fixup-whitespace))
@@ -2330,7 +2341,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (kill-region beg end)
          (conn-dispatch-fixup-whitespace))
@@ -2342,7 +2353,7 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (kill-region beg end)
          (conn-dispatch-fixup-whitespace))
@@ -2354,7 +2365,7 @@ state."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (conn-bounds-of-things thing current-prefix-arg)
+        (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
           (`(,beg . ,end)
            (setq str (filter-buffer-substring beg end))))))
     (if str
@@ -2368,7 +2379,7 @@ state."
         (push-mark nil t))
       (select-window window)
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing current-prefix-arg)
+      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (unless (region-active-p)
            (if (= (point) end)
@@ -2515,7 +2526,7 @@ state."
          (go :read-command)
          :end)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))
-    (list cmd action thing-arg)))
+    (list cmd action (* (if thing-sign -1 1) (or thing-arg 1)))))
 
 (defun conn--dispatch-narrow-labels (prompt overlays)
   (unwind-protect
@@ -6741,7 +6752,10 @@ apply to each contiguous component of the region."
   "_" 'calc-grab-sum-across
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
-  "<backspace>" 'clear-rectangle)
+  "d" 'open-rectangle
+  "<backspace>" 'clear-rectangle
+  "C-d" 'delete-whitespace-rectangle
+  "#" 'rectangle-number-lines)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
