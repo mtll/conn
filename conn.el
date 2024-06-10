@@ -579,10 +579,9 @@ If BUFFER is nil check `current-buffer'."
         (while (progn
                  (setq keys (read-key-sequence
                              (format prompt
-                                     (cond (thing-arg
-                                            (* (if thing-sign -1 1) thing-arg))
-                                           (thing-sign "[-1]")
-                                           (t "[1]"))
+                                     (format (if thing-arg "%s%s" "[%s1]")
+                                             (if thing-sign "-" "")
+                                             thing-arg)
                                      (if invalid
                                          (propertize "Not a valid thing command"
                                                      'face 'error)
@@ -2478,15 +2477,15 @@ state."
                               (when invalid
                                 (propertize "Invalid dispatch command"
                                             'face 'error)))
-                      (format -it-> (cond (thing-arg
-                                           (* (if thing-sign -1 1) thing-arg))
-                                          (thing-sign "[-1]")
-                                          (t "[1]")))
+                      (format -it-> (format (if thing-arg "%s%s" "[%s1]")
+                                            (if thing-sign "-" "")
+                                            thing-arg))
                       (read-key-sequence -it->))
                cmd (key-binding keys t)
                invalid nil)
          :loop
-         (when (get cmd :conn-command-thing) (go :end))
+         (when (get cmd :conn-command-thing)
+           (go :term))
          (pcase cmd
            ('keyboard-quit
             (keyboard-quit))
@@ -2524,7 +2523,7 @@ state."
            (_
             (setq invalid t)))
          (go :read-command)
-         :end)
+         :term)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))
     (list cmd action (* (if thing-sign -1 1) (or thing-arg 1)))))
 
@@ -5247,9 +5246,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message conn--wincontrol-help-format
-             (format (if conn--wincontrol-arg "%s" "[%s]")
-                     (* conn--wincontrol-arg-sign
-                        (or conn--wincontrol-arg 1))))))
+             (format (if conn--wincontrol-arg "%s%s" "[%s1]")
+                     (if (= conn--wincontrol-arg-sign -1) "-" "")
+                     conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
