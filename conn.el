@@ -832,11 +832,11 @@ If BUFFER is nil check `current-buffer'."
        :regexp regexp-flag
        :regexp-function (or replace-regexp-function
                             (and replace-char-fold
-	                         (not regexp-flag)
-	                         #'char-fold-to-regexp))
+                                 (not regexp-flag)
+                                 #'char-fold-to-regexp))
        :transform (lambda (string)
                     (when (and case-fold-search search-upper-case)
-	              (setq isearch-case-fold-search
+                      (setq isearch-case-fold-search
                             (isearch-no-upper-case-p string regexp-flag)))
                     string))
     (if regexp-flag
@@ -1227,21 +1227,25 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'buffer 'conn-individual-thing-handler
  'end-of-buffer 'beginning-of-buffer)
 
+(defun conn-line-forward-op (N)
+  (interactive "p")
+  (cond ((> N 0)
+         (forward-line N))
+        ((< N 0)
+         (let ((pt (point)))
+           (beginning-of-line)
+           (if (= pt (point))
+               (forward-line N)
+             (forward-line (1+ N)))))))
+
 (conn-register-thing line
-  :forward-op (lambda (N)
-                (cond ((> N 0)
-                       (forward-line N))
-                      ((< N 0)
-                       (let ((pt (point)))
-                         (beginning-of-line)
-                         (if (= pt (point))
-                             (forward-line N)
-                           (forward-line (1+ N)))))))
+  :forward-op 'conn-line-forward-op
   :dispatch-provider 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'line 'conn-sequential-thing-handler
- 'forward-line 'conn-backward-line)
+ 'forward-line 'conn-backward-line
+ 'conn-line-forward-op)
 
 (conn-register-thing line-column
   :dispatch-provider 'conn--dispatch-columns
@@ -7133,16 +7137,20 @@ determine if `conn-local-mode' should be enabled."
    'org-paragraph 'conn-sequential-thing-handler
    'org-forward-paragraph 'org-backward-paragraph)
 
+  (defun conn-org-sentence-forward (arg)
+    (interactive "p")
+    (if (>= arg 0)
+        (org-forward-sentence arg)
+      (org-backward-sentence (abs arg))))
+
   (conn-register-thing org-sentence
-    :forward-op (lambda (arg)
-                  (if (>= arg 0)
-                      (org-forward-sentence arg)
-                    (org-backward-sentence (abs arg))))
+    :forward-op 'conn-org-sentence-forward
     :mark-key "{"
     :modes 'org-mode)
 
   (conn-register-thing-commands
    'org-sentence 'conn-sequential-thing-handler
+   'conn-org-sentence-forward
    'org-forward-sentence 'org-backward-sentence)
 
   (conn-register-thing org-element
@@ -7281,6 +7289,15 @@ determine if `conn-local-mode' should be enabled."
   (declare-function outline-on-heading-p "outline")
   (declare-function outline-up-heading "outline")
 
+  (defun conn-forward-heading-op (N)
+    (interactive "p")
+    (cond ((< N 0)
+           (dotimes (_ (abs N))
+             (outline-previous-heading)))
+          ((> N 0)
+           (dotimes (_ N)
+             (outline-next-heading)))))
+
   (conn-register-thing heading
     :mark-key "H"
     :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
@@ -7290,13 +7307,11 @@ determine if `conn-local-mode' should be enabled."
                      (outline-up-heading 1))
                    (outline-mark-subtree)
                    (cons (region-beginning) (region-end))))
-    :forward-op (lambda (N)
-                  (cond ((< N 0)
-                         (dotimes (_ (abs N))
-                           (outline-previous-heading)))
-                        ((> N 0)
-                         (dotimes (_ N)
-                           (outline-next-heading))))))
+    :forward-op 'conn-forward-heading-op)
+
+  (conn-register-thing-commands
+   'heading 'conn-sequential-thing-handler
+   'conn-forward-heading-op)
 
   (conn-register-thing-commands
    'heading 'conn-individual-thing-handler
