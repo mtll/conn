@@ -1085,19 +1085,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn-bounds-of-things (thing arg)
   (save-mark-and-excursion
-    (pcase-let* ((current-prefix-arg arg)
-                 (this-command (or (get thing 'forward-op)
-                                   (prog1 (get thing 'beginning-op)
-                                     (setq current-prefix-arg (- current-prefix-arg)))
-                                   (error "Thing not defined")))
-                 (conn-this-command-start (point-marker))
-                 (conn-this-command-handler (get this-command :conn-mark-handler))
-                 (conn-this-command-thing thing)
-                 (`(,beg . ,end) (bounds-of-thing-at-point thing)))
-      (goto-char beg)
-      (call-interactively this-command)
-      (funcall conn-this-command-handler conn-this-command-start)
-      (cons (region-beginning) (if (< arg 0) end (region-end))))))
+    (if-let ((this-command (or (get thing 'forward-op)
+                               (prog1 (get thing 'beginning-op)
+                                 (setq current-prefix-arg (- current-prefix-arg))))))
+        (pcase-let* ((current-prefix-arg arg)
+                     (conn-this-command-start (point-marker))
+                     (conn-this-command-handler (get this-command :conn-mark-handler))
+                     (conn-this-command-thing thing)
+                     (`(,beg . ,end) (bounds-of-thing-at-point thing)))
+          (goto-char beg)
+          (call-interactively this-command)
+          (funcall conn-this-command-handler conn-this-command-start)
+          (cons (region-beginning) (if (< arg 0) end (region-end))))
+      (bounds-of-thing-at-point thing))))
 
 ;;;;; Thing Definitions
 
@@ -4194,12 +4194,14 @@ uninstersting marks."
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer."
   (interactive (list (if current-prefix-arg
-                         (pcase (car (read-multiple-choice
-                                      "Quote:"
-                                      '((?r "regexp-quote")
-                                        (?c "conn-completion-region-quote-function"))))
-                           (?r 'regexp-quote)
-                           (?c conn-completion-region-quote-function))
+                         (if conn-completion-region-quote-function
+                             (pcase (car (read-multiple-choice
+                                          "Quote:"
+                                          '((?r "regexp-quote")
+                                            (?c "conn-completion-region-quote-function"))))
+                               (?r 'regexp-quote)
+                               (?c conn-completion-region-quote-function))
+                           'regexp-quote)
                        'identity)))
   (insert (pcase-exhaustive conn--minibuffer-initial-region
             (`(,beg . ,end)
