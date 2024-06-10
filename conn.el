@@ -842,7 +842,8 @@ If BUFFER is nil check `current-buffer'."
     (if regexp-flag
         (read-regexp (format-prompt prompt (and (length> (ensure-list default) 0)
                                                 (query-replace-descr default)))
-                     (ensure-list default) 'conn--read-regexp-history)
+                     (mapcar #'regexp-quote (ensure-list default))
+                     'conn--read-regexp-history)
       (read-string (format-prompt prompt (and (length> (ensure-list default) 0)
                                               (query-replace-descr default)))
                    nil 'conn--read-string-history default))))
@@ -4192,10 +4193,14 @@ uninstersting marks."
 
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer."
-  (interactive (list (pcase current-prefix-arg
-                       ('(4) conn-completion-region-quote-function)
-                       ('nil 'identity)
-                       (_    'regexp-quote))))
+  (interactive (list (if current-prefix-arg
+                         (pcase (car (read-multiple-choice
+                                      "Quote:"
+                                      '((?r "regexp-quote")
+                                        (?c "conn-completion-region-quote-function"))))
+                           (?r 'regexp-quote)
+                           (?c conn-completion-region-quote-function))
+                       'identity)))
   (insert (pcase-exhaustive conn--minibuffer-initial-region
             (`(,beg . ,end)
              (with-minibuffer-selected-window
