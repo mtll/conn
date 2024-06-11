@@ -2238,7 +2238,8 @@ state."
 
 (defun conn-dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
-    (fixup-whitespace))
+    (fixup-whitespace)
+    (indent-for-tab-command))
   (when (save-excursion
           (beginning-of-line)
           (looking-at "\\s)*\n"))
@@ -2335,6 +2336,7 @@ state."
       (goto-char pt)
       (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
+         (pulse-momentary-highlight-region beg end)
          (copy-region-as-kill beg end)
          (conn-dispatch-fixup-whitespace))
         (_ (user-error "No thing at point")))))
@@ -2371,6 +2373,7 @@ state."
         (goto-char pt)
         (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
           (`(,beg . ,end)
+           (pulse-momentary-highlight-region beg end)
            (setq str (filter-buffer-substring beg end))))))
     (if str
         (insert str)
@@ -2772,38 +2775,37 @@ seconds."
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
-        (progn
-          (setf prefix-ovs (thread-last
-                             (conn-dispatch-finder thing-command)
-                             (funcall)
-                             (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                             (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                (alist-get (selected-window) prefix-ovs)
-                (seq-sort (lambda (a b)
-                            (< (abs (- (overlay-start a) (point)))
-                               (abs (- (overlay-start b) (point)))))
-                          (alist-get (selected-window) prefix-ovs))
-                labels (conn--create-label-strings
-                        (let ((sum 0))
-                          (dolist (p prefix-ovs sum)
-                            (setq sum (+ sum (length (cdr p))))))
-                        conn-dispatch-label-characters))
-          (catch 'term
-            (while t
-              (when (null labels)
-                (user-error "No matching candidates"))
-              (let* ((prefix (conn--read-labels
-                              prefix-ovs
-                              labels
-                              'conn--dispatch-label-overlays
-                              'prefix-overlay))
-                     (window (overlay-get prefix 'window))
-                     (pt (overlay-start prefix)))
-                (setq conn-this-command-thing
-                      (or (overlay-get prefix 'thing)
-                          (get thing-command :conn-command-thing)))
-                (funcall action window pt conn-this-command-thing)
-                (unless repeat (throw 'term nil))))))
+        (cl-loop
+         initially do
+         (setf prefix-ovs (thread-last
+                            (conn-dispatch-finder thing-command)
+                            (funcall)
+                            (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                            (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+               (alist-get (selected-window) prefix-ovs)
+               (seq-sort (lambda (a b)
+                           (< (abs (- (overlay-start a) (point)))
+                              (abs (- (overlay-start b) (point)))))
+                         (alist-get (selected-window) prefix-ovs))
+               labels (or (conn--create-label-strings
+                           (let ((sum 0))
+                             (dolist (p prefix-ovs sum)
+                               (setq sum (+ sum (length (cdr p))))))
+                           conn-dispatch-label-characters)
+                          (user-error "No matching candidates")))
+         do
+         (let* ((prefix (conn--read-labels
+                         prefix-ovs
+                         labels
+                         'conn--dispatch-label-overlays
+                         'prefix-overlay))
+                (window (overlay-get prefix 'window))
+                (pt (overlay-start prefix)))
+           (setq conn-this-command-thing
+                 (or (overlay-get prefix 'thing)
+                     (get thing-command :conn-command-thing)))
+           (funcall action window pt conn-this-command-thing))
+         while repeat)
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (dolist (ov ovs)
           (delete-overlay ov))))))
