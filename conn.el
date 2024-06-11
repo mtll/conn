@@ -492,7 +492,7 @@ Uses `read-regexp' to read the regexp."
 
 (declare-function conn--derived-mode-all-parents "conn.el")
 (if (version< "30" emacs-version)
-    (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents)
+    (defalias 'conn--derived-mode-all-parents #'derived-mode-all-parents)
   (defun conn--derived-mode-all-parents (mode)
     (let ((modes (list mode)))
       (while-let ((parent (get mode 'derived-mode-parent)))
@@ -1781,7 +1781,7 @@ If BUFFER is nil use current buffer."
   (setq conn--major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
-                   (nreverse (conn--derived-mode-all-parents major-mode))))
+                   (reverse (conn--derived-mode-all-parents major-mode))))
          mark-map-keys mode-map)
     (dolist (state conn-states)
       (setq mark-map-keys
@@ -6864,7 +6864,7 @@ apply to each contiguous component of the region."
   "M-1" 'delete-other-windows-vertically
   "M-2" 'tab-new
   "M-3" 'make-frame-command
-  "M-7" 'kill-this-buffer
+  "M-7" 'kill-buffer
   "M-8" 'tear-off-window
   "M-9" 'tab-detach
   "C-M-0" 'kill-buffer-and-window
