@@ -1179,17 +1179,28 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-sexp 'backward-sexp)
 
 (conn-register-thing list
-  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'sexp))
+  :forward-op 'forward-list)
 
 (conn-register-thing-commands
- 'list
- (lambda (beg)
-   (pcase (save-excursion
-            (goto-char beg)
-            (bounds-of-thing-at-point 'list))
-     (`(,b . ,e)
-      (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
+ 'list (lambda (beg)
+         (pcase (save-excursion
+                  (goto-char beg)
+                  (bounds-of-thing-at-point 'list))
+           (`(,b . ,e)
+            (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
  'up-list 'down-list 'backward-up-list)
+
+(conn-register-thing-commands
+ 'list (lambda (beg)
+         (cond ((> (point) beg)
+                (save-excursion
+                  (backward-list)
+                  (conn--push-ephemeral-mark (point))))
+               ((< (point) beg)
+                (save-excursion
+                  (forward-list)
+                  (conn--push-ephemeral-mark (point))))))
+ 'forward-list 'backward-list)
 
 (conn-register-thing whitespace
   :mark-key "SPC"
@@ -5873,14 +5884,14 @@ before each iteration."
 (transient-define-argument conn--kapply-order-infix ()
   "Dispatch on regions from last to first."
   :class 'transient-switch
-  :key "o"
+  :key "r"
   :description "Order"
   :argument "reverse")
 
 (transient-define-argument conn--kapply-empty-infix ()
   "Include empty regions in dispatch."
   :class 'transient-switch
-  :key "r"
+  :key "o"
   :description "Include Empty"
   :argument "empty")
 
@@ -6796,8 +6807,8 @@ apply to each contiguous component of the region."
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
   "u" (conn-remapping-command conn-backward-word-keys)
-  "(" 'backward-up-list
-  ")" 'down-list
+  "(" 'backward-list
+  ")" 'forward-list
   "{" (conn-remapping-command conn-backward-sentence-keys)
   "I" (conn-remapping-command conn-backward-paragraph-keys)
   "i" (conn-remapping-command conn-previous-line-keys)
