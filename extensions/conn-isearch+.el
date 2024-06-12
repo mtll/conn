@@ -46,14 +46,12 @@
 ;;;###autoload
 (defun conn-isearch-forward-in-dots ()
   (interactive)
-  (conn-dot-state)
   (isearch-mode t)
   (conn-isearch-in-dot-toggle))
 
 ;;;###autoload
 (defun conn-isearch-backward-in-dots ()
   (interactive)
-  (conn-dot-state)
   (isearch-mode nil)
   (conn-isearch-in-dot-toggle))
 
