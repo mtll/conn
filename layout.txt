@@ -1,7 +1,7 @@
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
 ┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │ Backspace    ┃
-┃          │          │          │          │  ispell  │          │          │          │   calc   │ ←up list │  →down   │  complex │ register │              ┃
-┃          │          │          │          │          │          │          │          │ dispatch │          │   list   │  command │ seperator│  ←delete     ┃
+┃          │          │          │          │  ispell  │          │          │          │   calc   │  ←list   │  →list   │  complex │ register │              ┃
+┃          │          │          │          │          │          │          │          │ dispatch │          │          │  command │ seperator│  ←delete     ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
 ┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
 ┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃
@@ -12,8 +12,8 @@
 ┃    indent    │   map    │          │          │   map    │  things  │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃    region    ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │   edit   │   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │   kill   │   kill   │  macro   ┃
-┃              │    map   │  region  │  state   │   map    │  region  │          │          │          │          │   load   │  append  │  prepend │ dispatch ┃
+┃              │   edit   │   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │  up list │   down   │  macro   ┃
+┃              │    map   │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │   list   │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
 ┃                │   M-X    │          │          │   dot    │          │   mark   │  ←line   │  ↓para   │  →line   │          │ surround │                   ┃
