@@ -6772,7 +6772,9 @@ apply to each contiguous component of the region."
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
-  "s" 'conn-surround-thing)
+  "s" 'conn-surround-thing
+  "p" 'conn-kill-prepend-region
+  "a" 'conn-kill-append-region)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
@@ -6809,7 +6811,10 @@ apply to each contiguous component of the region."
   "u" (conn-remapping-command conn-backward-word-keys)
   "(" 'backward-list
   ")" 'forward-list
-  "{" (conn-remapping-command conn-backward-sentence-keys)
+  "[" 'up-list
+  "]" 'down-list
+  "{" (conn-remapping-command conn-forward-sentence-keys)
+  "}" (conn-remapping-command conn-backward-sentence-keys)
   "I" (conn-remapping-command conn-backward-paragraph-keys)
   "i" (conn-remapping-command conn-previous-line-keys)
   "J" 'conn-beginning-of-inner-line
@@ -6822,7 +6827,6 @@ apply to each contiguous component of the region."
   "m" (conn-remapping-command conn-forward-sexp-keys)
   "N" (conn-remapping-command conn-beginning-of-defun-keys)
   "n" (conn-remapping-command conn-backward-sexp-keys)
-  "}" (conn-remapping-command conn-forward-sentence-keys)
   "<" 'conn-backward-line
   ">" 'forward-line)
 
@@ -6886,11 +6890,9 @@ apply to each contiguous component of the region."
   "=" 'indent-relative
   "$" 'ispell-word
   "*" 'calc-dispatch
-  "[" 'conn-kill-prepend-region
   "\"" 'conn-surround-thing
   "<tab>" 'indent-region
   "TAB" 'indent-region
-  "]" 'conn-kill-append-region
   "'" 'conn-other-place-prefix
   "C" 'conn-copy-region
   "c" (conn-remapping-command (key-parse "C-c"))
@@ -7193,8 +7195,8 @@ determine if `conn-local-mode' should be enabled."
 (with-eval-after-load 'paredit
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'paredit-mode)
-    "}" 'paredit-forward-down
-    "{" 'paredit-backward-down
+    "[" 'paredit-forward-down
+    "]" 'paredit-backward-down
     "(" 'paredit-backward-up
     ")" 'paredit-forward-up)
 
