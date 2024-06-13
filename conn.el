@@ -5996,6 +5996,7 @@ before each iteration."
   :key "w"
   :description "On String"
   (interactive (list (transient-args transient-current-command)))
+  (deactivate-mark)
   (conn--thread -->
       (pcase-let* ((`(,thing ,beg ,end) (conn--read-thing-region))
                    (string (conn--read-from-with-preview
@@ -6040,6 +6041,7 @@ apply to each contiguous component of the region."
   :key "v"
   :description "On Regions"
   (interactive (list (transient-args transient-current-command)))
+  (deactivate-mark)
   (conn--thread -->
       (region-bounds)
     (conn--kapply-region-iterator --> (member "reverse" args))
