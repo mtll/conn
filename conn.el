@@ -1177,7 +1177,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing sexp
   :forward-op 'forward-sexp
-  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix '(sexp symbol) 1 t))
+  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
 
 (conn-register-thing-commands
  'sexp 'conn-sequential-thing-handler
@@ -2196,7 +2196,9 @@ state."
   "f" 'conn-dispatch-yank-replace
   "d" 'conn-dispatch-grab-replace
   "g" 'conn-dispatch-goto
-  "z" 'conn-dispatch-jump)
+  "z" 'conn-dispatch-jump
+  "l" 'forward-line
+  "u" 'forward-symbol)
 
 (defvar conn-dispatch-command-descriptions
   '((conn-dispatch-kill-append . "Kill Append")
@@ -4678,6 +4680,16 @@ of deleting it."
   (funcall (conn--without-conn-maps
              (key-binding conn-yank-keys t))))
 
+(defun conn--end-of-inner-line-1 ()
+  (goto-char (line-end-position))
+  (when-let ((cs (and (conn--point-in-comment-p)
+                      (save-excursion
+                        (comment-search-backward
+                         (line-beginning-position) t)))))
+    (goto-char cs))
+  (skip-chars-backward " \t" (line-beginning-position))
+  (when (bolp) (skip-chars-forward " \t" (line-end-position))))
+
 (defun conn-end-of-inner-line (&optional N)
   "Go to point after the last non-whitespace or comment character in line.
 Immediately repeating this command goes to the point at end
@@ -4691,14 +4703,7 @@ With a non-nil prefix arg go `forward-line' by N instead."
               conn-this-command-thing 'line))
     (let ((point (point))
           (mark (mark t)))
-      (goto-char (line-end-position))
-      (when-let ((cs (and (conn--point-in-comment-p)
-                          (save-excursion
-                            (comment-search-backward
-                             (line-beginning-position) t)))))
-        (goto-char cs))
-      (skip-chars-backward " \t" (line-beginning-position))
-      (when (bolp) (skip-chars-forward " \t" (line-end-position)))
+      (conn--end-of-inner-line-1)
       (when (and (= point (point))
                  (or (= mark (save-excursion
                                (back-to-indentation)
