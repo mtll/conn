@@ -336,7 +336,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn-forward-list-keys (key-parse "C-M-n"))
 (defvar conn-backward-list-keys (key-parse "C-M-p"))
 
-(defvar-keymap conn-mark-thing-map)
+(defvar-keymap conn-mark-thing-map
+  "L" 'forward-line)
 
 ;;;;; Overlay Category Properties
 
@@ -4677,49 +4678,56 @@ of deleting it."
   (funcall (conn--without-conn-maps
              (key-binding conn-yank-keys t))))
 
-(defun conn--end-of-inner-line-1 ()
-  (goto-char (line-end-position))
-  (when-let ((cs (and (conn--point-in-comment-p)
-                      (save-excursion
-                        (comment-search-backward
-                         (line-beginning-position) t)))))
-    (goto-char cs))
-  (skip-chars-backward " \t" (line-beginning-position))
-  (when (bolp) (skip-chars-forward " \t" (line-end-position))))
-
 (defun conn-end-of-inner-line (&optional N)
   "Go to point after the last non-whitespace or comment character in line.
 Immediately repeating this command goes to the point at end
-of line proper."
+of line proper.
+With a non-nil prefix arg go `forward-line' by N instead."
   (interactive "P")
-  (let ((point (point))
-        (mark (mark t)))
-    (when N (forward-line N))
-    (conn--end-of-inner-line-1)
-    (when (and (= point (point))
-               (or (= mark (save-excursion
-                             (back-to-indentation)
-                             (point)))
-                   (region-active-p)))
+  (if N
+      (progn
+        (forward-line N)
+        (setq conn-this-command-handler (get 'forward-line :conn-mark-handler)
+              conn-this-command-thing 'line))
+    (let ((point (point))
+          (mark (mark t)))
       (goto-char (line-end-position))
-      (setq conn-this-command-thing 'outer-line))))
+      (when-let ((cs (and (conn--point-in-comment-p)
+                          (save-excursion
+                            (comment-search-backward
+                             (line-beginning-position) t)))))
+        (goto-char cs))
+      (skip-chars-backward " \t" (line-beginning-position))
+      (when (bolp) (skip-chars-forward " \t" (line-end-position)))
+      (when (and (= point (point))
+                 (or (= mark (save-excursion
+                               (back-to-indentation)
+                               (point)))
+                     (region-active-p)))
+        (goto-char (line-end-position))
+        (setq conn-this-command-thing 'outer-line)))))
 
 (defun conn-beginning-of-inner-line (&optional N)
   "Go to first non-whitespace character in line.
 Immediately repeating this command goes to the point at beginning
-of line proper."
+of line proper.
+With a non-nil prefix arg go `forward-line' by -N instead."
   (interactive "P")
-  (let ((point (point))
-        (mark (mark t)))
-    (when N (forward-line (- N)))
-    (back-to-indentation)
-    (when (and (= point (point))
-               (or (= mark (save-excursion
-                             (conn--end-of-inner-line-1)
-                             (point)))
-                   (region-active-p)))
-      (goto-char (line-beginning-position))
-      (setq conn-this-command-thing 'outer-line))))
+  (if N
+      (progn
+        (forward-line (- N))
+        (setq conn-this-command-thing 'line
+              conn-this-command-handler (get :conn-mark-handler 'forward-line)))
+    (let ((point (point))
+          (mark (mark t)))
+      (back-to-indentation)
+      (when (and (= point (point))
+                 (or (= mark (save-excursion
+                               (conn--end-of-inner-line-1)
+                               (point)))
+                     (region-active-p)))
+        (goto-char (line-beginning-position))
+        (setq conn-this-command-thing 'outer-line)))))
 
 ;; register-load from consult
 (defun conn-register-load (reg &optional arg)
@@ -6842,9 +6850,7 @@ apply to each contiguous component of the region."
   "M" (conn-remapping-command conn-end-of-defun-keys)
   "m" (conn-remapping-command conn-forward-sexp-keys)
   "N" (conn-remapping-command conn-beginning-of-defun-keys)
-  "n" (conn-remapping-command conn-backward-sexp-keys)
-  "<" 'conn-backward-line
-  ">" 'forward-line)
+  "n" (conn-remapping-command conn-backward-sexp-keys))
 
 (define-keymap
   :keymap conn-common-map
