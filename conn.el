@@ -331,6 +331,10 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn-forward-sentence-keys (key-parse "M-e"))
 (defvar conn-backward-delete-char-keys (key-parse "DEL"))
 (defvar conn-delete-char-keys (key-parse "C-d"))
+(defvar conn-backward-up-list-keys (key-parse "C-M-<up>"))
+(defvar conn-down-list-keys (key-parse "C-M-<down>"))
+(defvar conn-forward-list-keys (key-parse "C-M-n"))
+(defvar conn-backward-list-keys (key-parse "C-M-p"))
 
 (defvar-keymap conn-mark-thing-map)
 
@@ -1183,12 +1187,24 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'list (lambda (beg)
-         (pcase (save-excursion
-                  (goto-char beg)
-                  (bounds-of-thing-at-point 'list))
-           (`(,b . ,e)
-            (conn--push-ephemeral-mark (if (< (point) beg) e b)))))
- 'up-list 'down-list 'backward-up-list)
+         (unless (region-active-p)
+           (cond ((> (point) beg)
+                  (save-excursion
+                    (forward-thing 'list -1)
+                    (conn--push-ephemeral-mark (point))))
+                 ((< (point) beg)
+                  (save-excursion
+                    (forward-thing 'list 1)
+                    (conn--push-ephemeral-mark (point)))))))
+ 'up-list 'backward-up-list)
+
+(conn-register-thing-commands
+ 'list (lambda (_beg)
+         (unless (region-active-p)
+           (pcase (ignore-errors (bounds-of-thing-at-point 'list))
+             (`(,_ . ,end)
+              (conn--push-ephemeral-mark (1- end))))))
+ 'down-list)
 
 (conn-register-thing-commands
  'list (lambda (beg)
@@ -6809,12 +6825,12 @@ apply to each contiguous component of the region."
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
   "u" (conn-remapping-command conn-backward-word-keys)
-  "(" 'backward-list
-  ")" 'forward-list
-  "[" 'up-list
-  "]" 'down-list
-  "{" (conn-remapping-command conn-forward-sentence-keys)
-  "}" (conn-remapping-command conn-backward-sentence-keys)
+  "(" (conn-remapping-command conn-backward-list-keys)
+  ")" (conn-remapping-command conn-forward-list-keys)
+  "[" (conn-remapping-command conn-backward-up-list-keys)
+  "]" (conn-remapping-command conn-down-list-keys)
+  "{" (conn-remapping-command conn-backward-sentence-keys)
+  "}" (conn-remapping-command conn-forward-sentence-keys)
   "I" (conn-remapping-command conn-backward-paragraph-keys)
   "i" (conn-remapping-command conn-previous-line-keys)
   "J" 'conn-beginning-of-inner-line
@@ -7207,11 +7223,14 @@ determine if `conn-local-mode' should be enabled."
 
   (defun conn-paredit-list-handler (beg)
     (unless (region-active-p)
-      (pcase (save-excursion
-               (goto-char beg)
-               (ignore-errors (bounds-of-thing-at-point 'list)))
-        (`(,b . ,e)
-         (conn--push-ephemeral-mark (if (< (point) beg) e b))))))
+      (cond ((> (point) beg)
+             (save-excursion
+               (forward-thing 'sexp -1)
+               (conn--push-ephemeral-mark (point))))
+            ((< (point) beg)
+             (save-excursion
+               (forward-thing 'sexp 1)
+               (conn--push-ephemeral-mark (point)))))))
 
   (conn-register-thing-commands
    'list 'conn-paredit-list-handler
