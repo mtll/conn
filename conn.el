@@ -59,6 +59,14 @@
 (defvar kmacro-step-edit-replace)
 (defvar conn-state-map)
 
+(defvar conn-dispatch-providers-alist
+  '((t . conn--dispatch-chars)))
+
+(defvar conn-dispatch-default-actions-alist
+  '((t . conn-dispatch-goto)))
+
+(defvar conn-mark-handler-alist nil)
+
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
 
@@ -619,7 +627,7 @@ If BUFFER is nil check `current-buffer'."
       (let ((this-command cmd)
             (current-prefix-arg thing-arg)
             (conn-this-command-start (point-marker))
-            (conn-this-command-handler (get cmd :conn-mark-handler))
+            (conn-this-command-handler (conn-get-mark-handler cmd))
             (conn-this-command-thing (get cmd :conn-command-thing)))
         (call-interactively cmd)
         (when conn-this-command-handler
@@ -858,8 +866,9 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--repeat-advice (&rest app)
   (unwind-protect
       (apply app)
-    (setq conn-this-command-thing (get this-command :conn-command-thing)
-          conn-this-command-handler (get this-command :conn-mark-handler))))
+    (setq conn-this-command-thing (conn--command-property :conn-command-thing)
+          conn-this-command-handler (or (alist-get this-command conn-mark-handler-alist)
+                                        (conn--command-property :conn-mark-handler)))))
 
 (defun conn--push-mark-ad (&rest _)
   (unless conn--ephemeral-mark
@@ -901,6 +910,10 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Mark
 
+(defun conn-get-mark-handler (command)
+  (or (alist-get command conn-mark-handler-alist)
+      (get command :conn-mark-handler)))
+
 (defmacro conn--thing-bounds-command (thing)
   (let ((name (conn--symbolicate "conn-mark-" thing)))
     `(progn
@@ -914,35 +927,31 @@ If BUFFER is nil check `current-buffer'."
        (put ',name :conn-command-thing ',thing)
        ',name)))
 
-(defmacro conn-register-thing (thing &rest rest)
+(defun conn-register-thing (thing &rest rest)
   "Register a new THING.
 
 \(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-KEY)"
-  (declare (indent 1))
-  (macroexp-progn
-   (nconc
-    `((intern ,(symbol-name thing)))
-    (when-let ((finder (plist-get rest :dispatch-provider)))
-      `((put ',thing :conn-dispatch-finder ,finder)))
-    (when-let ((action (plist-get rest :default-action)))
-      `((put ',thing :conn-dispatch-default-action ,action)))
-    (when-let ((forward (plist-get rest :forward-op)))
-      `((put ',thing 'forward-op ,forward)))
-    (when-let ((beg (plist-get rest :beg-op)))
-      `((put ',thing 'beginning-op ,beg)))
-    (when-let ((end (plist-get rest :end-op)))
-      `((put ',thing 'end-op ,end)))
-    (when-let ((bounds (plist-get rest :bounds-op)))
-      `((put ',thing 'bounds-of-thing-at-point ,bounds)))
-    (when-let ((binding (plist-get rest :mark-key)))
-      `((let ((mark-command (conn--thing-bounds-command ,thing))
-              (binding ,binding))
-          ,(if (plist-get rest :modes)
-               `(dolist (mode (put ',thing :conn-thing-modes
-                                   (ensure-list ,(plist-get rest :modes))))
-                  (keymap-set (conn-get-mode-things-map mode)
-                              binding mark-command))
-             `(keymap-set conn-mark-thing-map binding mark-command))))))))
+  (intern (symbol-name thing))
+  (when-let ((finder (plist-get rest :dispatch-provider)))
+    (setf (alist-get thing conn-dispatch-providers-alist) finder))
+  (when-let ((action (plist-get rest :default-action)))
+    (setf (alist-get thing conn-dispatch-default-actions-alist) action))
+  (when-let ((forward (plist-get rest :forward-op)))
+    (put thing 'forward-op forward))
+  (when-let ((beg (plist-get rest :beg-op)))
+    (put thing 'beginning-op beg))
+  (when-let ((end (plist-get rest :end-op)))
+    (put thing 'end-op end))
+  (when-let ((bounds (plist-get rest :bounds-op)))
+    (put thing 'bounds-of-thing-at-point bounds))
+  (when-let ((binding (plist-get rest :mark-key))
+             (mark-command (conn--thing-bounds-command thing)))
+    (if (plist-get rest :modes)
+        (dolist (mode (put thing :conn-thing-modes
+                           (ensure-list (plist-get rest :modes))))
+          (keymap-set (conn-get-mode-things-map mode)
+                      binding mark-command))
+      (keymap-set conn-mark-thing-map binding mark-command))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
@@ -1042,7 +1051,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--mark-pre-command-hook ()
   (set-marker conn-this-command-start (point))
-  (setq conn-this-command-handler (conn--command-property :conn-mark-handler)
+  (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-alist)
+                                      (conn--command-property :conn-mark-handler))
         conn-this-command-thing (conn--command-property :conn-command-thing)))
 
 (defvar conn--last-command-amalgamating nil)
@@ -1080,13 +1090,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (delete-overlay ov)))
   (setq conn--mark-cursor nil))
 
-(defun conn--get-this-command-thing ()
-  (or conn-this-command-thing
-      (get this-command :conn-command-thing)))
-
-(defun conn-set-command-finder (command finder)
-  (put command :conn-dispatch-finder finder))
-
 (defun conn-bounds-of-things (thing arg)
   (condition-case _err
       (save-mark-and-excursion
@@ -1094,7 +1097,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                               (get thing 'beginning-op)))
                      (current-prefix-arg arg)
                      (conn-this-command-start (point-marker))
-                     (conn-this-command-handler (get cmd :conn-mark-handler))
+                     (conn-this-command-handler (conn-get-mark-handler cmd))
                      (conn-this-command-thing thing)
                      (`(,beg . ,end) (bounds-of-thing-at-point thing)))
           (goto-char beg)
@@ -1105,11 +1108,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Thing Definitions
 
-(conn-register-thing url :mark-key "!")
-(conn-register-thing email :mark-key "@")
-(conn-register-thing uuid :mark-key "$")
-(conn-register-thing string :mark-key "\"")
-(conn-register-thing filename :mark-key "/")
+(conn-register-thing 'url :mark-key "!")
+(conn-register-thing 'email :mark-key "@")
+(conn-register-thing 'uuid :mark-key "$")
+(conn-register-thing 'string :mark-key "\"")
+(conn-register-thing 'filename :mark-key "/")
 
 (defun conn-forward-defun (N)
   (interactive "p")
@@ -1117,18 +1120,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (beginning-of-defun (abs N))
     (end-of-defun N)))
 
-(conn-register-thing defun
-  :forward-op 'conn-forward-defun)
+(conn-register-thing 'defun
+  :forward-op 'conn-forward-defun
+  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'defun t))
 
-(conn-register-thing region
+(conn-register-thing 'region
   :bounds-op (lambda ()
                (cons (region-beginning) (region-end))))
 
-(conn-register-thing buffer-after-point
+(conn-register-thing 'buffer-after-point
   :bounds-op (lambda () (cons (point) (point-max)))
   :mark-key ">")
 
-(conn-register-thing buffer-before-point
+(conn-register-thing 'buffer-before-point
   :bounds-op (lambda () (cons (point-min) (point)))
   :mark-key "<")
 
@@ -1137,7 +1141,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'conn-toggle-mark-command
  'conn-set-mark-command)
 
-(conn-register-thing symbol
+(conn-register-thing 'symbol
   :forward-op 'forward-symbol
   :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
 
@@ -1145,7 +1149,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'symbol 'conn-sequential-thing-handler
  'forward-symbol 'conn-backward-symbol)
 
-(conn-register-thing page
+(conn-register-thing 'page
   :mark-key "p"
   :forward-op 'forward-page)
 
@@ -1153,7 +1157,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'page 'conn-individual-thing-handler
  'forward-page 'backward-page)
 
-(conn-register-thing dot
+(conn-register-thing 'dot
   :beg-op (lambda () (conn-previous-dot 1))
   :end-op (lambda () (conn-next-dot 1))
   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'dot))
@@ -1167,7 +1171,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-char 'backward-char
  'conn-forward-char 'conn-backward-char)
 
-(conn-register-thing word
+(conn-register-thing 'word
   :forward-op 'forward-word
   :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
 
@@ -1175,7 +1179,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'word 'conn-sequential-thing-handler
  'forward-word 'backward-word)
 
-(conn-register-thing sexp
+(conn-register-thing 'sexp
   :forward-op 'forward-sexp
   :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
 
@@ -1183,7 +1187,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'sexp 'conn-sequential-thing-handler
  'forward-sexp 'backward-sexp)
 
-(conn-register-thing list
+(conn-register-thing 'list
   :forward-op 'forward-list)
 
 (conn-register-thing-commands
@@ -1219,7 +1223,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (conn--push-ephemeral-mark (point))))))
  'forward-list 'backward-list)
 
-(conn-register-thing whitespace
+(conn-register-thing 'whitespace
   :mark-key "SPC"
   :forward-op 'forward-whitespace)
 
@@ -1227,14 +1231,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'whitespace 'conn-individual-thing-handler
  'forward-whitespace 'conn-backward-whitespace)
 
-(conn-register-thing sentence
-  :forward-op 'forward-sentence)
+(conn-register-thing 'sentence
+  :forward-op 'forward-sentence
+  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'sentence t))
 
 (conn-register-thing-commands
  'sentence 'conn-sequential-thing-handler
  'forward-sentence 'backward-sentence)
 
-(conn-register-thing paragraph
+(conn-register-thing 'paragraph
   :forward-op 'forward-paragraph
   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'paragraph t))
 
@@ -1247,7 +1252,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'end-of-defun 'beginning-of-defun
  'conn-forward-defun)
 
-(conn-register-thing char
+(conn-register-thing 'char
   :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
@@ -1265,7 +1270,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (forward-line N)
              (forward-line (1+ N)))))))
 
-(conn-register-thing line
+(conn-register-thing 'line
   :forward-op 'conn-line-forward-op
   :dispatch-provider 'conn--dispatch-lines)
 
@@ -1274,7 +1279,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-line 'conn-backward-line
  'conn-line-forward-op)
 
-(conn-register-thing line-column
+(conn-register-thing 'line-column
   :dispatch-provider 'conn--dispatch-columns
   :default-action 'conn-dispatch-jump)
 
@@ -1283,7 +1288,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'next-line 'previous-line
  'rectangle-next-line 'rectangle-previous-line)
 
-(conn-register-thing outer-line
+(conn-register-thing 'outer-line
   :beg-op (lambda () (move-beginning-of-line nil))
   :end-op (lambda () (move-end-of-line nil))
   :dispatch-provider 'conn--dispatch-lines)
@@ -1292,7 +1297,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'outer-line 'conn-individual-thing-handler
  'move-beginning-of-line 'move-end-of-line)
 
-(conn-register-thing inner-line
+(conn-register-thing 'inner-line
   :bounds-op (lambda ()
                (cons
                 (save-excursion
@@ -2182,7 +2187,9 @@ state."
 
 ;;;; Thing Dispatch
 
-(defvar-keymap conn-dispatch-command-maps
+(defvar conn-dispatch-all-things-collector 'conn--dispatch-all-things-1)
+
+(defvar-keymap conn-dispatch-command-map
   "[" 'conn-dispatch-kill-append
   "a" 'conn-dispatch-copy-append
   "]" 'conn-dispatch-kill-prepend
@@ -2196,9 +2203,12 @@ state."
   "f" 'conn-dispatch-yank-replace
   "d" 'conn-dispatch-grab-replace
   "g" 'conn-dispatch-goto
-  "z" 'conn-dispatch-jump
-  "l" 'forward-line
-  "u" 'forward-symbol)
+  "z" 'conn-dispatch-jump)
+
+(defvar-local conn-dispatch-override-maps
+    (list (define-keymap
+            "l" 'forward-line
+            "u" 'forward-symbol)))
 
 (defvar conn-dispatch-command-descriptions
   '((conn-dispatch-kill-append . "Kill Append")
@@ -2216,35 +2226,27 @@ state."
     (conn-dispatch-yank-replace . "Yank Replace")
     (conn-dispatch-grab-replace . "Grab Replace")))
 
-(defvar conn-dispatch-default-finder 'conn--dispatch-chars)
-
-(defvar conn-dispatch-default-action 'conn-dispatch-goto)
-
 (defun conn-dispatch-finder (command)
-  (or (get command :conn-dispatch-finder)
-      (get (get command :conn-command-thing) :conn-dispatch-finder)
-      conn-dispatch-default-finder))
+  (or (alist-get command conn-dispatch-providers-alist)
+      (alist-get (get command :conn-command-thing) conn-dispatch-providers-alist)
+      (alist-get t conn-dispatch-providers-alist)))
 
 (defun conn-dispatch-default-action (command)
-  (or (get command :conn-dispatch-default-action)
-      (get (get command :conn-command-thing) :conn-dispatch-default-action)
-      conn-dispatch-default-action))
+  (or (alist-get command conn-dispatch-default-actions-alist)
+      (alist-get (get command :conn-command-thing) conn-dispatch-default-actions-alist)
+      (alist-get t conn-dispatch-default-actions-alist)))
 
-(conn-set-command-finder
- 'conn-end-of-inner-line
- 'conn--dispatch-inner-lines-end)
+(setf (alist-get 'conn-end-of-inner-line conn-dispatch-providers-alist)
+      'conn--dispatch-inner-lines-end)
 
-(conn-set-command-finder
- 'move-end-of-line
- 'conn--dispatch-lines-end)
+(setf (alist-get 'move-end-of-line conn-dispatch-providers-alist)
+      'conn--dispatch-lines-end)
 
-(conn-set-command-finder
- 'conn-backward-symbol
- (apply-partially 'conn--dispatch-all-things 'symbol t))
+(setf (alist-get 'conn-backward-symbol conn-dispatch-providers-alist)
+      (apply-partially 'conn--dispatch-all-things 'symbol t))
 
-(conn-set-command-finder
- 'backward-word
- (apply-partially 'conn--dispatch-all-things 'word t))
+(setf (alist-get 'backward-word conn-dispatch-providers-alist)
+      (apply-partially 'conn--dispatch-all-things 'word t))
 
 (defun conn-dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -2476,8 +2478,9 @@ state."
 
 (defun conn--dispatch-read-command ()
   (let ((keymap (make-composed-keymap
-                 (append conn-dispatch-command-maps
-                         (conn--read-thing-keymap))))
+                 (append conn-dispatch-override-maps
+                         (list conn-dispatch-command-map
+                               (conn--read-thing-keymap)))))
         (prompt (concat "Thing Command "
                         (propertize "%s" 'face 'transient-value)
                         " ("
@@ -2486,7 +2489,8 @@ state."
         keys cmd invalid action thing-arg thing-sign)
     (internal-push-keymap keymap 'overriding-terminal-local-map)
     (unwind-protect
-        (cl-tagbody
+        (cl-prog
+         nil
          :read-command
          (setq keys (conn--thread -->
                         (or (alist-get action conn-dispatch-command-descriptions)
@@ -2496,15 +2500,17 @@ state."
                                 (propertize "Invalid dispatch command"
                                             'face 'error)))
                       (format --> (format (if thing-arg "%s%s" "[%s1]")
-                                            (if thing-sign "-" "")
-                                            thing-arg))
+                                          (if thing-sign "-" "")
+                                          thing-arg))
                       (read-key-sequence -->))
                cmd (key-binding keys t)
                invalid nil)
          :loop
-         (when (get cmd :conn-command-thing)
-           (go :term))
          (pcase cmd
+           (`(,thing ,finder . ,default-action)
+            (cl-return
+             (list thing finder (or action default-action)
+                   (* (if thing-sign -1 1) (or thing-arg 1)))))
            ('keyboard-quit
             (keyboard-quit))
            ('digit-argument
@@ -2523,11 +2529,11 @@ state."
                           "Command: "
                           (lambda (string pred action)
                             (if (eq action 'metadata)
-                                `(metadata
-                                  ,(cons 'affixation-function
-                                         (conn--dispatch-make-command-affixation keymap))
-                                  (category . conn-dispatch-command))
-                              (complete-with-action action obarray string pred)))
+            `(metadata
+              ,(cons 'affixation-function
+                     (conn--dispatch-make-command-affixation keymap))
+              (category . conn-dispatch-command))
+          (complete-with-action action obarray string pred)))
                           (lambda (sym)
                             (and (functionp sym)
                                  (not (eq sym 'help))
@@ -2536,14 +2542,18 @@ state."
                           t))))
             (internal-push-keymap keymap 'overriding-terminal-local-map)
             (go :loop))
-           ((guard (where-is-internal cmd conn-dispatch-command-maps t))
+           ((guard (get cmd :conn-command-thing))
+            (cl-return
+             (list (get cmd :conn-command-thing)
+                   (conn-dispatch-finder cmd)
+                   (or action (conn-dispatch-default-action cmd))
+                   action (* (if thing-sign -1 1) (or thing-arg 1)))))
+           ((guard (where-is-internal cmd conn-dispatch-command-map t))
             (setq action (unless (eq cmd action) cmd)))
            (_
             (setq invalid t)))
-         (go :read-command)
-         :term)
-      (internal-pop-keymap keymap 'overriding-terminal-local-map))
-    (list cmd action (* (if thing-sign -1 1) (or thing-arg 1)))))
+         (go :read-command))
+      (internal-pop-keymap keymap 'overriding-terminal-local-map))))
 
 (defun conn--dispatch-narrow-labels (prompt overlays)
   (unwind-protect
@@ -2616,29 +2626,37 @@ state."
   (cdr (conn--read-string-with-timeout-1 nil t)))
 
 (defun conn--dispatch-all-things-1 (thing)
-  (let (ovs)
-    (with-restriction (window-start) (window-end)
-      (ignore-error scan-error
-        (save-excursion
-          (forward-thing thing -1)
-          (while (/= (point) (point-min))
-            (unless (invisible-p (point))
-              (push (point) ovs))
-            (forward-thing thing -1))))
-      (ignore-error scan-error
-        (save-excursion
-          (while (/= (point) (point-max))
-            (forward-thing thing -1)
-            (unless (invisible-p (point))
-              (let ((beg (car (bounds-of-thing-at-point thing))))
-                (when (/= beg (car ovs)) (push beg ovs))))))))
+  (let ((last-point (point))
+        ovs)
+    (ignore-error scan-error
+      (save-excursion
+        (forward-thing thing -1)
+        (while (and (/= (point) last-point)
+                    (>= (point) (window-start)))
+          (setq last-point (point))
+          (unless (invisible-p (point))
+            (push (point) ovs))
+          (forward-thing thing -1))))
+    (ignore-error scan-error
+      (save-excursion
+        (setq last-point (point))
+        (forward-thing thing 1)
+        (while (/= (point) last-point)
+          (setq last-point (point))
+          (unless (invisible-p (point))
+            (pcase (bounds-of-thing-at-point thing)
+              ((or 'nil (and `(,beg . ,_) (guard (> beg (window-end)))))
+               (signal 'scan-error nil))
+              ((and `(,beg . ,_) (guard (and (car ovs) (/= beg (car ovs)))))
+               (push beg ovs))))
+          (forward-thing thing 1))))
     (cl-loop for pt in ovs collect
              (conn--make-preview-overlay pt 1 thing))))
 
 (defun conn--dispatch-all-things (thing &optional in-windows)
   (cl-loop for win in (conn--preview-get-windows in-windows)
            nconc (with-selected-window win
-                   (conn--dispatch-all-things-1 thing))))
+                   (funcall conn-dispatch-all-things-collector thing))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))
@@ -2756,7 +2774,7 @@ state."
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
-(defun conn-dispatch-on-things (thing-command action arg &optional repeat)
+(defun conn-dispatch-on-things (thing finder action arg &optional repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -2764,7 +2782,7 @@ to be performed followed by a THING to perform it on.  If
 no ACTION is selected the default ACTION is to go to the THING.
 
 Actions and things are selected via keybindings.  Actions are
-bound in the keymaps in `conn-dispatch-command-maps' which are
+bound in the keymaps in `conn-dispatch-command-maps which are
 active during prompting.  Things are associated with movement
 commands and pressing the binding for a movement command selects
 that commands THING (e.g. forward-sexp will select sexp as the
@@ -2776,19 +2794,15 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive
-   (pcase-let ((`(,cmd ,action ,arg) (conn--dispatch-read-command)))
-     (list cmd
-           (or action (conn-dispatch-default-action cmd))
-           arg
-           current-prefix-arg)))
+   (pcase-let ((`(,thing ,finder ,action ,arg) (conn--dispatch-read-command)))
+     (list thing finder action arg current-prefix-arg)))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
         (cl-loop
          initially do
          (setf prefix-ovs (thread-last
-                            (conn-dispatch-finder thing-command)
-                            (funcall)
+                            (funcall finder)
                             (seq-group-by (lambda (ov) (overlay-get ov 'window)))
                             (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
                (alist-get (selected-window) prefix-ovs)
@@ -2811,8 +2825,7 @@ seconds."
                 (window (overlay-get prefix 'window))
                 (pt (overlay-start prefix)))
            (setq conn-this-command-thing
-                 (or (overlay-get prefix 'thing)
-                     (get thing-command :conn-command-thing)))
+                 (or (overlay-get prefix 'thing) thing))
            (funcall action window pt conn-this-command-thing))
          while repeat)
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
@@ -4104,12 +4117,12 @@ of `conn-recenter-positions'."
   (interactive)
   (if (eq this-command last-command)
       (put this-command :conn-positions
-           (let ((ps (get this-command :conn-positions)))
+           (let ((ps (conn--command-property :conn-positions)))
              (append (cdr ps) (list (car ps)))))
     (put this-command :conn-positions conn-recenter-positions))
   (let ((beg (region-beginning))
         (end (region-end)))
-    (pcase (car (get this-command :conn-positions))
+    (pcase (car (conn--command-property :conn-positions))
       ('center
        (save-excursion
          (forward-line
@@ -4699,7 +4712,7 @@ With a non-nil prefix arg go `forward-line' by N instead."
   (if N
       (progn
         (forward-line N)
-        (setq conn-this-command-handler (get 'forward-line :conn-mark-handler)
+        (setq conn-this-command-handler (conn-get-mark-handler 'forward-line)
               conn-this-command-thing 'line))
     (let ((point (point))
           (mark (mark t)))
@@ -4722,7 +4735,7 @@ With a non-nil prefix arg go `forward-line' by -N instead."
       (progn
         (forward-line (- N))
         (setq conn-this-command-thing 'line
-              conn-this-command-handler (get :conn-mark-handler 'forward-line)))
+              conn-this-command-handler (conn-get-mark-handler 'forward-line)))
     (let ((point (point))
           (mark (mark t)))
       (back-to-indentation)
@@ -7123,7 +7136,7 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-backward-sentence "org")
   (declare-function org-forward-sentence "org")
 
-  (conn-register-thing org-paragraph
+  (conn-register-thing 'org-paragraph
     :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
     :forward-op 'org-forward-paragraph
     :mark-key "I"
@@ -7139,7 +7152,7 @@ determine if `conn-local-mode' should be enabled."
         (org-forward-sentence arg)
       (org-backward-sentence (abs arg))))
 
-  (conn-register-thing org-sentence
+  (conn-register-thing 'org-sentence
     :forward-op 'conn-org-sentence-forward
     :mark-key "{"
     :modes 'org-mode)
@@ -7149,7 +7162,7 @@ determine if `conn-local-mode' should be enabled."
    'conn-org-sentence-forward
    'org-forward-sentence 'org-backward-sentence)
 
-  (conn-register-thing org-element
+  (conn-register-thing 'org-element
     :mark-key "m"
     :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
     :beg-op 'org-backward-element
@@ -7167,7 +7180,7 @@ determine if `conn-local-mode' should be enabled."
    'org-up-element
    'org-up-heading)
 
-  (conn-register-thing org-heading
+  (conn-register-thing 'org-heading
     :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
     :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
     :forward-op 'org-next-visible-heading
@@ -7295,7 +7308,7 @@ determine if `conn-local-mode' should be enabled."
            (dotimes (_ N)
              (outline-next-heading)))))
 
-  (conn-register-thing heading
+  (conn-register-thing 'heading
     :mark-key "H"
     :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
     :bounds-op (lambda ()
@@ -7321,14 +7334,8 @@ determine if `conn-local-mode' should be enabled."
    'outline-backward-same-level))
 
 (with-eval-after-load 'treesit
-  (conn-register-thing treesit-defun
-    :beg-op 'treesit-beginning-of-defun
-    :end-op 'treesit-end-of-defun
-    :dispatch-provider (apply-partially 'conn--dispatch-all-things
-                                        'treesit-defun))
-
   (conn-register-thing-commands
-   'treesit-defun 'conn-individual-thing-handler
+   'defun 'conn-individual-thing-handler
    'treesit-end-of-defun
    'treesit-beginning-of-defun))
 ;;; conn.el ends here
