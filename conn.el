@@ -2187,7 +2187,8 @@ state."
 
 ;;;; Thing Dispatch
 
-(defvar conn-dispatch-all-things-collector 'conn--dispatch-all-things-1)
+(defvar conn-dispatch-all-things-collector-alist
+  '((t . conn--dispatch-all-things-1)))
 
 (defvar-keymap conn-dispatch-command-map
   "[" 'conn-dispatch-kill-append
@@ -2656,7 +2657,9 @@ state."
 (defun conn--dispatch-all-things (thing &optional in-windows)
   (cl-loop for win in (conn--preview-get-windows in-windows)
            nconc (with-selected-window win
-                   (funcall conn-dispatch-all-things-collector thing))))
+                   (if-let ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
+                       (funcall fn)
+                     (funcall (alist-get t conn-dispatch-all-things-collector-alist) thing)))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))

@@ -51,12 +51,12 @@
                          bash-ts-mode
                          typescript-ts-mode))
 
-(defun conn--dispatch-all-ts-things (thing)
+(defun conn--dispatch-all-ts-defuns ()
   (conn--thread -->
       (cl-loop for n in (with-restriction (window-start) (window-end)
                           (thread-first
                             (treesit-buffer-root-node)
-                            (treesit-induce-sparse-tree thing)
+                            (treesit-induce-sparse-tree treesit-defun-type-regexp)
                             (flatten-tree)))
                for beg = (treesit-node-start n)
                for end = (treesit-node-end n)
@@ -65,9 +65,14 @@
                          (<= beg (window-end)))
                collect beg)
     (seq-sort '< -->)
-    (cl-loop for pt in --> collect (conn--make-preview-overlay pt 1 thing))))
+    (cl-loop for pt in --> collect (conn--make-preview-overlay pt 1 'defun))))
 
 (dolist (mode conn--ts-modes)
   (add-hook (conn--symbolicate mode "-hook")
             (lambda ()
-              (setq-local conn-dispatch-all-things-collector 'conn--dispatch-all-ts-things))))
+              (setq-local conn-dispatch-all-things-collector-alist
+                          (cons (cons 'defun 'conn--dispatch-all-ts-defuns)
+                                conn-dispatch-all-things-collector-alist)))))
+
+(provide 'conn-treesit)
+
