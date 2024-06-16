@@ -7067,7 +7067,7 @@ apply to each contiguous component of the region."
   "C-x t s" 'tab-switch
   "C-x t a" 'conn-tab-to-register)
 
-(defvar-keymap conn-local-map
+(defvar-keymap conn-local-mode-map
   "M-g o" 'conn-mark-ring-backward
   "M-g u" 'conn-mark-ring-forward)
 
@@ -7102,7 +7102,7 @@ apply to each contiguous component of the region."
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :keymap conn-local-map
+  :keymap conn-local-mode-map
   :lighter (:eval conn-lighter)
   (conn--input-method-mode-line)
   (if conn-local-mode
