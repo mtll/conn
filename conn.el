@@ -1140,6 +1140,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :bounds-op (lambda () (cons (point-min) (point)))
  :mark-key "<")
 
+(conn-register-thing
+ 'visible
+ :bounds-op (lambda () (cons (window-start) (window-end))))
+
+(conn-register-thing-commands
+ 'visible nil
+ 'conn-scroll-up 'conn-scroll-down
+ 'scroll-up-command 'scroll-down-command)
 
 (conn-register-thing-commands
  'region nil
