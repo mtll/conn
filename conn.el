@@ -57,6 +57,7 @@
 (defvar conn-emacs-state)
 (defvar kmacro-step-edit-replace)
 (defvar conn-state-map)
+(defvar conn-expand-repeat-map)
 
 (defvar conn-dispatch-providers-alist
   '((t . conn--dispatch-chars)))
@@ -524,8 +525,7 @@ If BUFFER is nil check `current-buffer'."
                              (buffer-substring-no-properties beg end)
                              (string-trim)
                              (substring 0 20))))
-         (buffer   (clone-indirect-buffer-other-window name nil)))
-    (pop-to-buffer buffer)
+         (buffer   (clone-indirect-buffer-other-window name t)))
     (conn-narrow-to-region beg end record)
     (deactivate-mark)))
 
