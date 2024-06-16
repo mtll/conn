@@ -54,7 +54,6 @@
 (defvar conn-state)
 (defvar conn-emacs-state)
 (defvar conn-org-edit-state)
-(defvar conn-local-map)
 (defvar conn-emacs-state)
 (defvar kmacro-step-edit-replace)
 (defvar conn-state-map)
@@ -873,12 +872,12 @@ If BUFFER is nil check `current-buffer'."
                                         (conn--command-property :conn-mark-handler)))))
 
 (defun conn--push-mark-ad (&rest _)
-  (unless conn--ephemeral-mark
+  (unless (or conn--ephemeral-mark (null conn-local-mode))
     (conn--push-mark-ring-right (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--pop-mark-ad (&rest _)
-  (unless conn--ephemeral-mark
+  (unless (or conn--ephemeral-mark (null conn-local-mode))
     (conn--push-mark-ring-left (mark-marker)))
   (setq conn--ephemeral-mark t))
 
@@ -6804,8 +6803,6 @@ apply to each contiguous component of the region."
 
 (defvar-keymap conn-goto-map
   "l" 'pop-global-mark
-  "o" 'conn-mark-ring-backward
-  "u" 'conn-mark-ring-forward
   "k" 'goto-line
   "r" 'xref-find-references
   "s" 'xref-find-apropos
@@ -7059,6 +7056,10 @@ apply to each contiguous component of the region."
   "C-x t s" 'tab-switch
   "C-x t a" 'conn-tab-to-register)
 
+(defvar-keymap conn-local-map
+  "M-g o" 'conn-mark-ring-backward
+  "M-g u" 'conn-mark-ring-forward)
+
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn
@@ -7090,7 +7091,7 @@ apply to each contiguous component of the region."
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :keymap (make-sparse-keymap)
+  :keymap conn-local-map
   :lighter (:eval conn-lighter)
   (conn--input-method-mode-line)
   (if conn-local-mode
