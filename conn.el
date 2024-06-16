@@ -556,7 +556,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defvar-keymap conn-read-thing-command-mark-map
   "C-h" 'help
-  "h" conn-mark-thing-map
+  "t" conn-mark-thing-map
   "." 'reset-arg)
 
 (defun conn--read-thing-keymap ()
@@ -592,7 +592,9 @@ If BUFFER is nil check `current-buffer'."
                                        "")))
                        cmd (key-binding keys t)
                        invalid nil)
-                 (not (get cmd :conn-command-thing)))
+                 (not (or (get cmd :conn-command-thing)
+                          (eq cmd 'conn-expand)
+                          (eq cmd 'conn-contract))))
           (pcase cmd
             ('keyboard-quit
              (keyboard-quit))
@@ -615,18 +617,37 @@ If BUFFER is nil check `current-buffer'."
              (setq invalid t))))
       (message nil)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))
-    (if-let ((conn-this-command-handler (conn-get-mark-handler cmd)))
-        (save-mark-and-excursion
-          (let ((this-command cmd)
-                (current-prefix-arg thing-arg)
-                (conn-this-command-start (point-marker))
-                (conn-this-command-thing (get cmd :conn-command-thing)))
-            (call-interactively cmd)
-            (funcall conn-this-command-handler conn-this-command-start))
-          (list (get cmd :conn-command-thing) (region-beginning) (region-end)))
-      (let ((thing (get cmd :conn-command-thing)))
-        (pcase (bounds-of-thing-at-point thing)
-          (`(,beg . ,end) (list thing beg end)))))))
+    (pcase cmd
+      ((or 'conn-expand 'conn-contract)
+       (save-mark-and-excursion
+         (let ((current-prefix-arg
+                (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                      (thing-sign '-))))
+           (call-interactively cmd)
+           (set-transient-map
+            (define-keymap
+              :parent conn-expand-repeat-map
+              "<t>" 'exit-recursive-edit)
+            (lambda ()
+              (memq this-command '(conn-expand
+                                   conn-contract
+                                   conn-expand-exchange))))
+           (recursive-edit)
+           (list nil (region-beginning) (region-end)))))
+      ((app conn-get-mark-handler
+            (and conn-this-command-handler
+                 (pred functionp)))
+       (save-mark-and-excursion
+         (let ((this-command cmd)
+               (current-prefix-arg thing-arg)
+               (conn-this-command-start (point-marker))
+               (conn-this-command-thing (get cmd :conn-command-thing)))
+           (call-interactively cmd)
+           (funcall conn-this-command-handler conn-this-command-start))
+         (list (get cmd :conn-command-thing) (region-beginning) (region-end))))
+      ((and (let thing (get cmd :conn-command-thing))
+            (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
+       (list thing beg end)))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
