@@ -2674,7 +2674,9 @@ state."
             (pcase (bounds-of-thing-at-point thing)
               ((or 'nil (and `(,beg . ,_) (guard (> beg (window-end)))))
                (signal 'scan-error nil))
-              ((and `(,beg . ,_) (guard (and (car ovs) (/= beg (car ovs)))))
+              ((and `(,beg . ,_)
+                    (guard (or (null (car ovs))
+                               (/= beg (car ovs)))))
                (push beg ovs))))
           (forward-thing thing 1))))
     (cl-loop for pt in ovs collect
