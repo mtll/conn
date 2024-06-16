@@ -4594,19 +4594,6 @@ associated with that command (see `conn-register-thing')."
   (conn--narrow-indirect beg end interactive)
   (message "Narrow indirect to region"))
 
-(defun conn-narrow-to-visible (&optional interactive)
-  "Narrow buffer to the visible portion of the selected window."
-  (interactive (list t))
-  (conn-narrow-to-region (window-start) (window-end) interactive)
-  (message "Narrowed to visible region"))
-
-(defun conn-narrow-indirect-to-visible (&optional interactive)
-  "Narrow indirect buffer to the visible portion of the selected window.
-See `clone-indirect-buffer'."
-  (interactive (list t))
-  (conn--narrow-indirect (window-start) (window-end) interactive)
-  (message "Narrowed to visible region"))
-
 (defun conn-narrow-indirect-to-region (beg end &optional interactive)
   "Narrow to region from BEG to END in an indirect buffer in another window.
 See `clone-indirect-buffer' for meaning of indirect buffer."
@@ -7024,8 +7011,6 @@ apply to each contiguous component of the region."
   "C-x n >" 'conn-narrow-to-end-of-buffer
   "C-x n t" 'conn-narrow-to-thing
   "C-x n T" 'conn-narrow-indirect-to-thing
-  "C-x n v" 'conn-narrow-to-visible
-  "C-x n V" 'conn-narrow-indirect-to-visible
   "C-x n N" 'conn-narrow-indirect-to-region
   "C-x r \\" 'conn-set-register-seperator
   "C-x r ." 'conn-last-macro-dispatch-to-register
