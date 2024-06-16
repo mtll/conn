@@ -1064,7 +1064,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              (eq (current-buffer) (marker-buffer conn-this-command-start))
              conn-this-command-thing
              conn-this-command-handler)
-    (funcall conn-this-command-handler conn-this-command-start)))
+    (ignore-errors
+      (funcall conn-this-command-handler conn-this-command-start))))
 
 (defun conn--setup-mark ()
   (when conn--mark-cursor-timer
