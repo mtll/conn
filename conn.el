@@ -123,11 +123,6 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
-(defcustom conn-cursor-colors t
-  "Use per state cursor colors."
-  :type 'boolean
-  :group 'conn)
-
 (defface conn-dot-face
   '((default              (:background "#c6ebd9"))
     (((background dark))  (:background "#449066"))
@@ -293,8 +288,6 @@ nil `conn-local-mode' will be not enabled in the buffer.")
 (defvar-local conn--local-mode-maps nil)
 
 (defvar conn--transition-maps nil)
-
-(defvar conn--default-cursor-color nil)
 
 ;;;;; Mark Variables
 
@@ -1970,28 +1963,6 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
-(defun conn--update-cursor (&rest _frame)
-  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
-      (setq cursor-type cursor)
-    (setq cursor-type t))
-  (when conn-cursor-colors
-    (set-cursor-color (or (conn--thread -->
-                              (window-buffer (selected-window))
-                            (buffer-local-value 'conn-current-state -->)
-                            (get --> :conn-cursor-face)
-                            (ignore-errors (face-background -->)))
-                          conn--default-cursor-color))))
-
-(defun conn--setup-cursor ()
-  (if conn-mode
-      (progn
-        (setq conn--default-cursor-color (face-background 'cursor))
-        (add-hook 'window-selection-change-functions #'conn--update-cursor)
-        (add-hook 'window-buffer-change-functions #'conn--update-cursor))
-    (remove-hook 'window-selection-change-functions #'conn--update-cursor)
-    (remove-hook 'window-buffer-change-functions #'conn--update-cursor)
-    (set-cursor-color conn--default-cursor-color)))
-
 (defmacro conn-define-state (name doc &rest body)
   "Define a conn state NAME.
 Defines a transition function and variable NAME.  NAME is non-nil when
@@ -2005,10 +1976,6 @@ NAME.
 :KEYMAP is a keymap for the state.
 
 :CURSOR is the `cursor-type' for NAME.
-
-:CURSOR-FACE is the face for the cursor in NAME.  Only the the background
-color of the face is used.  Only has an effect when `conn-cursor-colors'
-is enabled.
 
 :TRANSITIONS is a list of transition key bindings to be bound in NAME's
 transition map.  It is of the form ((KEY . TRANSITION-FUNCTION) ...).
@@ -2026,7 +1993,6 @@ disabled.
          (cursor-name (conn--symbolicate name "-cursor-type"))
          (lighter-face-name (conn--symbolicate name "-lighter-face"))
          (indicator-name (conn--symbolicate name "-indicator"))
-         (cursor-face-name (conn--symbolicate name "-cursor-face"))
          (enter (gensym "enter"))
          keyw
          lighter-face
@@ -2035,8 +2001,7 @@ disabled.
          (keymap '(make-sparse-keymap))
          cursor
          (transitions '(make-sparse-keymap))
-         (indicator "")
-         cursor-face)
+         (indicator ""))
     (while (keywordp (setq keyw (car body)))
       (setq body (cdr body))
       (pcase-exhaustive keyw
@@ -2046,8 +2011,7 @@ disabled.
         (:keymap (setq keymap (pop body)))
         (:transitions (setq transitions (pop body)))
         (:indicator (setq indicator (pop body)))
-        (:ephemeral-marks (setq ephemeral-marks (pop body)))
-        (:cursor-face (setq cursor-face (pop body)))))
+        (:ephemeral-marks (setq ephemeral-marks (pop body)))))
     `(progn
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
@@ -2093,18 +2057,11 @@ disabled.
          :risky t
          :group 'conn-states)
 
-       (defface ,cursor-face-name
-         ',cursor-face
-         ,(conn--stringify "Cursor face in `" name "'.\n"
-                           "Note only the background is used.")
-         :group 'conn-states)
-
        ,(when ephemeral-marks
           `(cl-pushnew ',name conn-ephemeral-mark-states))
 
        (put ',name :conn-suppress-input-method ,suppress-input-method)
        (put ',name :conn-cursor-type ',cursor-name)
-       (put ',name :conn-cursor-face ',cursor-face-name)
        (put ',name :conn-indicator ',indicator-name)
        (put ',name :conn-lighter-face ',lighter-face-name)
 
@@ -2134,7 +2091,9 @@ disabled.
                                        'face ',lighter-face-name
                                        conn-lighter))
                   (conn--activate-input-method)
-                  (conn--update-cursor)
+                  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
+                      (setq cursor-type cursor)
+                    (setq cursor-type t))
                   (when (not executing-kbd-macro)
                     (force-mode-line-update)))
                 ,@body
@@ -2160,10 +2119,6 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :lighter-face ((default              (:inherit mode-line :background "#cae1ff"))
                  (((background light)) (:inherit mode-line :background "#cae1ff"))
                  (((background dark))  (:inherit mode-line :background "#49739f")))
-  :cursor-face ((default               (:background "#00517d"))
-                (((background light)) (:background "#00517d"))
-                (((background dark))  (:background "#b6d6e7")))
-  :cursor box
   :ephemeral-marks nil)
 
 (conn-define-state conn-state
@@ -2175,9 +2130,6 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :lighter-face ((default              (:inherit mode-line :background "#f3bdbd"))
                  (((background light)) (:inherit mode-line :background "#f3bdbd"))
                  (((background dark))  (:inherit mode-line :background "#8c3c3c")))
-  :cursor-face ((default               (:background "#7d0002"))
-                (((background light)) (:background "#7d0002"))
-                (((background dark))  (:background "#eba4a4")))
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
@@ -2203,9 +2155,6 @@ state."
   :lighter-face ((default              (:inherit mode-line :background "#f5c5ff"))
                  (((background light)) (:inherit mode-line :background "#f5c5ff"))
                  (((background dark))  (:inherit mode-line :background "#85508c")))
-  :cursor-face ((default              (:background "#7d0077"))
-                (((background light)) (:background "#7d0077"))
-                (((background dark))  (:background "#f1b9ee")))
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t
@@ -7156,7 +7105,6 @@ determine if `conn-local-mode' should be enabled."
     (conn--setup-keymaps)
     (conn--setup-mark)
     (conn--setup-advice)
-    (conn--setup-cursor)
     (if conn-mode
         (progn
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
