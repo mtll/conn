@@ -1126,43 +1126,49 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   :forward-op 'conn-forward-defun
   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'defun t))
 
-(conn-register-thing 'region
-  :bounds-op (lambda ()
-               (cons (region-beginning) (region-end))))
+(conn-register-thing
+ 'region
+ :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
-(conn-register-thing 'buffer-after-point
-  :bounds-op (lambda () (cons (point) (point-max)))
-  :mark-key ">")
+(conn-register-thing
+ 'buffer-after-point
+ :bounds-op (lambda () (cons (point) (point-max)))
+ :mark-key ">")
 
-(conn-register-thing 'buffer-before-point
-  :bounds-op (lambda () (cons (point-min) (point)))
-  :mark-key "<")
+(conn-register-thing
+ 'buffer-before-point
+ :bounds-op (lambda () (cons (point-min) (point)))
+ :mark-key "<")
+
 
 (conn-register-thing-commands
  'region nil
  'conn-toggle-mark-command
  'conn-set-mark-command)
 
-(conn-register-thing 'symbol
-  :forward-op 'forward-symbol
-  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
+(conn-register-thing
+ 'symbol
+ :forward-op 'forward-symbol
+ :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
 
 (conn-register-thing-commands
  'symbol 'conn-sequential-thing-handler
  'forward-symbol 'conn-backward-symbol)
 
-(conn-register-thing 'page
-  :mark-key "p"
-  :forward-op 'forward-page)
+(conn-register-thing
+ 'page
+ :mark-key "p"
+ :forward-op 'forward-page)
 
 (conn-register-thing-commands
  'page 'conn-individual-thing-handler
  'forward-page 'backward-page)
 
-(conn-register-thing 'dot
-  :beg-op (lambda () (conn-previous-dot 1))
-  :end-op (lambda () (conn-next-dot 1))
-  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'dot))
+(conn-register-thing
+ 'dot
+ :beg-op (lambda () (conn-previous-dot 1))
+ :end-op (lambda () (conn-next-dot 1))
+ :dispatch-provider (apply-partially 'conn--dispatch-all-things 'dot))
 
 (conn-register-thing-commands
  'dot 'conn-individual-thing-handler
@@ -1173,24 +1179,27 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-char 'backward-char
  'conn-forward-char 'conn-backward-char)
 
-(conn-register-thing 'word
-  :forward-op 'forward-word
-  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
+(conn-register-thing
+ 'word
+ :forward-op 'forward-word
+ :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
 
 (conn-register-thing-commands
  'word 'conn-sequential-thing-handler
  'forward-word 'backward-word)
 
-(conn-register-thing 'sexp
-  :forward-op 'forward-sexp
-  :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
+(conn-register-thing
+ 'sexp
+ :forward-op 'forward-sexp
+ :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
 
 (conn-register-thing-commands
  'sexp 'conn-sequential-thing-handler
  'forward-sexp 'backward-sexp)
 
-(conn-register-thing 'list
-  :forward-op 'forward-list)
+(conn-register-thing
+ 'list
+ :forward-op 'forward-list)
 
 (conn-register-thing-commands
  'list (lambda (beg)
@@ -1225,25 +1234,28 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (conn--push-ephemeral-mark (point))))))
  'forward-list 'backward-list)
 
-(conn-register-thing 'whitespace
-  :mark-key "SPC"
-  :forward-op 'forward-whitespace)
+(conn-register-thing
+ 'whitespace
+ :mark-key "SPC"
+ :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
  'whitespace 'conn-individual-thing-handler
  'forward-whitespace 'conn-backward-whitespace)
 
-(conn-register-thing 'sentence
-  :forward-op 'forward-sentence
-  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'sentence t))
+(conn-register-thing
+ 'sentence
+ :forward-op 'forward-sentence
+ :dispatch-provider (apply-partially 'conn--dispatch-all-things 'sentence t))
 
 (conn-register-thing-commands
  'sentence 'conn-sequential-thing-handler
  'forward-sentence 'backward-sentence)
 
-(conn-register-thing 'paragraph
-  :forward-op 'forward-paragraph
-  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'paragraph t))
+(conn-register-thing
+ 'paragraph
+ :forward-op 'forward-paragraph
+ :dispatch-provider (apply-partially 'conn--dispatch-all-things 'paragraph t))
 
 (conn-register-thing-commands
  'paragraph 'conn-sequential-thing-handler
@@ -1254,8 +1266,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'end-of-defun 'beginning-of-defun
  'conn-forward-defun)
 
-(conn-register-thing 'char
-  :default-action 'conn-dispatch-jump)
+(conn-register-thing
+ 'char
+ :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'buffer 'conn-individual-thing-handler
@@ -1272,43 +1285,47 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (forward-line N)
              (forward-line (1+ N)))))))
 
-(conn-register-thing 'line
-  :forward-op 'conn-line-forward-op
-  :dispatch-provider 'conn--dispatch-lines)
+(conn-register-thing
+ 'line
+ :forward-op 'conn-line-forward-op
+ :dispatch-provider 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'line 'conn-sequential-thing-handler
  'forward-line 'conn-backward-line
  'conn-line-forward-op)
 
-(conn-register-thing 'line-column
-  :dispatch-provider 'conn--dispatch-columns
-  :default-action 'conn-dispatch-jump)
+(conn-register-thing
+ 'line-column
+ :dispatch-provider 'conn--dispatch-columns
+ :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
  'next-line 'previous-line
  'rectangle-next-line 'rectangle-previous-line)
 
-(conn-register-thing 'outer-line
-  :beg-op (lambda () (move-beginning-of-line nil))
-  :end-op (lambda () (move-end-of-line nil))
-  :dispatch-provider 'conn--dispatch-lines)
+(conn-register-thing
+ 'outer-line
+ :beg-op (lambda () (move-beginning-of-line nil))
+ :end-op (lambda () (move-end-of-line nil))
+ :dispatch-provider 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'outer-line 'conn-individual-thing-handler
  'move-beginning-of-line 'move-end-of-line)
 
-(conn-register-thing 'inner-line
-  :bounds-op (lambda ()
-               (cons
-                (save-excursion
-                  (back-to-indentation)
-                  (point))
-                (save-excursion
-                  (conn--end-of-inner-line-1)
-                  (point))))
-  :dispatch-provider 'conn--dispatch-inner-lines)
+(conn-register-thing
+ 'inner-line
+ :bounds-op (lambda ()
+              (cons
+               (save-excursion
+                 (back-to-indentation)
+                 (point))
+               (save-excursion
+                 (conn--end-of-inner-line-1)
+                 (point))))
+ :dispatch-provider 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
  'inner-line 'conn-individual-thing-handler
@@ -7141,11 +7158,12 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-backward-sentence "org")
   (declare-function org-forward-sentence "org")
 
-  (conn-register-thing 'org-paragraph
-    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
-    :forward-op 'org-forward-paragraph
-    :mark-key "I"
-    :modes 'org-mode)
+  (conn-register-thing
+   'org-paragraph
+   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
+   :forward-op 'org-forward-paragraph
+   :mark-key "I"
+   :modes 'org-mode)
 
   (conn-register-thing-commands
    'org-paragraph 'conn-sequential-thing-handler
@@ -7157,22 +7175,24 @@ determine if `conn-local-mode' should be enabled."
         (org-forward-sentence arg)
       (org-backward-sentence (abs arg))))
 
-  (conn-register-thing 'org-sentence
-    :forward-op 'conn-org-sentence-forward
-    :mark-key "{"
-    :modes 'org-mode)
+  (conn-register-thing
+   'org-sentence
+   :forward-op 'conn-org-sentence-forward
+   :mark-key "{"
+   :modes 'org-mode)
 
   (conn-register-thing-commands
    'org-sentence 'conn-sequential-thing-handler
    'conn-org-sentence-forward
    'org-forward-sentence 'org-backward-sentence)
 
-  (conn-register-thing 'org-element
-    :mark-key "m"
-    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
-    :beg-op 'org-backward-element
-    :end-op 'org-forward-element
-    :modes 'org-mode)
+  (conn-register-thing
+   'org-element
+   :mark-key "m"
+   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
+   :beg-op 'org-backward-element
+   :end-op 'org-forward-element
+   :modes 'org-mode)
 
   (conn-register-thing-commands
    'org-element 'conn-individual-thing-handler
@@ -7185,12 +7205,13 @@ determine if `conn-local-mode' should be enabled."
    'org-up-element
    'org-up-heading)
 
-  (conn-register-thing 'org-heading
-    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
-    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
-    :forward-op 'org-next-visible-heading
-    :modes 'org-mode
-    :mark-key "H")
+  (conn-register-thing
+   'org-heading
+   :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
+   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
+   :forward-op 'org-next-visible-heading
+   :modes 'org-mode
+   :mark-key "H")
 
   (conn-register-thing-commands
    'org-heading 'conn-sequential-thing-handler
@@ -7313,16 +7334,17 @@ determine if `conn-local-mode' should be enabled."
            (dotimes (_ N)
              (outline-next-heading)))))
 
-  (conn-register-thing 'heading
-    :mark-key "H"
-    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
-    :bounds-op (lambda ()
-                 (save-mark-and-excursion
-                   (unless (outline-on-heading-p)
-                     (outline-up-heading 1))
-                   (outline-mark-subtree)
-                   (cons (region-beginning) (region-end))))
-    :forward-op 'conn-forward-heading-op)
+  (conn-register-thing
+   'heading
+   :mark-key "H"
+   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
+   :bounds-op (lambda ()
+                (save-mark-and-excursion
+                  (unless (outline-on-heading-p)
+                    (outline-up-heading 1))
+                  (outline-mark-subtree)
+                  (cons (region-beginning) (region-end))))
+   :forward-op 'conn-forward-heading-op)
 
   (conn-register-thing-commands
    'heading 'conn-sequential-thing-handler
