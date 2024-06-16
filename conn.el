@@ -623,16 +623,18 @@ If BUFFER is nil check `current-buffer'."
              (setq invalid t))))
       (message nil)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))
-    (save-mark-and-excursion
-      (let ((this-command cmd)
-            (current-prefix-arg thing-arg)
-            (conn-this-command-start (point-marker))
-            (conn-this-command-handler (conn-get-mark-handler cmd))
-            (conn-this-command-thing (get cmd :conn-command-thing)))
-        (call-interactively cmd)
-        (when conn-this-command-handler
-          (funcall conn-this-command-handler conn-this-command-start)))
-      (list (get cmd :conn-command-thing) (region-beginning) (region-end)))))
+    (if-let ((conn-this-command-handler (conn-get-mark-handler cmd)))
+        (save-mark-and-excursion
+          (let ((this-command cmd)
+                (current-prefix-arg thing-arg)
+                (conn-this-command-start (point-marker))
+                (conn-this-command-thing (get cmd :conn-command-thing)))
+            (call-interactively cmd)
+            (funcall conn-this-command-handler conn-this-command-start))
+          (list (get cmd :conn-command-thing) (region-beginning) (region-end)))
+      (let ((thing (get cmd :conn-command-thing)))
+        (pcase (bounds-of-thing-at-point thing)
+          (`(,beg . ,end) (list thing beg end)))))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -7338,7 +7340,7 @@ determine if `conn-local-mode' should be enabled."
 
 (with-eval-after-load 'treesit
   (conn-register-thing-commands
-   'defun 'conn-individual-thing-handler
+   'defun 'conn-sequential-thing-handler
    'treesit-end-of-defun
    'treesit-beginning-of-defun))
 ;;; conn.el ends here
