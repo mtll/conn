@@ -4135,6 +4135,14 @@ Interactively `region-beginning' and `region-end'."
      (yank)
      (string-lines (buffer-string)))))
 
+(defun conn-yank-replace-rectangle ()
+  (interactive)
+  (save-mark-and-excursion
+    (unless (>= (mark t) (point))
+      (conn-exchange-mark-command))
+    (delete-rectangle (region-beginning) (region-end))
+    (yank-rectangle)))
+
 (defvar conn-recenter-positions
   (list 'center 'top 'bottom))
 
@@ -4813,12 +4821,14 @@ If REGISTER is given copy to REGISTER instead."
   (if register
       (if rectangle-mark-mode
           (copy-rectangle-to-register register start end)
-        (copy-to-register register start end))
+        (copy-to-register register start end)
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region start end)))
     (if rectangle-mark-mode
         (copy-rectangle-as-kill start end)
-      (copy-region-as-kill start end)))
-  (unless executing-kbd-macro
-    (pulse-momentary-highlight-region start end)))
+      (copy-region-as-kill start end)
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-region start end)))))
 
 (defun conn-kill-region (&optional arg)
   "Kill region between START and END.
@@ -6811,6 +6821,7 @@ apply to each contiguous component of the region."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
+  "C-y" 'conn-yank-replace-rectangle
   "r DEL" 'delete-rectangle
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
