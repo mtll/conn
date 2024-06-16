@@ -975,32 +975,29 @@ If BUFFER is nil check `current-buffer'."
   (apply 'conn-set-command-handler handler commands))
 
 (defun conn-sequential-thing-handler (beg)
-  (unless (region-active-p)
-    (ignore-errors
-      (pcase (abs (prefix-numeric-value current-prefix-arg))
-        (0)
-        ((let dir (pcase (- (point) beg)
-                    (0 0)
-                    ((pred (< 0)) 1)
-                    ((pred (> 0)) -1)))
-         (save-excursion
-           (goto-char beg)
-           (forward-thing conn-this-command-thing dir)
-           (forward-thing conn-this-command-thing (- dir))
-           (conn--push-ephemeral-mark)))))))
+  (ignore-errors
+    (pcase (abs (prefix-numeric-value current-prefix-arg))
+      (0)
+      ((let dir (pcase (- (point) beg)
+                  (0 0)
+                  ((pred (< 0)) 1)
+                  ((pred (> 0)) -1)))
+       (save-excursion
+         (goto-char beg)
+         (forward-thing conn-this-command-thing dir)
+         (forward-thing conn-this-command-thing (- dir))
+         (conn--push-ephemeral-mark))))))
 
 (defun conn-individual-thing-handler (_beg)
-  (unless (region-active-p)
-    (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
-      (`(,beg . ,end)
-       (conn--push-ephemeral-mark (if (= (point) end) beg end))))))
+  (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
+    (`(,beg . ,end)
+     (conn--push-ephemeral-mark (if (= (point) end) beg end)))))
 
 (defun conn-jump-handler (beg)
   "Mark trail handler.
 The mark trail handler pushes an ephemeral mark at the starting point
 of the movement command unless `region-active-p'."
-  (unless (or (region-active-p)
-              (eql beg (point)))
+  (unless (eql beg (point))
     (conn--push-ephemeral-mark beg)))
 
 (defun conn-set-command-handler (handler &rest commands)
@@ -1077,8 +1074,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
              conn-this-command-thing
-             conn-this-command-handler)
-    (ignore-errors
+             conn-this-command-handler
+             (not (region-active-p)))
+    (with-demoted-errors "Error in mark hook: %S"
       (funcall conn-this-command-handler conn-this-command-start))))
 
 (defun conn--setup-mark ()
@@ -1225,23 +1223,21 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'list (lambda (beg)
-         (unless (region-active-p)
-           (cond ((> (point) beg)
-                  (save-excursion
-                    (forward-thing 'list -1)
-                    (conn--push-ephemeral-mark (point))))
-                 ((< (point) beg)
-                  (save-excursion
-                    (forward-thing 'list 1)
-                    (conn--push-ephemeral-mark (point)))))))
+         (cond ((> (point) beg)
+                (save-excursion
+                  (forward-thing 'list -1)
+                  (conn--push-ephemeral-mark (point))))
+               ((< (point) beg)
+                (save-excursion
+                  (forward-thing 'list 1)
+                  (conn--push-ephemeral-mark (point))))))
  'up-list 'backward-up-list)
 
 (conn-register-thing-commands
  'list (lambda (_beg)
-         (unless (region-active-p)
-           (pcase (ignore-errors (bounds-of-thing-at-point 'list))
-             (`(,_ . ,end)
-              (conn--push-ephemeral-mark (1- end))))))
+         (pcase (ignore-errors (bounds-of-thing-at-point 'list))
+           (`(,_ . ,end)
+            (conn--push-ephemeral-mark (1- end)))))
  'down-list)
 
 (conn-register-thing-commands
@@ -7266,15 +7262,14 @@ determine if `conn-local-mode' should be enabled."
    'paredit-backward-down)
 
   (defun conn-paredit-list-handler (beg)
-    (unless (region-active-p)
-      (cond ((> (point) beg)
-             (save-excursion
-               (forward-thing 'sexp -1)
-               (conn--push-ephemeral-mark (point))))
-            ((< (point) beg)
-             (save-excursion
-               (forward-thing 'sexp 1)
-               (conn--push-ephemeral-mark (point)))))))
+    (cond ((> (point) beg)
+           (save-excursion
+             (forward-thing 'sexp -1)
+             (conn--push-ephemeral-mark (point))))
+          ((< (point) beg)
+           (save-excursion
+             (forward-thing 'sexp 1)
+             (conn--push-ephemeral-mark (point))))))
 
   (conn-register-thing-commands
    'list 'conn-paredit-list-handler
@@ -7282,20 +7277,19 @@ determine if `conn-local-mode' should be enabled."
    'paredit-backward-up)
 
   (defun conn-paredit-sexp-handler (beg)
-    (unless (region-active-p)
-      (pcase (save-excursion
-               (goto-char beg)
-               (ignore-errors (bounds-of-thing-at-point 'list)))
-        ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
-         (conn-sequential-thing-handler beg))
-        ((and `(,b1 . ,_) (guard (/= beg b1)))
-         (save-excursion
-           (cond ((> (point) beg)
-                  (while (> (point) beg) (forward-thing 'sexp -1)))
-                 ((< (point) beg)
-                  (while (< (point) beg) (forward-thing 'sexp 1))))
-           (conn--push-ephemeral-mark)))
-        (_ (conn-sequential-thing-handler beg)))))
+    (pcase (save-excursion
+             (goto-char beg)
+             (ignore-errors (bounds-of-thing-at-point 'list)))
+      ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
+       (conn-sequential-thing-handler beg))
+      ((and `(,b1 . ,_) (guard (/= beg b1)))
+       (save-excursion
+         (cond ((> (point) beg)
+                (while (> (point) beg) (forward-thing 'sexp -1)))
+               ((< (point) beg)
+                (while (< (point) beg) (forward-thing 'sexp 1))))
+         (conn--push-ephemeral-mark)))
+      (_ (conn-sequential-thing-handler beg))))
 
   (conn-register-thing-commands
    'sexp 'conn-paredit-sexp-handler
