@@ -3201,7 +3201,8 @@ Expansions and contractions are provided by functions in
 Interactively defaults to the current region."
   (interactive (progn
                  (deactivate-mark)
-                 (list (region-beginning) (region-end) t)))
+                 (append (cdr (conn--read-thing-region))
+                         (list t))))
   (conn--narrow-ring-record beg end)
   (when (and pulse (not executing-kbd-macro))
     (pulse-momentary-highlight-region beg end 'region)))
