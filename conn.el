@@ -524,8 +524,8 @@ If BUFFER is nil check `current-buffer'."
                            (thread-first
                              (buffer-substring-no-properties beg end)
                              (string-trim)
-                             (substring 0 20))))
-         (buffer   (clone-indirect-buffer-other-window name t)))
+                             (substring 0 20)))))
+    (clone-indirect-buffer-other-window name t)
     (conn-narrow-to-region beg end record)
     (deactivate-mark)))
 
