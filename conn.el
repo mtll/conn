@@ -1976,7 +1976,7 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
-(defmacro conn-define-state (name doc &rest body)
+(defmacro conn-define-state (name doc &rest rest)
   "Define a conn state NAME.
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
@@ -2001,30 +2001,23 @@ disabled.
 
 \(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP TRANSITIONS INDICATOR EPHEMERAL-MARKS &rest BODY)"
   (declare (indent defun))
-  (let* ((map-name (conn--symbolicate name "-map"))
-         (transition-map-name (conn--symbolicate name "-transition-map"))
-         (cursor-name (conn--symbolicate name "-cursor-type"))
-         (lighter-face-name (conn--symbolicate name "-lighter-face"))
-         (indicator-name (conn--symbolicate name "-indicator"))
-         (enter (gensym "enter"))
-         keyw
-         lighter-face
-         suppress-input-method
-         ephemeral-marks
-         (keymap '(make-sparse-keymap))
-         cursor
-         (transitions '(make-sparse-keymap))
-         (indicator ""))
-    (while (keywordp (setq keyw (car body)))
-      (setq body (cdr body))
-      (pcase-exhaustive keyw
-        (:cursor (setq cursor (pop body)))
-        (:lighter-face (setq lighter-face (pop body)))
-        (:suppress-input-method (setq suppress-input-method (pop body)))
-        (:keymap (setq keymap (pop body)))
-        (:transitions (setq transitions (pop body)))
-        (:indicator (setq indicator (pop body)))
-        (:ephemeral-marks (setq ephemeral-marks (pop body)))))
+  (pcase-let* ((map-name (conn--symbolicate name "-map"))
+               (transition-map-name (conn--symbolicate name "-transition-map"))
+               (cursor-name (conn--symbolicate name "-cursor-type"))
+               (lighter-face-name (conn--symbolicate name "-lighter-face"))
+               (indicator-name (conn--symbolicate name "-indicator"))
+               (enter (gensym "enter"))
+               ((map :cursor
+                     :lighter-face
+                     :suppress-input-method
+                     (:keymap keymap '(make-sparse-keymap))
+                     (:transitions transitions '(make-sparse-keymap))
+                     (:indicator indicator "")
+                     :ephemeral-marks)
+                rest)
+               (body (cl-loop for sublist on rest by #'cddr
+                              unless (keywordp (car sublist))
+                              do (cl-return sublist))))
     `(progn
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
@@ -4225,7 +4218,7 @@ uninstersting marks."
                                (?c conn-completion-region-quote-function))
                            'regexp-quote)
                        'identity)))
-  (insert (pcase-exhaustive conn--minibuffer-initial-region
+  (insert (pcase conn--minibuffer-initial-region
             (`(,beg . ,end)
              (with-minibuffer-selected-window
                (funcall (or quote-function 'identity)
