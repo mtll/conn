@@ -2775,7 +2775,7 @@ seconds."
                            t))))
              (internal-push-keymap keymap 'overriding-terminal-local-map)
              (go :loop))
-            ((let (and thing (pred symbolp)) (get cmd :conn-command-thing))
+            ((let (and thing (pred identity)) (get cmd :conn-command-thing))
              (cl-return
               (list thing (conn-dispatch-finder cmd)
                     (or action (conn-dispatch-default-action cmd))
