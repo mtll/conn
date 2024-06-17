@@ -929,19 +929,6 @@ If BUFFER is nil check `current-buffer'."
   (or (alist-get command conn-mark-handler-alist)
       (get command :conn-mark-handler)))
 
-(defmacro conn--thing-bounds-command (thing)
-  (let ((name (conn--symbolicate "conn-mark-" thing)))
-    `(progn
-       (defun ,name ()
-         (interactive)
-         (pcase (bounds-of-thing-at-point ',thing)
-           (`(,beg . ,end)
-            (goto-char beg)
-            (conn--push-ephemeral-mark end))
-           (_ (user-error "Point not in %s" ',thing))))
-       (put ',name :conn-command-thing ',thing)
-       ',name)))
-
 (defun conn-register-thing (thing &rest rest)
   "Register a new THING.
 
@@ -960,7 +947,16 @@ If BUFFER is nil check `current-buffer'."
   (when-let ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
   (when-let ((binding (plist-get rest :mark-key))
-             (mark-command (conn--thing-bounds-command thing)))
+             (mark-command (conn--symbolicate "conn-mark-" thing)))
+    (fset mark-command
+          (lambda ()
+            (interactive)
+            (pcase (bounds-of-thing-at-point ',thing)
+              (`(,beg . ,end)
+               (goto-char beg)
+               (conn--push-ephemeral-mark end))
+              (_ (user-error "Point not in %s" ',thing)))))
+    (put mark-command :conn-command-thing thing)
     (if (plist-get rest :modes)
         (dolist (mode (put thing :conn-thing-modes
                            (ensure-list (plist-get rest :modes))))
@@ -2470,85 +2466,6 @@ state."
                             'face 'completions-annotations thing)
          (list command-name "" (concat thing binding)))))))
 
-(defun conn--dispatch-read-command ()
-  (let ((keymap (make-composed-keymap
-                 (append conn-dispatch-override-maps
-                         (list conn-dispatch-command-map
-                               (conn--read-thing-keymap)))))
-        (prompt (concat "Thing Command "
-                        (propertize "%s" 'face 'transient-value)
-                        " ("
-                        (propertize "C-h" 'face 'help-key-binding)
-                        " for commands): "))
-        keys cmd invalid action thing-arg thing-sign)
-    (internal-push-keymap keymap 'overriding-terminal-local-map)
-    (unwind-protect
-        (cl-prog
-         nil
-         :read-command
-         (setq keys (conn--thread -->
-                        (or (alist-get action conn-dispatch-command-descriptions)
-                            (and action (symbol-name action)))
-                      (concat prompt -->
-                              (when invalid
-                                (propertize "Invalid dispatch command"
-                                            'face 'error)))
-                      (format --> (format (if thing-arg "%s%s" "[%s1]")
-                                          (if thing-sign "-" "")
-                                          thing-arg))
-                      (read-key-sequence -->))
-               cmd (key-binding keys t)
-               invalid nil)
-         :loop
-         (pcase cmd
-           (`(,thing ,finder . ,default-action)
-            (cl-return
-             (list thing finder (or action default-action)
-                   (* (if thing-sign -1 1) (or thing-arg 1)))))
-           ('keyboard-quit
-            (keyboard-quit))
-           ('digit-argument
-            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-           ('reset-arg
-            (setq thing-arg nil))
-           ('negative-argument
-            (setq thing-sign (not thing-sign)))
-           ('help
-            (internal-pop-keymap keymap 'overriding-terminal-local-map)
-            (save-window-excursion
-              (setq keys nil
-                    cmd (intern
-                         (completing-read
-                          "Command: "
-                          (lambda (string pred action)
-                            (if (eq action 'metadata)
-                                `(metadata
-                                  ,(cons 'affixation-function
-                                         (conn--dispatch-make-command-affixation keymap))
-                                  (category . conn-dispatch-command))
-                              (complete-with-action action obarray string pred)))
-                          (lambda (sym)
-                            (and (functionp sym)
-                                 (not (eq sym 'help))
-                                 (or (get sym :conn-command-thing)
-                                     (where-is-internal sym (list keymap) t))))
-                          t))))
-            (internal-push-keymap keymap 'overriding-terminal-local-map)
-            (go :loop))
-           ((guard (get cmd :conn-command-thing))
-            (cl-return
-             (list (get cmd :conn-command-thing)
-                   (conn-dispatch-finder cmd)
-                   (or action (conn-dispatch-default-action cmd))
-                   action (* (if thing-sign -1 1) (or thing-arg 1)))))
-           ((guard (where-is-internal cmd conn-dispatch-command-map t))
-            (setq action (unless (eq cmd action) cmd)))
-           (_
-            (setq invalid t)))
-         (go :read-command))
-      (internal-pop-keymap keymap 'overriding-terminal-local-map))))
-
 (defun conn--dispatch-narrow-labels (prompt overlays)
   (unwind-protect
       (let ((c (read-char prompt))
@@ -2792,8 +2709,84 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive
-   (pcase-let ((`(,thing ,finder ,action ,arg) (conn--dispatch-read-command)))
-     (list thing finder action arg current-prefix-arg)))
+   (let ((keymap (make-composed-keymap
+                  (append conn-dispatch-override-maps
+                          (list conn-dispatch-command-map
+                                (conn--read-thing-keymap)))))
+         (prompt (concat "Thing Command "
+                         (propertize "%s" 'face 'transient-value)
+                         " ("
+                         (propertize "C-h" 'face 'help-key-binding)
+                         " for commands): "))
+         keys cmd invalid action thing-arg thing-sign)
+     (internal-push-keymap keymap 'overriding-terminal-local-map)
+     (unwind-protect
+         (cl-prog
+          nil
+          :read-command
+          (setq keys (conn--thread -->
+                         (or (alist-get action conn-dispatch-command-descriptions)
+                             (and action (symbol-name action)))
+                       (concat prompt --> " "
+                               (when invalid
+                                 (propertize "Invalid dispatch command"
+                                             'face 'error)))
+                       (format --> (format (if thing-arg "%s%s" "[%s1]")
+                                           (if thing-sign "-" "")
+                                           thing-arg))
+                       (read-key-sequence -->))
+                cmd (key-binding keys t)
+                invalid nil)
+          :loop
+          (pcase cmd
+            (`(,thing ,finder . ,default-action)
+             (cl-return
+              (list thing finder (or action default-action)
+                    (* (if thing-sign -1 1) (or thing-arg 1))
+                    current-prefix-arg)))
+            ('keyboard-quit
+             (keyboard-quit))
+            ('digit-argument
+             (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+               (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+            ('reset-arg
+             (setq thing-arg nil))
+            ('negative-argument
+             (setq thing-sign (not thing-sign)))
+            ('help
+             (internal-pop-keymap keymap 'overriding-terminal-local-map)
+             (save-window-excursion
+               (setq keys nil
+                     cmd (intern
+                          (completing-read
+                           "Command: "
+                           (lambda (string pred action)
+                             (if (eq action 'metadata)
+                                 `(metadata
+                                   ,(cons 'affixation-function
+                                          (conn--dispatch-make-command-affixation keymap)) 
+                                   (category . conn-dispatch-command))
+                               (complete-with-action action obarray string pred)))
+                           (lambda (sym)
+                             (and (functionp sym)
+                                  (not (eq sym 'help))
+                                  (or (get sym :conn-command-thing)
+                                      (where-is-internal sym (list keymap) t))))
+                           t))))
+             (internal-push-keymap keymap 'overriding-terminal-local-map)
+             (go :loop))
+            ((let (and thing (pred symbolp)) (get cmd :conn-command-thing))
+             (cl-return
+              (list thing (conn-dispatch-finder cmd)
+                    (or action (conn-dispatch-default-action cmd))
+                    (* (if thing-sign -1 1) (or thing-arg 1))
+                    current-prefix-arg)))
+            ((guard (where-is-internal cmd conn-dispatch-command-map t))
+             (setq action (unless (eq cmd action) cmd)))
+            (_
+             (setq invalid t)))
+          (go :read-command))
+       (internal-pop-keymap keymap 'overriding-terminal-local-map))))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
