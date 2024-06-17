@@ -5202,7 +5202,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "TAB" 'conn-wincontrol-other-window-scroll-up
   "DEL" 'conn-wincontrol-scroll-down
   "SPC" 'conn-wincontrol-scroll-up
-  "`" 'conn-wincontrol-other-window-scroll-down
+  "`" 'conn-quit-other-window-for-scrolling
+  "M-TAB" 'conn-wincontrol-other-window-scroll-down
+  "M-<tab>" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   "," 'conn-wincontrol-maximize-horizontally
@@ -5489,6 +5491,11 @@ When called interactively N is `last-command-event'."
 (defun conn-wincontrol-windmove-left ()
   (interactive)
   (windmove-left))
+
+(defun conn-quit-other-window-for-scrolling ()
+  (interactive)
+  (with-selected-window (other-window-for-scrolling)
+    (quit-window)))
 
 (defun conn-wincontrol-other-window-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
