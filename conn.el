@@ -2523,11 +2523,11 @@ state."
                           "Command: "
                           (lambda (string pred action)
                             (if (eq action 'metadata)
-            `(metadata
-              ,(cons 'affixation-function
-                     (conn--dispatch-make-command-affixation keymap))
-              (category . conn-dispatch-command))
-          (complete-with-action action obarray string pred)))
+                                `(metadata
+                                  ,(cons 'affixation-function
+                                         (conn--dispatch-make-command-affixation keymap))
+                                  (category . conn-dispatch-command))
+                              (complete-with-action action obarray string pred)))
                           (lambda (sym)
                             (and (functionp sym)
                                  (not (eq sym 'help))
@@ -4576,8 +4576,8 @@ associated with that command (see `conn-register-thing')."
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive (append (cdr (conn--read-thing-region)) (list t)))
   (narrow-to-region beg end)
-  (when record
-    (conn--narrow-ring-record beg end)
+  (when record (conn--narrow-ring-record beg end))
+  (when (called-interactively-p 'interactive)
     (message "Narrowed to region")))
 
 (defun conn-narrow-indirect-to-region (beg end &optional interactive)
@@ -4586,7 +4586,8 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (append (cdr (conn--read-thing-region)) (list t)))
   (conn--narrow-indirect beg end interactive)
-  (message "Narrow indirect to region"))
+  (when (called-interactively-p 'interactive)
+    (message "Narrow indirect to region")))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
