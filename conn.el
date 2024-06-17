@@ -5202,7 +5202,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "TAB" 'conn-wincontrol-other-window-scroll-up
   "DEL" 'conn-wincontrol-scroll-down
   "SPC" 'conn-wincontrol-scroll-up
-  "`" 'conn-quit-other-window-for-scrolling
+  "`" 'conn-wincontrol-quit-other-window-for-scrolling
   "M-TAB" 'conn-wincontrol-other-window-scroll-down
   "M-<tab>" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
@@ -5492,7 +5492,7 @@ When called interactively N is `last-command-event'."
   (interactive)
   (windmove-left))
 
-(defun conn-quit-other-window-for-scrolling ()
+(defun conn-wincontrol-quit-other-window-for-scrolling ()
   (interactive)
   (with-selected-window (other-window-for-scrolling)
     (quit-window)))
@@ -6811,16 +6811,16 @@ apply to each contiguous component of the region."
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
   "l" 'conn-emacs-state-eoil
-  "L" 'conn-emacs-state-eol
+  "e" 'conn-emacs-state-eol
   "j" 'conn-emacs-state-boil
-  "J" 'conn-emacs-state-bol
+  "a" 'conn-emacs-state-bol
   "t" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
   "s" 'conn-surround-thing
-  "p" 'conn-kill-prepend-region
-  "a" 'conn-kill-append-region)
+  "w" 'conn-kill-prepend-region
+  "d" 'conn-kill-append-region)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
