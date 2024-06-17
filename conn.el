@@ -3142,12 +3142,6 @@ Expansions and contractions are provided by functions in
                             (conn--create-marker end))
                       conn-narrow-ring)))))
 
-(defun conn-narrow-to-region (beg end &optional record)
-  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
-  (interactive (list (region-beginning) (region-end) t))
-  (narrow-to-region beg end)
-  (when record (conn--narrow-ring-record beg end)))
-
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
   (interactive "p")
@@ -4578,28 +4572,21 @@ associated with that command (see `conn-register-thing')."
   (unless executing-kbd-macro
     (pulse-momentary-highlight-region beg end)))
 
-(defun conn-narrow-to-thing (beg end &optional interactive)
-  "Narrow indirect buffer to THING at point.
-See `clone-indirect-buffer' for meaning of indirect buffer.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
+(defun conn-narrow-to-region (beg end &optional record)
+  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive (append (cdr (conn--read-thing-region)) (list t)))
-  (conn-narrow-to-region beg end interactive)
-  (message "Narrowed to region"))
+  (narrow-to-region beg end)
+  (when record
+    (conn--narrow-ring-record beg end)
+    (message "Narrowed to region")))
 
-(defun conn-narrow-indirect-to-thing (beg end &optional interactive)
+(defun conn-narrow-indirect-to-region (beg end &optional interactive)
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (append (cdr (conn--read-thing-region)) (list t)))
   (conn--narrow-indirect beg end interactive)
   (message "Narrow indirect to region"))
-
-(defun conn-narrow-indirect-to-region (beg end &optional interactive)
-  "Narrow to region from BEG to END in an indirect buffer in another window.
-See `clone-indirect-buffer' for meaning of indirect buffer."
-  (interactive (list (region-beginning) (region-end) t))
-  (conn--narrow-indirect beg end interactive))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -6662,13 +6649,10 @@ apply to each contiguous component of the region."
   "g" 'conn-rgrep-region
   "j" 'conn-join-lines
   "I" 'indent-rigidly
-  "N" 'conn-narrow-indirect-to-region
-  "n" 'conn-narrow-to-region
   "o" 'conn-occur-region
   "s" 'conn-sort-prefix
   "w" 'conn-replace-region-in-thing
   "u" 'conn-regexp-replace-region-in-thing
-  "v" 'conn-region-to-narrow-ring
   "V" 'vc-region-history
   "y" 'yank-rectangle
   "Y" 'conn-yank-lines-as-rectangle)
@@ -6841,8 +6825,8 @@ apply to each contiguous component of the region."
   "K" 'transpose-paragraphs
   "l" 'transpose-chars
   "m" 'transpose-sexps
-  "N" 'conn-narrow-indirect-to-thing
-  "n" 'conn-narrow-to-thing
+  "N" 'conn-narrow-indirect-to-region
+  "n" 'conn-narrow-to-region
   "o" 'transpose-words
   "q" 'indent-for-tab-command
   "r" 'conn-kmacro-prefix
@@ -7017,8 +7001,7 @@ apply to each contiguous component of the region."
   "C-x n <" 'conn-narrow-to-beginning-of-buffer
   "C-x n M->" 'conn-narrow-to-end-of-buffer-indirect
   "C-x n >" 'conn-narrow-to-end-of-buffer
-  "C-x n t" 'conn-narrow-to-thing
-  "C-x n T" 'conn-narrow-indirect-to-thing
+  "C-x n n" 'conn-narrow-to-region
   "C-x n N" 'conn-narrow-indirect-to-region
   "C-x r \\" 'conn-set-register-seperator
   "C-x r ." 'conn-last-macro-dispatch-to-register
