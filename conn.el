@@ -41,7 +41,8 @@
 (require 'sort)
 (eval-when-compile
   (require 'subr-x)
-  (require 'cl-lib))
+  (require 'cl-lib)
+  (require 'map))
 
 
 ;;;; Variables
