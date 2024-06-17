@@ -2023,10 +2023,12 @@ disabled.
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
 
-       (defvar ,map-name ,keymap
+       (defvar ,map-name
+         (setf (alist-get ',name conn--state-maps) ,keymap)
          ,(conn--stringify "Keymap active in `" name "'."))
 
-       (defvar ,transition-map-name ,transitions
+       (defvar ,transition-map-name
+         (setf (alist-get ',name conn--transition-maps) ,transitions)
          ,(conn--string-fill (conn--stringify
                               "Keymap for commands that transition from `"
                               name "' to other states.")
@@ -2073,8 +2075,6 @@ disabled.
        (put ',name :conn-lighter-face ',lighter-face-name)
 
        (cl-pushnew ',name conn-states)
-       (setf (alist-get ',name conn--state-maps) ,map-name
-             (alist-get ',name conn--transition-maps) ,transition-map-name)
 
        (defun ,name ()
          ,doc
@@ -2126,7 +2126,8 @@ from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state.
   :lighter-face ((default              (:inherit mode-line :background "#cae1ff"))
                  (((background light)) (:inherit mode-line :background "#cae1ff"))
                  (((background dark))  (:inherit mode-line :background "#49739f")))
-  :ephemeral-marks nil)
+  :ephemeral-marks nil
+  :keymap (make-sparse-keymap))
 
 (conn-define-state conn-state
   "Activate `conn-state' in the current buffer.
@@ -2758,7 +2759,7 @@ seconds."
                              (if (eq action 'metadata)
                                  `(metadata
                                    ,(cons 'affixation-function
-                                          (conn--dispatch-make-command-affixation keymap)) 
+                                          (conn--dispatch-make-command-affixation keymap))
                                    (category . conn-dispatch-command))
                                (complete-with-action action obarray string pred)))
                            (lambda (sym)
