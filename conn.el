@@ -2132,8 +2132,8 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
   :ephemeral-marks t
   :keymap (define-keymap :parent conn-common-map :suppress t)
   :transitions (define-keymap
-                 "e"       'conn-emacs-state
-                 "t"       'conn-change))
+                 "e" 'conn-emacs-state
+                 "t" 'conn-change))
 
 (add-to-list 'conn-buffer-default-state-alist
              '((derived-mode . prog-mode) . conn-state))
@@ -2156,7 +2156,7 @@ state."
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t
-  :transitions (define-keymap "f" 'conn-emacs-state))
+  :transitions (define-keymap "e" 'conn-emacs-state))
 
 
 ;;;; Thing Dispatch
@@ -6916,10 +6916,10 @@ apply to each contiguous component of the region."
   "?" 'undo-redo
   "q s" 'org-sort
   "q c" 'org-columns
-  "b" 'conn-dispatch-on-things
+  "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
-  "e" conn-misc-edit-map
+  "b" conn-misc-edit-map
   "g" (conn-remapping-command (key-parse "M-g"))
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
