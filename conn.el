@@ -6543,7 +6543,9 @@ apply to each contiguous component of the region."
   [["Sort Region: "
     ("a" "sort pages" sort-pages)
     ("c" "sort columns" sort-columns)
-    ("l" "sort lines" sort-lines)]
+    ("l" "sort lines" sort-lines)
+    ("o" "org sort" org-sort
+     :if (lambda () (eq major-mode 'org-mode)))]
    [("f" "case fold" conn--case-fold-infix)
     ("n" "sort numeric fields" sort-numeric-fields)
     ("p" "sort paragraphs" sort-paragraphs)
@@ -6607,7 +6609,6 @@ apply to each contiguous component of the region."
   "j" 'conn-join-lines
   "I" 'indent-rigidly
   "o" 'conn-occur-region
-  "s" 'conn-sort-prefix
   "w" 'conn-replace-region-in-thing
   "u" 'conn-regexp-replace-region-in-thing
   "V" 'vc-region-history
@@ -6787,6 +6788,7 @@ apply to each contiguous component of the region."
   "o" 'transpose-words
   "q" 'indent-for-tab-command
   "r" 'conn-kmacro-prefix
+  "s" 'conn-sort-prefix
   "v" 'conn-mark-thing
   "y" 'yank-in-context)
 
@@ -6914,8 +6916,7 @@ apply to each contiguous component of the region."
   "<" 'org-promote-subtree
   ">" 'org-demote-subtree
   "?" 'undo-redo
-  "q s" 'org-sort
-  "q c" 'org-columns
+  "q" 'conn-edit-map
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
