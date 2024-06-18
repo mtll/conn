@@ -4270,28 +4270,6 @@ With arg N, insert N newlines."
       (forward-line 1)
       (indent-according-to-mode))))
 
-(defun conn-narrow-to-end-of-buffer (&optional interactive)
-  "Narrow to the region between `point' and `point-max'."
-  (interactive (list t))
-  (conn-narrow-to-region (point) (point-max) interactive))
-
-(defun conn-narrow-to-end-of-buffer-indirect (&optional interactive)
-  "Narrow to the region between `point' and `point-max' in an indirect buffer.
-See `clone-indirect-buffer'."
-  (interactive (list t))
-  (conn--narrow-indirect (point) (point-max) interactive))
-
-(defun conn-narrow-to-beginning-of-buffer (&optional interactive)
-  "Narrow to the region between `point-min' and `point'."
-  (interactive (list t))
-  (conn-narrow-to-region (point-min) (point) interactive))
-
-(defun conn-narrow-to-beginning-of-buffer-indirect (&optional interactive)
-  "Narrow to the region between `point-min' and `point' in an indirect buffer.
-See `clone-indirect-buffer'."
-  (interactive (list t))
-  (conn--narrow-indirect (point-min) (point) interactive))
-
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
@@ -6976,10 +6954,6 @@ apply to each contiguous component of the region."
   "C-x 4 ?" 'tab-bar-history-forward
   "C-x 4 -" 'conn-window-resize-map
   "C-x ?" 'tab-bar-history-forward
-  "C-x n M-<" 'conn-narrow-to-beginning-of-buffer-indirect
-  "C-x n <" 'conn-narrow-to-beginning-of-buffer
-  "C-x n M->" 'conn-narrow-to-end-of-buffer-indirect
-  "C-x n >" 'conn-narrow-to-end-of-buffer
   "C-x n n" 'conn-narrow-to-region
   "C-x n N" 'conn-narrow-indirect-to-region
   "C-x r \\" 'conn-set-register-seperator
