@@ -39,10 +39,10 @@
 (require 'repeat)
 (require 'kmacro)
 (require 'sort)
+(require 'map)
 (eval-when-compile
   (require 'subr-x)
-  (require 'cl-lib)
-  (require 'map))
+  (require 'cl-lib))
 
 
 ;;;; Variables
@@ -2000,20 +2000,18 @@ marks while in state NAME.
 BODY contains code to be executed each time the state is enabled or
 disabled.
 
-\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP TRANSITIONS INDICATOR EPHEMERAL-MARKS &rest BODY)"
+\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP TRANSITIONS EPHEMERAL-MARKS &rest BODY)"
   (declare (indent defun))
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (transition-map-name (conn--symbolicate name "-transition-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-face-name (conn--symbolicate name "-lighter-face"))
-               (indicator-name (conn--symbolicate name "-indicator"))
                (enter (gensym "enter"))
                ((map :cursor
                      :lighter-face
                      :suppress-input-method
                      (:keymap keymap '(make-sparse-keymap))
                      (:transitions transitions '(make-sparse-keymap))
-                     (:indicator indicator "")
                      :ephemeral-marks)
                 rest)
                (body (cl-loop for sublist on rest by #'cddr
@@ -2036,7 +2034,7 @@ disabled.
 
        (defface ,lighter-face-name
          ',lighter-face
-         ,(conn--stringify "Face for `" name "' mode line indicator.")
+         ,(conn--stringify "Face for `" name "' mode line lighter.")
          :group 'conn-states)
 
        (defcustom ,cursor-name
@@ -2059,19 +2057,11 @@ disabled.
                        integer))
          :group 'conn-states)
 
-       (defcustom ,indicator-name
-         '(:propertize ,indicator face ,lighter-face-name)
-         ,(conn--stringify "`" name "' mode line indicator string.")
-         :type '(list string symbol)
-         :risky t
-         :group 'conn-states)
-
        ,(when ephemeral-marks
           `(cl-pushnew ',name conn-ephemeral-mark-states))
 
        (put ',name :conn-suppress-input-method ,suppress-input-method)
        (put ',name :conn-cursor-type ',cursor-name)
-       (put ',name :conn-indicator ',indicator-name)
        (put ',name :conn-lighter-face ',lighter-face-name)
 
        (cl-pushnew ',name conn-states)
