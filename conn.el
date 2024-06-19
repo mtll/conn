@@ -59,6 +59,7 @@
 (defvar kmacro-step-edit-replace)
 (defvar conn-state-map)
 (defvar conn-expand-repeat-map)
+(defvar conn-transition-hook)
 
 (defvar conn-dispatch-providers-alist
   '((t . conn--dispatch-chars)))
@@ -624,7 +625,7 @@ If BUFFER is nil check `current-buffer'."
                 (let ((exit (set-transient-map
                              conn-read-expand-region-map (lambda () t) nil
                              (substitute-command-keys
-                              (concat "Defining region. "
+                              (concat "Defining region. Press "
                                       "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to finish, "
                                       "\\<conn-read-expand-region-map>\\[abort-recursive-edit] to abort.")))))
                   (unwind-protect
@@ -2715,8 +2716,8 @@ seconds."
                          (propertize "C-h" 'face 'help-key-binding)
                          " for commands): "))
          keys cmd invalid action thing-arg thing-sign)
-     (internal-push-keymap keymap 'overriding-terminal-local-map)
      (conn--with-state conn-state
+       (internal-push-keymap keymap 'overriding-terminal-local-map)
        (unwind-protect
            (cl-prog
             nil
