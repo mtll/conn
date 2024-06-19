@@ -1232,9 +1232,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'list (lambda (_beg)
-         (pcase (ignore-errors (bounds-of-thing-at-point 'list))
-           (`(,_ . ,end)
-            (conn--push-ephemeral-mark (1- end)))))
+         (condition-case nil
+             (pcase (bounds-of-thing-at-point 'list)
+               (`(,_ . ,end)
+                (save-excursion
+                  (goto-char end)
+                  (down-list -1)
+                  (conn--push-ephemeral-mark (point)))))
+           (scan-error nil)))
  'down-list)
 
 (conn-register-thing-commands
