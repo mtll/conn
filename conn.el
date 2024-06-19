@@ -558,7 +558,21 @@ If BUFFER is nil check `current-buffer'."
 (defvar-keymap conn-read-thing-command-mark-map
   "C-h" 'help
   "t" conn-mark-thing-map
-  "." 'reset-arg)
+  "." 'reset-arg
+  "r" 'conn-define-region)
+
+(defvar conn-read-expand-region-map
+  (make-composed-keymap
+   (list (define-keymap
+           "H" 'conn-contract
+           "h" 'conn-expand
+           "v" 'conn-toggle-mark-command
+           "SPC" 'conn-set-mark-command)
+         conn-movement-map
+         (define-keymap
+           "<return>" 'exit-recursive-edit
+           "RET" 'exit-recursive-edit
+           "C-g" 'abort-recursive-edit))))
 
 (defun conn--read-thing-keymap ()
   (cond ((null conn-local-mode)
@@ -595,7 +609,8 @@ If BUFFER is nil check `current-buffer'."
                        invalid nil)
                  (not (or (get cmd :conn-command-thing)
                           (eq cmd 'conn-expand)
-                          (eq cmd 'conn-contract))))
+                          (eq cmd 'conn-contract)
+                          (eq cmd 'conn-define-region))))
           (pcase cmd
             ('keyboard-quit
              (keyboard-quit))
@@ -619,21 +634,22 @@ If BUFFER is nil check `current-buffer'."
       (message nil)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))
     (pcase cmd
-      ((or 'conn-expand 'conn-contract)
+      ((or 'conn-expand 'conn-contract 'conn-define-region)
        (save-mark-and-excursion
          (let ((current-prefix-arg
                 (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
                       (thing-sign '-))))
-           (call-interactively cmd)
-           (set-transient-map
-            (define-keymap
-              :parent conn-expand-repeat-map
-              "<t>" 'exit-recursive-edit)
-            (lambda ()
-              (memq this-command '(conn-expand
-                                   conn-contract
-                                   conn-expand-exchange))))
-           (recursive-edit)
+           (unless (eq cmd 'conn-define-region)
+             (call-interactively cmd))
+           (let ((exit (set-transient-map
+                        conn-read-expand-region-map (lambda () t) nil
+                        (substitute-command-keys
+                         (concat "Defining region. "
+                                 "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to accept region, "
+                                 "\\<conn-read-expand-region-map>\\[abort-recursive-edit] to abort.")))))
+             (unwind-protect
+                 (recursive-edit)
+               (funcall exit)))
            (list nil (region-beginning) (region-end)))))
       ((app conn-get-mark-handler
             (and conn-this-command-handler
@@ -1218,41 +1234,36 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'list
  :forward-op 'forward-list)
 
-(conn-register-thing-commands
- 'list (lambda (beg)
-         (cond ((> (point) beg)
-                (save-excursion
-                  (forward-thing 'list -1)
-                  (conn--push-ephemeral-mark (point))))
-               ((< (point) beg)
-                (save-excursion
-                  (forward-thing 'list 1)
-                  (conn--push-ephemeral-mark (point))))))
- 'up-list 'backward-up-list)
+(defun conn--list-mark-handler (beg)
+  (condition-case nil
+      (cond ((> (point) beg)
+             (save-excursion
+               (forward-thing 'list -1)
+               (conn--push-ephemeral-mark (point))))
+            ((< (point) beg)
+             (save-excursion
+               (forward-thing 'list 1)
+               (conn--push-ephemeral-mark (point)))))
+    (scan-error nil)))
 
 (conn-register-thing-commands
- 'list (lambda (_beg)
-         (condition-case nil
-             (pcase (bounds-of-thing-at-point 'list)
-               (`(,_ . ,end)
-                (save-excursion
-                  (goto-char end)
-                  (down-list -1)
-                  (conn--push-ephemeral-mark (point)))))
-           (scan-error nil)))
- 'down-list)
-
-(conn-register-thing-commands
- 'list (lambda (beg)
-         (cond ((> (point) beg)
-                (save-excursion
-                  (backward-list)
-                  (conn--push-ephemeral-mark (point))))
-               ((< (point) beg)
-                (save-excursion
-                  (forward-list)
-                  (conn--push-ephemeral-mark (point))))))
+ 'list 'conn--list-mark-handler
+ 'up-list 'backward-up-list
  'forward-list 'backward-list)
+
+(defun conn--down-list-mark-handler (_beg)
+  (condition-case nil
+      (pcase (bounds-of-thing-at-point 'list)
+        (`(,_ . ,end)
+         (save-excursion
+           (goto-char end)
+           (down-list -1)
+           (conn--push-ephemeral-mark (point)))))
+    (scan-error nil)))
+
+(conn-register-thing-commands
+ 'list 'conn--down-list-mark-handler 
+ 'down-list)
 
 (conn-register-thing
  'whitespace
@@ -1286,9 +1297,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'end-of-defun 'beginning-of-defun
  'conn-forward-defun)
 
-(conn-register-thing
- 'char
- :default-action 'conn-dispatch-jump)
+(conn-register-thing 'char :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'buffer 'conn-individual-thing-handler
@@ -1335,16 +1344,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'outer-line 'conn-individual-thing-handler
  'move-beginning-of-line 'move-end-of-line)
 
+(defun conn--bounds-of-inner-line ()
+  (cons
+   (save-excursion
+     (back-to-indentation)
+     (point))
+   (save-excursion
+     (conn--end-of-inner-line-1)
+     (point))))
+
 (conn-register-thing
  'inner-line
- :bounds-op (lambda ()
-              (cons
-               (save-excursion
-                 (back-to-indentation)
-                 (point))
-               (save-excursion
-                 (conn--end-of-inner-line-1)
-                 (point))))
+ :bounds-op 'conn--bounds-of-inner-line
  :dispatch-provider 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
@@ -3003,12 +3014,11 @@ Expansions and contractions are provided by functions in
 (defun conn-insert-pair ()
   (let ((beg (region-beginning))
         (end (region-end)))
-    (save-mark-and-excursion
-      (pcase-let ((`(,open . ,close) (conn--read-pair)))
-        (goto-char end)
-        (insert close)
-        (goto-char beg)
-        (insert-before-markers open)))))
+    (pcase-let ((`(,open . ,close) (conn--read-pair)))
+      (goto-char end)
+      (insert close)
+      (goto-char beg)
+      (insert-before-markers open))))
 
 (defun conn-change-pair-outward (arg)
   "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
@@ -3024,19 +3034,17 @@ Expansions and contractions are provided by functions in
 
 (defun conn-delete-pair-inward (arg)
   "Delete ARG chars at `point' and `mark'."
-  (save-mark-and-excursion
-    (let ((end (> (point) (mark-marker))))
-      (when end (exchange-point-and-mark t))
-      (delete-region (point) (+ (point) arg))
-      (delete-region (- (mark-marker) arg) (mark-marker)))))
+  (let ((end (> (point) (mark-marker))))
+    (when end (exchange-point-and-mark t))
+    (delete-region (point) (+ (point) arg))
+    (delete-region (- (mark-marker) arg) (mark-marker))))
 
 (defun conn-delete-pair-outward (arg)
   "Delete ARG chars at `point' and `mark'."
-  (save-mark-and-excursion
-    (let ((end (> (point) (mark-marker))))
-      (when end (exchange-point-and-mark t))
-      (delete-region (- (point) arg) (point))
-      (delete-region (mark-marker) (+ (mark-marker) arg)))))
+  (let ((end (> (point) (mark-marker))))
+    (when end (exchange-point-and-mark t))
+    (delete-region (- (point) arg) (point))
+    (delete-region (mark-marker) (+ (mark-marker) arg))))
 
 (defun conn--surround-region (action _beg _end arg)
   (pcase action
@@ -3056,27 +3064,27 @@ Expansions and contractions are provided by functions in
 (put 'region :conn-thing-surrounder 'conn--surround-region)
 
 (defun conn--surround-thing (action beg end arg)
-  (save-mark-and-excursion
-    (goto-char beg)
-    (conn--push-ephemeral-mark end)
-    (pcase action
-      ('surround (conn-insert-pair))
-      ('delete (conn-delete-pair-inward arg))
-      ('change (conn-change-pair-inward arg)))))
+  (goto-char beg)
+  (conn--push-ephemeral-mark end)
+  (pcase action
+    ('surround (conn-insert-pair))
+    ('delete (conn-delete-pair-inward arg))
+    ('change (conn-change-pair-inward arg))))
 
 (defun conn-surround-thing (thing beg end arg)
   (interactive (append (conn--read-thing-region)
                        (list (prefix-numeric-value current-prefix-arg))))
-  (funcall (or (get thing :conn-thing-surrounder)
-               'conn--surround-thing)
-           (pcase (car (read-multiple-choice
-                        "Action:" `((?s "surround")
-                                    (?d "delete")
-                                    (?c "change"))))
-             (?s 'surround)
-             (?d 'delete)
-             (?c 'change))
-           beg end arg))
+  (save-mark-and-excursion
+    (funcall (or (get thing :conn-thing-surrounder)
+                 'conn--surround-thing)
+             (pcase (car (read-multiple-choice
+                          "Action:" `((?s "surround")
+                                      (?d "delete")
+                                      (?c "change"))))
+               (?s 'surround)
+               (?d 'delete)
+               (?c 'change))
+             beg end arg)))
 
 
 ;;;; Narrow Ring
@@ -6574,6 +6582,12 @@ apply to each contiguous component of the region."
 
 ;;;; Keymaps
 
+(defvar-keymap conn-expand-repeat-map
+  :repeat t
+  "z" 'conn-expand-exchange
+  "H" 'conn-contract
+  "h" 'conn-expand)
+
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
   "C-s" 'reb-next-match
@@ -6619,12 +6633,6 @@ apply to each contiguous component of the region."
   "V" 'vc-region-history
   "y" 'yank-rectangle
   "Y" 'conn-yank-lines-as-rectangle)
-
-(defvar-keymap conn-expand-repeat-map
-  :repeat t
-  "z" 'conn-expand-exchange
-  "H" 'conn-contract
-  "h" 'conn-expand)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
