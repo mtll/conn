@@ -73,6 +73,12 @@
 
 (defvar-keymap conn-movement-map)
 
+(defvar-keymap conn-expand-repeat-map
+  :repeat t
+  "z" 'conn-expand-exchange
+  "H" 'conn-contract
+  "h" 'conn-expand)
+
 ;;;;; Custom Variables
 
 (defgroup conn nil
@@ -559,20 +565,15 @@ If BUFFER is nil check `current-buffer'."
   "C-h" 'help
   "t" conn-mark-thing-map
   "." 'reset-arg
-  "r" 'conn-define-region)
+  "r" 'conn-define-region-in-recursive-edit)
 
 (defvar conn-read-expand-region-map
-  (make-composed-keymap
-   (list (define-keymap
-           "H" 'conn-contract
-           "h" 'conn-expand
-           "v" 'conn-toggle-mark-command
-           "SPC" 'conn-set-mark-command)
-         conn-movement-map
-         (define-keymap
-           "<return>" 'exit-recursive-edit
-           "RET" 'exit-recursive-edit
-           "C-g" 'abort-recursive-edit))))
+  (define-keymap
+    :parent conn-expand-repeat-map
+    "v" 'conn-toggle-mark-command
+    "r" 'exit-recursive-edit
+    "C-g" 'abort-recursive-edit
+    "<t>" 'ignore))
 
 (defun conn--read-thing-keymap ()
   (cond ((null conn-local-mode)
@@ -610,7 +611,7 @@ If BUFFER is nil check `current-buffer'."
                  (not (or (get cmd :conn-command-thing)
                           (eq cmd 'conn-expand)
                           (eq cmd 'conn-contract)
-                          (eq cmd 'conn-define-region))))
+                          (eq cmd 'conn-define-region-in-recursive-edit))))
           (pcase cmd
             ('keyboard-quit
              (keyboard-quit))
@@ -634,23 +635,26 @@ If BUFFER is nil check `current-buffer'."
       (message nil)
       (internal-pop-keymap keymap 'overriding-terminal-local-map))
     (pcase cmd
-      ((or 'conn-expand 'conn-contract 'conn-define-region)
+      ((or 'conn-expand 'conn-contract)
        (save-mark-and-excursion
          (let ((current-prefix-arg
                 (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
                       (thing-sign '-))))
-           (unless (eq cmd 'conn-define-region)
-             (call-interactively cmd))
+           (call-interactively cmd)
            (let ((exit (set-transient-map
                         conn-read-expand-region-map (lambda () t) nil
                         (substitute-command-keys
                          (concat "Defining region. "
-                                 "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to accept region, "
+                                 "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to finish, "
                                  "\\<conn-read-expand-region-map>\\[abort-recursive-edit] to abort.")))))
              (unwind-protect
                  (recursive-edit)
                (funcall exit)))
            (list nil (region-beginning) (region-end)))))
+      ('conn-define-region-in-recursive-edit
+       (save-mark-and-excursion
+         (recursive-edit)
+         (list nil (region-beginning) (region-end))))
       ((app conn-get-mark-handler
             (and conn-this-command-handler
                  (pred functionp)))
@@ -6581,12 +6585,6 @@ apply to each contiguous component of the region."
 
 
 ;;;; Keymaps
-
-(defvar-keymap conn-expand-repeat-map
-  :repeat t
-  "z" 'conn-expand-exchange
-  "H" 'conn-contract
-  "h" 'conn-expand)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
