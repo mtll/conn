@@ -73,11 +73,7 @@
 
 (defvar-keymap conn-movement-map)
 
-(defvar-keymap conn-expand-repeat-map
-  :repeat t
-  "z" 'conn-expand-exchange
-  "H" 'conn-contract
-  "h" 'conn-expand)
+(defvar-keymap conn-expand-repeat-map :repeat t)
 
 ;;;;; Custom Variables
 
@@ -596,79 +592,75 @@ If BUFFER is nil check `current-buffer'."
         invalid keys cmd thing-arg thing-sign)
     (internal-push-keymap keymap 'overriding-terminal-local-map)
     (unwind-protect
-        (while (progn
-                 (setq keys (read-key-sequence
-                             (format prompt
-                                     (format (if thing-arg "%s%s" "[%s1]")
-                                             (if thing-sign "-" "")
-                                             thing-arg)
-                                     (if invalid
-                                         (propertize "Not a valid thing command"
-                                                     'face 'error)
-                                       "")))
-                       cmd (key-binding keys t)
-                       invalid nil)
-                 (not (or (get cmd :conn-command-thing)
-                          (eq cmd 'conn-expand)
-                          (eq cmd 'conn-contract)
-                          (eq cmd 'conn-define-region-in-recursive-edit))))
-          (pcase cmd
-            ('keyboard-quit
-             (keyboard-quit))
-            ('help
-             (internal-pop-keymap keymap 'overriding-terminal-local-map)
-             (save-window-excursion
-               (setq cmd (let ((read-extended-command-predicate
-                                (lambda (symbol _)
-                                  (get symbol :conn-command-thing))))
-                           (read-extended-command))))
-             (internal-push-keymap keymap 'overriding-terminal-local-map))
-            ('digit-argument
-             (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-               (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-            ('reset-arg
-             (setq thing-arg nil))
-            ('negative-argument
-             (setq thing-sign (not thing-sign)))
-            (_
-             (setq invalid t))))
+        (cl-loop
+         for keys = (read-key-sequence
+                     (format prompt
+                             (format (if thing-arg "%s%s" "[%s1]")
+                                     (if thing-sign "-" "")
+                                     thing-arg)
+                             (if invalid
+                                 (propertize "Not a valid thing command"
+                                             'face 'error)
+                               "")))
+         for cmd = (key-binding keys t)
+         for invalid = nil do
+         (pcase cmd
+           ('keyboard-quit
+            (keyboard-quit))
+           ('help
+            (internal-pop-keymap keymap 'overriding-terminal-local-map)
+            (save-window-excursion
+              (setq cmd (let ((read-extended-command-predicate
+                               (lambda (symbol _)
+                                 (get symbol :conn-command-thing))))
+                          (read-extended-command))))
+            (internal-push-keymap keymap 'overriding-terminal-local-map))
+           ('digit-argument
+            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+           ('reset-arg
+            (setq thing-arg nil))
+           ('negative-argument
+            (setq thing-sign (not thing-sign)))
+           ((or 'conn-expand 'conn-contract)
+            (save-mark-and-excursion
+              (let ((current-prefix-arg
+                     (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                           (thing-sign '-))))
+                (call-interactively cmd)
+                (let ((exit (set-transient-map
+                             conn-read-expand-region-map (lambda () t) nil
+                             (substitute-command-keys
+                              (concat "Defining region. "
+                                      "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to finish, "
+                                      "\\<conn-read-expand-region-map>\\[abort-recursive-edit] to abort.")))))
+                  (unwind-protect
+                      (recursive-edit)
+                    (funcall exit)))
+                (cl-return (list nil (region-beginning) (region-end))))))
+           ('conn-define-region-in-recursive-edit
+            (save-mark-and-excursion
+              (message "Defining region in recursive edit")
+              (recursive-edit)
+              (cl-return (list nil (region-beginning) (region-end)))))
+           ((guard (not (get cmd :conn-command-thing)))
+            (setq invalid t))
+           ((app conn-get-mark-handler
+                 (and conn-this-command-handler
+                      (pred functionp)))
+            (save-mark-and-excursion
+              (let ((this-command cmd)
+                    (current-prefix-arg thing-arg)
+                    (conn-this-command-start (point-marker))
+                    (conn-this-command-thing (get cmd :conn-command-thing)))
+                (call-interactively cmd)
+                (funcall conn-this-command-handler conn-this-command-start))
+              (cl-return (list (get cmd :conn-command-thing) (region-beginning) (region-end)))))
+           ((and (let thing (get cmd :conn-command-thing))
+                 (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
+            (cl-return (list thing beg end)))))
       (message nil)
-      (internal-pop-keymap keymap 'overriding-terminal-local-map))
-    (pcase cmd
-      ((or 'conn-expand 'conn-contract)
-       (save-mark-and-excursion
-         (let ((current-prefix-arg
-                (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                      (thing-sign '-))))
-           (call-interactively cmd)
-           (let ((exit (set-transient-map
-                        conn-read-expand-region-map (lambda () t) nil
-                        (substitute-command-keys
-                         (concat "Defining region. "
-                                 "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to finish, "
-                                 "\\<conn-read-expand-region-map>\\[abort-recursive-edit] to abort.")))))
-             (unwind-protect
-                 (recursive-edit)
-               (funcall exit)))
-           (list nil (region-beginning) (region-end)))))
-      ('conn-define-region-in-recursive-edit
-       (save-mark-and-excursion
-         (recursive-edit)
-         (list nil (region-beginning) (region-end))))
-      ((app conn-get-mark-handler
-            (and conn-this-command-handler
-                 (pred functionp)))
-       (save-mark-and-excursion
-         (let ((this-command cmd)
-               (current-prefix-arg thing-arg)
-               (conn-this-command-start (point-marker))
-               (conn-this-command-thing (get cmd :conn-command-thing)))
-           (call-interactively cmd)
-           (funcall conn-this-command-handler conn-this-command-start))
-         (list (get cmd :conn-command-thing) (region-beginning) (region-end))))
-      ((and (let thing (get cmd :conn-command-thing))
-            (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
-       (list thing beg end)))))
+      (internal-pop-keymap keymap 'overriding-terminal-local-map))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
   (with-current-buffer (or buffer (current-buffer))
@@ -6585,6 +6577,12 @@ apply to each contiguous component of the region."
 
 
 ;;;; Keymaps
+
+(define-keymap
+  :keymap conn-expand-repeat-map
+  "z" 'conn-expand-exchange
+  "H" 'conn-contract
+  "h" 'conn-expand)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
