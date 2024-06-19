@@ -564,29 +564,26 @@ If BUFFER is nil check `current-buffer'."
   "." 'reset-arg
   "r" 'conn-define-region-in-recursive-edit)
 
-(defvar conn-read-expand-region-map
-  (define-keymap
-    :parent conn-expand-repeat-map
-    "v" 'conn-toggle-mark-command
-    "r" 'exit-recursive-edit
-    "C-g" 'abort-recursive-edit
-    "<t>" 'ignore))
+(defvar-keymap conn-read-expand-region-map
+  :parent conn-expand-repeat-map
+  "v" 'conn-toggle-mark-command
+  "r" 'exit-recursive-edit
+  "C-g" 'abort-recursive-edit
+  "<t>" 'ignore)
 
 (defun conn--read-thing-region ()
   (conn--with-state conn-state
+    (internal-push-keymap conn-read-thing-command-mark-map
+                          'overriding-terminal-local-map)
     (unwind-protect
-        (cl-loop
-         initially do (internal-push-keymap conn-read-thing-command-mark-map
-                                            'overriding-terminal-local-map)
-         with prompt = (concat "Thing Command "
-                               (propertize "%s" 'face 'transient-value)
-                               " ("
-                               (propertize "C-h" 'face 'help-key-binding)
-                               " for commands): %s")
-         with thing-arg
-         with thing-sign
-         for invalid = nil
-         for keys = (read-key-sequence
+        (cl-prog ((prompt (concat "Thing Command "
+                                  (propertize "%s" 'face 'transient-value)
+                                  " ("
+                                  (propertize "C-h" 'face 'help-key-binding)
+                                  " for commands): %s"))
+                  thing-arg thing-sign invalid keys cmd)
+         :read-command
+         (setq keys (read-key-sequence
                      (format prompt
                              (format (if thing-arg "%s%s" "[%s1]")
                                      (if thing-sign "-" "")
@@ -595,8 +592,8 @@ If BUFFER is nil check `current-buffer'."
                                  (propertize "Not a valid thing command"
                                              'face 'error)
                                "")))
-         for cmd = (key-binding keys t)
-         do
+               cmd (key-binding keys t))
+         :test
          (pcase cmd
            ('keyboard-quit
             (keyboard-quit))
@@ -607,8 +604,10 @@ If BUFFER is nil check `current-buffer'."
               (setq cmd (let ((read-extended-command-predicate
                                (lambda (symbol _)
                                  (get symbol :conn-command-thing))))
-                          (read-extended-command))))
-            (internal-push-keymap keymap 'overriding-terminal-local-map))
+                          (intern-soft (read-extended-command)))))
+            (internal-push-keymap conn-read-thing-command-mark-map
+                                  'overriding-terminal-local-map)
+            (go :test))
            ('digit-argument
             (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
               (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
@@ -657,7 +656,8 @@ If BUFFER is nil check `current-buffer'."
                      (region-end)))))
            ((and (let thing (get cmd :conn-command-thing))
                  (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
-            (cl-return (list thing beg end)))))
+            (cl-return (list thing beg end))))
+         (go :read-command))
       (message nil)
       (internal-pop-keymap conn-read-thing-command-mark-map
                            'overriding-terminal-local-map))))
