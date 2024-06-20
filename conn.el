@@ -578,18 +578,12 @@ If BUFFER is nil check `current-buffer'."
                           'overriding-terminal-local-map)
     (unwind-protect
         (cl-prog
-         ((prompt (concat "Define Region "
-                          (propertize "%s" 'face 'transient-value)
-                          " ("
-                          (substitute-command-keys
-                           "\\<conn-read-thing-command-mark-map>\\[help]:")
-                          " commands; "
-                          (substitute-command-keys
-                           "\\<conn-dispatch-command-map>\\[reset-arg]:")
-                          " reset arg; "
-                          (substitute-command-keys
-                           "\\<conn-read-thing-command-mark-map>\\[conn-define-region-in-recursive-edit]:")
-                          " recursive edit): %s"))
+         ((prompt (substitute-command-keys
+                   (concat "\\<conn-read-thing-command-mark-map>Define Region "
+                           (propertize "%s" 'face 'transient-value)
+                           " (\\[help]: commands; \\[reset-arg]: reset arg; "
+                           "\\[conn-define-region-in-recursive-edit]: "
+                           " recursive edit): %s")))
           thing-arg thing-sign invalid keys cmd)
          :read-command
          (setq keys (read-key-sequence
@@ -633,9 +627,10 @@ If BUFFER is nil check `current-buffer'."
                 (let ((exit (set-transient-map
                              conn-read-expand-region-map (lambda () t) nil
                              (substitute-command-keys
-                              (concat "Defining region. Press "
-                                      "\\<conn-read-expand-region-map>\\[exit-recursive-edit] to finish, "
-                                      "\\<conn-read-expand-region-map>\\[abort-recursive-edit] to abort.")))))
+                              (concat "\\<conn-read-expand-region-map>"
+                                      "Defining region. Press "
+                                      "\\[exit-recursive-edit] to finish, "
+                                      "\\[abort-recursive-edit] to abort.")))))
                   (unwind-protect
                       (recursive-edit)
                     (funcall exit)))
@@ -2720,15 +2715,10 @@ seconds."
    (let ((keymap (make-composed-keymap
                   (append conn-dispatch-override-maps
                           conn-dispatch-command-map)))
-         (prompt (concat "Thing "
-                         (propertize "%s" 'face 'transient-value)
-                         " ("
-                         (substitute-command-keys
-                          "\\<conn-dispatch-command-map>\\[help]:")
-                         " commands; "
-                         (substitute-command-keys
-                          "\\<conn-dispatch-command-map>\\[reset-arg]:")
-                         " reset arg): "))
+         (prompt (substitute-command-keys
+                  (concat "\\<conn-read-thing-command-mark-map>Thing "
+                          (propertize "%s" 'face 'transient-value)
+                          " (\\[help]: commands; \\[reset-arg]: reset arg): %s")))
          keys cmd invalid action thing-arg thing-sign)
      (conn--with-state conn-state
        (internal-push-keymap keymap 'overriding-terminal-local-map)
@@ -2736,17 +2726,19 @@ seconds."
            (cl-prog
             nil
             :read-command
-            (setq keys (conn--thread -->
-                           (or (alist-get action conn-dispatch-command-descriptions)
-                               (and action (symbol-name action)))
-                         (concat prompt --> " "
-                                 (when invalid
-                                   (propertize "Invalid dispatch command"
-                                               'face 'error)))
-                         (format --> (format (if thing-arg "%s%s" "[%s1]")
-                                             (if thing-sign "-" "")
-                                             thing-arg))
-                         (read-key-sequence -->))
+            (setq keys (read-key-sequence
+                        (format prompt
+                                (format (if thing-arg "%s%s" "[%s1]")
+                                        (if thing-sign "-" "")
+                                        thing-arg)
+                                (cond
+                                 (invalid
+                                  (propertize "Not a valid thing command"
+                                              'face 'error))
+                                 (action
+                                  (or (alist-get action conn-dispatch-command-descriptions)
+                                      (and action (symbol-name action))))
+                                 (t ""))))
                   cmd (key-binding keys t)
                   invalid nil)
             :loop
@@ -2793,7 +2785,7 @@ seconds."
                       (or action (conn-dispatch-default-action cmd))
                       (* (if thing-sign -1 1) (or thing-arg 1))
                       current-prefix-arg)))
-              ((guard (where-is-internal cmd conn-dispatch-command-map t))
+              ((guard (where-is-internal cmd (list conn-dispatch-command-map) t))
                (setq action (unless (eq cmd action) cmd)))
               (_
                (setq invalid t)))
