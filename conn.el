@@ -129,8 +129,8 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :group 'conn-states)
 
 (defface conn-dot-face
-  '((default              (:background "#c6ebd9"))
-    (((background dark))  (:background "#449066"))
+  '((default (:background "#c6ebd9"))
+    (((background dark)) (:background "#449066"))
     (((background light)) (:background "#d6eeab")))
   "Face for dots."
   :group 'conn-dots)
@@ -141,16 +141,16 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :group 'conn)
 
 (defface conn-mark-face
-  '((default              (:inherit cursor :background "#b8a2f0"))
+  '((default (:inherit cursor :background "#b8a2f0"))
     (((background light)) (:inherit cursor :background "#b8a2f0"))
-    (((background dark))  (:inherit cursor :background "#a742b0")))
+    (((background dark)) (:inherit cursor :background "#a742b0")))
   "Face for mark."
   :group 'conn-marks)
 
 (defface conn-window-prompt-face
-  '((default              (:height 2.5 :foreground "#d00000"))
+  '((default (:height 2.5 :foreground "#d00000"))
     (((background light)) (:height 2.5 :foreground "#d00000"))
-    (((background dark))  (:height 2.5 :foreground "#7c0000")))
+    (((background dark)) (:height 2.5 :foreground "#7c0000")))
   "Face for conn window prompt overlay."
   :group 'conn-mode)
 
@@ -577,12 +577,13 @@ If BUFFER is nil check `current-buffer'."
     (internal-push-keymap conn-read-thing-command-mark-map
                           'overriding-terminal-local-map)
     (unwind-protect
-        (cl-prog ((prompt (concat "Thing Command "
-                                  (propertize "%s" 'face 'transient-value)
-                                  " ("
-                                  (propertize "C-h" 'face 'help-key-binding)
-                                  " for commands): %s"))
-                  thing-arg thing-sign invalid keys cmd)
+        (cl-prog
+         ((prompt (concat "Thing Command "
+                          (propertize "%s" 'face 'transient-value)
+                          " ("
+                          (propertize "C-h" 'face 'help-key-binding)
+                          " for commands): %s"))
+          thing-arg thing-sign invalid keys cmd)
          :read-command
          (setq keys (read-key-sequence
                      (format prompt
@@ -4544,7 +4545,7 @@ associated with that command (see `conn-register-thing')."
   (narrow-to-region beg end)
   (when record (conn--narrow-ring-record beg end))
   (when (called-interactively-p 'interactive)
-    (message "Narrowed to region")))
+    (message "Buffer narrowed")))
 
 (defun conn-narrow-indirect-to-region (beg end &optional interactive)
   "Narrow to THING at point.
@@ -4553,7 +4554,7 @@ associated with that command (see `conn-register-thing')."
   (interactive (append (cdr (conn--read-thing-region)) (list t)))
   (conn--narrow-indirect beg end interactive)
   (when (called-interactively-p 'interactive)
-    (message "Narrow indirect to region")))
+    (message "Buffer narrowed indirect")))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -6885,8 +6886,6 @@ apply to each contiguous component of the region."
   "M-y" 'conn-completing-yank-replace
   "|" 'conn-shell-command-on-region
   "=" 'indent-relative
-  "$" 'ispell-word
-  "*" 'calc-dispatch
   "\"" 'conn-surround-thing
   "<tab>" 'indent-region
   "TAB" 'indent-region
