@@ -578,11 +578,18 @@ If BUFFER is nil check `current-buffer'."
                           'overriding-terminal-local-map)
     (unwind-protect
         (cl-prog
-         ((prompt (concat "Thing Command "
+         ((prompt (concat "Define Region "
                           (propertize "%s" 'face 'transient-value)
                           " ("
-                          (propertize "C-h" 'face 'help-key-binding)
-                          " for commands): %s"))
+                          (substitute-command-keys
+                           "\\<conn-read-thing-command-mark-map>\\[help]:")
+                          " commands; "
+                          (substitute-command-keys
+                           "\\<conn-dispatch-command-map>\\[reset-arg]:")
+                          " reset arg; "
+                          (substitute-command-keys
+                           "\\<conn-read-thing-command-mark-map>\\[conn-define-region-in-recursive-edit]:")
+                          " recursive edit): %s"))
           thing-arg thing-sign invalid keys cmd)
          :read-command
          (setq keys (read-key-sequence
@@ -2179,6 +2186,8 @@ state."
   '((t . conn--dispatch-all-things-1)))
 
 (defvar-keymap conn-dispatch-command-map
+  "C-h" 'help
+  "." 'reset-arg
   "[" 'conn-dispatch-kill-append
   "a" 'conn-dispatch-copy-append
   "]" 'conn-dispatch-kill-prepend
@@ -2711,11 +2720,15 @@ seconds."
    (let ((keymap (make-composed-keymap
                   (append conn-dispatch-override-maps
                           conn-dispatch-command-map)))
-         (prompt (concat "Thing Command "
+         (prompt (concat "Thing "
                          (propertize "%s" 'face 'transient-value)
                          " ("
-                         (propertize "C-h" 'face 'help-key-binding)
-                         " for commands): "))
+                         (substitute-command-keys
+                          "\\<conn-dispatch-command-map>\\[help]:")
+                         " commands; "
+                         (substitute-command-keys
+                          "\\<conn-dispatch-command-map>\\[reset-arg]:")
+                         " reset arg): "))
          keys cmd invalid action thing-arg thing-sign)
      (conn--with-state conn-state
        (internal-push-keymap keymap 'overriding-terminal-local-map)
