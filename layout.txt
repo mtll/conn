@@ -1,31 +1,31 @@
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
 ┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │ Backspace    ┃
-┃          │          │          │          │  ispell  │          │          │          │   calc   │  ←list   │  →list   │  complex │ register │              ┃
-┃          │          │          │          │          │          │          │          │ dispatch │          │          │  command │ seperator│  ←delete     ┃
+┃          │          │          │          │          │          │          │          │          │  ←list   │  →list   │  complex │ register │              ┃
+┃          │          │          │          │          │          │          │          │          │          │          │  command │ seperator│  ←delete     ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
 ┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
 ┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R  dot   │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │ dot edit │  widen   │          │  region  │   dot    │   yank   │  ←symbol │  ↑para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
-┃    indent    │   map    │          │          │   map    │  things  │   read   │          │          │          │  prefix  │          │          │ on region┃
+┃              │ dot edit │  widen   │   dot    │  region  │   dot    │   yank   │  ←symbol │  ↑para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
+┃    indent    │   map    │          │  region  │   map    │  things  │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃    region    ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │   edit   │   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │  up list │   down   │  macro   ┃
-┃              │    map   │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │   list   │ dispatch ┃
+┃              │   edit   │   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │  ↑list   │  ↓list   │  macro   ┃
+┃              │    map   │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │          │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │          │          │   dot    │          │   mark   │  ←line   │  ↓para   │  →line   │          │ surround │                   ┃
-┃                │          │          │          │  region  │          │   map    │          │          │          │          │          │                   ┃
+┃                │   M-X    │          │          │          │          │   mark   │  ←inner  │  ↓para   │  →inner  │          │ surround │                   ┃
+┃                │          │          │          │          │          │   map    │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ ' other  │                   ┃
-┃                │   M-x    │  search  │  →delete │  thing   │   goto   │  expand  │  ←char   │  ↓line   │  →char   │   win    │   place  │                   ┃
-┃                │          │   map    │          │ dispatch │   map    │  region  │          │          │          │ control  │   prefix │                   ┃
+┃                │   M-x    │   M-s    │  →delete │  thing   │   M-g    │  expand  │  ←char   │  ↓line   │  →char   │   win    │   place  │                   ┃
+┃                │          │          │          │ dispatch │          │  region  │          │          │          │ control  │   prefix │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
-┃                      │           │  narrow  │   copy   │  narrow  │          │ ←defun   │ →defun   │  ←whole  │  →whole  │   redo   │                       ┃
-┃                      │           │  prefix  │  region  │  region  │          │          │          │   line   │   line   │          │                       ┃
+┃                      │           │  narrow  │   copy   │  narrow  │          │ ←defun   │ →defun   │          │          │   redo   │                       ┃
+┃                      │           │  prefix  │  region  │  region  │          │          │          │          │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
 ┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
 ┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │   misc   │  ←sexp   │  →sexp   │          │  repeat  │   undo   │                       ┃
