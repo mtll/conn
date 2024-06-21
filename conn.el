@@ -274,8 +274,7 @@ Each element may be either a symbol or a list of the form
 Each function is run without any arguments and if any of them return
 non-nil `conn-local-mode' will be enabled in the buffer.")
 
-(defvar conn-disable-in-buffer-hook
-  nil
+(defvar conn-disable-in-buffer-hook nil
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
 Each function is run without any arguments and if any of them return
 nil `conn-local-mode' will be not enabled in the buffer.")
@@ -759,7 +758,7 @@ If BUFFER is nil check `current-buffer'."
     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
            (string (char-to-string (read-char prompt t)))
            (overlays (conn--string-preview-overlays string dir in-windows)))
-      (condition-case _
+      (condition-case _err
           (progn
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                               conn-read-string-timeout)))
@@ -1235,7 +1234,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :forward-op 'forward-list)
 
 (defun conn--list-mark-handler (beg)
-  (condition-case nil
+  (condition-case _err
       (cond ((> (point) beg)
              (save-excursion
                (forward-thing 'list -1)
@@ -1252,7 +1251,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'forward-list 'backward-list)
 
 (defun conn--down-list-mark-handler (_beg)
-  (condition-case nil
+  (condition-case _err
       (pcase (bounds-of-thing-at-point 'list)
         (`(,_ . ,end)
          (save-excursion
@@ -2113,7 +2112,7 @@ disabled.
                 (run-hook-wrapped
                  'conn-transition-hook
                  (lambda (hook)
-                   (condition-case _
+                   (condition-case _err
                        (funcall hook)
                      (error
                       (remove-hook 'conn-transition-hook hook)
@@ -2189,6 +2188,7 @@ state."
   "p" 'conn-dispatch-copy-prepend
   "w" 'conn-dispatch-kill
   "e" 'conn-dispatch-dot
+  "E" 'conn-dispatch-dot
   "s" 'conn-dispatch-grab
   "y" 'conn-dispatch-yank
   "x" 'conn-dispatch-transpose
@@ -2501,40 +2501,40 @@ state."
 
 (defun conn--dispatch-label-overlays (labels prefix-overlays)
   (let (overlays)
-    (condition-case err
-        (pcase-dolist (`(,window . ,prefixes) prefix-overlays)
-          (with-current-buffer (window-buffer window)
-            (dolist (p prefixes)
-              (let* ((beg (overlay-end p))
-                     (label (pop labels))
-                     (next (thread-last
-                             (conn--all-overlays
-                              (lambda (ov)
-                                (and (eq 'conn-read-string-match
-                                         (overlay-get ov 'category))
-                                     (not (eq ov p))))
-                              beg (+ beg (length label)))
-                             (mapcar #'overlay-start)
-                             (apply 'min (point-max))))
-                     (end (min next (+ beg (length label))))
-                     (ov (make-overlay beg end)))
-                (push ov overlays)
-                (overlay-put p 'after-string (overlay-get p 'padding))
-                (overlay-put p 'face 'conn-read-string-match-face)
-                (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
-                  (when-let ((pos (string-search "\n" after-str)))
-                    (overlay-put ov 'after-string (substring after-str pos))))
-                (overlay-put ov 'prefix-overlay p)
-                (overlay-put ov 'category 'conn-label-overlay)
-                (overlay-put ov 'window window)
-                (overlay-put ov (if (or (= beg next)
-                                        (= beg (point-max)))
-                                    'before-string
-                                  'display)
-                             label)))))
-      (t (mapc #'delete-overlay overlays)
-         (signal (car err) (cdr err))))
-    overlays))
+    (condition-case _err
+        (progn
+          (pcase-dolist (`(,window . ,prefixes) prefix-overlays)
+            (with-current-buffer (window-buffer window)
+              (dolist (p prefixes)
+                (let* ((beg (overlay-end p))
+                       (label (pop labels))
+                       (next (thread-last
+                               (conn--all-overlays
+                                (lambda (ov)
+                                  (and (eq 'conn-read-string-match
+                                           (overlay-get ov 'category))
+                                       (not (eq ov p))))
+                                beg (+ beg (length label)))
+                               (mapcar #'overlay-start)
+                               (apply 'min (point-max))))
+                       (end (min next (+ beg (length label))))
+                       (ov (make-overlay beg end)))
+                  (push ov overlays)
+                  (overlay-put p 'after-string (overlay-get p 'padding))
+                  (overlay-put p 'face 'conn-read-string-match-face)
+                  (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
+                    (when-let ((pos (string-search "\n" after-str)))
+                      (overlay-put ov 'after-string (substring after-str pos))))
+                  (overlay-put ov 'prefix-overlay p)
+                  (overlay-put ov 'category 'conn-label-overlay)
+                  (overlay-put ov 'window window)
+                  (overlay-put ov (if (or (= beg next)
+                                          (= beg (point-max)))
+                                      'before-string
+                                    'display)
+                               label)))))
+          overlays)
+      (t (mapc #'delete-overlay overlays)))))
 
 (defun conn--dispatch-chars ()
   (cdr (conn--read-string-with-timeout-1 nil t)))
@@ -2593,73 +2593,84 @@ state."
              (apply 'conn--make-preview-overlay ov))))
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional in-windows)
-  (let ((prefix ""))
+  (let ((prefix "")
+        ovs)
     (conn--with-input-method
       (while (length< prefix prefix-length)
         (setq prefix (thread-last
                        (read-char (concat "char: " prefix) t)
                        (char-to-string)
                        (concat prefix)))))
-    (cl-loop for win in (conn--preview-get-windows in-windows)
-             nconc (with-selected-window win
-                     (conn--dispatch-things-with-prefix-1 things prefix)))))
+    (condition-case _err
+        (dolist (win (conn--preview-get-windows in-windows) ovs)
+          (setq ovs (nconc (with-selected-window win
+                             (conn--dispatch-things-with-prefix-1 things prefix))
+                           ovs)))
+      (t (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-columns ()
   (let ((col (current-column))
         ovs)
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-min))
-        (while (/= (point) (point-max))
-          (when (and (>= col (window-hscroll))
-                     (not (invisible-p (point)))
-                     (not (ignore-errors (invisible-p (1- (point))))))
-            (move-to-column col)
-            (push (conn--make-preview-overlay (point) 1) ovs))
-          (forward-line))))
-    ovs))
+    (condition-case _err
+        (progn
+          (save-excursion
+            (with-restriction (window-start) (window-end)
+              (goto-char (point-min))
+              (while (/= (point) (point-max))
+                (when (and (>= col (window-hscroll))
+                           (not (invisible-p (point)))
+                           (not (ignore-errors (invisible-p (1- (point))))))
+                  (move-to-column col)
+                  (push (conn--make-preview-overlay (point) 1) ovs))
+                (forward-line))))
+          ovs)
+      (t (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-lines ()
   (let (ovs)
-    (dolist (win (window-list-1 nil nil 'visible) ovs)
-      (with-selected-window win
-        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-          (save-excursion
-            (with-restriction (window-start) (window-end)
-              (goto-char (point-min))
-              (when (and (bolp)
-                         (<= (+ (point) (window-hscroll)) (line-end-position))
-                         (goto-char (+ (point) (window-hscroll)))
-                         (not (invisible-p (point))))
-                (push (conn--make-preview-overlay (point) 1) ovs))
-              (while (/= (point) (point-max))
-                (forward-line)
-                (when (and (bolp)
-                           (<= (+ (point) (window-hscroll))
-                               (line-end-position) (point-max))
-                           (goto-char (+ (point) (window-hscroll)))
-                           (not (invisible-p (point)))
-                           (not (invisible-p (1- (point)))))
-                  (push (conn--make-preview-overlay (point) 1) ovs))))))))))
+    (condition-case _err
+        (dolist (win (window-list-1 nil nil 'visible) ovs)
+          (with-selected-window win
+            (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+              (save-excursion
+                (with-restriction (window-start) (window-end)
+                  (goto-char (point-min))
+                  (when (and (bolp)
+                             (<= (+ (point) (window-hscroll)) (line-end-position))
+                             (goto-char (+ (point) (window-hscroll)))
+                             (not (invisible-p (point))))
+                    (push (conn--make-preview-overlay (point) 1) ovs))
+                  (while (/= (point) (point-max))
+                    (forward-line)
+                    (when (and (bolp)
+                               (<= (+ (point) (window-hscroll))
+                                   (line-end-position) (point-max))
+                               (goto-char (+ (point) (window-hscroll)))
+                               (not (invisible-p (point)))
+                               (not (invisible-p (1- (point)))))
+                      (push (conn--make-preview-overlay (point) 1) ovs))))))))
+      (t (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-lines-end ()
   (let (ovs)
-    (dolist (win (window-list-1 nil nil 'visible) ovs)
-      (with-selected-window win
-        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-          (save-excursion
-            (with-restriction (window-start) (window-end)
-              (goto-char (point-min))
-              (move-end-of-line nil)
-              (when (and (eolp) (not (invisible-p (point))))
-                (push (conn--make-preview-overlay (point) 1) ovs))
-              (while (/= (point) (point-max))
-                (forward-line)
-                (move-end-of-line nil)
-                (when (and (eolp)
-                           (not (invisible-p (point)))
-                           (not (invisible-p (1- (point)))))
-                  (push (conn--make-preview-overlay (point) 1) ovs))))))))))
+    (condition-case _err
+        (dolist (win (window-list-1 nil nil 'visible) ovs)
+          (with-selected-window win
+            (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+              (save-excursion
+                (with-restriction (window-start) (window-end)
+                  (goto-char (point-min))
+                  (move-end-of-line nil)
+                  (when (and (eolp) (not (invisible-p (point))))
+                    (push (conn--make-preview-overlay (point) 1) ovs))
+                  (while (/= (point) (point-max))
+                    (forward-line)
+                    (move-end-of-line nil)
+                    (when (and (eolp)
+                               (not (invisible-p (point)))
+                               (not (invisible-p (1- (point)))))
+                      (push (conn--make-preview-overlay (point) 1) ovs))))))))
+      (t (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-inner-lines (&optional end)
   (let (ovs)
@@ -2835,25 +2846,19 @@ seconds."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (let* ((prefix-ovs (conn--dispatch-isearch-matches))
-         (count (length prefix-ovs))
-         (prefix-ovs (seq-group-by (lambda (ov) (overlay-get ov 'window))
-                                   prefix-ovs)))
+  (let* ((prefix-ovs `((,(selected-window) . ,(conn--dispatch-isearch-matches))))
+         (count (length (cdar prefix-ovs))))
     (unwind-protect
-        (let ((labels (conn--create-label-strings
-                       count conn-dispatch-label-characters)))
-          (unwind-protect
-              (let* ((prefix (conn--read-labels prefix-ovs
-                                                labels
-                                                'conn--dispatch-label-overlays
-                                                'prefix-overlay))
-                     (pt (overlay-start prefix)))
-                (isearch-done)
-                (goto-char pt))
-            (pcase-dolist (`(_ . ,ovs) labels)
-              (dolist (ov ovs) (delete-overlay ov)))))
-      (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-        (dolist (ov ovs) (delete-overlay ov))))))
+        (let* ((labels (conn--create-label-strings
+                        count conn-dispatch-label-characters))
+               (prefix (conn--read-labels prefix-ovs
+                                          labels
+                                          'conn--dispatch-label-overlays
+                                          'prefix-overlay))
+               (pt (overlay-start prefix)))
+          (isearch-done)
+          (goto-char pt))
+      (dolist (ov (cdar prefix-ovs)) (delete-overlay ov)))))
 
 
 ;;;; Expand Region
@@ -6711,7 +6716,8 @@ apply to each contiguous component of the region."
   "M-E" 'conn-isearch-add-dots
   "M-R" 'conn-isearch-refine-dots
   "M-W" 'conn-isearch-remove-dots
-  "M-S" 'conn-isearch-split-dots)
+  "M-S" 'conn-isearch-split-dots
+  "C-," 'conn-dispatch-isearch)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'compilation-mode)
