@@ -2175,29 +2175,33 @@ state."
 (defvar conn-dispatch-all-things-collector-alist
   '((t . conn--dispatch-all-things-1)))
 
-(defvar-keymap conn-dispatch-command-map
-  "C-h" 'help
-  "." 'reset-arg
-  "[" 'conn-dispatch-kill-append
-  "a" 'conn-dispatch-copy-append
-  "]" 'conn-dispatch-kill-prepend
-  "p" 'conn-dispatch-copy-prepend
-  "w" 'conn-dispatch-kill
-  "e" 'conn-dispatch-dot
-  "E" 'conn-dispatch-dot
-  "s" 'conn-dispatch-grab
-  "y" 'conn-dispatch-yank
-  "x" 'conn-dispatch-transpose
-  "c" 'conn-dispatch-copy
-  "f" 'conn-dispatch-yank-replace
-  "d" 'conn-dispatch-grab-replace
-  "g" 'conn-dispatch-goto
-  "z" 'conn-dispatch-jump)
+(defvar conn-dispatch-command-maps
+  (list (define-keymap
+          "C-h" 'help
+          "." 'reset-arg
+          "[" 'conn-dispatch-kill-append
+          "a" 'conn-dispatch-copy-append
+          "]" 'conn-dispatch-kill-prepend
+          "p" 'conn-dispatch-copy-prepend
+          "w" 'conn-dispatch-kill
+          "e" 'conn-dispatch-dot
+          "E" 'conn-dispatch-dot
+          "s" 'conn-dispatch-grab
+          "y" 'conn-dispatch-yank
+          "x" 'conn-dispatch-transpose
+          "c" 'conn-dispatch-copy
+          "f" 'conn-dispatch-yank-replace
+          "d" 'conn-dispatch-grab-replace
+          "g" 'conn-dispatch-goto
+          "z" 'conn-dispatch-jump)))
 
-(defvar-local conn-dispatch-override-maps
-    (list (define-keymap
-            "l" 'forward-line
-            "u" 'forward-symbol)))
+(defvar conn-dispatch-override-maps
+  (list (define-keymap
+          "l" 'forward-line
+          "u" 'forward-symbol
+          "U" `(symbol
+                ,(apply-partially 'conn--dispatch-all-things 'symbol)
+                . conn-dispatch-goto))))
 
 (defvar conn-dispatch-command-descriptions
   '((conn-dispatch-kill-append . "Kill Append")
@@ -2721,7 +2725,7 @@ seconds."
   (interactive
    (let ((keymap (make-composed-keymap
                   (append conn-dispatch-override-maps
-                          conn-dispatch-command-map)))
+                          conn-dispatch-command-maps)))
          (prompt (substitute-command-keys
                   (concat "\\<conn-read-thing-command-mark-map>Thing "
                           (propertize "%s" 'face 'transient-value)
@@ -2792,7 +2796,7 @@ seconds."
                       (or action (conn-dispatch-default-action cmd))
                       (* (if thing-sign -1 1) (or thing-arg 1))
                       current-prefix-arg)))
-              ((guard (where-is-internal cmd (list conn-dispatch-command-map) t))
+              ((guard (where-is-internal cmd conn-dispatch-command-maps t))
                (setq action (unless (eq cmd action) cmd)))
               (_
                (setq invalid t)))
