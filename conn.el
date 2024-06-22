@@ -72,8 +72,6 @@
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
 
-(defvar-keymap conn-movement-map)
-
 (defvar-keymap conn-expand-repeat-map :repeat t)
 
 ;;;;; Custom Variables
@@ -1146,9 +1144,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (beginning-of-defun (abs N))
     (end-of-defun N)))
 
-(conn-register-thing 'defun
-  :forward-op 'conn-forward-defun
-  :dispatch-provider (apply-partially 'conn--dispatch-all-things 'defun t))
+(conn-register-thing
+ 'defun
+ :forward-op 'conn-forward-defun
+ :dispatch-provider (apply-partially 'conn--dispatch-all-things 'defun t))
 
 (conn-register-thing
  'region
@@ -2118,9 +2117,6 @@ disabled.
                       (remove-hook 'conn-transition-hook hook)
                       (message "Error in transition hook %s" hook)))))))))))
 
-(defvar-keymap conn-common-map
-  :doc "Keymap for bindings shared between dot and conn states.")
-
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
@@ -2145,7 +2141,7 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  (((background dark))  (:inherit mode-line :background "#8c3c3c")))
   :suppress-input-method t
   :ephemeral-marks t
-  :keymap (define-keymap :parent conn-common-map :suppress t)
+  :keymap (define-keymap :suppress t)
   :transitions (define-keymap
                  "e" 'conn-emacs-state
                  "t" 'conn-change))
@@ -6814,8 +6810,7 @@ apply to each contiguous component of the region."
   "v" 'conn-mark-thing
   "y" 'yank-in-context)
 
-(define-keymap
-  :keymap conn-movement-map
+(defvar-keymap conn-movement-map
   "o" (conn-remapping-command conn-forward-word-keys)
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
@@ -6840,23 +6835,24 @@ apply to each contiguous component of the region."
   "n" (conn-remapping-command conn-backward-sexp-keys))
 
 (define-keymap
-  :keymap conn-common-map
+  :keymap conn-state-map
   :parent conn-movement-map
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
+  "|" 'conn-shell-command-on-region
+  "'" 'conn-other-place-prefix
+  "+" 'conn-set-register-seperator
+  "." 'repeat
+  "/" 'undo-only
+  ";" 'conn-wincontrol
+  "<tab>" 'indent-region
+  "TAB" 'indent-region
+  "=" 'indent-relative
+  "?" 'undo-redo
+  "\"" 'conn-surround-thing
   "\\" 'conn-kapply-prefix
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-4" (conn-remapping-command (key-parse "C-x 4"))
-  "C-5" (conn-remapping-command (key-parse "C-x 5"))
-  "C-8" 'conn-tab-to-register
-  "C-9" 'quit-window
-  "C-0" 'delete-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-=" 'balance-windows
-  "C-+" 'maximize-window
-  "M-V" 'conn-wincontrol-maximize-vertically
-  "M-R" 'conn-wincontrol-maximize-horizontally
+  "_" 'repeat-complex-command
+  "`" 'other-window
+  "SPC" 'conn-set-mark-command
   "M-0" 'tab-close
   "M-1" 'delete-other-windows-vertically
   "M-2" 'tab-new
@@ -6864,56 +6860,52 @@ apply to each contiguous component of the region."
   "M-7" 'kill-buffer
   "M-8" 'tear-off-window
   "M-9" 'tab-detach
+  "M-R" 'conn-wincontrol-maximize-horizontally
+  "M-V" 'conn-wincontrol-maximize-vertically
+  "M-y" 'conn-completing-yank-replace
+  "C-+" 'maximize-window
+  "C--" 'shrink-window-if-larger-than-buffer
+  "C-0" 'delete-window
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-4" (conn-remapping-command (key-parse "C-x 4"))
+  "C-5" (conn-remapping-command (key-parse "C-x 5"))
+  "C-8" 'conn-tab-to-register
+  "C-9" 'quit-window
+  "C-=" 'balance-windows
   "C-M-0" 'kill-buffer-and-window
-  "SPC" 'conn-set-mark-command
-  "_" 'repeat-complex-command
-  "+" 'conn-set-register-seperator
-  "/" 'undo-only
+  "C-M-l" 'conn-recenter-on-region
+  "C-t" (conn-remapping-command (key-parse "C-x t"))
+  "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "?" 'undo-redo
-  "`" 'other-window
-  "." 'repeat
+  "b" conn-misc-edit-map
+  "c" (conn-remapping-command (key-parse "C-c"))
+  "C" 'conn-copy-region
+  "d" (conn-remapping-command conn-delete-char-keys)
+  "E" 'conn-dot-region
   "f" 'conn-dispatch-on-things
-  ";" 'conn-wincontrol
   "g" (conn-remapping-command (key-parse "M-g"))
   "h" 'conn-expand
   "H" conn-mark-thing-map
   "p" 'conn-register-load
   "P" 'conn-register-prefix
-  "s" (conn-remapping-command (key-parse "M-s"))
-  "V" 'conn-narrow-to-region
-  "v" 'conn-toggle-mark-command
-  "W" 'widen
-  "X" 'conn-narrow-ring-prefix
-  "x" (conn-remapping-command (key-parse "C-x"))
-  "z" 'conn-exchange-mark-command)
-
-(define-keymap
-  :keymap conn-state-map
-  "C-M-l" 'conn-recenter-on-region
-  "C-t" (conn-remapping-command (key-parse "C-x t"))
-  "C-y" 'conn-yank-replace
-  "M-y" 'conn-completing-yank-replace
-  "|" 'conn-shell-command-on-region
-  "=" 'indent-relative
-  "\"" 'conn-surround-thing
-  "<tab>" 'indent-region
-  "TAB" 'indent-region
-  "'" 'conn-other-place-prefix
-  "C" 'conn-copy-region
-  "c" (conn-remapping-command (key-parse "C-c"))
-  "d" (conn-remapping-command conn-delete-char-keys)
-  "b" conn-misc-edit-map
-  "E" 'conn-dot-region
   "Q" 'conn-dot-edit-map
   "q" 'conn-edit-map
   "R" conn-dot-region-map
   "r" conn-region-map
+  "s" (conn-remapping-command (key-parse "M-s"))
   "T" 'conn-dot-all-things-in-region
+  "V" 'conn-narrow-to-region
+  "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
+  "W" 'widen
+  "X" 'conn-narrow-ring-prefix
+  "x" (conn-remapping-command (key-parse "C-x"))
+  "Y" 'yank-from-kill-ring
   "y" (conn-remapping-command conn-yank-keys)
-  "Y" 'yank-from-kill-ring)
+  "z" 'conn-exchange-mark-command)
 
 (defvar-keymap conn-dot-nav-map
   :repeat t
