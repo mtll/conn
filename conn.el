@@ -5907,8 +5907,9 @@ before each iteration."
   "Include empty regions in dispatch."
   :class 'transient-switch
   :key "o"
-  :description "Include Empty"
-  :argument "empty")
+  :description "Skip Empty"
+  :argument "skip"
+  :init-value (lambda (obj) (oset obj value "skip")))
 
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
@@ -5961,7 +5962,7 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "empty" args) --> (conn--kapply-skip-empty -->))
+    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6001,7 +6002,7 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "empty" args) --> (conn--kapply-skip-empty -->))
+    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6037,7 +6038,7 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "empty" args) --> (conn--kapply-skip-empty -->))
+    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6074,7 +6075,7 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "empty" args) --> (conn--kapply-skip-empty -->))
+    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6105,7 +6106,7 @@ apply to each contiguous component of the region."
   (conn--thread -->
       (region-bounds)
     (conn--kapply-region-iterator --> (member "reverse" args))
-    (if (member "empty" args) --> (conn--kapply-skip-empty -->))
+    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6192,7 +6193,7 @@ apply to each contiguous component of the region."
                      (transient-args transient-current-command)))
   (conn--thread -->
       (funcall iterator (member "reverse" args))
-    (if (member "empty" args) --> (conn--kapply-skip-empty -->))
+    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6221,7 +6222,7 @@ apply to each contiguous component of the region."
       (save-excursion
         (let ((beg (region-beginning))
               (end (region-end))
-              (emptyp (member "empty" args))
+              (emptyp (not (member "skip" args)))
               regions)
           (goto-char beg)
           (move-beginning-of-line 1)
@@ -6341,7 +6342,15 @@ apply to each contiguous component of the region."
    conn--kmacro-ring-display
    [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("e" "Edit Macro"
+    ("g" "Push Register" conn--push-macro-ring :transient t)]
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("M" "Display"
+     (lambda ()
+       (interactive)
+       (kmacro-display last-kbd-macro t))
+     :transient t)]
+   [("e" "Edit Macro"
      (lambda (arg)
        (interactive "P")
        (conn-recursive-edit-kmacro arg)
@@ -6352,39 +6361,35 @@ apply to each contiguous component of the region."
        (interactive)
        (conn-recursive-edit-lossage)
        (transient-resume))
-     :transient transient--do-suspend)]
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--push-macro-ring :transient t)
-    ("M" "Display"
-     (lambda ()
-       (interactive)
-       (kmacro-display last-kbd-macro t))
-     :transient t)]]
+     :transient transient--do-suspend)]]
   [:description
-   "Apply Kmacro On:"
-   [(conn--kapply-suffix)
+   "Options:"
+   [(conn--kapply-order-infix)
+    (conn--kapply-empty-infix)
+    (conn--kapply-state-infix)]
+   [(conn--kapply-dots-infix)
+    (conn--kapply-dot-read-buffers-infix)
+    (conn--kapply-region-infix)
+    (conn--kapply-macro-infix)]]
+  [[:description
+    "Save State:"
+    (conn--kapply-merge-undo-infix)
+    (conn--kapply-save-windows-infix)
+    (conn--kapply-save-restriction-infix)
+    (conn--kapply-save-excursion-infix)]
+   [:description
+    "Apply Kmacro On:"
+    (conn--kapply-suffix)
     (conn--kapply-dot-suffix)
     (conn--kapply-lines-suffix)
     (conn--kapply-text-property-suffix)
     (conn--kapply-iterate-suffix)]
-   [(conn--kapply-macro-infix)
-    (conn--kapply-region-infix)
-    (conn--kapply-state-infix)
-    (conn--kapply-dots-infix)
-    (conn--kapply-dot-read-buffers-infix)
-    (conn--kapply-empty-infix)
-    (conn--kapply-order-infix)]]
-  [[(conn--kapply-regexp-suffix)
-    (conn--kapply-string-suffix)]
-   [(conn--kapply-regexp-region-suffix)
+   [:description
+    ""
+    (conn--kapply-regexp-suffix)
+    (conn--kapply-string-suffix)
+    (conn--kapply-regexp-region-suffix)
     (conn--kapply-string-region-suffix)]]
-  [:description
-   "Save State:"
-   [(conn--kapply-merge-undo-infix)
-    (conn--kapply-save-windows-infix)]
-   [(conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-kapply-prefix))
@@ -6393,49 +6398,47 @@ apply to each contiguous component of the region."
   "Transient menu for keyboard macro application on isearch matches."
   [:description
    conn--kmacro-ring-display
-   [("c" "Set Counter"
+   [("c" "Set Counter" kmacro-set-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("g" "Push Register" conn--push-macro-ring :transient t)]
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("M" "Display"
      (lambda ()
        (interactive)
-       (with-isearch-suspended
-        (call-interactively 'kmacro-set-counter)))
-     :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("e" "Edit Macro"
+       (kmacro-display last-kbd-macro t))
+     :transient t)]
+   [("e" "Edit Macro"
      (lambda (arg)
        (interactive "P")
-       (with-isearch-suspended (conn-recursive-edit-kmacro arg))
+       (conn-recursive-edit-kmacro arg)
        (transient-resume))
      :transient transient--do-suspend)
     ("E" "Edit Lossage"
      (lambda ()
        (interactive)
-       (with-isearch-suspended (conn-recursive-edit-lossage))
+       (conn-recursive-edit-lossage)
        (transient-resume))
-     :transient transient--do-suspend)]
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--push-macro-ring :transient t)
-    ("M" "Display"
-     (lambda ()
-       (interactive)
-       (kmacro-display last-kbd-macro t))
-     :transient t)]]
-  ["Apply Kmacro"
-   [(conn--kapply-isearch-suffix)
-    (conn--kapply-dot-suffix)]
-   [(conn--kapply-macro-infix)
-    (conn--kapply-region-infix)
-    (conn--kapply-state-infix)
-    (conn--kapply-matches-infix)
-    (conn--kapply-dots-infix)
-    (conn--kapply-dot-read-buffers-infix)
-    (conn--kapply-order-infix)]]
+     :transient transient--do-suspend)]]
   [:description
-   "Save State:"
-   [(conn--kapply-merge-undo-infix)
-    (conn--kapply-save-windows-infix)]
-   [(conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]]
+   "Options:"
+   [(conn--kapply-order-infix)
+    (conn--kapply-region-infix)
+    (conn--kapply-state-infix)]
+   [(conn--kapply-dots-infix)
+    (conn--kapply-dot-read-buffers-infix)
+    (conn--kapply-matches-infix)
+    (conn--kapply-macro-infix)]]
+  [[:description
+    "Save State:"
+    (conn--kapply-merge-undo-infix)
+    (conn--kapply-save-windows-infix)
+    (conn--kapply-save-restriction-infix)
+    (conn--kapply-save-excursion-infix)]
+   [:description
+    "Apply Kmacro On:"
+    (conn--kapply-isearch-suffix)
+    (conn--kapply-dot-suffix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-isearch-kapply-prefix))
@@ -6446,7 +6449,15 @@ apply to each contiguous component of the region."
    conn--kmacro-ring-display
    [("c" "Set Counter" kmacro-set-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)
-    ("e" "Edit Macro"
+    ("g" "Push Register" conn--push-macro-ring :transient t)]
+   [("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("M" "Display"
+     (lambda ()
+       (interactive)
+       (kmacro-display last-kbd-macro t))
+     :transient t)]
+   [("e" "Edit Macro"
      (lambda (arg)
        (interactive "P")
        (conn-recursive-edit-kmacro arg)
@@ -6457,28 +6468,22 @@ apply to each contiguous component of the region."
        (interactive)
        (conn-recursive-edit-lossage)
        (transient-resume))
-     :transient transient--do-suspend)]
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("g" "Push Register" conn--push-macro-ring :transient t)
-    ("M" "Display"
-     (lambda ()
-       (interactive)
-       (kmacro-display last-kbd-macro t))
-     :transient t)]]
-  ["Apply Kmacro"
-   [(conn--kapply-regions-suffix)]
-   [(conn--kapply-macro-infix)
-    (conn--kapply-region-infix)
-    (conn--kapply-state-infix)
-    (conn--kapply-empty-infix)
-    (conn--kapply-order-infix)]]
+     :transient transient--do-suspend)]]
   [:description
-   "Save State:"
-   [(conn--kapply-merge-undo-infix)
-    (conn--kapply-save-windows-infix)]
-   [(conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]]
+   "Options:"
+   [(conn--kapply-order-infix)
+    (conn--kapply-state-infix)]
+   [(conn--kapply-region-infix)
+    (conn--kapply-macro-infix)]]
+  [[:description
+    "Save State:"
+    (conn--kapply-merge-undo-infix)
+    (conn--kapply-save-windows-infix)
+    (conn--kapply-save-restriction-infix)
+    (conn--kapply-save-excursion-infix)]
+   [:description
+    "Apply Kmacro On:"
+    (conn--kapply-regions-suffix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (kmacro-display last-kbd-macro t)
