@@ -556,7 +556,7 @@ If BUFFER is nil check `current-buffer'."
          ,@body)
      (conn--activate-input-method)))
 
-(defvar-keymap conn-read-thing-command-mark-map
+(defvar-keymap conn-read-thing-command-map
   "C-h" 'help
   "t" conn-mark-thing-map
   "." 'reset-arg
@@ -571,12 +571,12 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--read-thing-region ()
   (conn--with-state conn-state
-    (internal-push-keymap conn-read-thing-command-mark-map
+    (internal-push-keymap conn-read-thing-command-map
                           'overriding-terminal-local-map)
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-thing-command-mark-map>Define Region "
+                   (concat "\\<conn-read-thing-command-map>Define Region "
                            (propertize "%s" 'face 'transient-value)
                            " (\\[help]: commands; \\[reset-arg]: reset arg; "
                            "\\[conn-define-region-in-recursive-edit]: "
@@ -598,14 +598,14 @@ If BUFFER is nil check `current-buffer'."
            ('keyboard-quit
             (keyboard-quit))
            ('help
-            (internal-pop-keymap conn-read-thing-command-mark-map
+            (internal-pop-keymap conn-read-thing-command-map
                                  'overriding-terminal-local-map)
             (save-window-excursion
               (setq cmd (let ((read-extended-command-predicate
                                (lambda (symbol _)
                                  (get symbol :conn-command-thing))))
                           (intern-soft (read-extended-command)))))
-            (internal-push-keymap conn-read-thing-command-mark-map
+            (internal-push-keymap conn-read-thing-command-map
                                   'overriding-terminal-local-map)
             (go :test))
            ('digit-argument
@@ -635,7 +635,7 @@ If BUFFER is nil check `current-buffer'."
            ('conn-define-region-in-recursive-edit
             (save-mark-and-excursion
               (message "Defining region in recursive edit")
-              (internal-pop-keymap conn-read-thing-command-mark-map
+              (internal-pop-keymap conn-read-thing-command-map
                                    'overriding-terminal-local-map)
               (recursive-edit)
               (cl-return (list nil (region-beginning) (region-end)))))
@@ -660,7 +660,7 @@ If BUFFER is nil check `current-buffer'."
             (cl-return (list thing beg end))))
          (go :read-command))
       (message nil)
-      (internal-pop-keymap conn-read-thing-command-mark-map
+      (internal-pop-keymap conn-read-thing-command-map
                            'overriding-terminal-local-map))))
 
 (defun conn--isearch-matches (&optional buffer restrict)
@@ -2201,6 +2201,9 @@ state."
           "u" 'forward-symbol
           "U" `(symbol
                 ,(apply-partially 'conn--dispatch-all-things 'symbol)
+                . conn-dispatch-goto)
+          "O" `(word
+                ,(apply-partially 'conn--dispatch-all-things 'word)
                 . conn-dispatch-goto))))
 
 (defvar conn-dispatch-command-descriptions
@@ -2727,7 +2730,7 @@ seconds."
                   (append conn-dispatch-override-maps
                           conn-dispatch-command-maps)))
          (prompt (substitute-command-keys
-                  (concat "\\<conn-read-thing-command-mark-map>Thing "
+                  (concat "\\<conn-read-thing-command-map>Thing "
                           (propertize "%s" 'face 'transient-value)
                           " (\\[help]: commands; \\[reset-arg]: reset arg): %s")))
          keys cmd invalid action thing-arg thing-sign)
@@ -7268,8 +7271,8 @@ determine if `conn-local-mode' should be enabled."
 (with-eval-after-load 'paredit
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'paredit-mode)
-    "[" 'paredit-forward-down
-    "]" 'paredit-backward-down
+    "]" 'paredit-forward-down
+    "[" 'paredit-backward-down
     "(" 'paredit-backward-up
     ")" 'paredit-forward-up)
 
