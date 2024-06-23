@@ -576,11 +576,12 @@ If BUFFER is nil check `current-buffer'."
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-thing-command-map>Define Region "
+                   (concat "\\<conn-read-thing-command-map>Define Region (arg: "
                            (propertize "%s" 'face 'transient-value)
-                           " (\\[help]: commands; \\[reset-arg]: reset arg; "
-                           "\\[conn-define-region-in-recursive-edit]: "
-                           " recursive edit): %s")))
+                           ", \\[reset-arg] reset arg; "
+                           "\\[help] commands; "
+                           "\\[conn-define-region-in-recursive-edit] "
+                           "recursive edit): %s")))
           thing-arg thing-sign invalid keys cmd)
          :read-command
          (setq keys (read-key-sequence
@@ -2730,9 +2731,10 @@ seconds."
                   (append conn-dispatch-override-maps
                           conn-dispatch-command-maps)))
          (prompt (substitute-command-keys
-                  (concat "\\<conn-read-thing-command-map>Thing "
+                  (concat "\\<conn-read-thing-command-map>Thing (arg: "
                           (propertize "%s" 'face 'transient-value)
-                          " (\\[help]: commands; \\[reset-arg]: reset arg): %s")))
+                          ", \\[reset-arg] reset arg; "
+                          "\\[help] commands): %s")))
          keys cmd invalid action thing-arg thing-sign)
      (conn--with-state conn-state
        (internal-push-keymap keymap 'overriding-terminal-local-map)
