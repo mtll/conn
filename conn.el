@@ -1262,7 +1262,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (scan-error nil)))
 
 (conn-register-thing-commands
- 'list 'conn--down-list-mark-handler 
+ 'list 'conn--down-list-mark-handler
  'down-list)
 
 (conn-register-thing
@@ -7214,7 +7214,20 @@ determine if `conn-local-mode' should be enabled."
    :modes 'org-mode)
 
   (conn-register-thing-commands
-   'org-element 'conn-individual-thing-handler
+   'org-element
+   (lambda (_beg)
+     (cond ((eobp))
+           ((org-with-limited-levels (org-at-heading-p))
+            (conn--push-ephemeral-mark
+             (save-excursion (org-end-of-subtree nil t))))
+           (t
+            (let* ((elem (org-element-at-point))
+                   (end (org-element-end elem))
+                   (parent (org-element-parent elem)))
+              (cond ((and parent (= (org-element-contents-end parent) end))
+                     (conn--push-ephemeral-mark (org-element-end parent)))
+                    ((integer-or-marker-p end)
+                     (conn--push-ephemeral-mark end)))))))
    'org-forward-element
    'org-backward-element
    'org-next-visible-heading
