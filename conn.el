@@ -901,12 +901,16 @@ If BUFFER is nil check `current-buffer'."
                                         (conn--command-property :conn-mark-handler)))))
 
 (defun conn--push-mark-ad (&rest _)
-  (unless (or conn--ephemeral-mark (null conn-local-mode))
+  (unless (or conn--ephemeral-mark
+              (null conn-local-mode)
+              (null (marker-position (mark-marker))))
     (conn--push-mark-ring-right (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--pop-mark-ad (&rest _)
-  (unless (or conn--ephemeral-mark (null conn-local-mode))
+  (unless (or conn--ephemeral-mark
+              (null conn-local-mode)
+              (null (marker-position (mark-marker))))
     (conn--push-mark-ring-left (mark-marker)))
   (setq conn--ephemeral-mark t))
 
@@ -1008,7 +1012,7 @@ If BUFFER is nil check `current-buffer'."
   "Mark trail handler.
 The mark trail handler pushes an ephemeral mark at the starting point
 of the movement command unless `region-active-p'."
-  (unless (eql beg (point))
+  (unless (= beg (point))
     (conn--push-ephemeral-mark beg)))
 
 (defun conn-set-command-handler (handler &rest commands)
@@ -1078,10 +1082,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                       (conn--command-property :conn-mark-handler))
         conn-this-command-thing (conn--command-property :conn-command-thing)))
 
-(defvar conn--last-command-amalgamating nil)
-
 (defun conn--mark-post-command-hook ()
-  (setq conn--last-command-amalgamating undo-auto--this-command-amalgamating)
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
              conn-this-command-thing
@@ -6058,6 +6059,9 @@ before each iteration."
       (_ (conn--kmacro-apply -->)))))
 
 (transient-define-suffix conn--kapply-string-suffix (args)
+  "Apply keyboard macro to every occurance of a string within a region.
+The region is read by prompting for a command with a `:conn-command-thing'
+property."
   :transient 'transient--do-exit
   :key "qw"
   :description "String"
