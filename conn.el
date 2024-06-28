@@ -2153,35 +2153,8 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
                  (((background dark))  (:inherit mode-line :background "#8c3c3c")))
   :suppress-input-method t
   :ephemeral-marks t
-  :keymap (define-keymap
-            :suppress t
-            :parent conn-movement-map
-            "C-h" 'help
-            "." 'reset-arg
-            "[" 'conn-dispatch-kill-append
-            "a" 'conn-dispatch-copy-append
-            "]" 'conn-dispatch-kill-prepend
-            "p" 'conn-dispatch-copy-prepend
-            "w" 'conn-dispatch-kill
-            "e" 'conn-dispatch-dot
-            "E" 'conn-dispatch-dot
-            "s" 'conn-dispatch-grab
-            "y" 'conn-dispatch-yank
-            "x" 'conn-dispatch-transpose
-            "c" 'conn-dispatch-copy
-            "f" 'conn-dispatch-yank-replace
-            "d" 'conn-dispatch-grab-replace
-            "g" 'conn-dispatch-goto
-            "z" 'conn-dispatch-jump
-            "l" 'forward-line
-            "u" 'forward-symbol
-            "U" `(symbol
-                  ,(apply-partially 'conn--dispatch-all-things 'symbol)
-                  . conn-dispatch-goto)
-            "O" `(word
-                  ,(apply-partially 'conn--dispatch-all-things 'word)
-                  . conn-dispatch-goto))
-  :transitions (define-keymap "f" 'conn-emacs-state))
+  :cursor hollow
+  :keymap (define-keymap :suppress t))
 
 (conn-define-state conn-org-edit-state
   "Activate `conn-org-edit-state' in the current buffer.
@@ -6963,6 +6936,35 @@ apply to each contiguous component of the region."
   "m" (conn-remapping-command conn-forward-sexp-keys)
   "N" (conn-remapping-command conn-beginning-of-defun-keys)
   "n" (conn-remapping-command conn-backward-sexp-keys))
+
+(define-keymap
+  :keymap conn-thing-pending-state-map
+  :parent conn-movement-map
+  "C-h" 'help
+  "." 'reset-arg
+  "[" 'conn-dispatch-kill-append
+  "a" 'conn-dispatch-copy-append
+  "]" 'conn-dispatch-kill-prepend
+  "p" 'conn-dispatch-copy-prepend
+  "w" 'conn-dispatch-kill
+  "e" 'conn-dispatch-dot
+  "E" 'conn-dispatch-dot
+  "s" 'conn-dispatch-grab
+  "y" 'conn-dispatch-yank
+  "x" 'conn-dispatch-transpose
+  "c" 'conn-dispatch-copy
+  "f" 'conn-dispatch-yank-replace
+  "d" 'conn-dispatch-grab-replace
+  "g" 'conn-dispatch-goto
+  "z" 'conn-dispatch-jump
+  "l" 'forward-line
+  "u" 'forward-symbol
+  "U" `(symbol
+        ,(apply-partially 'conn--dispatch-all-things 'symbol)
+        . conn-dispatch-goto)
+  "O" `(word
+        ,(apply-partially 'conn--dispatch-all-things 'word)
+        . conn-dispatch-goto))
 
 (define-keymap
   :keymap conn-state-map
