@@ -569,14 +569,15 @@ If BUFFER is nil check `current-buffer'."
   "C-g" 'abort-recursive-edit
   "<t>" 'ignore)
 
-(defun conn--read-thing-region ()
+(defun conn--read-thing-region (prompt)
   (conn--with-state conn-state
     (internal-push-keymap conn-read-thing-command-map
                           'overriding-terminal-local-map)
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-thing-command-map>Define Region (arg: "
+                   (concat "\\<conn-read-thing-command-map>"
+                           prompt " (arg: "
                            (propertize "%s" 'face 'transient-value)
                            ", \\[reset-arg] reset arg; "
                            "\\[help] commands; "
@@ -3089,7 +3090,7 @@ Expansions and contractions are provided by functions in
     ('change (conn-change-pair-inward arg))))
 
 (defun conn-surround-thing (thing beg end arg)
-  (interactive (append (conn--read-thing-region)
+  (interactive (append (conn--read-thing-region "Define Region")
                        (list (prefix-numeric-value current-prefix-arg))))
   (save-mark-and-excursion
     (funcall (or (get thing :conn-thing-surrounder)
@@ -3203,7 +3204,7 @@ Expansions and contractions are provided by functions in
 Interactively defaults to the current region."
   (interactive (progn
                  (deactivate-mark)
-                 (append (cdr (conn--read-thing-region))
+                 (append (cdr (conn--read-thing-region "Define Region"))
                          (list t))))
   (conn--narrow-ring-record beg end)
   (when (and pulse (not executing-kbd-macro))
@@ -3321,7 +3322,7 @@ Interactively defaults to the current region."
 
 (defun conn-dot-regexp-in-thing (beg end regexp)
   (interactive
-   (append (cdr (conn--read-thing-region))
+   (append (cdr (conn--read-thing-region "Define Region"))
            (list (conn--read-from-with-preview
                   "Regexp" t
                   (buffer-substring-no-properties
@@ -3344,7 +3345,7 @@ Interactively defaults to the current region."
 
 (defun conn-dot-occurances-in-thing (beg end string)
   (interactive
-   (append (cdr (conn--read-thing-region))
+   (append (cdr (conn--read-thing-region "Define Region"))
            (list (conn--read-from-with-preview
                   "Regexp" t
                   (buffer-substring-no-properties
@@ -3565,7 +3566,7 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
 
 (defun conn-refine-dots (beg end regexp)
   (interactive
-   (pcase-let ((`(,_ ,beg ,end) (conn--read-thing-region))
+   (pcase-let ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
                (regexp (read-regexp "Regexp: "
                                     (list ""
                                           (ignore-errors
@@ -3809,14 +3810,14 @@ k keeps the remaining dots."
   "Dot THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region))))
+  (interactive (list (car (conn--read-thing-region "Define Region"))))
   (conn--create-dots (bounds-of-thing-at-point thing)))
 
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region))))
+  (interactive (list (car (conn--read-thing-region "Define Region"))))
   (unless thing
     (error "Unknown thing command"))
   (save-excursion
@@ -3933,7 +3934,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
   "Isearch forward for THING.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region))))
+  (interactive (list (car (conn--read-thing-region "Define Region"))))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-backward beg end))
     (_              (user-error "No %s found" thing))))
@@ -3942,7 +3943,7 @@ associated with that command (see `conn-register-thing')."
   "Isearch backward for THING.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region))))
+  (interactive (list (car (conn--read-thing-region "Define Region"))))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-forward beg end))
     (_              (user-error "No %s found" thing))))
@@ -3979,7 +3980,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region)))
+   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
                  (pcase-let ((`(,beg ,end) region))
@@ -4001,7 +4002,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region)))
+   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
                  (pcase-let ((`(,beg ,end) region))
@@ -4023,7 +4024,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region)))
+   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
                  (pcase-let ((`(,beg ,end) region))
@@ -4045,7 +4046,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-regexp-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region)))
+   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
                  (pcase-let ((`(,beg ,end) region))
@@ -4544,14 +4545,14 @@ interactively."
   "Mark THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (cdr (conn--read-thing-region)))
+  (interactive (cdr (conn--read-thing-region "Define Region")))
   (goto-char end)
   (conn--push-ephemeral-mark beg)
   (activate-mark t))
 
 (defun conn-copy-thing (beg end &optional register)
   "Copy THING at point."
-  (interactive (append (cdr (conn--read-thing-region))
+  (interactive (append (cdr (conn--read-thing-region "Define Region"))
                        (when current-prefix-arg
                          (list (register-read-with-preview "Register: ")))))
   (conn-copy-region beg end register)
@@ -4560,7 +4561,7 @@ associated with that command (see `conn-register-thing')."
 
 (defun conn-narrow-to-region (beg end &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
-  (interactive (append (cdr (conn--read-thing-region)) (list t)))
+  (interactive (append (cdr (conn--read-thing-region "Define Region")) (list t)))
   (narrow-to-region beg end)
   (when record (conn--narrow-ring-record beg end))
   (when (called-interactively-p 'interactive)
@@ -4570,7 +4571,7 @@ associated with that command (see `conn-register-thing')."
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (append (cdr (conn--read-thing-region)) (list t)))
+  (interactive (append (cdr (conn--read-thing-region "Define Region")) (list t)))
   (conn--narrow-indirect beg end interactive)
   (when (called-interactively-p 'interactive)
     (message "Buffer narrowed indirect")))
@@ -5953,7 +5954,7 @@ before each iteration."
   :description "Regexp in Region"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region))
+      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
                    (regexp (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer 'regexp-quote))
@@ -5993,7 +5994,7 @@ before each iteration."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region))
+      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
                    (string (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer))
@@ -6032,7 +6033,7 @@ before each iteration."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region))
+      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
                    (regexp (conn--read-from-with-preview
                             "Regexp" t nil (cons beg end)))
                    (regions))
@@ -6072,7 +6073,7 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region))
+      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
                    (string (conn--read-from-with-preview
                             "String" nil nil (cons beg end)))
                    (regions))
