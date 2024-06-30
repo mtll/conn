@@ -5719,14 +5719,15 @@ The last value is \"don't use any of these switches\"."
   [:description
    conn--kmacro-ring-display
    :if-not conn--in-kbd-macro-p
+   [("l" "List" list-keyboard-macros :if (lambda () (version<= "30" emacs-version)))
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("w" "Swap" kmacro-swap-ring :transient t)
+    ("o" "Pop" kmacro-delete-ring-head :transient t)]
    [("i" "Insert Counter" kmacro-insert-counter)
     ("c" "Set Counter" kmacro-set-counter :transient t)
     ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix :transient t)]
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("w" "Swap" kmacro-swap-ring :transient t)
-    ("o" "Pop" kmacro-delete-ring-head :transient t)]]
+    ("f" "Set Format" conn--set-counter-format-infix :transient t)]]
   [:if
    (lambda () (version<= "30" emacs-version))
    :description
@@ -6363,9 +6364,6 @@ apply to each contiguous component of the region."
   "Transient menu for keyboard macro application on regions."
   [:description
    conn--kmacro-ring-display
-   [("c" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("M" "Display"
@@ -6373,6 +6371,9 @@ apply to each contiguous component of the region."
        (interactive)
        (kmacro-display last-kbd-macro t))
      :transient t)]
+   [("c" "Set Counter" kmacro-set-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("g" "Push Register" conn--push-macro-ring :transient t)]
    [("e" "Edit Macro"
      (lambda (arg)
        (interactive "P")
@@ -6421,9 +6422,6 @@ apply to each contiguous component of the region."
   "Transient menu for keyboard macro application on isearch matches."
   [:description
    conn--kmacro-ring-display
-   [("c" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("M" "Display"
@@ -6431,6 +6429,9 @@ apply to each contiguous component of the region."
        (interactive)
        (kmacro-display last-kbd-macro t))
      :transient t)]
+   [("c" "Set Counter" kmacro-set-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("g" "Push Register" conn--push-macro-ring :transient t)]
    [("e" "Edit Macro"
      (lambda (arg)
        (interactive "P")
@@ -6470,9 +6471,6 @@ apply to each contiguous component of the region."
   "Transient menu for keyboard macro application on regions."
   [:description
    conn--kmacro-ring-display
-   [("c" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]
    [("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("M" "Display"
@@ -6480,6 +6478,9 @@ apply to each contiguous component of the region."
        (interactive)
        (kmacro-display last-kbd-macro t))
      :transient t)]
+   [("c" "Set Counter" kmacro-set-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)
+    ("g" "Push Register" conn--push-macro-ring :transient t)]
    [("e" "Edit Macro"
      (lambda (arg)
        (interactive "P")
