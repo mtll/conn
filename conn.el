@@ -5727,9 +5727,18 @@ The last value is \"don't use any of these switches\"."
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("w" "Swap" kmacro-swap-ring :transient t)
     ("o" "Pop" kmacro-delete-ring-head :transient t)]]
+  [:if
+   (lambda () (version<= "30" emacs-version))
+   :description
+   "Counter Registers"
+   [("rs" "Save Counter Register" kmacro-reg-save-counter)
+    ("rl" "Load Counter Register" kmacro-reg-load-counter)]
+   [("r<" "Register Add Counter <" kmacro-reg-add-counter-less)
+    ("r>" "Register Add Counter >" kmacro-reg-add-counter-greater)
+    ("r=" "Register Add Counter =" kmacro-reg-add-counter-equal)]]
   ["Commands"
    :if-not conn--in-kbd-macro-p
-   [("r" "Record Macro" kmacro-start-macro)
+   [("m" "Record Macro" kmacro-start-macro)
     ("k" "Call Macro" kmacro-call-macro)
     ("a" "Append to Macro" (lambda ()
                              (interactive)
@@ -5742,7 +5751,12 @@ The last value is \"don't use any of these switches\"."
     ("E" "Edit Lossage" kmacro-edit-lossage)
     ("s" "Register Save" kmacro-to-register)
     ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
-    ("q" "Step Edit Macro" kmacro-step-edit-macro)]]
+    ("S" "Step Edit Macro" kmacro-step-edit-macro)]
+   [:if
+    (lambda () (version<= "30" emacs-version))
+    ("q<" "Quit Counter Less" kmacro-quit-counter-less)
+    ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
+    ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
   [:if
    conn--in-kbd-macro-p
    ["Commands"
