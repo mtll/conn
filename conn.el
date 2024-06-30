@@ -498,7 +498,7 @@ Uses `read-regexp' to read the regexp."
 
 (declare-function conn--derived-mode-all-parents "conn.el")
 (if (version< "30" emacs-version)
-    (defalias 'conn--derived-mode-all-parents #'derived-mode-all-parents)
+    (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents)
   (defun conn--derived-mode-all-parents (mode)
     (let ((modes (list mode)))
       (while-let ((parent (get mode 'derived-mode-parent)))
@@ -603,10 +603,22 @@ If BUFFER is nil check `current-buffer'."
             (internal-pop-keymap conn-read-thing-command-map
                                  'overriding-terminal-local-map)
             (save-window-excursion
-              (setq cmd (let ((read-extended-command-predicate
-                               (lambda (symbol _)
-                                 (get symbol :conn-command-thing))))
-                          (intern-soft (read-extended-command)))))
+              (setq cmd (intern
+                         (completing-read
+                          "Command: "
+                          (lambda (string pred action)
+                            (if (eq action 'metadata)
+                                `(metadata
+                                  ,(cons 'affixation-function
+                                         (conn--dispatch-make-command-affixation
+                                          conn-read-thing-command-map))
+                                  (category . conn-dispatch-command))
+                              (complete-with-action action obarray string pred)))
+                          (lambda (sym)
+                            (and (functionp sym)
+                                 (not (eq sym 'help))
+                                 (get sym :conn-command-thing)))
+                          t))))
             (internal-push-keymap conn-read-thing-command-map
                                   'overriding-terminal-local-map)
             (go :test))
@@ -1766,6 +1778,9 @@ The iterator must be the first argument in ARGLIST.
          ,(macroexp-progn body))
      (conn--text-property-to-dots)))
 
+(defun conn-overlay-p (overlay)
+  (overlay-get overlay 'conn-overlay))
+
 (defun conn--sorted-overlays (typep &optional sort-predicate start end buffer)
   "Get all dots between START and END sorted by starting position."
   (unless sort-predicate (setq sort-predicate #'<))
@@ -1775,13 +1790,10 @@ The iterator must be the first argument in ARGLIST.
       ('> (nreverse overlays))
       (_ (sort overlays sort-predicate)))))
 
-(defun conn--clear-overlays ()
-  "Delete all conn overlays."
-  (save-restriction
-    (widen)
-    (mapc #'delete-overlay
-          (conn--all-overlays
-           (lambda (ov) (overlay-get ov 'conn-overlay))))))
+(defun conn--clear-overlays (&optional buffer)
+  "Delete all conn overlays in BUFFER."
+  (without-restriction
+    (mapc #'delete-overlay (conn--all-overlays #'conn-overlay-p nil nil buffer))))
 
 (defun conn--dot-before-point (point)
   (unless (= point (point-min))
