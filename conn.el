@@ -2189,6 +2189,7 @@ state."
 
 (cl-defmacro conn-define-dispatch-action ((name description) arglist &rest body)
   "\(fn (NAME description) arglist &body body)"
+  (declare (indent 2))
   `(progn
      (defun ,name ,arglist ,@body)
      (put ',name :conn-action-description ,description)
@@ -2260,7 +2261,7 @@ state."
     (join-line)))
 
 (conn-define-dispatch-action (conn-dispatch-kill "Kill")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2273,7 +2274,7 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-append "Kill Append")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2287,7 +2288,7 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-prepend "Kill Prepend")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2301,7 +2302,7 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-copy "Copy")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2313,7 +2314,7 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-append "Copy Append")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2325,7 +2326,7 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-prepend "Copy Prepend")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2337,7 +2338,7 @@ state."
         (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-dot "Dot")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2352,7 +2353,7 @@ state."
            (conn--create-dots reg)))))))
 
 (conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2366,7 +2367,7 @@ state."
   (yank))
 
 (conn-define-dispatch-action (conn-dispatch-grab-replace "Grab Replace")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2379,7 +2380,7 @@ state."
   (yank))
 
 (conn-define-dispatch-action (conn-dispatch-grab "Grab")
-                             (window pt thing)
+    (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2391,7 +2392,7 @@ state."
   (yank))
 
 (conn-define-dispatch-action (conn-dispatch-yank "Yank")
-                             (window pt thing)
+    (window pt thing)
   (let (str)
     (with-selected-window window
       (save-excursion
@@ -2405,7 +2406,7 @@ state."
       (user-error "No thing at point"))))
 
 (conn-define-dispatch-action (conn-dispatch-goto "Goto")
-                             (window pt thing)
+    (window pt thing)
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
       (unless (region-active-p)
@@ -2422,7 +2423,7 @@ state."
            (goto-char beg)))))))
 
 (conn-define-dispatch-action (conn-dispatch-jump "Jump")
-                             (window pt _thing)
+    (window pt _thing)
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
       (unless (region-active-p)
@@ -2431,7 +2432,7 @@ state."
       (goto-char pt))))
 
 (conn-define-dispatch-action (conn-dispatch-transpose "Transpose")
-                             (window pt thing)
+    (window pt thing)
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
                  (cons (region-beginning) (region-end))
@@ -2801,7 +2802,7 @@ seconds."
                                (if (eq action 'metadata)
                                    `(metadata
                                      ,(cons 'affixation-function
-                            (conn--dispatch-make-command-affixation keymap))
+                                            (conn--dispatch-make-command-affixation keymap))
                                      (category . conn-dispatch-command))
                                  (complete-with-action action obarray string pred)))
                              (lambda (sym)
