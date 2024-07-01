@@ -2824,6 +2824,7 @@ seconds."
               (_
                (setq invalid t)))
             (go :read-command))
+         (message nil)
          (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
@@ -5119,15 +5120,16 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-quit]: quit; "
-    "\\[toggle-frame-fullscreen]: fullscreen; "
+    "\\[conn-wincontrol-quit]: quit"
+    "\n"
+    "\\[other-frame]: other; "
     "\\[clone-frame]: clone; "
-    "\\[undelete-frame]: undelete"
+    "\\[undelete-frame]: undelete; "
+    "\\[tear-off-window]: tear off; "
+    "\\[toggle-frame-fullscreen]: fullscreen"
     "\n"
     "\\[conn-wincontrol-reverse] \\[conn-wincontrol-reflect]: reverse/reflect; "
-    "\\[other-frame]: other; "
     "\\[iconify-or-deiconify-frame] \\[make-frame-command]: iconify/create; "
-    "\\[tear-off-window]: tear off; "
     "\\[delete-frame] \\[delete-other-frames]: delete/other")))
 
 (defun conn--wincontrol-simple-format ()
@@ -5732,7 +5734,8 @@ The last value is \"don't use any of these switches\"."
   [:description
    conn--kmacro-ring-display
    :if-not conn--in-kbd-macro-p
-   [("l" "List" list-keyboard-macros :if (lambda () (version<= "30" emacs-version)))
+   [("l" "List Macros" list-keyboard-macros
+     :if (lambda () (version<= "30" emacs-version)))
     ("n" "Next" kmacro-cycle-ring-previous :transient t)
     ("p" "Previous" kmacro-cycle-ring-next :transient t)
     ("w" "Swap" kmacro-swap-ring :transient t)
@@ -5740,7 +5743,12 @@ The last value is \"don't use any of these switches\"."
    [("i" "Insert Counter" kmacro-insert-counter)
     ("c" "Set Counter" kmacro-set-counter :transient t)
     ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix :transient t)]]
+    ("f" "Set Format" conn--set-counter-format-infix :transient t)]
+   [:if
+    (lambda () (version<= "30" emacs-version))
+    ("q<" "Quit Counter Less" kmacro-quit-counter-less)
+    ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
+    ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
   [:if
    (lambda () (version<= "30" emacs-version))
    :description
@@ -5765,12 +5773,7 @@ The last value is \"don't use any of these switches\"."
     ("E" "Edit Lossage" kmacro-edit-lossage)
     ("s" "Register Save" kmacro-to-register)
     ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
-    ("S" "Step Edit Macro" kmacro-step-edit-macro)]
-   [:if
-    (lambda () (version<= "30" emacs-version))
-    ("q<" "Quit Counter Less" kmacro-quit-counter-less)
-    ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
-    ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
+    ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
   [:if
    conn--in-kbd-macro-p
    ["Commands"
@@ -7340,11 +7343,6 @@ determine if `conn-local-mode' should be enabled."
     "(" 'paredit-backward-up
     ")" 'paredit-forward-up)
 
-  (conn-register-thing-commands
-   'paredit-sexp 'conn-individual-thing-handler
-   'paredit-forward-down
-   'paredit-backward-down)
-
   (defun conn-paredit-list-handler (beg)
     (cond ((> (point) beg)
            (save-excursion
@@ -7359,6 +7357,23 @@ determine if `conn-local-mode' should be enabled."
    'list 'conn-paredit-list-handler
    'paredit-forward-up
    'paredit-backward-up)
+
+  (defun conn-paredit-down-list-handler (beg)
+    (cond ((> (point) beg)
+           (save-excursion
+             (paredit-forward-up)
+             (paredit-backward-down)
+             (conn--push-ephemeral-mark (point))))
+          ((< (point) beg)
+           (save-excursion
+             (paredit-backward-up)
+             (paredit-forward-down)
+             (conn--push-ephemeral-mark (point))))))
+
+  (conn-register-thing-commands
+   'list 'conn-paredit-down-list-handler
+   'paredit-forward-down
+   'paredit-backward-down)
 
   (defun conn-paredit-sexp-handler (beg)
     (pcase (save-excursion
