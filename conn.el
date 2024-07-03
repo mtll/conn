@@ -6531,6 +6531,18 @@ apply to each contiguous component of the region."
 
 ;;;;; Narrow Ring Prefix
 
+(defun conn--narrow-ring-restore (state)
+  (widen)
+  (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring) state))
+    (narrow-to-region min max)
+    (goto-char point)
+    (save-mark-and-excursion--restore mark)
+    (conn-clear-narrow-ring)
+    (setq conn-narrow-ring
+          (cl-loop for (beg . end) in narrow-ring
+                   collect (cons (conn--create-marker beg)
+                                 (conn--create-marker end))))))
+
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)
       (pcase-let ((`(,beg . ,end) narrowing))
@@ -6585,7 +6597,21 @@ apply to each contiguous component of the region."
        (widen)
        (conn-recenter-on-region)))
     ("c" "Clear" conn-clear-narrow-ring)
-    ("v" "Add Region" conn-region-to-narrow-ring)]
+    ("v" "Add Region" conn-region-to-narrow-ring)
+    ("N" "In Indired Buffer"
+     (lambda ()
+       (interactive)
+       (let ((beg (point-min))
+             (end (point-max))
+             (buf (current-buffer))
+             (win (selected-window)))
+         (widen)
+         (conn--narrow-indirect beg end)
+         (with-current-buffer buf
+           (if (eq (window-buffer win) buf)
+               (with-selected-window win
+                 (conn--narrow-ring-restore (oref transient-current-prefix scope)))
+             (conn--narrow-ring-restore (oref transient-current-prefix scope)))))))]
    [("n" "Cycle Next" conn-cycle-narrowings :transient t)
     ("p" "Cycle Previous"
      (lambda (arg)
@@ -6596,17 +6622,7 @@ apply to each contiguous component of the region."
     ("a" "Abort Cycling"
      (lambda ()
        (interactive)
-       (widen)
-       (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring)
-                    (oref transient-current-prefix scope)))
-         (narrow-to-region min max)
-         (goto-char point)
-         (save-mark-and-excursion--restore mark)
-         (conn-clear-narrow-ring)
-         (setq conn-narrow-ring
-               (cl-loop for (beg . end) in narrow-ring
-                        collect (cons (conn--create-marker beg)
-                                      (conn--create-marker end)))))))]]
+       (conn--narrow-ring-restore (oref transient-current-prefix scope))))]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
