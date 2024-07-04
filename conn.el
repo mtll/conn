@@ -58,7 +58,6 @@
 (defvar conn-emacs-state)
 (defvar kmacro-step-edit-replace)
 (defvar conn-state-map)
-(defvar conn-expand-repeat-map)
 (defvar conn-transition-hook)
 
 (defvar conn-dispatch-providers-alist
@@ -71,8 +70,6 @@
 
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
-
-(defvar-keymap conn-expand-repeat-map :repeat t)
 
 ;;;;; Custom Variables
 
@@ -2895,6 +2892,12 @@ potential expansions.  Functions may return invalid expansions
 
 (defvar-local conn--current-expansions nil)
 
+(defvar-keymap conn-expand-repeat-map
+  :repeat t
+  "z" 'conn-expand-exchange
+  "H" 'conn-contract
+  "h" 'conn-expand)
+
 (defun conn--expand-post-change-hook (&rest _)
   (setq conn--current-expansions nil)
   (remove-hook 'after-change-functions 'conn--expand-post-change-hook t))
@@ -3581,13 +3584,15 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
 (defun conn-refine-dots (beg end regexp)
   (interactive
    (pcase-let ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
-               (regexp (read-regexp "Regexp: "
-                                    (list ""
-                                          (ignore-errors
-                                            (list (regexp-quote
-                                                   (buffer-substring-no-properties
-                                                    (region-beginning)
-                                                    (region-end)))))))))
+               (regexp (thread-last
+                         (buffer-substring-no-properties
+                          (region-beginning)
+                          (region-end))
+                         (regexp-quote)
+                         (list)
+                         (ignore-errors)
+                         (list "")
+                         (read-regexp "Regexp: "))))
      (list beg end regexp)))
   (let (new-dots)
     (save-excursion
@@ -6531,7 +6536,7 @@ apply to each contiguous component of the region."
 
 ;;;;; Narrow Ring Prefix
 
-(defun conn--narrow-ring-restore (state)
+(defun conn--narrow-ring-restore-state (state)
   (widen)
   (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring) state))
     (narrow-to-region min max)
@@ -6610,8 +6615,8 @@ apply to each contiguous component of the region."
          (with-current-buffer buf
            (if (eq (window-buffer win) buf)
                (with-selected-window win
-                 (conn--narrow-ring-restore (oref transient-current-prefix scope)))
-             (conn--narrow-ring-restore (oref transient-current-prefix scope)))))))]
+                 (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
+             (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))]
    [("n" "Cycle Next" conn-cycle-narrowings :transient t)
     ("p" "Cycle Previous"
      (lambda (arg)
@@ -6622,7 +6627,7 @@ apply to each contiguous component of the region."
     ("a" "Abort Cycling"
      (lambda ()
        (interactive)
-       (conn--narrow-ring-restore (oref transient-current-prefix scope))))]]
+       (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
@@ -6726,12 +6731,6 @@ apply to each contiguous component of the region."
 
 
 ;;;; Keymaps
-
-(define-keymap
-  :keymap conn-expand-repeat-map
-  "z" 'conn-expand-exchange
-  "H" 'conn-contract
-  "h" 'conn-expand)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
