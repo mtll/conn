@@ -974,6 +974,8 @@ If BUFFER is nil check `current-buffer'."
     (put thing 'end-op end))
   (when-let ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
+  (when-let ((inner-bounds-op (plist-get rest :inner-bounds-op)))
+    (put thing :conn-inner-bounds-op inner-bounds-op))
   (when-let ((binding (plist-get rest :mark-key))
              (mark-command (conn--symbolicate "conn-mark-" thing)))
     (fset mark-command
@@ -1157,6 +1159,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (cons (region-beginning) (if (< arg 0) end (region-end)))))
     (error (bounds-of-thing-at-point thing))))
 
+(defun conn-bounds-of-inner-thing (thing bounds)
+  (when-let ((inner-op (get thing :conn-inner-bounds-op)))
+    (funcall inner-op (car bounds) (cdr bounds))))
+
+(cl-defgeneric conn-thing-empty-p (thing bounds)
+  (or (= (car bounds) (cdr bounds))
+      (pcase (conn-bounds-of-inner-thing thing bounds)
+        ('nil nil)
+        ((and `(,beg . ,end) (guard (= beg end))) t))))
+
 ;;;;; Thing Definitions
 
 (conn-register-thing 'url :mark-key "!")
@@ -1257,7 +1269,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing
  'list
- :forward-op 'forward-list)
+ :forward-op 'forward-list
+ :inner-bounds-op (lambda (beg end)
+                    (cons (save-excursion
+                            (goto-char beg)
+                            (down-list 1)
+                            (point))
+                          (save-excursion
+                            (goto-char end)
+                            (down-list -1)
+                            (point)))))
 
 (defun conn--list-mark-handler (beg)
   (condition-case _err
@@ -1342,6 +1363,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'line
  :forward-op 'conn-line-forward-op
+ :inner-bounds-op (lambda (beg end) (cons beg (1- end)))
  :dispatch-provider 'conn--dispatch-lines)
 
 (conn-register-thing-commands
@@ -1432,10 +1454,8 @@ If any function returns a nil value then macro application it halted.")
     (unless (eq state :finalize)
       (cons (point) (mark t)))))
 
-(defun conn--kapply-thing-iterator (thing beg end &optional reverse)
-  (let ((beg (conn--create-marker beg))
-        (end (conn--create-marker end))
-        (regions))
+(defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty)
+  (let (regions)
     (save-mark-and-excursion
       (with-restriction beg end
         (goto-char (point-min))
@@ -1446,13 +1466,14 @@ If any function returns a nil value then macro application it halted.")
                    with conn-this-command-handler = (conn-get-mark-handler cmd)
                    with conn-this-command-thing = thing
                    for conn-this-command-start = (point-marker)
-                   while (< (point) (point-max)) do
+                   while (< (point) (point-max))
+                   do
                    (forward-thing thing 1)
                    (funcall conn-this-command-handler conn-this-command-start)
-                   while (/= (point) conn-this-command-start) do
-                   (push (cons (conn--create-marker (region-beginning))
-                               (conn--create-marker (region-end)))
-                         regions)))))
+                   while (/= (point) conn-this-command-start)
+                   for reg = (cons (region-beginning) (region-end))
+                   unless (and skip-empty (conn-thing-empty-p thing reg))
+                   do (push reg regions)))))
     (conn--kapply-region-iterator (nreverse regions) reverse)))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
@@ -5901,6 +5922,14 @@ the edit in the macro."
   (kmacro-push-ring macro)
   (kmacro-swap-ring))
 
+(transient-define-argument conn--kapply-empty-infix ()
+  "Include empty regions in dispatch."
+  :class 'transient-switch
+  :key "o"
+  :description "Skip Empty"
+  :argument "skip"
+  :init-value (lambda (obj) (oset obj value "skip")))
+
 (transient-define-argument conn--kapply-dot-read-buffers-infix ()
   "How to read additional buffers on which to dispatch.
 CRM means read buffers with `completing-read-multiple',
@@ -6187,28 +6216,31 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
-      (conn--kapply-region-iterator (prog1
-                                        (cdr (conn--read-thing-region "Things"))
-                                      (deactivate-mark))
-                                    (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (pcase-let ((`(,thing . ,regions) (conn--read-thing-region "Things")))
+    (deactivate-mark)
+    (conn--thread -->
+      (if (member "skip" args)
+          (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
+                      regions)
+        regions)
+      (conn--kapply-region-iterator --> (member "reverse" args))
+      (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+      (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
+      (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
+      (pcase-exhaustive (transient-arg-value "state=" args)
+        ("conn" (conn--kapply-with-state --> 'conn-state))
+        ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
+      (pcase-exhaustive (transient-arg-value "region=" args)
+        ("change" (conn--kapply-change-region -->))
+        ("end" (conn--kapply-at-end -->))
+        ("start" -->))
+      (conn--kapply-pulse-region -->)
+      (if (member "windows" args) (conn--kapply-save-windows -->) -->)
+      (pcase (transient-arg-value "last-kmacro=" args)
+        ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
+        ("append" (conn--kmacro-apply-append -->))
+        ("step-edit" (conn--kmacro-apply-step-edit -->))
+        (_ (conn--kmacro-apply -->))))))
 
 (transient-define-suffix conn--kapply-things-in-region-suffix (args)
   "Apply keyboard macro on the current region.
@@ -6223,7 +6255,8 @@ apply to each contiguous component of the region."
       (conn--kapply-thing-iterator (car (conn--read-thing-region "Things"))
                                    (region-beginning)
                                    (region-end)
-                                   (member "reverse" args))
+                                   (member "reverse" args)
+                                   (member "skip" args))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6442,7 +6475,8 @@ apply to each contiguous component of the region."
   [:description
    "Options:"
    [(conn--kapply-order-infix)
-    (conn--kapply-state-infix)]
+    (conn--kapply-state-infix)
+    (conn--kapply-empty-infix)]
    [(conn--kapply-dots-infix)
     (conn--kapply-dot-read-buffers-infix)
     (conn--kapply-region-infix)
