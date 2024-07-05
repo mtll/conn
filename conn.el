@@ -71,6 +71,12 @@
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
 
+(defvar-keymap conn-expand-repeat-map
+  :repeat t
+  "z" 'conn-expand-exchange
+  "H" 'conn-contract
+  "h" 'conn-expand)
+
 ;;;;; Custom Variables
 
 (defgroup conn nil
@@ -1416,6 +1422,29 @@ If any function returns a nil value then macro application it halted.")
     (unless (eq state :finalize)
       (cons (point) (mark t)))))
 
+(defun conn--kapply-thing-iterator (thing beg end &optional reverse)
+  (let ((beg (conn--create-marker beg))
+        (end (conn--create-marker end))
+        (regions))
+    (save-mark-and-excursion
+      (with-restriction beg end
+        (goto-char (point-min))
+        (ignore-errors
+          (cl-loop with cmd = (or (get thing 'forward-op)
+                                  (get thing 'end-op))
+                   with current-prefix-arg = 1
+                   with conn-this-command-handler = (conn-get-mark-handler cmd)
+                   with conn-this-command-thing = thing
+                   for conn-this-command-start = (point-marker)
+                   while (< (point) (point-max)) do
+                   (forward-thing thing 1)
+                   (funcall conn-this-command-handler conn-this-command-start)
+                   (push (cons (conn--create-marker (region-beginning))
+                               (conn--create-marker (region-end)))
+                         regions)
+                   while (/= (point) conn-this-command-start)))))
+    (conn--kapply-region-iterator (nreverse regions) reverse)))
+
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
   (pcase-dolist ((and reg `(,beg . ,end)) regions)
@@ -2226,12 +2255,12 @@ state."
                 ,(apply-partially 'conn--dispatch-all-things 'word)
                 . conn-dispatch-goto))))
 
-(defun conn-dispatch-finder (command)
+(defun conn--dispatch-finder (command)
   (or (alist-get command conn-dispatch-providers-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-providers-alist)
       (alist-get t conn-dispatch-providers-alist)))
 
-(defun conn-dispatch-default-action (command)
+(defun conn--dispatch-default-action (command)
   (or (alist-get command conn-dispatch-default-actions-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-default-actions-alist)
       (alist-get t conn-dispatch-default-actions-alist)))
@@ -2474,7 +2503,8 @@ state."
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
       (cl-loop
-       for command-name in command-names collect
+       for command-name in command-names
+       collect
        (let* ((fun (and (stringp command-name) (intern-soft command-name)))
               (binding (where-is-internal fun
                                           (cons keymap (current-active-maps t))
@@ -2812,8 +2842,8 @@ seconds."
                (go :loop))
               ((let (and thing (pred identity)) (get cmd :conn-command-thing))
                (cl-return
-                (list thing (conn-dispatch-finder cmd)
-                      (or action (conn-dispatch-default-action cmd))
+                (list thing (conn--dispatch-finder cmd)
+                      (or action (conn--dispatch-default-action cmd))
                       (* (if thing-sign -1 1) (or thing-arg 1))
                       current-prefix-arg)))
               ((guard (where-is-internal cmd conn-dispatch-command-maps t))
@@ -2891,12 +2921,6 @@ potential expansions.  Functions may return invalid expansions
 (e.g. nil, invalid regions, etc.) and they will be filtered out.")
 
 (defvar-local conn--current-expansions nil)
-
-(defvar-keymap conn-expand-repeat-map
-  :repeat t
-  "z" 'conn-expand-exchange
-  "H" 'conn-contract
-  "h" 'conn-expand)
 
 (defun conn--expand-post-change-hook (&rest _)
   (setq conn--current-expansions nil)
@@ -3378,13 +3402,10 @@ Interactively defaults to the current region."
 When called interactively and there are multiple dots in the current
 buffers completing read DOT."
   (interactive
-   (let ((dots (conn--all-overlays #'conn-dotp)))
-     (cond
-      ((null dots)
-       (user-error "No dots active"))
-      ((length= dots 1)
-       dots)
-      (t (list (conn--completing-read-dot dots))))))
+   (pcase (conn--all-overlays #'conn-dotp)
+     ('nil (user-error "No dots active"))
+     ((and `(,_) dots) dots)
+     (dots (list (conn--completing-read-dot dots)))))
   (let ((beg (conn--create-marker (overlay-start dot)))
         (end (overlay-end dot)))
     (save-mark-and-excursion
@@ -4773,12 +4794,12 @@ If REGISTER is given copy to REGISTER instead."
       (if rectangle-mark-mode
           (copy-rectangle-to-register register start end)
         (copy-to-register register start end)
-        (unless executing-kbd-macro
+        (when (called-interactively-p 'interactive)
           (pulse-momentary-highlight-region start end)))
     (if rectangle-mark-mode
         (copy-rectangle-as-kill start end)
       (copy-region-as-kill start end)
-      (unless executing-kbd-macro
+      (when (called-interactively-p 'interactive)
         (pulse-momentary-highlight-region start end)))))
 
 (defun conn-kill-region (&optional arg)
@@ -6170,6 +6191,36 @@ apply to each contiguous component of the region."
       ("step-edit" (conn--kmacro-apply-step-edit -->))
       (_ (conn--kmacro-apply -->)))))
 
+(transient-define-suffix conn--kapply-things-suffix (args)
+  "Apply keyboard macro on the current region.
+If the region is discontiguous (e.g. a rectangular region) then
+apply to each contiguous component of the region."
+  :transient 'transient--do-exit
+  :key "f"
+  :description "Regions"
+  (interactive (list (transient-args transient-current-command)))
+  (deactivate-mark)
+  (conn--thread -->
+      (pcase-let ((`(,thing ,beg ,end) (conn--read-thing-region "Things")))
+        (conn--kapply-thing-iterator thing beg end (member "reverse" args)))
+    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
+    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
+    (pcase-exhaustive (transient-arg-value "state=" args)
+      ("conn" (conn--kapply-with-state --> 'conn-state))
+      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
+    (pcase-exhaustive (transient-arg-value "region=" args)
+      ("change" (conn--kapply-change-region -->))
+      ("end" (conn--kapply-at-end -->))
+      ("start" -->))
+    (conn--kapply-pulse-region -->)
+    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
+    (pcase (transient-arg-value "last-kmacro=" args)
+      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
+      ("append" (conn--kmacro-apply-append -->))
+      ("step-edit" (conn--kmacro-apply-step-edit -->))
+      (_ (conn--kmacro-apply -->)))))
+
 (transient-define-suffix conn--kapply-iterate-suffix (args)
   "Apply keyboard macro a specified number of times."
   :transient 'transient--do-exit
@@ -6431,6 +6482,7 @@ apply to each contiguous component of the region."
     (conn--kapply-iterate-suffix)]
    [:description
     ""
+    (conn--kapply-things-suffix)
     (conn--kapply-regexp-suffix)
     (conn--kapply-string-suffix)
     (conn--kapply-regexp-region-suffix)
@@ -6937,6 +6989,8 @@ apply to each contiguous component of the region."
   "h" conn-mark-thing-map
   "I" 'copy-from-above-command
   "j" 'join-line
+  "x" 'kill-matching-lines
+  "z" 'copy-matching-lines
   "k" 'transpose-lines
   "K" 'transpose-paragraphs
   "l" 'transpose-chars
@@ -7351,6 +7405,11 @@ determine if `conn-local-mode' should be enabled."
                      'paredit-backward-up))
 
 (with-eval-after-load 'paredit
+  (declare-function paredit-forward-down "paredit")
+  (declare-function paredit-backward-down "paredit")
+  (declare-function paredit-forward-up "paredit")
+  (declare-function paredit-backward-up "paredit")
+
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'paredit-mode)
     "]" 'paredit-forward-down
