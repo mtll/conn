@@ -1128,7 +1128,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn-bounds-of-things (cmd arg)
   (let (regions)
     (save-mark-and-excursion
-      (cl-loop with current-prefix-arg = 1
+      (cl-loop with current-prefix-arg = nil
                with conn-this-command-handler = (conn-get-mark-handler cmd)
                with conn-this-command-thing = (get cmd :conn-command-thing)
                for conn-this-command-start = (point-marker)
@@ -2293,117 +2293,104 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-        (let ((str (filter-buffer-substring beg end)))
-          (kill-region beg end)
-          (conn-dispatch-fixup-whitespace)
-          (message "Killed: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-region beg end)
+           (conn-dispatch-fixup-whitespace)
+           (message "Killed: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-append "Kill Append")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-        (let ((str (filter-buffer-substring beg end)))
-          (kill-append str nil)
-          (delete-region beg end)
-          (conn-dispatch-fixup-whitespace)
-          (message "Appended: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str nil)
+           (delete-region beg end)
+           (conn-dispatch-fixup-whitespace)
+           (message "Appended: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-prepend "Kill Prepend")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-
-        (let ((str (filter-buffer-substring beg end)))
-          (kill-append str t)
-          (delete-region beg end)
-          (conn-dispatch-fixup-whitespace)
-          (message "Prepended: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str t)
+           (delete-region beg end)
+           (conn-dispatch-fixup-whitespace)
+           (message "Prepended: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-copy "Copy")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-
-        (let ((str (filter-buffer-substring beg end)))
-          (kill-new str)
-          (message "Copied: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-new str)
+           (message "Copied: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-append "Copy Append")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-
-        (let ((str (filter-buffer-substring beg end)))
-          (kill-append str nil)
-          (message "Copy Appended: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str nil)
+           (message "Copy Appended: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-prepend "Copy Prepend")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-
-        (let ((str (filter-buffer-substring beg end)))
-          (kill-append str t)
-          (message "Copy Prepended: %s" str))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (let ((str (filter-buffer-substring beg end)))
+           (kill-append str t)
+           (message "Copy Prepended: %s" str)))
+        (_ (user-error "No thing at point"))))))
 
 (conn-define-dispatch-action (conn-dispatch-dot "Dot")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds)))
-                (dot (conn--dot-after-point beg)))
-        (if (and dot
-                 (= beg (overlay-start dot))
-                 (= end (overlay-end dot)))
-            (conn--delete-dot dot)
-          (conn--create-dots bounds))
-        (user-error "No thing at point")))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        ('nil (user-error "No thing at point"))
+        ((and `(,beg . ,end) reg
+              (let dot (conn--dot-after-point beg)))
+         (if (and dot
+                  (= beg (overlay-start dot))
+                  (= end (overlay-end dot)))
+             (conn--delete-dot dot)
+           (conn--create-dots reg)))))))
 
 (conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-          (progn
-            (pulse-momentary-highlight-region beg end)
-            (copy-region-as-kill beg end)
-            (conn-dispatch-fixup-whitespace))
-        (user-error "No thing at point"))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (pulse-momentary-highlight-region beg end)
+         (copy-region-as-kill beg end)
+         (conn-dispatch-fixup-whitespace))
+        (_ (user-error "No thing at point")))))
   (delete-region (region-beginning) (region-end))
   (yank))
 
@@ -2412,13 +2399,11 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-          (progn
-            (kill-region beg end)
-            (conn-dispatch-fixup-whitespace))
-        (user-error "No thing at point"))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (kill-region beg end)
+         (conn-dispatch-fixup-whitespace))
+        (_ (user-error "No thing at point")))))
   (delete-region (region-beginning) (region-end))
   (yank))
 
@@ -2427,13 +2412,11 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                (beg (caar bounds))
-                (end (cdar (last bounds))))
-          (progn
-            (kill-region beg end)
-            (conn-dispatch-fixup-whitespace))
-        (user-error "No thing at point"))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (kill-region beg end)
+         (conn-dispatch-fixup-whitespace))
+        (_ (user-error "No thing at point")))))
   (yank))
 
 (conn-define-dispatch-action (conn-dispatch-yank "Yank")
@@ -2442,11 +2425,10 @@ state."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (when-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                    (beg (caar bounds))
-                    (end (cdar (last bounds))))
-          (pulse-momentary-highlight-region beg end)
-          (setq str (filter-buffer-substring beg end)))))
+        (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+          (`(,beg . ,end)
+           (pulse-momentary-highlight-region beg end)
+           (setq str (filter-buffer-substring beg end))))))
     (if str
         (insert str)
       (user-error "No thing at point"))))
@@ -2459,15 +2441,14 @@ state."
         (push-mark nil t))
       (select-window window)
       (goto-char pt)
-      (when-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
-                  (beg (caar bounds))
-                  (end (cdar (last bounds))))
-        (unless (region-active-p)
-          (if (= (point) end)
-              (conn--push-ephemeral-mark beg)
-            (conn--push-ephemeral-mark end)))
-        (unless (or (= pt beg) (= pt end))
-          (goto-char beg))))))
+      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (`(,beg . ,end)
+         (unless (region-active-p)
+           (if (= (point) end)
+               (conn--push-ephemeral-mark beg)
+             (conn--push-ephemeral-mark end)))
+         (unless (or (= pt beg) (= pt end))
+           (goto-char beg)))))))
 
 (conn-define-dispatch-action (conn-dispatch-jump "Jump")
     (window pt _thing)
