@@ -1658,14 +1658,6 @@ If any function returns a nil value then macro application it halted.")
       (`(,beg . ,end) (cons end beg))
       (ret ret))))
 
-(defun conn--kapply-skip-empty (iterator)
-  (lambda (state)
-    (let ((ret (funcall iterator state)))
-      (unless (eq state :finalize)
-        (while (and ret (= (car ret) (cdr ret)))
-          (setq ret (funcall iterator state))))
-      ret)))
-
 (defun conn--kapply-pulse-region (iterator)
   (lambda (state)
     (pcase (funcall iterator state)
@@ -6024,14 +6016,6 @@ before each iteration."
   :description "Order"
   :argument "reverse")
 
-(transient-define-argument conn--kapply-empty-infix ()
-  "Include empty regions in dispatch."
-  :class 'transient-switch
-  :key "o"
-  :description "Skip Empty"
-  :argument "skip"
-  :init-value (lambda (obj) (oset obj value "skip")))
-
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
   :class 'transient-switch
@@ -6083,7 +6067,6 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6123,7 +6106,6 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6159,7 +6141,6 @@ before each iteration."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6199,7 +6180,6 @@ property."
               (push (cons (match-beginning 0) (match-end 0)) regions))))
         regions)
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6349,7 +6329,6 @@ apply to each contiguous component of the region."
                      (transient-args transient-current-command)))
   (conn--thread -->
       (funcall iterator (member "reverse" args))
-    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6482,7 +6461,6 @@ apply to each contiguous component of the region."
   [:description
    "Options:"
    [(conn--kapply-order-infix)
-    (conn--kapply-empty-infix)
     (conn--kapply-state-infix)]
    [(conn--kapply-dots-infix)
     (conn--kapply-dot-read-buffers-infix)
