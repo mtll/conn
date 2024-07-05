@@ -648,33 +648,26 @@ If BUFFER is nil check `current-buffer'."
                   (unwind-protect
                       (recursive-edit)
                     (funcall exit)))
-                (cl-return (list nil (region-beginning) (region-end))))))
+                (cl-return (cons nil (region-bounds))))))
            ('conn-define-region-in-recursive-edit
             (save-mark-and-excursion
               (message "Defining region in recursive edit")
               (internal-pop-keymap conn-read-thing-command-map
                                    'overriding-terminal-local-map)
               (recursive-edit)
-              (cl-return (list nil (region-beginning) (region-end)))))
+              (cl-return (cons nil (region-bounds)))))
            ((guard (not (get cmd :conn-command-thing)))
             (setq invalid t))
            ((app conn-get-mark-handler
                  (and conn-this-command-handler
                       (pred functionp)))
-            (save-mark-and-excursion
-              (let ((this-command cmd)
-                    (current-prefix-arg thing-arg)
-                    (conn-this-command-start (point-marker))
-                    (conn-this-command-thing (get cmd :conn-command-thing)))
-                (call-interactively cmd)
-                (funcall conn-this-command-handler conn-this-command-start))
-              (cl-return
-               (list (get cmd :conn-command-thing)
-                     (region-beginning)
-                     (region-end)))))
+            (cl-return (cons (get cmd :conn-command-thing)
+                             (conn-bounds-of-things cmd thing-arg))))
+           ((let 'region (get cmd :conn-command-thing))
+            (cl-return (cons 'region (region-bounds))))
            ((and (let thing (get cmd :conn-command-thing))
                  (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
-            (cl-return (list thing beg end))))
+            (cl-return (cons thing (list (cons beg end))))))
          (go :read-command))
       (message nil)
       (internal-pop-keymap conn-read-thing-command-map
@@ -1132,7 +1125,23 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (delete-overlay ov)))
   (setq conn--mark-cursor nil))
 
-(defun conn-bounds-of-things (thing arg)
+(defun conn-bounds-of-things (cmd arg)
+  (let (regions)
+    (save-mark-and-excursion
+      (cl-loop with current-prefix-arg = 1
+               with conn-this-command-handler = (conn-get-mark-handler cmd)
+               with conn-this-command-thing = (get cmd :conn-command-thing)
+               for conn-this-command-start = (point-marker)
+               repeat (prefix-numeric-value arg)
+               do (progn
+                    (call-interactively cmd)
+                    (funcall conn-this-command-handler conn-this-command-start))
+               while (/= (point) conn-this-command-start)
+               do
+               (push (cons (region-beginning) (region-end)) regions)))
+    (nreverse regions)))
+
+(defun conn-bounds-of-thing-region (thing arg)
   (condition-case _err
       (save-mark-and-excursion
         (pcase-let* ((cmd (or (get thing 'forward-op)
@@ -1342,6 +1351,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing
  'line-column
+ :forward-op 'next-line
  :dispatch-provider 'conn--dispatch-columns
  :default-action 'conn-dispatch-jump)
 
@@ -1439,10 +1449,10 @@ If any function returns a nil value then macro application it halted.")
                    while (< (point) (point-max)) do
                    (forward-thing thing 1)
                    (funcall conn-this-command-handler conn-this-command-start)
+                   while (/= (point) conn-this-command-start) do
                    (push (cons (conn--create-marker (region-beginning))
                                (conn--create-marker (region-end)))
-                         regions)
-                   while (/= (point) conn-this-command-start)))))
+                         regions)))))
     (conn--kapply-region-iterator (nreverse regions) reverse)))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
@@ -2291,104 +2301,117 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-region beg end)
-           (conn-dispatch-fixup-whitespace)
-           (message "Killed: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+        (let ((str (filter-buffer-substring beg end)))
+          (kill-region beg end)
+          (conn-dispatch-fixup-whitespace)
+          (message "Killed: %s" str))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-append "Kill Append")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-append str nil)
-           (delete-region beg end)
-           (conn-dispatch-fixup-whitespace)
-           (message "Appended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+        (let ((str (filter-buffer-substring beg end)))
+          (kill-append str nil)
+          (delete-region beg end)
+          (conn-dispatch-fixup-whitespace)
+          (message "Appended: %s" str))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-prepend "Kill Prepend")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-append str t)
-           (delete-region beg end)
-           (conn-dispatch-fixup-whitespace)
-           (message "Prepended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+
+        (let ((str (filter-buffer-substring beg end)))
+          (kill-append str t)
+          (delete-region beg end)
+          (conn-dispatch-fixup-whitespace)
+          (message "Prepended: %s" str))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-copy "Copy")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-new str)
-           (message "Copied: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+
+        (let ((str (filter-buffer-substring beg end)))
+          (kill-new str)
+          (message "Copied: %s" str))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-append "Copy Append")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-append str nil)
-           (message "Copy Appended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+
+        (let ((str (filter-buffer-substring beg end)))
+          (kill-append str nil)
+          (message "Copy Appended: %s" str))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-prepend "Copy Prepend")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (kill-append str t)
-           (message "Copy Prepended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+
+        (let ((str (filter-buffer-substring beg end)))
+          (kill-append str t)
+          (message "Copy Prepended: %s" str))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-dot "Dot")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        ('nil (user-error "No thing at point"))
-        ((and `(,beg . ,end) reg
-              (let dot (conn--dot-after-point beg)))
-         (if (and dot
-                  (= beg (overlay-start dot))
-                  (= end (overlay-end dot)))
-             (conn--delete-dot dot)
-           (conn--create-dots reg)))))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds)))
+                (dot (conn--dot-after-point beg)))
+        (if (and dot
+                 (= beg (overlay-start dot))
+                 (= end (overlay-end dot)))
+            (conn--delete-dot dot)
+          (conn--create-dots bounds))
+        (user-error "No thing at point")))))
 
 (conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
     (window pt thing)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (pulse-momentary-highlight-region beg end)
-         (copy-region-as-kill beg end)
-         (conn-dispatch-fixup-whitespace))
-        (_ (user-error "No thing at point")))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+          (progn
+            (pulse-momentary-highlight-region beg end)
+            (copy-region-as-kill beg end)
+            (conn-dispatch-fixup-whitespace))
+        (user-error "No thing at point"))))
   (delete-region (region-beginning) (region-end))
   (yank))
 
@@ -2397,11 +2420,13 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (kill-region beg end)
-         (conn-dispatch-fixup-whitespace))
-        (_ (user-error "No thing at point")))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+          (progn
+            (kill-region beg end)
+            (conn-dispatch-fixup-whitespace))
+        (user-error "No thing at point"))))
   (delete-region (region-beginning) (region-end))
   (yank))
 
@@ -2410,11 +2435,13 @@ state."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (kill-region beg end)
-         (conn-dispatch-fixup-whitespace))
-        (_ (user-error "No thing at point")))))
+      (if-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                (beg (caar bounds))
+                (end (cdar (last bounds))))
+          (progn
+            (kill-region beg end)
+            (conn-dispatch-fixup-whitespace))
+        (user-error "No thing at point"))))
   (yank))
 
 (conn-define-dispatch-action (conn-dispatch-yank "Yank")
@@ -2423,10 +2450,11 @@ state."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-          (`(,beg . ,end)
-           (pulse-momentary-highlight-region beg end)
-           (setq str (filter-buffer-substring beg end))))))
+        (when-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                    (beg (caar bounds))
+                    (end (cdar (last bounds))))
+          (pulse-momentary-highlight-region beg end)
+          (setq str (filter-buffer-substring beg end)))))
     (if str
         (insert str)
       (user-error "No thing at point"))))
@@ -2439,14 +2467,15 @@ state."
         (push-mark nil t))
       (select-window window)
       (goto-char pt)
-      (pcase (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg))
-        (`(,beg . ,end)
-         (unless (region-active-p)
-           (if (= (point) end)
-               (conn--push-ephemeral-mark beg)
-             (conn--push-ephemeral-mark end)))
-         (unless (or (= pt beg) (= pt end))
-           (goto-char beg)))))))
+      (when-let* ((bounds (conn-bounds-of-things thing (prefix-numeric-value current-prefix-arg)))
+                  (beg (caar bounds))
+                  (end (cdar (last bounds))))
+        (unless (region-active-p)
+          (if (= (point) end)
+              (conn--push-ephemeral-mark beg)
+            (conn--push-ephemeral-mark end)))
+        (unless (or (= pt beg) (= pt end))
+          (goto-char beg))))))
 
 (conn-define-dispatch-action (conn-dispatch-jump "Jump")
     (window pt _thing)
@@ -3131,8 +3160,12 @@ Expansions and contractions are provided by functions in
     ('change (conn-change-pair-inward arg))))
 
 (defun conn-surround-thing (thing beg end arg)
-  (interactive (append (conn--read-thing-region "Define Region")
-                       (list (prefix-numeric-value current-prefix-arg))))
+  (interactive
+   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+     (list (car regions)
+           (caar regions)
+           (cdar (last regions))
+           (list (prefix-numeric-value current-prefix-arg)))))
   (save-mark-and-excursion
     (funcall (or (get thing :conn-thing-surrounder)
                  'conn--surround-thing)
@@ -3243,10 +3276,13 @@ Expansions and contractions are provided by functions in
 (defun conn-region-to-narrow-ring (beg end &optional pulse)
   "Add the region from BEG to END to the narrow ring.
 Interactively defaults to the current region."
-  (interactive (progn
-                 (deactivate-mark)
-                 (append (cdr (conn--read-thing-region "Define Region"))
-                         (list t))))
+  (interactive
+   (progn
+     (deactivate-mark)
+     (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+       (list (caar regions)
+             (cdar (last regions))
+             t))))
   (conn--narrow-ring-record beg end)
   (when (and pulse (not executing-kbd-macro))
     (pulse-momentary-highlight-region beg end 'region)))
@@ -3363,7 +3399,9 @@ Interactively defaults to the current region."
 
 (defun conn-dot-regexp-in-thing (beg end regexp)
   (interactive
-   (append (cdr (conn--read-thing-region "Define Region"))
+   (append (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+             (list (caar regions)
+                   (cdar (last regions))))
            (list (conn--read-from-with-preview
                   "Regexp" t
                   (buffer-substring-no-properties
@@ -3386,11 +3424,13 @@ Interactively defaults to the current region."
 
 (defun conn-dot-occurances-in-thing (beg end string)
   (interactive
-   (append (cdr (conn--read-thing-region "Define Region"))
-           (list (conn--read-from-with-preview
-                  "Regexp" t
-                  (buffer-substring-no-properties
-                   (region-beginning) (region-end))))))
+   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+     (list (caar regions)
+           (cdar (last regions))
+           (conn--read-from-with-preview
+            "Regexp" t
+            (buffer-substring-no-properties
+             (region-beginning) (region-end))))))
   (save-excursion
     (with-restriction beg end
       (goto-char beg)
@@ -3604,17 +3644,19 @@ If region is already a dot `search-backward', dot, and `search-backward' again."
 
 (defun conn-refine-dots (beg end regexp)
   (interactive
-   (pcase-let ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
-               (regexp (thread-last
-                         (buffer-substring-no-properties
-                          (region-beginning)
-                          (region-end))
-                         (regexp-quote)
-                         (list)
-                         (ignore-errors)
-                         (list "")
-                         (read-regexp "Regexp: "))))
-     (list beg end regexp)))
+   (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (beg (caar regions))
+          (end (cdar (last regions))))
+     (list beg end
+           (thread-last
+             (buffer-substring-no-properties
+              (region-beginning)
+              (region-end))
+             (regexp-quote)
+             (list)
+             (ignore-errors)
+             (list "")
+             (read-regexp "Regexp: ")))))
   (let (new-dots)
     (save-excursion
       (goto-char beg)
@@ -4020,12 +4062,13 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
+   (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
+              (beg (caar regions))
+              (end (cdar regions))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
-                 (pcase-let ((`(,beg ,end) region))
-                   (lambda (b e)
-                     (and (<= beg b end) (<= beg e end))))))
+                 (lambda (b e)
+                   (and (<= beg b end) (<= beg e end)))))
               ((symbol-function 'use-region-p)
                (lambda () t))
               (common
@@ -4035,19 +4078,20 @@ Interactively `region-beginning' and `region-end'."
                             (if (eq current-prefix-arg '-) " backward" " word")
                           ""))
                 nil)))
-     (append region common)))
+     (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
       (perform-replace from-string to-string t nil delimited nil nil beg end backward))))
 
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
+   (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
+              (beg (caar regions))
+              (end (cdar regions))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
-                 (pcase-let ((`(,beg ,end) region))
-                   (lambda (b e)
-                     (and (<= beg b end) (<= beg e end))))))
+                 (lambda (b e)
+                   (and (<= beg b end) (<= beg e end)))))
               ((symbol-function 'use-region-p)
                (lambda () t))
               (common
@@ -4057,19 +4101,19 @@ Interactively `region-beginning' and `region-end'."
                             (if (eq current-prefix-arg '-) " backward" " word")
                           ""))
                 t)))
-     (append region common)))
+     (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
       (perform-replace from-string to-string t t delimited nil nil beg end backward))))
 
 (defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
+   (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
+              (beg (caar regions))
+              (end (cdar regions))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
-                 (pcase-let ((`(,beg ,end) region))
-                   (lambda (b e)
-                     (and (<= beg b end) (<= beg e end))))))
+                 (lambda (b e) (and (<= beg b end) (<= beg e end)))))
               ((symbol-function 'use-region-p)
                (lambda () t))
               (common
@@ -4081,17 +4125,18 @@ Interactively `region-beginning' and `region-end'."
                               (if (eq current-prefix-arg '-) " backward" " word")
                             ""))
                   nil))))
-     (append region common)))
+     (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
 (defun conn-regexp-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((region (cdr (conn--read-thing-region "Define Region")))
+   (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
+              (beg (caar regions))
+              (end (cdar regions))
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
-                 (pcase-let ((`(,beg ,end) region))
-                   (lambda (b e)
-                     (and (<= beg b end) (<= beg e end))))))
+                 (lambda (b e)
+                   (and (<= beg b end) (<= beg e end)))))
               ((symbol-function 'use-region-p)
                (lambda () t))
               (common
@@ -4103,7 +4148,7 @@ Interactively `region-beginning' and `region-end'."
                               (if (eq current-prefix-arg '-) " backward" " word")
                             ""))
                   t))))
-     (append region common)))
+     (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
 (defun conn-open-line (arg)
@@ -4585,23 +4630,32 @@ interactively."
   "Mark THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (cdr (conn--read-thing-region "Define Region")))
+  (interactive
+   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+     (list (caar regions) (cdar (last regions)))))
   (goto-char end)
   (conn--push-ephemeral-mark beg)
   (activate-mark t))
 
 (defun conn-copy-thing (beg end &optional register)
   "Copy THING at point."
-  (interactive (append (cdr (conn--read-thing-region "Define Region"))
-                       (when current-prefix-arg
-                         (list (register-read-with-preview "Register: ")))))
+  (interactive
+   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+     (list (caar regions)
+           (cdar (last regions))
+           (when current-prefix-arg
+             (list (register-read-with-preview "Register: "))))))
   (conn-copy-region beg end register)
   (unless executing-kbd-macro
     (pulse-momentary-highlight-region beg end)))
 
 (defun conn-narrow-to-region (beg end &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
-  (interactive (append (cdr (conn--read-thing-region "Define Region")) (list t)))
+  (interactive
+   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+     (list (caar regions)
+           (cdar (last regions))
+           t)))
   (narrow-to-region beg end)
   (when record (conn--narrow-ring-record beg end))
   (when (called-interactively-p 'interactive)
@@ -4611,7 +4665,11 @@ associated with that command (see `conn-register-thing')."
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (append (cdr (conn--read-thing-region "Define Region")) (list t)))
+  (interactive
+   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+     (list (caar regions)
+           (cdar (last regions))
+           t)))
   (conn--narrow-indirect beg end interactive)
   (when (called-interactively-p 'interactive)
     (message "Buffer narrowed indirect")))
@@ -6011,7 +6069,7 @@ before each iteration."
   :description "Regexp in Region"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
+      (pcase-let* ((`(,beg . ,end) (cadr (conn--read-thing-region "Define Region")))
                    (regexp (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer 'regexp-quote))
@@ -6051,7 +6109,7 @@ before each iteration."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
+      (pcase-let* ((`(,beg . ,end) (cadr (conn--read-thing-region "Define Region")))
                    (string (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer))
@@ -6090,7 +6148,7 @@ before each iteration."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
+      (pcase-let* ((`(,beg . ,end) (cadr (conn--read-thing-region "Define Region")))
                    (regexp (conn--read-from-with-preview
                             "Regexp" t nil (cons beg end)))
                    (regions))
@@ -6130,7 +6188,7 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,_ ,beg ,end) (conn--read-thing-region "Define Region"))
+      (pcase-let* ((`(,beg . ,end) (cadr (conn--read-thing-region "Define Region")))
                    (string (conn--read-from-with-preview
                             "String" nil nil (cons beg end)))
                    (regions))
@@ -6160,19 +6218,19 @@ property."
       ("step-edit" (conn--kmacro-apply-step-edit -->))
       (_ (conn--kmacro-apply -->)))))
 
-(transient-define-suffix conn--kapply-suffix (args)
+(transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :transient 'transient--do-exit
-  :key "v"
-  :description "Regions"
+  :key "f"
+  :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (deactivate-mark)
   (conn--thread -->
-      (region-bounds)
-    (conn--kapply-region-iterator --> (member "reverse" args))
-    (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
+      (conn--kapply-region-iterator (prog1
+                                        (cdr (conn--read-thing-region "Things"))
+                                      (deactivate-mark))
+                                    (member "reverse" args))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6191,18 +6249,20 @@ apply to each contiguous component of the region."
       ("step-edit" (conn--kmacro-apply-step-edit -->))
       (_ (conn--kmacro-apply -->)))))
 
-(transient-define-suffix conn--kapply-things-suffix (args)
+(transient-define-suffix conn--kapply-things-in-region-suffix (args)
   "Apply keyboard macro on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :transient 'transient--do-exit
-  :key "f"
-  :description "Regions"
+  :key "v"
+  :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let ((`(,thing ,beg ,end) (conn--read-thing-region "Things")))
-        (conn--kapply-thing-iterator thing beg end (member "reverse" args)))
+      (conn--kapply-thing-iterator (car (conn--read-thing-region "Things"))
+                                   (region-beginning)
+                                   (region-end)
+                                   (member "reverse" args))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6290,45 +6350,6 @@ apply to each contiguous component of the region."
   (conn--thread -->
       (funcall iterator (member "reverse" args))
     (if (member "skip" args) (conn--kapply-skip-empty -->) -->)
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
-
-(transient-define-suffix conn--kapply-lines-suffix (args)
-  "Dispatch on each line between `point' and `mark'."
-  :transient 'transient--do-exit
-  :key "l"
-  :description "Lines"
-  (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
-      (save-excursion
-        (let ((beg (region-beginning))
-              (end (region-end))
-              (emptyp (not (member "skip" args)))
-              regions)
-          (goto-char beg)
-          (move-beginning-of-line 1)
-          (while (< (point) end)
-            (let ((eol (line-end-position)))
-              (when (or emptyp (not (= (point) eol)))
-                (push (cons (point) eol) regions)))
-            (forward-line))
-          regions))
-    (conn--kapply-region-iterator --> (not (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -6475,14 +6496,13 @@ apply to each contiguous component of the region."
     (conn--kapply-save-excursion-infix)]
    [:description
     "Apply Kmacro On:"
-    (conn--kapply-suffix)
-    (conn--kapply-dot-suffix)
-    (conn--kapply-lines-suffix)
+    (conn--kapply-things-suffix)
+    (conn--kapply-things-in-region-suffix)
     (conn--kapply-text-property-suffix)
     (conn--kapply-iterate-suffix)]
    [:description
     ""
-    (conn--kapply-things-suffix)
+    (conn--kapply-dot-suffix)
     (conn--kapply-regexp-suffix)
     (conn--kapply-string-suffix)
     (conn--kapply-regexp-region-suffix)
@@ -7005,6 +7025,8 @@ apply to each contiguous component of the region."
   "y" 'yank-in-context)
 
 (defvar-keymap conn-movement-map
+  ">" 'forward-line
+  "<" 'conn-backward-line
   "o" (conn-remapping-command conn-forward-word-keys)
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
