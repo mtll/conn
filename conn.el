@@ -342,7 +342,9 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn-backward-list-keys (key-parse "C-M-p"))
 
 (defvar-keymap conn-mark-thing-map
-  "L" 'forward-line)
+  "L" 'forward-line
+  ")" 'forward-list
+  "(" 'backward-list)
 
 ;;;;; Overlay Category Properties
 
@@ -1130,17 +1132,22 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn-bounds-of-things (cmd arg)
   (let (regions)
     (save-mark-and-excursion
-      (cl-loop with current-prefix-arg = nil
-               with conn-this-command-handler = (conn-get-mark-handler cmd)
-               with conn-this-command-thing = (get cmd :conn-command-thing)
-               for conn-this-command-start = (point-marker)
-               repeat (prefix-numeric-value arg)
-               do (progn
-                    (call-interactively cmd)
-                    (funcall conn-this-command-handler conn-this-command-start))
-               while (/= (point) conn-this-command-start)
-               do
-               (push (cons (region-beginning) (region-end)) regions)))
+      (ignore-errors
+        (cl-loop with current-prefix-arg = nil
+                 with conn-this-command-handler = (conn-get-mark-handler cmd)
+                 with conn-this-command-thing = (get cmd :conn-command-thing)
+                 for conn-this-command-start = (point-marker)
+                 repeat (prefix-numeric-value arg)
+                 do (progn
+                      (call-interactively cmd)
+                      (funcall conn-this-command-handler conn-this-command-start))
+                 while (and (/= (point) conn-this-command-start)
+                            (= (point) (save-excursion
+                                         (goto-char (region-beginning))
+                                         (call-interactively cmd)
+                                         (point))))
+                 do
+                 (push (cons (region-beginning) (region-end)) regions))))
     (nreverse regions)))
 
 (defun conn-bounds-of-thing-region (thing arg)
@@ -1269,16 +1276,21 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing
  'list
- :forward-op 'forward-list
+ :forward-op (lambda (arg) (forward-list arg t))
  :inner-bounds-op (lambda (beg end)
-                    (cons (save-excursion
-                            (goto-char beg)
-                            (down-list 1)
-                            (point))
-                          (save-excursion
-                            (goto-char end)
-                            (down-list -1)
-                            (point)))))
+                    (ignore-errors
+                      (cons (save-excursion
+                              (goto-char beg)
+                              (down-list 1)
+                              (point))
+                            (save-excursion
+                              (goto-char end)
+                              (down-list -1)
+                              (point))))))
+
+(conn-register-thing-commands
+ 'list 'conn-sequential-thing-handler
+ 'forward-list 'backward-list)
 
 (defun conn--list-mark-handler (beg)
   (condition-case _err
@@ -1470,7 +1482,11 @@ If any function returns a nil value then macro application it halted.")
                    do
                    (forward-thing thing 1)
                    (funcall conn-this-command-handler conn-this-command-start)
-                   while (/= (point) conn-this-command-start)
+                   while (and (/= (point) conn-this-command-start)
+                              (= (point) (save-excursion
+                                           (goto-char (region-beginning))
+                                           (forward-thing thing 1)
+                                           (point))))
                    for reg = (cons (region-beginning) (region-end))
                    unless (and skip-empty (conn-thing-empty-p thing reg))
                    do (push reg regions)))))
