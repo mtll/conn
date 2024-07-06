@@ -1276,7 +1276,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing
  'list
- :forward-op (lambda (arg) (forward-list arg t))
+ :forward-op 'forward-list
  :inner-bounds-op (lambda (beg end)
                     (ignore-errors
                       (cons (save-excursion
@@ -1306,8 +1306,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'list 'conn--list-mark-handler
- 'up-list 'backward-up-list
- 'forward-list 'backward-list)
+ 'up-list 'backward-up-list)
 
 (defun conn--down-list-mark-handler (_beg)
   (condition-case _err
@@ -1471,26 +1470,25 @@ If any function returns a nil value then macro application it halted.")
     (save-mark-and-excursion
       (with-restriction beg end
         (goto-char (point-min))
-        (ignore-errors
-          (cl-loop with cmd = (or (get thing 'forward-op)
-                                  (get thing 'end-op))
-                   with current-prefix-arg = 1
-                   with conn-this-command-handler = (conn-get-mark-handler cmd)
-                   with conn-this-command-thing = thing
-                   for conn-this-command-start = (point-marker)
-                   while (< (point) (point-max))
-                   do
-                   (forward-thing thing 1)
-                   (funcall conn-this-command-handler conn-this-command-start)
-                   while (and (/= (point) conn-this-command-start)
-                              (= (point) (save-excursion
-                                           (goto-char (region-beginning))
-                                           (forward-thing thing 1)
-                                           (point))))
-                   for reg = (cons (region-beginning) (region-end))
-                   unless (and skip-empty (conn-thing-empty-p thing reg))
-                   do (push reg regions)))))
-    (conn--kapply-region-iterator (nreverse regions) reverse)))
+        (cl-loop with current-prefix-arg = 1
+                 with conn-this-command-handler = (conn-get-mark-handler
+                                                   (or (get thing 'forward-op)
+                                                       (get thing 'end-op)))
+                 with conn-this-command-thing = thing
+                 for conn-this-command-start = (point-marker)
+                 while (< (point) (point-max))
+                 do
+                 (forward-thing thing 1)
+                 (funcall conn-this-command-handler conn-this-command-start)
+                 while (and (/= (point) conn-this-command-start)
+                            (= (point) (save-excursion
+                                         (goto-char (region-beginning))
+                                         (forward-thing thing 1)
+                                         (point))))
+                 for reg = (cons (region-beginning) (region-end))
+                 unless (and skip-empty (conn-thing-empty-p thing reg))
+                 do (push reg regions))))
+    (conn--kapply-region-iterator (if reverse regions (nreverse regions)))))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
@@ -5943,8 +5941,7 @@ the edit in the macro."
   :class 'transient-switch
   :key "o"
   :description "Skip Empty"
-  :argument "skip"
-  :init-value (lambda (obj) (oset obj value "skip")))
+  :argument "skip")
 
 (transient-define-argument conn--kapply-dot-read-buffers-infix ()
   "How to read additional buffers on which to dispatch.
