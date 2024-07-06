@@ -561,7 +561,7 @@ If BUFFER is nil check `current-buffer'."
          ,@body)
      (conn--activate-input-method)))
 
-(defvar-keymap conn-read-thing-command-map
+(defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
   "t" conn-mark-thing-map
   "." 'reset-arg
@@ -576,12 +576,12 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--read-thing-region (prompt)
   (conn--with-state conn-state
-    (internal-push-keymap conn-read-thing-command-map
+    (internal-push-keymap conn-read-thing-region-command-map
                           'overriding-terminal-local-map)
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-thing-command-map>"
+                   (concat "\\<conn-read-thing-region-command-map>"
                            prompt " (arg: "
                            (propertize "%s" 'face 'transient-value)
                            ", \\[reset-arg] reset arg; "
@@ -595,6 +595,102 @@ If BUFFER is nil check `current-buffer'."
                              (format (if thing-arg "%s%s" "[%s1]")
                                      (if thing-sign "-" "")
                                      thing-arg)
+                             (if invalid
+                                 (propertize "Not a valid thing command"
+                                             'face 'error)
+                               "")))
+               cmd (key-binding keys t))
+         :test
+         (pcase cmd
+           ('keyboard-quit
+            (keyboard-quit))
+           ('help
+            (internal-pop-keymap conn-read-thing-region-command-map
+                                 'overriding-terminal-local-map)
+            (save-window-excursion
+              (setq cmd (intern
+                         (completing-read
+                          "Command: "
+                          (lambda (string pred action)
+                            (if (eq action 'metadata)
+                                `(metadata
+                                  ,(cons 'affixation-function
+                                         (conn--dispatch-make-command-affixation
+                                          conn-read-thing-region-command-map))
+                                  (category . conn-dispatch-command))
+                              (complete-with-action action obarray string pred)))
+                          (lambda (sym)
+                            (and (functionp sym)
+                                 (not (eq sym 'help))
+                                 (get sym :conn-command-thing)))
+                          t))))
+            (internal-push-keymap conn-read-thing-region-command-map
+                                  'overriding-terminal-local-map)
+            (go :test))
+           ('digit-argument
+            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+           ('reset-arg
+            (setq thing-arg nil))
+           ('negative-argument
+            (setq thing-sign (not thing-sign)))
+           ((or 'conn-expand 'conn-contract)
+            (save-mark-and-excursion
+              (let ((current-prefix-arg
+                     (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                           (thing-sign '-))))
+                (call-interactively cmd)
+                (let ((exit (set-transient-map
+                             conn-read-expand-region-map (lambda () t) nil
+                             (substitute-command-keys
+                              (concat "\\<conn-read-expand-region-map>"
+                                      "Defining region. Press "
+                                      "\\[exit-recursive-edit] to finish, "
+                                      "\\[abort-recursive-edit] to abort.")))))
+                  (unwind-protect
+                      (recursive-edit)
+                    (funcall exit)))
+                (cl-return (cons nil (region-bounds))))))
+           ('conn-define-region-in-recursive-edit
+            (save-mark-and-excursion
+              (message "Defining region in recursive edit")
+              (internal-pop-keymap conn-read-thing-region-command-map
+                                   'overriding-terminal-local-map)
+              (recursive-edit)
+              (cl-return (cons nil (region-bounds)))))
+           ((guard (not (get cmd :conn-command-thing)))
+            (setq invalid t))
+           ((app conn-get-mark-handler
+                 (and conn-this-command-handler
+                      (pred functionp)))
+            (cl-return (cons (get cmd :conn-command-thing)
+                             (conn-bounds-of-things cmd thing-arg))))
+           ((let 'region (get cmd :conn-command-thing))
+            (cl-return (cons 'region (region-bounds))))
+           ((and (let thing (get cmd :conn-command-thing))
+                 (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
+            (cl-return (cons thing (list (cons beg end))))))
+         (go :read-command))
+      (message nil)
+      (internal-pop-keymap conn-read-thing-region-command-map
+                           'overriding-terminal-local-map))))
+
+(defvar-keymap conn-read-thing-command-map
+  "C-h" 'help)
+
+(defun conn--read-thing (prompt)
+  (conn--with-state conn-state
+    (internal-push-keymap conn-read-thing-command-map
+                          'overriding-terminal-local-map)
+    (unwind-protect
+        (cl-prog
+         ((prompt (substitute-command-keys
+                   (concat "\\<conn-read-thing-command-map>"
+                           prompt " (\\[help] commands): %s")))
+          invalid keys cmd)
+         :read-command
+         (setq keys (read-key-sequence
+                     (format prompt
                              (if invalid
                                  (propertize "Not a valid thing command"
                                              'face 'error)
@@ -627,49 +723,10 @@ If BUFFER is nil check `current-buffer'."
             (internal-push-keymap conn-read-thing-command-map
                                   'overriding-terminal-local-map)
             (go :test))
-           ('digit-argument
-            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-           ('reset-arg
-            (setq thing-arg nil))
-           ('negative-argument
-            (setq thing-sign (not thing-sign)))
-           ((or 'conn-expand 'conn-contract)
-            (save-mark-and-excursion
-              (let ((current-prefix-arg
-                     (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                           (thing-sign '-))))
-                (call-interactively cmd)
-                (let ((exit (set-transient-map
-                             conn-read-expand-region-map (lambda () t) nil
-                             (substitute-command-keys
-                              (concat "\\<conn-read-expand-region-map>"
-                                      "Defining region. Press "
-                                      "\\[exit-recursive-edit] to finish, "
-                                      "\\[abort-recursive-edit] to abort.")))))
-                  (unwind-protect
-                      (recursive-edit)
-                    (funcall exit)))
-                (cl-return (cons nil (region-bounds))))))
-           ('conn-define-region-in-recursive-edit
-            (save-mark-and-excursion
-              (message "Defining region in recursive edit")
-              (internal-pop-keymap conn-read-thing-command-map
-                                   'overriding-terminal-local-map)
-              (recursive-edit)
-              (cl-return (cons nil (region-bounds)))))
            ((guard (not (get cmd :conn-command-thing)))
             (setq invalid t))
-           ((app conn-get-mark-handler
-                 (and conn-this-command-handler
-                      (pred functionp)))
-            (cl-return (cons (get cmd :conn-command-thing)
-                             (conn-bounds-of-things cmd thing-arg))))
-           ((let 'region (get cmd :conn-command-thing))
-            (cl-return (cons 'region (region-bounds))))
-           ((and (let thing (get cmd :conn-command-thing))
-                 (let `(,beg . ,end) (bounds-of-thing-at-point thing)))
-            (cl-return (cons thing (list (cons beg end))))))
+           ((let thing (get cmd :conn-command-thing))
+            (cl-return thing)))
          (go :read-command))
       (message nil)
       (internal-pop-keymap conn-read-thing-command-map
@@ -3900,14 +3957,14 @@ k keeps the remaining dots."
   "Dot THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region "Define Region"))))
+  (interactive (list (conn--read-thing "Thing")))
   (conn--create-dots (bounds-of-thing-at-point thing)))
 
 (defun conn-dot-all-things-in-region (thing)
   "Dot all THINGs in region.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region "Define Region"))))
+  (interactive (list (conn--read-thing "Thing")))
   (unless thing
     (error "Unknown thing command"))
   (save-excursion
@@ -4024,7 +4081,7 @@ Interactively PARTIAL-MATCH is the prefix argument."
   "Isearch forward for THING.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region "Define Region"))))
+  (interactive (list (conn--read-thing "Thing")))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-backward beg end))
     (_              (user-error "No %s found" thing))))
@@ -4033,7 +4090,7 @@ associated with that command (see `conn-register-thing')."
   "Isearch backward for THING.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
-  (interactive (list (car (conn--read-thing-region "Define Region"))))
+  (interactive (list (conn--read-thing "Thing")))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-forward beg end))
     (_              (user-error "No %s found" thing))))
@@ -6265,7 +6322,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (conn--kapply-thing-iterator (car (conn--read-thing-region "Things"))
+      (conn--kapply-thing-iterator (conn--read-thing "Things")
                                    (region-beginning)
                                    (region-end)
                                    (member "reverse" args)
