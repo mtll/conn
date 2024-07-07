@@ -1684,29 +1684,27 @@ The iterator must be the first argument in ARGLIST.
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
-       (cl-letf* ((undo-outer-limit nil)
-                  (undo-limit most-positive-fixnum)
-                  (undo-strong-limit most-positive-fixnum)
-                  (conn-kmacro-applying-p t)
-                  (conn-kmacro-apply-error nil)
-                  (kmacro-loopfn (symbol-function 'kmacro-loop-setup-function))
-                  (,iterator (lambda (&optional state)
-                               (pcase (funcall ,iterator (or state :loop))
-                                 (`(,beg . ,end)
-                                  (goto-char beg)
-                                  (conn--push-ephemeral-mark end)
-                                  (when (markerp beg) (set-marker beg nil))
-                                  (when (markerp end) (set-marker end nil))
-                                  (and (run-hook-with-args-until-failure
-                                        'conn-kmacro-apply-iterator-hook)
-                                       (funcall kmacro-loopfn))))))
-                  ((symbol-function 'kmacro-loop-setup-function) ,iterator))
+       (let* ((undo-outer-limit nil)
+              (undo-limit most-positive-fixnum)
+              (undo-strong-limit most-positive-fixnum)
+              (conn-kmacro-applying-p t)
+              (conn-kmacro-apply-error nil)
+              (,iterator (lambda (&optional state)
+                           (pcase (funcall ,iterator (or state :loop))
+                             (`(,beg . ,end)
+                              (goto-char beg)
+                              (conn--push-ephemeral-mark end)
+                              (when (markerp beg) (set-marker beg nil))
+                              (when (markerp end) (set-marker end nil))
+                              (run-hook-with-args-until-failure
+                               'conn-kmacro-apply-iterator-hook))))))
          (unwind-protect
              (condition-case err
                  (progn
                    (run-hooks 'conn-kmacro-apply-start-hook)
                    (deactivate-mark)
-                   ,@body)
+                   (conn--with-advice 'kmacro-loop-setup-function :before-while ,iterator
+                     ,@body))
                (t
                 (setq conn-kmacro-apply-error err)
                 (signal (car err) (cdr err))))
