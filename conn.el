@@ -1030,7 +1030,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn-get-mark-handler (command)
   (or (alist-get command conn-mark-handler-alist)
-      (get command :conn-mark-handler)))
+      (ignore-errors (get command :conn-mark-handler))))
 
 (defun conn-register-thing (thing &rest rest)
   "Register a new THING.
@@ -1207,7 +1207,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (save-mark-and-excursion
       (ignore-errors
         (cl-loop with current-prefix-arg = nil
-                 with conn-this-command-handler = (conn-get-mark-handler cmd)
+                 with conn-this-command-handler = (or (conn-get-mark-handler cmd)
+                                                      'conn-individual-thing-handler)
                  with conn-this-command-thing = (get cmd :conn-command-thing)
                  for conn-this-command-start = (point-marker)
                  repeat (prefix-numeric-value arg)
@@ -3262,7 +3263,7 @@ Expansions and contractions are provided by functions in
   (interactive
    (let ((regions (conn--read-thing-region "Define Region")))
      (list (car regions)
-           (caar (cdr regions))
+           (caadr regions)
            (cdar (last (cdr regions)))
            (list (prefix-numeric-value current-prefix-arg)))))
   (save-mark-and-excursion
@@ -4301,7 +4302,8 @@ Interactively `region-beginning' and `region-end'."
     (yank-rectangle)))
 
 (defvar conn-recenter-positions
-  (list 'center 'top 'bottom))
+  (list 'center 'top 'bottom)
+  "Cycle order for `conn-recenter-on-region'.")
 
 (defun conn-recenter-on-region ()
   "Recenter the screen on the current region.
@@ -6606,17 +6608,17 @@ apply to each contiguous component of the region."
     (conn--kapply-macro-infix)]]
   [[:description
     "Apply Kmacro On:"
-    (conn--kapply-things-suffix)
-    (conn--kapply-things-in-region-suffix)
     (conn--kapply-dot-suffix)
-    (conn--kapply-regexp-region-suffix)
-    (conn--kapply-string-region-suffix)]
-   [:description
-    ""
     (conn--kapply-text-property-suffix)
     (conn--kapply-iterate-suffix)
     (conn--kapply-regexp-suffix)
     (conn--kapply-string-suffix)]
+   [:description
+    ""
+    (conn--kapply-things-suffix)
+    (conn--kapply-things-in-region-suffix)
+    (conn--kapply-regexp-region-suffix)
+    (conn--kapply-string-region-suffix)]
    [:description
     "Save State:"
     (conn--kapply-merge-undo-infix)
