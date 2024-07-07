@@ -2090,7 +2090,7 @@ state."
           "w" 'conn-dispatch-kill
           "s" 'conn-dispatch-grab
           "y" 'conn-dispatch-yank
-          "x" 'conn-dispatch-transpose
+          "q" 'conn-dispatch-transpose
           "c" 'conn-dispatch-copy
           "f" 'conn-dispatch-yank-replace
           "d" 'conn-dispatch-grab-replace
@@ -6044,11 +6044,9 @@ apply to each contiguous component of the region."
 (dolist (state '(conn-state conn-emacs-state))
   (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
-(defvar-keymap conn-other-window-repeat-map
-  :repeat t
-  "`" 'other-window)
-
 (defvar-keymap conn-region-map
+  "RET" 'whitespace-cleanup
+  "TAB" 'indent-rigidly
   "f" 'conn-isearch-region-forward
   "b" 'conn-isearch-region-backward
   "DEL" (conn-remapping-command conn-kill-region-keys)
@@ -6062,13 +6060,17 @@ apply to each contiguous component of the region."
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
-  "c" 'conn-region-case-prefix
+  "c" 'conn-copy-thing
   "D" 'conn-duplicate-and-comment-region
   "d" 'conn-duplicate-region
   "e c" 'conn-split-region-on-regexp
   "g" 'conn-rgrep-region
+  "i" 'clone-indirect-buffer
   "j" 'conn-join-lines
   "I" 'indent-rigidly
+  "N" 'conn-narrow-indirect-to-region
+  "n" 'conn-narrow-to-region
+  "s" 'conn-sort-prefix
   "o" 'conn-occur-region
   "w" 'conn-replace-region-in-thing
   "u" 'conn-regexp-replace-region-in-thing
@@ -6144,6 +6146,9 @@ apply to each contiguous component of the region."
   "?" 'tab-bar-history-forward)
 
 (defvar-keymap conn-misc-edit-map
+  "f" 'conn-fill-prefix
+  "c" 'conn-region-case-prefix
+  "TAB" 'indent-for-tab-command
   "o" 'conn-open-line-and-indent
   "n" 'conn-open-line-above
   "m" 'conn-open-line
@@ -6158,32 +6163,11 @@ apply to each contiguous component of the region."
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
   "s" 'conn-surround-thing
-  "w" 'conn-kill-prepend-region
-  "d" 'conn-kill-append-region)
-
-(defvar-keymap conn-edit-map
-  :prefix 'conn-edit-map
-  "RET" 'whitespace-cleanup
-  "TAB" 'indent-rigidly
+  "d p" 'conn-kill-prepend-region
+  "d a" 'conn-kill-append-region
+  "y" 'yank-in-context
   "w" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing
-  ";" 'comment-line
-  "c" 'conn-copy-thing
-  "i" 'clone-indirect-buffer
-  "d" 'duplicate-dwim
-  "f" 'conn-fill-prefix
-  "h" conn-mark-thing-map
-  "I" 'copy-from-above-command
-  "j" 'join-line
-  "x" 'kill-matching-lines
-  "z" 'copy-matching-lines
-  "l" 'conn-transpose-regions
-  "N" 'conn-narrow-indirect-to-region
-  "n" 'conn-narrow-to-region
-  "q" 'indent-for-tab-command
-  "r" 'conn-kmacro-prefix
-  "s" 'conn-sort-prefix
-  "y" 'yank-in-context)
+  "u" 'conn-regexp-replace-in-thing)
 
 (defvar-keymap conn-movement-map
   ">" 'forward-line
@@ -6228,7 +6212,6 @@ apply to each contiguous component of the region."
   "\"" 'conn-surround-thing
   "\\" 'conn-kapply-prefix
   "_" 'repeat-complex-command
-  "`" 'other-window
   "SPC" 'conn-set-mark-command
   "M-0" 'tab-close
   "M-1" 'delete-other-windows-vertically
@@ -6267,7 +6250,7 @@ apply to each contiguous component of the region."
   "H" conn-mark-thing-map
   "p" 'conn-register-load
   "P" 'conn-register-prefix
-  "q" 'conn-edit-map
+  "q" 'conn-transpose-regions
   "r" conn-region-map
   "s" (conn-remapping-command (key-parse "M-s"))
   "V" 'conn-narrow-to-region
@@ -6293,7 +6276,6 @@ apply to each contiguous component of the region."
   "<" 'org-promote-subtree
   ">" 'org-demote-subtree
   "?" 'undo-redo
-  "q" 'conn-edit-map
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
@@ -6325,7 +6307,6 @@ apply to each contiguous component of the region."
 
 (define-keymap
   :keymap global-map
-  "C-`" 'other-window
   "C-S-w" 'delete-region
   "C-x /" 'tab-bar-history-back
   "C-x 4 /" 'tab-bar-history-back
