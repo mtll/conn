@@ -3253,7 +3253,7 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
-(defvar-keymap conn-read-mover-map
+(defvar-keymap conn--read-mover-map
   "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "C-<backspace>" 'reset-arg
@@ -3262,15 +3262,15 @@ Interactively `region-beginning' and `region-end'."
   "." 'reset-arg
   "r" 'conn-define-region-in-recursive-edit)
 
-(defun conn--read-mover (prompt)
-  (conn--with-state conn-state
-    (internal-push-keymap conn-read-mover-map
+(defun conn-transpose-regions (mover arg)
+  (interactive
+   (conn--with-state conn-state
+    (internal-push-keymap conn--read-mover-map
                           'overriding-terminal-local-map)
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-mover-map>"
-                           prompt " (arg: "
+                   (concat "\\<conn--read-mover-map> (arg: "
                            (propertize "%s" 'face 'transient-value)
                            ", \\[reset-arg] reset arg; "
                            "\\[conn-define-region-in-recursive-edit] "
@@ -3337,11 +3337,8 @@ Interactively `region-beginning' and `region-end'."
             (cl-return (list cmd (prefix-numeric-value thing-arg)))))
          (go :read-command))
       (message nil)
-      (internal-pop-keymap conn-read-mover-map
+      (internal-pop-keymap conn--read-mover-map
                            'overriding-terminal-local-map))))
-
-(defun conn-transpose-regions (mover arg)
-  (interactive (conn--read-mover "Mover"))
   (pcase mover
     ('recursive-edit
      (let ((beg (region-beginning))
@@ -6050,7 +6047,7 @@ apply to each contiguous component of the region."
   "TAB" 'indent-rigidly
   "f" 'conn-isearch-region-forward
   "b" 'conn-isearch-region-backward
-  "DEL" (conn-remapping-command conn-kill-region-keys)
+  "DEL" (conn-remapping-command conn-delete-region-keys)
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
