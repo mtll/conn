@@ -84,11 +84,6 @@
   :prefix "conn-"
   :group 'editing)
 
-(defgroup conn-dots nil
-  "Conn-mode dots."
-  :prefix "conn-"
-  :group 'conn)
-
 (defgroup conn-marks nil
   "Conn-mode marks."
   :prefix "conn-"
@@ -129,15 +124,10 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
-(defface conn-dot-face
+(defface conn-pulse-face
   '((default (:background "#c6ebd9"))
     (((background dark)) (:background "#449066"))
     (((background light)) (:background "#d6eeab")))
-  "Face for dots."
-  :group 'conn-dots)
-
-(defface conn-pulse-face
-  '((default (:inherit conn-dot-face)))
   "Face for kapply pulse."
   :group 'conn)
 
@@ -159,14 +149,6 @@ CONDITION has the same meaning as in `buffer-match-p'."
   '((t (:inherit isearch)))
   "Face for matches when reading strings."
   :group 'conn)
-
-(defcustom conn-dot-overlay-priority 1001
-  "Priority of dot overlays."
-  :type 'integer
-  :group 'conn-dots
-  :set (lambda (sym val)
-         (set sym val)
-         (put 'conn--dot 'priority val)))
 
 (defcustom conn-mark-overlay-priority 2000
   "Priority of mark overlay."
@@ -358,14 +340,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 (put 'conn--mark-cursor 'conn-overlay t)
 
-;;;;;; Dot Overlays
-
-(put 'conn--dot 'evaporate t)
-(put 'conn--dot 'priority conn-dot-overlay-priority)
-(put 'conn--dot 'face 'conn-dot-face)
-(put 'conn--dot 'evaporate t)
-(put 'conn--dot 'conn-overlay t)
-
 ;;;;;; Read String Overlays
 
 (put 'conn-read-string-match 'conn-overlay t)
@@ -384,8 +358,6 @@ Used to restore previous value when `conn-mode' is disabled.")
   "History var for `conn-set-register-seperator'.")
 
 (defvar conn--read-string-timeout-history nil)
-
-(defvar conn--dot-buffer-history nil)
 
 (defvar conn--read-string-history nil)
 
@@ -469,18 +441,6 @@ Used to restore previous value when `conn-mode' is disabled.")
   (or (nth 4 (syntax-ppss))
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
-
-;; From misearch
-(defun conn--read-dot-buffers-regexp ()
-  "Return a list of buffers whose names match specified regexp.
-Uses `read-regexp' to read the regexp."
-  ;; Most code from `multi-occur-in-matching-buffers'
-  ;; and `kill-matching-buffers'.
-  (let ((bufregexp
-         (read-regexp "Search in buffers whose names match regexp")))
-    (when bufregexp
-      (cl-loop for buf in (buffer-list)
-               when (buffer-match-p bufregexp buf) collect buf))))
 
 (defun conn--read-buffers (&optional predicate)
   "Return a list of buffers specified interactively, one by one."
@@ -666,14 +626,14 @@ If BUFFER is nil check `current-buffer'."
                   (unwind-protect
                       (recursive-edit)
                     (funcall exit)))
-                (cl-return (cons nil (region-bounds))))))
+                (cl-return (cons 'region (region-bounds))))))
            ('conn-define-region-in-recursive-edit
             (save-mark-and-excursion
               (message "Defining region in recursive edit")
               (internal-pop-keymap conn-read-thing-region-command-map
                                    'overriding-terminal-local-map)
               (recursive-edit)
-              (cl-return (cons nil (region-bounds)))))
+              (cl-return (cons 'region (region-bounds)))))
            ((guard (not (get cmd :conn-command-thing)))
             (setq invalid t))
            ((app conn-get-mark-handler
@@ -974,6 +934,21 @@ If BUFFER is nil check `current-buffer'."
                                               (query-replace-descr default)))
                    nil 'conn--read-string-history default))))
 
+(defun conn-overlay-p (overlay)
+  (overlay-get overlay 'conn-overlay))
+
+(defun conn--clear-overlays (&optional buffer)
+  "Delete all conn overlays in BUFFER."
+  (without-restriction
+    (mapc #'delete-overlay (conn--all-overlays #'conn-overlay-p nil nil buffer))))
+
+(defun conn--all-overlays (predicate &optional start end buffer)
+  "Get all overlays between START and END satisfying PREDICATE."
+  (with-current-buffer (or buffer (current-buffer))
+    (cl-loop for ov in (overlays-in (or start (conn--beginning-of-region-or-restriction))
+                                    (or end   (conn--end-of-region-or-restriction)))
+             when (funcall predicate ov) collect ov)))
+
 
 ;;;; Advice
 
@@ -1217,7 +1192,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                       (funcall conn-this-command-handler conn-this-command-start))
                  while (and (/= (point) conn-this-command-start)
                             (= (point) (save-excursion
-                                         (goto-char (region-beginning))
+                                         (goto-char (mark t))
                                          (call-interactively cmd)
                                          (point))))
                  do
@@ -1314,16 +1289,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing-commands
  'page 'conn-individual-thing-handler
  'forward-page 'backward-page)
-
-(conn-register-thing
- 'dot
- :beg-op (lambda () (conn-previous-dot 1))
- :end-op (lambda () (conn-next-dot 1))
- :dispatch-provider (apply-partially 'conn--dispatch-all-things 'dot))
-
-(conn-register-thing-commands
- 'dot 'conn-individual-thing-handler
- 'conn-next-dot 'conn-previous-dot)
 
 (conn-register-thing-commands
  'char nil
@@ -1525,15 +1490,6 @@ If any function returns a nil value then macro application it halted.")
         (error "Could not pop to buffer %s" buffer))))
   region)
 
-(defun conn--kapply-ensure-overlay-buffer (dot)
-  (when-let ((buffer (and dot (overlay-buffer dot))))
-    (when (not (eq buffer (current-buffer)))
-      (pop-to-buffer-same-window buffer)
-      (deactivate-mark t)
-      (unless (eq buffer (window-buffer (selected-window)))
-        (error "Could not pop to buffer %s" buffer))))
-  dot)
-
 (defun conn--kapply-infinite-iterator ()
   (lambda (state)
     (unless (eq state :finalize)
@@ -1545,9 +1501,10 @@ If any function returns a nil value then macro application it halted.")
       (with-restriction beg end
         (goto-char (point-min))
         (cl-loop with current-prefix-arg = 1
-                 with conn-this-command-handler = (conn-get-mark-handler
-                                                   (or (get thing 'forward-op)
-                                                       (get thing 'end-op)))
+                 with conn-this-command-handler = (or (conn-get-mark-handler
+                                                       (or (get thing 'forward-op)
+                                                           (get thing 'end-op)))
+                                                      'conn-individual-thing-handler)
                  with conn-this-command-thing = thing
                  for conn-this-command-start = (point-marker)
                  while (< (point) (point-max))
@@ -1595,18 +1552,6 @@ If any function returns a nil value then macro application it halted.")
       (_
        (when-let ((pt (pop points)))
          (conn--kapply-ensure-region-buffer (cons pt pt)))))))
-
-(defun conn--kapply-dot-iterator (dots &optional reverse)
-  (when reverse (setq dots (reverse dots)))
-  (dolist (dot dots)
-    (overlay-put dot 'evaporate nil))
-  (lambda (state)
-    (pcase state
-      (:finalize
-       (dolist (dot dots)
-         (overlay-put dot 'evaporate t)))
-      (_
-       (conn--kapply-ensure-overlay-buffer (pop dots))))))
 
 (defun conn--kapply-merge-undo (iterator &optional undo-on-error)
   (let (undo-handles)
@@ -1691,75 +1636,6 @@ If any function returns a nil value then macro application it halted.")
                     (list conn-current-state conn-previous-state)))
             (funcall transition))))
         ret))))
-
-(defun conn--kapply-relocate-dots (iterator)
-  (let (primed new-dots old-dots)
-    (lambda (state)
-      (pcase state
-        (:finalize
-         (pcase-dolist (`(,buffer . ,dots)
-                        (if conn-kmacro-apply-error old-dots new-dots))
-           (with-current-buffer buffer
-             (apply 'conn--create-dots dots)))
-         (dolist (list (list new-dots old-dots))
-           (pcase-dolist (`(_ . ,dots) list)
-             (pcase-dolist (`(,beg . ,end) dots)
-               (set-marker beg nil)
-               (set-marker end nil))))
-         (funcall iterator state))
-        (_
-         (if primed
-             (push (cons (conn--create-marker (region-beginning))
-                         (conn--create-marker (region-end)))
-                   (alist-get (current-buffer) new-dots))
-           (setq primed t))
-         (pcase (funcall iterator state)
-           ((and (pred conn-dotp) dot
-                 (let buffer (overlay-buffer dot))
-                 (let beg (conn--create-marker (overlay-start dot) buffer))
-                 (let end (conn--create-marker (overlay-end dot) buffer)))
-            (conn--delete-dot dot)
-            (push (cons beg end) (alist-get buffer old-dots))
-            (cons (copy-marker beg) (copy-marker end)))
-           (ret ret)))))))
-
-(defun conn--kapply-stationary-dots (iterator)
-  (lambda (state)
-    (pcase (funcall iterator state)
-      ((and (pred conn-dotp) dot)
-       (let ((beg (conn--create-marker (overlay-start dot)
-                                       (overlay-buffer dot)))
-             (end (conn--create-marker (overlay-end dot)
-                                       (overlay-buffer dot))))
-         (cons beg end)))
-      (ret ret))))
-
-(defun conn--kapply-remove-dots (iterator)
-  (let (old-dots)
-    (lambda (state)
-      (pcase state
-        (:finalize
-         (funcall iterator state)
-         (when conn-kmacro-apply-error
-           (pcase-dolist (`(,buffer . ,dots) old-dots)
-             (with-current-buffer buffer
-               (apply 'conn--create-dots dots))))
-         (pcase-dolist (`(_ . ,dots) old-dots)
-           (pcase-dolist (`(,beg . ,end) dots)
-             (set-marker beg nil)
-             (set-marker end nil))))
-        (_
-         (pcase (funcall iterator state)
-           ((and (pred conn-dotp) dot)
-            (let* ((buffer (overlay-buffer dot))
-                   (beg (conn--create-marker (overlay-start dot) buffer))
-                   (end (conn--create-marker (overlay-end dot) buffer)))
-              (conn--delete-dot dot)
-              (push (cons (copy-marker beg)
-                          (copy-marker end))
-                    (alist-get buffer old-dots))
-              (cons beg end)))
-           (ret ret)))))))
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
@@ -1869,142 +1745,6 @@ The iterator must be the first argument in ARGLIST.
       (unless apply
         (user-error "Keyboard macro edit aborted")))
     (kmacro-call-macro (or count 0))))
-
-
-;;;; Dots
-
-(defun conn--propertize-dot-candidates (dots)
-  (save-current-buffer
-    (cl-loop
-     for dot in dots collect
-     (progn
-       (set-buffer (overlay-buffer dot))
-       (let* ((beg (overlay-start dot))
-              (end (overlay-end dot))
-              (str (substring (buffer-substring beg end)
-                              0 (min 120 (- end beg)))))
-         (add-text-properties 0 1 `(conn-dot-cand ,dot) str)
-         (cons str dot))))))
-
-(defun conn--completing-read-dot (dots)
-  (let ((table (conn--propertize-dot-candidates dots)))
-    (alist-get (completing-read "Dots: " table nil t)
-               table nil nil 'string=)))
-
-(defun conn--text-property-to-dots ()
-  (goto-char (point-min))
-  (let (dots)
-    (while-let ((match (text-property-search-forward 'conn-dot-text)))
-      (push (cons (prop-match-beginning match)
-                  (prop-match-end match))
-            dots))
-    (apply #'conn--create-dots dots))
-  (remove-text-properties (point-min) (point-max) '(conn-dot-text nil)))
-
-(defun conn--dot-to-text-property (dot)
-  (let ((beg (overlay-start dot))
-        (end (overlay-end dot)))
-    (conn--delete-dot dot)
-    (put-text-property beg end 'conn-dot-text t)))
-
-(defmacro conn--with-dots-as-text-properties (dots &rest body)
-  (declare (indent 1))
-  `(unwind-protect
-       (progn
-         (mapc #'conn--dot-to-text-property ,(ensure-list dots))
-         ,(macroexp-progn body))
-     (conn--text-property-to-dots)))
-
-(defun conn-overlay-p (overlay)
-  (overlay-get overlay 'conn-overlay))
-
-(defun conn--sorted-overlays (typep &optional sort-predicate start end buffer)
-  "Get all dots between START and END sorted by starting position."
-  (unless sort-predicate (setq sort-predicate #'<))
-  (let ((overlays (conn--all-overlays typep start end buffer)))
-    (pcase sort-predicate
-      ('< overlays)
-      ('> (nreverse overlays))
-      (_ (sort overlays sort-predicate)))))
-
-(defun conn--clear-overlays (&optional buffer)
-  "Delete all conn overlays in BUFFER."
-  (without-restriction
-    (mapc #'delete-overlay (conn--all-overlays #'conn-overlay-p nil nil buffer))))
-
-(defun conn--dot-before-point (point)
-  (unless (= point (point-min))
-    (catch 'term
-      (dolist (ov (overlays-in (1- point) point))
-        (when (conn-dotp ov) (throw 'term ov))))))
-
-(defun conn--dot-after-point (point)
-  (unless (= point (point-max))
-    (catch 'term
-      (dolist (ov (overlays-in point (1+ point)))
-        (when (conn-dotp ov) (throw 'term ov))))))
-
-(defun conn--all-dots (&optional sort-predicate start end)
-  "All dots in region START to END sorted by SORT-PREDICATE."
-  (if sort-predicate
-      (conn--sorted-overlays #'conn-dotp sort-predicate start end)
-    (conn--all-overlays #'conn-dotp start end)))
-
-(defun conn--delete-dot (dot)
-  (overlay-put dot 'dot nil)
-  (delete-overlay dot))
-
-(defun conn--create-dots (&rest bounds)
-  (save-current-buffer
-    (cl-loop
-     for (start . end) in bounds
-     do (unless (= start end)
-          (when (markerp start) (set-buffer (marker-buffer start)))
-          (let* ((overlaps (conn--all-overlays #'conn-dotp start end))
-                 (start (apply #'min start (mapcar #'overlay-start overlaps)))
-                 (end (apply #'max end (mapcar #'overlay-end overlaps)))
-                 (overlay (make-overlay start end nil nil t)))
-            (mapc #'conn--delete-dot overlaps)
-            (overlay-put overlay 'category 'conn--dot))))))
-
-(defun conn--remove-dots (&optional start end)
-  (mapc #'conn--delete-dot (conn--all-overlays #'conn-dotp start end)))
-
-(defun conn--all-overlays (predicate &optional start end buffer)
-  "Get all overlays between START and END satisfying PREDICATE."
-  (with-current-buffer (or buffer (current-buffer))
-    (cl-loop for ov in (overlays-in (or start (conn--beginning-of-region-or-restriction))
-                                    (or end   (conn--end-of-region-or-restriction)))
-             when (funcall predicate ov) collect ov)))
-
-(defun conn-dotp (overlay)
-  "Return t if OVERLAY is a dot."
-  (and (overlayp overlay)
-       (eq (overlay-get overlay 'category) 'conn--dot)))
-
-(defun conn--clear-dots (&optional buffer)
-  "Delete all dots in BUFFERS."
-  (with-current-buffer buffer
-    (save-restriction
-      (widen)
-      (conn--remove-dots))))
-
-(defun conn--dots-active-p (&optional buffer)
-  "Return t if there are any dots in BUFFER; obeys current restriction.
-
-If BUFFER is nil use current buffer."
-  (with-current-buffer (or buffer (current-buffer))
-    (let (result)
-      (save-excursion
-        (goto-char (point-min))
-        (goto-char (next-overlay-change (point)))
-        (while (and (not (setq result (conn--all-overlays
-                                       #'conn-dotp
-                                       (max (point-min) (1- (point)))
-                                       (min (point-max) (1+ (point))))))
-                    (/= (point) (point-max)))
-          (goto-char (next-overlay-change (point))))
-        result))))
 
 
 ;;;; States
@@ -2348,8 +2088,6 @@ state."
           "]" 'conn-dispatch-kill-prepend
           "p" 'conn-dispatch-copy-prepend
           "w" 'conn-dispatch-kill
-          "e" 'conn-dispatch-dot
-          "E" 'conn-dispatch-dot
           "s" 'conn-dispatch-grab
           "y" 'conn-dispatch-yank
           "x" 'conn-dispatch-transpose
@@ -2482,21 +2220,6 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (kill-append str t)
            (message "Copy Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
-
-(conn-define-dispatch-action (conn-dispatch-dot "Dot")
-    (window pt thing)
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
-        ('nil (user-error "No thing at point"))
-        ((and `(,beg . ,end) reg
-              (let dot (conn--dot-after-point beg)))
-         (if (and dot
-                  (= beg (overlay-start dot))
-                  (= end (overlay-end dot)))
-             (conn--delete-dot dot)
-           (conn--create-dots reg)))))))
 
 (conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
     (window pt thing)
@@ -3429,11 +3152,6 @@ Interactively defaults to the current region."
                   '((isearch-message-prefix . "[NARROW] ")))
     (isearch-backward)))
 
-(defun conn-dot-narrow-ring ()
-  "Dot regions in `conn-narrow-ring'."
-  (interactive)
-  (apply 'conn--create-dots conn-narrow-ring))
-
 
 ;;;; Commands
 
@@ -3485,632 +3203,7 @@ Interactively defaults to the current region."
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-tab-register)))
 
-;;;;; Dot Commands
-
-(defun conn-dot-regexp-in-region (beg end regexp)
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (conn--read-from-with-preview "Regexp" t)))
-  (save-excursion
-    (with-restriction beg end
-      (goto-char beg)
-      (while (search-forward regexp end t)
-        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
-
-(defun conn-dot-regexp-in-thing (beg end regexp)
-  (interactive
-   (append (let ((regions (cdr (conn--read-thing-region "Define Region"))))
-             (list (caar regions)
-                   (cdar (last regions))))
-           (list (conn--read-from-with-preview
-                  "Regexp" t
-                  (buffer-substring-no-properties
-                   (region-beginning) (region-end))))))
-  (save-excursion
-    (with-restriction beg end
-      (goto-char beg)
-      (while (search-forward regexp end t)
-        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
-
-(defun conn-dot-occurances-in-region (beg end string)
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (conn--read-from-with-preview "String")))
-  (save-excursion
-    (with-restriction beg end
-      (goto-char beg)
-      (while (search-forward string end t)
-        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
-
-(defun conn-dot-occurances-in-thing (beg end string)
-  (interactive
-   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
-     (list (caar regions)
-           (cdar (last regions))
-           (conn--read-from-with-preview
-            "Regexp" t
-            (buffer-substring-no-properties
-             (region-beginning) (region-end))))))
-  (save-excursion
-    (with-restriction beg end
-      (goto-char beg)
-      (while (search-forward string end t)
-        (conn--create-dots (cons (match-beginning 0) (match-end 0)))))))
-
-(defun conn-transpose-region-and-dot (dot)
-  "Tranpose region and DOT.
-When called interactively and there are multiple dots in the current
-buffers completing read DOT."
-  (interactive
-   (pcase (conn--all-overlays #'conn-dotp)
-     ('nil (user-error "No dots active"))
-     ((and `(,_) dots) dots)
-     (dots (list (conn--completing-read-dot dots)))))
-  (let ((beg (conn--create-marker (overlay-start dot)))
-        (end (overlay-end dot)))
-    (save-mark-and-excursion
-      (conn--with-dots-as-text-properties (list dot)
-        (transpose-regions (region-beginning) (region-end) beg end)))))
-
-(defun conn-sort-dots ()
-  "Sort all dots in the current buffer by the text they contain.
-Obeys `sort-case-fold'."
-  (interactive)
-  (let* ((sort-lists
-          (cl-loop for dot in (conn--sorted-overlays #'conn-dotp '>)
-                   collect (let ((key (cons (overlay-start dot)
-                                            (overlay-end dot))))
-                             (cons key key))))
-         (old (reverse sort-lists))
-         (case-fold-search sort-fold-case))
-    (when sort-lists
-      (save-mark-and-excursion
-        (conn--with-dots-as-text-properties
-            (conn--all-overlays #'conn-dotp)
-          (setq sort-lists
-                (sort sort-lists
-                      (lambda (a b)
-                        (> 0 (compare-buffer-substrings
-                              nil (car (car a)) (cdr (car a))
-                              nil (car (car b)) (cdr (car b)))))))
-          (with-buffer-unmodified-if-unchanged
-            (sort-reorder-buffer sort-lists old)))))))
-
-(defun conn-remove-dot ()
-  "Remove dot at point.
-If the region is active remove all dots in region."
-  (interactive)
-  (if (use-region-p)
-      (conn--remove-dots (region-beginning) (region-end))
-    (save-mark-and-excursion
-      (if-let ((dot (conn--dot-before-point (point))))
-          (progn
-            (conn--delete-dot dot)
-            (when (called-interactively-p 'interactive)
-              (message "Dot removed")))
-        (when (called-interactively-p 'interactive)
-          (message "No dot at point"))))))
-
-(defun conn-remove-all-dots (&optional multi-buffer)
-  "Remove all dots.
-
-With a plain prefix argument (\\[universal-argument]), prompt for a
-regular expression and remove all dots in all buffers whose name
-matches the expression.
-
-With a numerical prefix argument read buffers using `completing-read'."
-  (interactive "P")
-  (cond ((consp multi-buffer)
-         (mapc #'conn--clear-dots (conn--read-dot-buffers-regexp)))
-        (multi-buffer
-         (mapc #'conn--clear-dots (conn--read-buffers 'conn--dots-active-p)))
-        (t (conn--remove-dots
-            (conn--beginning-of-region-or-restriction)
-            (conn--end-of-region-or-restriction))))
-  (when (called-interactively-p 'interactive)
-    (message "Dots removed")))
-
-(defun conn-first-dot ()
-  "Go to the end of the first dot in buffer."
-  (interactive)
-  (when-let ((dot (save-excursion
-                    (goto-char (point-min))
-                    (conn--next-dot-1)
-                    (conn--dot-before-point (point)))))
-    (goto-char (overlay-start dot))
-    (conn--push-ephemeral-mark (overlay-end dot))))
-
-(defun conn-last-dot ()
-  "Go to the end of the last dot in buffer."
-  (interactive)
-  (when-let ((dot (save-excursion
-                    (goto-char (point-max))
-                    (conn--previous-dot-1)
-                    (conn--dot-after-point (point)))))
-    (goto-char (overlay-end dot))
-    (conn--push-ephemeral-mark (overlay-start dot))))
-
-(defun conn-remove-dot-backward (arg)
-  "Remove nearest dot within the range `point-min' to `point'.
-If region is active remove all dots in region."
-  (interactive "p")
-  (if (use-region-p)
-      (conn--remove-dots (region-beginning) (region-end))
-    (let ((dot (or (conn--dot-before-point (point))
-                   (when (conn--previous-dot-1)
-                     (conn--next-dot-1)))))
-      (while (and (> arg 1) dot)
-        (conn--delete-dot dot)
-        (setq dot (or (conn--dot-before-point (point))
-                      (when (conn--previous-dot-1)
-                        (conn--next-dot-1)))
-              arg (1- arg)))
-      (when dot
-        (goto-char (overlay-start dot))
-        (conn--push-ephemeral-mark (overlay-end dot))
-        (conn--delete-dot dot)))))
-
-(defun conn-remove-dot-forward (arg)
-  "Remove nearest dot within the range `point' to `point-max'."
-  (interactive "p")
-  (if (use-region-p)
-      (conn--remove-dots (region-beginning) (region-end))
-    (let ((dot (or (conn--dot-after-point (point))
-                   (when (conn--next-dot-1)
-                     (conn--previous-dot-1)))))
-      (while (and (> arg 1) dot)
-        (conn--delete-dot dot)
-        (setq dot (or (conn--dot-after-point (point))
-                      (when (conn--next-dot-1)
-                        (conn--previous-dot-1)))
-              arg (1- arg)))
-      (when dot
-        (goto-char (overlay-end dot))
-        (conn--push-ephemeral-mark (overlay-start dot))
-        (conn--delete-dot dot)))))
-
-(defun conn-dot-region (bounds)
-  "Dot current region."
-  (interactive (list (region-bounds)))
-  (apply #'conn--create-dots bounds)
-  (deactivate-mark))
-
-(defun conn-dot-region-forward (start end &optional arg)
-  "Dot region and `search-foward' for string matching region.
-If ARG is non-nil repeat ARG times.
-If region is already a dot `search-forward', dot, and `search-forward' again."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (prefix-numeric-value current-prefix-arg)))
-  (let ((str (buffer-substring-no-properties start end)))
-    (goto-char end)
-    (conn--create-dots (cons start end))
-    (cl-decf arg)
-    (search-forward str)
-    (dotimes (_ arg)
-      (conn--create-dots (cons (match-beginning 0) (match-end 0)))
-      (search-forward str))
-    (conn--push-ephemeral-mark (match-beginning 0)))
-  (when (called-interactively-p 'interactive)
-    (message "Region dotted forward")))
-
-(defun conn-dot-region-backward (start end &optional arg)
-  "Dot region and `search-backward' for string matching region.
-If ARG is non-nil repeat ARG times.
-If region is already a dot `search-backward', dot, and `search-backward' again."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (prefix-numeric-value current-prefix-arg)))
-  (let ((str (buffer-substring-no-properties start end)))
-    (goto-char start)
-    (conn--create-dots (cons start end))
-    (cl-decf arg)
-    (search-backward str)
-    (dotimes (_ arg)
-      (conn--create-dots (cons (match-beginning 0) (match-end 0)))
-      (search-backward str))
-    (conn--push-ephemeral-mark (match-end 0)))
-  (when (called-interactively-p 'interactive)
-    (message "Region dotted backward")))
-
-(defun conn-dot-skip-forward (start end &optional arg)
-  "`search-forward', skipping this region."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
-  (let ((str (buffer-substring-no-properties start end)))
-    (unless (= (point) end)
-      (exchange-point-and-mark t))
-    (dotimes (_ (or (and (numberp arg) arg) 1))
-      (search-forward str))
-    (conn--push-ephemeral-mark (match-beginning 0)))
-  (when (called-interactively-p 'interactive)
-    (message "Region skipped forward")))
-
-(defun conn-dot-skip-backward (start end &optional arg)
-  "`search-backward', skipping this region."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
-  (with-demoted-errors "%s"
-    (let ((str (buffer-substring-no-properties start end)))
-      (unless (= (point) start)
-        (exchange-point-and-mark t))
-      (dotimes (_ (or (and (numberp arg) arg) 1))
-        (search-backward str))
-      (conn--push-ephemeral-mark (match-end 0))))
-  (when (called-interactively-p 'interactive)
-    (message "Region skipped backward")))
-
-(defun conn-refine-dots (beg end regexp)
-  (interactive
-   (let* ((regions (cdr (conn--read-thing-region "Define Region")))
-          (beg (caar regions))
-          (end (cdar (last regions))))
-     (list beg end
-           (thread-last
-             (buffer-substring-no-properties
-              (region-beginning)
-              (region-end))
-             (regexp-quote)
-             (list)
-             (ignore-errors)
-             (list "")
-             (read-regexp "Regexp: ")))))
-  (let (new-dots)
-    (save-excursion
-      (goto-char beg)
-      (while (re-search-forward regexp end t)
-        (when (conn-isearch-in-dot-p (match-beginning 0) (match-end 0))
-          (push (cons (match-beginning 0) (match-end 0)) new-dots)))
-      (conn--remove-dots beg end)
-      (apply #'conn--create-dots new-dots))))
-
-(defun conn-dot-lines (start end)
-  "Dot each line in region from START to END.
-
-When called START is `region-beginning' and END is `region-end'."
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (save-excursion
-    (goto-char start)
-    (conn--create-dots (cons (line-beginning-position)
-                             (line-end-position)))
-    (while (> end (progn (forward-line) (point)))
-      (conn--create-dots (cons (line-beginning-position)
-                               (line-end-position))))))
-
-(defun conn-remove-dots-outside-region (start end)
-  "Remove all dots outside region from START to END.
-
-When called interactively operates within `region-bounds'."
-  (interactive (list (region-beginning) (region-end)))
-  (conn--remove-dots (point-min) start)
-  (conn--remove-dots end (point-max)))
-
-(defun conn-split-region-on-regexp (regexp start end)
-  "Split region from START to END into dots on REGEXP.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (read-regexp "Regexp" nil)
-                     (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)))
-  (let (dots
-        (search-invisible 'open))
-    (save-excursion
-      (goto-char start)
-      (push (point) dots)
-      (while (re-search-forward regexp end t)
-        (push (match-beginning 0) dots)
-        (push (match-end 0) dots)
-        (when (= (match-beginning 0) (match-end 0))
-          (forward-char)))
-      (push end dots))
-    (conn--remove-dots start end)
-    (while dots (conn--create-dots (cons (pop dots) (pop dots))))))
-
-(defun conn-split-dots-on-regexp (regexp start end)
-  "Split all dots in region START to END on regexp.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (read-regexp "Regexp" "[[:blank:]]")
-                     (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)))
-  (dolist (dot (conn--all-dots nil start end))
-    (let ((start (overlay-start dot))
-          (end (overlay-end dot)))
-      (conn--delete-dot dot)
-      (conn-split-region-on-regexp regexp start end))))
-
-(defun conn--previous-dot-1 ()
-  "Perform one iteration for `conn-previous-dot-end'."
-  (let* ((pt (previous-overlay-change (point)))
-         (ov (conn--dot-after-point pt)))
-    (while (and (or (not ov)
-                    (/= pt (overlay-start ov)))
-                (/= pt (point-min)))
-      (setq pt (previous-overlay-change pt)
-            ov (conn--dot-after-point pt)))
-    (if ov
-        (progn (goto-char pt) ov)
-      (message "No more dots")
-      nil)))
-
-(defun conn--next-dot-1 ()
-  "Perform one iteration for `conn-next-dot-end'."
-  (let* ((pt (next-overlay-change (point)))
-         (ov (conn--dot-before-point pt)))
-    (while (and (or (not ov)
-                    (/= pt (overlay-end ov)))
-                (/= pt (point-max)))
-      (setq pt (next-overlay-change pt)
-            ov (conn--dot-before-point pt)))
-    (if ov
-        (progn
-          (goto-char pt)
-          ov)
-      (message "No more dots")
-      nil)))
-
-(defun conn-next-dot (arg)
-  "Move point forward ARG dots."
-  (interactive "p")
-  (cond ((> arg 0)
-         (dotimes (_ arg)
-           (conn--next-dot-1)))
-        ((< arg 0)
-         (dotimes (_ (abs arg))
-           (conn--previous-dot-1)))))
-(put 'dot 'forward-op 'conn-next-dot)
-
-(defun conn-previous-dot (arg)
-  "Move point backward ARG dots."
-  (interactive "p")
-  (conn-next-dot (- arg)))
-
-(defun conn-dot-point (point)
-  "Insert dot at point."
-  (interactive (list (point)))
-  (conn--create-dots (cons point (1+ point))))
-
-(defun conn-dot-at-click (event)
-  "Insert dot at mouse click."
-  (interactive "e")
-  (mouse-minibuffer-check event)
-  (let* ((start-posn (event-start event))
-         (start-point (posn-point start-posn))
-         (start-window (posn-window start-posn)))
-    (with-current-buffer (window-buffer start-window)
-      (conn-dot-point start-point)
-      (goto-char start-point))))
-
-(defun conn-dot-text-property (start end &optional refine)
-  "Dot each region between START and END with text property PROP equal to VAL.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)
-                     current-prefix-arg))
-  (let* ((prop (intern (completing-read
-                        "Property: "
-                        (let ((props (text-properties-at (point)))
-                              result)
-                          (while props
-                            (push (prog1 (pop props) (pop props)) result))
-                          result)
-                        nil t)))
-         (vals (mapcar (lambda (s) (cons (format "%s" s) s))
-                       (ensure-list (get-text-property (point) prop))))
-         (val (alist-get (completing-read "Value: " vals) vals
-                         nil nil #'string=))
-         new-dots)
-    (save-excursion
-      (with-restriction
-          start end
-        (goto-char (point-min))
-        (while-let ((match (text-property-search-forward prop val t)))
-          (cond ((null refine)
-                 (conn--create-dots (cons (prop-match-beginning match)
-                                          (prop-match-end match))))
-                ((conn-isearch-in-dot-p (prop-match-beginning match)
-                                        (prop-match-end match))
-                 (push (cons (prop-match-beginning match)
-                             (prop-match-end match))
-                       new-dots))))
-        (when refine
-          (conn--remove-dots start end)
-          (apply #'conn--create-dots new-dots))))))
-
-(defun conn-dot-trim-regexp (regexp start end)
-  "Trim regexp from beginning and end of all dots.
-
-When region is active operates within `region-bounds', otherwise operates
-between `point-min' and `point-max'."
-  (interactive (list (read-regexp "Regexp" "[[:blank:]]+")
-                     (conn--beginning-of-region-or-restriction)
-                     (conn--end-of-region-or-restriction)))
-  (dolist (dot (conn--all-dots '> start end))
-    (let ((start (overlay-start dot))
-          (end (overlay-end dot)))
-      (goto-char start)
-      (when (looking-at regexp)
-        (setq start (match-end 0)))
-      (goto-char end)
-      (when (looking-back regexp start t)
-        (setq end (match-beginning 0)))
-      (if (>= start end)
-          (conn--delete-dot dot)
-        (move-overlay dot start end)))))
-
-(defun conn-query-remove-dots ()
-  "Prompt to delete each dot.
-y delete the dot.
-n keeps the dot.
-d deletes the remaining dots.
-k keeps the remaining dots."
-  (interactive)
-  (save-excursion
-    (catch 'keep-rest
-      (let ((message (format "%s (%s)es; (%s)o; (%s)elete rest; (%s)eep rest"
-                             (propertize "Delete:" 'face 'bold)
-                             (propertize "y" 'face 'help-key-binding)
-                             (propertize "n" 'face 'help-key-binding)
-                             (propertize "d" 'face 'help-key-binding)
-                             (propertize "k" 'face 'help-key-binding)))
-            delete-rest)
-        (dolist (dot (conn--all-dots '<))
-          (goto-char (overlay-start dot))
-          (if delete-rest
-              (conn--delete-dot dot)
-            (while (pcase (read-char message)
-                     (?y (conn--delete-dot dot) nil)
-                     (?n nil)
-                     (?d (conn--delete-dot dot)
-                         (setq delete-rest t)
-                         nil)
-                     (?k (throw 'keep-rest nil))
-                     (_ t)))))))))
-
-(defun conn-remove-dots-after (point)
-  "Clear all dots after POINT."
-  (interactive (list (point)))
-  (conn--remove-dots point (point-max))
-  (when (called-interactively-p 'interactive)
-    (message "Dots after point removed")))
-
-(defun conn-remove-dots-before (point)
-  "Clear all dots before POINT."
-  (interactive (list (point)))
-  (conn--remove-dots (point-min) point)
-  (when (called-interactively-p 'interactive)
-    (message "Dots before point removed")))
-
-(defun conn-dot-thing-at-point (thing)
-  "Dot THING at point.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing "Thing")))
-  (conn--create-dots (bounds-of-thing-at-point thing)))
-
-(defun conn-dot-all-things-in-region (thing)
-  "Dot all THINGs in region.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing "Thing")))
-  (unless thing
-    (error "Unknown thing command"))
-  (save-excursion
-    (with-restriction
-        (region-beginning) (region-end)
-      (goto-char (point-min))
-      (when-let ((bounds (bounds-of-thing-at-point thing)))
-        (conn--create-dots bounds))
-      (let (bounds)
-        (while (and (/= (point) (point-max))
-                    (/= (point) (progn
-                                  (forward-thing thing)
-                                  (point)))
-                    (setq bounds (bounds-of-thing-at-point thing)))
-          (conn--create-dots bounds)
-          (setq bounds (bounds-of-thing-at-point thing))))))
-  (message "Dots added at %ss" thing))
-
-(defun conn-shell-command-on-dots (command arg)
-  "Run `shell-command-on-region' on each dot."
-  (interactive
-   (list (read-shell-command "Shell command on dots: ")
-         current-prefix-arg))
-  (save-mark-and-excursion
-    (dolist (dot (conn--all-overlays #'conn-dotp))
-      (let ((beg (overlay-start dot))
-            (end (overlay-end dot)))
-        (shell-command-on-region beg end
-                                 command arg arg
-                                 shell-command-default-error-buffer
-                                 t nil)
-        (conn-exchange-mark-command)
-        (when (and (looking-back "\n" 1) arg)
-          (delete-char 1))))))
-
 ;;;;; Isearch Commands
-
-(defun conn-isearch-in-dot-p (beg end)
-  "Whether or not region from BEG to END is entirely within a dot.
-Meant to be used as `isearch-filter-predicate'."
-  (when-let ((ov (conn--dot-after-point beg)))
-    (>= (overlay-end ov) end)))
-
-(defun conn-isearch-not-in-dot-p (beg end)
-  "Inverse of `conn-isearch-in-dot-p'."
-  (not (conn-isearch-in-dot-p beg end)))
-
-(defun conn-isearch-dot-match ()
-  "Dot the current isearch match and repeat in current direction."
-  (interactive)
-  (conn--create-dots (cons (min (point) isearch-other-end)
-                           (max (point) isearch-other-end)))
-  (if isearch-forward
-      (isearch-repeat-forward)
-    (isearch-repeat-backward)))
-
-(defun conn-isearch-add-dots ()
-  "Dot all isearch matches."
-  (interactive)
-  (if (or (not (boundp 'multi-isearch-buffer-list))
-          (not multi-isearch-buffer-list))
-      (apply #'conn--create-dots (conn--isearch-matches))
-    (dolist (buf multi-isearch-buffer-list)
-      (when buf
-        (apply #'conn--create-dots (conn--isearch-matches buf)))))
-  (isearch-update))
-
-(defun conn-isearch-remove-dots (&optional partial-match)
-  "Remove all dots exactly matching isearch search string.
-If PARTIAL-MATCH is non-nil remove all dots containing an isearch match.
-Interactively PARTIAL-MATCH is the prefix argument."
-  (interactive "P")
-  (save-excursion
-    (dolist (dot (conn--all-overlays #'conn-dotp))
-      (goto-char (overlay-start dot))
-      (when (and (isearch-search-string isearch-string (overlay-end dot) t)
-                 (funcall isearch-filter-predicate
-                          (match-beginning 0) (match-end 0))
-                 (or (not partial-match)
-                     (and (= (match-beginning 0) (overlay-start dot))
-                          (= (match-end 0) (overlay-end dot)))))
-        (conn--delete-dot dot)))))
-
-(defun conn-isearch-split-dots (&optional refine)
-  "Split dots on isearch matches."
-  (interactive "P")
-  (let ((forward isearch-forward)
-        dots)
-    (save-excursion
-      (unwind-protect
-          (progn
-            ;; we need to ensure we are searching forward or the
-            ;; bound wont be correct for isearch-search-string
-            (unless forward (isearch-repeat-forward))
-            (dolist (dot (conn--all-overlays #'conn-dotp))
-              (goto-char (overlay-start dot))
-              (unless refine (push (point) dots))
-              (while (isearch-search-string isearch-string (overlay-end dot) t)
-                (when (funcall isearch-filter-predicate
-                               (match-beginning 0) (match-end 0))
-                  (push (match-beginning 0) dots)
-                  (push (match-end 0) dots)))
-              (unless refine (push (overlay-end dot) dots))))
-        (unless forward (isearch-repeat-backward))))
-    (conn--remove-dots)
-    (while dots (conn--create-dots (cons (pop dots) (pop dots))))))
-
-(defun conn-isearch-refine-dots ()
-  "Clear dots and add new dots at isearch matches within previous dots."
-  (interactive)
-  (conn-isearch-split-dots t))
 
 (defun conn-isearch-backward-thing (thing)
   "Isearch forward for THING.
@@ -4159,6 +3252,124 @@ Interactively `region-beginning' and `region-end'."
   (conn--push-ephemeral-mark isearch-other-end))
 
 ;;;;; Editing Commands
+
+(defvar-keymap conn-read-mover-map
+  "C-w" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "C-<backspace>" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "M-DEL" 'reset-arg
+  "." 'reset-arg
+  "r" 'conn-define-region-in-recursive-edit)
+
+(defun conn--read-mover (prompt)
+  (conn--with-state conn-state
+    (internal-push-keymap conn-read-mover-map
+                          'overriding-terminal-local-map)
+    (unwind-protect
+        (cl-prog
+         ((prompt (substitute-command-keys
+                   (concat "\\<conn-read-mover-map>"
+                           prompt " (arg: "
+                           (propertize "%s" 'face 'transient-value)
+                           ", \\[reset-arg] reset arg; "
+                           "\\[conn-define-region-in-recursive-edit] "
+                           "recursive edit): %s")))
+          thing-arg thing-sign invalid keys cmd)
+         :read-command
+         (setq keys (read-key-sequence
+                     (format prompt
+                             (format (if thing-arg "%s%s" "[%s1]")
+                                     (if thing-sign "-" "")
+                                     thing-arg)
+                             (if invalid
+                                 (propertize "Not a valid thing command"
+                                             'face 'error)
+                               "")))
+               cmd (key-binding keys t))
+         :test
+         (pcase cmd
+           ('keyboard-quit
+            (keyboard-quit))
+           ('help
+            (internal-pop-keymap conn-read-thing-region-command-map
+                                 'overriding-terminal-local-map)
+            (save-window-excursion
+              (setq cmd (intern
+                         (completing-read
+                          "Command: "
+                          (lambda (string pred action)
+                            (if (eq action 'metadata)
+                                `(metadata
+                                  ,(cons 'affixation-function
+                                         (conn--dispatch-make-command-affixation
+                                          conn-read-thing-region-command-map))
+                                  (category . conn-dispatch-command))
+                              (complete-with-action action obarray string pred)))
+                          (lambda (sym)
+                            (and (functionp sym)
+                                 (not (eq sym 'help))
+                                 (get sym :conn-command-thing)))
+                          t))))
+            (internal-push-keymap conn-read-thing-region-command-map
+                                  'overriding-terminal-local-map)
+            (go :test))
+           ('digit-argument
+            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+           ('reset-arg
+            (setq thing-arg nil))
+           ('backward-delete-arg
+            (setq thing-arg (floor thing-arg 10)))
+           ('forward-delete-arg
+            (setq thing-arg (conn--thread -->
+                                (log thing-arg 10)
+                              (floor -->)
+                              (expt 10 -->)
+                              (mod thing-arg -->))))
+           ('negative-argument
+            (setq thing-sign (not thing-sign)))
+           ('conn-define-region-in-recursive-edit
+            (cl-return (list 'recursive-edit nil)))
+           ((guard (not (get cmd :conn-command-thing)))
+            (setq invalid t))
+           ((guard (get cmd :conn-command-thing))
+            (cl-return (list cmd (prefix-numeric-value thing-arg)))))
+         (go :read-command))
+      (message nil)
+      (internal-pop-keymap conn-read-mover-map
+                           'overriding-terminal-local-map))))
+
+(defun conn-transpose-regions (mover arg)
+  (interactive (conn--read-mover "Mover"))
+  (pcase mover
+    ('recursive-edit
+     (let ((beg (region-beginning))
+           (end (region-end))
+           (buf (current-buffer)))
+       (setq buffer-read-only t)
+       (unwind-protect
+           (recursive-edit)
+         (setq buffer-read-only nil))
+       (if (eq buf (current-buffer))
+           (transpose-regions beg end (region-beginning) (region-end))
+         (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
+               str2)
+           (with-current-buffer buf
+             (setq str2 (filter-buffer-substring beg end t))
+             (insert str1))
+           (insert str2)))))
+    ((let 0 arg)
+     (pcase-let* ((thing (get mover :conn-command-thing))
+                  (`(,beg1 . ,end1) (if (region-active-p)
+                                        (cons (region-beginning) (region-end))
+                                      (bounds-of-thing-at-point thing)))
+                  (`(,beg2 . ,end2) (save-excursion
+                                      (goto-char (mark t))
+                                      (bounds-of-thing-at-point thing))))
+       (transpose-regions beg1 end1 beg2 end2)))
+    (_
+     (transpose-subr mover arg))))
 
 (defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
@@ -4727,17 +3938,6 @@ interactively."
                    (_ (filter-buffer-substring beg end t)))
                  t)))
 
-(defun conn-mark-thing (beg end)
-  "Mark THING at point.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive
-   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
-     (list (caar regions) (cdar (last regions)))))
-  (goto-char end)
-  (conn--push-ephemeral-mark beg)
-  (activate-mark t))
-
 (defun conn-copy-thing (beg end &optional register)
   "Copy THING at point."
   (interactive
@@ -5088,18 +4288,6 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Transition Functions
 
-(defun conn-emacs-state-and-complete ()
-  "Enter `conn-emacs-state' and call `completion-at-point'."
-  (interactive)
-  (conn-emacs-state)
-  (completion-at-point))
-
-(defun conn-dot-quit ()
-  "Pop state and clear all dots."
-  (interactive)
-  (conn--remove-dots)
-  (conn-pop-state))
-
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
   (interactive)
@@ -5219,11 +4407,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :type '(choice (const :tag "Window" window)
                  (const :tag "Frame" frame)
                  (const :tag "Short" nil)))
-
-(defcustom conn-wincontrol-arg-limit 1000
-  "Limit for prefix arg in `conn-wincontrol-mode'."
-  :group 'conn
-  :type 'integer)
 
 (defun conn--wincontrol-window-format-1 ()
   (substitute-command-keys
@@ -5484,8 +4667,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         scroll-conservatively 100)
   (unless preserve-state
     (setq conn--wincontrol-arg (when current-prefix-arg
-                                 (mod (prefix-numeric-value current-prefix-arg)
-                                      conn-wincontrol-arg-limit))
+                                 (prefix-numeric-value current-prefix-arg))
           conn--wincontrol-help conn-wincontrol-initial-help
           conn--wincontrol-arg-sign 1
           conn--wincontrol-initial-window (selected-window)
@@ -5515,17 +4697,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defun conn-wincontrol-universal-arg ()
   (interactive)
-  (setq conn--wincontrol-arg (mod (* 4 (or conn--wincontrol-arg 1))
-                                  conn-wincontrol-arg-limit)))
+  (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
 
 (defun conn-wincontrol-digit-argument (N)
   "Append N to wincontrol prefix arg.
 When called interactively N is `last-command-event'."
   (interactive (list (- (logand last-command-event ?\177) ?0)))
   (if conn--wincontrol-arg
-      (let ((arg (+ (if (>= (or conn--wincontrol-arg 1) 0) N (- N))
-                    (* 10 (or conn--wincontrol-arg 1)))))
-        (setq conn--wincontrol-arg (if (>= arg conn-wincontrol-arg-limit) N arg)))
+      (setq conn--wincontrol-arg (+ (if (>= (or conn--wincontrol-arg 1) 0) N (- N))
+                                    (* 10 (or conn--wincontrol-arg 1))))
     (setq conn--wincontrol-arg N))
   (setq this-command 'conn-wincontrol-digit-argument))
 
@@ -6055,35 +5235,6 @@ the edit in the macro."
   :description "Skip Empty"
   :argument "skip")
 
-(transient-define-argument conn--kapply-dot-read-buffers-infix ()
-  "How to read additional buffers on which to dispatch.
-CRM means read buffers with `completing-read-multiple',
-MATCH-REGEXP means dispatch on buffers matching a regexp."
-  :class 'conn-transient-switches
-  :description "Read Dot Buffers"
-  :key "b"
-  :argument "buffers="
-  :argument-format "buffers=%s"
-  :argument-regexp "\\(buffers=\\(one-by-one\\|match-regexp\\)\\)"
-  :choices '("one-by-one" "match-regexp")
-  :if 'conn--dots-active-p)
-
-(transient-define-argument conn--kapply-dots-infix ()
-  "What to do with dots after dispatching on them.
-REMOVE means delete the dots, to-region means move the dots to the
-current region after each macro has finished executing, and KEEP
-means keep the dots in their original position."
-  :class 'conn-transient-switches
-  :description "Dots"
-  :key "h"
-  :argument "dots"
-  :argument-format "dots=%s"
-  :argument-regexp "\\(dots=\\(remove\\|to-region\\|keep\\)\\)"
-  :choices '("to-region" "remove" "keep")
-  :required t
-  :if 'conn--dots-active-p
-  :init-value (lambda (obj) (oset obj value "dots=to-region")))
-
 (transient-define-argument conn--kapply-macro-infix ()
   "Dispatch `last-kbd-macro'.
 APPLY simply executes the macro at each region.  APPEND executes
@@ -6421,44 +5572,6 @@ apply to each contiguous component of the region."
         ("step-edit" (conn--kmacro-apply-step-edit --> count))
         (_ (conn--kmacro-apply --> count))))))
 
-(transient-define-suffix conn--kapply-dot-suffix (args)
-  "Apply keyboard macro on dots in the selected buffers."
-  :transient 'transient--do-exit
-  :if 'conn--dots-active-p
-  :key "d"
-  :description "Dots"
-  (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
-      (pcase (transient-arg-value "buffers=" args)
-        ("one-by-one" (conn--read-buffers 'conn--dots-active-p))
-        ("match-regexp" (conn--read-dot-buffers-regexp))
-        (_ (list (current-buffer))))
-    (mapcan (apply-partially 'conn--sorted-overlays
-                             #'conn-dotp '< nil nil)
-            -->)
-    (conn--kapply-dot-iterator --> (member "reverse" args))
-    (pcase-exhaustive (transient-arg-value "dots=" args)
-      ("keep" (conn--kapply-stationary-dots -->))
-      ("to-region" (conn--kapply-relocate-dots -->))
-      ("remove" (conn--kapply-remove-dots -->)))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
-
 (transient-define-suffix conn--kapply-regions-suffix (iterator args)
   "Apply keyboard macro on regions."
   :transient 'transient--do-exit
@@ -6602,13 +5715,10 @@ apply to each contiguous component of the region."
    [(conn--kapply-order-infix)
     (conn--kapply-state-infix)
     (conn--kapply-empty-infix)]
-   [(conn--kapply-dots-infix)
-    (conn--kapply-dot-read-buffers-infix)
-    (conn--kapply-region-infix)
+   [(conn--kapply-region-infix)
     (conn--kapply-macro-infix)]]
   [[:description
     "Apply Kmacro On:"
-    (conn--kapply-dot-suffix)
     (conn--kapply-text-property-suffix)
     (conn--kapply-iterate-suffix)
     (conn--kapply-regexp-suffix)
@@ -6660,14 +5770,11 @@ apply to each contiguous component of the region."
    [(conn--kapply-order-infix)
     (conn--kapply-region-infix)
     (conn--kapply-state-infix)]
-   [(conn--kapply-dots-infix)
-    (conn--kapply-dot-read-buffers-infix)
-    (conn--kapply-matches-infix)
+   [(conn--kapply-matches-infix)
     (conn--kapply-macro-infix)]]
   [[:description
     "Apply Kmacro On:"
-    (conn--kapply-isearch-suffix)
-    (conn--kapply-dot-suffix)]
+    (conn--kapply-isearch-suffix)]
    [:description
     "Save State:"
     (conn--kapply-merge-undo-infix)
@@ -6782,7 +5889,6 @@ apply to each contiguous component of the region."
    conn--narrow-ring-display
    [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
     ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
-    ("e" "Dot Narrowings" conn-dot-narrow-ring)
     ("s" "Register Store" conn-narrow-ring-to-register :transient t)
     ("l" "Register Load" conn-register-load :transient t)]
    [("m" "Merge" conn-merge-narrow-ring :transient t)
@@ -6959,9 +6065,6 @@ apply to each contiguous component of the region."
   "c" 'conn-region-case-prefix
   "D" 'conn-duplicate-and-comment-region
   "d" 'conn-duplicate-region
-  "e l" 'conn-dot-region-forward
-  "e j" 'conn-dot-region-backward
-  "e o" 'conn-remove-dots-outside-region
   "e c" 'conn-split-region-on-regexp
   "g" 'conn-rgrep-region
   "j" 'conn-join-lines
@@ -6987,67 +6090,10 @@ apply to each contiguous component of the region."
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
 
-(defvar-keymap conn-dot-remove-repeat-map
-  :repeat t
-  "DEL" 'conn-remove-dot-backward
-  "d" 'conn-remove-dot-forward)
-
-(defvar-keymap conn-dot-movement-repeat-map
-  :repeat t
-  "l" 'conn-next-dot
-  "j" 'conn-previous-dot)
-
-(defvar-keymap conn-dot-edit-map
-  :prefix 'conn-dot-edit-map
-  :doc "Dot this map."
-  "RET" 'conn-dot-lines
-  "DEL" 'conn-remove-dot-backward
-  "[" 'conn-remove-dots-before
-  "]" 'conn-remove-dots-after
-  "{" 'conn-first-dot
-  "}" 'conn-last-dot
-  "l" 'conn-next-dot
-  "j" 'conn-previous-dot
-  "c" 'conn-split-dots-on-regexp
-  "D" 'conn-remove-all-dots
-  "d" 'conn-remove-dot-forward
-  "p" 'conn-dot-text-property
-  "q" 'conn-query-remove-dots
-  "r" 'conn-refine-dots
-  "s" 'conn-sort-dots
-  "t" 'conn-dot-trim-regexp
-  "w" 'conn-dot-occurances-in-thing
-  "u" 'conn-dot-regexp-in-thing)
-
-(defvar-keymap conn-dot-region-repeat-map
-  :repeat t
-  "j" 'conn-dot-region-backward
-  "l" 'conn-dot-region-forward
-  "o" 'conn-dot-skip-forward
-  "u" 'conn-dot-skip-backward
-  "J" 'conn-dot-skip-backward
-  "L" 'conn-dot-skip-forward)
-
-(defvar-keymap conn-dot-region-map
-  :parent conn-region-map
-  "|" 'conn-shell-command-on-dots
-  "w" 'conn-dot-occurances-in-region
-  "u" 'conn-dot-regexp-in-region
-  "l" 'conn-dot-region-forward
-  "j" 'conn-dot-region-backward
-  "o" 'conn-remove-dots-outside-region
-  "c" 'conn-split-region-on-regexp)
-
 (define-keymap
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
-  "C-TAB" 'conn-isearch-dot-match
-  "C-<tab>" 'conn-isearch-dot-match
   "M-\\" 'conn-isearch-kapply-prefix
-  "M-E" 'conn-isearch-add-dots
-  "M-R" 'conn-isearch-refine-dots
-  "M-W" 'conn-isearch-remove-dots
-  "M-S" 'conn-isearch-split-dots
   "C-," 'conn-dispatch-isearch)
 
 (define-keymap
@@ -7098,8 +6144,6 @@ apply to each contiguous component of the region."
   "?" 'tab-bar-history-forward)
 
 (defvar-keymap conn-misc-edit-map
-  "TAB" 'conn-emacs-state-and-complete
-  "<tab>" 'conn-emacs-state-and-complete
   "o" 'conn-open-line-and-indent
   "n" 'conn-open-line-above
   "m" 'conn-open-line
@@ -7120,7 +6164,6 @@ apply to each contiguous component of the region."
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
   "RET" 'whitespace-cleanup
-  "SPC" 'conn-transpose-region-and-dot
   "TAB" 'indent-rigidly
   "w" 'conn-replace-in-thing
   "u" 'conn-regexp-replace-in-thing
@@ -7134,17 +6177,12 @@ apply to each contiguous component of the region."
   "j" 'join-line
   "x" 'kill-matching-lines
   "z" 'copy-matching-lines
-  "k" 'transpose-lines
-  "K" 'transpose-paragraphs
-  "l" 'transpose-chars
-  "m" 'transpose-sexps
+  "l" 'conn-transpose-regions
   "N" 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
-  "o" 'transpose-words
   "q" 'indent-for-tab-command
   "r" 'conn-kmacro-prefix
   "s" 'conn-sort-prefix
-  "v" 'conn-mark-thing
   "y" 'yank-in-context)
 
 (defvar-keymap conn-movement-map
@@ -7223,19 +6261,15 @@ apply to each contiguous component of the region."
   "c" (conn-remapping-command (key-parse "C-c"))
   "C" 'conn-copy-region
   "d" (conn-remapping-command conn-delete-char-keys)
-  "E" 'conn-dot-region
   "f" 'conn-dispatch-on-things
   "g" (conn-remapping-command (key-parse "M-g"))
   "h" 'conn-expand
   "H" conn-mark-thing-map
   "p" 'conn-register-load
   "P" 'conn-register-prefix
-  "Q" 'conn-dot-edit-map
   "q" 'conn-edit-map
-  "R" conn-dot-region-map
   "r" conn-region-map
   "s" (conn-remapping-command (key-parse "M-s"))
-  "T" 'conn-dot-all-things-in-region
   "V" 'conn-narrow-to-region
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
@@ -7245,14 +6279,6 @@ apply to each contiguous component of the region."
   "Y" 'yank-from-kill-ring
   "y" (conn-remapping-command conn-yank-keys)
   "z" 'conn-exchange-mark-command)
-
-(defvar-keymap conn-dot-nav-map
-  :repeat t
-  :prefix 'conn-dot-nav-map
-  "C-p" 'conn-previous-dot
-  "C-n" 'conn-next-dot
-  "C-M-p" 'conn-first-dot
-  "C-M-n" 'conn-last-dot)
 
 (define-keymap
   :keymap conn-org-edit-state-map
@@ -7310,7 +6336,6 @@ apply to each contiguous component of the region."
   "C-x n N" 'conn-narrow-indirect-to-region
   "C-x r \\" 'conn-set-register-seperator
   "C-x r ." 'conn-last-macro-dispatch-to-register
-  "C-x r ," 'conn-dot-state-to-register
   "C-x r !" 'kmacro-to-register
   "C-x r W" 'conn-unset-register
   "C-x t j" 'conn-register-load
@@ -7372,7 +6397,6 @@ apply to each contiguous component of the region."
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
-    (without-restriction (conn--remove-dots))
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
     (conn--clear-overlays)
