@@ -267,7 +267,10 @@ Each element may be either a symbol or a list of the form
          calc-trail-mode
          calc-keypad-mode
          special-mode)
-    t))
+    t)
+  "Modes in `conn-local-mode' should be enabled.
+Must be of a form accepted by `define-globalized-minor-mode'
+:predicate argument.")
 
 (defvar conn-enable-in-buffer-hook
   (list (lambda () (easy-mmode--globalized-predicate-p conn-in-modes)))
@@ -2353,7 +2356,9 @@ state."
           "f" 'conn-dispatch-yank-replace
           "d" 'conn-dispatch-grab-replace
           "g" 'conn-dispatch-goto
-          "z" 'conn-dispatch-jump)))
+          "z" 'conn-dispatch-jump))
+  "List of keymap containing dispatch actions.
+All dispatch actions must be in a keymap in this list.")
 
 (defvar conn-dispatch-thing-override-maps
   (list (define-keymap
@@ -2364,7 +2369,10 @@ state."
                 . conn-dispatch-goto)
           "O" `(word
                 ,(apply-partially 'conn--dispatch-all-things 'word)
-                . conn-dispatch-goto))))
+                . conn-dispatch-goto)))
+  "List of keymaps containing thing commands that overrides default bindings.
+Members of these keymaps can be either a command with a thing property or
+a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 
 (defun conn--dispatch-finder (command)
   (or (alist-get command conn-dispatch-providers-alist)
@@ -2388,7 +2396,7 @@ state."
 (setf (alist-get 'backward-word conn-dispatch-providers-alist)
       (apply-partially 'conn--dispatch-all-things 'word t))
 
-(defun conn-dispatch-fixup-whitespace ()
+(defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
     (fixup-whitespace)
     (indent-for-tab-command))
@@ -2406,7 +2414,7 @@ state."
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
-           (conn-dispatch-fixup-whitespace)
+           (conn--dispatch-fixup-whitespace)
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2420,7 +2428,7 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
            (delete-region beg end)
-           (conn-dispatch-fixup-whitespace)
+           (conn--dispatch-fixup-whitespace)
            (message "Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2434,7 +2442,7 @@ state."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
            (delete-region beg end)
-           (conn-dispatch-fixup-whitespace)
+           (conn--dispatch-fixup-whitespace)
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
@@ -2498,7 +2506,7 @@ state."
         (`(,beg . ,end)
          (pulse-momentary-highlight-region beg end)
          (copy-region-as-kill beg end)
-         (conn-dispatch-fixup-whitespace))
+         (conn--dispatch-fixup-whitespace))
         (_ (user-error "No thing at point")))))
   (delete-region (region-beginning) (region-end))
   (yank))
@@ -2511,7 +2519,7 @@ state."
       (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (kill-region beg end)
-         (conn-dispatch-fixup-whitespace))
+         (conn--dispatch-fixup-whitespace))
         (_ (user-error "No thing at point")))))
   (delete-region (region-beginning) (region-end))
   (yank))
@@ -2524,7 +2532,7 @@ state."
       (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
         (`(,beg . ,end)
          (kill-region beg end)
-         (conn-dispatch-fixup-whitespace))
+         (conn--dispatch-fixup-whitespace))
         (_ (user-error "No thing at point")))))
   (yank))
 
@@ -3252,10 +3260,10 @@ Expansions and contractions are provided by functions in
 
 (defun conn-surround-thing (thing beg end arg)
   (interactive
-   (let ((regions (cdr (conn--read-thing-region "Define Region"))))
+   (let ((regions (conn--read-thing-region "Define Region")))
      (list (car regions)
-           (caar regions)
-           (cdar (last regions))
+           (caar (cdr regions))
+           (cdar (last (cdr regions)))
            (list (prefix-numeric-value current-prefix-arg)))))
   (save-mark-and-excursion
     (funcall (or (get thing :conn-thing-surrounder)
