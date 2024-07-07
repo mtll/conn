@@ -5373,7 +5373,7 @@ before each iteration."
 
 (transient-define-suffix conn--kapply-string-region-suffix (args)
   :transient 'transient--do-exit
-  :key "rw"
+  :key "rq"
   :description "String in Region"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
@@ -5450,7 +5450,7 @@ before each iteration."
 The region is read by prompting for a command with a `:conn-command-thing'
 property."
   :transient 'transient--do-exit
-  :key "qw"
+  :key "qq"
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
@@ -6072,7 +6072,7 @@ apply to each contiguous component of the region."
   "n" 'conn-narrow-to-region
   "s" 'conn-sort-prefix
   "o" 'conn-occur-region
-  "w" 'conn-replace-region-in-thing
+  "q" 'conn-replace-region-in-thing
   "u" 'conn-regexp-replace-region-in-thing
   "V" 'vc-region-history
   "y" 'yank-rectangle
@@ -6163,10 +6163,11 @@ apply to each contiguous component of the region."
   "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
   "s" 'conn-surround-thing
-  "d p" 'conn-kill-prepend-region
-  "d a" 'conn-kill-append-region
+  "d" 'duplicate-dwim
+  "w p" 'conn-kill-prepend-region
+  "w a" 'conn-kill-append-region
   "y" 'yank-in-context
-  "w" 'conn-replace-in-thing
+  "q" 'conn-replace-in-thing
   "u" 'conn-regexp-replace-in-thing)
 
 (defvar-keymap conn-movement-map
