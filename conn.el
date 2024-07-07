@@ -407,11 +407,14 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn--with-advice (symbol how function &rest body)
-  (declare (indent 3))
+(defmacro conn--with-advice (symbol how function props &rest body)
+  (declare (indent 4))
+  (unless body
+    (setq body props
+          props nil))
   (let ((fn (gensym "advice")))
     `(let ((,fn ,function))
-       (advice-add ,symbol ,how ,fn)
+       (advice-add ,symbol ,how ,fn ,props)
        (unwind-protect
            ,(macroexp-progn body)
          (advice-remove ,symbol ,fn)))))
@@ -1703,7 +1706,8 @@ The iterator must be the first argument in ARGLIST.
                  (progn
                    (run-hooks 'conn-kmacro-apply-start-hook)
                    (deactivate-mark)
-                   (conn--with-advice 'kmacro-loop-setup-function :before-while ,iterator
+                   (conn--with-advice
+                       'kmacro-loop-setup-function :before-while ,iterator nil
                      ,@body))
                (t
                 (setq conn-kmacro-apply-error err)
@@ -3393,6 +3397,7 @@ Interactively `region-beginning' and `region-end'."
                      (cl-letf (((symbol-function 'use-region-p)
                                 (lambda () t)))
                        (apply args)))
+                   nil
                  (query-replace-read-args
                   (concat "Query replace"
                           (if current-prefix-arg
@@ -3422,6 +3427,7 @@ Interactively `region-beginning' and `region-end'."
                      (cl-letf (((symbol-function 'use-region-p)
                                 (lambda () t)))
                        (apply args)))
+                   nil
                  (query-replace-read-args
                   (concat "Query replace regexp"
                           (if current-prefix-arg
@@ -3450,6 +3456,7 @@ Interactively `region-beginning' and `region-end'."
                        (cl-letf (((symbol-function 'use-region-p)
                                   (lambda () t)))
                          (apply args)))
+                     nil
                    (query-replace-read-args
                     (concat "Query replace"
                             (if current-prefix-arg
@@ -3477,6 +3484,7 @@ Interactively `region-beginning' and `region-end'."
                        (cl-letf (((symbol-function 'use-region-p)
                                   (lambda () t)))
                          (apply args)))
+                     nil
                    (query-replace-read-args
                     (concat "Query replace regexp"
                             (if current-prefix-arg
