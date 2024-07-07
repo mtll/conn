@@ -6045,6 +6045,7 @@ apply to each contiguous component of the region."
   (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
 (defvar-keymap conn-region-map
+  :prefix 'conn-region-map
   "RET" 'whitespace-cleanup
   "TAB" 'indent-rigidly
   "f" 'conn-isearch-region-forward
@@ -6076,7 +6077,8 @@ apply to each contiguous component of the region."
   "u" 'conn-regexp-replace-region-in-thing
   "V" 'vc-region-history
   "y" 'yank-rectangle
-  "Y" 'conn-yank-lines-as-rectangle)
+  "Y" 'conn-yank-lines-as-rectangle
+  "l" 'join-line)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -6118,6 +6120,10 @@ apply to each contiguous component of the region."
   "o" 'conn-mark-ring-backward
   "u" 'conn-mark-ring-forward)
 
+(defvar-keymap conn-other-window-repeat-map
+  :repeat t
+  "`" 'other-window)
+
 (defvar-keymap conn-goto-map
   "l" 'pop-global-mark
   "k" 'goto-line
@@ -6145,7 +6151,7 @@ apply to each contiguous component of the region."
   "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward)
 
-(defvar-keymap conn-misc-edit-map
+(defvar-keymap conn-edit-map
   "f" 'conn-fill-prefix
   "c" 'conn-region-case-prefix
   "TAB" 'indent-for-tab-command
@@ -6200,6 +6206,7 @@ apply to each contiguous component of the region."
   :keymap conn-state-map
   :parent conn-movement-map
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
+  "`" 'other-window
   "|" 'conn-shell-command-on-region
   "'" 'conn-other-place-prefix
   "+" 'conn-set-register-seperator
@@ -6241,7 +6248,7 @@ apply to each contiguous component of the region."
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" conn-misc-edit-map
+  "b" conn-edit-map
   "c" (conn-remapping-command (key-parse "C-c"))
   "C" 'conn-copy-region
   "d" (conn-remapping-command conn-delete-char-keys)
@@ -6252,7 +6259,7 @@ apply to each contiguous component of the region."
   "p" 'conn-register-load
   "P" 'conn-register-prefix
   "q" 'conn-transpose-regions
-  "r" conn-region-map
+  "r" 'conn-region-map
   "s" (conn-remapping-command (key-parse "M-s"))
   "V" 'conn-narrow-to-region
   "v" 'conn-toggle-mark-command
@@ -6280,7 +6287,7 @@ apply to each contiguous component of the region."
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
-  "b" conn-misc-edit-map
+  "b" conn-edit-map
   "g" (conn-remapping-command (key-parse "M-g"))
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
@@ -6322,7 +6329,8 @@ apply to each contiguous component of the region."
   "C-x r W" 'conn-unset-register
   "C-x t j" 'conn-register-load
   "C-x t s" 'tab-switch
-  "C-x t a" 'conn-tab-to-register)
+  "C-x t a" 'conn-tab-to-register
+  "C-`" 'other-window)
 
 (defvar-keymap conn-local-mode-map
   "M-g o" 'conn-mark-ring-backward
