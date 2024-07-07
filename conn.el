@@ -563,6 +563,11 @@ If BUFFER is nil check `current-buffer'."
 
 (defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
+  "C-w" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "C-<backspace>" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "M-DEL" 'reset-arg
   "t" conn-mark-thing-map
   "." 'reset-arg
   "r" 'conn-define-region-in-recursive-edit)
@@ -632,6 +637,14 @@ If BUFFER is nil check `current-buffer'."
               (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
            ('reset-arg
             (setq thing-arg nil))
+           ('backward-delete-arg
+            (setq thing-arg (floor thing-arg 10)))
+           ('forward-delete-arg
+            (setq thing-arg (conn--thread -->
+                                (log thing-arg 10)
+                              (floor -->)
+                              (expt 10 -->)
+                              (mod thing-arg -->))))
            ('negative-argument
             (setq thing-sign (not thing-sign)))
            ((or 'conn-expand 'conn-contract)
@@ -2318,10 +2331,14 @@ state."
 (defvar conn-dispatch-all-things-collector-alist
   '((t . conn--dispatch-all-things-1)))
 
-(defvar conn-dispatch-command-maps
+(defvar-keymap conn-dispatch-command-map
+  "C-h" 'help
+  "." 'reset-arg
+  "C-d" 'forward-delete-arg
+  "C-w" 'backward-delete-arg)
+
+(defvar conn-dispatch-action-maps
   (list (define-keymap
-          "C-h" 'help
-          "." 'reset-arg
           "[" 'conn-dispatch-kill-append
           "a" 'conn-dispatch-copy-append
           "]" 'conn-dispatch-kill-prepend
@@ -2338,7 +2355,7 @@ state."
           "g" 'conn-dispatch-goto
           "z" 'conn-dispatch-jump)))
 
-(defvar conn-dispatch-override-maps
+(defvar conn-dispatch-thing-override-maps
   (list (define-keymap
           "l" 'forward-line
           "u" 'forward-symbol
@@ -2856,7 +2873,7 @@ to be performed followed by a THING to perform it on.  If
 no ACTION is selected the default ACTION is to go to the THING.
 
 Actions and things are selected via keybindings.  Actions are
-bound in the keymaps in `conn-dispatch-command-maps which are
+bound in the keymaps in `conn-dispatch-action-maps' which are
 active during prompting.  Things are associated with movement
 commands and pressing the binding for a movement command selects
 that commands THING (e.g. forward-sexp will select sexp as the
@@ -2869,10 +2886,11 @@ The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive
    (let ((keymap (make-composed-keymap
-                  (append conn-dispatch-override-maps
-                          conn-dispatch-command-maps)))
+                  (append (list conn-dispatch-command-map)
+                          conn-dispatch-thing-override-maps
+                          conn-dispatch-action-maps)))
          (prompt (substitute-command-keys
-                  (concat "\\<conn-read-thing-command-map>Thing (arg: "
+                  (concat "\\<conn-dispatch-command-map>Thing (arg: "
                           (propertize "%s" 'face 'transient-value)
                           ", \\[reset-arg] reset arg; "
                           "\\[help] commands): %s")))
@@ -2908,6 +2926,14 @@ seconds."
               ('digit-argument
                (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
                  (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+              ('backward-delete-arg
+               (setq thing-arg (floor thing-arg 10)))
+              ('forward-delete-arg
+               (setq thing-arg (conn--thread -->
+                                   (log thing-arg 10)
+                                 (floor -->)
+                                 (expt 10 -->)
+                                 (mod thing-arg -->))))
               ('reset-arg
                (setq thing-arg nil))
               ('negative-argument
@@ -2940,7 +2966,7 @@ seconds."
                       (or action (conn--dispatch-default-action cmd))
                       (* (if thing-sign -1 1) (or thing-arg 1))
                       current-prefix-arg)))
-              ((guard (where-is-internal cmd conn-dispatch-command-maps t))
+              ((guard (where-is-internal cmd conn-dispatch-action-maps t))
                (setq action (unless (eq cmd action) cmd)))
               (_
                (setq invalid t)))
@@ -5298,6 +5324,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
+  "C-<backspace>" 'conn-wincontrol-digit-argument-reset
+  "M-<backspace>" 'conn-wincontrol-digit-argument-reset
+  "M-DEL" 'conn-wincontrol-digit-argument-reset
+  "C-w" 'conn-wincontrol-backward-delete-arg
+  "C-d" 'conn-wincontrol-forward-delete-arg
   "C-0" 'delete-window
   "C-1" 'delete-other-windows
   "C-2" 'split-window-below
@@ -5498,6 +5529,20 @@ When called interactively N is `last-command-event'."
   (interactive)
   (setq conn--wincontrol-arg nil)
   (setq conn--wincontrol-arg-sign 1))
+
+(defun conn-wincontrol-backward-delete-arg ()
+  "Delete least significant digit of prefix arg."
+  (interactive)
+  (setq conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
+
+(defun conn-wincontrol-forward-delete-arg ()
+  "Delete most significant digit of prefix arg."
+  (interactive)
+  (setq conn--wincontrol-arg (conn--thread -->
+                                 (log conn--wincontrol-arg 10)
+                               (floor -->)
+                               (expt 10 -->)
+                               (mod conn--wincontrol-arg -->))))
 
 (defun conn-wincontrol-quit ()
   "Exit `conn-wincontrol-mode'."
@@ -6552,24 +6597,24 @@ apply to each contiguous component of the region."
     (conn--kapply-region-infix)
     (conn--kapply-macro-infix)]]
   [[:description
+    "Apply Kmacro On:"
+    (conn--kapply-things-suffix)
+    (conn--kapply-things-in-region-suffix)
+    (conn--kapply-dot-suffix)
+    (conn--kapply-regexp-region-suffix)
+    (conn--kapply-string-region-suffix)]
+   [:description
+    ""
+    (conn--kapply-text-property-suffix)
+    (conn--kapply-iterate-suffix)
+    (conn--kapply-regexp-suffix)
+    (conn--kapply-string-suffix)]
+   [:description
     "Save State:"
     (conn--kapply-merge-undo-infix)
     (conn--kapply-save-windows-infix)
     (conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]
-   [:description
-    "Apply Kmacro On:"
-    (conn--kapply-things-suffix)
-    (conn--kapply-things-in-region-suffix)
-    (conn--kapply-text-property-suffix)
-    (conn--kapply-iterate-suffix)]
-   [:description
-    ""
-    (conn--kapply-dot-suffix)
-    (conn--kapply-regexp-suffix)
-    (conn--kapply-string-suffix)
-    (conn--kapply-regexp-region-suffix)
-    (conn--kapply-string-region-suffix)]]
+    (conn--kapply-save-excursion-infix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-kapply-prefix))
@@ -6610,15 +6655,15 @@ apply to each contiguous component of the region."
     (conn--kapply-matches-infix)
     (conn--kapply-macro-infix)]]
   [[:description
+    "Apply Kmacro On:"
+    (conn--kapply-isearch-suffix)
+    (conn--kapply-dot-suffix)]
+   [:description
     "Save State:"
     (conn--kapply-merge-undo-infix)
     (conn--kapply-save-windows-infix)
     (conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]
-   [:description
-    "Apply Kmacro On:"
-    (conn--kapply-isearch-suffix)
-    (conn--kapply-dot-suffix)]]
+    (conn--kapply-save-excursion-infix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-isearch-kapply-prefix))
@@ -6656,14 +6701,14 @@ apply to each contiguous component of the region."
    [(conn--kapply-region-infix)
     (conn--kapply-macro-infix)]]
   [[:description
+    "Apply Kmacro On:"
+    (conn--kapply-regions-suffix)]
+   [:description
     "Save State:"
     (conn--kapply-merge-undo-infix)
     (conn--kapply-save-windows-infix)
     (conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]
-   [:description
-    "Apply Kmacro On:"
-    (conn--kapply-regions-suffix)]]
+    (conn--kapply-save-excursion-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (kmacro-display last-kbd-macro t)
@@ -6866,6 +6911,11 @@ apply to each contiguous component of the region."
 
 
 ;;;; Keymaps
+
+(defvar-keymap conn-list-movement-repeat-map
+  :repeat t
+  ")" 'forward-list
+  "(" 'backward-list)
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
