@@ -407,6 +407,15 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
+(defmacro conn--with-advice (symbol how function &rest body)
+  (declare (indent 3))
+  (let ((fn (gensym "advice")))
+    `(let ((,fn ,function))
+       (advice-add ,symbol ,how ,fn)
+       (unwind-protect
+           ,(macroexp-progn body)
+         (advice-remove ,symbol ,fn)))))
+
 (defun conn-remapping-command (from-keys)
   `(menu-item
     ""
@@ -3380,12 +3389,18 @@ Interactively `region-beginning' and `region-end'."
               ((symbol-function 'use-region-p)
                (lambda () t))
               (common
-               (query-replace-read-args
-                (concat "Query replace"
-                        (if current-prefix-arg
-                            (if (eq current-prefix-arg '-) " backward" " word")
-                          ""))
-                nil)))
+               (conn--with-advice
+                   'minibuffer-lazy-highlight-setup :around
+                   (lambda (&rest args)
+                     (cl-letf (((symbol-function 'use-region-p)
+                                (lambda () t)))
+                       (apply args)))
+                 (query-replace-read-args
+                  (concat "Query replace"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  nil))))
      (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
@@ -3403,12 +3418,18 @@ Interactively `region-beginning' and `region-end'."
               ((symbol-function 'use-region-p)
                (lambda () t))
               (common
-               (query-replace-read-args
-                (concat "Query replace regexp"
-                        (if current-prefix-arg
-                            (if (eq current-prefix-arg '-) " backward" " word")
-                          ""))
-                t)))
+               (conn--with-advice
+                   'minibuffer-lazy-highlight-setup :around
+                   (lambda (&rest args)
+                     (cl-letf (((symbol-function 'use-region-p)
+                                (lambda () t)))
+                       (apply args)))
+                 (query-replace-read-args
+                  (concat "Query replace regexp"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  t))))
      (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
@@ -3422,17 +3443,21 @@ Interactively `region-beginning' and `region-end'."
               ((symbol-function 'replace--region-filter)
                (lambda (_bounds)
                  (lambda (b e) (and (<= beg b end) (<= beg e end)))))
-              ((symbol-function 'use-region-p)
-               (lambda () t))
               (common
                (minibuffer-with-setup-hook
                    'conn-yank-region-to-minibuffer
-                 (query-replace-read-args
-                  (concat "Query replace"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  nil))))
+                 (conn--with-advice
+                     'minibuffer-lazy-highlight-setup :around
+                     (lambda (&rest args)
+                       (cl-letf (((symbol-function 'use-region-p)
+                                  (lambda () t)))
+                         (apply args)))
+                   (query-replace-read-args
+                    (concat "Query replace"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    nil)))))
      (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
@@ -3445,17 +3470,21 @@ Interactively `region-beginning' and `region-end'."
                (lambda (_bounds)
                  (lambda (b e)
                    (and (<= beg b end) (<= beg e end)))))
-              ((symbol-function 'use-region-p)
-               (lambda () t))
               (common
                (minibuffer-with-setup-hook
                    'conn-yank-region-to-minibuffer
-                 (query-replace-read-args
-                  (concat "Query replace regexp"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  t))))
+                 (conn--with-advice
+                     'minibuffer-lazy-highlight-setup :around
+                     (lambda (&rest args)
+                       (cl-letf (((symbol-function 'use-region-p)
+                                  (lambda () t)))
+                         (apply args)))
+                   (query-replace-read-args
+                    (concat "Query replace regexp"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    t)))))
      (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
@@ -4422,7 +4451,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     "\\[enlarge-window-horizontally] "
     "\\[shrink-window-horizontally]: "
     "heighten shorten widen narrow; "
-    "\\[previous-buffer] \\[next-buffer] \\[conn-previous-window] \\[conn-next-window]"
+    "\\[previous-buffer] \\[next-buffer] "
+    "\\[conn-wincontrol-previous-window] \\[conn-wincontrol-next-window]"
     ": prev/next buffer/win"
     "\n"
     "\\[delete-window] \\[delete-other-windows]: delete win/other; "
@@ -4594,7 +4624,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "m" 'conn-wincontrol-maximize-vertically
   "n" 'shrink-window-horizontally
   "N" 'tab-bar-new-tab
-  "o" 'conn-next-window
+  "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-load
   "P" 'window-configuration-to-register
@@ -4604,7 +4634,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "s" 'shrink-window
   "S" 'conn-wincontrol-isearch-other-window
   "t" 'tab-switch
-  "u" 'conn-previous-window
+  "u" 'conn-wincontrol-previous-window
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
   "w" 'enlarge-window-horizontally
@@ -4823,11 +4853,11 @@ When called interactively N is `last-command-event'."
           (isearch-backward arg))
       (conn--wincontrol-setup t))))
 
-(defun conn-next-window ()
+(defun conn-wincontrol-next-window ()
   (interactive)
   (other-window 1))
 
-(defun conn-previous-window ()
+(defun conn-wincontrol-previous-window ()
   (interactive)
   (other-window -1))
 
