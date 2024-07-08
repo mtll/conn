@@ -536,6 +536,18 @@ If BUFFER is nil check `current-buffer'."
          ,@body)
      (conn--activate-input-method)))
 
+(defun conn-bounds-of-thing-cmd (cmd arg)
+  (let ((current-prefix-arg arg)
+        (conn-this-command-handler (or (conn-get-mark-handler cmd)
+                                       'conn-individual-thing-handler))
+        (conn-this-command-thing (get cmd :conn-command-thing))
+        (this-command cmd)
+        (conn-this-command-start (point-marker)))
+    (save-mark-and-excursion
+      (call-interactively cmd)
+      (funcall conn-this-command-handler conn-this-command-start)
+      (cons (region-beginning) (region-end)))))
+
 (defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
   "C-w" 'backward-delete-arg
@@ -583,7 +595,7 @@ If BUFFER is nil check `current-buffer'."
     ((let 'region (get cmd :conn-command-thing))
      (region-bounds))
     (_
-     (conn-bounds-of-things cmd arg))))
+     (conn-bounds-of-thing-cmd cmd arg))))
 
 (defvar-keymap conn--read-thing-mover-map
   "C-w" 'backward-delete-arg
@@ -689,13 +701,23 @@ If BUFFER is nil check `current-buffer'."
         (message nil)
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
 
-(defun conn--read-thing-regions (prompt &optional arg keymap)
+(defun conn--read-thing-region (prompt &optional arg keymap)
   (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover prompt arg keymap t)))
     (cons (get cmd :conn-command-thing)
           (conn--bounds-of-thing-command cmd arg))))
 
-(defun conn--regions-bounds (regions)
-  (cons (caar regions) (cdar (last regions))))
+(cl-defgeneric conn--things-in-region (thing beg end)
+  (save-excursion
+    (with-restriction beg end
+      (goto-char (point-min))
+      (forward-thing thing 1)
+      (cl-loop for bounds = (save-excursion
+                              (forward-thing thing -1)
+                              (bounds-of-thing-at-point thing))
+               while bounds collect bounds into regions
+               while (< (point) (point-max))
+               do (forward-thing thing 1)
+               finally (cl-return (nreverse regions))))))
 
 (defvar-keymap conn-read-thing-command-map
   "C-h" 'help)
@@ -1223,28 +1245,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (delete-overlay ov)))
   (setq conn--mark-cursor nil))
 
-(defun conn-bounds-of-things (cmd arg)
-  (let (regions)
-    (save-mark-and-excursion
-      (ignore-errors
-        (cl-loop with current-prefix-arg = nil
-                 with conn-this-command-handler = (or (conn-get-mark-handler cmd)
-                                                      'conn-individual-thing-handler)
-                 with conn-this-command-thing = (get cmd :conn-command-thing)
-                 for conn-this-command-start = (point-marker)
-                 repeat (prefix-numeric-value arg)
-                 do (progn
-                      (call-interactively cmd)
-                      (funcall conn-this-command-handler conn-this-command-start))
-                 while (and (/= (point) conn-this-command-start)
-                            (= (point) (save-excursion
-                                         (goto-char (mark t))
-                                         (call-interactively cmd)
-                                         (point))))
-                 do
-                 (push (cons (region-beginning) (region-end)) regions))))
-    (nreverse regions)))
-
 (defun conn-bounds-of-thing-region (thing arg)
   (condition-case _err
       (save-mark-and-excursion
@@ -1436,8 +1436,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'defun 'conn-sequential-thing-handler
- 'end-of-defun 'beginning-of-defun
- 'conn-forward-defun)
+ 'end-of-defun 'beginning-of-defun)
 
 (conn-register-thing 'char :default-action 'conn-dispatch-jump)
 
@@ -1542,30 +1541,9 @@ If any function returns a nil value then macro application it halted.")
       (cons (point) (mark t)))))
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty)
-  (let (regions)
-    (save-mark-and-excursion
-      (with-restriction beg end
-        (goto-char (point-min))
-        (cl-loop with current-prefix-arg = 1
-                 with conn-this-command-handler = (or (conn-get-mark-handler
-                                                       (or (get thing 'forward-op)
-                                                           (get thing 'end-op)))
-                                                      'conn-individual-thing-handler)
-                 with conn-this-command-thing = thing
-                 for conn-this-command-start = (point-marker)
-                 while (< (point) (point-max))
-                 do
-                 (forward-thing thing 1)
-                 (funcall conn-this-command-handler conn-this-command-start)
-                 while (and (/= (point) conn-this-command-start)
-                            (= (point) (save-excursion
-                                         (goto-char (region-beginning))
-                                         (forward-thing thing 1)
-                                         (point))))
-                 for reg = (cons (region-beginning) (region-end))
-                 unless (and skip-empty (conn-thing-empty-p thing reg))
-                 do (push reg regions))))
-    (conn--kapply-region-iterator (if reverse regions (nreverse regions)))))
+  (conn--thread -->
+      (conn--things-in-region thing (region-beginning) (region-end))
+    (conn--kapply-region-iterator (if reverse --> (nreverse -->)))))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
@@ -3150,9 +3128,7 @@ Interactively defaults to the current region."
      (append
       (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t)
       (list t))))
-  (pcase-let ((`(,beg . ,end) (thread-first
-                                (conn--bounds-of-thing-command thing-mover arg)
-                                (conn--regions-bounds))))
+  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
     (conn--narrow-ring-record beg end)
     (when (and pulse (not executing-kbd-macro))
       (pulse-momentary-highlight-region beg end 'region))))
@@ -3352,13 +3328,13 @@ Interactively `region-beginning' and `region-end'."
                       :regexp-function (or replace-regexp-function
                                            delimited-flag
                                            (and replace-char-fold
-	                                        (not regexp-flag)
-	                                        #'char-fold-to-regexp))
+                                                (not regexp-flag)
+                                                #'char-fold-to-regexp))
                       :transform (lambda (string)
                                    (let* ((split (query-replace--split-string string))
                                           (from-string (if (consp split) (car split) split)))
                                      (when (and case-fold-search search-upper-case)
-	                               (setq isearch-case-fold-search
+                                       (setq isearch-case-fold-search
                                              (isearch-no-upper-case-p from-string regexp-flag)))
                                      from-string)))
                    (query-replace-read-from prompt regexp-flag)))
@@ -3374,9 +3350,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-                (`(,beg . ,end) (thread-first
-                                  (conn--bounds-of-thing-command thing-mover arg)
-                                  (conn--regions-bounds)))
+                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (conn--replace-read-args
                   (concat "Query replace"
@@ -3385,9 +3359,7 @@ Interactively `region-beginning' and `region-end'."
                             ""))
                   nil beg end)))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (thread-first
-                                 (conn--bounds-of-thing-command thing-mover arg)
-                                 (conn--regions-bounds))))
+  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string t nil delimited nil nil beg end backward)))))
@@ -3396,9 +3368,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-                (`(,beg . ,end) (thread-first
-                                  (conn--bounds-of-thing-command thing-mover arg)
-                                  (conn--regions-bounds)))
+                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (conn--replace-read-args
                   (concat "Query replace"
@@ -3407,9 +3377,7 @@ Interactively `region-beginning' and `region-end'."
                             ""))
                   t beg end)))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (thread-first
-                                 (conn--bounds-of-thing-command thing-mover arg)
-                                 (conn--regions-bounds))))
+  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string t t delimited nil nil beg end backward)))))
@@ -3418,9 +3386,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-                (`(,beg . ,end) (thread-first
-                                  (conn--bounds-of-thing-command thing-mover arg)
-                                  (conn--regions-bounds)))
+                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
                      'conn-yank-region-to-minibuffer
@@ -3437,9 +3403,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-                (`(,beg . ,end) (thread-first
-                                  (conn--bounds-of-thing-command thing-mover arg)
-                                  (conn--regions-bounds)))
+                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
                      'conn-yank-region-to-minibuffer
@@ -3900,9 +3864,7 @@ interactively."
    (append (conn--read-thing-mover "Thing Mover")
            (when current-prefix-arg
              (list (register-read-with-preview "Register: ")))))
-  (pcase-let ((`(,beg . ,end) (thread-first
-                                (conn--bounds-of-thing-command thing-mover arg)
-                                (conn--regions-bounds))))
+  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
     (conn-copy-region beg end register)
     (unless executing-kbd-macro
       (pulse-momentary-highlight-region beg end))))
@@ -3912,9 +3874,7 @@ interactively."
   (interactive
    (append (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t)
            (list t)))
-  (pcase-let ((`(,beg . ,end) (thread-first
-                                (conn--bounds-of-thing-command thing-mover arg)
-                                (conn--regions-bounds))))
+  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
     (narrow-to-region beg end)
     (when record (conn--narrow-ring-record beg end))
     (when (called-interactively-p 'interactive)
@@ -3927,9 +3887,7 @@ associated with that command (see `conn-register-thing')."
   (interactive
    (append (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t)
            (list t)))
-  (pcase-let ((`(,beg . ,end) (thread-first
-                                (conn--bounds-of-thing-command thing-mover arg)
-                                (conn--regions-bounds))))
+  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed indirect"))))
@@ -5299,8 +5257,7 @@ before each iteration."
   :description "Regexp in Region"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (conn--regions-bounds
-                                    (cdr (conn--read-thing-regions "Define Region"))))
+      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (regexp (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer 'regexp-quote))
@@ -5339,8 +5296,7 @@ before each iteration."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (conn--regions-bounds
-                                    (cdr (conn--read-thing-regions "Define Region"))))
+      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (string (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer))
@@ -5378,8 +5334,7 @@ before each iteration."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (conn--regions-bounds
-                                    (cdr (conn--read-thing-regions "Define Region"))))
+      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (regexp (conn--read-from-with-preview
                             "Regexp" t nil (cons beg end)))
                    (regions))
@@ -5418,8 +5373,7 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (conn--regions-bounds
-                                    (cdr (conn--read-thing-regions "Define Region"))))
+      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (string (conn--read-from-with-preview
                             "String" nil nil (cons beg end)))
                    (regions))
@@ -5456,7 +5410,7 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,thing . ,regions) (conn--read-thing-regions "Things")))
+  (pcase-let ((`(,thing . ,regions) (conn--read-thing-region "Things")))
     (deactivate-mark)
     (conn--thread -->
       (if (member "skip" args)
@@ -5492,11 +5446,9 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (conn--kapply-thing-iterator (conn--read-thing "Things")
-                                   (region-beginning)
-                                   (region-end)
-                                   (member "reverse" args)
-                                   (member "skip" args))
+      (conn--kapply-thing-iterator
+       (conn--read-thing "Thing") (region-beginning) (region-end)
+       (member "reverse" args) (member "skip" args))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
