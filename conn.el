@@ -1043,11 +1043,11 @@ If BUFFER is nil check `current-buffer'."
     (fset mark-command
           (lambda ()
             (interactive)
-            (pcase (bounds-of-thing-at-point ',thing)
+            (pcase (bounds-of-thing-at-point thing)
               (`(,beg . ,end)
                (goto-char beg)
                (conn--push-ephemeral-mark end))
-              (_ (user-error "Point not in %s" ',thing)))))
+              (_ (user-error "Point not in %s" thing)))))
     (put mark-command :conn-command-thing thing)
     (if (plist-get rest :modes)
         (dolist (mode (put thing :conn-thing-modes
@@ -3418,13 +3418,15 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
    (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (beg (caar regions))
+          (end (cdar regions))
           (common
            (conn--replace-read-args
             (concat "Query replace"
                     (if current-prefix-arg
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
-            nil (caar regions) (cdar regions))))
+            nil beg end)))
      (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
@@ -3433,13 +3435,15 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
    (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (beg (caar regions))
+          (end (cdar regions))
           (common
            (conn--replace-read-args
             (concat "Query replace regexp"
                     (if current-prefix-arg
                         (if (eq current-prefix-arg '-) " backward" " word")
                       ""))
-            t (caar regions) (cdar regions))))
+            t beg end)))
      (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
@@ -3448,6 +3452,8 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
    (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (beg (caar regions))
+          (end (cdar regions))
           (common
            (minibuffer-with-setup-hook
                'conn-yank-region-to-minibuffer
@@ -3456,13 +3462,15 @@ Interactively `region-beginning' and `region-end'."
                       (if current-prefix-arg
                           (if (eq current-prefix-arg '-) " backward" " word")
                         ""))
-              nil (caar regions) (cdar regions)))))
+              nil beg end))))
      (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
 (defun conn-regexp-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
    (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (beg (caar regions))
+          (end (cdar regions))
           (common
            (minibuffer-with-setup-hook
                'conn-yank-region-to-minibuffer
@@ -3471,7 +3479,7 @@ Interactively `region-beginning' and `region-end'."
                       (if current-prefix-arg
                           (if (eq current-prefix-arg '-) " backward" " word")
                         ""))
-              t (caar regions) (cdar regions)))))
+              t beg end))))
      (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
