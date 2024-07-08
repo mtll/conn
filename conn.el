@@ -3271,6 +3271,8 @@ Interactively `region-beginning' and `region-end'."
   "M-<backspace>" 'reset-arg
   "M-DEL" 'reset-arg
   "." 'reset-arg
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
   "r" 'conn-define-region-in-recursive-edit)
 
 (defun conn-transpose-regions (mover arg)
@@ -3431,8 +3433,6 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
    (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
-              (beg (caar regions))
-              (end (cdar regions))
               (common
                (conn--replace-read-args
                 (concat "Query replace regexp"
