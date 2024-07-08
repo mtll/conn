@@ -3432,14 +3432,14 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-regexp-replace-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
-              (common
-               (conn--replace-read-args
-                (concat "Query replace regexp"
-                        (if current-prefix-arg
-                            (if (eq current-prefix-arg '-) " backward" " word")
-                          ""))
-                t (caar regions) (cdar regions))))
+   (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (common
+           (conn--replace-read-args
+            (concat "Query replace regexp"
+                    (if current-prefix-arg
+                        (if (eq current-prefix-arg '-) " backward" " word")
+                      ""))
+            t (caar regions) (cdar regions))))
      (append (list beg end) common)))
   (save-window-excursion
     (save-excursion
@@ -3447,16 +3447,16 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-replace-region-in-thing (beg end from-string to-string &optional delimited backward)
   (interactive
-   (cl-letf* ((regions (cdr (conn--read-thing-region "Define Region")))
-              (common
-               (minibuffer-with-setup-hook
-                   'conn-yank-region-to-minibuffer
-                 (conn--replace-read-args
-                  (concat "Query replace"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  nil (caar regions) (cdar regions)))))
+   (let* ((regions (cdr (conn--read-thing-region "Define Region")))
+          (common
+           (minibuffer-with-setup-hook
+               'conn-yank-region-to-minibuffer
+             (conn--replace-read-args
+              (concat "Query replace"
+                      (if current-prefix-arg
+                          (if (eq current-prefix-arg '-) " backward" " word")
+                        ""))
+              nil (caar regions) (cdar regions)))))
      (append (list beg end) common)))
   (conn-replace-in-thing beg end from-string to-string delimited backward))
 
@@ -3508,14 +3508,6 @@ Interactively `region-beginning' and `region-end'."
   (interactive "P")
   (let ((current-prefix-arg (not arg)))
     (call-interactively 'shell-command-on-region)))
-
-(defun conn-yank-lines-as-rectangle ()
-  "Yank the lines of the previous kill as if they were a rectangle."
-  (interactive)
-  (rectangle--insert-for-yank
-   (with-temp-buffer
-     (yank)
-     (string-lines (buffer-string)))))
 
 (defun conn-yank-replace-rectangle ()
   (interactive)
@@ -3658,26 +3650,6 @@ uninstersting marks."
                         (buffer-substring-no-properties beg end))))
             (_ (user-error "No region in buffer")))))
 
-(defun conn-query-replace-region ()
-  "Run `query-replace' with the region as initial contents."
-  (interactive)
-  (save-mark-and-excursion
-    (unless (eql (point) (region-beginning))
-      (conn-exchange-mark-command))
-    (minibuffer-with-setup-hook 'conn-yank-region-to-minibuffer
-      (call-interactively #'query-replace))))
-
-(defun conn-query-replace-regexp-region ()
-  "Run `query-replace-regexp' with the region as initial contents.
-Also ensure point is at start of region beforehand."
-  (interactive)
-  (save-mark-and-excursion
-    (unless (eql (point) (region-beginning))
-      (conn-exchange-mark-command))
-    (minibuffer-with-setup-hook
-        (apply-partially 'conn-yank-region-to-minibuffer 'regexp-quote)
-      (call-interactively #'query-replace-regexp))))
-
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position.
 Pulses line that was the first visible line before scrolling."
@@ -3814,12 +3786,6 @@ When called interactively reads STRING with timeout
 (conn-set-command-handler 'conn--goto-string-handler
                           'conn-forward-char
                           'conn-backward-char)
-
-(defun conn-pop-state ()
-  "Transition to the previous state."
-  (interactive)
-  (when conn-previous-state
-    (funcall conn-previous-state)))
 
 (defun conn--apply-region-transform (transform-func)
   "Apply TRANSFORM-FUNC to region contents.
@@ -6091,7 +6057,6 @@ apply to each contiguous component of the region."
   "u" 'conn-regexp-replace-region-in-thing
   "V" 'vc-region-history
   "y" 'yank-rectangle
-  "Y" 'conn-yank-lines-as-rectangle
   "j" 'join-line)
 
 (defvar-keymap conn-window-resize-map
@@ -6647,7 +6612,8 @@ determine if `conn-local-mode' should be enabled."
   (defun conn--edebug-toggle-emacs-state ()
     (if edebug-mode
         (conn-emacs-state)
-      (conn-pop-state)))
+      (when conn-previous-state
+        (funcall conn-previous-state))))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
 (with-eval-after-load 'outline
