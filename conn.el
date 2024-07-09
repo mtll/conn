@@ -592,7 +592,7 @@ If BUFFER is nil check `current-buffer'."
 (cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-expand)) arg)
   (conn--bounds-of-expansion 'conn-expand arg))
 
-(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'recursive-edit)) arg)
+(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'recursive-edit)) _arg)
   (let (buf)
     (save-mark-and-excursion
       (message "Defining region in recursive edit")
@@ -1547,7 +1547,7 @@ If any function returns a nil value then macro application it halted.")
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty)
   (conn--thread -->
-      (conn--things-in-region thing (region-beginning) (region-end))
+      (conn--things-in-region thing beg end)
     (conn--kapply-region-iterator (if reverse --> (nreverse -->)))))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
@@ -4524,7 +4524,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O" 'tear-off-window
   "p" 'conn-register-load
   "P" 'window-configuration-to-register
-  "q" 'conn-wincontrol-quit
+  "x" 'conn-wincontrol-quit
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "s" 'shrink-window
@@ -4534,7 +4534,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
   "w" 'enlarge-window-horizontally
-  "x" 'conn-wincontrol-transpose-window
+  "q" 'conn-wincontrol-transpose-window
   "y" 'conn-wincontrol-yank-window
   "z" 'conn-wincontrol-zoom-out
   "Z" 'conn-wincontrol-zoom-in)
