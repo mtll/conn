@@ -536,7 +536,26 @@ If BUFFER is nil check `current-buffer'."
          ,@body)
      (conn--activate-input-method)))
 
-(defun conn-bounds-of-thing-cmd (cmd arg)
+(defvar-keymap conn-read-thing-region-command-map
+  "C-h" 'help
+  "C-w" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "C-<backspace>" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "M-DEL" 'reset-arg
+  "t" conn-mark-thing-map
+  "." 'reset-arg
+  "r" 'conn-define-region-in-recursive-edit
+  "v" 'region)
+
+(defvar-keymap conn-read-expand-region-map
+  :parent conn-expand-repeat-map
+  "v" 'conn-toggle-mark-command
+  "r" 'exit-recursive-edit
+  "C-g" 'abort-recursive-edit
+  "<t>" 'ignore)
+
+(cl-defgeneric conn--bounds-of-thing-command (cmd arg)
   (let ((current-prefix-arg arg)
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
                                        'conn-individual-thing-handler))
@@ -548,54 +567,40 @@ If BUFFER is nil check `current-buffer'."
       (funcall conn-this-command-handler conn-this-command-start)
       (cons (region-beginning) (region-end)))))
 
-(defvar-keymap conn-read-thing-region-command-map
-  "C-h" 'help
-  "C-w" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
-  "C-<backspace>" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "M-DEL" 'reset-arg
-  "t" conn-mark-thing-map
-  "." 'reset-arg
-  "r" 'conn-define-region-in-recursive-edit)
+(defun conn--bounds-of-expansion (cmd arg)
+  (save-mark-and-excursion
+    (let ((current-prefix-arg arg))
+      (call-interactively cmd)
+      (let ((exit (set-transient-map
+                   conn-read-expand-region-map (lambda () t) nil
+                   (substitute-command-keys
+                    (concat "\\<conn-read-expand-region-map>"
+                            "Defining region. Press "
+                            "\\[exit-recursive-edit] to finish, "
+                            "\\[abort-recursive-edit] to abort.")))))
+        (unwind-protect
+            (recursive-edit)
+          (funcall exit)))
+      (region-bounds))))
 
-(defvar-keymap conn-read-expand-region-map
-  :parent conn-expand-repeat-map
-  "v" 'conn-toggle-mark-command
-  "r" 'exit-recursive-edit
-  "C-g" 'abort-recursive-edit
-  "<t>" 'ignore)
+(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'region)) _arg)
+  (region-bounds))
 
-(defun conn--bounds-of-thing-command (cmd arg)
-  (pcase cmd
-    ((or 'conn-expand 'conn-contract)
-     (save-mark-and-excursion
-       (let ((current-prefix-arg arg))
-         (call-interactively cmd)
-         (let ((exit (set-transient-map
-                      conn-read-expand-region-map (lambda () t) nil
-                      (substitute-command-keys
-                       (concat "\\<conn-read-expand-region-map>"
-                               "Defining region. Press "
-                               "\\[exit-recursive-edit] to finish, "
-                               "\\[abort-recursive-edit] to abort.")))))
-           (unwind-protect
-               (recursive-edit)
-             (funcall exit)))
-         (region-bounds))))
-    ('recursive-edit
-     (let (buf)
-       (save-mark-and-excursion
-         (message "Defining region in recursive edit")
-         (with-current-buffer (current-buffer)
-           (recursive-edit)
-           (setq buf (current-buffer))))
-       (set-buffer buf)
-       (region-bounds)))
-    ((let 'region (get cmd :conn-command-thing))
-     (region-bounds))
-    (_
-     (conn-bounds-of-thing-cmd cmd arg))))
+(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-contract)) arg)
+  (conn--bounds-of-expansion 'conn-contract arg))
+
+(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-expand)) arg)
+  (conn--bounds-of-expansion 'conn-expand arg))
+
+(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'recursive-edit)) arg)
+  (let (buf)
+    (save-mark-and-excursion
+      (message "Defining region in recursive edit")
+      (with-current-buffer (current-buffer)
+        (recursive-edit)
+        (setq buf (current-buffer))))
+    (set-buffer buf)
+    (region-bounds)))
 
 (defvar-keymap conn--read-thing-mover-map
   "C-w" 'backward-delete-arg
