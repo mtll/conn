@@ -581,16 +581,17 @@ If BUFFER is nil check `current-buffer'."
         (unwind-protect
             (recursive-edit)
           (funcall exit)))
-      (region-bounds))))
-
-(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'region)) _arg)
-  (region-bounds))
+      (cons (region-beginning) (region-end)))))
 
 (cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-contract)) arg)
   (conn--bounds-of-expansion 'conn-contract arg))
 
 (cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-expand)) arg)
   (conn--bounds-of-expansion 'conn-expand arg))
+
+(cl-defmethod conn--bounds-of-thing-command
+  ((_cmd (eql 'conn-toggle-mark-command)) _arg)
+  (cons (region-beginning) (region-end)))
 
 (cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'recursive-edit)) _arg)
   (let (buf)
@@ -600,7 +601,7 @@ If BUFFER is nil check `current-buffer'."
         (recursive-edit)
         (setq buf (current-buffer))))
     (set-buffer buf)
-    (region-bounds)))
+    (cons (region-beginning) (region-end))))
 
 (defvar-keymap conn--read-thing-mover-map
   "C-w" 'backward-delete-arg
@@ -722,7 +723,10 @@ If BUFFER is nil check `current-buffer'."
                while bounds collect bounds into regions
                while (< (point) (point-max))
                do (forward-thing thing 1)
-               finally (cl-return (nreverse regions))))))
+               finally (cl-return regions)))))
+
+(cl-defmethod conn--things-in-region ((_thing (eql 'region)) _beg _end)
+  (region-bounds))
 
 (defvar-keymap conn-read-thing-command-map
   "C-h" 'help)
@@ -1545,10 +1549,19 @@ If any function returns a nil value then macro application it halted.")
     (unless (eq state :finalize)
       (cons (point) (mark t)))))
 
-(defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty)
+(defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
   (conn--thread -->
       (conn--things-in-region thing beg end)
-    (conn--kapply-region-iterator (if reverse --> (nreverse -->)))))
+    (if skip-empty
+        (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
+      -->)
+    (if (or (null nth) (= 1 nth))
+        -->
+      (cl-loop with stack = -->
+               while stack
+               collect (car stack)
+               do (cl-loop repeat nth do (pop stack))))
+    (conn--kapply-region-iterator (if reverse (nreverse -->) -->))))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
@@ -5415,13 +5428,12 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,thing . ,regions) (conn--read-thing-region "Things")))
-    (deactivate-mark)
+  (pcase-let ((`(,thing ,beg . ,end) (conn--read-thing-region "Things")))
     (conn--thread -->
+        (conn--things-in-region thing beg end)
       (if (member "skip" args)
-          (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
-                      regions)
-        regions)
+          (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
+        -->)
       (conn--kapply-region-iterator --> (member "reverse" args))
       (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
       (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
@@ -5451,9 +5463,11 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (conn--kapply-thing-iterator
-       (conn--read-thing "Thing") (region-beginning) (region-end)
-       (member "reverse" args) (member "skip" args))
+      (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing")))
+        (conn--kapply-thing-iterator
+         (get cmd :conn-command-thing)
+         (region-beginning) (region-end)
+         (member "reverse" args) (member "skip" args) arg))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
