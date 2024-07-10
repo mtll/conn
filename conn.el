@@ -3371,7 +3371,7 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (conn--replace-read-args
@@ -3389,7 +3389,7 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (conn--replace-read-args
@@ -3407,7 +3407,7 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-replace-region-in-thing (thing-mover arg from-string to-string &optional delimited backward)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
@@ -3424,7 +3424,7 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-regexp-replace-region-in-thing (thing-mover arg from-string to-string &optional delimited backward)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
@@ -3436,7 +3436,7 @@ Interactively `region-beginning' and `region-end'."
                               ""))
                     t beg end))))
      (append (list thing-mover arg) common)))
-  (conn-replace-in-thing thing-mover arg from-string to-string delimited backward))
+  (conn-regexp-replace-in-thing thing-mover arg from-string to-string delimited backward))
 
 (defun conn-open-line (arg)
   (interactive "p")
@@ -4356,7 +4356,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-quit]: quit; "
+    "\\[conn-wincontrol-exit]: exit; "
     "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
     "\n"
     "\\[enlarge-window] "
@@ -4383,7 +4383,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-quit]: quit; "
+    "\\[conn-wincontrol-exit]: exit; "
     "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
     "\\[quit-window]: quit"
     "\n"
@@ -4410,7 +4410,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-quit]: quit; "
+    "\\[conn-wincontrol-exit]: exit; "
     "\\[conn-tab-to-register]: store"
     "\n"
     "\\[tab-bar-move-window-to-tab]: win to new tab; "
@@ -4428,7 +4428,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-quit]: quit"
+    "\\[conn-wincontrol-exit]: exit"
     "\n"
     "\\[other-frame]: other; "
     "\\[clone-frame]: clone; "
@@ -4449,7 +4449,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (propertize "%s" 'face 'transient-value) "; "
     "\\[conn-wincontrol-digit-argument-reset]: reset; "
     "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-quit]: quit; "
+    "\\[conn-wincontrol-exit]: exit; "
     "\\[conn-wincontrol-scroll-up] "
     "\\[conn-wincontrol-scroll-down]: "
     "scroll")))
@@ -4512,7 +4512,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   "," 'conn-wincontrol-maximize-horizontally
-  ";" 'conn-wincontrol-quit-to-initial-win
+  ";" 'conn-wincontrol-exit-to-initial-win
   "b" 'switch-to-buffer
   "C" 'tab-bar-duplicate-tab
   "c" 'conn-wincontrol-mru-window
@@ -4541,7 +4541,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O" 'tear-off-window
   "p" 'conn-register-load
   "P" 'window-configuration-to-register
-  "x" 'conn-wincontrol-quit
+  "x" 'conn-wincontrol-exit
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "s" 'shrink-window
@@ -4674,7 +4674,7 @@ When called interactively N is `last-command-event'."
                                (expt 10 -->)
                                (mod conn--wincontrol-arg -->))))
 
-(defun conn-wincontrol-quit ()
+(defun conn-wincontrol-exit ()
   "Exit `conn-wincontrol-mode'."
   (interactive)
   (when conn-wincontrol-mode
@@ -4688,7 +4688,7 @@ When called interactively N is `last-command-event'."
     (when conn--wincontrol-initial-winconf
       (set-window-configuration conn--wincontrol-initial-winconf))))
 
-(defun conn-wincontrol-quit-to-initial-win ()
+(defun conn-wincontrol-exit-to-initial-win ()
   "Exit `conn-wincontrol-mode' and select initial window."
   (interactive)
   (when conn-wincontrol-mode
