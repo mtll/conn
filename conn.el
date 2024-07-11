@@ -963,14 +963,16 @@ If BUFFER is nil check `current-buffer'."
 (cl-defgeneric conn--things-in-region (thing beg end)
   (save-excursion
     (with-restriction beg end
-      (goto-char (point-min))
+      (goto-char beg)
       (forward-thing thing 1)
       (cl-loop for bounds = (save-excursion
                               (forward-thing thing -1)
                               (bounds-of-thing-at-point thing))
                while bounds collect bounds into regions
-               while (< (point) (point-max))
-               do (forward-thing thing 1)
+               while (and (< (point) (point-max))
+                          (ignore-errors
+                            (forward-thing thing 1)
+                            t))
                finally (cl-return regions)))))
 
 (cl-defmethod conn--things-in-region ((_thing (eql 'region)) _beg _end)
@@ -3300,11 +3302,14 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-transpose-regions (mover arg)
   (interactive
-   (conn--read-thing-mover "Mover" current-prefix-arg
-                           (define-keymap
-                             "i" 'conn-backward-line
-                             "k" 'forward-line)
-                           t))
+   (pcase-let ((`(,cmd ,arg)
+                (conn--read-thing-mover "Mover"
+                                        current-prefix-arg
+                                        (define-keymap
+                                          "i" 'conn-backward-line
+                                          "k" 'forward-line)
+                                        t)))
+     (list (apply-partially 'forward-thing (get cmd :conn-command-thing)) arg)))
   (pcase mover
     ('recursive-edit
      (let ((beg (region-beginning))
