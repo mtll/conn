@@ -781,9 +781,9 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;;; Read Things
 
-(defvar conn-bounds-of-command-alist nil)
+(defvar-local conn-bounds-of-command-alist nil)
 
-(defvar conn-bounds-of-things-in-region-alist nil)
+(defvar-local conn-bounds-of-things-in-region-alist nil)
 
 (defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
@@ -1280,22 +1280,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                     (point-min) (point-max)))
       (delete-overlay ov)))
   (setq conn--mark-cursor nil))
-
-(defun conn-bounds-of-thing-region (thing arg)
-  (condition-case _err
-      (save-mark-and-excursion
-        (pcase-let* ((cmd (or (get thing 'forward-op)
-                              (get thing 'beginning-op)))
-                     (current-prefix-arg arg)
-                     (conn-this-command-start (point-marker))
-                     (conn-this-command-handler (conn-get-mark-handler cmd))
-                     (conn-this-command-thing thing)
-                     (`(,beg . ,end) (bounds-of-thing-at-point thing)))
-          (goto-char beg)
-          (forward-thing thing arg)
-          (funcall conn-this-command-handler conn-this-command-start)
-          (cons (region-beginning) (if (< arg 0) end (region-end)))))
-    (error (bounds-of-thing-at-point thing))))
 
 (defun conn-bounds-of-inner-thing (thing bounds)
   (when-let ((inner-op (get thing :conn-inner-bounds-op)))
@@ -2217,7 +2201,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-region beg end)
@@ -2230,7 +2214,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
@@ -2244,7 +2228,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
@@ -2258,7 +2242,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-new str)
@@ -2270,7 +2254,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
@@ -2282,7 +2266,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
@@ -2294,7 +2278,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (pulse-momentary-highlight-region beg end)
          (copy-region-as-kill beg end)
@@ -2308,7 +2292,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (kill-region beg end)
          (conn--dispatch-fixup-whitespace))
@@ -2321,7 +2305,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (kill-region beg end)
          (conn--dispatch-fixup-whitespace))
@@ -2334,7 +2318,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+        (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
            (setq str (filter-buffer-substring beg end))))))
@@ -2350,7 +2334,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (push-mark nil t))
       (select-window window)
       (goto-char pt)
-      (pcase (conn-bounds-of-thing-region thing (prefix-numeric-value current-prefix-arg))
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (unless (region-active-p)
            (if (= (point) end)
@@ -2367,6 +2351,15 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (push-mark nil t))
       (select-window window)
       (goto-char pt))))
+
+(conn-define-dispatch-action (conn-dispatch-narrow-ring "Narrow Ring")
+    (window pt thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
+        (`(,beg . ,end)
+         (conn--narrow-ring-record beg end))))))
 
 (conn-define-dispatch-action (conn-dispatch-transpose "Transpose")
     (window pt thing)
@@ -2409,6 +2402,12 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
             (_ (user-error "No thing at point")))))
       (delete-region (region-beginning) (region-end))
       (insert str2))))
+
+(defun conn--dispatch-thing-bounds (thing arg)
+  (save-excursion
+    (forward-thing thing 1)
+    (forward-thing thing -1)
+    (cons (point) (progn (forward-thing thing arg) (point)))))
 
 (defun conn--dispatch-make-command-affixation (keymap)
   (lambda (command-names)
@@ -3160,9 +3159,9 @@ Expansions and contractions are provided by functions in
       (message "Narrow ring merged into %s region"
                (length conn-narrow-ring)))))
 
-(defun conn-region-to-narrow-ring (thing-mover arg &optional register pulse)
-  "Add the region from BEG to END to the narrow ring.
-Interactively defaults to the current region."
+(defun conn-thing-to-narrow-ring (thing-mover arg &optional register pulse)
+  "Add region defined by THING-MOVER called with ARG to narrow ring.
+With prefix arg REGISTER add to narrow ring register instead."
   (interactive
    (progn
      (deactivate-mark)
@@ -3172,6 +3171,20 @@ Interactively defaults to the current region."
               (register-read-with-preview "Register:"))
             t))))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+    (conn--narrow-ring-record beg end register)
+    (when (and pulse (not executing-kbd-macro))
+      (pulse-momentary-highlight-region beg end 'region))))
+
+(defun conn-region-to-narrow-ring (&optional register pulse)
+  "Add the region from BEG to END to the narrow ring.
+Interactively defaults to the current region.
+With prefix arg REGISTER add to narrow ring register instead."
+  (interactive
+   (list (when current-prefix-arg
+           (register-read-with-preview "Register:"))
+         t))
+  (let ((beg (region-beginning))
+        (end (region-end)))
     (conn--narrow-ring-record beg end register)
     (when (and pulse (not executing-kbd-macro))
       (pulse-momentary-highlight-region beg end 'region))))
@@ -6114,7 +6127,7 @@ apply to each contiguous component of the region."
   "?" 'tab-bar-history-forward)
 
 (defvar-keymap conn-edit-map
-  "f" 'conn-fill-prefix
+  "F" 'conn-fill-prefix
   "c" 'conn-region-case-prefix
   "TAB" 'indent-for-tab-command
   "o" 'conn-open-line-and-indent
@@ -6129,6 +6142,7 @@ apply to each contiguous component of the region."
   "t" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
+  "f" 'conn-thing-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
   "s" 'conn-surround-thing
   "d" 'duplicate-dwim
