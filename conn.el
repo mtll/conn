@@ -781,6 +781,10 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;;; Read Things
 
+(defvar conn-bounds-of-command-alist nil)
+
+(defvar conn-bounds-of-things-in-region-alist nil)
+
 (defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
   "C-w" 'backward-delete-arg
@@ -815,7 +819,13 @@ If BUFFER is nil check `current-buffer'."
 (defvar-keymap conn-read-thing-command-map
   "C-h" 'help)
 
-(cl-defgeneric conn--bounds-of-thing-command (cmd arg)
+(defun conn-bounds-of-command (cmd arg)
+  (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+               (ignore-errors (get cmd :conn-command-bounds))
+               (apply-partially 'conn--bounds-of-thing-command-default cmd))
+           arg))
+
+(defun conn--bounds-of-thing-command-default (cmd arg)
   (let ((current-prefix-arg arg)
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
                                        'conn-individual-thing-handler))
@@ -843,17 +853,18 @@ If BUFFER is nil check `current-buffer'."
           (funcall exit)))
       (cons (region-beginning) (region-end)))))
 
-(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-contract)) arg)
-  (conn--bounds-of-expansion 'conn-contract arg))
+(put 'conn-expand :conn-command-bounds
+     (apply-partially 'conn--bounds-of-expansion 'conn-expand))
 
-(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'conn-expand)) arg)
-  (conn--bounds-of-expansion 'conn-expand arg))
+(put 'conn-contract :conn-command-bounds
+     (apply-partially 'conn--bounds-of-expansion 'conn-contract))
 
-(cl-defmethod conn--bounds-of-thing-command
-  ((_cmd (eql 'conn-toggle-mark-command)) _arg)
+(defun conn--bounds-of-region (_arg)
   (cons (region-beginning) (region-end)))
 
-(cl-defmethod conn--bounds-of-thing-command ((_cmd (eql 'recursive-edit)) _arg)
+(put 'conn-toggle-mark-command :conn-command-bounds 'conn--bounds-of-region)
+
+(defun conn--bounds-recursive-edit (_arg)
   (let (buf)
     (save-mark-and-excursion
       (message "Defining region in recursive edit")
@@ -862,6 +873,34 @@ If BUFFER is nil check `current-buffer'."
         (setq buf (current-buffer))))
     (set-buffer buf)
     (cons (region-beginning) (region-end))))
+
+(put 'recursive-edit :conn-command-bounds 'conn--bounds-of-recursive-edit)
+
+(defun conn-bounds-of-things-in-region (thing beg end)
+  (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
+               (ignore-errors (get thing :conn-things-in-region))
+               'conn--things-in-region-default)
+           thing beg end))
+
+(defun conn--things-in-region-default (thing beg end)
+  (save-excursion
+    (with-restriction beg end
+      (goto-char beg)
+      (forward-thing thing 1)
+      (cl-loop for bounds = (save-excursion
+                              (forward-thing thing -1)
+                              (bounds-of-thing-at-point thing))
+               while bounds collect bounds into regions
+               while (and (< (point) (point-max))
+                          (ignore-errors
+                            (forward-thing thing 1)
+                            t))
+               finally (cl-return regions)))))
+
+(defun conn--region-bounds (_beg _end) 
+  (region-bounds))
+
+(put 'region :conn-things-in-region 'conn--region-bounds)
 
 (defun conn--read-thing-mover (prompt &optional arg keymap recursive-edit)
   (let ((keymap (thread-last
@@ -958,25 +997,7 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--read-thing-region (prompt &optional arg keymap)
   (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover prompt arg keymap t)))
     (cons (get cmd :conn-command-thing)
-          (conn--bounds-of-thing-command cmd arg))))
-
-(cl-defgeneric conn--things-in-region (thing beg end)
-  (save-excursion
-    (with-restriction beg end
-      (goto-char beg)
-      (forward-thing thing 1)
-      (cl-loop for bounds = (save-excursion
-                              (forward-thing thing -1)
-                              (bounds-of-thing-at-point thing))
-               while bounds collect bounds into regions
-               while (and (< (point) (point-max))
-                          (ignore-errors
-                            (forward-thing thing 1)
-                            t))
-               finally (cl-return regions)))))
-
-(cl-defmethod conn--things-in-region ((_thing (eql 'region)) _beg _end)
-  (region-bounds))
+          (conn-bounds-of-command cmd arg))))
 
 (defun conn--read-thing (prompt)
   (conn--with-state conn-state
@@ -1557,7 +1578,7 @@ If any function returns a nil value then macro application it halted.")
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
   (conn--thread -->
-      (conn--things-in-region thing beg end)
+      (conn-bounds-of-things-in-region thing beg end)
     (if skip-empty
         (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
       -->)
@@ -3032,7 +3053,7 @@ Expansions and contractions are provided by functions in
 (defun conn-surround-thing (mover arg)
   (interactive
    (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-  (let* ((regions (conn--bounds-of-thing-command mover arg))
+  (let* ((regions (conn-bounds-of-command mover arg))
          (thing (get mover :conn-command-thing))
          (beg (caar regions))
          (end (cdar (last regions))))
@@ -3051,14 +3072,11 @@ Expansions and contractions are provided by functions in
 
 ;;;; Narrow Ring
 
-(defvar conn-narrow-ring-max 16
-  "Maximum number of narrowings to keep in `conn-narrow-ring'.")
-
 (defvar-local conn-narrow-ring nil
   "Ring of recent narrowed regions.")
 
 (cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
-  (narrow-ring nil :read-only t))
+  (narrow-ring nil))
 
 (defun conn--make-narrow-register ()
   (%conn--make-narrow-register
@@ -3085,15 +3103,14 @@ Expansions and contractions are provided by functions in
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-narrow-register)))
 
-(defun conn--narrow-ring-record (beg end)
-  (unless (seq-find (pcase-lambda (`(,b . ,e))
-                      (and (= beg b) (= end e)))
-                    conn-narrow-ring)
-    (setq conn-narrow-ring
-          (take conn-narrow-ring-max
-                (cons (cons (conn--create-marker beg)
-                            (conn--create-marker end))
-                      conn-narrow-ring)))))
+(defun conn--narrow-ring-record (beg end &optional register)
+  (cl-pushnew (cons (conn--create-marker beg)
+                    (conn--create-marker end))
+              (if-let ((reg (get-register register))
+                       (_ (conn-narrow-register-p reg)))
+                  (slot-value reg 'narrow-ring)
+                conn-narrow-ring)
+              :test #'equal))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
@@ -3143,17 +3160,19 @@ Expansions and contractions are provided by functions in
       (message "Narrow ring merged into %s region"
                (length conn-narrow-ring)))))
 
-(defun conn-region-to-narrow-ring (thing-mover arg &optional pulse)
+(defun conn-region-to-narrow-ring (thing-mover arg &optional register pulse)
   "Add the region from BEG to END to the narrow ring.
 Interactively defaults to the current region."
   (interactive
    (progn
      (deactivate-mark)
      (append
-      (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t)
-      (list t))))
-  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
-    (conn--narrow-ring-record beg end)
+      (conn--read-thing-mover "Thing Mover" nil nil t)
+      (list (when current-prefix-arg
+              (register-read-with-preview "Register:"))
+            t))))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+    (conn--narrow-ring-record beg end register)
     (when (and pulse (not executing-kbd-macro))
       (pulse-momentary-highlight-region beg end 'region))))
 
@@ -3377,7 +3396,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
                 (common
                  (conn--replace-read-args
                   (concat "Query replace"
@@ -3386,7 +3405,7 @@ Interactively `region-beginning' and `region-end'."
                             ""))
                   nil beg end)))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string t nil delimited nil nil beg end backward)))))
@@ -3395,7 +3414,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
                 (common
                  (conn--replace-read-args
                   (concat "Query replace"
@@ -3404,7 +3423,7 @@ Interactively `region-beginning' and `region-end'."
                             ""))
                   t beg end)))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string t t delimited nil nil beg end backward)))))
@@ -3413,7 +3432,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
                      'conn-yank-region-to-minibuffer
@@ -3430,7 +3449,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
                      'conn-yank-region-to-minibuffer
@@ -3891,7 +3910,7 @@ interactively."
    (append (conn--read-thing-mover "Thing Mover")
            (when current-prefix-arg
              (list (register-read-with-preview "Register: ")))))
-  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (conn-copy-region beg end register)
     (unless executing-kbd-macro
       (pulse-momentary-highlight-region beg end))))
@@ -3901,7 +3920,7 @@ interactively."
   (interactive
    (append (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t)
            (list t)))
-  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (narrow-to-region beg end)
     (when record (conn--narrow-ring-record beg end))
     (when (called-interactively-p 'interactive)
@@ -3914,7 +3933,7 @@ associated with that command (see `conn-register-thing')."
   (interactive
    (append (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t)
            (list t)))
-  (pcase-let ((`(,beg . ,end) (conn--bounds-of-thing-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed indirect"))))
@@ -5439,7 +5458,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,thing ,beg . ,end) (conn--read-thing-region "Things")))
     (conn--thread -->
-        (conn--things-in-region thing beg end)
+        (conn-bounds-of-things-in-region thing beg end)
       (if (member "skip" args)
           (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
         -->)
@@ -5833,16 +5852,6 @@ apply to each contiguous component of the region."
    conn--narrow-ring-display
    [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
     ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
-    ("s" "Register Store" conn-narrow-ring-to-register :transient t)
-    ("l" "Register Load" conn-register-load :transient t)]
-   [("m" "Merge" conn-merge-narrow-ring :transient t)
-    ("w" "Widen"
-     (lambda ()
-       (interactive)
-       (widen)
-       (conn-recenter-on-region)))
-    ("c" "Clear" conn-clear-narrow-ring)
-    ("v" "Add Region" conn-region-to-narrow-ring)
     ("N" "In Indired Buffer"
      (lambda ()
        (interactive)
@@ -5856,7 +5865,17 @@ apply to each contiguous component of the region."
            (if (eq (window-buffer win) buf)
                (with-selected-window win
                  (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
-             (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))]
+             (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
+    ("s" "Register Store" conn-narrow-ring-to-register :transient t)
+    ("l" "Register Load" conn-register-load :transient t)]
+   [("m" "Merge" conn-merge-narrow-ring :transient t)
+    ("w" "Widen"
+     (lambda ()
+       (interactive)
+       (widen)
+       (conn-recenter-on-region)))
+    ("c" "Clear" conn-clear-narrow-ring)
+    ("v" "Add Region" conn-region-to-narrow-ring)]
    [("n" "Cycle Next" conn-cycle-narrowings :transient t)
     ("p" "Cycle Previous"
      (lambda (arg)
