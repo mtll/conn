@@ -619,7 +619,8 @@ If BUFFER is nil check `current-buffer'."
                                     (or end   (conn--end-of-region-or-restriction)))
              when (funcall predicate ov) collect ov)))
 
-;;;;; Labels
+
+;;;; Labels
 
 (defun conn--make-preview-overlay (pt length &optional thing)
   (let* ((eol (save-excursion
@@ -771,7 +772,8 @@ If BUFFER is nil check `current-buffer'."
                    (set-window-hscroll win hscroll)
                    (set-window-vscroll win vscroll)))))))
 
-;;;;; Read Things
+
+;;;; Read Things
 
 (defvar-local conn-bounds-of-command-alist nil)
 
@@ -1047,7 +1049,8 @@ If BUFFER is nil check `current-buffer'."
       (internal-pop-keymap conn-read-thing-command-map
                            'overriding-terminal-local-map))))
 
-;;;;; Key Remapping
+
+;;;; Key Remapping
 
 (defvar conn--remapped-keys nil)
 
@@ -3979,15 +3982,18 @@ associated with that command (see `conn-register-thing')."
                       conn--seperator-history nil t)))
   (set-register register-separator string))
 
+(defun conn-rectangle-mark ()
+  (interactive)
+  (if (region-active-p)
+      (rectangle-mark-mode 'toggle)
+    (activate-mark)
+    (rectangle-mark-mode)))
+
 (defun conn-toggle-mark-command (&optional arg)
   "Toggle `mark-active'.
 With a prefix ARG activate `rectangle-mark-mode'."
   (interactive "P")
-  (cond (arg
-         (if (region-active-p)
-             (rectangle-mark-mode 'toggle)
-           (activate-mark)
-           (rectangle-mark-mode)))
+  (cond (arg (conn-rectangle-mark))
         (mark-active (deactivate-mark))
         (t (activate-mark))))
 
@@ -6261,6 +6267,7 @@ apply to each contiguous component of the region."
   "P" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
+  "R" 'conn-rectangle-mark
   "s" (conn-remapping-command (key-parse "M-s"))
   "V" 'conn-narrow-to-region
   "v" 'conn-toggle-mark-command
