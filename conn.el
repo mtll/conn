@@ -419,14 +419,6 @@ Used to restore previous value when `conn-mode' is disabled.")
            ,(macroexp-progn body)
          (advice-remove ,symbol ,fn)))))
 
-(defun conn-remapping-command (from-keys)
-  `(menu-item
-    ""
-    nil
-    :filter ,(lambda (&rest _)
-               (conn--without-conn-maps
-                 (key-binding from-keys t)))))
-
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
   "Split STRING on CHAR, which can be escaped with backslash."
@@ -1054,6 +1046,25 @@ If BUFFER is nil check `current-buffer'."
       (message nil)
       (internal-pop-keymap conn-read-thing-command-map
                            'overriding-terminal-local-map))))
+
+;;;;; Key Remapping
+
+(defvar conn--remapped-keys nil)
+
+(defun conn--remapping-hook ()
+  (when conn--remapped-keys
+    (setq last-command-event (aref conn--remapped-keys
+                                   (1- (length conn--remapped-keys)))
+          conn--remapped-keys nil)))
+
+(defun conn-remapping-command (from-keys)
+  `(menu-item
+    ""
+    nil
+    :filter ,(lambda (&rest _)
+               (setq conn--remapped-keys from-keys)
+               (conn--without-conn-maps
+                 (key-binding from-keys t)))))
 
 
 ;;;; Advice
@@ -6166,11 +6177,27 @@ apply to each contiguous component of the region."
   "I" (conn-remapping-command conn-backward-paragraph-keys)
   "i" (conn-remapping-command conn-previous-line-keys)
   "J" 'conn-beginning-of-inner-line
-  "j" 'conn-backward-char
+  "j" `(menu-item
+        ""
+        nil
+        :filter ,(lambda (&rest _)
+                   (let ((binding (key-binding (key-parse "C-b") t)))
+                     (if (eq binding 'forward-char)
+                         'conn-backward-char
+                       (setq conn--remapped-keys (key-parse "C-b"))
+                       binding))))
   "K" (conn-remapping-command conn-forward-paragraph-keys)
   "k" (conn-remapping-command conn-next-line-keys)
   "L" 'conn-end-of-inner-line
-  "l" 'conn-forward-char
+  "l" `(menu-item
+        ""
+        nil
+        :filter ,(lambda (&rest _)
+                   (let ((binding (key-binding (key-parse "C-f") t)))
+                     (if (eq binding 'forward-char)
+                         'conn-forward-char
+                       (setq conn--remapped-keys (key-parse "C-f"))
+                       binding))))
   "M" (conn-remapping-command conn-end-of-defun-keys)
   "m" (conn-remapping-command conn-forward-sexp-keys)
   "N" (conn-remapping-command conn-beginning-of-defun-keys)
@@ -6394,11 +6421,13 @@ determine if `conn-local-mode' should be enabled."
     (if conn-mode
         (progn
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
-          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
+          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50)
+          (add-hook 'pre-command-hook 'conn--remapping-hook -90))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
-      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
+      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook)
+      (remove-hook 'pre-command-hook 'conn--remapping-hook))))
 
 (provide 'conn)
 
