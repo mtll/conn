@@ -8,12 +8,12 @@
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │          │  widen   │          │          │          │   yank   │  ←symbol │  ↑para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
-┃    indent    │          │          │          │          │          │   read   │          │          │          │  prefix  │          │          │ on region┃
+┃              │          │  widen   │          │ rectangle│          │   yank   │  ←symbol │  ↑para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
+┃    indent    │          │          │          │   mark   │          │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃    region    ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │   edit   │   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │  ↑list   │  ↓list   │  macro   ┃
-┃              │    map   │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │          │ dispatch ┃
+┃              │ transpose│   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑line   │  →word   │ register │  ↑list   │  ↓list   │  macro   ┃
+┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │          │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
 ┃                │   M-X    │          │          │          │          │   mark   │  ←inner  │  ↓para   │  →inner  │          │ surround │                   ┃
@@ -25,11 +25,11 @@
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │  narrow  │   copy   │  narrow  │          │ ←defun   │ →defun   │   ←line  │   →line  │   redo   │                       ┃
-┃                      │           │  prefix  │  region  │  region  │          │          │          │          │          │          │                       ┃
+┃                      │           │  prefix  │  region  │          │          │          │          │          │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
 ┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
-┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │   misc   │  ←sexp   │  →sexp   │          │  repeat  │   undo   │                       ┃
-┃                      │ and mark  │          │          │  region  │ edit map │          │          │          │          │          │                       ┃
+┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │   edit   │  ←sexp   │  →sexp   │          │  repeat  │   undo   │                       ┃
+┃                      │ and mark  │          │          │  region  │   map    │          │          │          │          │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
                                                          ┃                 set mark                  ┃
