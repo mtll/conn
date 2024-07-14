@@ -3102,14 +3102,10 @@ Expansions and contractions are provided by functions in
   (interactive (list (register-read-with-preview "Tab to register: ")))
   (set-register register (conn--make-narrow-register)))
 
-(defun conn--narrow-ring-record (beg end &optional register)
-  (cl-pushnew (cons (conn--create-marker beg)
-                    (conn--create-marker end))
-              (if-let ((reg (get-register register))
-                       (_ (conn-narrow-register-p reg)))
-                  (slot-value reg 'narrow-ring)
-                conn-narrow-ring)
-              :test #'equal))
+(defun conn--narrow-ring-record (beg end)
+  (conn--thread -->
+      (cons (conn--create-marker beg) (conn--create-marker end))
+    (setq conn-narrow-ring (cons --> (delete --> conn-narrow-ring)))))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
@@ -3171,7 +3167,7 @@ With prefix arg REGISTER add to narrow ring register instead."
               (register-read-with-preview "Register:"))
             t))))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
-    (conn--narrow-ring-record beg end register)
+    (conn--narrow-ring-record beg end)
     (when (and pulse (not executing-kbd-macro))
       (pulse-momentary-highlight-region beg end 'region))))
 
@@ -3185,7 +3181,7 @@ With prefix arg REGISTER add to narrow ring register instead."
          t))
   (let ((beg (region-beginning))
         (end (region-end)))
-    (conn--narrow-ring-record beg end register)
+    (conn--narrow-ring-record beg end)
     (when (and pulse (not executing-kbd-macro))
       (pulse-momentary-highlight-region beg end 'region))))
 
