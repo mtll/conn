@@ -2400,24 +2400,36 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
               (user-error "Invalid regions")))
            (_ (user-error "No thing at point"))))
         (_ (user-error "No thing at point")))
-    (let (str1 str2)
-      (pcase (if (region-active-p)
-                 (cons (region-beginning) (region-end))
-               (bounds-of-thing-at-point thing))
-        (`(,beg . ,end)
-         (setq str1 (filter-buffer-substring beg end)))
-        (_ (user-error "No thing at point")))
-      (with-selected-window window
-        (save-excursion
-          (goto-char pt)
-          (pcase (bounds-of-thing-at-point thing)
-            (`(,beg . ,end)
-             (setq str2 (filter-buffer-substring beg end))
-             (delete-region beg end)
-             (insert str1))
-            (_ (user-error "No thing at point")))))
-      (delete-region (region-beginning) (region-end))
-      (insert str2))))
+    (let ((cg1 (prepare-change-group))
+          (cg2 (with-current-buffer (window-buffer window)
+                 (prepare-change-group)))
+          str1 str2 success)
+      (unwind-protect
+          (progn
+            (pcase (if (region-active-p)
+                       (cons (region-beginning) (region-end))
+                     (bounds-of-thing-at-point thing))
+              (`(,beg . ,end)
+               (setq str1 (filter-buffer-substring beg end)))
+              (_ (user-error "No thing at point")))
+            (with-selected-window window
+              (save-excursion
+                (goto-char pt)
+                (pcase (bounds-of-thing-at-point thing)
+                  (`(,beg . ,end)
+                   (setq str2 (filter-buffer-substring beg end))
+                   (delete-region beg end)
+                   (insert str1))
+                  (_ (user-error "No thing at point")))))
+            (delete-region (region-beginning) (region-end))
+            (insert str2)
+            (setq success t))
+        (if success
+            (progn
+              (accept-change-group cg1)
+              (accept-change-group cg2))
+          (cancel-change-group cg1)
+          (cancel-change-group cg2))))))
 
 (defun conn--dispatch-thing-bounds (thing arg)
   (save-excursion
@@ -2477,8 +2489,8 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
     (mapc #'delete-overlay overlays)))
 
 (defun conn--dispatch-label-overlays (labels prefix-overlays)
-  (let (overlays)
-    (condition-case _err
+  (let (overlays success)
+    (unwind-protect
         (progn
           (pcase-dolist (`(,window . ,prefixes) prefix-overlays)
             (with-current-buffer (window-buffer window)
@@ -2510,8 +2522,9 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                                       'before-string
                                     'display)
                                label)))))
+          (setq success t)
           overlays)
-      (t (mapc #'delete-overlay overlays)))))
+      (unless success (mapc #'delete-overlay overlays)))))
 
 (defun conn--dispatch-chars ()
   (cdr (conn--read-string-with-timeout-1 nil t)))
@@ -2571,24 +2584,27 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional in-windows)
   (let ((prefix "")
-        ovs)
+        ovs success)
     (conn--with-input-method
       (while (length< prefix prefix-length)
         (setq prefix (thread-last
                        (read-char (concat "char: " prefix) t)
                        (char-to-string)
                        (concat prefix)))))
-    (condition-case _err
-        (dolist (win (conn--preview-get-windows in-windows) ovs)
-          (setq ovs (nconc (with-selected-window win
-                             (conn--dispatch-things-with-prefix-1 things prefix))
-                           ovs)))
-      (t (mapc #'delete-overlay ovs)))))
+    (unwind-protect
+        (progn
+          (dolist (win (conn--preview-get-windows in-windows))
+            (setq ovs (nconc (with-selected-window win
+                               (conn--dispatch-things-with-prefix-1 things prefix))
+                             ovs)))
+          (setq success t)
+          ovs)
+      (unless success (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-columns ()
   (let ((col (current-column))
-        ovs)
-    (condition-case _err
+        ovs success)
+    (unwind-protect
         (progn
           (save-excursion
             (with-restriction (window-start) (window-end)
@@ -2600,54 +2616,61 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                   (move-to-column col)
                   (push (conn--make-preview-overlay (point) 1) ovs))
                 (forward-line))))
+          (setq success t)
           ovs)
-      (t (mapc #'delete-overlay ovs)))))
+      (unless success (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-lines ()
-  (let (ovs)
-    (condition-case _err
-        (dolist (win (window-list-1 nil nil 'visible) ovs)
-          (with-selected-window win
-            (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-              (save-excursion
-                (with-restriction (window-start) (window-end)
-                  (goto-char (point-min))
-                  (when (and (bolp)
-                             (<= (+ (point) (window-hscroll)) (line-end-position))
-                             (goto-char (+ (point) (window-hscroll)))
-                             (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 1) ovs))
-                  (while (/= (point) (point-max))
-                    (forward-line)
+  (let (ovs success)
+    (unwind-protect
+        (progn
+          (dolist (win (window-list-1 nil nil 'visible))
+            (with-selected-window win
+              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+                (save-excursion
+                  (with-restriction (window-start) (window-end)
+                    (goto-char (point-min))
                     (when (and (bolp)
-                               (<= (+ (point) (window-hscroll))
-                                   (line-end-position) (point-max))
+                               (<= (+ (point) (window-hscroll)) (line-end-position))
                                (goto-char (+ (point) (window-hscroll)))
-                               (not (invisible-p (point)))
-                               (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 1) ovs))))))))
-      (t (mapc #'delete-overlay ovs)))))
+                               (not (invisible-p (point))))
+                      (push (conn--make-preview-overlay (point) 1) ovs))
+                    (while (/= (point) (point-max))
+                      (forward-line)
+                      (when (and (bolp)
+                                 (<= (+ (point) (window-hscroll))
+                                     (line-end-position) (point-max))
+                                 (goto-char (+ (point) (window-hscroll)))
+                                 (not (invisible-p (point)))
+                                 (not (invisible-p (1- (point)))))
+                        (push (conn--make-preview-overlay (point) 1) ovs))))))))
+          (setq success t)
+          ovs)
+      (unless success (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-lines-end ()
-  (let (ovs)
-    (condition-case _err
-        (dolist (win (window-list-1 nil nil 'visible) ovs)
-          (with-selected-window win
-            (unless (memq major-mode conn-dispatch-thing-ignored-modes)
-              (save-excursion
-                (with-restriction (window-start) (window-end)
-                  (goto-char (point-min))
-                  (move-end-of-line nil)
-                  (when (and (eolp) (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 1) ovs))
-                  (while (/= (point) (point-max))
-                    (forward-line)
+  (let (ovs success)
+    (unwind-protect
+        (progn
+          (dolist (win (window-list-1 nil nil 'visible))
+            (with-selected-window win
+              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+                (save-excursion
+                  (with-restriction (window-start) (window-end)
+                    (goto-char (point-min))
                     (move-end-of-line nil)
-                    (when (and (eolp)
-                               (not (invisible-p (point)))
-                               (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 1) ovs))))))))
-      (t (mapc #'delete-overlay ovs)))))
+                    (when (and (eolp) (not (invisible-p (point))))
+                      (push (conn--make-preview-overlay (point) 1) ovs))
+                    (while (/= (point) (point-max))
+                      (forward-line)
+                      (move-end-of-line nil)
+                      (when (and (eolp)
+                                 (not (invisible-p (point)))
+                                 (not (invisible-p (1- (point)))))
+                        (push (conn--make-preview-overlay (point) 1) ovs))))))))
+          (setq success t)
+          ovs)
+      (unless success (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-inner-lines (&optional end)
   (let (ovs)
@@ -3171,7 +3194,7 @@ Expansions and contractions are provided by functions in
       (message "Narrow ring merged into %s region"
                (length conn-narrow-ring)))))
 
-(defun conn-thing-to-narrow-ring (thing-mover arg &optional register pulse)
+(defun conn-thing-to-narrow-ring (thing-mover arg &optional pulse)
   "Add region defined by THING-MOVER called with ARG to narrow ring.
 With prefix arg REGISTER add to narrow ring register instead."
   (interactive
@@ -3179,22 +3202,17 @@ With prefix arg REGISTER add to narrow ring register instead."
      (deactivate-mark)
      (append
       (conn--read-thing-mover "Thing Mover" nil nil t)
-      (list (when current-prefix-arg
-              (register-read-with-preview "Register:"))
-            t))))
+      (list t))))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (conn--narrow-ring-record beg end)
     (when (and pulse (not executing-kbd-macro))
       (pulse-momentary-highlight-region beg end 'region))))
 
-(defun conn-region-to-narrow-ring (&optional register pulse)
+(defun conn-region-to-narrow-ring (&optional pulse)
   "Add the region from BEG to END to the narrow ring.
 Interactively defaults to the current region.
 With prefix arg REGISTER add to narrow ring register instead."
-  (interactive
-   (list (when current-prefix-arg
-           (register-read-with-preview "Register:"))
-         t))
+  (interactive (list t))
   (let ((beg (region-beginning))
         (end (region-end)))
     (conn--narrow-ring-record beg end)
