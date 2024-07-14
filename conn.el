@@ -897,8 +897,10 @@ If BUFFER is nil check `current-buffer'."
                             t))
                finally (cl-return regions)))))
 
-(defun conn--region-bounds (_beg _end) 
-  (region-bounds))
+(defun conn--region-bounds (beg end)
+  (cl-loop for reg in (region-bounds)
+           when (<= beg (car reg) (cdr reg) end)
+           collect reg))
 
 (put 'region :conn-things-in-region 'conn--region-bounds)
 
@@ -6183,12 +6185,12 @@ apply to each contiguous component of the region."
   "'" 'conn-other-place-prefix
   "+" 'conn-set-register-seperator
   "." 'repeat
-  "/" 'undo-only
+  "/" (conn-remapping-command (key-parse "C-/"))
   ";" 'conn-wincontrol
   "<tab>" 'indent-region
   "TAB" 'indent-region
   "=" 'indent-relative
-  "?" 'undo-redo
+  "?" (conn-remapping-command (key-parse "C-?"))
   "\"" 'conn-surround-thing
   "\\" 'conn-kapply-prefix
   "_" 'repeat-complex-command
@@ -6249,13 +6251,13 @@ apply to each contiguous component of the region."
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
   "." 'point-to-register
-  "/" 'undo-only
+  "/" (conn-remapping-command (key-parse "C-/"))
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "*" 'conn-org-tree-edit-insert-heading
   "<" 'org-promote-subtree
   ">" 'org-demote-subtree
-  "?" 'undo-redo
+  "?" (conn-remapping-command (key-parse "C-?"))
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
