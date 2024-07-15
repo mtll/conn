@@ -1703,15 +1703,21 @@ If any function returns a nil value then macro application it halted.")
              ('undo
               (if stack
                   (progn
-                    (pop stack)
+                    (pcase (pop stack)
+                      (`(act . ,ov)
+                       (delete-overlay ov)))
                     (cl-decf index))
                 (message "Nothing to undo")
                 (ding 'no-terminate)
                 (sit-for 1)))
              ('undo-all
               (if stack
-                  (setq stack nil
-                        index 0)
+                  (progn
+                    (dolist (action stack)
+                      (pcase action
+                        (`(act . ,ov) (delete-overlay ov))))
+                    (setq stack nil
+                          index 0))
                 (message "Nothing to undo")
                 (ding 'no-terminate)
                 (sit-for 1))))))
