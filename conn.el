@@ -1625,15 +1625,14 @@ If any function returns a nil value then macro application it halted.")
          (conn--kapply-ensure-region-buffer (cons pt pt)))))))
 
 (defconst conn-kapply-query-help
-  "Type \\`SPC' or \\`y' to apply to one match, Delete or \\`n' to skip to next,
-\\`RET' or \\`q' to exit, Period to apply to one match and exit,
-\\`C-l' to clear the screen, redisplay, and offer same match again,
-\\`!' to replace all remaining matches in this buffer with no more questions,
-\\`^' to move point back to previous match,
-\\`u' to undo previous replacement,
-\\`U' to undo all replacements,
-\\`e' to edit the replacement string.
-\\`E' to edit the replacement string with exact case."
+  "\\<query-replace-map>Type \\`y' to apply to one match,
+\\`n' to skip to next,
+\\[exit] to exit,
+\\[act-and-exit] to apply to current match and exit,
+\\[recenter] to clear the screen, redisplay, and offer same match again,
+\\[automatic] to replace all remaining matches in this buffer with no more questions,
+\\[undo] to undo previous replacement,
+\\[undo-all] to undo all replacements."
   "Help message while in `conn--kapply-query'.")
 
 (defun conn--kapply-query (string beg end &optional regexp-flag reverse delimited-flag)
@@ -1688,24 +1687,22 @@ If any function returns a nil value then macro application it halted.")
               (cl-return))
              ('exit (cl-return))
              ('help
-              (let ((display-buffer-overriding-action
-                     '(nil (inhibit-same-window . t))))
-                (with-output-to-temp-buffer "*Help*"
-                  (princ
-                   (concat "Query applying "
-                           (if reverse "backward " "")
-                           (if regexp-flag "regexp " "")
-                           string
-                           (substitute-command-keys
-                            conn-kapply-query-help)))
-                  (with-current-buffer standard-output
+              (let ((display-buffer-overriding-action))
+                (with-temp-buffer-window
+                    "*Help*" '(nil (inhibit-same-window . t)) nil
+                  (with-current-buffer "*Help*"
+                    (insert "Query applying "
+                            (if reverse "backward " "")
+                            (if regexp-flag "regexp " "")
+                            "to: " string "\n"
+                            (substitute-command-keys
+                             conn-kapply-query-help))
                     (help-mode)))))
              ('quit (signal 'quit nil))
              ('recenter
               (let ((this-command 'recenter-top-bottom)
 		    (last-command 'recenter-top-bottom))
 		(recenter-top-bottom)))
-             ('redisplay (redisplay))
              ('scroll-up (scroll-up))
              ('scroll-down (scroll-down))
              ('skip
