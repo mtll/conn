@@ -1639,7 +1639,7 @@ If any function returns a nil value then macro application it halted.")
 (defun conn--kapply-query (string beg end &optional regexp-flag reverse delimited-flag)
   (pcase-let*
       ((prompt (apply #'propertize
-                      (concat "Act on match? "
+                      (concat "[%s/%s] Act on match? "
                               (substitute-command-keys
                                "(\\<query-replace-map>\\[help] for help) "))
                       minibuffer-prompt-properties))
@@ -1667,7 +1667,10 @@ If any function returns a nil value then macro application it halted.")
            (goto-char (if reverse beg end))
            (move-overlay hl beg end)
            for action = (lookup-key (list query-replace-map)
-                                    (read-key-sequence prompt))
+                                    (read-key-sequence
+                                     (format prompt
+                                             (1+ index)
+                                             (length matches))))
            do
            (pcase action
              ('act
@@ -6316,7 +6319,6 @@ apply to each contiguous component of the region."
                    (let ((binding (key-binding (key-parse "C-b") t)))
                      (if (eq binding 'forward-char)
                          'conn-backward-char
-                       ;; (setq conn--remapped-keys (key-parse "C-b"))
                        binding))))
   "K" (conn-remapping-command conn-forward-paragraph-keys)
   "k" (conn-remapping-command conn-next-line-keys)
@@ -6328,7 +6330,6 @@ apply to each contiguous component of the region."
                    (let ((binding (key-binding (key-parse "C-f") t)))
                      (if (eq binding 'forward-char)
                          'conn-forward-char
-                       ;; (setq conn--remapped-keys (key-parse "C-f"))
                        binding))))
   "M" (conn-remapping-command conn-end-of-defun-keys)
   "m" (conn-remapping-command conn-forward-sexp-keys)
