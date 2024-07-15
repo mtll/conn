@@ -1667,6 +1667,8 @@ If any function returns a nil value then macro application it halted.")
                                     (read-key-sequence prompt))
            do
            (pcase action
+             ('scroll-up (scroll-up))
+             ('scroll-down (scroll-down))
              ('quit (signal 'quit nil))
              ('exit (cl-return))
              ('help
@@ -1698,7 +1700,10 @@ If any function returns a nil value then macro application it halted.")
              ('automatic
               (push 'automatic stack)
               (cl-return))
-             ('recenter (recenter))
+             ('recenter
+              (let ((this-command 'recenter-top-bottom)
+		    (last-command 'recenter-top-bottom))
+		(recenter-top-bottom)))
              ('redisplay (redisplay))
              ('undo
               (if stack
@@ -1720,7 +1725,9 @@ If any function returns a nil value then macro application it halted.")
                           index 0))
                 (message "Nothing to undo")
                 (ding 'no-terminate)
-                (sit-for 1))))))
+                (sit-for 1))))
+           (unless (eq action 'recenter)
+             (setq recenter-last-op nil))))
       (funcall exit-fn)
       (delete-overlay hl)
       (mapc (lambda (action)
