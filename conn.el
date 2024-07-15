@@ -5432,7 +5432,7 @@ before each iteration."
 (transient-define-argument conn--kapply-order-infix ()
   "Dispatch on regions from last to first."
   :class 'transient-switch
-  :key "u"
+  :key "b"
   :description "Order"
   :argument "reverse")
 
@@ -5530,7 +5530,7 @@ before each iteration."
 
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   :transient 'transient--do-exit
-  :key "qu"
+  :key "u"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
@@ -5560,7 +5560,7 @@ before each iteration."
 The region is read by prompting for a command with a `:conn-command-thing'
 property."
   :transient 'transient--do-exit
-  :key "qq"
+  :key "q"
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
