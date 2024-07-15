@@ -1653,7 +1653,7 @@ If any function returns a nil value then macro application it halted.")
                (hl (make-overlay (point) (point)))
                (stack nil)
                (result nil))
-    (overlay-put hl 'face 'lazy-highlight)
+    (overlay-put hl 'face 'highlight)
     (unwind-protect
         (save-excursion
           (cl-loop
@@ -1683,13 +1683,17 @@ If any function returns a nil value then macro application it halted.")
                   (with-current-buffer standard-output
                     (help-mode)))))
              ('act
-              (push (cons 'act (copy-overlay hl)) stack)
+              (let ((ov (copy-overlay hl)))
+                (push (cons 'act ov) stack)
+                (overlay-put ov 'face 'lazy-highlight))
               (cl-incf index))
              ('skip
               (push 'skip stack)
               (cl-incf index))
              ('act-and-exit
-              (push (cons 'act (copy-overlay hl)) stack)
+              (let ((ov (copy-overlay hl)))
+                (push (cons 'act ov) stack)
+                (overlay-put ov 'face 'lazy-highlight))
               (cl-return))
              ('automatic
               (push 'automatic stack)
@@ -1712,15 +1716,19 @@ If any function returns a nil value then macro application it halted.")
                 (ding 'no-terminate)
                 (sit-for 1))))))
       (funcall exit-fn)
-      (delete-overlay hl))
+      (delete-overlay hl)
+      (mapc (lambda (action)
+              (pcase action
+                (`(act . ,ov)
+                 (delete-overlay ov)
+                 (setcdr action nil))))
+            stack))
     (cl-loop
      for action in (nreverse stack)
      for reg = (car regions)
      do
      (pcase action
-       (`(act . ,ov)
-        (push reg result)
-        (delete-overlay ov))
+       (`(act . ,_) (push reg result))
        ('automatic (setq result (nconc (nreverse regions) result))))
      (pop regions)
      finally (setq result
