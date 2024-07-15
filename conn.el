@@ -1683,13 +1683,13 @@ If any function returns a nil value then macro application it halted.")
                   (with-current-buffer standard-output
                     (help-mode)))))
              ('act
-              (push 'act stack)
+              (push (cons 'act (copy-overlay hl)) stack)
               (cl-incf index))
              ('skip
               (push 'skip stack)
               (cl-incf index))
              ('act-and-exit
-              (push 'act stack)
+              (push (cons 'act (copy-overlay hl)) stack)
               (cl-return))
              ('automatic
               (push 'automatic stack)
@@ -1715,11 +1715,14 @@ If any function returns a nil value then macro application it halted.")
       (delete-overlay hl))
     (cl-loop
      for action in (nreverse stack)
-     for reg = (pop regions)
+     for reg = (car regions)
      do
      (pcase action
-       ('act (push reg result))
+       (`(act . ,ov)
+        (push reg result)
+        (delete-overlay ov))
        ('automatic (setq result (nconc (nreverse regions) result))))
+     (pop regions)
      finally (setq result
                    (mapcar (pcase-lambda (`(,beg . ,end))
                              (cons (conn--create-marker beg)
