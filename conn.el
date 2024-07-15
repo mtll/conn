@@ -1735,9 +1735,7 @@ If any function returns a nil value then macro application it halted.")
       (delete-overlay hl)
       (mapc (lambda (action)
               (pcase action
-                (`(act . ,ov)
-                 (delete-overlay ov)
-                 (setcdr action nil))))
+                (`(act . ,ov) (delete-overlay ov))))
             stack))
     (cl-loop
      for action in (nreverse stack)
@@ -3803,16 +3801,17 @@ uninstersting marks."
 
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer."
-  (interactive (list (if current-prefix-arg
-                         (if conn-completion-region-quote-function
-                             (pcase (car (read-multiple-choice
-                                          "Quote:"
-                                          '((?r "regexp-quote")
-                                            (?c "conn-completion-region-quote-function"))))
-                               (?r 'regexp-quote)
-                               (?c conn-completion-region-quote-function))
-                           'regexp-quote)
-                       'identity)))
+  (interactive
+   (list (if current-prefix-arg
+             (if conn-completion-region-quote-function
+                 (pcase (car (read-multiple-choice
+                              "Quote:"
+                              '((?r "regexp-quote")
+                                (?c "conn-completion-region-quote-function"))))
+                   (?r 'regexp-quote)
+                   (?c conn-completion-region-quote-function))
+               'regexp-quote)
+           'identity)))
   (insert (pcase conn--minibuffer-initial-region
             (`(,beg . ,end)
              (with-minibuffer-selected-window
@@ -4557,112 +4556,107 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                  (const :tag "Frame" frame)
                  (const :tag "Short" nil)))
 
-(defun conn--wincontrol-window-format-1 ()
-  (substitute-command-keys
-   (concat
-    "\\<conn-wincontrol-map>"
-    (propertize "Window: " 'face 'bold)
-    "prefix arg: "
-    (propertize "%s" 'face 'transient-value) "; "
-    "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-exit]: exit; "
-    "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
-    "\n"
-    "\\[enlarge-window] "
-    "\\[shrink-window] "
-    "\\[enlarge-window-horizontally] "
-    "\\[shrink-window-horizontally]: "
-    "heighten shorten widen narrow; "
-    "\\[previous-buffer] \\[next-buffer] "
-    "\\[conn-wincontrol-previous-window] \\[conn-wincontrol-next-window]"
-    ": prev/next buffer/win"
-    "\n"
-    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
-    "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
-    "split vert/right; "
-    "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank; "
-    "\\[conn-wincontrol-mru-window]: last win")))
+(defconst conn--wincontrol-window-format-1
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "Window: " 'face 'bold)
+   "prefix arg: "
+   (propertize "%s" 'face 'transient-value) "; "
+   "\\[conn-wincontrol-digit-argument-reset]: reset; "
+   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
+   "\\[conn-wincontrol-exit]: exit; "
+   "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
+   "\n"
+   "\\[enlarge-window] "
+   "\\[shrink-window] "
+   "\\[enlarge-window-horizontally] "
+   "\\[shrink-window-horizontally]: "
+   "heighten shorten widen narrow; "
+   "\\[previous-buffer] \\[next-buffer] "
+   "\\[conn-wincontrol-previous-window] \\[conn-wincontrol-next-window]"
+   ": prev/next buffer/win"
+   "\n"
+   "\\[delete-window] \\[delete-other-windows]: delete win/other; "
+   "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
+   "split vert/right; "
+   "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank; "
+   "\\[conn-wincontrol-mru-window]: last win"))
 
-(defun conn--wincontrol-window-format-2 ()
-  (substitute-command-keys
-   (concat
-    "\\<conn-wincontrol-map>"
-    (propertize "Window: " 'face 'bold)
-    "prefix arg: "
-    (propertize "%s" 'face 'transient-value) "; "
-    "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-exit]: exit; "
-    "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
-    "\\[quit-window]: quit"
-    "\n"
-    "\\[conn-wincontrol-other-window-scroll-down] \\[conn-wincontrol-other-window-scroll-up]"
-    ": scroll other; "
-    "\\[conn-wincontrol-isearch-other-window] \\[conn-wincontrol-isearch-other-window-backward]"
-    ": isearch other; "
-    "\\[conn-wincontrol-isearch] \\[conn-wincontrol-isearch-backward]"
-    ": isearch; "
-    "\\[unbury-buffer] \\[bury-buffer]: un/bury"
-    "\n"
-    "\\[shrink-window-if-larger-than-buffer]: shrink win to buf; "
-    "\\[balance-windows] \\[maximize-window]: balance/max; "
-    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
-    "max vert/horiz; "
-    "\\[conn-register-load] \\[window-configuration-to-register]: load/store")))
+(defconst conn--wincontrol-window-format-2
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "Window: " 'face 'bold)
+   "prefix arg: "
+   (propertize "%s" 'face 'transient-value) "; "
+   "\\[conn-wincontrol-digit-argument-reset]: reset; "
+   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
+   "\\[conn-wincontrol-exit]: exit; "
+   "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
+   "\\[quit-window]: quit"
+   "\n"
+   "\\[conn-wincontrol-other-window-scroll-down] \\[conn-wincontrol-other-window-scroll-up]"
+   ": scroll other; "
+   "\\[conn-wincontrol-isearch-other-window] \\[conn-wincontrol-isearch-other-window-backward]"
+   ": isearch other; "
+   "\\[conn-wincontrol-isearch] \\[conn-wincontrol-isearch-backward]"
+   ": isearch; "
+   "\\[unbury-buffer] \\[bury-buffer]: un/bury"
+   "\n"
+   "\\[shrink-window-if-larger-than-buffer]: shrink win to buf; "
+   "\\[balance-windows] \\[maximize-window]: balance/max; "
+   "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
+   "max vert/horiz; "
+   "\\[conn-register-load] \\[window-configuration-to-register]: load/store"))
 
-(defun conn--wincontrol-tab-format ()
-  (substitute-command-keys
-   (concat
-    "\\<conn-wincontrol-map>"
-    (propertize "Tab: " 'face 'bold)
-    "prefix arg: "
-    (propertize "%s" 'face 'transient-value) "; "
-    "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-exit]: exit; "
-    "\\[conn-tab-to-register]: store"
-    "\n"
-    "\\[tab-bar-move-window-to-tab]: win to new tab; "
-    "\\[tab-previous] \\[tab-next]: next/prev; "
-    "\\[conn-wincontrol-tab-new] \\[tab-bar-duplicate-tab] \\[conn-wincontrol-tab-close]: "
-    "new/clone/kill; "
-    "\\[tab-bar-detach-tab]: tear off")))
+(defconst conn--wincontrol-tab-format
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "Tab: " 'face 'bold)
+   "prefix arg: "
+   (propertize "%s" 'face 'transient-value) "; "
+   "\\[conn-wincontrol-digit-argument-reset]: reset; "
+   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
+   "\\[conn-wincontrol-exit]: exit; "
+   "\\[conn-tab-to-register]: store"
+   "\n"
+   "\\[tab-bar-move-window-to-tab]: win to new tab; "
+   "\\[tab-previous] \\[tab-next]: next/prev; "
+   "\\[conn-wincontrol-tab-new] \\[tab-bar-duplicate-tab] \\[conn-wincontrol-tab-close]: "
+   "new/clone/kill; "
+   "\\[tab-bar-detach-tab]: tear off"))
 
-(defun conn--wincontrol-frame-format ()
-  (substitute-command-keys
-   (concat
-    "\\<conn-wincontrol-map>"
-    (propertize "Frame: " 'face 'bold)
-    "prefix arg: "
-    (propertize "%s" 'face 'transient-value) "; "
-    "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-exit]: exit"
-    "\n"
-    "\\[other-frame]: other; "
-    "\\[clone-frame]: clone; "
-    "\\[undelete-frame]: undelete; "
-    "\\[tear-off-window]: tear off; "
-    "\\[toggle-frame-fullscreen]: fullscreen"
-    "\n"
-    "\\[conn-wincontrol-reverse] \\[conn-wincontrol-reflect]: reverse/reflect; "
-    "\\[iconify-or-deiconify-frame] \\[make-frame-command]: iconify/create; "
-    "\\[delete-frame] \\[delete-other-frames]: delete/other")))
+(defconst conn--wincontrol-frame-format
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "Frame: " 'face 'bold)
+   "prefix arg: "
+   (propertize "%s" 'face 'transient-value) "; "
+   "\\[conn-wincontrol-digit-argument-reset]: reset; "
+   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
+   "\\[conn-wincontrol-exit]: exit"
+   "\n"
+   "\\[other-frame]: other; "
+   "\\[clone-frame]: clone; "
+   "\\[undelete-frame]: undelete; "
+   "\\[tear-off-window]: tear off; "
+   "\\[toggle-frame-fullscreen]: fullscreen"
+   "\n"
+   "\\[conn-wincontrol-reverse] \\[conn-wincontrol-reflect]: reverse/reflect; "
+   "\\[iconify-or-deiconify-frame] \\[make-frame-command]: iconify/create; "
+   "\\[delete-frame] \\[delete-other-frames]: delete/other"))
 
-(defun conn--wincontrol-simple-format ()
-  (substitute-command-keys
-   (concat
-    "\\<conn-wincontrol-map>"
-    (propertize "WinControl: " 'face 'bold)
-    "prefix arg: "
-    (propertize "%s" 'face 'transient-value) "; "
-    "\\[conn-wincontrol-digit-argument-reset]: reset; "
-    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-    "\\[conn-wincontrol-exit]: exit; "
-    "\\[conn-wincontrol-scroll-up] "
-    "\\[conn-wincontrol-scroll-down]: "
-    "scroll")))
+(defconst conn--wincontrol-simple-format
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "WinControl: " 'face 'bold)
+   "prefix arg: "
+   (propertize "%s" 'face 'transient-value) "; "
+   "\\[conn-wincontrol-digit-argument-reset]: reset; "
+   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
+   "\\[conn-wincontrol-exit]: exit; "
+   "\\[conn-wincontrol-scroll-up] "
+   "\\[conn-wincontrol-scroll-down]: "
+   "scroll"))
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
@@ -4913,16 +4907,17 @@ When called interactively N is `last-command-event'."
     (setq conn--wincontrol-help (pcase conn--wincontrol-help
                                   ('window-1 'window-2)
                                   ('window-2 'tab)
-                                  ('tab      'frame)
-                                  ('frame    nil)
-                                  (_         'window-1))))
+                                  ('tab 'frame)
+                                  ('frame nil)
+                                  (_ 'window-1))))
   (setq conn--wincontrol-help-format
-        (pcase conn--wincontrol-help
-          ('window-1 (conn--wincontrol-window-format-1))
-          ('window-2 (conn--wincontrol-window-format-2))
-          ('tab      (conn--wincontrol-tab-format))
-          ('frame    (conn--wincontrol-frame-format))
-          (_         (conn--wincontrol-simple-format)))))
+        (substitute-command-keys
+         (pcase conn--wincontrol-help
+           ('window-1 conn--wincontrol-window-format-1)
+           ('window-2 conn--wincontrol-window-format-2)
+           ('tab conn--wincontrol-tab-format)
+           ('frame conn--wincontrol-frame-format)
+           (_ conn--wincontrol-simple-format)))))
 
 (defun conn-wincontrol-help-backward (&optional interactive)
   "Cycle to the next `conn-wincontrol-mode' help message."
@@ -4931,16 +4926,16 @@ When called interactively N is `last-command-event'."
     (setq conn--wincontrol-help (pcase conn--wincontrol-help
                                   ('window-1 nil)
                                   ('window-2 'window-1)
-                                  ('tab      'window-2)
-                                  ('frame    'tab)
-                                  (_         'frame))))
+                                  ('tab 'window-2)
+                                  ('frame 'tab)
+                                  (_ 'frame))))
   (setq conn--wincontrol-help-format
         (pcase conn--wincontrol-help
-          ('window-1 (conn--wincontrol-window-format-1))
-          ('window-2 (conn--wincontrol-window-format-2))
-          ('tab      (conn--wincontrol-tab-format))
-          ('frame    (conn--wincontrol-frame-format))
-          (_         (conn--wincontrol-simple-format)))))
+          ('window-1 conn--wincontrol-window-format-1)
+          ('window-2 conn--wincontrol-window-format-2)
+          ('tab conn--wincontrol-tab-format)
+          ('frame conn--wincontrol-frame-format)
+          (_ conn--wincontrol-simple-format))))
 
 (defun conn-wincontrol-isearch (arg)
   (interactive "P")
