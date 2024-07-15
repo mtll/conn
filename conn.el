@@ -1633,26 +1633,26 @@ If any function returns a nil value then macro application it halted.")
 \\`E' to edit the replacement string with exact case."
   "Help message while in `conn--kapply-query'.")
 
-(defun conn--kapply-query (string beg end &optional regexp-flag reverse)
-  (pcase-let* ((exit-fn (set-transient-map query-replace-map (lambda () t)))
-               (prompt (apply #'propertize
-                              (concat "Act on match? "
-                                      (substitute-command-keys
-                                       "(\\<query-replace-map>\\[help] for help) "))
-                              minibuffer-prompt-properties))
-               (regions (save-excursion
-                          (cl-loop
-                           initially (goto-char beg)
-                           with search-fn = (if regexp-flag
-                                                're-search-forward
-                                              'search-forward)
-                           with result
-                           while (funcall search-fn string end t)
-                           do (push (cons (match-beginning 0) (match-end 0)) result)
-                           finally (cl-return (if reverse result (nreverse result))))))
-               (hl (make-overlay (point) (point)))
-               (stack nil)
-               (result nil))
+(defun conn--kapply-query (string beg end &optional regexp-flag reverse delimited-flag)
+  (pcase-let*
+      ((prompt (apply #'propertize
+                      (concat "Act on match? "
+                              (substitute-command-keys
+                               "(\\<query-replace-map>\\[help] for help) "))
+                      minibuffer-prompt-properties))
+       (regions (save-excursion
+                  (goto-char beg)
+                  (cl-loop
+                   with result
+                   while (replace-search string end regexp-flag
+                                         delimited-flag case-fold-search)
+                   for (mb me . _) = (match-data t)
+                   do (push (cons mb me) result)
+                   finally (cl-return (if reverse result (nreverse result))))))
+       (hl (make-overlay (point) (point)))
+       (stack nil)
+       (result nil)
+       (exit-fn (set-transient-map query-replace-map (lambda () t))))
     (overlay-put hl 'face 'highlight)
     (unwind-protect
         (save-excursion
