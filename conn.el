@@ -898,14 +898,16 @@ If BUFFER is nil check `current-buffer'."
 (put 'region :conn-things-in-region 'conn--region-bounds)
 
 (defun conn--read-thing-mover (prompt &optional arg keymap recursive-edit)
-  (let ((keymap (thread-last
-                  (list keymap
-                        conn--read-thing-mover-map
-                        (if recursive-edit (define-keymap "r" 'recursive-edit)))
-                  (delq nil)
-                  (make-composed-keymap))))
+  (let ((conn--read-thing-mover-map
+         (thread-last
+           (list keymap
+                 conn--read-thing-mover-map
+                 (if recursive-edit (define-keymap "r" 'recursive-edit)))
+           (delq nil)
+           (make-composed-keymap))))
     (conn--with-state conn-state
-      (internal-push-keymap keymap 'overriding-terminal-local-map)
+      (internal-push-keymap conn--read-thing-mover-map
+                            'overriding-terminal-local-map)
       (unwind-protect
           (cl-prog
            ((prompt (substitute-command-keys
@@ -936,7 +938,8 @@ If BUFFER is nil check `current-buffer'."
            (pcase cmd
              ('keyboard-quit (keyboard-quit))
              ('help
-              (internal-pop-keymap keymap 'overriding-terminal-local-map)
+              (internal-pop-keymap conn--read-thing-mover-map
+                                   'overriding-terminal-local-map)
               (save-window-excursion
                 (setq cmd (intern
                            (completing-read
@@ -954,7 +957,8 @@ If BUFFER is nil check `current-buffer'."
                                    (not (eq sym 'help))
                                    (get sym :conn-command-thing)))
                             t))))
-              (internal-push-keymap keymap 'overriding-terminal-local-map)
+              (internal-push-keymap conn--read-thing-mover-map
+                                    'overriding-terminal-local-map)
               (go :test))
              ('digit-argument
               (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
@@ -984,7 +988,8 @@ If BUFFER is nil check `current-buffer'."
              (_ (setq invalid t)))
            (go :read-command))
         (message nil)
-        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+        (internal-pop-keymap conn--read-thing-mover-map
+                             'overriding-terminal-local-map)))))
 
 (defun conn--read-thing-region (prompt &optional arg keymap)
   (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover prompt arg keymap t)))
@@ -1665,9 +1670,19 @@ If any function returns a nil value then macro application it halted.")
                                     (read-key-sequence prompt))
            do
            (pcase action
-             ('scroll-up (scroll-up))
-             ('scroll-down (scroll-down))
-             ('quit (signal 'quit nil))
+             ('act
+              (let ((ov (copy-overlay hl)))
+                (push (cons 'act ov) stack)
+                (overlay-put ov 'face 'lazy-highlight))
+              (cl-incf index))
+             ('act-and-exit
+              (let ((ov (copy-overlay hl)))
+                (push (cons 'act ov) stack)
+                (overlay-put ov 'face 'lazy-highlight))
+              (cl-return))
+             ('automatic
+              (push 'automatic stack)
+              (cl-return))
              ('exit (cl-return))
              ('help
               (let ((display-buffer-overriding-action
@@ -1682,27 +1697,17 @@ If any function returns a nil value then macro application it halted.")
                             conn-kapply-query-help)))
                   (with-current-buffer standard-output
                     (help-mode)))))
-             ('act
-              (let ((ov (copy-overlay hl)))
-                (push (cons 'act ov) stack)
-                (overlay-put ov 'face 'lazy-highlight))
-              (cl-incf index))
-             ('skip
-              (push 'skip stack)
-              (cl-incf index))
-             ('act-and-exit
-              (let ((ov (copy-overlay hl)))
-                (push (cons 'act ov) stack)
-                (overlay-put ov 'face 'lazy-highlight))
-              (cl-return))
-             ('automatic
-              (push 'automatic stack)
-              (cl-return))
+             ('quit (signal 'quit nil))
              ('recenter
               (let ((this-command 'recenter-top-bottom)
 		    (last-command 'recenter-top-bottom))
 		(recenter-top-bottom)))
              ('redisplay (redisplay))
+             ('scroll-up (scroll-up))
+             ('scroll-down (scroll-down))
+             ('skip
+              (push 'skip stack)
+              (cl-incf index))
              ('undo
               (if stack
                   (progn
