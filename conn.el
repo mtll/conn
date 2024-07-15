@@ -914,7 +914,7 @@ If BUFFER is nil check `current-buffer'."
                              (propertize "%s" 'face 'transient-value)
                              ", \\[reset-arg] reset arg; \\[help] commands"
                              (if recursive-edit
-                                 (concat "; \\[conn-recursive-edit-thing] "
+                                 (concat "; \\[recursive-edit] "
                                          "recursive edit)")
                                ")")
                              ": %s")))
@@ -1638,28 +1638,28 @@ If any function returns a nil value then macro application it halted.")
                               (substitute-command-keys
                                "(\\<query-replace-map>\\[help] for help) "))
                       minibuffer-prompt-properties))
-       (regions (save-excursion
+       (matches (save-excursion
                   (goto-char beg)
                   (cl-loop
-                   with result
+                   with matches
                    while (replace-search string end regexp-flag
                                          delimited-flag case-fold-search)
                    for (mb me . _) = (match-data t)
-                   do (push (cons mb me) result)
-                   finally (cl-return (if reverse result (nreverse result))))))
+                   do (push (cons mb me) matches)
+                   finally (cl-return (if reverse matches (nreverse matches))))))
        (hl (make-overlay (point) (point)))
        (stack nil)
-       (result nil)
+       (regions nil)
        (exit-fn (set-transient-map query-replace-map (lambda () t))))
-    (overlay-put hl 'face 'highlight)
+    (overlay-put hl 'face 'query-replace)
     (unwind-protect
         (save-excursion
           (cl-loop
            with index = 0
-           while (length> regions index)
-           for (beg . end) = (nth index regions)
+           while (length> matches index)
+           for (beg . end) = (nth index matches)
            do
-           (goto-char beg)
+           (goto-char (if reverse beg end))
            (move-overlay hl beg end)
            for action = (lookup-key (list query-replace-map)
                                     (read-key-sequence prompt))
@@ -1736,26 +1736,26 @@ If any function returns a nil value then macro application it halted.")
             stack))
     (cl-loop
      for action in (nreverse stack)
-     for reg = (car regions)
+     for match = (car matches)
      do
      (pcase action
-       (`(act . ,_) (push reg result))
-       ('automatic (setq result (nconc (nreverse regions) result))))
-     (pop regions)
-     finally (setq result
+       (`(act . ,_) (push match regions))
+       ('automatic (setq regions (nconc (nreverse matches) regions))))
+     (pop matches)
+     finally (setq regions
                    (mapcar (pcase-lambda (`(,beg . ,end))
                              (cons (conn--create-marker beg)
                                    (conn--create-marker end)))
-                           (nreverse result))))
+                           (nreverse regions))))
     (lambda (state)
       (pcase state
         (:finalize
          (mapc (pcase-lambda (`(,beg . ,end))
                  (set-marker beg nil)
                  (set-marker end nil))
-               result))
+               regions))
         (_
-         (conn--kapply-ensure-region-buffer (pop result)))))))
+         (conn--kapply-ensure-region-buffer (pop regions)))))))
 
 (defun conn--kapply-merge-undo (iterator &optional undo-on-error)
   (let (undo-handles)
