@@ -1646,8 +1646,10 @@ If any function returns a nil value then macro application it halted.")
                            with search-fn = (if regexp-flag
                                                 're-search-forward
                                               'search-forward)
+                           with result
                            while (funcall search-fn string end t)
-                           collect (cons (match-beginning 0) (match-end 0)))))
+                           do (push (cons (match-beginning 0) (match-end 0)) result)
+                           finally (cl-return (if reverse result (nreverse result))))))
                (hl (make-overlay (point) (point)))
                (stack nil)
                (result nil))
@@ -1722,7 +1724,7 @@ If any function returns a nil value then macro application it halted.")
                    (mapcar (pcase-lambda (`(,beg . ,end))
                              (cons (conn--create-marker beg)
                                    (conn--create-marker end)))
-                           (if reverse (nreverse result) result))))
+                           (nreverse result))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -5465,7 +5467,7 @@ before each iteration."
                                (lambda ()
                                  (conn-yank-region-to-minibuffer 'regexp-quote))
                              (conn--read-from-with-preview "Regexp" t nil (cons beg end)))))
-        (conn--kapply-query regexp beg end t (not (member "reverse" args))))
+        (conn--kapply-query regexp beg end t (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5496,7 +5498,7 @@ before each iteration."
                                (lambda ()
                                  (conn-yank-region-to-minibuffer))
                              (conn--read-from-with-preview "String" nil nil (cons beg end)))))
-        (conn--kapply-query string beg end nil (not (member "reverse" args))))
+        (conn--kapply-query string beg end nil (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5523,7 +5525,7 @@ before each iteration."
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (regexp (conn--read-from-with-preview "Regexp" t nil (cons beg end))))
-        (conn--kapply-query regexp beg end t (not (member "reverse" args))))
+        (conn--kapply-query regexp beg end t (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5554,7 +5556,7 @@ property."
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (string (conn--read-from-with-preview "String" nil nil (cons beg end))))
-        (conn--kapply-query string beg end nil (not (member "reverse" args))))
+        (conn--kapply-query string beg end nil (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
