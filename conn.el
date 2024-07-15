@@ -788,13 +788,13 @@ If BUFFER is nil check `current-buffer'."
   "M-DEL" 'reset-arg
   "t" conn-mark-thing-map
   "." 'reset-arg
-  "r" 'conn-define-region-in-recursive-edit
+  "r" 'recursive-edit
   "v" 'region)
 
 (defvar-keymap conn-read-expand-region-map
   :parent conn-expand-repeat-map
   "v" 'conn-toggle-mark-command
-  "r" 'exit-recursive-edit
+  "e" 'exit-recursive-edit
   "C-g" 'abort-recursive-edit
   "<t>" 'ignore)
 
@@ -807,7 +807,6 @@ If BUFFER is nil check `current-buffer'."
   "." 'reset-arg
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
-  "r" 'conn-recursive-edit-thing
   "C-h" 'help)
 
 (defvar-keymap conn-read-thing-command-map
@@ -858,15 +857,15 @@ If BUFFER is nil check `current-buffer'."
 
 (put 'conn-toggle-mark-command :conn-command-bounds 'conn--bounds-of-region)
 
-(defun conn--bounds-recursive-edit (_arg)
+(defun conn--bounds-of-recursive-edit (_arg)
   (let (buf)
     (save-mark-and-excursion
       (message "Defining region in recursive edit")
       (with-current-buffer (current-buffer)
         (recursive-edit)
-        (setq buf (current-buffer))))
-    (set-buffer buf)
-    (cons (region-beginning) (region-end))))
+        (setq buf (current-buffer)))
+      (set-buffer buf)
+      (cons (region-beginning) (region-end)))))
 
 (put 'recursive-edit :conn-command-bounds 'conn--bounds-of-recursive-edit)
 
@@ -976,14 +975,13 @@ If BUFFER is nil check `current-buffer'."
               (cl-return
                (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
                                (thing-sign '-)))))
-             ((and 'recursive-edit (guard recursive-edit))
-              (cl-return (list 'recursive-edit nil)))
-             ((guard (not (get cmd :conn-command-thing)))
-              (setq invalid t))
-             ((guard (get cmd :conn-command-thing))
+             ((guard (or (ignore-errors (get cmd :conn-command-thing))
+                         (ignore-errors (get cmd :conn-command-bounds))
+                         (alist-get cmd conn-bounds-of-command-alist)))
               (cl-return
                (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                               (thing-sign '-))))))
+                               (thing-sign '-)))))
+             (_ (setq invalid t)))
            (go :read-command))
         (message nil)
         (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
