@@ -4727,7 +4727,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C" 'tab-bar-duplicate-tab
   "c" 'conn-wincontrol-mru-window
   "d" 'delete-window
-  "e" 'conn-tab-to-register
+  "e" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
   "g" 'delete-other-windows
@@ -4751,7 +4751,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O" 'tear-off-window
   "p" 'conn-register-load
   "P" 'window-configuration-to-register
-  "x" 'conn-wincontrol-exit
+  "x" 'conn-tab-to-register
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "s" 'shrink-window
