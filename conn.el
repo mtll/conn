@@ -1622,6 +1622,118 @@ If any function returns a nil value then macro application it halted.")
        (when-let ((pt (pop points)))
          (conn--kapply-ensure-region-buffer (cons pt pt)))))))
 
+(defconst conn-kapply-query-help
+  "Type \\`SPC' or \\`y' to apply to one match, Delete or \\`n' to skip to next,
+\\`RET' or \\`q' to exit, Period to apply to one match and exit,
+\\`C-l' to clear the screen, redisplay, and offer same match again,
+\\`!' to replace all remaining matches in this buffer with no more questions,
+\\`^' to move point back to previous match,
+\\`u' to undo previous replacement,
+\\`U' to undo all replacements,
+\\`e' to edit the replacement string.
+\\`E' to edit the replacement string with exact case."
+  "Help message while in `conn--kapply-query'.")
+
+(defun conn--kapply-query (string beg end &optional regexp-flag reverse)
+  (pcase-let* ((exit-fn (set-transient-map query-replace-map (lambda () t)))
+               (prompt (apply #'propertize
+                              (concat "Act on match? "
+                                      (substitute-command-keys
+                                       "(\\<query-replace-map>\\[help] for help) "))
+                              minibuffer-prompt-properties))
+               (regions (save-excursion
+                          (cl-loop
+                           initially (goto-char beg)
+                           with search-fn = (if regexp-flag
+                                                're-search-forward
+                                              'search-forward)
+                           while (funcall search-fn string end t)
+                           collect (cons (match-beginning 0) (match-end 0)))))
+               (hl (make-overlay (point) (point)))
+               (stack nil)
+               (result nil))
+    (overlay-put hl 'face 'lazy-highlight)
+    (unwind-protect
+        (save-excursion
+          (cl-loop
+           with index = 0
+           while (length> regions index)
+           for (beg . end) = (nth index regions)
+           do
+           (goto-char beg)
+           (move-overlay hl beg end)
+           for action = (lookup-key (list query-replace-map)
+                                    (read-key-sequence prompt))
+           do
+           (pcase action
+             ('quit (signal 'quit nil))
+             ('exit (cl-return))
+             ('help
+              (let ((display-buffer-overriding-action
+                     '(nil (inhibit-same-window . t))))
+                (with-output-to-temp-buffer "*Help*"
+                  (princ
+                   (concat "Query applying "
+                           (if reverse "backward " "")
+                           (if regexp-flag "regexp " "")
+                           string
+                           (substitute-command-keys
+                            conn-kapply-query-help)))
+                  (with-current-buffer standard-output
+                    (help-mode)))))
+             ('act
+              (push 'act stack)
+              (cl-incf index))
+             ('skip
+              (push 'skip stack)
+              (cl-incf index))
+             ('act-and-exit
+              (push 'act stack)
+              (cl-return))
+             ('automatic
+              (push 'automatic stack)
+              (cl-return))
+             ('recenter (recenter))
+             ('redisplay (redisplay))
+             ('undo
+              (if stack
+                  (progn
+                    (pop stack)
+                    (cl-decf index))
+                (message "Nothing to undo")
+                (ding 'no-terminate)
+                (sit-for 1)))
+             ('undo-all
+              (if stack
+                  (setq stack nil
+                        index 0)
+                (message "Nothing to undo")
+                (ding 'no-terminate)
+                (sit-for 1))))))
+      (funcall exit-fn)
+      (delete-overlay hl))
+    (cl-loop
+     for action in (nreverse stack)
+     for reg = (pop regions)
+     do
+     (pcase action
+       ('act (push reg result))
+       ('automatic (setq result (nconc (nreverse regions) result))))
+     finally (setq result
+                   (mapcar (pcase-lambda (`(,beg . ,end))
+                             (cons (conn--create-marker beg)
+                                   (conn--create-marker end)))
+                           (if reverse (nreverse result) result))))
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (mapc (pcase-lambda (`(,beg . ,end))
+                 (set-marker beg nil)
+                 (set-marker end nil))
+               result))
+        (_
+         (conn--kapply-ensure-region-buffer (pop result)))))))
+
 (defun conn--kapply-merge-undo (iterator &optional undo-on-error)
   (let (undo-handles)
     (lambda (state)
@@ -5353,16 +5465,8 @@ before each iteration."
                    (regexp (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer 'regexp-quote))
-                             (conn--read-from-with-preview
-                              "Regexp" t nil (cons beg end))))
-                   (regions))
-        (save-excursion
-          (with-restriction beg end
-            (goto-char beg)
-            (while (re-search-forward regexp nil t)
-              (push (cons (match-beginning 0) (match-end 0)) regions))))
-        regions)
-    (conn--kapply-region-iterator --> (not (member "reverse" args)))
+                             (conn--read-from-with-preview "Regexp" t nil (cons beg end)))))
+        (conn--kapply-query regexp beg end t (not (member "reverse" args))))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5392,16 +5496,8 @@ before each iteration."
                    (string (minibuffer-with-setup-hook
                                (lambda ()
                                  (conn-yank-region-to-minibuffer))
-                             (conn--read-from-with-preview
-                              "String" nil nil (cons beg end))))
-                   (regions))
-        (save-excursion
-          (with-restriction beg end
-            (goto-char beg)
-            (while (search-forward string nil t)
-              (push (cons (match-beginning 0) (match-end 0)) regions))))
-        regions)
-    (conn--kapply-region-iterator --> (not (member "reverse" args)))
+                             (conn--read-from-with-preview "String" nil nil (cons beg end)))))
+        (conn--kapply-query string beg end nil (not (member "reverse" args))))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5427,16 +5523,8 @@ before each iteration."
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (regexp (conn--read-from-with-preview
-                            "Regexp" t nil (cons beg end)))
-                   (regions))
-        (save-excursion
-          (with-restriction beg end
-            (goto-char beg)
-            (while (re-search-forward regexp nil t)
-              (push (cons (match-beginning 0) (match-end 0)) regions))))
-        regions)
-    (conn--kapply-region-iterator --> (not (member "reverse" args)))
+                   (regexp (conn--read-from-with-preview "Regexp" t nil (cons beg end))))
+        (conn--kapply-query regexp beg end t (not (member "reverse" args))))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5466,16 +5554,8 @@ property."
   (deactivate-mark)
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (string (conn--read-from-with-preview
-                            "String" nil nil (cons beg end)))
-                   (regions))
-        (save-excursion
-          (with-restriction beg end
-            (goto-char beg)
-            (while (search-forward string nil t)
-              (push (cons (match-beginning 0) (match-end 0)) regions))))
-        regions)
-    (conn--kapply-region-iterator --> (not (member "reverse" args)))
+                   (string (conn--read-from-with-preview "String" nil nil (cons beg end))))
+        (conn--kapply-query string beg end nil (not (member "reverse" args))))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
