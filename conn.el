@@ -919,8 +919,7 @@ If BUFFER is nil check `current-buffer'."
                                          "recursive edit)")
                                ")")
                              ": %s")))
-            (thing-arg (when arg
-                         (abs (prefix-numeric-value arg))))
+            (thing-arg (when arg (abs (prefix-numeric-value arg))))
             (thing-sign (when arg (> 0 arg)))
             invalid keys cmd)
            :read-command
@@ -936,8 +935,7 @@ If BUFFER is nil check `current-buffer'."
                  cmd (key-binding keys t))
            :test
            (pcase cmd
-             ('keyboard-quit
-              (keyboard-quit))
+             ('keyboard-quit (keyboard-quit))
              ('help
               (internal-pop-keymap keymap 'overriding-terminal-local-map)
               (save-window-excursion
@@ -1065,7 +1063,8 @@ If BUFFER is nil check `current-buffer'."
     ""
     nil
     :filter ,(lambda (&rest _)
-               (setq conn--remapped-keys from-keys)
+               ;; read-key-sequence interferes with this
+               ;; (setq conn--remapped-keys from-keys)
                (conn--without-conn-maps
                  (key-binding from-keys t)))))
 
@@ -6288,7 +6287,7 @@ apply to each contiguous component of the region."
                    (let ((binding (key-binding (key-parse "C-b") t)))
                      (if (eq binding 'forward-char)
                          'conn-backward-char
-                       (setq conn--remapped-keys (key-parse "C-b"))
+                       ;; (setq conn--remapped-keys (key-parse "C-b"))
                        binding))))
   "K" (conn-remapping-command conn-forward-paragraph-keys)
   "k" (conn-remapping-command conn-next-line-keys)
@@ -6300,7 +6299,7 @@ apply to each contiguous component of the region."
                    (let ((binding (key-binding (key-parse "C-f") t)))
                      (if (eq binding 'forward-char)
                          'conn-forward-char
-                       (setq conn--remapped-keys (key-parse "C-f"))
+                       ;; (setq conn--remapped-keys (key-parse "C-f"))
                        binding))))
   "M" (conn-remapping-command conn-end-of-defun-keys)
   "m" (conn-remapping-command conn-forward-sexp-keys)
@@ -6527,7 +6526,8 @@ determine if `conn-local-mode' should be enabled."
         (progn
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50)
-          (add-hook 'pre-command-hook 'conn--remapping-hook -90))
+          ;; (add-hook 'pre-command-hook 'conn--remapping-hook -90)
+          )
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
