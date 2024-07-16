@@ -395,6 +395,14 @@ Used to restore previous value when `conn-mode' is disabled.")
         (fill-region (point-min) (point-max)))
       (buffer-string))))
 
+(defun conn-remapping-command (from-keys)
+  `(menu-item
+    ""
+    nil
+    :filter ,(lambda (&rest _)
+               (conn--without-conn-maps
+                 (key-binding from-keys t)))))
+
 (defmacro conn--without-conn-maps (&rest body)
   (declare (indent 0))
   `(let ((emulation-mode-map-alists (seq-difference
@@ -1048,27 +1056,6 @@ If BUFFER is nil check `current-buffer'."
       (message nil)
       (internal-pop-keymap conn-read-thing-command-map
                            'overriding-terminal-local-map))))
-
-
-;;;; Key Remapping
-
-(defvar conn--remapped-keys nil)
-
-(defun conn--remapping-hook ()
-  (when conn--remapped-keys
-    (setq last-command-event (aref conn--remapped-keys
-                                   (1- (length conn--remapped-keys)))
-          conn--remapped-keys nil)))
-
-(defun conn-remapping-command (from-keys)
-  `(menu-item
-    ""
-    nil
-    :filter ,(lambda (&rest _)
-               ;; read-key-sequence interferes with this
-               ;; (setq conn--remapped-keys from-keys)
-               (conn--without-conn-maps
-                 (key-binding from-keys t)))))
 
 
 ;;;; Advice
@@ -6468,14 +6455,11 @@ determine if `conn-local-mode' should be enabled."
     (if conn-mode
         (progn
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
-          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50)
-          ;; (add-hook 'pre-command-hook 'conn--remapping-hook -90)
-          )
+          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
-      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook)
-      (remove-hook 'pre-command-hook 'conn--remapping-hook))))
+      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
 (provide 'conn)
 
