@@ -393,7 +393,22 @@ Used to restore previous value when `conn-mode' is disabled.")
       (let ((fill-column col)
             (adaptive-fill-mode nil))
         (fill-region (point-min) (point-max)))
-      (buffer-string))))
+      (buffer-string)))
+
+  (defun conn--with-advice-1 (advice-form &rest body)
+    (pcase-let ((fn (gensym "advice"))
+                (`(,symbol ,how ,function . ,props) advice-form))
+      `(let ((,fn ,function))
+         (advice-add ,symbol ,how ,fn ,(car props))
+         (unwind-protect
+             ,(macroexp-progn body)
+           (advice-remove ,symbol ,fn)))))
+
+  (defmacro conn--with-advice (advice-forms &rest body)
+    (declare (indent 1))
+    (setq body (macroexp-progn body))
+    (dolist (form (nreverse advice-forms) body)
+      (setq body (conn--with-advice-1 form body)))))
 
 (defmacro conn--without-conn-maps (&rest body)
   (declare (indent 0))
@@ -414,21 +429,6 @@ Used to restore previous value when `conn-mode' is disabled.")
     :filter ,(lambda (&rest _)
                (conn--without-conn-maps
                  (key-binding from-keys t)))))
-
-(defun conn--with-advice-1 (advice-form &rest body)
-  (pcase-let ((fn (gensym "advice"))
-              ((seq symbol how function &optional props) advice-form))
-    `(let ((,fn ,function))
-       (advice-add ,symbol ,how ,fn ,props)
-       (unwind-protect
-           ,(macroexp-progn body)
-         (advice-remove ,symbol ,fn)))))
-
-(defmacro conn--with-advice (advice-forms &rest body)
-  (declare (indent 1))
-  (setq body (macroexp-progn body))
-  (dolist (form (nreverse advice-forms) body)
-    (setq body (conn--with-advice-1 form body))))
 
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
