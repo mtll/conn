@@ -417,7 +417,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defun conn--with-advice-1 (advice-form &rest body)
   (pcase-let ((fn (gensym "advice"))
-              (`(,symbol ,how ,function . ,props) advice-form))
+              ((seq symbol how function &optional props) advice-form))
     `(let ((,fn ,function))
        (advice-add ,symbol ,how ,fn ,props)
        (unwind-protect
@@ -426,7 +426,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defmacro conn--with-advice (advice-forms &rest body)
   (setq body (macroexp-progn body))
-  (dolist (form advice-forms body)
+  (dolist (form (nreverse advice-forms) body)
     (setq body (conn--with-advice-1 form body))))
 
 ;; From orderless
