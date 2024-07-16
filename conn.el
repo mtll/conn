@@ -5466,67 +5466,6 @@ before each iteration."
   :description "Windows"
   :argument "windows")
 
-;; (transient-define-suffix conn--kapply-regexp-region-suffix (args)
-;;   :transient 'transient--do-exit
-;;   :key "ru"
-;;   :description "Regexp in Region"
-;;   (interactive (list (transient-args transient-current-command)))
-;;   (conn--thread -->
-;;       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-;;                    (regexp (minibuffer-with-setup-hook
-;;                                (lambda ()
-;;                                  (conn-yank-region-to-minibuffer 'regexp-quote))
-;;                              (conn--read-from-with-preview "Regexp" beg end t nil))))
-;;         (conn--kapply-query regexp beg end t (member "reverse" args)))
-;;     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-;;     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-;;     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-;;     (pcase-exhaustive (transient-arg-value "state=" args)
-;;       ("conn" (conn--kapply-with-state --> 'conn-state))
-;;       ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-;;     (pcase-exhaustive (transient-arg-value "region=" args)
-;;       ("change" (conn--kapply-change-region -->))
-;;       ("end" (conn--kapply-at-end -->))
-;;       ("start" -->))
-;;     (conn--kapply-pulse-region -->)
-;;     (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-;;     (pcase (transient-arg-value "last-kmacro=" args)
-;;       ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-;;       ("append" (conn--kmacro-apply-append -->))
-;;       ("step-edit" (conn--kmacro-apply-step-edit -->))
-;;       (_ (conn--kmacro-apply -->)))))
-
-;; (transient-define-suffix conn--kapply-string-region-suffix (args)
-;;   :transient 'transient--do-exit
-;;   :key "rq"
-;;   :description "String in Region"
-;;   (interactive (list (transient-args transient-current-command)))
-;;   (deactivate-mark)
-;;   (conn--thread -->
-;;       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-;;                    (string (minibuffer-with-setup-hook
-;;                                (lambda ()
-;;                                  (conn-yank-region-to-minibuffer))
-;;                              (conn--read-from-with-preview "String" beg end nil nil))))
-;;         (conn--kapply-query string beg end nil (member "reverse" args)))
-;;     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-;;     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-;;     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-;;     (pcase-exhaustive (transient-arg-value "state=" args)
-;;       ("conn" (conn--kapply-with-state --> 'conn-state))
-;;       ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-;;     (pcase-exhaustive (transient-arg-value "region=" args)
-;;       ("change" (conn--kapply-change-region -->))
-;;       ("end" (conn--kapply-at-end -->))
-;;       ("start" -->))
-;;     (conn--kapply-pulse-region -->)
-;;     (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-;;     (pcase (transient-arg-value "last-kmacro=" args)
-;;       ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-;;       ("append" (conn--kmacro-apply-append -->))
-;;       ("step-edit" (conn--kmacro-apply-step-edit -->))
-;;       (_ (conn--kmacro-apply -->)))))
-
 (transient-define-suffix conn--kapply-string-suffix (args)
   "Apply keyboard macro to every occurance of a string within a region.
 The region is read by prompting for a command with a `:conn-command-thing'
