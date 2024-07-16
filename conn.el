@@ -425,6 +425,7 @@ Used to restore previous value when `conn-mode' is disabled.")
          (advice-remove ,symbol ,fn)))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
+  (declare (indent 1))
   (setq body (macroexp-progn body))
   (dolist (form (nreverse advice-forms) body)
     (setq body (conn--with-advice-1 form body))))
