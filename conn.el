@@ -395,14 +395,6 @@ Used to restore previous value when `conn-mode' is disabled.")
         (fill-region (point-min) (point-max)))
       (buffer-string))))
 
-(defun conn-remapping-command (from-keys)
-  `(menu-item
-    ""
-    nil
-    :filter ,(lambda (&rest _)
-               (conn--without-conn-maps
-                 (key-binding from-keys t)))))
-
 (defmacro conn--without-conn-maps (&rest body)
   (declare (indent 0))
   `(let ((emulation-mode-map-alists (seq-difference
@@ -415,17 +407,27 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn--with-advice (symbol how function props &rest body)
-  (declare (indent 4))
-  (unless body
-    (setq body props
-          props nil))
-  (let ((fn (gensym "advice")))
+(defun conn-remapping-command (from-keys)
+  `(menu-item
+    ""
+    nil
+    :filter ,(lambda (&rest _)
+               (conn--without-conn-maps
+                 (key-binding from-keys t)))))
+
+(defun conn--with-advice-1 (advice-form &rest body)
+  (pcase-let ((fn (gensym "advice"))
+              (`(,symbol ,how ,function . ,props) advice-form))
     `(let ((,fn ,function))
        (advice-add ,symbol ,how ,fn ,props)
        (unwind-protect
            ,(macroexp-progn body)
          (advice-remove ,symbol ,fn)))))
+
+(defmacro conn--with-advice (advice-forms &rest body)
+  (setq body (macroexp-progn body))
+  (dolist (form advice-forms body)
+    (setq body (conn--with-advice-1 form body))))
 
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
@@ -1887,8 +1889,7 @@ The iterator must be the first argument in ARGLIST.
                  (progn
                    (run-hooks 'conn-kmacro-apply-start-hook)
                    (deactivate-mark)
-                   (conn--with-advice
-                       'kmacro-loop-setup-function :before-while ,iterator nil
+                   (conn--with-advice (('kmacro-loop-setup-function :before-while ,iterator))
                      ,@body))
                (t
                 (setq conn-kmacro-apply-error err)
@@ -3572,7 +3573,7 @@ Interactively `region-beginning' and `region-end'."
                                                    (isearch-no-upper-case-p from-string regexp-flag)))
                                            from-string)))
                          (conn--with-advice
-                             'query-replace-descr :filter-args (lambda (_) (list prev)) nil
+                             (('query-replace-descr :filter-args (lambda (_) (list prev))))
                            (query-replace-read-from prompt regexp-flag))))
                  (to (if (consp from) (prog1 (cdr from) (setq from (car from)))
                        (query-replace-read-to from prompt regexp-flag))))
