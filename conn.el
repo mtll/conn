@@ -576,33 +576,32 @@ If BUFFER is nil check `current-buffer'."
             (push (match-beginning 0) matches)))
         (nreverse matches)))))
 
-(defun conn--read-from-with-preview (prompt &optional regexp-flag default bounds)
-  (minibuffer-with-setup-hook
-      (minibuffer-lazy-highlight-setup
-       :case-fold case-fold-search
-       :filter (when bounds
-                 (lambda (beg end)
-                   (and (<= (car bounds) beg (cdr bounds))
-                        (<= (car bounds) end (cdr bounds)))))
-       :highlight query-replace-lazy-highlight
-       :regexp regexp-flag
-       :regexp-function (or replace-regexp-function
-                            (and replace-char-fold
-                                 (not regexp-flag)
-                                 #'char-fold-to-regexp))
-       :transform (lambda (string)
-                    (when (and case-fold-search search-upper-case)
-                      (setq isearch-case-fold-search
-                            (isearch-no-upper-case-p string regexp-flag)))
-                    string))
-    (if regexp-flag
-        (read-regexp (format-prompt prompt (and (length> (ensure-list default) 0)
-                                                (query-replace-descr default)))
-                     (mapcar #'regexp-quote (ensure-list default))
-                     'conn--read-regexp-history)
-      (read-string (format-prompt prompt (and (length> (ensure-list default) 0)
-                                              (query-replace-descr default)))
-                   nil 'conn--read-string-history default))))
+(defun conn--read-from-with-preview (prompt &optional beg end regexp-flag)
+  (pcase-let ((`(,default . ,prev) (conn--replace-read-default)))
+    (minibuffer-with-setup-hook
+        (minibuffer-lazy-highlight-setup
+         :case-fold case-fold-search
+         :filter (when (or beg end)
+                   (lambda (beg end)
+                     (and (<= (or beg (point-min)) beg (or end (point-max)))
+                          (<= (or beg (point-min)) end (or end (point-max))))))
+         :highlight query-replace-lazy-highlight
+         :regexp regexp-flag
+         :regexp-function (or replace-regexp-function
+                              (and replace-char-fold
+                                   (not regexp-flag)
+                                   #'char-fold-to-regexp))
+         :transform (lambda (string)
+                      (when (and case-fold-search search-upper-case)
+                        (setq isearch-case-fold-search
+                              (isearch-no-upper-case-p string regexp-flag)))
+                      string))
+      (if regexp-flag
+          (read-regexp (format-prompt prompt (and default (query-replace-descr prev)))
+                       (mapcar #'regexp-quote default)
+                       'conn--read-regexp-history)
+        (read-string (format-prompt prompt (and default (query-replace-descr prev)))
+                     nil 'conn--read-string-history default)))))
 
 (defun conn-overlay-p (overlay)
   (overlay-get overlay 'conn-overlay))
@@ -3539,34 +3538,57 @@ Interactively `region-beginning' and `region-end'."
     (_
      (transpose-subr mover (prefix-numeric-value arg)))))
 
+(defun conn--replace-read-default ()
+  (let* ((default (when (< (- (region-end) (region-beginning)) 1000)
+                    (buffer-substring-no-properties (region-beginning) (region-end))))
+         (prev (when default
+                 (let* ((b (region-beginning))
+                        (e (region-end))
+                        (prev-str (buffer-substring-no-properties
+                                   b (min (+ b 32)
+                                          (save-excursion
+                                            (goto-char b)
+                                            (if (search-forward "\n" e t)
+                                                (1- (point))
+                                              e))))))
+                   (concat
+                    prev-str
+                    (when (< (length prev-str) (- e b)) "..."))))))
+    (cons default prev)))
+
 ;; From replace.el
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
   (unless noerror
     (barf-if-buffer-read-only))
   (save-mark-and-excursion
-    (let* ((delimited-flag (and current-prefix-arg
-                                (not (eq current-prefix-arg '-))))
-           (from (minibuffer-with-setup-hook
-                     (minibuffer-lazy-highlight-setup
-                      :case-fold case-fold-search
-                      :filter (lambda (b e) (<= beg b e end))
-                      :highlight query-replace-lazy-highlight
-                      :regexp regexp-flag
-                      :regexp-function (or replace-regexp-function
-                                           delimited-flag
-                                           (and replace-char-fold
-                                                (not regexp-flag)
-                                                #'char-fold-to-regexp))
-                      :transform (lambda (string)
-                                   (let* ((split (query-replace--split-string string))
-                                          (from-string (if (consp split) (car split) split)))
-                                     (when (and case-fold-search search-upper-case)
-                                       (setq isearch-case-fold-search
-                                             (isearch-no-upper-case-p from-string regexp-flag)))
-                                     from-string)))
-                   (query-replace-read-from prompt regexp-flag)))
-           (to (if (consp from) (prog1 (cdr from) (setq from (car from)))
-                 (query-replace-read-to from prompt regexp-flag))))
+    (pcase-let* ((delimited-flag (and current-prefix-arg
+                                      (not (eq current-prefix-arg '-))))
+                 (`(,default . ,prev) (conn--replace-read-default))
+                 (query-replace-read-from-default (lambda () (list default)))
+                 (query-replace-read-from-regexp-default (regexp-quote default))
+                 (from (minibuffer-with-setup-hook
+                           (minibuffer-lazy-highlight-setup
+                            :case-fold case-fold-search
+                            :filter (lambda (b e) (<= beg b e end))
+                            :highlight query-replace-lazy-highlight
+                            :regexp regexp-flag
+                            :regexp-function (or replace-regexp-function
+                                                 delimited-flag
+                                                 (and replace-char-fold
+                                                      (not regexp-flag)
+                                                      #'char-fold-to-regexp))
+                            :transform (lambda (string)
+                                         (let* ((split (query-replace--split-string string))
+                                                (from-string (if (consp split) (car split) split)))
+                                           (when (and case-fold-search search-upper-case)
+                                             (setq isearch-case-fold-search
+                                                   (isearch-no-upper-case-p from-string regexp-flag)))
+                                           from-string)))
+                         (conn--with-advice
+                             'query-replace-descr :filter-args (lambda (_) (list prev)) nil
+                           (query-replace-read-from prompt regexp-flag))))
+                 (to (if (consp from) (prog1 (cdr from) (setq from (car from)))
+                       (query-replace-read-to from prompt regexp-flag))))
       (list from to
             (or delimited-flag
                 (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
@@ -3608,40 +3630,6 @@ Interactively `region-beginning' and `region-end'."
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string t t delimited nil nil beg end backward)))))
-
-(defun conn-replace-region-in-thing (thing-mover arg from-string to-string &optional delimited backward)
-  (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (common
-                 (minibuffer-with-setup-hook
-                     'conn-yank-region-to-minibuffer
-                   (conn--replace-read-args
-                    (concat "Query replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    nil beg end))))
-     (append (list thing-mover arg) common)))
-  (conn-replace-in-thing thing-mover arg from-string to-string delimited backward))
-
-(defun conn-regexp-replace-region-in-thing (thing-mover arg from-string to-string &optional delimited backward)
-  (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (common
-                 (minibuffer-with-setup-hook
-                     'conn-yank-region-to-minibuffer
-                   (conn--replace-read-args
-                    (concat "Query replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    t beg end))))
-     (append (list thing-mover arg) common)))
-  (conn-regexp-replace-in-thing thing-mover arg from-string to-string delimited backward))
 
 (defun conn-open-line (arg)
   (interactive "p")
@@ -5107,19 +5095,19 @@ See `tab-close'."
 
 (defun conn--wincontrol-reflect-window (state)
   (pcase-let* ((`(,params . ,windows)
-                (conn--wincontrol-split-window-state state)))
-    (let* ((height  (alist-get 'normal-height params))
-           (width   (alist-get 'normal-width  params))
-           (pheight (* (alist-get 'pixel-width  params) (/ height width)))
-           (theight (* (alist-get 'total-width  params) (/ height width)))
-           (pwidth  (* (alist-get 'pixel-height params) (/ height width)))
-           (twidth  (* (alist-get 'total-height params) (/ height width))))
-      (setf (alist-get 'normal-width  params) height
-            (alist-get 'normal-height params) width
-            (alist-get 'pixel-height  params) pheight
-            (alist-get 'pixel-width   params) pwidth
-            (alist-get 'total-height  params) theight
-            (alist-get 'total-width   params) twidth))
+                (conn--wincontrol-split-window-state state))
+               (height  (alist-get 'normal-height params))
+               (width   (alist-get 'normal-width  params))
+               (pheight (* (alist-get 'pixel-width  params) (/ height width)))
+               (theight (* (alist-get 'total-width  params) (/ height width)))
+               (pwidth  (* (alist-get 'pixel-height params) (/ height width)))
+               (twidth  (* (alist-get 'total-height params) (/ height width))))
+    (setf (alist-get 'normal-width  params) height
+          (alist-get 'normal-height params) width
+          (alist-get 'pixel-height  params) pheight
+          (alist-get 'pixel-width   params) pwidth
+          (alist-get 'total-height  params) theight
+          (alist-get 'total-width   params) twidth)
     (append (cl-loop for elem in params collect (pcase elem
                                                   ('vc 'hc)
                                                   ('hc 'vc)
@@ -5478,48 +5466,79 @@ before each iteration."
   :description "Windows"
   :argument "windows")
 
-(transient-define-suffix conn--kapply-regexp-region-suffix (args)
-  :transient 'transient--do-exit
-  :key "ru"
-  :description "Regexp in Region"
-  (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (regexp (minibuffer-with-setup-hook
-                               (lambda ()
-                                 (conn-yank-region-to-minibuffer 'regexp-quote))
-                             (conn--read-from-with-preview "Regexp" t nil (cons beg end)))))
-        (conn--kapply-query regexp beg end t (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+;; (transient-define-suffix conn--kapply-regexp-region-suffix (args)
+;;   :transient 'transient--do-exit
+;;   :key "ru"
+;;   :description "Regexp in Region"
+;;   (interactive (list (transient-args transient-current-command)))
+;;   (conn--thread -->
+;;       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
+;;                    (regexp (minibuffer-with-setup-hook
+;;                                (lambda ()
+;;                                  (conn-yank-region-to-minibuffer 'regexp-quote))
+;;                              (conn--read-from-with-preview "Regexp" beg end t nil))))
+;;         (conn--kapply-query regexp beg end t (member "reverse" args)))
+;;     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+;;     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
+;;     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
+;;     (pcase-exhaustive (transient-arg-value "state=" args)
+;;       ("conn" (conn--kapply-with-state --> 'conn-state))
+;;       ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
+;;     (pcase-exhaustive (transient-arg-value "region=" args)
+;;       ("change" (conn--kapply-change-region -->))
+;;       ("end" (conn--kapply-at-end -->))
+;;       ("start" -->))
+;;     (conn--kapply-pulse-region -->)
+;;     (if (member "windows" args) (conn--kapply-save-windows -->) -->)
+;;     (pcase (transient-arg-value "last-kmacro=" args)
+;;       ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
+;;       ("append" (conn--kmacro-apply-append -->))
+;;       ("step-edit" (conn--kmacro-apply-step-edit -->))
+;;       (_ (conn--kmacro-apply -->)))))
 
-(transient-define-suffix conn--kapply-string-region-suffix (args)
+;; (transient-define-suffix conn--kapply-string-region-suffix (args)
+;;   :transient 'transient--do-exit
+;;   :key "rq"
+;;   :description "String in Region"
+;;   (interactive (list (transient-args transient-current-command)))
+;;   (deactivate-mark)
+;;   (conn--thread -->
+;;       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
+;;                    (string (minibuffer-with-setup-hook
+;;                                (lambda ()
+;;                                  (conn-yank-region-to-minibuffer))
+;;                              (conn--read-from-with-preview "String" beg end nil nil))))
+;;         (conn--kapply-query string beg end nil (member "reverse" args)))
+;;     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+;;     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
+;;     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
+;;     (pcase-exhaustive (transient-arg-value "state=" args)
+;;       ("conn" (conn--kapply-with-state --> 'conn-state))
+;;       ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
+;;     (pcase-exhaustive (transient-arg-value "region=" args)
+;;       ("change" (conn--kapply-change-region -->))
+;;       ("end" (conn--kapply-at-end -->))
+;;       ("start" -->))
+;;     (conn--kapply-pulse-region -->)
+;;     (if (member "windows" args) (conn--kapply-save-windows -->) -->)
+;;     (pcase (transient-arg-value "last-kmacro=" args)
+;;       ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
+;;       ("append" (conn--kmacro-apply-append -->))
+;;       ("step-edit" (conn--kmacro-apply-step-edit -->))
+;;       (_ (conn--kmacro-apply -->)))))
+
+(transient-define-suffix conn--kapply-string-suffix (args)
+  "Apply keyboard macro to every occurance of a string within a region.
+The region is read by prompting for a command with a `:conn-command-thing'
+property."
   :transient 'transient--do-exit
-  :key "rq"
-  :description "String in Region"
+  :key "q"
+  :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (string (minibuffer-with-setup-hook
-                               (lambda ()
-                                 (conn-yank-region-to-minibuffer))
-                             (conn--read-from-with-preview "String" nil nil (cons beg end)))))
+                   (string (conn--read-from-with-preview "String" beg end nil)))
         (conn--kapply-query string beg end nil (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
@@ -5546,39 +5565,8 @@ before each iteration."
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (regexp (conn--read-from-with-preview "Regexp" t nil (cons beg end))))
+                   (regexp (conn--read-from-with-preview "Regexp" beg end t)))
         (conn--kapply-query regexp beg end t (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
-
-(transient-define-suffix conn--kapply-string-suffix (args)
-  "Apply keyboard macro to every occurance of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
-  :transient 'transient--do-exit
-  :key "q"
-  :description "String"
-  (interactive (list (transient-args transient-current-command)))
-  (deactivate-mark)
-  (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (string (conn--read-from-with-preview "String" nil nil (cons beg end))))
-        (conn--kapply-query string beg end nil (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5831,16 +5819,12 @@ apply to each contiguous component of the region."
     (conn--kapply-macro-infix)]]
   [[:description
     "Apply Kmacro On:"
-    (conn--kapply-text-property-suffix)
-    (conn--kapply-iterate-suffix)
+    (conn--kapply-string-suffix)
     (conn--kapply-regexp-suffix)
-    (conn--kapply-string-suffix)]
-   [:description
-    ""
     (conn--kapply-things-suffix)
     (conn--kapply-things-in-region-suffix)
-    (conn--kapply-regexp-region-suffix)
-    (conn--kapply-string-region-suffix)]
+    (conn--kapply-text-property-suffix)
+    (conn--kapply-iterate-suffix)]
    [:description
     "Save State:"
     (conn--kapply-merge-undo-infix)
@@ -6185,8 +6169,6 @@ apply to each contiguous component of the region."
   "n" 'conn-narrow-to-region
   "s" 'conn-sort-prefix
   "o" 'conn-occur-region
-  "q" 'conn-replace-region-in-thing
-  "u" 'conn-regexp-replace-region-in-thing
   "V" 'vc-region-history
   "y" 'yank-rectangle
   "j" 'join-line)
