@@ -1786,21 +1786,19 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-with-state (iterator transition)
   (let ((buffer-states nil))
     (lambda (state)
-      (let ((ret (funcall iterator state)))
-        (cond
-         ((eq state :finalize)
+      (prog1
+          (funcall iterator state)
+        (when (eq state :finalize)
           (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
             (when state
               (with-current-buffer buf
                 (funcall state)
                 (setq conn-previous-state prev-state)))))
-         (ret
-          (when conn-local-mode
-            (unless (alist-get (current-buffer) buffer-states)
-              (setf (alist-get (current-buffer) buffer-states)
-                    (list conn-current-state conn-previous-state)))
-            (funcall transition))))
-        ret))))
+        (when conn-local-mode
+          (unless (alist-get (current-buffer) buffer-states)
+            (setf (alist-get (current-buffer) buffer-states)
+                  (list conn-current-state conn-previous-state)))
+          (funcall transition))))))
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
@@ -1825,8 +1823,7 @@ Possibilities: \\<query-replace-map>
          (funcall iterator state)
          (set-window-configuration wconf))
         (_
-         (unless wconf
-           (setq wconf (current-window-configuration)))
+         (unless wconf (setq wconf (current-window-configuration)))
          (funcall iterator state))))))
 
 (defmacro conn--define-kapply (name arglist &rest body)
@@ -1843,8 +1840,8 @@ The iterator must be the first argument in ARGLIST.
               (undo-limit most-positive-fixnum)
               (undo-strong-limit most-positive-fixnum)
               (conn-kmacro-applying-p t)
-              (success t)
               (conn--kapply-automatic-flag nil)
+              (success nil)
               (,iterator (lambda (&optional state)
                            (when (funcall ,iterator (or state :loop))
                              (run-hook-with-args-until-failure
