@@ -465,7 +465,7 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      (if predicate (funcall predicate buf) t)
                                      (not (member name selected)))))
            until (equal buf "") collect buf into selected
-           finally (cl-return selected)))
+           finally return selected))
 
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
@@ -898,7 +898,7 @@ If BUFFER is nil check `current-buffer'."
                           (ignore-errors
                             (forward-thing thing 1)
                             t))
-               finally (cl-return regions)))))
+               finally return regions))))
 
 (defun conn--region-bounds (beg end)
   (cl-loop for reg in (region-bounds)
@@ -1642,7 +1642,7 @@ Possibilities: \\<query-replace-map>
      t)))
 
 (defun conn--kapply-infinite-iterator ()
-  (lambda (state) t))
+  (lambda (_state) t))
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
   (conn--thread -->
@@ -1693,11 +1693,15 @@ Possibilities: \\<query-replace-map>
   (let ((matches (save-excursion
                    (goto-char beg)
                    (cl-loop
+                    with matches = nil
                     while (replace-search string end regexp-flag
                                           delimited-flag case-fold-search)
                     for (mb me . _) = (match-data t)
-                    collect (cons (conn--create-marker mb)
-                                  (conn--create-marker me))))))
+                    do
+                    (push (cons (conn--create-marker mb)
+                                (conn--create-marker me))
+                          matches)
+                    finally return (if reverse matches (nreverse matches))))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -1711,26 +1715,25 @@ Possibilities: \\<query-replace-map>
            (unwind-protect
                (cl-loop
                 for cont = (conn--kapply-advance-region (pop matches))
-                until (progn
-                        (recenter nil)
-                        (move-overlay hl (region-beginning) (region-end) (current-buffer))
-                        (y-or-n-p "Record here?"))
-                finally (cl-return cont))
+                until (or (null cont)
+                          (progn
+                            (recenter nil)
+                            (move-overlay hl (region-beginning) (region-end) (current-buffer))
+                            (y-or-n-p "Record here?")))
+                finally return cont)
              (delete-overlay hl))))
         (_
          (conn--kapply-advance-region (pop matches)))))))
 
-(defun conn--kapply-merge-undo (iterator &optional undo-on-error)
+(defun conn--kapply-merge-undo (iterator)
   (let (undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
-           (if (and conn-kmacro-apply-error undo-on-error)
-               (cancel-change-group handle)
-             (accept-change-group handle)
-             (undo-amalgamate-change-group handle))))
+           (accept-change-group handle)
+           (undo-amalgamate-change-group handle)))
         (_
          (prog1
              (funcall iterator state)
@@ -5084,7 +5087,7 @@ When ARG is nil the root window is used."
   (let ((window
          (when arg
            (cl-loop for win = (selected-window) then (window-parent win)
-                    repeat (abs arg) while win finally (cl-return win)))))
+                    repeat (abs arg) while win finally return win))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reverse-window (and arg (< arg 0)))
@@ -5097,7 +5100,7 @@ When ARG is nil the root window is used."
   (let ((window
          (when arg
            (cl-loop for win = (selected-window) then (window-parent win)
-                    repeat (abs arg) while win finally (cl-return win)))))
+                    repeat (abs arg) while win finally return win))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reflect-window)
@@ -5428,7 +5431,7 @@ property."
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (string (conn--read-from-with-preview "String" beg end nil)))
         (conn--kapply-matches string beg end nil (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5455,7 +5458,7 @@ property."
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
                    (regexp (conn--read-from-with-preview "Regexp" beg end t)))
         (conn--kapply-matches regexp beg end t (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5488,7 +5491,7 @@ apply to each contiguous component of the region."
           (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
         -->)
       (conn--kapply-region-iterator --> (member "reverse" args))
-      (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+      (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
       (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
       (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
       (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5521,7 +5524,7 @@ apply to each contiguous component of the region."
          (get cmd :conn-command-thing)
          (region-beginning) (region-end)
          (member "reverse" args) (member "skip" args) arg))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5569,7 +5572,7 @@ apply to each contiguous component of the region."
                      (transient-args transient-current-command)))
   (conn--thread -->
       (funcall iterator (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5610,7 +5613,7 @@ apply to each contiguous component of the region."
                  collect (cons (conn--create-marker beg)
                                (conn--create-marker end))))
     (conn--kapply-region-iterator --> (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
     (pcase-exhaustive (transient-arg-value "state=" args)
@@ -5654,7 +5657,7 @@ apply to each contiguous component of the region."
                   regions))
           regions))
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo --> t) -->)
+    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
     (pcase-exhaustive (transient-arg-value "state=" args)
