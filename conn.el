@@ -609,10 +609,16 @@ If BUFFER is nil check `current-buffer'."
                       string))
       (if regexp-flag
           (read-regexp (format-prompt prompt (and default (query-replace-descr prev)))
-                       (mapcar #'regexp-quote default)
+                       (regexp-quote default)
                        'conn--read-regexp-history)
-        (read-string (format-prompt prompt (and default (query-replace-descr prev)))
-                     nil 'conn--read-string-history default)))))
+        (read-from-minibuffer
+         (format-prompt prompt (and default (query-replace-descr prev)))
+         nil nil nil nil
+         (if default
+             (delete-dups
+              (cons default (query-replace-read-from-suggestions)))
+           (query-replace-read-from-suggestions))
+         t)))))
 
 (defun conn-overlay-p (overlay)
   (overlay-get overlay 'conn-overlay))
