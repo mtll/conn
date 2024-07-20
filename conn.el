@@ -6037,7 +6037,6 @@ apply to each contiguous component of the region."
   "TAB" 'indent-rigidly
   "f" 'conn-isearch-region-forward
   "b" 'conn-isearch-region-backward
-  "DEL" (conn-remapping-command conn-delete-region-keys)
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
@@ -6048,7 +6047,7 @@ apply to each contiguous component of the region."
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
-  "c" 'conn-copy-thing
+  "c" 'conn-region-case-prefix
   "D" 'conn-duplicate-and-comment-region
   "d" 'conn-duplicate-region
   "e c" 'conn-split-region-on-regexp
@@ -6062,7 +6061,9 @@ apply to each contiguous component of the region."
   "o" 'conn-occur-region
   "V" 'vc-region-history
   "y" 'yank-rectangle
-  "j" 'join-line)
+  "j" 'join-line
+  "q" 'conn-replace-in-thing
+  "u" 'conn-regexp-replace-in-thing)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -6137,7 +6138,7 @@ apply to each contiguous component of the region."
 
 (defvar-keymap conn-edit-map
   "F" 'conn-fill-prefix
-  "c" 'conn-region-case-prefix
+  "c" 'conn-copy-thing
   "TAB" 'indent-for-tab-command
   "o" 'conn-open-line-and-indent
   "n" 'conn-open-line-above
@@ -6157,9 +6158,7 @@ apply to each contiguous component of the region."
   "d" 'duplicate-dwim
   "w p" 'conn-kill-prepend-region
   "w a" 'conn-kill-append-region
-  "y" 'yank-in-context
-  "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing)
+  "y" 'yank-in-context)
 
 (defvar-keymap conn-movement-map
   ">" 'forward-line
