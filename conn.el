@@ -3516,7 +3516,7 @@ Interactively `region-beginning' and `region-end'."
     (pcase-let* ((delimited-flag (and current-prefix-arg
                                       (not (eq current-prefix-arg '-))))
                  (`(,default . ,prev) (conn--replace-read-default))
-                 (query-replace-read-from-default (lambda () (list default)))
+                 (query-replace-read-from-default (lambda () default))
                  (query-replace-read-from-regexp-default (regexp-quote default))
                  (from (minibuffer-with-setup-hook
                            (minibuffer-lazy-highlight-setup
@@ -3539,7 +3539,8 @@ Interactively `region-beginning' and `region-end'."
                          (conn--with-advice
                              (('query-replace-descr :filter-args (lambda (_) (list prev))))
                            (query-replace-read-from prompt regexp-flag))))
-                 (to (if (consp from) (prog1 (cdr from) (setq from (car from)))
+                 (to (if (consp from)
+                         (prog1 (cdr from) (setq from (car from)))
                        (query-replace-read-to from prompt regexp-flag))))
       (list from to
             (or delimited-flag
