@@ -611,14 +611,16 @@ If BUFFER is nil check `current-buffer'."
           (read-regexp (format-prompt prompt (and default (query-replace-descr prev)))
                        (regexp-quote default)
                        'conn--read-regexp-history)
-        (read-from-minibuffer
-         (format-prompt prompt (and default (query-replace-descr prev)))
-         nil nil nil nil
-         (if default
-             (delete-dups
-              (cons default (query-replace-read-from-suggestions)))
-           (query-replace-read-from-suggestions))
-         t)))))
+        (let ((from (read-from-minibuffer
+                     (format-prompt prompt (and default (query-replace-descr prev)))
+                     nil nil nil nil
+                     (if default
+                         (delete-dups
+                          (cons default (query-replace-read-from-suggestions)))
+                       (query-replace-read-from-suggestions))
+                     t)))
+          (or (and (zerop (length from)) default)
+              from))))))
 
 (defun conn-overlay-p (overlay)
   (overlay-get overlay 'conn-overlay))
