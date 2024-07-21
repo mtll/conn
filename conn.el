@@ -3464,14 +3464,12 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-transpose-regions (mover arg)
   (interactive
-   (pcase-let ((`(,cmd ,arg)
-                (conn--read-thing-mover "Mover"
-                                        current-prefix-arg
-                                        (define-keymap
-                                          "i" 'conn-backward-line
-                                          "k" 'forward-line)
-                                        t)))
-     (list cmd arg)))
+   (conn--read-thing-mover "Mover"
+                           current-prefix-arg
+                           (define-keymap
+                             "i" 'conn-backward-line
+                             "k" 'forward-line)
+                           t))
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
