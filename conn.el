@@ -1722,12 +1722,14 @@ Possibilities: \\<query-replace-map>
            (overlay-put hl 'face 'query-replace)
            (unwind-protect
                (cl-loop
+                with len = (length matches)
                 for cont = (conn--kapply-advance-region (pop matches))
+                for i from 1
                 until (or (null cont)
                           (progn
                             (recenter nil)
                             (move-overlay hl (region-beginning) (region-end) (current-buffer))
-                            (y-or-n-p "Record here?")))
+                            (y-or-n-p (format "[%s/%s] Record here?" i len))))
                 finally return cont)
              (delete-overlay hl))))
         (_
@@ -3556,7 +3558,7 @@ Interactively `region-beginning' and `region-end'."
                      (get-text-property 0 'isearch-regexp-function from)))
             (and current-prefix-arg (eq current-prefix-arg '-))))))
 
-(defun conn-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
+(defun conn-query-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
@@ -3574,7 +3576,7 @@ Interactively `region-beginning' and `region-end'."
       (save-excursion
         (perform-replace from-string to-string t nil delimited nil nil beg end backward)))))
 
-(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
+(defun conn-query-regexp-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
@@ -3591,6 +3593,42 @@ Interactively `region-beginning' and `region-end'."
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string t t delimited nil nil beg end backward)))))
+
+(defun conn-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
+  (interactive
+   (pcase-let* ((`(,thing-mover ,arg)
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
+                (common
+                 (conn--replace-read-args
+                  (concat "Query replace"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  nil beg end)))
+     (append (list thing-mover arg) common)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+    (save-window-excursion
+      (save-excursion
+        (perform-replace from-string to-string nil nil delimited nil nil beg end backward)))))
+
+(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
+  (interactive
+   (pcase-let* ((`(,thing-mover ,arg)
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
+                (common
+                 (conn--replace-read-args
+                  (concat "Query replace"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  t beg end)))
+     (append (list thing-mover arg) common)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+    (save-window-excursion
+      (save-excursion
+        (perform-replace from-string to-string nil t delimited nil nil beg end backward)))))
 
 (defun conn-open-line (arg)
   (interactive "p")
@@ -6071,8 +6109,8 @@ apply to each contiguous component of the region."
   "V" 'vc-region-history
   "y" 'yank-rectangle
   "j" 'join-line
-  "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing)
+  "q" 'conn-query-replace-in-thing
+  "u" 'conn-query-regexp-replace-in-thing)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -6167,7 +6205,9 @@ apply to each contiguous component of the region."
   "d" 'duplicate-dwim
   "w p" 'conn-kill-prepend-region
   "w a" 'conn-kill-append-region
-  "y" 'yank-in-context)
+  "y" 'yank-in-context
+  "q" 'conn-replace-in-thing
+  "u" 'conn-regexp-replace-in-thing)
 
 (defvar-keymap conn-movement-map
   ">" 'forward-line
