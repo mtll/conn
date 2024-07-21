@@ -556,8 +556,7 @@ If BUFFER is nil check `current-buffer'."
       (cl-loop with bound = (if isearch-forward (point-max) (point-min))
                with case-fold-search = isearch-case-fold-search
                while (isearch-search-string isearch-string bound t)
-               when (funcall isearch-filter-predicate
-                             (match-beginning 0) (match-end 0))
+               when (funcall isearch-filter-predicate (match-beginning 0) (match-end 0))
                collect (cons (match-beginning 0) (match-end 0))
                when (and (= (match-beginning 0) (match-end 0))
                          (not (if isearch-forward (eobp) (bobp))))
@@ -986,11 +985,11 @@ If BUFFER is nil check `current-buffer'."
              ('backward-delete-arg
               (setq thing-arg (floor thing-arg 10)))
              ('forward-delete-arg
-              (setq thing-arg (conn--thread -->
-                                  (log thing-arg 10)
-                                (floor -->)
-                                (expt 10 -->)
-                                (mod thing-arg -->))))
+              (setq thing-arg (thread-last
+                                (log thing-arg 10)
+                                (floor)
+                                (expt 10)
+                                (mod thing-arg))))
              ('negative-argument
               (setq thing-sign (not thing-sign)))
              ((or 'conn-expand 'conn-contract)
@@ -1300,11 +1299,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (when-let ((inner-op (get thing :conn-inner-bounds-op)))
     (funcall inner-op (car bounds) (cdr bounds))))
 
-(cl-defgeneric conn-thing-empty-p (thing bounds)
-  (or (= (car bounds) (cdr bounds))
-      (pcase (conn-bounds-of-inner-thing thing bounds)
+(defun conn-thing-empty-p (thing bounds)
+  (or (pcase (conn-bounds-of-inner-thing thing bounds)
         ('nil nil)
-        ((and `(,beg . ,end) (guard (= beg end))) t))))
+        ((and `(,beg . ,end) (guard (= beg end))) t))
+      (= (car bounds) (cdr bounds))))
 
 ;;;;; Thing Definitions
 
@@ -2231,13 +2230,15 @@ state."
 
 ;;;; Thing Dispatch
 
-(cl-defmacro conn-define-dispatch-action ((name description) arglist &rest body)
-  "\(fn (NAME description) arglist &body body)"
+(defmacro conn-define-dispatch-action (name-and-description arglist &rest body)
+  "\(fn (NAME DESCRIPTION) ARGLIST &body BODY)"
   (declare (indent 2))
-  `(progn
-     (defun ,name ,arglist ,@body)
-     (put ',name :conn-action-description ,description)
-     (put ',name :conn-action t)))
+  (pcase-exhaustive name-and-description
+    (`(,name ,description)
+     `(progn
+        (defun ,name ,arglist ,@body)
+        (put ',name :conn-action-description ,description)
+        (put ',name :conn-action t)))))
 
 (defvar conn-dispatch-all-things-collector-alist
   '((t . conn--dispatch-all-things-1)))
@@ -3021,10 +3022,10 @@ potential expansions.  Functions may return invalid expansions
       (cl-loop for (beg . end) in (reverse conn--current-expansions)
                when (and (= (point) beg)
                          (/= (mark t) end))
-               do (cl-return (goto-char end))
+               return (goto-char end)
                when (and (= (point) end)
                          (/= (mark t) beg))
-               do (cl-return (goto-char beg)))
+               return (goto-char beg))
     (conn-exchange-mark-command)))
 
 (defun conn-expand (arg)
@@ -3470,7 +3471,8 @@ Interactively `region-beginning' and `region-end'."
                                           "i" 'conn-backward-line
                                           "k" 'forward-line)
                                         t)))
-     (list (apply-partially 'forward-thing (get cmd :conn-command-thing)) arg)))
+     (list cmd arg)))
+  (deactivate-mark t)
   (pcase mover
     ('recursive-edit
      (let ((beg (region-beginning))
@@ -3498,7 +3500,8 @@ Interactively `region-beginning' and `region-end'."
                                       (bounds-of-thing-at-point thing))))
        (transpose-regions beg1 end1 beg2 end2)))
     (_
-     (transpose-subr mover (prefix-numeric-value arg)))))
+     (transpose-subr (apply-partially 'forward-thing (get cmd :conn-command-thing))
+                     (prefix-numeric-value arg)))))
 
 (defun conn--replace-read-default ()
   (let* ((default (when (< (- (region-end) (region-beginning)) 1000)
