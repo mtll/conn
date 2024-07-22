@@ -3521,14 +3521,14 @@ Interactively `region-beginning' and `region-end'."
 
 (defvar conn--query-flag nil)
 
-(defun conn-replace-query ()
+(defun conn-query-replace ()
   (interactive)
   (setq conn--query-flag t)
   (exit-minibuffer))
 
 (defvar-keymap conn-replace-map
-  "C-RET" 'conn-replace-query
-  "C-<return>" 'conn-replace-query)
+  "C-RET" 'conn-query-replace
+  "C-<return>" 'conn-query-replace)
 
 ;; From replace.el
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
@@ -3584,7 +3584,6 @@ Interactively `region-beginning' and `region-end'."
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (query-flag nil)
                 (common
                  (minibuffer-with-setup-hook
                      (lambda ()
@@ -3611,7 +3610,6 @@ Interactively `region-beginning' and `region-end'."
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (query-flag nil)
                 (common
                  (minibuffer-with-setup-hook
                      (lambda ()
