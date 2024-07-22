@@ -3512,6 +3512,21 @@ Interactively `region-beginning' and `region-end'."
                         (pos-eol))))
       (buffer-substring-no-properties beg end))))
 
+(defun conn-replace-insert-separator ()
+  (interactive)
+  (when query-replace-from-to-separator
+    (let ((separator-string
+           (when query-replace-from-to-separator
+             (if (char-displayable-p
+                  (string-to-char (string-replace
+                                   " " "" query-replace-from-to-separator)))
+                 query-replace-from-to-separator
+               " -> "))))
+      (insert (propertize separator-string
+                          'display separator-string
+                          'face 'minibuffer-prompt
+                          'separator t)))))
+
 (defvar conn-query-flag nil
   "Default value for conn-query-flag.
 If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
@@ -3526,7 +3541,8 @@ instances of from-string.")
 
 (defvar-keymap conn-replace-map
   "C-RET" 'conn-query-replace
-  "C-<return>" 'conn-query-replace)
+  "C-<return>" 'conn-query-replace
+  "C-M-;" 'conn-replace-insert-separator)
 
 ;; From replace.el
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
