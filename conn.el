@@ -3131,6 +3131,41 @@ instances of from-string.")
         (perform-replace from-string to-string query-flag t
                          delimited nil nil beg end backward)))))
 
+;;;;; Command Registers
+
+(cl-defstruct (conn-command-register)
+  (command nil :read-only t))
+
+(cl-defmethod register-val-jump-to ((val conn-command-register) _arg)
+  (let ((cmd (conn-command-register-command val)))
+    (apply #'funcall-interactively
+           (car cmd)
+           (mapcar (lambda (e) (eval e t)) (cdr cmd)))))
+
+(cl-defmethod register-val-describe ((val conn-command-register) _arg)
+  (princ (format "Command:  %s"
+                 (car (conn-command-register-command val)))))
+
+(defun conn-command-to-register (register &optional arg)
+  "Store command in REGISTER."
+  (interactive
+   (list (register-read-with-preview "Command to register: ")
+         current-prefix-arg))
+  (set-register
+   register
+   (make-conn-command-register
+    :command (let* ((arg 1)
+                    (elt (nth (1- arg) command-history))
+                    (print-level nil)
+	            (minibuffer-history-position arg)
+	            (minibuffer-history-sexp-flag (1+ (minibuffer-depth))))
+               (unwind-protect
+	           (read-from-minibuffer
+	            "Redo: " (prin1-to-string elt) read-expression-map t
+	            (cons 'command-history arg))
+                 (when (stringp (car command-history))
+                   (pop command-history)))))))
+
 ;;;;; Tab Registers
 
 (cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie frame)))
@@ -3676,41 +3711,65 @@ Handles rectangular regions."
   (interactive)
   (conn--apply-region-transform 'conn--buffer-to-words))
 
-(defun conn-kill-append-region (beg end &optional register)
-  "Kill region from BEG to END and append it to most recent kill.
-Optionally if REGISTER is specified append kill to REGISTER instead.
+(defun conn-append-region (beg end &optional register kill-flag)
+  "Appne region from BEG to END to most recent kill.
+Optionally if REGISTER is specified append to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
-interactively."
+interactively.
+When KILL-FLAG is non-nil kill the region as well."
   (interactive
    (list (region-beginning)
          (region-end)
          (when current-prefix-arg
            (register-read-with-preview "Append kill to register: "))))
   (if register
-      (append-to-register register beg end t)
+      (append-to-register register beg end kill-flag)
     (kill-append (pcase (alist-get register-separator register-alist)
                    ((and (pred stringp) sep)
-                    (concat sep (filter-buffer-substring beg end t)))
-                   (_ (filter-buffer-substring beg end t)))
-                 nil)))
+                    (concat sep (filter-buffer-substring beg end kill-flag)))
+                   (_ (filter-buffer-substring beg end kill-flag)))
+                 nil))
+  (when (and (null kill-flag)
+             (called-interactively-p 'interactive))
+    (pulse-momentary-highlight-region beg end)))
 
-(defun conn-kill-prepend-region (beg end &optional register)
-  "Kill region from BEG to END and prepend it to most recent kill.
-Optionally if REGISTER is specified prepend kill to REGISTER instead.
+(defun conn-prepend-region (beg end &optional register kill-flag)
+  "Prepend region from BEG to END to most recent kill.
+Optionally if REGISTER is specified prepend to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
-interactively."
+interactively.
+When KILL-FLAG is non-nil kill the region as well."
   (interactive
    (list (region-beginning)
          (region-end)
          (when current-prefix-arg
-           (register-read-with-preview "Prepend kill to register: "))))
+           (register-read-with-preview "Prepend to register: "))))
   (if register
-      (prepend-to-register register beg end t)
+      (prepend-to-register register beg end kill-flag)
     (kill-append (pcase (alist-get register-separator register-alist)
                    ((and (pred stringp) sep)
-                    (concat (filter-buffer-substring beg end t) sep))
-                   (_ (filter-buffer-substring beg end t)))
-                 t)))
+                    (concat (filter-buffer-substring beg end kill-flag) sep))
+                   (_ (filter-buffer-substring beg end kill-flag)))
+                 t))
+  (when (and (null kill-flag)
+             (called-interactively-p 'interactive))
+    (pulse-momentary-highlight-region beg end)))
+
+(defun conn-kill-append-region (beg end &optional register)
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (when current-prefix-arg
+           (register-read-with-preview "Prepend to register: "))))
+  (conn-append-region beg end register t))
+
+(defun conn-kill-prepend-region (beg end &optional register)
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (when current-prefix-arg
+           (register-read-with-preview "Prepend to register: "))))
+  (conn-prepend-region beg end register t))
 
 (defun conn-copy-thing (thing-mover arg &optional register)
   "Copy THING at point."
@@ -3901,7 +3960,7 @@ for the meaning of prefix ARG."
     (register-read-with-preview "Load register: ")
     current-prefix-arg))
   (when (use-region-p)
-    (if (rectangle-mark-mode)
+    (if (bound-and-true-p rectangle-mark-mode)
         (delete-rectangle (region-beginning) (region-end))
       (delete-region (region-beginning) (region-end))))
   (condition-case err
@@ -4920,8 +4979,8 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   "F" 'conn-fill-prefix
-  "c" 'conn-copy-thing
   "TAB" 'indent-for-tab-command
+  "_" 'conn-command-to-register
   "o" 'conn-open-line-and-indent
   "n" 'conn-open-line-above
   "m" 'conn-open-line
@@ -4938,8 +4997,11 @@ When ARG is nil the root window is used."
   "x" 'conn-narrow-ring-prefix
   "s" 'conn-surround-thing
   "d" 'duplicate-dwim
-  "w p" 'conn-kill-prepend-region
-  "w a" 'conn-kill-append-region
+  "w j" 'conn-kill-prepend-region
+  "w l" 'conn-kill-append-region
+  "c j" 'conn-append-region
+  "c l" 'conn-append-region
+  "c v" 'conn-copy-thing
   "y" 'yank-in-context)
 
 (defvar-keymap conn-movement-map
