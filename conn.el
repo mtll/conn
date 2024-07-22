@@ -1696,7 +1696,7 @@ Possibilities: \\<query-replace-map>
        (when-let ((pt (pop points)))
          (conn--kapply-advance-region (cons pt pt)))))))
 
-(defun conn--kapply-matches (string beg end &optional regexp-flag reverse delimited-flag)
+(defun conn--kapply-matches (string beg end &optional regexp-flag reverse delimited-flag query-flag)
   (let ((matches (save-excursion
                    (goto-char beg)
                    (cl-loop
