@@ -1229,7 +1229,7 @@ apply to each contiguous component of the region."
                          collect (cons (marker-position beg)
                                        (marker-position end))))))
 
-;;;;; Register Prefix
+;;;; Register Prefix
 
 ;;;###autoload
 (transient-define-prefix conn-register-prefix ()
@@ -1248,7 +1248,7 @@ apply to each contiguous component of the region."
    [("l" "Load" conn-register-load)
     ("u" "Unset" conn-unset-register :transient t)]])
 
-;;;;; Fill Prefix
+;;;; Fill Prefix
 
 (transient-define-infix conn--set-fill-column-infix ()
   "Set `fill-column'."
@@ -1287,7 +1287,7 @@ apply to each contiguous component of the region."
     ("p" "Prefix" conn--set-fill-prefix-infix)
     ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
 
-;;;;; Sort Prefix
+;;;; Sort Prefix
 
 (transient-define-infix conn--case-fold-infix ()
   "Toggle `sort-fold-case'."
@@ -1309,7 +1309,7 @@ apply to each contiguous component of the region."
     ("p" "sort paragraphs" sort-paragraphs)
     ("r" "sort regexp fields" sort-regexp-fields)]])
 
-;;;;; Case Prefix
+;;;; Case Prefix
 
 ;;;###autoload
 (transient-define-prefix conn-region-case-prefix ()
