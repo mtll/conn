@@ -3498,7 +3498,7 @@ Interactively `region-beginning' and `region-end'."
                                       (bounds-of-thing-at-point thing))))
        (transpose-regions beg1 end1 beg2 end2)))
     (_
-     (transpose-subr (apply-partially 'forward-thing (get cmd :conn-command-thing))
+     (transpose-subr (apply-partially 'forward-thing (get mover :conn-command-thing))
                      (prefix-numeric-value arg)))))
 
 (defun conn--replace-read-default ()
@@ -3516,8 +3516,19 @@ Interactively `region-beginning' and `region-end'."
                                               e))))))
                    (concat
                     prev-str
-                    (when (< (length prev-str) (- e b)) "..."))))))
+                    (when (< (length prev-str) (- e b)) "…"))))))
     (cons default prev)))
+
+(defvar conn--query-flag nil)
+
+(defun conn-replace-query ()
+  (interactive)
+  (setq conn--query-flag t)
+  (exit-minibuffer))
+
+(defvar-keymap conn-replace-map
+  "C-RET" 'conn-replace-query
+  "C-<return>" 'conn-replace-query)
 
 ;; From replace.el
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
@@ -3529,6 +3540,7 @@ Interactively `region-beginning' and `region-end'."
                  (`(,default . ,prev) (conn--replace-read-default))
                  (query-replace-read-from-default (lambda () default))
                  (query-replace-read-from-regexp-default (regexp-quote default))
+                 (conn--query-flag nil)
                  (from (minibuffer-with-setup-hook
                            (minibuffer-lazy-highlight-setup
                             :case-fold case-fold-search
@@ -3552,84 +3564,73 @@ Interactively `region-beginning' and `region-end'."
                            (query-replace-read-from prompt regexp-flag))))
                  (to (if (consp from)
                          (prog1 (cdr from) (setq from (car from)))
-                       (query-replace-read-to from prompt regexp-flag))))
+                       (minibuffer-with-setup-hook
+                           (lambda ()
+                             (thread-last
+                               (list conn-replace-map (current-local-map))
+                               (make-composed-keymap)
+                               (use-local-map)))
+                         (query-replace-read-to from prompt regexp-flag)))))
       (list from to
             (or delimited-flag
                 (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
                      (get-text-property 0 'isearch-regexp-function from)))
-            (and current-prefix-arg (eq current-prefix-arg '-))))))
+            (and current-prefix-arg (eq current-prefix-arg '-))
+            conn--query-flag))))
 
-(defun conn-query-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
+(defun conn-replace-in-thing (thing-mover arg from-string to-string
+                                          &optional delimited backward query-flag)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
+                (query-flag nil)
                 (common
-                 (conn--replace-read-args
-                  (concat "Query replace"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  nil beg end)))
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (list conn-replace-map (current-local-map))
+                         (make-composed-keymap)
+                         (use-local-map)))
+                   (conn--replace-read-args
+                    (concat "Replace"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    nil beg end))))
      (append (list thing-mover arg) common)))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (save-window-excursion
       (save-excursion
-        (perform-replace from-string to-string t nil delimited nil nil beg end backward)))))
+        (perform-replace from-string to-string query-flag nil
+                         delimited nil nil beg end backward)))))
 
-(defun conn-query-regexp-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
+(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string
+                                                 &optional delimited backward query-flag)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil nil t))
                 (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
+                (query-flag nil)
                 (common
-                 (conn--replace-read-args
-                  (concat "Query replace"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  t beg end)))
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (list conn-replace-map (current-local-map))
+                         (make-composed-keymap)
+                         (use-local-map)))
+                   (conn--replace-read-args
+                    (concat "Replace"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    t beg end))))
      (append (list thing-mover arg) common)))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
     (save-window-excursion
       (save-excursion
-        (perform-replace from-string to-string t t delimited nil nil beg end backward)))))
-
-(defun conn-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
-  (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (common
-                 (conn--replace-read-args
-                  (concat "Query replace"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  nil beg end)))
-     (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
-    (save-window-excursion
-      (save-excursion
-        (perform-replace from-string to-string nil nil delimited nil nil beg end backward)))))
-
-(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string &optional delimited backward)
-  (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (common
-                 (conn--replace-read-args
-                  (concat "Query replace"
-                          (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
-                            ""))
-                  t beg end)))
-     (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
-    (save-window-excursion
-      (save-excursion
-        (perform-replace from-string to-string nil t delimited nil nil beg end backward)))))
+        (perform-replace from-string to-string query-flag t
+                         delimited nil nil beg end backward)))))
 
 (defun conn-open-line (arg)
   (interactive "p")
@@ -4420,7 +4421,7 @@ there's a region, all lines that region covers will be duplicated."
   (display-buffer-override-next-command
    'display-buffer-same-window
    nil "[current-window]")
-  (message "Display next command buffer in current window..."))
+  (message "Display next command buffer in current window…"))
 
 ;;;;; Transition Functions
 
@@ -5197,7 +5198,7 @@ The last value is \"don't use any of these switches\"."
               (z (and trunc (> l trunc))))
          (format "%s%s"
                  (if z (substring m 0 (1- trunc)) m)
-                 (if z "..." ""))))))
+                 (if z "…" ""))))))
 
 (defun conn--kmacro-ring-display ()
   (with-temp-message ""
@@ -6110,8 +6111,8 @@ apply to each contiguous component of the region."
   "V" 'vc-region-history
   "y" 'yank-rectangle
   "j" 'join-line
-  "q" 'conn-query-replace-in-thing
-  "u" 'conn-query-regexp-replace-in-thing)
+  "q" 'conn-replace-in-thing
+  "u" 'conn-regexp-replace-in-thing)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -6206,9 +6207,7 @@ apply to each contiguous component of the region."
   "d" 'duplicate-dwim
   "w p" 'conn-kill-prepend-region
   "w a" 'conn-kill-append-region
-  "y" 'yank-in-context
-  "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing)
+  "y" 'yank-in-context)
 
 (defvar-keymap conn-movement-map
   ">" 'forward-line
