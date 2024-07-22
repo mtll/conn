@@ -1717,20 +1717,22 @@ Possibilities: \\<query-replace-map>
                  (set-marker end nil))
                matches))
         (:record
-         (let ((hl (make-overlay (point) (point))))
-           (overlay-put hl 'face 'query-replace)
-           (unwind-protect
-               (cl-loop
-                with len = (length matches)
-                for cont = (conn--kapply-advance-region (pop matches))
-                for i from 1
-                until (or (null cont)
-                          (progn
-                            (recenter nil)
-                            (move-overlay hl (region-beginning) (region-end) (current-buffer))
-                            (y-or-n-p (format "[%s/%s] Record here?" i len))))
-                finally return cont)
-             (delete-overlay hl))))
+         (if query-flag
+             (let ((hl (make-overlay (point) (point))))
+               (overlay-put hl 'face 'query-replace)
+               (unwind-protect
+                   (cl-loop
+                    with len = (length matches)
+                    for cont = (conn--kapply-advance-region (pop matches))
+                    for i from 1
+                    until (or (null cont)
+                              (progn
+                                (recenter nil)
+                                (move-overlay hl (region-beginning) (region-end) (current-buffer))
+                                (y-or-n-p (format "[%s/%s] Record here?" i len))))
+                    finally return cont)
+                 (delete-overlay hl)))
+           (conn--kapply-advance-region (pop matches))))
         (_
          (conn--kapply-advance-region (pop matches)))))))
 
@@ -5481,8 +5483,16 @@ property."
   (deactivate-mark)
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (string (conn--read-from-with-preview "String" beg end nil)))
-        (conn--kapply-matches string beg end nil (member "reverse" args)))
+                   (conn-query-flag conn-query-flag)
+                   (string (minibuffer-with-setup-hook
+                               (lambda ()
+                                 (thread-last
+                                   (list conn-replace-map (current-local-map))
+                                   (make-composed-keymap)
+                                   (use-local-map)))
+                             (conn--read-from-with-preview "String" beg end nil))))
+        (conn--kapply-matches string beg end nil (member "reverse" args)
+                              current-prefix-arg conn-query-flag))
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -5508,8 +5518,16 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
       (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
-                   (regexp (conn--read-from-with-preview "Regexp" beg end t)))
-        (conn--kapply-matches regexp beg end t (member "reverse" args)))
+                   (conn-query-flag conn-query-flag)
+                   (regexp (minibuffer-with-setup-hook
+                               (lambda ()
+                                 (thread-last
+                                   (list conn-replace-map (current-local-map))
+                                   (make-composed-keymap)
+                                   (use-local-map)))
+                             (conn--read-from-with-preview "Regexp" beg end t))))
+        (conn--kapply-matches regexp beg end t (member "reverse" args)
+                              current-prefix-arg conn-query-flag))
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
