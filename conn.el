@@ -3504,22 +3504,13 @@ Interactively `region-beginning' and `region-end'."
                      (prefix-numeric-value arg)))))
 
 (defun conn--replace-read-default ()
-  (let* ((default (when (< (- (region-end) (region-beginning)) 1000)
-                    (buffer-substring-no-properties (region-beginning) (region-end))))
-         (prev (when default
-                 (let* ((b (region-beginning))
-                        (e (region-end))
-                        (prev-str (buffer-substring-no-properties
-                                   b (min (+ b 32)
-                                          (save-excursion
-                                            (goto-char b)
-                                            (if (search-forward "\n" e t)
-                                                (1- (point))
-                                              e))))))
-                   (concat
-                    prev-str
-                    (when (< (length prev-str) (- e b)) "…"))))))
-    (cons default prev)))
+  (let* ((beg (region-beginning))
+         (end (region-end)))
+    (when (or (< (- end beg) 32)
+              (<= end (save-excursion
+                        (goto-char beg)
+                        (pos-eol))))
+      (buffer-substring-no-properties beg end))))
 
 (defvar conn-query-flag nil
   "Default value for conn-query-flag.
@@ -3539,45 +3530,48 @@ instances of from-string.")
 
 ;; From replace.el
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
-  (unless noerror
-    (barf-if-buffer-read-only))
+  (unless noerror (barf-if-buffer-read-only))
   (save-mark-and-excursion
-    (pcase-let* ((delimited-flag (and current-prefix-arg
-                                      (not (eq current-prefix-arg '-))))
-                 (`(,default . ,prev) (conn--replace-read-default))
-                 (query-replace-read-from-default (lambda () default))
-                 (query-replace-read-from-regexp-default (regexp-quote default))
-                 (conn-query-flag conn-query-flag)
-                 (from (minibuffer-with-setup-hook
-                           (minibuffer-lazy-highlight-setup
-                            :case-fold case-fold-search
-                            :filter (lambda (b e) (<= beg b e end))
-                            :highlight query-replace-lazy-highlight
-                            :regexp regexp-flag
-                            :regexp-function (or replace-regexp-function
-                                                 delimited-flag
-                                                 (and replace-char-fold
-                                                      (not regexp-flag)
-                                                      #'char-fold-to-regexp))
-                            :transform (lambda (string)
-                                         (let* ((split (query-replace--split-string string))
-                                                (from-string (if (consp split) (car split) split)))
-                                           (when (and case-fold-search search-upper-case)
-                                             (setq isearch-case-fold-search
-                                                   (isearch-no-upper-case-p from-string regexp-flag)))
-                                           from-string)))
-                         (conn--with-advice
-                             (('query-replace-descr :filter-args (lambda (_) (list prev))))
-                           (query-replace-read-from prompt regexp-flag))))
-                 (to (if (consp from)
-                         (prog1 (cdr from) (setq from (car from)))
-                       (minibuffer-with-setup-hook
-                           (lambda ()
-                             (thread-last
-                               (list conn-replace-map (current-local-map))
-                               (make-composed-keymap)
-                               (use-local-map)))
-                         (query-replace-read-to from prompt regexp-flag)))))
+    (let* ((delimited-flag (and current-prefix-arg
+                                (not (eq current-prefix-arg '-))))
+           (default (conn--replace-read-default))
+           (query-replace-read-from-default
+            (if default
+                (lambda () default)
+              query-replace-read-from-default))
+           (query-replace-read-from-regexp-default
+            (if default
+                (regexp-quote default)
+              query-replace-read-from-regexp-default))
+           (conn-query-flag conn-query-flag)
+           (from (minibuffer-with-setup-hook
+                     (minibuffer-lazy-highlight-setup
+                      :case-fold case-fold-search
+                      :filter (lambda (b e) (<= beg b e end))
+                      :highlight query-replace-lazy-highlight
+                      :regexp regexp-flag
+                      :regexp-function (or replace-regexp-function
+                                           delimited-flag
+                                           (and replace-char-fold
+                                                (not regexp-flag)
+                                                #'char-fold-to-regexp))
+                      :transform (lambda (string)
+                                   (let* ((split (query-replace--split-string string))
+                                          (from-string (if (consp split) (car split) split)))
+                                     (when (and case-fold-search search-upper-case)
+                                       (setq isearch-case-fold-search
+                                             (isearch-no-upper-case-p from-string regexp-flag)))
+                                     from-string)))
+                   (query-replace-read-from prompt regexp-flag)))
+           (to (if (consp from)
+                   (prog1 (cdr from) (setq from (car from)))
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-map)
+                         (use-local-map)))
+                   (query-replace-read-to from prompt regexp-flag)))))
       (list from to
             (or delimited-flag
                 (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
@@ -3595,8 +3589,8 @@ instances of from-string.")
                  (minibuffer-with-setup-hook
                      (lambda ()
                        (thread-last
-                         (list conn-replace-map (current-local-map))
-                         (make-composed-keymap)
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-map)
                          (use-local-map)))
                    (conn--replace-read-args
                     (concat "Replace"
@@ -3621,8 +3615,8 @@ instances of from-string.")
                  (minibuffer-with-setup-hook
                      (lambda ()
                        (thread-last
-                         (list conn-replace-map (current-local-map))
-                         (make-composed-keymap)
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-map)
                          (use-local-map)))
                    (conn--replace-read-args
                     (concat "Replace"
@@ -5487,8 +5481,8 @@ property."
                    (string (minibuffer-with-setup-hook
                                (lambda ()
                                  (thread-last
-                                   (list conn-replace-map (current-local-map))
-                                   (make-composed-keymap)
+                                   (current-local-map)
+                                   (make-composed-keymap conn-replace-map)
                                    (use-local-map)))
                              (conn--read-from-with-preview "String" beg end nil))))
         (conn--kapply-matches string beg end nil (member "reverse" args)
@@ -5522,8 +5516,8 @@ property."
                    (regexp (minibuffer-with-setup-hook
                                (lambda ()
                                  (thread-last
-                                   (list conn-replace-map (current-local-map))
-                                   (make-composed-keymap)
+                                   (current-local-map)
+                                   (make-composed-keymap conn-replace-map)
                                    (use-local-map)))
                              (conn--read-from-with-preview "Regexp" beg end t))))
         (conn--kapply-matches regexp beg end t (member "reverse" args)
