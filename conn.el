@@ -3366,6 +3366,151 @@ With prefix arg REGISTER add to narrow ring register instead."
 
 ;;;; Commands
 
+;;;;; Replace
+
+(defvar conn-query-flag nil
+  "Default value for conn-query-flag.
+If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
+will query before replacing from-string, otherwise just replace all
+instances of from-string.")
+
+(defvar-keymap conn-replace-map
+  "C-RET" 'conn-query-replace
+  "C-<return>" 'conn-query-replace
+  "C-M-;" 'conn-replace-insert-separator)
+
+(defun conn-query-replace ()
+  "Invert value of `conn-query-flag' and exit minibuffer."
+  (interactive)
+  (setq conn-query-flag (not conn-query-flag))
+  (exit-minibuffer))
+
+(defun conn-replace-insert-separator ()
+  (interactive)
+  (when query-replace-from-to-separator
+    (let ((separator-string
+           (when query-replace-from-to-separator
+             (if (char-displayable-p
+                  (string-to-char (string-replace
+                                   " " "" query-replace-from-to-separator)))
+                 query-replace-from-to-separator
+               " -> "))))
+      (insert (propertize separator-string
+                          'display separator-string
+                          'face 'minibuffer-prompt
+                          'separator t)))))
+
+(defun conn--replace-read-default ()
+  (let* ((beg (region-beginning))
+         (end (region-end)))
+    (when (or (< (- end beg) 32)
+              (<= end (save-excursion
+                        (goto-char beg)
+                        (pos-eol))))
+      (buffer-substring-no-properties beg end))))
+
+(defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
+  (unless noerror (barf-if-buffer-read-only))
+  (save-mark-and-excursion
+    (let* ((delimited-flag (and current-prefix-arg
+                                (not (eq current-prefix-arg '-))))
+           (default (conn--replace-read-default))
+           (query-replace-read-from-default
+            (if default
+                (lambda () default)
+              query-replace-read-from-default))
+           (query-replace-read-from-regexp-default
+            (if default
+                (regexp-quote default)
+              query-replace-read-from-regexp-default))
+           (conn-query-flag conn-query-flag)
+           (from (minibuffer-with-setup-hook
+                     (minibuffer-lazy-highlight-setup
+                      :case-fold case-fold-search
+                      :filter (lambda (b e) (<= beg b e end))
+                      :highlight query-replace-lazy-highlight
+                      :regexp regexp-flag
+                      :regexp-function (or replace-regexp-function
+                                           delimited-flag
+                                           (and replace-char-fold
+                                                (not regexp-flag)
+                                                #'char-fold-to-regexp))
+                      :transform (lambda (string)
+                                   (let* ((split (query-replace--split-string string))
+                                          (from-string (if (consp split) (car split) split)))
+                                     (when (and case-fold-search search-upper-case)
+                                       (setq isearch-case-fold-search
+                                             (isearch-no-upper-case-p from-string regexp-flag)))
+                                     from-string)))
+                   (query-replace-read-from prompt regexp-flag)))
+           (to (if (consp from)
+                   (prog1 (cdr from) (setq from (car from)))
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-map)
+                         (use-local-map)))
+                   (query-replace-read-to from prompt regexp-flag)))))
+      (list from to
+            (or delimited-flag
+                (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
+                     (get-text-property 0 'isearch-regexp-function from)))
+            (and current-prefix-arg (eq current-prefix-arg '-))
+            conn-query-flag))))
+
+(defun conn-replace-in-thing (thing-mover arg from-string to-string
+                                          &optional delimited backward query-flag)
+  (interactive
+   (pcase-let* ((`(,thing-mover ,arg)
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
+                (common
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-map)
+                         (use-local-map)))
+                   (conn--replace-read-args
+                    (concat "Replace"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    nil beg end))))
+     (append (list thing-mover arg) common)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+    (save-window-excursion
+      (save-excursion
+        (perform-replace from-string to-string query-flag nil
+                         delimited nil nil beg end backward)))))
+
+(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string
+                                                 &optional delimited backward query-flag)
+  (interactive
+   (pcase-let* ((`(,thing-mover ,arg)
+                 (conn--read-thing-mover "Thing Mover" nil nil t))
+                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
+                (common
+                 (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-map)
+                         (use-local-map)))
+                   (conn--replace-read-args
+                    (concat "Replace"
+                            (if current-prefix-arg
+                                (if (eq current-prefix-arg '-) " backward" " word")
+                              ""))
+                    t beg end))))
+     (append (list thing-mover arg) common)))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+    (save-window-excursion
+      (save-excursion
+        (perform-replace from-string to-string query-flag t
+                         delimited nil nil beg end backward)))))
+
 ;;;;; Tab Registers
 
 (cl-defstruct (conn-tab-register (:constructor %conn--make-tab-register (cookie frame)))
@@ -3502,150 +3647,6 @@ Interactively `region-beginning' and `region-end'."
     (_
      (transpose-subr (apply-partially 'forward-thing (get mover :conn-command-thing))
                      (prefix-numeric-value arg)))))
-
-(defun conn--replace-read-default ()
-  (let* ((beg (region-beginning))
-         (end (region-end)))
-    (when (or (< (- end beg) 32)
-              (<= end (save-excursion
-                        (goto-char beg)
-                        (pos-eol))))
-      (buffer-substring-no-properties beg end))))
-
-(defun conn-replace-insert-separator ()
-  (interactive)
-  (when query-replace-from-to-separator
-    (let ((separator-string
-           (when query-replace-from-to-separator
-             (if (char-displayable-p
-                  (string-to-char (string-replace
-                                   " " "" query-replace-from-to-separator)))
-                 query-replace-from-to-separator
-               " -> "))))
-      (insert (propertize separator-string
-                          'display separator-string
-                          'face 'minibuffer-prompt
-                          'separator t)))))
-
-(defvar conn-query-flag nil
-  "Default value for conn-query-flag.
-If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
-will query before replacing from-string, otherwise just replace all
-instances of from-string.")
-
-(defun conn-query-replace ()
-  "Invert value of `conn-query-flag' and exit minibuffer."
-  (interactive)
-  (setq conn-query-flag (not conn-query-flag))
-  (exit-minibuffer))
-
-(defvar-keymap conn-replace-map
-  "C-RET" 'conn-query-replace
-  "C-<return>" 'conn-query-replace
-  "C-M-;" 'conn-replace-insert-separator)
-
-;; From replace.el
-(defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
-  (unless noerror (barf-if-buffer-read-only))
-  (save-mark-and-excursion
-    (let* ((delimited-flag (and current-prefix-arg
-                                (not (eq current-prefix-arg '-))))
-           (default (conn--replace-read-default))
-           (query-replace-read-from-default
-            (if default
-                (lambda () default)
-              query-replace-read-from-default))
-           (query-replace-read-from-regexp-default
-            (if default
-                (regexp-quote default)
-              query-replace-read-from-regexp-default))
-           (conn-query-flag conn-query-flag)
-           (from (minibuffer-with-setup-hook
-                     (minibuffer-lazy-highlight-setup
-                      :case-fold case-fold-search
-                      :filter (lambda (b e) (<= beg b e end))
-                      :highlight query-replace-lazy-highlight
-                      :regexp regexp-flag
-                      :regexp-function (or replace-regexp-function
-                                           delimited-flag
-                                           (and replace-char-fold
-                                                (not regexp-flag)
-                                                #'char-fold-to-regexp))
-                      :transform (lambda (string)
-                                   (let* ((split (query-replace--split-string string))
-                                          (from-string (if (consp split) (car split) split)))
-                                     (when (and case-fold-search search-upper-case)
-                                       (setq isearch-case-fold-search
-                                             (isearch-no-upper-case-p from-string regexp-flag)))
-                                     from-string)))
-                   (query-replace-read-from prompt regexp-flag)))
-           (to (if (consp from)
-                   (prog1 (cdr from) (setq from (car from)))
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-map)
-                         (use-local-map)))
-                   (query-replace-read-to from prompt regexp-flag)))))
-      (list from to
-            (or delimited-flag
-                (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
-                     (get-text-property 0 'isearch-regexp-function from)))
-            (and current-prefix-arg (eq current-prefix-arg '-))
-            conn-query-flag))))
-
-(defun conn-replace-in-thing (thing-mover arg from-string to-string
-                                          &optional delimited backward query-flag)
-  (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (common
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-map)
-                         (use-local-map)))
-                   (conn--replace-read-args
-                    (concat "Replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    nil beg end))))
-     (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
-    (save-window-excursion
-      (save-excursion
-        (perform-replace from-string to-string query-flag nil
-                         delimited nil nil beg end backward)))))
-
-(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string
-                                                 &optional delimited backward query-flag)
-  (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil nil t))
-                (`(,beg . ,end) (conn-bounds-of-command thing-mover arg))
-                (common
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-map)
-                         (use-local-map)))
-                   (conn--replace-read-args
-                    (concat "Replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    t beg end))))
-     (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
-    (save-window-excursion
-      (save-excursion
-        (perform-replace from-string to-string query-flag t
-                         delimited nil nil beg end backward)))))
 
 (defun conn-open-line (arg)
   (interactive "p")
