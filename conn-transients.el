@@ -15,17 +15,14 @@
 ;;
 ;;; Commentary:
 ;;
-;; A region oriented modal keybinding mode.
+;; Transient commands for Conn.
 ;;
 ;;; Code:
 
 (require 'conn)
 (require 'transient)
 
-
-;;;; Transients
-
-;;;;; Classes
+;;;; Classes
 
 (defclass conn-transient-switches (transient-switches)
   ((required :initarg :required :initform nil))
@@ -55,7 +52,7 @@ The last value is \"don't use any of these switches\"."
       choices
       (propertize "|" 'face 'transient-delimiter)))))
 
-;;;;; Kmacro Prefix
+;;;; Kmacro Prefix
 
 (defun conn--kmacro-display (macro &optional trunc)
   (pcase macro
@@ -172,7 +169,7 @@ The last value is \"don't use any of these switches\"."
     ("+" "Add to Counter" kmacro-add-counter :transient t)
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
-;;;;; Kapply Prefix
+;;;; Kapply Prefix
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
@@ -754,7 +751,7 @@ apply to each contiguous component of the region."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-regions-kapply-prefix nil nil :scope iterator))
 
-;;;;; Narrow Ring Prefix
+;;;; Narrow Ring Prefix
 
 (defun conn--narrow-ring-restore-state (state)
   (widen)
