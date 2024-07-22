@@ -21,6 +21,8 @@
 
 (require 'conn)
 (require 'transient)
+(require 'kmacro)
+(require 'sort)
 
 ;;;; Classes
 
@@ -170,6 +172,379 @@ The last value is \"don't use any of these switches\"."
     ("f" "Set Format" conn--set-counter-format-infix)]])
 
 ;;;; Kapply Prefix
+
+(defvar kmacro-step-edit-replace)
+
+(defvar conn-kmacro-applying-p nil
+  "Non-nil during kmacro application.")
+
+(defvar conn-kmacro-apply-error nil
+  "If non-nil contains the error encountered during macro application.")
+
+(defvar conn-kmacro-apply-end-hook nil
+  "Hook run after macro application has completed.")
+
+(defvar conn-kmacro-apply-start-hook nil
+  "Hook run before macro application begins.")
+
+(defvar conn-kmacro-apply-iterator-hook nil
+  "Hook run during each iteration of macro application.
+If any function returns a nil value then macro application it halted.")
+
+(defvar conn--kapply-automatic-flag nil)
+
+;;;###autoload
+(defun conn-kapply-kbd-macro-query (flag)
+  "Query user during kbd macro execution.
+
+With prefix argument FLAG, enter recursive edit, reading
+keyboard commands even within a kbd macro.  You can give
+different commands each time the macro executes.
+
+Without prefix argument, ask whether to continue running the
+macro.
+
+Your options are: \\<query-replace-map>
+
+\\[act]	Finish this iteration normally and continue with the next.
+\\[skip]	Skip the rest of this iteration, and start the next.
+\\[exit]	Stop the macro entirely right now.
+\\[recenter]	Redisplay the screen, then ask again.
+\\[edit]	Enter recursive edit; ask again when you exit from that.
+\\[automatic]   Apply keyboard macro to rest."
+  (interactive "P")
+  (or executing-kbd-macro
+      defining-kbd-macro
+      (user-error "Not defining or executing kbd macro"))
+  (cond
+   (flag
+    (let (executing-kbd-macro defining-kbd-macro)
+      (recursive-edit)))
+   ((not executing-kbd-macro))
+   ((not conn--kapply-automatic-flag)
+    (cl-loop
+     with msg = (substitute-command-keys
+		 "Proceed with macro?\\<query-replace-map>\
+ (\\[act], \\[skip], \\[exit], \\[recenter], \\[edit], \\[automatic]) ")
+     do
+     (pcase (let ((executing-kbd-macro nil)
+		  (defining-kbd-macro nil))
+	      (message "%s" msg)
+	      (lookup-key query-replace-map (vector (read-event))))
+       ('act (cl-return))
+       ('skip
+        (setq executing-kbd-macro "")
+        (cl-return))
+       ('exit
+        (setq executing-kbd-macro t)
+        (cl-return))
+       ('recenter
+        (recenter nil))
+       ('edit
+        (let (executing-kbd-macro defining-kbd-macro)
+	  (recursive-edit)))
+       ('quit
+        (setq quit-flag t)
+        (cl-return))
+       ('automatic
+        (setq conn--kapply-automatic-flag t)
+        (cl-return))
+       ('help
+        (with-output-to-temp-buffer "*Help*"
+	  (princ
+	   (substitute-command-keys
+	    "Specify how to proceed with keyboard macro execution.
+Possibilities: \\<query-replace-map>
+\\[act]	Finish this iteration normally and continue with the next.
+\\[skip]	Skip the rest of this iteration, and start the next.
+\\[exit]	Stop the macro entirely right now.
+\\[recenter]	Redisplay the screen, then ask again.
+\\[edit]	Enter recursive edit; ask again when you exit from that.
+\\[automatic]   Apply keyboard macro to rest."))
+	  (with-current-buffer standard-output
+	    (help-mode))))
+       (_ (ding)))))))
+
+(defun conn--kapply-advance-region (region)
+  (pcase region
+    (`(,beg . ,end)
+     (when-let ((buffer (and region (marker-buffer beg))))
+       (when (not (eq buffer (current-buffer)))
+         (pop-to-buffer-same-window buffer)
+         (deactivate-mark t)
+         (unless (eq buffer (window-buffer (selected-window)))
+           (error "Could not pop to buffer %s" buffer))))
+     (goto-char beg)
+     (conn--push-ephemeral-mark end)
+     (when (markerp beg) (set-marker beg nil))
+     (when (markerp end) (set-marker end nil))
+     t)))
+
+(defun conn--kapply-infinite-iterator ()
+  (lambda (_state) t))
+
+(defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
+  (conn--thread -->
+      (conn-bounds-of-things-in-region thing beg end)
+    (if skip-empty
+        (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
+      -->)
+    (if (or (null nth) (= 1 nth))
+        -->
+      (cl-loop with stack = -->
+               while stack
+               collect (car stack)
+               do (cl-loop repeat nth do (pop stack))))
+    (conn--kapply-region-iterator (if reverse (nreverse -->) -->))))
+
+(defun conn--kapply-region-iterator (regions &optional reverse)
+  (when reverse (setq regions (reverse regions)))
+  (pcase-dolist ((and reg `(,beg . ,end)) regions)
+    (unless (markerp beg)
+      (setcar reg (conn--create-marker beg)))
+    (unless (markerp end)
+      (setcdr reg (conn--create-marker end))))
+  (lambda (state)
+    (pcase state
+      (:finalize
+       (pcase-dolist (`(,beg . ,end) regions)
+         (set-marker beg nil)
+         (set-marker end nil)))
+      (_
+       (conn--kapply-advance-region (pop regions))))))
+
+(defun conn--kapply-point-iterator (points &optional reverse)
+  (setq points (cl-loop for pt in (if reverse
+                                      (nreverse points)
+                                    points)
+                        collect (if (markerp pt)
+                                    pt
+                                  (conn--create-marker pt))))
+  (lambda (state)
+    (pcase state
+      (:finalize
+       (dolist (pt points) (set-marker pt nil)))
+      (_
+       (when-let ((pt (pop points)))
+         (conn--kapply-advance-region (cons pt pt)))))))
+
+(defun conn--kapply-matches (string beg end &optional regexp-flag reverse delimited-flag query-flag)
+  (let ((matches (save-excursion
+                   (goto-char beg)
+                   (cl-loop
+                    with matches = nil
+                    while (replace-search string end regexp-flag
+                                          delimited-flag case-fold-search)
+                    for (mb me . _) = (match-data t)
+                    do
+                    (push (cons (conn--create-marker mb)
+                                (conn--create-marker me))
+                          matches)
+                    finally return (if reverse matches (nreverse matches))))))
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (mapc (pcase-lambda (`(,beg . ,end))
+                 (set-marker beg nil)
+                 (set-marker end nil))
+               matches))
+        (:record
+         (if query-flag
+             (let ((hl (make-overlay (point) (point))))
+               (overlay-put hl 'face 'query-replace)
+               (unwind-protect
+                   (cl-loop
+                    with len = (length matches)
+                    for cont = (conn--kapply-advance-region (pop matches))
+                    for i from 1
+                    until (or (null cont)
+                              (progn
+                                (recenter nil)
+                                (move-overlay hl (region-beginning) (region-end) (current-buffer))
+                                (y-or-n-p (format "[%s/%s] Record here?" i len))))
+                    finally return cont)
+                 (delete-overlay hl)))
+           (conn--kapply-advance-region (pop matches))))
+        (_
+         (conn--kapply-advance-region (pop matches)))))))
+
+(defun conn--kapply-merge-undo (iterator)
+  (let (undo-handles)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(_ . ,handle) undo-handles)
+           (accept-change-group handle)
+           (undo-amalgamate-change-group handle)))
+        (_
+         (prog1
+             (funcall iterator state)
+           (unless (alist-get (current-buffer) undo-handles)
+             (activate-change-group
+              (setf (alist-get (current-buffer) undo-handles)
+                    (prepare-change-group))))))))))
+
+(defun conn--kapply-save-excursion (iterator)
+  (let (saved-excursions)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(,buffer ,pt . ,saved) saved-excursions)
+           (with-current-buffer buffer
+             (goto-char pt)
+             (set-marker pt nil)
+             (save-mark-and-excursion--restore saved))))
+        (_
+         (prog1 (funcall iterator state)
+           (unless (alist-get (current-buffer) saved-excursions)
+             (setf (alist-get (current-buffer) saved-excursions)
+                   (cons (point-marker) (save-mark-and-excursion--save))))))))))
+
+(defun conn--kapply-save-restriction (iterator)
+  (let (kapply-saved-restrictions)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(,buffer ,beg . ,end) kapply-saved-restrictions)
+           (with-current-buffer buffer
+             (widen)
+             (narrow-to-region beg end))))
+        (_
+         (prog1
+             (funcall iterator state)
+           (if-let ((restriction (alist-get (current-buffer) kapply-saved-restrictions)))
+               (progn
+                 (widen)
+                 (narrow-to-region (car restriction) (cdr restriction)))
+             (setf (alist-get (current-buffer) kapply-saved-restrictions)
+                   (cons (point-min-marker)
+                         (point-max-marker))))))))))
+
+(defun conn--kapply-change-region (iterator)
+  (lambda (state)
+    (when-let ((ret (funcall iterator state)))
+      (delete-region (region-beginning) (region-end))
+      ret)))
+
+(defun conn--kapply-with-state (iterator transition)
+  (let ((buffer-states nil))
+    (lambda (state)
+      (prog1
+          (funcall iterator state)
+        (when (eq state :finalize)
+          (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
+            (when state
+              (with-current-buffer buf
+                (funcall state)
+                (setq conn-previous-state prev-state)))))
+        (when conn-local-mode
+          (unless (alist-get (current-buffer) buffer-states)
+            (setf (alist-get (current-buffer) buffer-states)
+                  (list conn-current-state conn-previous-state)))
+          (funcall transition))))))
+
+(defun conn--kapply-at-end (iterator)
+  (lambda (state)
+    (when-let ((ret (funcall iterator state)))
+      (conn-exchange-mark-command)
+      ret)))
+
+(defun conn--kapply-pulse-region (iterator)
+  (lambda (state)
+    (when-let ((ret (funcall iterator state)))
+      (when (eq state :record)
+        (pulse-momentary-highlight-region (region-beginning)
+                                          (region-end)
+                                          'conn-pulse-face))
+      ret)))
+
+(defun conn--kapply-save-windows (iterator)
+  (let (wconf)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (set-window-configuration wconf))
+        (_
+         (unless wconf (setq wconf (current-window-configuration)))
+         (funcall iterator state))))))
+
+(defmacro conn--define-kapply (name arglist &rest body)
+  "Define a macro application function.
+The iterator must be the first argument in ARGLIST.
+
+\(fn NAME ARGLIST [DOCSTRING] BODY...)"
+  (declare (doc-string 3) (indent 2))
+  (let ((iterator (car arglist))
+        (docstring (if (stringp (car body)) (pop body) "")))
+    `(defun ,name ,arglist
+       ,docstring
+       (let* ((undo-outer-limit nil)
+              (undo-limit most-positive-fixnum)
+              (undo-strong-limit most-positive-fixnum)
+              (conn-kmacro-applying-p t)
+              (conn--kapply-automatic-flag nil)
+              (success nil)
+              (,iterator (lambda (&optional state)
+                           (when (funcall ,iterator (or state :loop))
+                             (run-hook-with-args-until-failure
+                              'conn-kmacro-apply-iterator-hook)))))
+         (run-hook-wrapped 'conn-kmacro-apply-start-hook
+                           (lambda (hook)
+                             (ignore-errors (funcall hook))))
+         (deactivate-mark)
+         (unwind-protect
+             (conn--with-advice (('kmacro-loop-setup-function :before-while ,iterator))
+               ,@body
+               (setq success t))
+           (let ((conn-kmacro-apply-error (not success)))
+             (funcall ,iterator :finalize)
+             (run-hook-wrapped 'conn-kmacro-apply-end-hook
+                               (lambda (hook)
+                                 (ignore-errors (funcall hook))))))))))
+
+(conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
+  (pcase-exhaustive macro
+    ((pred kmacro-p)
+     (funcall macro (or count 0)))
+    ((or (pred stringp) (pred vectorp))
+     (kmacro-call-macro (or count 0) nil nil macro))
+    ('nil
+     (when (funcall iterator :record)
+       (kmacro-start-macro nil)
+       (unwind-protect
+           (progn
+             (recursive-edit)
+             (when (not defining-kbd-macro)
+               (user-error "Not defining keyboard macro")))
+         (when defining-kbd-macro (kmacro-end-macro nil)))
+       (kmacro-call-macro (or count 0))))))
+
+(conn--define-kapply conn--kmacro-apply-append (iterator &optional count skip-exec)
+  (when (funcall iterator :record)
+    (kmacro-start-macro (if skip-exec '(16) '(4)))
+    (unwind-protect
+        (progn
+          (recursive-edit)
+          (when (not defining-kbd-macro)
+            (user-error "Not defining keyboard macro")))
+      (when defining-kbd-macro (kmacro-end-macro nil)))
+    (kmacro-call-macro (or count 0))))
+
+(conn--define-kapply conn--kmacro-apply-step-edit (iterator &optional count)
+  (when (funcall iterator :record)
+    (let* ((apply nil)
+           (hook (lambda () (setq apply kmacro-step-edit-replace))))
+      (add-hook 'kbd-macro-termination-hook hook)
+      (unwind-protect
+          (kmacro-step-edit-macro)
+        (remove-hook 'kbd-macro-termination-hook hook))
+      (unless apply
+        (user-error "Keyboard macro edit aborted")))
+    (kmacro-call-macro (or count 0))))
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
@@ -951,3 +1326,4 @@ apply to each contiguous component of the region."
     ("d" "downcase" downcase-region)]])
 
 (provide 'conn-transients)
+;;; conn-transients.el ends here
