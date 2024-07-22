@@ -3519,11 +3519,16 @@ Interactively `region-beginning' and `region-end'."
                     (when (< (length prev-str) (- e b)) "…"))))))
     (cons default prev)))
 
-(defvar conn--query-flag nil)
+(defvar conn-query-flag nil
+  "Default value for conn-query-flag.
+If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
+will query before replacing from-string, otherwise just replace all
+instances of from-string.")
 
 (defun conn-query-replace ()
+  "Invert value of `conn-query-flag' and exit minibuffer."
   (interactive)
-  (setq conn--query-flag t)
+  (setq conn-query-flag (not conn-query-flag))
   (exit-minibuffer))
 
 (defvar-keymap conn-replace-map
@@ -3540,7 +3545,7 @@ Interactively `region-beginning' and `region-end'."
                  (`(,default . ,prev) (conn--replace-read-default))
                  (query-replace-read-from-default (lambda () default))
                  (query-replace-read-from-regexp-default (regexp-quote default))
-                 (conn--query-flag nil)
+                 (conn-query-flag conn-query-flag)
                  (from (minibuffer-with-setup-hook
                            (minibuffer-lazy-highlight-setup
                             :case-fold case-fold-search
@@ -3576,7 +3581,7 @@ Interactively `region-beginning' and `region-end'."
                 (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
                      (get-text-property 0 'isearch-regexp-function from)))
             (and current-prefix-arg (eq current-prefix-arg '-))
-            conn--query-flag))))
+            conn-query-flag))))
 
 (defun conn-replace-in-thing (thing-mover arg from-string to-string
                                           &optional delimited backward query-flag)
