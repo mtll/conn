@@ -71,6 +71,11 @@
   "H" 'conn-contract
   "h" 'conn-expand)
 
+(defvar-keymap conn-mark-thing-map
+  "L" 'forward-line
+  ")" 'forward-list
+  "(" 'backward-list)
+
 ;;;;; Custom Variables
 
 (defgroup conn nil
@@ -319,11 +324,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn-down-list-keys (key-parse "C-M-<down>"))
 (defvar conn-forward-list-keys (key-parse "C-M-n"))
 (defvar conn-backward-list-keys (key-parse "C-M-p"))
-
-(defvar-keymap conn-mark-thing-map
-  "L" 'forward-line
-  ")" 'forward-list
-  "(" 'backward-list)
 
 ;;;;; Overlay Category Properties
 
@@ -1135,7 +1135,6 @@ If any function returns a nil value then macro application it halted.")
 
 (defvar conn--kapply-automatic-flag nil)
 
-;;;###autoload
 (defun conn-kapply-kbd-macro-query (flag)
   "Query user during kbd macro execution.
 
@@ -1166,13 +1165,13 @@ Your options are: \\<query-replace-map>
    ((not conn--kapply-automatic-flag)
     (cl-loop
      with msg = (substitute-command-keys
-		 "Proceed with macro?\\<query-replace-map>\
+                 "Proceed with macro?\\<query-replace-map>\
  (\\[act], \\[skip], \\[exit], \\[recenter], \\[edit], \\[automatic]) ")
      do
      (pcase (let ((executing-kbd-macro nil)
-		  (defining-kbd-macro nil))
-	      (message "%s" msg)
-	      (lookup-key query-replace-map (vector (read-event))))
+                  (defining-kbd-macro nil))
+              (message "%s" msg)
+              (lookup-key query-replace-map (vector (read-event))))
        ('act (cl-return))
        ('skip
         (setq executing-kbd-macro "")
@@ -1184,7 +1183,7 @@ Your options are: \\<query-replace-map>
         (recenter nil))
        ('edit
         (let (executing-kbd-macro defining-kbd-macro)
-	  (recursive-edit)))
+          (recursive-edit)))
        ('quit
         (setq quit-flag t)
         (cl-return))
@@ -1193,9 +1192,9 @@ Your options are: \\<query-replace-map>
         (cl-return))
        ('help
         (with-output-to-temp-buffer "*Help*"
-	  (princ
-	   (substitute-command-keys
-	    "Specify how to proceed with keyboard macro execution.
+          (princ
+           (substitute-command-keys
+            "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
@@ -1203,8 +1202,8 @@ Possibilities: \\<query-replace-map>
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
 \\[automatic]   Apply keyboard macro to rest."))
-	  (with-current-buffer standard-output
-	    (help-mode))))
+          (with-current-buffer standard-output
+            (help-mode))))
        (_ (ding)))))))
 
 (defun conn--kapply-advance-region (region)
@@ -3523,23 +3522,22 @@ instances of from-string.")
   (princ (format "Command:  %s"
                  (car (conn-command-register-command val)))))
 
-(defun conn-command-to-register (register)
+(defun conn-command-to-register (register arg)
   "Store command in REGISTER."
   (interactive
    (list (register-read-with-preview "Command to register: ")
-         current-prefix-arg))
+         (abs (prefix-numeric-value current-prefix-arg))))
   (set-register
    register
    (make-conn-command-register
-    :command (let* ((arg 1)
-                    (elt (nth (1- arg) command-history))
+    :command (let* ((elt (nth (1- arg) command-history))
                     (print-level nil)
-	            (minibuffer-history-position arg)
-	            (minibuffer-history-sexp-flag (1+ (minibuffer-depth))))
+                    (minibuffer-history-position arg)
+                    (minibuffer-history-sexp-flag (1+ (minibuffer-depth))))
                (unwind-protect
-	           (read-from-minibuffer
-	            "Redo: " (prin1-to-string elt) read-expression-map t
-	            (cons 'command-history arg))
+                   (read-from-minibuffer
+                    "Redo: " (prin1-to-string elt) read-expression-map t
+                    (cons 'command-history arg))
                  (when (stringp (car command-history))
                    (pop command-history)))))))
 
@@ -4261,15 +4259,11 @@ of deleting it."
   (interactive (list (region-beginning)
                      (region-end)
                      current-prefix-arg))
-  (if arg
-      (funcall (conn--without-conn-maps
-                 (key-binding conn-kill-region-keys t))
-               start end)
-    (funcall (conn--without-conn-maps
-               (key-binding conn-delete-region-keys t))
-             start end))
-  (funcall (conn--without-conn-maps
-             (key-binding conn-yank-keys t))))
+  (conn--without-conn-maps
+    (if arg
+        (funcall (key-binding conn-kill-region-keys t) start end)
+      (funcall (key-binding conn-delete-region-keys t) start end))
+    (funcall (key-binding conn-yank-keys t))))
 
 (defun conn--end-of-inner-line-1 ()
   (goto-char (line-end-position))
