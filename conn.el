@@ -29,15 +29,14 @@
 
 ;;;; Requires
 
-(require 'replace)
 (require 'compat)
+(require 'replace)
 (require 'isearch)
-(require 'map)
 (require 'easy-mmode)
-(require 'kmacro)
 (eval-when-compile
+  (require 'cl-lib)
   (require 'subr-x)
-  (require 'cl-lib))
+  (require 'map))
 
 
 ;;;; Variables
