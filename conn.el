@@ -93,6 +93,11 @@
   :prefix "conn-"
   :group 'conn)
 
+(defgroup conn-key-remapping nil
+  "Conn-mode states."
+  :prefix "conn-"
+  :group 'conn)
+
 (defcustom conn-mark-update-delay 0.1
   "Update delay for mark cursor display."
   :type '(number :tag "seconds")
@@ -303,27 +308,110 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;; Key Remapping
 
-(defvar conn-yank-keys (key-parse "C-y"))
-(defvar conn-kill-region-keys (key-parse "C-w"))
-(defvar conn-delete-region-keys (key-parse "C-S-w"))
-(defvar conn-forward-sexp-keys (key-parse "C-M-f"))
-(defvar conn-backward-sexp-keys (key-parse "C-M-b"))
-(defvar conn-backward-paragraph-keys (key-parse "M-{"))
-(defvar conn-forward-paragraph-keys (key-parse "M-}"))
-(defvar conn-beginning-of-defun-keys (key-parse "C-M-a"))
-(defvar conn-end-of-defun-keys (key-parse "C-M-e"))
-(defvar conn-next-line-keys (key-parse "C-n"))
-(defvar conn-previous-line-keys (key-parse "C-p"))
-(defvar conn-forward-word-keys (key-parse "M-f"))
-(defvar conn-backward-word-keys (key-parse "M-b"))
-(defvar conn-backward-sentence-keys (key-parse "M-a"))
-(defvar conn-forward-sentence-keys (key-parse "M-e"))
-(defvar conn-backward-delete-char-keys (key-parse "DEL"))
-(defvar conn-delete-char-keys (key-parse "C-d"))
-(defvar conn-backward-up-list-keys (key-parse "C-M-<up>"))
-(defvar conn-down-list-keys (key-parse "C-M-<down>"))
-(defvar conn-forward-list-keys (key-parse "C-M-n"))
-(defvar conn-backward-list-keys (key-parse "C-M-p"))
+(defcustom conn-yank-keys (key-parse "C-y")
+  "`yank' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-kill-region-keys (key-parse "C-w")
+  "`kill-region' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-delete-region-keys (key-parse "C-S-w")
+  "`delete-region' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-forward-sexp-keys (key-parse "C-M-f")
+  "`forward-sexp' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-sexp-keys (key-parse "C-M-b")
+  "`backward-sexp' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-paragraph-keys (key-parse "M-{")
+  "`backward-paragraph' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-forward-paragraph-keys (key-parse "M-}")
+  "`forward-paragraph' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-beginning-of-defun-keys (key-parse "C-M-a")
+  "`beginning-of-defun' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-end-of-defun-keys (key-parse "C-M-e")
+  "`end-of-defun' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-next-line-keys (key-parse "C-n")
+  "`next-line' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-previous-line-keys (key-parse "C-p")
+  "`previous-line' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-forward-word-keys (key-parse "M-f")
+  "`forward-word' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-word-keys (key-parse "M-b")
+  "`backward-word' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-sentence-keys (key-parse "M-a")
+  "`backward-sentence' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-forward-sentence-keys (key-parse "M-e")
+  "`forward-sentence' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-delete-char-keys (key-parse "DEL")
+  "`backward-delete-char' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-delete-char-keys (key-parse "C-d")
+  "`delete-char' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-up-list-keys (key-parse "C-M-<up>")
+  "`backward-up-list' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-down-list-keys (key-parse "C-M-<down>")
+  "`down-list' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-forward-list-keys (key-parse "C-M-n")
+  "`forward-list' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-list-keys (key-parse "C-M-p")
+  "`backward-list' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
 
 ;;;;; Overlay Category Properties
 
@@ -363,7 +451,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (eval-and-compile
   (defmacro conn--thread (needle form &rest forms)
     (declare (indent 2)
-             (debug (symbolp form body)))
+             (debug (symbolp form)))
     (if forms
         `(let ((,needle ,form))
            (conn--thread ,needle ,@forms))
@@ -3189,10 +3277,8 @@ Expansions and contractions are provided by functions in
 (defun conn-surround-thing (mover arg)
   (interactive
    (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-  (let* ((regions (conn-bounds-of-command mover arg))
-         (thing (get mover :conn-command-thing))
-         (beg (caar regions))
-         (end (cdar (last regions))))
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command mover arg))
+              (thing (get mover :conn-command-thing)))
     (save-mark-and-excursion
       (funcall (or (get thing :conn-thing-surrounder)
                    'conn--surround-thing)
@@ -4598,6 +4684,19 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;; A simple version of hyperbole's hycontrol-windows
 
+(defgroup conn-wincontrol nil
+  "Conn-mode marks."
+  :prefix "conn-wincontrol-"
+  :group 'conn)
+
+(defcustom conn-wincontrol-initial-help 'window-1
+  "Initial help message printed during `conn-wincontrol-mode'."
+  :group 'conn-wincontrol
+  :type '(choice (const :tag "Window" window-1)
+                 (const :tag "Frame" frame)
+                 (const :tag "Tab" tab)
+                 (const :tag "Short" nil)))
+
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--previous-scroll-conservatively)
@@ -4606,13 +4705,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
-
-(defcustom conn-wincontrol-initial-help 'window
-  "Initial help message printed during `conn-wincontrol-mode'."
-  :group 'conn
-  :type '(choice (const :tag "Window" window)
-                 (const :tag "Frame" frame)
-                 (const :tag "Short" nil)))
 
 (defconst conn--wincontrol-window-format-1
   (concat
@@ -4824,6 +4916,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :lighter " WinC"
   :init-value nil
   :interactive nil
+  :group 'conn-wincontrol
   (if conn-wincontrol-mode
       (conn--wincontrol-setup)
     (conn--wincontrol-exit)))
