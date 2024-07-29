@@ -5367,7 +5367,8 @@ When ARG is nil the root window is used."
   "y" 'yank-rectangle
   "j" 'join-line
   "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing)
+  "u" 'conn-regexp-replace-in-thing
+  "DEL" 'clear-rectangle)
 
 (defvar-keymap conn-window-resize-map
   :repeat t
@@ -5424,7 +5425,6 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
   "C-y" 'conn-yank-replace-rectangle
-  "r DEL" 'delete-rectangle
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
   "_" 'calc-grab-sum-across
