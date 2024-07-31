@@ -474,22 +474,19 @@ Used to restore previous value when `conn-mode' is disabled.")
       (let ((fill-column col)
             (adaptive-fill-mode nil))
         (fill-region (point-min) (point-max)))
-      (buffer-string)))
-
-  (defun conn--with-advice-1 (advice-form &rest body)
-    (pcase-let ((fn (gensym "advice"))
-                (`(,symbol ,how ,function . ,props) advice-form))
-      `(let ((,fn ,function))
-         (advice-add ,symbol ,how ,fn ,(car props))
-         (unwind-protect
-             ,(macroexp-progn body)
-           (advice-remove ,symbol ,fn))))))
+      (buffer-string))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   (declare (indent 1))
-  (setq body (macroexp-progn body))
-  (dolist (form (nreverse advice-forms) body)
-    (setq body (conn--with-advice-1 form body))))
+  (pcase-dolist (`(,symbol ,how ,function . ,props)
+                 (nreverse advice-forms))
+    (setq body (let ((fn (gensym "advice")))
+                 `(let ((,fn ,function))
+                    (advice-add ,symbol ,how ,fn ,(car props))
+                    (unwind-protect
+                        ,(macroexp-progn body)
+                      (advice-remove ,symbol ,fn))))))
+  body)
 
 (defmacro conn--without-conn-maps (&rest body)
   (declare (indent 0))
@@ -537,16 +534,6 @@ Used to restore previous value when `conn-mode' is disabled.")
   (or (nth 4 (syntax-ppss))
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
-
-(defun conn--read-buffers (&optional predicate)
-  "Return a list of buffers specified interactively, one by one."
-  (cl-loop for buf = (read-buffer "Buffer: " nil t
-                                  (pcase-lambda (`(,name . ,buf))
-                                    (and
-                                     (if predicate (funcall predicate buf) t)
-                                     (not (member name selected)))))
-           until (equal buf "") collect buf into selected
-           finally return selected))
 
 (defun conn--beginning-of-region-or-restriction ()
   (if (use-region-p) (region-beginning) (point-min)))
@@ -5369,6 +5356,10 @@ When ARG is nil the root window is used."
   "q" 'conn-replace-in-thing
   "u" 'conn-regexp-replace-in-thing
   "DEL" 'clear-rectangle)
+
+(when (version<= "30" emacs-version)
+  (keymap-set conn-region-map "U" 'replace-regexp-as-diff)
+  (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff))
 
 (defvar-keymap conn-window-resize-map
   :repeat t
