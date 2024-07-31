@@ -476,8 +476,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defmacro conn--with-advice (advice-forms &rest body)
   (declare (indent 1))
-  (pcase-dolist (`(,symbol ,how ,function . ,props)
-                 (nreverse advice-forms))
+  (pcase-dolist (`(,symbol ,how ,function . ,props) (nreverse advice-forms))
     (setq body (let ((fn (gensym "advice")))
                  `(let ((,fn ,function))
                     (advice-add ,symbol ,how ,fn ,(car props))
@@ -1136,6 +1135,16 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Advice
 
+(defun conn--read-from-suggestions-ad (&rest app)
+  (if (and (not (use-region-p))
+           (not (save-excursion
+                  (goto-char (region-beginning))
+                  (search-forward "\n" (region-end) t))))
+      (cons (buffer-substring-no-properties
+             (region-beginning) (region-end))
+            (apply app))
+    (apply app)))
+
 (defun conn--repeat-advice (&rest app)
   (unwind-protect
       (apply app)
@@ -1169,6 +1178,10 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
+        (advice-add 'query-replace-read-from-suggestions :around
+                    'conn--read-from-suggestions-ad)
+        (advice-add 'read-regexp-suggestions :around
+                    'conn--read-from-suggestions-ad)
         (advice-add 'repeat :around #'conn--repeat-advice)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'pop-mark :before #'conn--pop-mark-ad)
@@ -1177,6 +1190,10 @@ If BUFFER is nil check `current-buffer'."
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad))
+    (advice-remove 'query-replace-read-from-suggestions
+                   'conn--read-from-suggestions-ad)
+    (advice-remove 'read-regexp-suggestions
+                   'conn--read-from-suggestions-ad)
     (advice-remove 'set-mark #'conn--set-mark-ad)
     (advice-remove 'repeat #'conn--repeat-advice)
     (advice-remove 'pop-mark #'conn--pop-mark-ad)
