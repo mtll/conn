@@ -163,6 +163,7 @@ THING BEG and END are bound in BODY."
   "g" 'conn-consult-ripgrep-region)
 
 (keymap-set conn-region-map "o" 'conn-consult-line-region)
+(keymap-set conn-region-map "O" 'conn-consult-line-multi-region)
 (keymap-set conn-region-map "g" 'conn-consult-ripgrep-region)
 (keymap-set conn-region-map "h" 'conn-consult-region-search-map)
 (keymap-set isearch-mode-map "M-s o" 'conn-consult-isearch-matches)
