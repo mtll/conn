@@ -30,9 +30,6 @@
 ;;;; Requires
 
 (require 'compat)
-(require 'replace)
-(require 'isearch)
-(require 'easy-mmode)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x)
