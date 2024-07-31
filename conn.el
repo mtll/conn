@@ -30,6 +30,7 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'easy-mmode)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x)
