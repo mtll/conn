@@ -251,7 +251,7 @@ Each element may be either a symbol or a list of the form
          calc-keypad-mode
          special-mode)
     t)
-  "Modes in `conn-local-mode' should be enabled.
+  "Modes in which `conn-local-mode' should be enabled.
 Must be of a form accepted by `define-globalized-minor-mode'
 :predicate argument.")
 
@@ -3191,106 +3191,6 @@ Expansions and contractions are provided by functions in
               (not conn-expand-pulse-region)
               executing-kbd-macro)
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
-
-
-;;;; Surround Thing
-
-(defun conn--read-pair ()
-  (pcase (conn--escapable-split-on-char
-          (minibuffer-with-setup-hook
-              (lambda ()
-                (when (boundp 'electric-pair-mode)
-                  (electric-pair-mode -1)))
-            (read-string "Pair: " nil 'conn-pair-history))
-          conn-read-pair-split-char)
-    (`(,front ,back . nil) (cons front back))
-    (`(,str) (conn--thread -->
-                 (lambda (char)
-                   (pcase (alist-get char insert-pair-alist)
-                     (`(,close . nil) (list char close))
-                     (`(,open ,close) (list open close))
-                     (_               (list char char))))
-               (seq-map --> str)
-               (apply #'seq-mapn 'string -->)
-               (cons (car -->) (nreverse (cadr -->)))))
-    (_ (user-error "Unknown pair format."))))
-
-(defun conn-insert-pair ()
-  (let ((beg (region-beginning))
-        (end (region-end)))
-    (pcase-let ((`(,open . ,close) (conn--read-pair)))
-      (goto-char end)
-      (insert close)
-      (goto-char beg)
-      (insert-before-markers open))))
-
-(defun conn-change-pair-outward (arg)
-  "`conn-delete-pair-outward' with ARG then `conn-insert-pair' with STRING."
-  (atomic-change-group
-    (conn-delete-pair-outward arg)
-    (conn-insert-pair)))
-
-(defun conn-change-pair-inward (arg)
-  "`conn-delete-pair-inward' with ARG then `conn-insert-pair' with STRING."
-  (atomic-change-group
-    (conn-delete-pair-inward arg)
-    (conn-insert-pair)))
-
-(defun conn-delete-pair-inward (arg)
-  "Delete ARG chars at `point' and `mark'."
-  (let ((end (> (point) (mark-marker))))
-    (when end (exchange-point-and-mark t))
-    (delete-region (point) (+ (point) arg))
-    (delete-region (- (mark-marker) arg) (mark-marker))))
-
-(defun conn-delete-pair-outward (arg)
-  "Delete ARG chars at `point' and `mark'."
-  (let ((end (> (point) (mark-marker))))
-    (when end (exchange-point-and-mark t))
-    (delete-region (- (point) arg) (point))
-    (delete-region (mark-marker) (+ (mark-marker) arg))))
-
-(defun conn--surround-region (action _beg _end arg)
-  (pcase action
-    ('surround (conn-insert-pair))
-    ('delete
-     (pcase (car (read-multiple-choice
-                  "Direction:" `((?i "inward" "Delete surrounding chars inward")
-                                 (?o "outward" "Delete surrounding chars outward"))))
-       (?i (conn-delete-pair-inward arg))
-       (?o (conn-delete-pair-outward arg))))
-    ('change
-     (pcase (car (read-multiple-choice
-                  "Direction:" `((?i "inward" "Change surrounding chars inward")
-                                 (?o "outward" "Change surrounding chars outward"))))
-       (?i (conn-change-pair-inward arg))
-       (?o (conn-change-pair-outward arg))))))
-(put 'region :conn-thing-surrounder 'conn--surround-region)
-
-(defun conn--surround-thing (action beg end arg)
-  (goto-char beg)
-  (conn--push-ephemeral-mark end)
-  (pcase action
-    ('surround (conn-insert-pair))
-    ('delete (conn-delete-pair-inward arg))
-    ('change (conn-change-pair-inward arg))))
-
-(defun conn-surround-thing (mover arg)
-  (interactive
-   (conn--read-thing-mover "Thing Mover" current-prefix-arg nil t))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command mover arg))
-              (thing (get mover :conn-command-thing)))
-    (save-mark-and-excursion
-      (funcall (or (get thing :conn-thing-surrounder)
-                   'conn--surround-thing)
-               (pcase (car (read-multiple-choice
-                            "Action:" `((?s "surround")
-                                        (?d "delete")
-                                        (?c "change"))))
-                 (?s 'surround)
-                 (?d 'delete)
-                 (?c 'change))
-               beg end arg))))
 
 
 ;;;; Narrow Ring
