@@ -2354,6 +2354,23 @@ state."
   "List of keymap containing dispatch actions.
 All dispatch actions must be in a keymap in this list.")
 
+(defvar conn-dispatch-over-action-maps
+  (list (define-keymap
+          "[" 'conn-dispatch-kill-append-over
+          "{" 'conn-dispatch-kill-append-over
+          "a" 'conn-dispatch-copy-append-over
+          "A" 'conn-dispatch-copy-append-over
+          "]" 'conn-dispatch-kill-prepend-over
+          "}" 'conn-dispatch-kill-prepend-over
+          "p" 'conn-dispatch-copy-prepend-over
+          "P" 'conn-dispatch-copy-prepend-over
+          "w" 'conn-dispatch-kill-over
+          "W" 'conn-dispatch-kill-over
+          "c" 'conn-dispatch-copy-over
+          "C" 'conn-dispatch-copy-over))
+  "List of keymap containing dispatch actions.
+All dispatch actions must be in a keymap in this list.")
+
 (defvar conn-dispatch-thing-override-maps
   (list (define-keymap
           "l" 'forward-line
@@ -2412,6 +2429,16 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
+(conn-define-dispatch-action (conn-dispatch-kill-over "Kill")
+    (window pt thing)
+  (when (and (eq (window-buffer window) (current-buffer))
+             (/= pt (point))
+             (or (bounds-of-thing-at-point thing)
+                 (user-error "No %s at point" thing)))
+    (conn-dispatch-over window pt thing)
+    (kill-region (region-beginning) (region-end))
+    (conn--dispatch-fixup-whitespace)))
+
 (conn-define-dispatch-action (conn-dispatch-kill-append "Kill Append")
     (window pt thing)
   (with-selected-window window
@@ -2425,6 +2452,18 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (conn--dispatch-fixup-whitespace)
            (message "Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
+
+(conn-define-dispatch-action (conn-dispatch-kill-append-over "Kill Append")
+    (window pt thing)
+  (when (and (eq (window-buffer window) (current-buffer))
+             (/= pt (point))
+             (or (bounds-of-thing-at-point thing)
+                 (user-error "No %s at point" thing)))
+    (conn-dispatch-over window pt thing)
+    (let ((str (filter-buffer-substring (region-beginning) (region-end))))
+      (kill-append str nil)
+      (delete-region (region-beginning) (region-end))
+      (conn--dispatch-fixup-whitespace))))
 
 (conn-define-dispatch-action (conn-dispatch-kill-prepend "Kill Prepend")
     (window pt thing)
@@ -2440,6 +2479,18 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
+(conn-define-dispatch-action (conn-dispatch-kill-prepend-over "Kill Prepend")
+    (window pt thing)
+  (when (and (eq (window-buffer window) (current-buffer))
+             (/= pt (point))
+             (or (bounds-of-thing-at-point thing)
+                 (user-error "No %s at point" thing)))
+    (conn-dispatch-over window pt thing)
+    (let ((str (filter-buffer-substring (region-beginning) (region-end))))
+      (kill-append str t)
+      (delete-region (region-beginning) (region-end))
+      (conn--dispatch-fixup-whitespace))))
+
 (conn-define-dispatch-action (conn-dispatch-copy "Copy")
     (window pt thing)
   (with-selected-window window
@@ -2451,6 +2502,17 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (pulse-momentary-highlight-region beg end)
            (kill-new str)))
         (_ (user-error "No thing at point"))))))
+
+(conn-define-dispatch-action (conn-dispatch-copy-over "Copy")
+    (window pt thing)
+  (when (and (eq (window-buffer window) (current-buffer))
+             (/= pt (point))
+             (or (bounds-of-thing-at-point thing)
+                 (user-error "No %s at point" thing)))
+    (save-mark-and-excursion
+      (conn-dispatch-over window pt thing)
+      (copy-region-as-kill (region-beginning) (region-end))
+      (pulse-momentary-highlight-region (region-beginning) (region-end)))))
 
 (conn-define-dispatch-action (conn-dispatch-copy-append "Copy Append")
     (window pt thing)
@@ -2464,6 +2526,19 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (message "Copy Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
+(conn-define-dispatch-action (conn-dispatch-copy-append-over "Copy Append")
+    (window pt thing)
+  (when (and (eq (window-buffer window) (current-buffer))
+             (/= pt (point))
+             (or (bounds-of-thing-at-point thing)
+                 (user-error "No %s at point" thing)))
+    (save-mark-and-excursion
+      (conn-dispatch-over window pt thing)
+      (let ((str (filter-buffer-substring (region-beginning) (region-end))))
+        (kill-append str nil)
+        (pulse-momentary-highlight-region (region-beginning) (region-end))
+        (conn--dispatch-fixup-whitespace)))))
+
 (conn-define-dispatch-action (conn-dispatch-copy-prepend "Copy Prepend")
     (window pt thing)
   (with-selected-window window
@@ -2475,6 +2550,19 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (kill-append str t)
            (message "Copy Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
+
+(conn-define-dispatch-action (conn-dispatch-copy-prepend-over "Copy Prepend")
+    (window pt thing)
+  (when (and (eq (window-buffer window) (current-buffer))
+             (/= pt (point))
+             (or (bounds-of-thing-at-point thing)
+                 (user-error "No %s at point" thing)))
+    (save-mark-and-excursion
+      (conn-dispatch-over window pt thing)
+      (let ((str (filter-buffer-substring (region-beginning) (region-end))))
+        (kill-append str t)
+        (pulse-momentary-highlight-region (region-beginning) (region-end))
+        (conn--dispatch-fixup-whitespace)))))
 
 (conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
     (window pt thing)
@@ -2548,8 +2636,10 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 
 (conn-define-dispatch-action (conn-dispatch-over "Over")
     (window pt thing)
-  (when (and (eq (window-buffer (selected-window)) (current-buffer))
+  (when (and (eq (window-buffer window) (current-buffer))
              (/= pt (point)))
+    (unless (region-active-p)
+      (push-mark nil t))
     (pcase (cons (bounds-of-thing-at-point thing)
                  (progn
                    (goto-char pt)
@@ -2562,7 +2652,9 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
              (conn--push-ephemeral-mark beg1)
              (goto-char end2))
          (conn--push-ephemeral-mark end1)
-         (goto-char beg2))))))
+         (goto-char beg2))
+       t)
+      (_ nil))))
 
 (conn-define-dispatch-action (conn-dispatch-jump "Jump")
     (window pt _thing)
@@ -2908,11 +3000,11 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
-(defun conn--dispatch-read-thing (&optional default-action)
+(defun conn--dispatch-read-thing (action-maps &optional default-action)
   (let ((keymap (make-composed-keymap
                  (append (list conn-dispatch-command-map)
                          conn-dispatch-thing-override-maps
-                         conn-dispatch-action-maps)))
+                         action-maps)))
         (prompt (substitute-command-keys
                  (concat "\\<conn-dispatch-command-map>Thing (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
@@ -2991,7 +3083,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
                      current-prefix-arg)))
-             ((guard (where-is-internal cmd conn-dispatch-action-maps t))
+             ((guard (where-is-internal cmd action-maps t))
               (setq action (unless (eq cmd action) cmd)))
              (_
               (setq invalid t)))
@@ -3018,7 +3110,8 @@ the THING at the location selected is acted upon.
 
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
-  (interactive (conn--dispatch-read-thing))
+  (interactive
+   (conn--dispatch-read-thing conn-dispatch-action-maps))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
@@ -3056,7 +3149,9 @@ seconds."
           (delete-overlay ov))))))
 
 (defun conn-dispatch-over-things (thing finder action arg &optional repeat)
-  (interactive (conn--dispatch-read-thing 'conn-dispatch-over))
+  "See `conn-dispatch-on-things', with default action `conn-dispatch-over'."
+  (interactive
+   (conn--dispatch-read-thing conn-dispatch-over-action-maps 'conn-dispatch-over))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
@@ -5523,6 +5618,7 @@ When ARG is nil the root window is used."
   "C" 'conn-copy-region
   "d" (conn-remapping-command conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
+  "F" 'conn-dispatch-over-things
   "g" (conn-remapping-command (key-parse "M-g"))
   "h" 'conn-expand
   "H" conn-mark-thing-map
@@ -5556,6 +5652,7 @@ When ARG is nil the root window is used."
   ">" 'org-demote-subtree
   "?" (conn-remapping-command (key-parse "C-?"))
   "f" 'conn-dispatch-on-things
+  "F" 'conn-dispatch-over-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
   "b" conn-edit-map
