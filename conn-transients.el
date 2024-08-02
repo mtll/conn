@@ -330,7 +330,7 @@ before each iteration."
   "Save and restore current window configuration during dispatch."
   :class 'transient-switch
   :key "sw"
-  :description "Windows"
+  :description "Window Conf"
   :argument "windows")
 
 (transient-define-suffix conn--kapply-string-suffix (args)
