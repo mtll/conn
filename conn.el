@@ -889,16 +889,20 @@ If BUFFER is nil check `current-buffer'."
   "." 'reset-arg
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
+  "b" 'beginning-of-buffer
   "C-h" 'help)
 
 (defvar-keymap conn-read-thing-command-map
   "C-h" 'help)
 
+(defvar conn-last-bounds-of-command nil)
+
 (defun conn-bounds-of-command (cmd arg)
-  (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-               (ignore-errors (get cmd :conn-command-bounds))
-               (apply-partially 'conn--bounds-of-thing-command-default cmd))
-           arg))
+  (setq conn-last-bounds-of-command
+        (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                     (ignore-errors (get cmd :conn-command-bounds))
+                     (apply-partially 'conn--bounds-of-thing-command-default cmd))
+                 arg)))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
   (let ((current-prefix-arg arg)
@@ -3629,7 +3633,7 @@ instances of from-string.")
                               ""))
                     nil beg end))))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) conn-last-bounds-of-command))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string query-flag nil
@@ -3655,7 +3659,7 @@ instances of from-string.")
                               ""))
                     t beg end))))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
+  (pcase-let ((`(,beg . ,end) conn-last-bounds-of-command))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string query-flag t
@@ -3797,9 +3801,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (conn--read-thing-mover "Mover"
                            current-prefix-arg
-                           (define-keymap
-                             "i" 'conn-backward-line
-                             "k" 'forward-line)
+                           (define-keymap "k" 'forward-line)
                            t))
   (deactivate-mark t)
   (pcase mover
