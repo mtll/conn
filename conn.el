@@ -305,6 +305,16 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;; Key Remapping
 
+(defcustom conn-undo-keys (key-parse "C-/")
+  "`undo' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-undo-redo-keys (key-parse "C-?")
+  "`undo-redo' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
 (defcustom conn-yank-keys (key-parse "C-y")
   "`yank' key binding."
   :group 'conn-key-remapping
@@ -357,6 +367,16 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defcustom conn-previous-line-keys (key-parse "C-p")
   "`previous-line' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-forward-char-keys (key-parse "C-f")
+  "`forward-char' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
+(defcustom conn-backward-char-keys (key-parse "C-b")
+  "`backward-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
@@ -4668,17 +4688,8 @@ there's a region, all lines that region covers will be duplicated."
 
 (defun conn-change-line ()
   (interactive)
-  (call-interactively (key-binding conn-kill-line-keys))
+  (call-interactively (key-binding conn-kill-line-keys t))
   (conn-emacs-state))
-
-(defun conn-quoted-insert-overwrite ()
-  "Overwrite char after point using `quoted-insert'."
-  (interactive)
-  (save-excursion
-    (let ((overwrite-mode 'overwrite-mode-binary))
-      (message "%s" (propertize "Overwrite Char:"
-                                'face 'minibuffer-prompt))
-      (call-interactively #'quoted-insert))))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
   "Open line above and enter `conn-emacs-state'.
@@ -5585,7 +5596,7 @@ When ARG is nil the root window is used."
         ""
         nil
         :filter ,(lambda (&rest _)
-                   (let ((binding (key-binding (key-parse "C-b") t)))
+                   (let ((binding (key-binding conn-backward-char-keys t)))
                      (if (eq binding 'forward-char)
                          'conn-backward-char
                        binding))))
@@ -5596,7 +5607,7 @@ When ARG is nil the root window is used."
         ""
         nil
         :filter ,(lambda (&rest _)
-                   (let ((binding (key-binding (key-parse "C-f") t)))
+                   (let ((binding (key-binding conn-forward-char-keys t)))
                      (if (eq binding 'forward-char)
                          'conn-forward-char
                        binding))))
@@ -5614,13 +5625,12 @@ When ARG is nil the root window is used."
   "'" 'conn-other-place-prefix
   "+" 'conn-set-register-seperator
   "." 'repeat
-  "/" (conn-remapping-command (key-parse "C-/"))
+  "/" (conn-remapping-command conn-undo-keys)
   ";" 'conn-wincontrol
-  ":" 'conn-quoted-insert-overwrite
   "<tab>" 'indent-region
   "TAB" 'indent-region
   "=" 'indent-relative
-  "?" (conn-remapping-command (key-parse "C-?"))
+  "?" (conn-remapping-command conn-undo-redo-keys)
   "\"" 'conn-surround-thing
   "\\" 'conn-kapply-prefix
   "_" 'repeat-complex-command
@@ -5683,13 +5693,13 @@ When ARG is nil the root window is used."
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
   "." 'point-to-register
-  "/" (conn-remapping-command (key-parse "C-/"))
+  "/" (conn-remapping-command conn-undo-keys)
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "*" 'conn-org-tree-edit-insert-heading
   "<" 'org-promote-subtree
   ">" 'org-demote-subtree
-  "?" (conn-remapping-command (key-parse "C-?"))
+  "?" (conn-remapping-command conn-undo-redo-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-dispatch-over-things
   "C" 'org-toggle-comment
