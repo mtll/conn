@@ -5951,7 +5951,8 @@ determine if `conn-local-mode' should be enabled."
                      'paredit-forward
                      'paredit-forward-up
                      'paredit-backward
-                     'paredit-backward-up))
+                     'paredit-backward-up
+                     'conn-dispatch-on-things))
 
 (with-eval-after-load 'paredit
   (declare-function paredit-forward-down "paredit")
