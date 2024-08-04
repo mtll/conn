@@ -125,13 +125,6 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
-(defface conn-pulse-face
-  '((default (:background "#c6ebd9"))
-    (((background dark)) (:background "#449066"))
-    (((background light)) (:background "#d6eeab")))
-  "Face for kapply pulse."
-  :group 'conn)
-
 (defface conn-mark-face
   '((default (:inherit cursor :background "#b8a2f0"))
     (((background light)) (:inherit cursor :background "#b8a2f0"))
@@ -660,8 +653,7 @@ If BUFFER is nil check `current-buffer'."
                 never (invisible-p pt))))
 
 (defun conn--string-no-upper-case-p (string)
-  (cl-loop for char across string
-           always (eq char (downcase char))))
+  (cl-loop for char across string always (eq char (downcase char))))
 
 (defun conn--visible-matches (string &optional dir)
   (save-excursion
@@ -677,7 +669,7 @@ If BUFFER is nil check `current-buffer'."
         (nreverse matches)))))
 
 (defun conn--read-from-with-preview (prompt &optional beg end regexp-flag)
-  (pcase-let ((`(,default . ,prev) (conn--replace-read-default)))
+  (let ((default (conn--replace-read-default)))
     (minibuffer-with-setup-hook
         (minibuffer-lazy-highlight-setup
          :case-fold case-fold-search
@@ -697,11 +689,11 @@ If BUFFER is nil check `current-buffer'."
                               (isearch-no-upper-case-p string regexp-flag)))
                       string))
       (if regexp-flag
-          (read-regexp (format-prompt prompt (and default (query-replace-descr prev)))
+          (read-regexp (format-prompt prompt default)
                        (regexp-quote default)
                        'conn--read-regexp-history)
         (let ((from (read-from-minibuffer
-                     (format-prompt prompt (and default (query-replace-descr prev)))
+                     (format-prompt prompt default)
                      nil nil nil nil
                      (if default
                          (delete-dups
@@ -1517,7 +1509,7 @@ Possibilities: \\<query-replace-map>
       (when (eq state :record)
         (pulse-momentary-highlight-region (region-beginning)
                                           (region-end)
-                                          'conn-pulse-face))
+                                          'query-replace))
       ret)))
 
 (defun conn--kapply-save-windows (iterator)
