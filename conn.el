@@ -410,6 +410,11 @@ Used to restore previous value when `conn-mode' is disabled.")
   :group 'conn-key-remapping
   :type '(vector integer))
 
+(defcustom conn-kill-line-keys (key-parse "C-k")
+  "`kill-line' key binding."
+  :group 'conn-key-remapping
+  :type '(vector integer))
+
 ;;;;; Overlay Category Properties
 
 ;;;;;; Mark Cursor
@@ -4654,6 +4659,18 @@ there's a region, all lines that region covers will be duplicated."
 
 ;;;;; Transition Functions
 
+(defun conn-change-whole-line (&optional arg)
+  (interactive "P")
+  (kill-whole-line arg)
+  (open-line 1)
+  (indent-according-to-mode)
+  (conn-emacs-state))
+
+(defun conn-change-line ()
+  (interactive)
+  (call-interactively (key-binding conn-kill-line-keys))
+  (conn-emacs-state))
+
 (defun conn-quoted-insert-overwrite ()
   "Overwrite char after point using `quoted-insert'."
   (interactive)
@@ -5522,6 +5539,8 @@ When ARG is nil the root window is used."
 (defvar-keymap conn-edit-map
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
+  "DEL" 'conn-change-whole-line
+  "h" 'conn-change-line
   "_" 'conn-command-to-register
   "o" 'conn-open-line-and-indent
   "n" 'conn-open-line-above
@@ -5597,6 +5616,7 @@ When ARG is nil the root window is used."
   "." 'repeat
   "/" (conn-remapping-command (key-parse "C-/"))
   ";" 'conn-wincontrol
+  ":" 'conn-quoted-insert-overwrite
   "<tab>" 'indent-region
   "TAB" 'indent-region
   "=" 'indent-relative
