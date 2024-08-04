@@ -1792,12 +1792,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing 'string :mark-key "\"")
 (conn-register-thing 'filename :mark-key "/")
 
-(defun conn-forward-defun (N)
-  (interactive "p")
-  (if (< N 0)
-      (beginning-of-defun (abs N))
-    (end-of-defun N)))
-
 (conn-register-thing
  'defun
  :forward-op 'conn-forward-defun
@@ -3814,6 +3808,12 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Editing Commands
 
+(defun conn-forward-defun (N)
+  (interactive "p")
+  (if (< N 0)
+      (beginning-of-defun (abs N))
+    (end-of-defun N)))
+
 (defun conn-transpose-regions (mover arg)
   (interactive
    (conn--read-thing-mover "Mover"
@@ -5739,7 +5739,8 @@ When ARG is nil the root window is used."
   "C-x t j" 'conn-register-load
   "C-x t s" 'tab-switch
   "C-x t a" 'conn-tab-to-register
-  "C-`" 'other-window)
+  "C-`" 'other-window
+  "C-x m" 'conn-kmacro-prefix)
 
 (defvar-keymap conn-mode-map
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
