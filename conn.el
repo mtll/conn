@@ -5079,6 +5079,28 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                          'unspecified))
   (invert-face 'mode-line))
 
+(defun conn-wincontrol-one-command ()
+  (interactive)
+  (let ((post-hook (make-symbol "one-command-post-hook"))
+        (pre-hook (make-symbol "one-command-pre-hook")))
+    (fset post-hook (lambda ()
+                      (remove-hook 'post-command-hook post-hook)
+                      (conn-wincontrol-exit)
+                      (message nil)))
+    (fset pre-hook (lambda ()
+                     (unless (memq this-command '(conn-wincontrol-forward-delete-arg
+                                                  conn-wincontrol-backward-delete-arg
+                                                  conn-wincontrol-digit-argument-reset
+                                                  conn-wincontrol-invert-argument
+                                                  conn-wincontrol-digit-argument
+                                                  conn-wincontrol-universal-arg))
+                       (remove-hook 'pre-command-hook pre-hook)
+                       (add-hook 'post-command-hook post-hook 90))))
+    (conn-wincontrol)
+    (add-hook 'pre-command-hook pre-hook)))
+
+(keymap-set conn-state-map ":" 'conn-wincontrol-one-command-hook)
+
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
