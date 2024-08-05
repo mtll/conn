@@ -5099,8 +5099,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (conn-wincontrol)
     (add-hook 'pre-command-hook pre-hook)))
 
-(keymap-set conn-state-map ":" 'conn-wincontrol-one-command-hook)
-
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
@@ -5633,6 +5631,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap conn-state-map
   :parent conn-movement-map
+  ":" 'conn-wincontrol-one-command
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
   "`" 'other-window
   "|" 'conn-shell-command-on-region
