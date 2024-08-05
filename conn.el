@@ -5072,6 +5072,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+  (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
   (dolist (state conn-states)
@@ -5081,12 +5082,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defun conn-wincontrol-one-command ()
   (interactive)
-  (let ((post-hook (make-symbol "one-command-post-hook"))
-        (pre-hook (make-symbol "one-command-pre-hook")))
-    (fset post-hook (lambda ()
-                      (remove-hook 'post-command-hook post-hook)
-                      (conn-wincontrol-exit)
-                      (message nil)))
+  (let ((pre-hook (make-symbol "one-command-pre-hook")))
     (fset pre-hook (lambda ()
                      (unless (memq this-command '(conn-wincontrol-forward-delete-arg
                                                   conn-wincontrol-backward-delete-arg
@@ -5095,9 +5091,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                                                   conn-wincontrol-digit-argument
                                                   conn-wincontrol-universal-arg))
                        (remove-hook 'pre-command-hook pre-hook)
-                       (add-hook 'post-command-hook post-hook 90))))
+                       (conn-wincontrol-exit))))
     (conn-wincontrol)
-    (add-hook 'pre-command-hook pre-hook)))
+    (add-hook 'pre-command-hook pre-hook 90)))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
