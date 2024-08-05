@@ -52,10 +52,10 @@
 (defvar conn-transition-hook)
 
 (defvar conn-dispatch-providers-alist
-  '((t . conn--dispatch-chars)))
+  (list (cons t conn--dispatch-chars)))
 
 (defvar conn-dispatch-default-actions-alist
-  '((t . conn-dispatch-goto)))
+  (list (cons t conn-dispatch-goto)))
 
 (defvar conn-mark-handler-alist nil)
 
@@ -231,19 +231,19 @@ Each element may be either a symbol or a list of the form
   "Previous conn state for buffer.")
 
 (defvar conn-in-modes
-  '(occur-mode
-    grep-mode
-    occur-edit-mode
-    eshell-mode
-    edmacro-mode
-    (not minibuffer-mode
-         dired-mode
-         slime-xref-mode
-         calc-mode
-         calc-trail-mode
-         calc-keypad-mode
-         special-mode)
-    t)
+  (list 'occur-mode
+        'grep-mode
+        'occur-edit-mode
+        'eshell-mode
+        'edmacro-mode
+        '(not minibuffer-mode
+              dired-mode
+              slime-xref-mode
+              calc-mode
+              calc-trail-mode
+              calc-keypad-mode
+              special-mode)
+        t)
   "Modes in which `conn-local-mode' should be enabled.
 Must be of a form accepted by `define-globalized-minor-mode'
 :predicate argument.")
@@ -2343,7 +2343,7 @@ state."
         (put ',name :conn-action t)))))
 
 (defvar conn-dispatch-all-things-collector-alist
-  '((t . conn--dispatch-all-things-1)))
+  (list (cons t conn--dispatch-all-things-1)))
 
 (defvar-keymap conn-dispatch-command-map
   "C-h" 'help
