@@ -52,10 +52,10 @@
 (defvar conn-transition-hook)
 
 (defvar conn-dispatch-providers-alist
-  (list (cons t conn--dispatch-chars)))
+  (list (cons t 'conn--dispatch-chars)))
 
 (defvar conn-dispatch-default-actions-alist
-  (list (cons t conn-dispatch-goto)))
+  (list (cons t 'conn-dispatch-goto)))
 
 (defvar conn-mark-handler-alist nil)
 
@@ -874,9 +874,9 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; Read Things
 
-(defvar-local conn-bounds-of-command-alist nil)
+(defvar conn-bounds-of-command-alist nil)
 
-(defvar-local conn-bounds-of-things-in-region-alist nil)
+(defvar conn-bounds-of-things-in-region-alist nil)
 
 (defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
@@ -917,7 +917,6 @@ If BUFFER is nil check `current-buffer'."
 (defun conn-bounds-of-command (cmd arg)
   (setq conn-last-bounds-of-command
         (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                     (ignore-errors (get cmd :conn-command-bounds))
                      (apply-partially 'conn--bounds-of-thing-command-default cmd))
                  arg)))
 
@@ -949,16 +948,17 @@ If BUFFER is nil check `current-buffer'."
           (funcall exit)))
       (cons (region-beginning) (region-end)))))
 
-(put 'conn-expand :conn-command-bounds
-     (apply-partially 'conn--bounds-of-expansion 'conn-expand))
+(setf (alist-get 'conn-expand conn-bounds-of-command-alist)
+      (apply-partially 'conn--bounds-of-expansion 'conn-expand))
 
-(put 'conn-contract :conn-command-bounds
-     (apply-partially 'conn--bounds-of-expansion 'conn-contract))
+(setf (alist-get 'conn-contract conn-bounds-of-command-alist)
+      (apply-partially 'conn--bounds-of-expansion 'conn-contract))
 
 (defun conn--bounds-of-region (_arg)
   (cons (region-beginning) (region-end)))
 
-(put 'conn-toggle-mark-command :conn-command-bounds 'conn--bounds-of-region)
+(setf (alist-get 'conn-toggle-mark-command conn-bounds-of-command-alist)
+      'conn--bounds-of-region)
 
 (defun conn--bounds-of-recursive-edit (_arg)
   (let (buf)
@@ -970,13 +970,22 @@ If BUFFER is nil check `current-buffer'."
       (set-buffer buf)
       (cons (region-beginning) (region-end)))))
 
-(put 'recursive-edit :conn-command-bounds 'conn--bounds-of-recursive-edit)
+(setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
+      'conn--bounds-of-recursive-edit)
 
 (defun conn-bounds-of-things-in-region (thing beg end)
   (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
-               (ignore-errors (get thing :conn-things-in-region))
+               (ignore-errors
+                 (alist-get (get thing :conn-command-thing)
+                            conn-bounds-of-things-in-region-alist))
                'conn--things-in-region-default)
            thing beg end))
+
+(defun conn-bounds-of-region (_thing _beg _end)
+  (region-bounds))
+
+(setf (alist-get 'region conn-bounds-of-things-in-region-alist)
+      'conn-bounds-of-region)
 
 (defun conn--things-in-region-default (thing beg end)
   (save-excursion
@@ -997,8 +1006,6 @@ If BUFFER is nil check `current-buffer'."
   (cl-loop for reg in (region-bounds)
            when (<= beg (car reg) (cdr reg) end)
            collect reg))
-
-(put 'region :conn-things-in-region 'conn--region-bounds)
 
 (defun conn--read-thing-mover (prompt &optional arg keymap recursive-edit)
   (let ((conn--read-thing-mover-map
@@ -1335,18 +1342,20 @@ Possibilities: \\<query-replace-map>
   (lambda (_state) t))
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
-  (conn--thread -->
-      (conn-bounds-of-things-in-region thing beg end)
-    (if skip-empty
-        (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
-      -->)
-    (if (or (null nth) (= 1 nth))
-        -->
-      (cl-loop with stack = -->
-               while stack
-               collect (car stack)
-               do (cl-loop repeat nth do (pop stack))))
-    (conn--kapply-region-iterator (if reverse (nreverse -->) -->))))
+  (prog1
+      (conn--thread -->
+          (conn-bounds-of-things-in-region thing beg end)
+        (if skip-empty
+            (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
+          -->)
+        (if (or (null nth) (= 1 nth))
+            -->
+          (cl-loop with stack = -->
+                   while stack
+                   collect (car stack)
+                   do (cl-loop repeat nth do (pop stack))))
+        (conn--kapply-region-iterator (if reverse (nreverse -->) -->)))
+    (deactivate-mark)))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
   (when reverse (setq regions (reverse regions)))
@@ -2343,7 +2352,7 @@ state."
         (put ',name :conn-action t)))))
 
 (defvar conn-dispatch-all-things-collector-alist
-  (list (cons t conn--dispatch-all-things-1)))
+  (list (cons t 'conn--dispatch-all-things-1)))
 
 (defvar-keymap conn-dispatch-command-map
   "C-h" 'help

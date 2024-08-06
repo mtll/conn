@@ -448,7 +448,6 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (deactivate-mark)
   (conn--thread -->
       (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing")))
         (conn--kapply-thing-iterator
