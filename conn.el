@@ -3826,7 +3826,8 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-transpose-regions (mover arg)
   (interactive
    (conn--read-thing-mover "Mover"
-                           (prefix-numeric-value current-prefix-arg)
+                           (when current-prefix-arg
+                             (prefix-numeric-value current-prefix-arg))
                            (define-keymap "k" 'forward-line)
                            t))
   (deactivate-mark t)
@@ -4343,7 +4344,8 @@ When KILL-FLAG is non-nil kill the region as well."
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
    (append (conn--read-thing-mover "Thing Mover"
-                                   (prefix-numeric-value current-prefix-arg)
+                                   (when current-prefix-arg
+                                     (prefix-numeric-value current-prefix-arg))
                                    nil t)
            (list t)))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
@@ -4358,7 +4360,8 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
    (append (conn--read-thing-mover "Thing Mover"
-                                   (prefix-numeric-value current-prefix-arg)
+                                   (when current-prefix-arg
+                                     (prefix-numeric-value current-prefix-arg))
                                    nil t)
            (list t)))
   (pcase-let ((`(,beg . ,end) (conn-bounds-of-command thing-mover arg)))
