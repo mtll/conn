@@ -144,9 +144,9 @@ CONDITION has the same meaning as in `buffer-match-p'."
   "Face for matches when reading strings."
   :group 'conn)
 
-(defface conn-selection-face
+(defface conn-dot-face
   '((t (:inherit match)))
-  "Face for multiple selections."
+  "Face for dots."
   :group 'conn)
 
 (defcustom conn-mark-overlay-priority 2000
@@ -454,12 +454,12 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
 
-;;;;;; Selection Overlay
+;;;;;; Dot Overlay
 
-(put 'conn--selection-overlay 'face 'conn-selection-face)
-(put 'conn--selection-overlay 'priority (1- conn-mark-overlay-priority))
-(put 'conn--selection-overlay 'conn-overlay t)
-(put 'conn--selection-overlay 'evaporate t)
+(put 'conn--dot-overlay 'face 'conn-dot-face)
+(put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
+(put 'conn--dot-overlay 'conn-overlay t)
+(put 'conn--dot-overlay 'evaporate t)
 
 ;;;;; Command Histories
 
@@ -999,45 +999,45 @@ If BUFFER is nil check `current-buffer'."
   (let* ((posn (event-start event))
          (point (posn-point posn))
          (ov (make-overlay point (1+ point) (window-buffer (posn-window posn)))))
-    (overlay-put ov 'category 'conn--selection-overlay)
+    (overlay-put ov 'category 'conn--dot-overlay)
     (overlay-put ov 'point t)
-    (push ov conn--selections)))
+    (push ov conn--dots)))
 
-(defun conn-point-to-selection (point)
+(defun conn-point-to-dot (point)
   (interactive (list (point)))
   (let* ((ov (make-overlay point (1+ point))))
-    (overlay-put ov 'category 'conn--selection-overlay)
+    (overlay-put ov 'category 'conn--dot-overlay)
     (overlay-put ov 'point t)
-    (push ov conn--selections)))
+    (push ov conn--dots)))
 
 (defun conn-region-to-secondary (beg end &optional buffer)
   (interactive (list (region-beginning) (region-end)))
   (move-overlay mouse-secondary-overlay beg end buffer))
 
-(defun conn-delete-selection-at-click (event)
+(defun conn-delete-dot-at-click (event)
   (interactive "e")
   (let* ((posn (event-start event))
 	 (point (posn-point posn)))
     (with-current-buffer (window-buffer (posn-window posn))
       (dolist (ov (seq-filter (lambda (ov)
-                                (eq (overlay-get ov 'category) 'conn--selection-overlay))
+                                (eq (overlay-get ov 'category) 'conn--dot-overlay))
                               (overlays-at point)))
-        (setq conn--selections (delq ov conn--selections))
+        (setq conn--dots (delq ov conn--dots))
         (delete-overlay ov)))))
 
-(defun conn-delete-selection-at-point (point)
+(defun conn-delete-dot-at-point (point)
   (interactive (list (point)))
   (dolist (ov (seq-filter (lambda (ov)
-                            (eq (overlay-get ov 'category) 'conn--selection-overlay))
+                            (eq (overlay-get ov 'category) 'conn--dot-overlay))
                           (overlays-at point)))
-    (setq conn--selections (delq ov conn--selections))
+    (setq conn--dots (delq ov conn--dots))
     (delete-overlay ov)))
 
-(defvar conn--selections nil)
+(defvar conn--dots nil)
 
-(defvar conn-selections-mode nil)
+(defvar conn-dots-mode nil)
 
-(defun conn--selection-mode-command-hook ()
+(defun conn--dot-mode-command-hook ()
   (when (overlay-buffer mouse-secondary-overlay)
     (with-current-buffer (overlay-buffer mouse-secondary-overlay)
       (let* ((beg (overlay-start mouse-secondary-overlay))
@@ -1045,32 +1045,32 @@ If BUFFER is nil check `current-buffer'."
                       beg
                     (overlay-end mouse-secondary-overlay)))
              (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
-        (overlay-put ov 'category 'conn--selection-overlay)
-        (push ov conn--selections)
+        (overlay-put ov 'category 'conn--dot-overlay)
+        (push ov conn--dots)
         (delete-overlay mouse-secondary-overlay)))))
 
-(define-minor-mode conn-selection-mode
-  "Minor mode for multiple selections."
+(define-minor-mode conn-dot-mode
+  "Minor mode for multiple dots."
   :global t
   :lighter ""
   :keymap (define-keymap
-            "C-w" 'conn-delete-selection-at-point
+            "C-w" 'conn-delete-dot-at-point
             "C-d" 'conn-region-to-secondary
             "S-<mouse-1>" 'conn-mouse-click-secondary
             "S-<down-mouse-1>" 'conn-mouse-click-secondary
             "S-<drag-mouse-1>" 'conn-mouse-click-secondary
-            "S-<mouse-3>" 'conn-delete-selection-at-click
-            "S-<down-mouse-3>" 'conn-delete-selection-at-click
+            "S-<mouse-3>" 'conn-delete-dot-at-click
+            "S-<down-mouse-3>" 'conn-delete-dot-at-click
             "ESC" 'exit-recursive-edit
             "<escape>" 'exit-recursive-edit)
-  (if conn-selection-mode
+  (if conn-dot-mode
       (progn
         (delete-overlay mouse-secondary-overlay)
-        (setq conn--selections nil)
-        (add-hook 'post-command-hook 'conn--selection-mode-command-hook))
-    (remove-hook 'post-command-hook 'conn--selection-mode-command-hook)
-    (mapc #'delete-overlay conn--selections)
-    (setq conn--selections nil)))
+        (setq conn--dots nil)
+        (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
+    (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
+    (mapc #'delete-overlay conn--dots)
+    (setq conn--dots nil)))
 
 (defun conn--merge-regions (regions)
   (let (merged)
@@ -1089,13 +1089,13 @@ If BUFFER is nil check `current-buffer'."
         ('nil (push region merged))))
     merged))
 
-(defun conn--bounds-of-selections (&rest _)
-  (conn-selection-mode 1)
+(defun conn--bounds-of-dots (&rest _)
+  (conn-dot-mode 1)
   (unwind-protect
       (thread-last
         (progn
           (recursive-edit)
-          conn--selections)
+          conn--dots)
         (seq-filter 'overlay-buffer)
         (mapcar (lambda (ov)
                   (cons (conn--create-marker (overlay-start ov)
@@ -1103,23 +1103,10 @@ If BUFFER is nil check `current-buffer'."
                         (conn--create-marker (overlay-end ov)
                                              (overlay-buffer ov)))))
         conn--merge-regions)
-    (conn-selection-mode -1)))
+    (conn-dot-mode -1)))
 
-(setf (alist-get 'multiple-regions conn-bounds-of-things-in-region-alist)
-      'conn--bounds-of-selections)
-
-(defun conn--bounds-of-recursive-edit (_arg)
-  (let (buf)
-    (save-mark-and-excursion
-      (message "Defining region in recursive edit")
-      (with-current-buffer (current-buffer)
-        (recursive-edit)
-        (setq buf (current-buffer)))
-      (set-buffer buf)
-      (cons (region-beginning) (region-end)))))
-
-(setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
-      'conn--bounds-of-recursive-edit)
+(setf (alist-get 'dots conn-bounds-of-things-in-region-alist)
+      'conn--bounds-of-dots)
 
 (defun conn-bounds-of-things-in-region (thing beg end)
   (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
@@ -1143,7 +1130,7 @@ If BUFFER is nil check `current-buffer'."
                             (forward-thing thing -1)
                             (bounds-of-thing-at-point thing))
              while bounds collect bounds into regions
-             while (and (< (point) (point-max))
+             while (and (< (point) end)
                         (ignore-errors
                           (forward-thing thing 1)
                           t))
@@ -1958,7 +1945,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
 (conn-register-thing
- 'multiple-regions
+ 'dots
  :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
 (conn-register-thing
@@ -1985,7 +1972,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'conn-toggle-mark-command)
 
 (conn-register-thing-commands
- 'multiple-regions nil
+ 'dots nil
  'conn-set-mark-command
  'set-mark-command)
 
@@ -5584,10 +5571,10 @@ When ARG is nil the root window is used."
 ;;;; Keymaps
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-state 'conn-selection-mode)
-  "w" 'conn-delete-selection-at-point
+  :keymap (conn-get-mode-map 'conn-state 'conn-dot-mode)
+  "w" 'conn-delete-dot-at-point
   "d" 'conn-region-to-secondary
-  "D" 'conn-point-to-selection)
+  "D" 'conn-point-to-dot)
 
 (defvar-keymap conn-list-movement-repeat-map
   :repeat t
