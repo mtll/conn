@@ -595,6 +595,23 @@ If BUFFER is nil check `current-buffer'."
       (when-let ((prop (get mode property)))
         (throw 'term prop)))))
 
+(defun conn--merge-regions (regions)
+  (let (merged)
+    (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
+      (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
+                         (and (eq (marker-buffer beg2) (marker-buffer beg1))
+                              (not (or (< end2 beg1) (< end1 beg2)))))
+                       merged)
+        ((and cons `(,beg2 . ,end2))
+         (setcar cons (if (< beg1 beg2)
+                          (prog1 beg1 (set-marker beg2 nil))
+                        (prog1 beg2 (set-marker beg1 nil))))
+         (setcdr cons (if (> end1 end2)
+                          (prog1 end1 (set-marker end2 nil))
+                        (prog1 end2 (set-marker end1 nil)))))
+        ('nil (push region merged))))
+    merged))
+
 (defun conn--narrow-indirect (beg end &optional record)
   (let* ((line-beg (line-number-at-pos beg))
          (linenum  (- (line-number-at-pos end) line-beg))
@@ -1010,9 +1027,11 @@ If BUFFER is nil check `current-buffer'."
     (overlay-put ov 'point t)
     (push ov conn--dots)))
 
-(defun conn-region-to-secondary (beg end &optional buffer)
+(defun conn-region-to-dot (beg end &optional buffer)
   (interactive (list (region-beginning) (region-end)))
-  (move-overlay mouse-secondary-overlay beg end buffer))
+  (let* ((ov (make-overlay beg end buffer)))
+    (overlay-put ov 'category 'conn--dot-overlay)
+    (push ov conn--dots)))
 
 (defun conn-delete-dot-at-click (event)
   (interactive "e")
@@ -1049,45 +1068,32 @@ If BUFFER is nil check `current-buffer'."
         (push ov conn--dots)
         (delete-overlay mouse-secondary-overlay)))))
 
+(defvar-keymap conn-dot-mode-map
+  "C-w" 'conn-region-to-dot
+  "C-d" 'conn-point-to-dot
+  "S-<mouse-1>" 'conn-mouse-click-secondary
+  "S-<down-mouse-1>" 'conn-mouse-click-secondary
+  "S-<drag-mouse-1>" 'conn-mouse-click-secondary
+  "S-<mouse-3>" 'conn-delete-dot-at-click
+  "S-<down-mouse-3>" 'conn-delete-dot-at-click
+  "<escape>" 'exit-recursive-edit
+  "DEL" 'conn-delete-dot-at-point)
+
 (define-minor-mode conn-dot-mode
   "Minor mode for multiple dots."
   :global t
   :lighter ""
-  :keymap (define-keymap
-            "C-w" 'conn-delete-dot-at-point
-            "C-d" 'conn-region-to-secondary
-            "S-<mouse-1>" 'conn-mouse-click-secondary
-            "S-<down-mouse-1>" 'conn-mouse-click-secondary
-            "S-<drag-mouse-1>" 'conn-mouse-click-secondary
-            "S-<mouse-3>" 'conn-delete-dot-at-click
-            "S-<down-mouse-3>" 'conn-delete-dot-at-click
-            "ESC" 'exit-recursive-edit
-            "<escape>" 'exit-recursive-edit)
+  :interactive nil
   (if conn-dot-mode
       (progn
+        (internal-push-keymap conn-dot-mode-map 'overriding-terminal-local-map)
         (delete-overlay mouse-secondary-overlay)
         (setq conn--dots nil)
         (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
+    (internal-pop-keymap conn-dot-mode-map 'overriding-terminal-local-map)
     (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
     (mapc #'delete-overlay conn--dots)
     (setq conn--dots nil)))
-
-(defun conn--merge-regions (regions)
-  (let (merged)
-    (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
-      (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
-                         (and (eq (marker-buffer beg2) (marker-buffer beg1))
-                              (not (or (< end2 beg1) (< end1 beg2)))))
-                       merged)
-        ((and cons `(,beg2 . ,end2))
-         (setcar cons (if (< beg1 beg2)
-                          (prog1 beg1 (set-marker beg2 nil))
-                        (prog1 beg2 (set-marker beg1 nil))))
-         (setcdr cons (if (> end1 end2)
-                          (prog1 end1 (set-marker end2 nil))
-                        (prog1 end2 (set-marker end1 nil)))))
-        ('nil (push region merged))))
-    merged))
 
 (defun conn--bounds-of-dots (&rest _)
   (conn-dot-mode 1)
@@ -5569,12 +5575,6 @@ When ARG is nil the root window is used."
 
 
 ;;;; Keymaps
-
-(define-keymap
-  :keymap (conn-get-mode-map 'conn-state 'conn-dot-mode)
-  "w" 'conn-delete-dot-at-point
-  "d" 'conn-region-to-secondary
-  "D" 'conn-point-to-dot)
 
 (defvar-keymap conn-list-movement-repeat-map
   :repeat t
