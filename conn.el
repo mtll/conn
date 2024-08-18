@@ -449,6 +449,12 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
 
+;;;;;; Selection Overlay
+
+(put 'conn--selection-overlay 'face 'conn-read-string-match-face)
+(put 'conn--selection-overlay 'priority (1- conn-mark-overlay-priority))
+(put 'conn--selection-overlay 'conn-overlay t)
+
 ;;;;; Command Histories
 
 (defvar conn--seperator-history nil
@@ -965,6 +971,111 @@ If BUFFER is nil check `current-buffer'."
 
 (setf (alist-get 'set-mark-command conn-bounds-of-command-alist)
       'conn--bounds-of-region)
+
+(setf (alist-get 'conn-set-mark-command conn-bounds-of-command-alist)
+      'conn--bounds-of-region)
+
+(defun conn--bounds-of-recursive-edit (_arg)
+  (let (buf)
+    (save-mark-and-excursion
+      (message "Defining region in recursive edit")
+      (with-current-buffer (current-buffer)
+        (recursive-edit)
+        (setq buf (current-buffer)))
+      (set-buffer buf)
+      (cons (region-beginning) (region-end)))))
+
+(setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
+      'conn--bounds-of-recursive-edit)
+
+(defun conn-mouse-click-secondary (event)
+  (interactive "e")
+  (let* ((posn (event-start event))
+         (point (posn-point posn))
+         (ov (make-overlay point (1+ point) (window-buffer (posn-window posn)))))
+    (overlay-put ov 'category 'conn--selection-overlay)
+    (overlay-put ov 'point t)
+    (push ov conn--selections)))
+
+(defun conn-region-to-secondary (beg end &optional buffer)
+  (interactive (list (region-beginning) (region-end)))
+  (move-overlay mouse-secondary-overlay beg end buffer))
+
+(defun conn-delete-selection-at-click (event)
+  (interactive "e")
+  (let* ((posn (event-start event))
+	 (point (posn-point posn)))
+    (with-current-buffer (window-buffer (posn-window posn))
+      (dolist (ov (seq-filter (lambda (ov)
+                                (eq (overlay-get ov 'category) 'conn--selection-overlay))
+                              (overlays-at point)))
+        (setq conn--selections (delq ov conn--selections))
+        (delete-overlay ov)))))
+
+(defun conn-delete-selection-at-point (point)
+  (interactive (list (point)))
+  (dolist (ov (seq-filter (lambda (ov)
+                            (eq (overlay-get ov 'category) 'conn--selection-overlay))
+                          (overlays-at point)))
+    (setq conn--selections (delq ov conn--selections))
+    (delete-overlay ov)))
+
+(defvar conn--selections nil)
+
+(defvar conn-selections-mode nil)
+
+(defun conn--merge-regions (regions)
+  (let (merged)
+    (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
+      (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
+                         (and (eq (marker-buffer beg2) (marker-buffer beg1))
+                              (not (or (< end2 beg1) (< end1 beg2)))))
+                       merged)
+        ((and cons `(,beg2 . ,end2))
+         (setcar cons (if (< beg1 beg2)
+                          (prog1 beg1 (set-marker beg2 nil))
+                        (prog1 beg2 (set-marker beg1 nil))))
+         (setcdr cons (if (> end1 end2)
+                          (prog1 end1 (set-marker end2 nil))
+                        (prog1 end2 (set-marker end1 nil)))))
+        ('nil (push region merged))))
+    merged))
+
+(defun conn--bounds-of-selections (&rest _)
+  (let* ((overlays nil)
+         (hook (lambda ()
+                 (when (overlay-buffer mouse-secondary-overlay)
+                   (with-current-buffer (overlay-buffer mouse-secondary-overlay)
+                     (let* ((beg (overlay-start mouse-secondary-overlay))
+                            (end (if (eq this-command 'conn-mouse-click-secondary)
+                                     beg
+                                   (overlay-end mouse-secondary-overlay)))
+                            (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
+                       (overlay-put ov 'category 'conn--selection-overlay)
+                       (push ov conn--selections)
+                       (delete-overlay mouse-secondary-overlay)))))))
+    (delete-overlay mouse-secondary-overlay)
+    (add-hook 'post-command-hook hook)
+    (setq conn-selections-mode t
+          conn--selections nil)
+    (unwind-protect
+        (progn
+          (recursive-edit)
+          (thread-last
+            conn--selections
+            (mapcar (lambda (ov)
+                      (cons (conn--create-marker (overlay-start ov)
+                                                 (overlay-buffer ov))
+                            (conn--create-marker (overlay-end ov)
+                                                 (overlay-buffer ov)))))
+            conn--merge-regions))
+      (mapc #'delete-overlay conn--selections)
+      (setq conn-selections-mode nil
+            conn--selections nil)
+      (remove-hook 'post-command-hook hook))))
+
+(setf (alist-get 'multiple-regions conn-bounds-of-things-in-region-alist)
+      'conn--bounds-of-selections)
 
 (defun conn--bounds-of-recursive-edit (_arg)
   (let (buf)
@@ -1816,6 +1927,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
 (conn-register-thing
+ 'multiple-regions
+ :bounds-op (lambda () (cons (region-beginning) (region-end))))
+
+(conn-register-thing
  'buffer-after-point
  :bounds-op (lambda () (cons (point) (point-max)))
  :mark-key ">")
@@ -1836,8 +1951,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'region nil
- 'conn-toggle-mark-command
- 'conn-set-mark-command)
+ 'conn-toggle-mark-command)
+
+(conn-register-thing-commands
+ 'multiple-regions nil
+ 'conn-set-mark-command
+ 'set-mark-command)
 
 (conn-register-thing
  'symbol
@@ -3455,25 +3574,10 @@ Expansions and contractions are provided by functions in
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
-  (let (merged)
-    (pcase-dolist ((and region `(,beg1 . ,end1)) conn-narrow-ring)
-      (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
-                         (not (or (< beg2 end2 beg1 end1)
-                                  (< beg1 end1 beg2 end2))))
-                       merged)
-        ((and cons `(,beg2 . ,end2))
-         (setcar cons (if (< beg1 beg2)
-                          (prog1 beg1 (set-marker beg2 nil))
-                        (prog1 beg2 (set-marker beg1 nil))))
-         (setcdr cons (if (> end1 end2)
-                          (prog1 end1 (set-marker end2 nil))
-                        (prog1 end2 (set-marker end1 nil)))))
-        ('nil
-         (push region merged))))
-    (setq conn-narrow-ring (nreverse merged))
-    (when (and interactive (not executing-kbd-macro))
-      (message "Narrow ring merged into %s region"
-               (length conn-narrow-ring)))))
+  (setq conn-narrow-ring (nreverse (conn--merge-regions conn-narrow-ring)))
+  (when (and interactive (not executing-kbd-macro))
+    (message "Narrow ring merged into %s region"
+             (length conn-narrow-ring))))
 
 (defun conn-thing-to-narrow-ring (thing-mover arg &optional pulse)
   "Add region defined by THING-MOVER called with ARG to narrow ring.
@@ -5447,6 +5551,18 @@ When ARG is nil the root window is used."
 
 
 ;;;; Keymaps
+
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-state 'conn-selections-mode)
+  "S-<mouse-1>" 'conn-mouse-click-secondary
+  "S-<down-mouse-1>" 'conn-mouse-click-secondary
+  "S-<drag-mouse-1>" 'conn-mouse-click-secondary
+  "S-<mouse-3>" 'conn-delete-selection-at-click
+  "S-<down-mouse-3>" 'conn-delete-selection-at-click
+  "w" 'conn-delete-selection-at-point
+  "y" 'conn-region-to-secondary
+  "ESC" 'exit-recursive-edit
+  "<escape>" 'exit-recursive-edit)
 
 (defvar-keymap conn-list-movement-repeat-map
   :repeat t
