@@ -878,6 +878,9 @@ If BUFFER is nil check `current-buffer'."
 
 (defvar conn-bounds-of-things-in-region-alist nil)
 
+(defvar conn-bounds-of-things-in-region-default
+  'conn--things-in-region-default)
+
 (defvar-keymap conn-read-thing-region-command-map
   "C-h" 'help
   "C-w" 'backward-delete-arg
@@ -960,6 +963,9 @@ If BUFFER is nil check `current-buffer'."
 (setf (alist-get 'conn-toggle-mark-command conn-bounds-of-command-alist)
       'conn--bounds-of-region)
 
+(setf (alist-get 'set-mark-command conn-bounds-of-command-alist)
+      'conn--bounds-of-region)
+
 (defun conn--bounds-of-recursive-edit (_arg)
   (let (buf)
     (save-mark-and-excursion
@@ -978,7 +984,7 @@ If BUFFER is nil check `current-buffer'."
                (ignore-errors
                  (alist-get (get thing :conn-command-thing)
                             conn-bounds-of-things-in-region-alist))
-               'conn--things-in-region-default)
+               'conn-bounds-of-things-in-region-default)
            thing beg end))
 
 (defun conn-bounds-of-region (_thing _beg _end)
@@ -3714,7 +3720,7 @@ instances of from-string.")
                     (minibuffer-history-sexp-flag (1+ (minibuffer-depth))))
                (unwind-protect
                    (read-from-minibuffer
-                    "Redo: " (prin1-to-string elt) read-expression-map t
+                    "Command: " (prin1-to-string elt) read-expression-map t
                     (cons 'command-history arg))
                  (when (stringp (car command-history))
                    (pop command-history)))))))
