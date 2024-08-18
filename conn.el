@@ -144,6 +144,11 @@ CONDITION has the same meaning as in `buffer-match-p'."
   "Face for matches when reading strings."
   :group 'conn)
 
+(defface conn-selection-face
+  '((t (:inherit match)))
+  "Face for multiple selections."
+  :group 'conn)
+
 (defcustom conn-mark-overlay-priority 2000
   "Priority of mark overlay."
   :type 'integer
@@ -451,9 +456,10 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;;; Selection Overlay
 
-(put 'conn--selection-overlay 'face 'conn-read-string-match-face)
+(put 'conn--selection-overlay 'face 'conn-selection-face)
 (put 'conn--selection-overlay 'priority (1- conn-mark-overlay-priority))
 (put 'conn--selection-overlay 'conn-overlay t)
+(put 'conn--selection-overlay 'evaporate t)
 
 ;;;;; Command Histories
 
@@ -997,6 +1003,13 @@ If BUFFER is nil check `current-buffer'."
     (overlay-put ov 'point t)
     (push ov conn--selections)))
 
+(defun conn-point-to-selection (point)
+  (interactive (list (point)))
+  (let* ((ov (make-overlay point (1+ point))))
+    (overlay-put ov 'category 'conn--selection-overlay)
+    (overlay-put ov 'point t)
+    (push ov conn--selections)))
+
 (defun conn-region-to-secondary (beg end &optional buffer)
   (interactive (list (region-beginning) (region-end)))
   (move-overlay mouse-secondary-overlay beg end buffer))
@@ -1024,6 +1037,41 @@ If BUFFER is nil check `current-buffer'."
 
 (defvar conn-selections-mode nil)
 
+(defun conn--selection-mode-command-hook ()
+  (when (overlay-buffer mouse-secondary-overlay)
+    (with-current-buffer (overlay-buffer mouse-secondary-overlay)
+      (let* ((beg (overlay-start mouse-secondary-overlay))
+             (end (if (eq this-command 'conn-mouse-click-secondary)
+                      beg
+                    (overlay-end mouse-secondary-overlay)))
+             (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
+        (overlay-put ov 'category 'conn--selection-overlay)
+        (push ov conn--selections)
+        (delete-overlay mouse-secondary-overlay)))))
+
+(define-minor-mode conn-selection-mode
+  "Minor mode for multiple selections."
+  :global t
+  :lighter ""
+  :keymap (define-keymap
+            "C-w" 'conn-delete-selection-at-point
+            "C-d" 'conn-region-to-secondary
+            "S-<mouse-1>" 'conn-mouse-click-secondary
+            "S-<down-mouse-1>" 'conn-mouse-click-secondary
+            "S-<drag-mouse-1>" 'conn-mouse-click-secondary
+            "S-<mouse-3>" 'conn-delete-selection-at-click
+            "S-<down-mouse-3>" 'conn-delete-selection-at-click
+            "ESC" 'exit-recursive-edit
+            "<escape>" 'exit-recursive-edit)
+  (if conn-selection-mode
+      (progn
+        (delete-overlay mouse-secondary-overlay)
+        (setq conn--selections nil)
+        (add-hook 'post-command-hook 'conn--selection-mode-command-hook))
+    (remove-hook 'post-command-hook 'conn--selection-mode-command-hook)
+    (mapc #'delete-overlay conn--selections)
+    (setq conn--selections nil)))
+
 (defun conn--merge-regions (regions)
   (let (merged)
     (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
@@ -1042,37 +1090,20 @@ If BUFFER is nil check `current-buffer'."
     merged))
 
 (defun conn--bounds-of-selections (&rest _)
-  (let* ((overlays nil)
-         (hook (lambda ()
-                 (when (overlay-buffer mouse-secondary-overlay)
-                   (with-current-buffer (overlay-buffer mouse-secondary-overlay)
-                     (let* ((beg (overlay-start mouse-secondary-overlay))
-                            (end (if (eq this-command 'conn-mouse-click-secondary)
-                                     beg
-                                   (overlay-end mouse-secondary-overlay)))
-                            (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
-                       (overlay-put ov 'category 'conn--selection-overlay)
-                       (push ov conn--selections)
-                       (delete-overlay mouse-secondary-overlay)))))))
-    (delete-overlay mouse-secondary-overlay)
-    (add-hook 'post-command-hook hook)
-    (setq conn-selections-mode t
-          conn--selections nil)
-    (unwind-protect
+  (conn-selection-mode 1)
+  (unwind-protect
+      (thread-last
         (progn
           (recursive-edit)
-          (thread-last
-            conn--selections
-            (mapcar (lambda (ov)
-                      (cons (conn--create-marker (overlay-start ov)
-                                                 (overlay-buffer ov))
-                            (conn--create-marker (overlay-end ov)
-                                                 (overlay-buffer ov)))))
-            conn--merge-regions))
-      (mapc #'delete-overlay conn--selections)
-      (setq conn-selections-mode nil
-            conn--selections nil)
-      (remove-hook 'post-command-hook hook))))
+          conn--selections)
+        (seq-filter 'overlay-buffer)
+        (mapcar (lambda (ov)
+                  (cons (conn--create-marker (overlay-start ov)
+                                             (overlay-buffer ov))
+                        (conn--create-marker (overlay-end ov)
+                                             (overlay-buffer ov)))))
+        conn--merge-regions)
+    (conn-selection-mode -1)))
 
 (setf (alist-get 'multiple-regions conn-bounds-of-things-in-region-alist)
       'conn--bounds-of-selections)
@@ -5553,16 +5584,10 @@ When ARG is nil the root window is used."
 ;;;; Keymaps
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-state 'conn-selections-mode)
-  "S-<mouse-1>" 'conn-mouse-click-secondary
-  "S-<down-mouse-1>" 'conn-mouse-click-secondary
-  "S-<drag-mouse-1>" 'conn-mouse-click-secondary
-  "S-<mouse-3>" 'conn-delete-selection-at-click
-  "S-<down-mouse-3>" 'conn-delete-selection-at-click
+  :keymap (conn-get-mode-map 'conn-state 'conn-selection-mode)
   "w" 'conn-delete-selection-at-point
-  "y" 'conn-region-to-secondary
-  "ESC" 'exit-recursive-edit
-  "<escape>" 'exit-recursive-edit)
+  "d" 'conn-region-to-secondary
+  "D" 'conn-point-to-selection)
 
 (defvar-keymap conn-list-movement-repeat-map
   :repeat t
