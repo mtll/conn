@@ -5208,12 +5208,13 @@ When called interactively N is `last-command-event'."
                                   ('frame 'tab)
                                   (_ 'frame))))
   (setq conn--wincontrol-help-format
-        (pcase conn--wincontrol-help
-          ('window-1 conn--wincontrol-window-format-1)
-          ('window-2 conn--wincontrol-window-format-2)
-          ('tab conn--wincontrol-tab-format)
-          ('frame conn--wincontrol-frame-format)
-          (_ conn--wincontrol-simple-format))))
+        (substitute-command-keys
+         (pcase conn--wincontrol-help
+           ('window-1 conn--wincontrol-window-format-1)
+           ('window-2 conn--wincontrol-window-format-2)
+           ('tab conn--wincontrol-tab-format)
+           ('frame conn--wincontrol-frame-format)
+           (_ conn--wincontrol-simple-format)))))
 
 (defun conn-wincontrol-isearch (arg)
   (interactive "P")
