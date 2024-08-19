@@ -247,7 +247,8 @@ Each element may be either a symbol or a list of the form
               calc-mode
               calc-trail-mode
               calc-keypad-mode
-              special-mode)
+              special-mode
+              image-mode)
         t)
   "Modes in which `conn-local-mode' should be enabled.
 Must be of a form accepted by `define-globalized-minor-mode'
@@ -591,13 +592,11 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
-  (catch 'term
-    (dolist (mode (conn--thread -mode->
-                      'major-mode
-                    (buffer-local-value -mode-> (or buffer (current-buffer)))
-                    (conn--derived-mode-all-parents -mode->)))
-      (when-let ((prop (get mode property)))
-        (throw 'term prop)))))
+  (cl-loop for mode in (conn--thread -mode->
+                           'major-mode
+                         (buffer-local-value -mode-> (or buffer (current-buffer)))
+                         (conn--derived-mode-all-parents -mode->))
+           for prop = (get mode property) when prop return prop))
 
 (defun conn--merge-regions (regions)
   (let (merged)
