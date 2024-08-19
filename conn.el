@@ -562,17 +562,21 @@ Used to restore previous value when `conn-mode' is disabled.")
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
 
-(defun conn--beginning-of-region-or-restriction ()
-  (if (use-region-p) (region-beginning) (point-min)))
-
-(defun conn--end-of-region-or-restriction ()
-  (if (use-region-p) (region-end) (point-max)))
-
 (defun conn--create-marker (pos &optional buffer)
   "Create marker at POS in BUFFER."
   (let ((marker (make-marker)))
     (set-marker marker pos buffer)
     marker))
+
+(defun conn--overlay-start-marker (ov)
+  (conn--create-marker (overlay-start ov) (overlay-buffer ov)))
+
+(defun conn--overlay-end-marker (ov)
+  (conn--create-marker (overlay-end ov) (overlay-buffer ov)))
+
+(defun conn--overlay-bounds-markers (ov)
+  (cons (conn--overlay-start-marker ov)
+        (conn--overlay-end-marker ov)))
 
 (declare-function conn--derived-mode-all-parents "conn.el")
 (if (version< "30" emacs-version)
@@ -743,8 +747,12 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--all-overlays (predicate &optional start end buffer)
   "Get all overlays between START and END satisfying PREDICATE."
   (with-current-buffer (or buffer (current-buffer))
-    (cl-loop for ov in (overlays-in (or start (conn--beginning-of-region-or-restriction))
-                                    (or end   (conn--end-of-region-or-restriction)))
+    (cl-loop for ov in (overlays-in (or start (if (use-region-p)
+                                                  (region-beginning)
+                                                (point-min)))
+                                    (or end (if (use-region-p)
+                                                (region-end)
+                                              (point-max))))
              when (funcall predicate ov) collect ov)))
 
 
@@ -1011,113 +1019,6 @@ If BUFFER is nil check `current-buffer'."
 (setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
       'conn--bounds-of-recursive-edit)
 
-(defun conn-mouse-click-dot (event)
-  (interactive "e")
-  (let* ((posn (event-start event))
-         (point (posn-point posn))
-         (ov (make-overlay point (1+ point) (window-buffer (posn-window posn)))))
-    (overlay-put ov 'category 'conn--dot-overlay)
-    (overlay-put ov 'point t)
-    (push ov conn--dots)))
-
-(defun conn-point-to-dot (point)
-  (interactive (list (point)))
-  (let* ((ov (make-overlay point (1+ point))))
-    (overlay-put ov 'category 'conn--dot-overlay)
-    (overlay-put ov 'point t)
-    (push ov conn--dots)))
-
-(defun conn-region-to-dot (bounds &optional buffer)
-  (interactive (list (region-bounds)))
-  (pcase-dolist (`(,beg . ,end) bounds)
-    (let* ((ov (make-overlay beg end buffer)))
-      (overlay-put ov 'category 'conn--dot-overlay)
-      (push ov conn--dots)))
-  (deactivate-mark t))
-
-(defun conn-delete-dot-at-click (event)
-  (interactive "e")
-  (let* ((posn (event-start event))
-	 (point (posn-point posn)))
-    (with-current-buffer (window-buffer (posn-window posn))
-      (dolist (ov (seq-filter (lambda (ov)
-                                (eq (overlay-get ov 'category) 'conn--dot-overlay))
-                              (overlays-at point)))
-        (setq conn--dots (delq ov conn--dots))
-        (delete-overlay ov)))))
-
-(defun conn-delete-dots ()
-  (interactive)
-  (cl-flet ((get-dots (ovs)
-              (seq-filter (lambda (ov)
-                            (eq (overlay-get ov 'category) 'conn--dot-overlay))
-                          ovs)))
-    (dolist (ov (if (use-region-p)
-                    (get-dots (overlays-in (region-beginning) (region-end)))
-                  (or (get-dots (overlays-at (point)))
-                      (get-dots (overlays-at (1- (point)))))))
-      (setq conn--dots (delq ov conn--dots))
-      (delete-overlay ov))
-    (deactivate-mark t)))
-
-(defun conn--dot-mode-command-hook ()
-  (when (overlay-buffer mouse-secondary-overlay)
-    (with-current-buffer (overlay-buffer mouse-secondary-overlay)
-      (let* ((beg (overlay-start mouse-secondary-overlay))
-             (end (overlay-end mouse-secondary-overlay))
-             (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
-        (overlay-put ov 'category 'conn--dot-overlay)
-        (push ov conn--dots)
-        (delete-overlay mouse-secondary-overlay)))))
-
-(defvar conn--dots nil)
-
-(defvar-keymap conn--dot-mode-map
-  "C-w" 'conn-region-to-dot
-  "C-d" 'conn-point-to-dot
-  "S-<mouse-1>" 'conn-mouse-click-dot
-  "S-<down-mouse-1>" 'conn-mouse-click-dot
-  "S-<drag-mouse-1>" 'conn-mouse-click-dot
-  "S-<mouse-3>" 'conn-delete-dot-at-click
-  "S-<down-mouse-3>" 'conn-delete-dot-at-click
-  "<escape>" 'exit-recursive-edit
-  "DEL" 'conn-delete-dots)
-
-(define-minor-mode conn--dot-mode
-  "Minor mode for multiple dots."
-  :global t
-  :lighter ""
-  :interactive nil
-  (if conn--dot-mode
-      (progn
-        (internal-push-keymap conn--dot-mode-map 'overriding-terminal-local-map)
-        (delete-overlay mouse-secondary-overlay)
-        (setq conn--dots nil)
-        (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
-    (internal-pop-keymap conn--dot-mode-map 'overriding-terminal-local-map)
-    (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
-    (mapc #'delete-overlay conn--dots)
-    (setq conn--dots nil)))
-
-(defun conn--bounds-of-dots (&rest _)
-  (conn--dot-mode 1)
-  (unwind-protect
-      (thread-last
-        (progn
-          (recursive-edit)
-          conn--dots)
-        (seq-filter 'overlay-buffer)
-        (mapcar (lambda (ov)
-                  (cons (conn--create-marker (overlay-start ov)
-                                             (overlay-buffer ov))
-                        (conn--create-marker (overlay-end ov)
-                                             (overlay-buffer ov)))))
-        conn--merge-regions)
-    (conn--dot-mode -1)))
-
-(setf (alist-get 'dots conn-bounds-of-things-in-region-alist)
-      'conn--bounds-of-dots)
-
 (defun conn-bounds-of-things-in-region (thing beg end)
   (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
                (ignore-errors
@@ -1303,6 +1204,113 @@ If BUFFER is nil check `current-buffer'."
       (message nil)
       (internal-pop-keymap conn-read-thing-command-map
                            'overriding-terminal-local-map))))
+
+;;;;; Dots
+
+(defun conn-mouse-click-dot (event)
+  (interactive "e")
+  (let* ((posn (event-start event))
+         (point (posn-point posn))
+         (ov (make-overlay point (1+ point) (window-buffer (posn-window posn)))))
+    (overlay-put ov 'category 'conn--dot-overlay)
+    (overlay-put ov 'point t)
+    (push ov conn--dots)))
+
+(defun conn-point-to-dot (point)
+  (interactive (list (point)))
+  (let* ((ov (make-overlay point (1+ point))))
+    (overlay-put ov 'category 'conn--dot-overlay)
+    (overlay-put ov 'point t)
+    (push ov conn--dots)))
+
+(defun conn-region-to-dot (bounds &optional buffer)
+  (interactive (list (region-bounds)))
+  (pcase-dolist (`(,beg . ,end) bounds)
+    (let* ((ov (make-overlay beg end buffer)))
+      (overlay-put ov 'category 'conn--dot-overlay)
+      (push ov conn--dots)))
+  (deactivate-mark t))
+
+(defun conn-delete-dot-at-click (event)
+  (interactive "e")
+  (let* ((posn (event-start event))
+	 (point (posn-point posn)))
+    (with-current-buffer (window-buffer (posn-window posn))
+      (dolist (ov (seq-filter (lambda (ov)
+                                (eq (overlay-get ov 'category) 'conn--dot-overlay))
+                              (overlays-at point)))
+        (delete-overlay ov)))))
+
+(defun conn-delete-dots ()
+  (interactive)
+  (cl-flet ((get-dots (ovs)
+              (seq-filter (lambda (ov)
+                            (eq (overlay-get ov 'category) 'conn--dot-overlay))
+                          ovs)))
+    (dolist (ov (if (use-region-p)
+                    (get-dots (overlays-in (region-beginning) (region-end)))
+                  (or (get-dots (overlays-at (point)))
+                      (get-dots (overlays-at (1- (point)))))))
+      (delete-overlay ov))
+    (deactivate-mark t)))
+
+(defun conn--dot-mode-command-hook ()
+  (when (overlay-buffer mouse-secondary-overlay)
+    (with-current-buffer (overlay-buffer mouse-secondary-overlay)
+      (let* ((beg (overlay-start mouse-secondary-overlay))
+             (end (overlay-end mouse-secondary-overlay))
+             (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
+        (overlay-put ov 'category 'conn--dot-overlay)
+        (push ov conn--dots)
+        (delete-overlay mouse-secondary-overlay)))))
+
+(defvar conn--dots nil)
+
+(defvar-keymap conn--dot-mode-map
+  "C-w" 'conn-region-to-dot
+  "C-d" 'conn-point-to-dot
+  "S-<mouse-1>" 'conn-mouse-click-dot
+  "S-<down-mouse-1>" 'conn-mouse-click-dot
+  "S-<drag-mouse-1>" 'conn-mouse-click-dot
+  "S-<mouse-3>" 'conn-delete-dot-at-click
+  "S-<down-mouse-3>" 'conn-delete-dot-at-click
+  "<escape>" 'exit-recursive-edit
+  "DEL" 'conn-delete-dots)
+
+(define-minor-mode conn--dot-mode
+  "Minor mode for multiple dots."
+  :global t
+  :lighter ""
+  :interactive nil
+  (if conn--dot-mode
+      (progn
+        (internal-push-keymap conn--dot-mode-map 'overriding-terminal-local-map)
+        (delete-overlay mouse-secondary-overlay)
+        (setq conn--dots nil)
+        (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
+    (internal-pop-keymap conn--dot-mode-map 'overriding-terminal-local-map)
+    (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
+    (mapc #'delete-overlay conn--dots)
+    (setq conn--dots nil)))
+
+(defun conn--bounds-of-dots (&rest _)
+  (conn--dot-mode 1)
+  (unwind-protect
+      (thread-last
+        (progn
+          (recursive-edit)
+          conn--dots)
+        (seq-filter 'overlay-buffer)
+        (mapcar (lambda (ov)
+                  (if (overlay-get ov 'point)
+                      (cons (conn--overlay-start-marker ov)
+                            (conn--overlay-start-marker ov))
+                    (conn--overlay-bounds-markers ov))))
+        conn--merge-regions)
+    (conn--dot-mode -1)))
+
+(setf (alist-get 'dots conn-bounds-of-things-in-region-alist)
+      'conn--bounds-of-dots)
 
 
 ;;;; Advice
@@ -5157,7 +5165,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "Global minor mode for window control."
   :global t
   :lighter " WinC"
-  :init-value nil
   :interactive nil
   :group 'conn-wincontrol
   (if conn-wincontrol-mode
