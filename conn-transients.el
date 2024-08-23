@@ -27,12 +27,11 @@
 
 (defclass conn-transient-switches (transient-switches)
   ((required :initarg :required :initform nil))
-  "Class used for sets of mutually exclusive command-line switches.
+  "Class used for sets of mutually exclusive switches.
 Does not allow a null value.")
 
 (cl-defmethod transient-infix-read ((obj conn-transient-switches))
-  "Cycle through the mutually exclusive switches.
-The last value is \"don't use any of these switches\"."
+  "Cycle through the mutually exclusive switches."
   (let ((choices (mapcar (apply-partially #'format (oref obj argument-format))
                          (oref obj choices))))
     (if-let ((value (oref obj value)))
