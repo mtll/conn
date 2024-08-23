@@ -2533,6 +2533,7 @@ state."
           "f" 'conn-dispatch-yank-replace
           "d" 'conn-dispatch-grab-replace
           "g" 'conn-dispatch-goto
+          "e" 'conn-dispatch-over
           "z" 'conn-dispatch-jump))
   "List of keymap containing dispatch actions.
 All dispatch actions must be in a keymap in this list.")
@@ -3347,42 +3348,9 @@ seconds."
 (defun conn-dispatch-over-things (thing finder action arg &optional repeat)
   "See `conn-dispatch-on-things', with default action `conn-dispatch-over'."
   (interactive
-   (conn--dispatch-read-thing conn-dispatch-over-action-maps 'conn-dispatch-over))
-  (let ((current-prefix-arg arg)
-        prefix-ovs labels)
-    (unwind-protect
-        (cl-loop
-         initially do
-         (setf prefix-ovs (thread-last
-                            (funcall finder)
-                            (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                            (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-               (alist-get (selected-window) prefix-ovs)
-               (seq-sort (lambda (a b)
-                           (< (abs (- (overlay-start a) (point)))
-                              (abs (- (overlay-start b) (point)))))
-                         (alist-get (selected-window) prefix-ovs))
-               labels (or (conn--create-label-strings
-                           (let ((sum 0))
-                             (dolist (p prefix-ovs sum)
-                               (setq sum (+ sum (length (cdr p))))))
-                           conn-dispatch-label-characters)
-                          (user-error "No matching candidates")))
-         do
-         (let* ((prefix (conn--read-labels
-                         prefix-ovs
-                         labels
-                         'conn--dispatch-label-overlays
-                         'prefix-overlay))
-                (window (overlay-get prefix 'window))
-                (pt (overlay-start prefix)))
-           (setq conn-this-command-thing
-                 (or (overlay-get prefix 'thing) thing))
-           (funcall action window pt conn-this-command-thing))
-         while repeat)
-      (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-        (dolist (ov ovs)
-          (delete-overlay ov))))))
+   (conn--dispatch-read-thing conn-dispatch-over-action-maps
+                              'conn-dispatch-over))
+  (conn-dispatch-on-things thing finder action arg repeat))
 
 (defun conn--dispatch-isearch-matches ()
   (with-restriction (window-start) (window-end)
@@ -3920,7 +3888,7 @@ associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing "Thing")))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-backward beg end))
-    (_              (user-error "No %s found" thing))))
+    (_ (user-error "No %s found" thing))))
 
 (defun conn-isearch-forward-thing (thing)
   "Isearch backward for THING.
@@ -3929,7 +3897,7 @@ associated with that command (see `conn-register-thing')."
   (interactive (list (conn--read-thing "Thing")))
   (pcase (bounds-of-thing-at-point thing)
     (`(,beg . ,end) (conn-isearch-region-forward beg end))
-    (_              (user-error "No %s found" thing))))
+    (_ (user-error "No %s found" thing))))
 
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
