@@ -30,7 +30,6 @@
 ;;;; Requires
 
 (require 'compat)
-(require 'easy-mmode)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x)
@@ -255,7 +254,9 @@ Must be of a form accepted by `define-globalized-minor-mode'
 :predicate argument.")
 
 (defvar conn-enable-in-buffer-hook
-  (list (lambda () (easy-mmode--globalized-predicate-p conn-in-modes)))
+  (list (lambda ()
+          (require 'easy-mmode)
+          (easy-mmode--globalized-predicate-p conn-in-modes)))
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
 Each function is run without any arguments and if any of them return
 non-nil `conn-local-mode' will be enabled in the buffer.")
@@ -1023,7 +1024,7 @@ If BUFFER is nil check `current-buffer'."
                (ignore-errors
                  (alist-get (get thing :conn-command-thing)
                             conn-bounds-of-things-in-region-alist))
-               'conn-bounds-of-things-in-region-default)
+               conn-bounds-of-things-in-region-default)
            thing beg end))
 
 (defun conn-bounds-of-region (_thing _beg _end)
@@ -4960,7 +4961,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
    "\\[conn-wincontrol-exit]: exit; "
    "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
-   "\\[quit-window]: quit"
+   "\\[quit-window]: quit win"
    "\n"
    "\\[conn-wincontrol-other-window-scroll-down] \\[conn-wincontrol-other-window-scroll-up]"
    ": scroll other; "
@@ -5574,8 +5575,8 @@ When ARG is nil the root window is used."
   :prefix 'conn-region-map
   "RET" 'whitespace-cleanup
   "TAB" 'indent-rigidly
-  "f" 'conn-isearch-region-forward
-  "b" 'conn-isearch-region-backward
+  "C-s" 'conn-isearch-region-forward
+  "C-r" 'conn-isearch-region-backward
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
