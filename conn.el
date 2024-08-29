@@ -278,8 +278,6 @@ nil `conn-local-mode' will be not enabled in the buffer.")
 
 (defvar-local conn--local-mode-maps nil)
 
-(defvar conn--transition-maps nil)
-
 ;;;;; Mark Variables
 
 (defvar conn-this-command-handler nil
@@ -521,8 +519,7 @@ Used to restore previous value when `conn-mode' is disabled.")
   (declare (indent 0))
   `(let ((emulation-mode-map-alists (seq-difference
                                      emulation-mode-map-alists
-                                     '(conn--transition-maps
-                                       conn--local-mode-maps
+                                     '(conn--local-mode-maps
                                        conn--major-mode-maps
                                        conn--local-maps
                                        conn--state-maps)
@@ -2212,12 +2209,6 @@ If INHIBIT-INHERIT-MAPS is non-nil then any maps defined using
 when MODE is."
   (put mode :conn-inhibit-inherit-maps inhibit-inherit-maps))
 
-(defun conn-get-transition-map (state)
-  "Get transition map for STATE."
-  (or (alist-get state conn--transition-maps)
-      (setf (alist-get state conn--transition-maps)
-            (make-sparse-keymap))))
-
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
 If one does not exists assign a new sparse keymap for MODE
@@ -2334,19 +2325,15 @@ NAME.
 
 :CURSOR is the `cursor-type' for NAME.
 
-:TRANSITIONS is a list of transition key bindings to be bound in NAME's
-transition map.  It is of the form ((KEY . TRANSITION-FUNCTION) ...).
-
 :EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral
 marks while in state NAME.
 
 BODY contains code to be executed each time the state is enabled or
 disabled.
 
-\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP TRANSITIONS EPHEMERAL-MARKS &rest BODY)"
+\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
   (declare (indent defun))
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
-               (transition-map-name (conn--symbolicate name "-transition-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-face-name (conn--symbolicate name "-lighter-face"))
                (enter (gensym "enter"))
@@ -2354,7 +2341,6 @@ disabled.
                      :lighter-face
                      :suppress-input-method
                      (:keymap keymap '(make-sparse-keymap))
-                     (:transitions transitions '(make-sparse-keymap))
                      :ephemeral-marks)
                 rest)
                (body (cl-loop for sublist on rest by #'cddr
@@ -2367,13 +2353,6 @@ disabled.
        (defvar ,map-name
          (setf (alist-get ',name conn--state-maps) ,keymap)
          ,(conn--stringify "Keymap active in `" name "'."))
-
-       (defvar ,transition-map-name
-         (setf (alist-get ',name conn--transition-maps) ,transitions)
-         ,(conn--string-fill (conn--stringify
-                              "Keymap for commands that transition from `"
-                              name "' to other states.")
-                             70))
 
        (defface ,lighter-face-name
          ',lighter-face
@@ -2449,31 +2428,22 @@ disabled.
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
-bind anything except transition commands.
-
-See `conn-emacs-state-transition-map' for keybindings to enter other states
-from Emacs state.  See `conn-emacs-state-map' for commands bound by Emacs state."
-  :lighter-face ((default              (:inherit mode-line :background "#cae1ff"))
+bind anything except transition commands."
+  :lighter-face ((default (:inherit mode-line :background "#cae1ff"))
                  (((background light)) (:inherit mode-line :background "#cae1ff"))
-                 (((background dark))  (:inherit mode-line :background "#49739f")))
+                 (((background dark)) (:inherit mode-line :background "#49739f")))
   :ephemeral-marks nil
   :keymap (make-sparse-keymap))
 
 (conn-define-state conn-state
   "Activate `conn-state' in the current buffer.
-A `conn-mode' state for editing text.
-
-See `conn-state-transition-map' for keybindings to enter other states
-from conn state.  See `conn-state-map' for commands bound by conn state."
-  :lighter-face ((default              (:inherit mode-line :background "#f3bdbd"))
+A `conn-mode' state for editing text."
+  :lighter-face ((default (:inherit mode-line :background "#f3bdbd"))
                  (((background light)) (:inherit mode-line :background "#f3bdbd"))
-                 (((background dark))  (:inherit mode-line :background "#8c3c3c")))
+                 (((background dark)) (:inherit mode-line :background "#8c3c3c")))
   :suppress-input-method t
   :ephemeral-marks t
-  :keymap (define-keymap :suppress t)
-  :transitions (define-keymap
-                 "e" 'conn-emacs-state
-                 "t" 'conn-change))
+  :keymap (define-keymap :suppress t))
 
 (add-to-list 'conn-buffer-default-state-alist
              '((derived-mode . prog-mode) . conn-state))
@@ -2484,19 +2454,13 @@ from conn state.  See `conn-state-map' for commands bound by conn state."
 
 (conn-define-state conn-org-edit-state
   "Activate `conn-org-edit-state' in the current buffer.
-A `conn-mode' state for structural editing of `org-mode' buffers.
-
-See `conn-org-edit-state-transition-map' for keybindings to enter
-other states from org-tree-edit state.  See
-`conn-org-edit-state-map' for commands bound by org-tree-edit
-state."
-  :lighter-face ((default              (:inherit mode-line :background "#f5c5ff"))
+A `conn-mode' state for structural editing of `org-mode' buffers."
+  :lighter-face ((default (:inherit mode-line :background "#f5c5ff"))
                  (((background light)) (:inherit mode-line :background "#f5c5ff"))
-                 (((background dark))  (:inherit mode-line :background "#85508c")))
+                 (((background dark)) (:inherit mode-line :background "#85508c")))
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
-  :ephemeral-marks t
-  :transitions (define-keymap "e" 'conn-emacs-state))
+  :ephemeral-marks t)
 
 
 ;;;; Thing Dispatch
@@ -5752,6 +5716,8 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap conn-state-map
   :parent conn-movement-map
+  "e" 'conn-emacs-state
+  "t" 'conn-change
   ":" 'conn-wincontrol-one-command
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
   "`" 'other-window
@@ -5823,6 +5789,7 @@ When ARG is nil the root window is used."
 
 (define-keymap
   :keymap conn-org-edit-state-map
+  "e" 'conn-emacs-state
   "SPC" 'conn-scroll-up
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
@@ -5898,7 +5865,6 @@ When ARG is nil the root window is used."
         (cl-pushnew 'conn--local-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--major-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-mode-maps emulation-mode-map-alists)
-        (cl-pushnew 'conn--transition-maps emulation-mode-map-alists)
         (set-keymap-parent search-map conn-search-map)
         (set-keymap-parent goto-map conn-goto-map)
         (set-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
@@ -5912,8 +5878,7 @@ When ARG is nil the root window is used."
           (seq-difference '(conn--state-maps
                             conn--local-maps
                             conn--major-mode-maps
-                            conn--local-mode-maps
-                            conn--transition-maps)
+                            conn--local-mode-maps)
                           emulation-mode-map-alists #'eq))))
 
 
