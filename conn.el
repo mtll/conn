@@ -456,7 +456,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;;; Dot Overlay
 
-(put 'conn--dot-overlay 'face 'conn-dot-face)
 (put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
 (put 'conn--dot-overlay 'conn-overlay t)
 (put 'conn--dot-overlay 'evaporate t)
@@ -1204,28 +1203,62 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;;; Dots
 
+(defface conn-dot-face-1
+  '((default (:inherit match)))
+  "Face for dots."
+  :group 'conn)
+
+(defface conn-dot-face-2
+  '((default (:inherit highlight)))
+  "Face for dots."
+  :group 'conn)
+
+(defface conn-dot-face-3
+  '((default (:inherit isearch)))
+  "Face for dots."
+  :group 'conn)
+
+(defcustom conn-dot-faces
+  (list 'conn-dot-face-1 'conn-dot-face-2 'conn-dot-face-3)
+  "List of faces for dots."
+  :group 'conn)
+
+(defun conn--create-dot (beg end &optional buffer point)
+  (with-current-buffer (or buffer (current-buffer))
+    (cl-loop for ov in (overlays-in beg end) do
+             (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
+               (let ((b (overlay-start ov))
+                     (e (overlay-end ov)))
+                 (when (or (< beg b end) (< beg e end))
+                   (setq beg (min beg (overlay-start ov))
+                         end (max end (overlay-end ov)))
+                   (delete-overlay ov)))))
+    (let ((dot (make-overlay beg end buffer))
+          (faces (thread-last
+                   (append (overlays-at (1- beg)) (overlays-at (1+ end)))
+                   (seq-filter (lambda (ov)
+                                 (eq 'conn--dot-overlay (overlay-get ov 'category))))
+                   (mapcar (lambda (ov) (overlay-get ov 'face)))
+                   (seq-difference conn-dot-faces))))
+      (overlay-put dot 'category 'conn--dot-overlay)
+      (overlay-put dot 'point point)
+      (overlay-put dot 'face (car faces))
+      (push dot conn--dots))))
+
 (defun conn-mouse-click-dot (event)
   (interactive "e")
   (let* ((posn (event-start event))
-         (point (posn-point posn))
-         (ov (make-overlay point (1+ point) (window-buffer (posn-window posn)))))
-    (overlay-put ov 'category 'conn--dot-overlay)
-    (overlay-put ov 'point t)
-    (push ov conn--dots)))
+         (point (posn-point posn)))
+    (conn--create-dot point (1+ point) (window-buffer (posn-window posn)) t)))
 
 (defun conn-point-to-dot (point)
   (interactive (list (point)))
-  (let* ((ov (make-overlay point (1+ point))))
-    (overlay-put ov 'category 'conn--dot-overlay)
-    (overlay-put ov 'point t)
-    (push ov conn--dots)))
+  (conn--create-dot point (1+ point) nil t))
 
-(defun conn-region-to-dot (bounds &optional buffer)
+(defun conn-region-to-dot (bounds)
   (interactive (list (region-bounds)))
   (pcase-dolist (`(,beg . ,end) bounds)
-    (let* ((ov (make-overlay beg end buffer)))
-      (overlay-put ov 'category 'conn--dot-overlay)
-      (push ov conn--dots)))
+    (conn--create-dot beg end))
   (deactivate-mark t))
 
 (defun conn-delete-dot-at-click (event)
@@ -1296,14 +1329,15 @@ If BUFFER is nil check `current-buffer'."
       (thread-last
         (progn
           (recursive-edit)
-          conn--dots)
+          (nreverse conn--dots))
         (seq-filter 'overlay-buffer)
         (mapcar (lambda (ov)
-                  (if (overlay-get ov 'point)
-                      (cons (conn--overlay-start-marker ov)
-                            (conn--overlay-start-marker ov))
-                    (conn--overlay-bounds-markers ov))))
-        conn--merge-regions)
+                  (prog1
+                      (if (overlay-get ov 'point)
+                          (cons (conn--overlay-start-marker ov)
+                                (conn--overlay-start-marker ov))
+                        (conn--overlay-bounds-markers ov))
+                    (delete-overlay ov)))))
     (conn--dot-mode -1)))
 
 (setf (alist-get 'dots conn-bounds-of-things-in-region-alist)
