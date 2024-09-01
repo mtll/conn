@@ -865,7 +865,7 @@ apply to each contiguous component of the region."
    [("f" "Frameset" frameset-to-register)
     ("r" "Rectangle" copy-rectangle-to-register)
     ("w" "Window Configuration" window-configuration-to-register)]]
-  ["Register:"
+  ["Register Commands:"
    [("e" "Set Seperator" conn-set-register-seperator)
     ("i" "Increment" increment-register :transient t)
     ("s" "List" list-registers :transient t)]
