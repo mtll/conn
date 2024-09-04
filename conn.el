@@ -914,17 +914,57 @@ If BUFFER is nil check `current-buffer'."
 (defvar conn-bounds-of-things-in-region-default
   'conn--things-in-region-default)
 
-(defvar-keymap conn-read-thing-region-command-map
-  "C-h" 'help
-  "C-w" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
-  "C-<backspace>" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "M-DEL" 'reset-arg
-  "t" conn-mark-thing-map
-  "." 'reset-arg
-  "r" 'recursive-edit
-  "v" 'region)
+(defvar-local conn-read-thing-mover-override-maps nil)
+
+(defvar-local conn-read-thing-override-maps nil)
+
+(define-minor-mode conn-read-thing-mode
+  "Mode for reading a thing."
+  :keymap (define-keymap "C-h" 'help)
+  :lighter " THING"
+  (if conn-read-thing-mode
+      (progn
+        (setq conn--thing-overriding-maps
+              (thread-last
+                (append conn-read-thing-override-maps
+                        (list conn-read-thing-mode-map))
+                (delq nil)
+                (make-composed-keymap)))
+        (internal-push-keymap conn--thing-overriding-maps
+                              'overriding-terminal-local-map))
+    (internal-pop-keymap conn--thing-overriding-maps
+                         'overriding-terminal-local-map)))
+
+(defvar conn--thing-overriding-maps nil)
+
+(define-minor-mode conn-read-thing-mover-mode
+  "Mode for reading a thing mover."
+  :lighter " MOVER"
+  :keymap (define-keymap
+            "C-w" 'backward-delete-arg
+            "C-d" 'forward-delete-arg
+            "C-<backspace>" 'reset-arg
+            "M-<backspace>" 'reset-arg
+            "M-DEL" 'reset-arg
+            "." 'reset-arg
+            "<remap> <conn-forward-char>" 'forward-char
+            "<remap> <conn-backward-char>" 'backward-char
+            "b" 'beginning-of-buffer
+            "C-h" 'help
+            "t" conn-mark-thing-map
+            "r" 'recursive-edit)
+  (if conn-read-thing-mover-mode
+      (progn
+        (setq conn--thing-overriding-maps
+              (thread-last
+                (append conn-read-thing-mover-override-maps
+                        (list conn-read-thing-mover-mode-map))
+                (delq nil)
+                (make-composed-keymap)))
+        (internal-push-keymap conn--thing-overriding-maps
+                              'overriding-terminal-local-map))
+    (internal-pop-keymap conn--thing-overriding-maps
+                         'overriding-terminal-local-map)))
 
 (defvar-keymap conn-read-expand-region-map
   :parent conn-expand-repeat-map
@@ -932,21 +972,6 @@ If BUFFER is nil check `current-buffer'."
   "e" 'exit-recursive-edit
   "C-g" 'abort-recursive-edit
   "<t>" 'ignore)
-
-(defvar-keymap conn--read-thing-mover-map
-  "C-w" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
-  "C-<backspace>" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "M-DEL" 'reset-arg
-  "." 'reset-arg
-  "<remap> <conn-forward-char>" 'forward-char
-  "<remap> <conn-backward-char>" 'backward-char
-  "b" 'beginning-of-buffer
-  "C-h" 'help)
-
-(defvar-keymap conn-read-thing-command-map
-  "C-h" 'help)
 
 (defvar conn-last-bounds-of-command nil)
 
@@ -1049,98 +1074,87 @@ If BUFFER is nil check `current-buffer'."
            collect reg))
 
 (defun conn--read-thing-mover (prompt &optional arg keymap recursive-edit)
-  (let ((conn--read-thing-mover-map
-         (thread-last
-           (list keymap
-                 conn--read-thing-mover-map
-                 (if recursive-edit (define-keymap "r" 'recursive-edit)))
-           (delq nil)
-           (make-composed-keymap))))
-    (conn--with-state conn-state
-      (internal-push-keymap conn--read-thing-mover-map
-                            'overriding-terminal-local-map)
-      (unwind-protect
-          (cl-prog
-           ((prompt (substitute-command-keys
-                     (concat "\\<conn--read-thing-mover-map>"
-                             prompt " (arg: "
-                             (propertize "%s" 'face 'read-multiple-choice-face)
-                             ", \\[reset-arg] reset arg; \\[help] commands"
-                             (if recursive-edit
-                                 (concat "; \\[recursive-edit] "
-                                         "recursive edit)")
-                               ")")
-                             ": %s")))
-            (thing-arg (when arg (abs (prefix-numeric-value arg))))
-            (thing-sign (when arg (> 0 arg)))
-            invalid keys cmd)
-           :read-command
-           (setq keys (read-key-sequence
-                       (format prompt
-                               (format (if thing-arg "%s%s" "[%s1]")
-                                       (if thing-sign "-" "")
-                                       thing-arg)
-                               (if invalid
-                                   (propertize "Not a valid thing command"
-                                               'face 'error)
-                                 "")))
-                 cmd (key-binding keys t))
-           :test
-           (pcase cmd
-             ('keyboard-quit (keyboard-quit))
-             ('help
-              (internal-pop-keymap conn--read-thing-mover-map
-                                   'overriding-terminal-local-map)
-              (save-window-excursion
-                (setq cmd (intern
-                           (completing-read
-                            "Command: "
-                            (lambda (string pred action)
-                              (if (eq action 'metadata)
-                                  `(metadata
-                                    ,(cons 'affixation-function
-                                           (conn--dispatch-make-command-affixation
-                                            conn-read-thing-region-command-map))
-                                    (category . conn-dispatch-command))
-                                (complete-with-action action obarray string pred)))
-                            (lambda (sym)
-                              (and (functionp sym)
-                                   (not (eq sym 'help))
-                                   (get sym :conn-command-thing)))
-                            t))))
-              (internal-push-keymap conn--read-thing-mover-map
-                                    'overriding-terminal-local-map)
-              (go :test))
-             ('digit-argument
-              (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-             ('reset-arg
-              (setq thing-arg nil))
-             ('backward-delete-arg
-              (setq thing-arg (floor thing-arg 10)))
-             ('forward-delete-arg
-              (setq thing-arg (thread-last
-                                (log thing-arg 10)
-                                (floor)
-                                (expt 10)
-                                (mod thing-arg))))
-             ('negative-argument
-              (setq thing-sign (not thing-sign)))
-             ((or 'conn-expand 'conn-contract)
-              (cl-return
-               (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                               (thing-sign '-)))))
-             ((guard (or (ignore-errors (get cmd :conn-command-thing))
-                         (ignore-errors (get cmd :conn-command-bounds))
-                         (alist-get cmd conn-bounds-of-command-alist)))
-              (cl-return
-               (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                               (thing-sign '-)))))
-             (_ (setq invalid t)))
-           (go :read-command))
-        (message nil)
-        (internal-pop-keymap conn--read-thing-mover-map
-                             'overriding-terminal-local-map)))))
+  (conn--with-state conn-state
+    (conn-read-thing-mover-mode 1)
+    (unwind-protect
+        (cl-prog
+         ((prompt (substitute-command-keys
+                   (concat "\\<conn-read-thing-mover-mode-map>"
+                           prompt " (arg: "
+                           (propertize "%s" 'face 'read-multiple-choice-face)
+                           ", \\[reset-arg] reset arg; \\[help] commands"
+                           (if recursive-edit
+                               (concat "; \\[recursive-edit] "
+                                       "recursive edit)")
+                             ")")
+                           ": %s")))
+          (thing-arg (when arg (abs (prefix-numeric-value arg))))
+          (thing-sign (when arg (> 0 arg)))
+          invalid keys cmd)
+         :read-command
+         (setq keys (read-key-sequence
+                     (format prompt
+                             (format (if thing-arg "%s%s" "[%s1]")
+                                     (if thing-sign "-" "")
+                                     thing-arg)
+                             (if invalid
+                                 (propertize "Not a valid thing command"
+                                             'face 'error)
+                               "")))
+               cmd (key-binding keys t))
+         :test
+         (pcase cmd
+           ('keyboard-quit (keyboard-quit))
+           ('help
+            (conn-read-thing-mover-mode -1)
+            (save-window-excursion
+              (setq cmd (intern
+                         (completing-read
+                          "Command: "
+                          (lambda (string pred action)
+                            (if (eq action 'metadata)
+                                `(metadata
+                                  ,(cons 'affixation-function
+                                         (conn--dispatch-make-command-affixation
+                                          conn-read-thing-mover-mode-map))
+                                  (category . conn-dispatch-command))
+                              (complete-with-action action obarray string pred)))
+                          (lambda (sym)
+                            (and (functionp sym)
+                                 (not (eq sym 'help))
+                                 (get sym :conn-command-thing)))
+                          t))))
+            (conn-read-thing-mover-mode 1)
+            (go :test))
+           ('digit-argument
+            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+           ('reset-arg
+            (setq thing-arg nil))
+           ('backward-delete-arg
+            (setq thing-arg (floor thing-arg 10)))
+           ('forward-delete-arg
+            (setq thing-arg (thread-last
+                              (log thing-arg 10)
+                              (floor)
+                              (expt 10)
+                              (mod thing-arg))))
+           ('negative-argument
+            (setq thing-sign (not thing-sign)))
+           ((or 'conn-expand 'conn-contract)
+            (cl-return
+             (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                             (thing-sign '-)))))
+           ((guard (or (ignore-errors (get cmd :conn-command-thing))
+                       (ignore-errors (get cmd :conn-command-bounds))
+                       (alist-get cmd conn-bounds-of-command-alist)))
+            (cl-return
+             (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                             (thing-sign '-)))))
+           (_ (setq invalid t)))
+         (go :read-command))
+      (message nil)
+      (conn-read-thing-mover-mode -1))))
 
 (defun conn--read-thing-region (prompt &optional arg keymap)
   (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover prompt arg keymap t)))
@@ -1149,8 +1163,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--read-thing (prompt)
   (conn--with-state conn-state
-    (internal-push-keymap conn-read-thing-command-map
-                          'overriding-terminal-local-map)
+    (conn-read-thing-mode 1)
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
@@ -1170,8 +1183,7 @@ If BUFFER is nil check `current-buffer'."
            ('keyboard-quit
             (keyboard-quit))
            ('help
-            (internal-pop-keymap conn-read-thing-command-map
-                                 'overriding-terminal-local-map)
+            (conn-read-thing-mode -1)
             (save-window-excursion
               (setq cmd (intern
                          (completing-read
@@ -1181,7 +1193,7 @@ If BUFFER is nil check `current-buffer'."
                                 `(metadata
                                   ,(cons 'affixation-function
                                          (conn--dispatch-make-command-affixation
-                                          conn-read-thing-command-map))
+                                          conn-read-thing-mode-map))
                                   (category . conn-dispatch-command))
                               (complete-with-action action obarray string pred)))
                           (lambda (sym)
@@ -1189,17 +1201,16 @@ If BUFFER is nil check `current-buffer'."
                                  (not (eq sym 'help))
                                  (get sym :conn-command-thing)))
                           t))))
-            (internal-push-keymap conn-read-thing-command-map
-                                  'overriding-terminal-local-map)
+            (conn-read-thing-mode 1)
             (go :test))
-           ((guard (not (get cmd :conn-command-thing)))
-            (setq invalid t))
-           ((let thing (get cmd :conn-command-thing))
-            (cl-return thing)))
+           ((and (pred symbolp)
+                 (guard (get cmd :conn-command-thing)))
+            (cl-return thing))
+           (_
+            (setq invalid t)))
          (go :read-command))
       (message nil)
-      (internal-pop-keymap conn-read-thing-command-map
-                           'overriding-terminal-local-map))))
+      (conn-read-thing-mode -1))))
 
 ;;;;; Dots
 
@@ -1221,7 +1232,10 @@ If BUFFER is nil check `current-buffer'."
 (defcustom conn-dot-faces
   (list 'conn-dot-face-1 'conn-dot-face-2 'conn-dot-face-3)
   "List of faces for dots."
-  :group 'conn)
+  :group 'conn
+  :type '(list symbol))
+
+(defvar conn--dots nil)
 
 (defun conn--create-dot (beg end &optional buffer point)
   (with-current-buffer (or buffer (current-buffer))
@@ -1293,8 +1307,6 @@ If BUFFER is nil check `current-buffer'."
         (overlay-put ov 'category 'conn--dot-overlay)
         (push ov conn--dots)
         (delete-overlay mouse-secondary-overlay)))))
-
-(defvar conn--dots nil)
 
 (defvar-keymap conn--dot-mode-map
   "C-w" 'conn-region-to-dot
@@ -1541,7 +1553,7 @@ Possibilities: \\<query-replace-map>
     (deactivate-mark)))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
-  (when reverse (setq regions (reverse regions)))
+  (setq regions (if reverse (nreverse regions)))
   (pcase-dolist ((and reg `(,beg . ,end)) regions)
     (unless (markerp beg)
       (setcar reg (conn--create-marker beg)))
@@ -3196,11 +3208,32 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
+(defvar conn--dispatch-overriding-map nil)
+
+(defvar conn-dispatch-action-override-maps nil)
+
+(define-minor-mode conn-dispatch-read-thing-mode
+  "Read a thing for dispatch."
+  :lighter " DISPATCH"
+  :keymap (define-keymap
+            "C-h" 'help
+            "." 'reset-arg
+            "C-d" 'forward-delete-arg
+            "C-w" 'backward-delete-arg)
+  (if conn-dispatch-read-thing-mode
+      (thread-first
+        (setq conn--dispatch-overriding-map
+              (make-composed-keymap
+               (reverse
+                (append (list conn-dispatch-read-thing-mode-map)
+                        conn-dispatch-thing-override-maps
+                        conn-dispatch-action-override-maps))))
+        (internal-push-keymap 'overriding-terminal-local-map))
+    (internal-pop-keymap conn--dispatch-overriding-map
+                         'overriding-terminal-local-map)))
+
 (defun conn--dispatch-read-thing (action-maps &optional default-action)
-  (let ((keymap (make-composed-keymap
-                 (append (list conn-dispatch-command-map)
-                         conn-dispatch-thing-override-maps
-                         action-maps)))
+  (let ((conn-dispatch-action-override-maps action-maps)
         (prompt (substitute-command-keys
                  (concat "\\<conn-dispatch-command-map>Thing (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
@@ -3209,7 +3242,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (action default-action)
         keys cmd invalid thing-arg thing-sign)
     (conn--with-state conn-state
-      (internal-push-keymap keymap 'overriding-terminal-local-map)
+      (conn-dispatch-read-thing-mode 1)
       (unwind-protect
           (cl-prog
            nil
@@ -3252,7 +3285,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
              ('negative-argument
               (setq thing-sign (not thing-sign)))
              ('help
-              (internal-pop-keymap keymap 'overriding-terminal-local-map)
+              (conn-dispatch-read-thing-mode -1)
               (save-window-excursion
                 (setq keys nil
                       cmd (intern
@@ -3271,7 +3304,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                                    (or (get sym :conn-command-thing)
                                        (where-is-internal sym (list keymap) t))))
                             t))))
-              (internal-push-keymap keymap 'overriding-terminal-local-map)
+              (conn-dispatch-read-thing-mode 1)
               (go :loop))
              ((let (and thing (pred identity)) (get cmd :conn-command-thing))
               (cl-return
@@ -3285,7 +3318,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
               (setq invalid t)))
            (go :read-command))
         (message nil)
-        (internal-pop-keymap keymap 'overriding-terminal-local-map)))))
+        (conn-dispatch-read-thing-mode -1)))))
 
 (defun conn-dispatch-on-things (thing finder action arg &optional repeat)
   "Begin dispatching ACTION on a THING.
@@ -6239,4 +6272,8 @@ determine if `conn-local-mode' should be enabled."
    'defun 'conn-sequential-thing-handler
    'treesit-end-of-defun
    'treesit-beginning-of-defun))
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn.el ends here
