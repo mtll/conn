@@ -159,21 +159,6 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :type '(repeat symbol)
   :group 'conn-marks)
 
-(defcustom conn-completion-region-quote-function 'regexp-quote
-  "Function used to quote region strings for consult search functions."
-  :group 'conn
-  :type 'symbol)
-
-(defcustom conn-read-pair-split-char "\t"
-  "String on which to split `conn-insert-pair' brackets."
-  :group 'conn
-  :type 'string)
-
-(defcustom conn-expand-pulse-region t
-  "Pulse region on expansion when mark is not active"
-  :group 'conn
-  :type 'boolean)
-
 (defcustom conn-read-string-timeout 0.5
   "Timeout for string reading functions."
   :group 'conn
@@ -453,12 +438,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn-label-overlay 'face 'conn-read-string-match-face)
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
-
-;;;;;; Dot Overlay
-
-(put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
-(put 'conn--dot-overlay 'conn-overlay t)
-(put 'conn--dot-overlay 'evaporate t)
 
 ;;;;; Command Histories
 
@@ -1217,6 +1196,10 @@ If BUFFER is nil check `current-buffer'."
   "List of faces for dots."
   :group 'conn
   :type '(list symbol))
+
+(put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
+(put 'conn--dot-overlay 'conn-overlay t)
+(put 'conn--dot-overlay 'evaporate t)
 
 (defvar conn--dots nil)
 
@@ -3395,6 +3378,11 @@ seconds."
 
 ;;;; Expand Region
 
+(defcustom conn-expand-pulse-region t
+  "Pulse region on expansion when mark is not active"
+  :group 'conn
+  :type 'boolean)
+
 (defvar conn-expansion-functions nil
   "Functions which provide expansions for `conn-expand'.
 Functions should return a list of (BEGIN . END) pairs representing
@@ -4147,6 +4135,11 @@ uninstersting marks."
   (setq conn--minibuffer-initial-region
         (with-minibuffer-selected-window
           (ignore-errors (cons (region-beginning) (region-end))))))
+
+(defcustom conn-completion-region-quote-function 'regexp-quote
+  "Function used to quote region strings for consult search functions."
+  :group 'conn
+  :type 'symbol)
 
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer."
