@@ -342,7 +342,7 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
+      (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
                    (conn-query-flag conn-query-flag)
                    (string (minibuffer-with-setup-hook
                                (lambda ()
@@ -377,7 +377,7 @@ property."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let* ((`(,beg . ,end) (cdr (conn--read-thing-region "Define Region")))
+      (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
                    (conn-query-flag conn-query-flag)
                    (regexp (minibuffer-with-setup-hook
                                (lambda ()
@@ -414,9 +414,9 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,thing ,beg . ,end) (conn--read-thing-region "Things")))
+  (pcase-let ((`(,thing ,_beg ,_end . ,regions) (conn--read-thing-region "Things")))
     (conn--thread -->
-        (conn-bounds-of-things-in-region thing beg end)
+        regions
       (if (member "skip" args)
           (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
         -->)
@@ -448,7 +448,7 @@ apply to each contiguous component of the region."
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (conn--thread -->
-      (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing")))
+      (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing" nil t)))
         (conn--kapply-thing-iterator
          (get cmd :conn-command-thing)
          (region-beginning) (region-end)
