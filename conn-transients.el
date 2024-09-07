@@ -950,4 +950,8 @@ apply to each contiguous component of the region."
     ("d" "downcase" downcase-region)]])
 
 (provide 'conn-transients)
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn-transients.el ends here
