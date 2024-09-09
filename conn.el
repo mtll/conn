@@ -5099,7 +5099,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ";" 'conn-wincontrol-exit-to-initial-win
   "b" 'switch-to-buffer
   "C" 'tab-bar-duplicate-tab
-  "c" 'conn-wincontrol-mru-window
+  "'" 'conn-tab-to-register
+  "c" (conn-remapping-command (key-parse "C-c"))
   "d" 'delete-window
   "e" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
@@ -5125,7 +5126,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O" 'tear-off-window
   "p" 'conn-register-load
   "P" 'window-configuration-to-register
-  "x" 'conn-tab-to-register
+  "x" (conn-remapping-command (key-parse "C-x"))
+  "X" 'conn-wincontrol-mru-window
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "s" 'shrink-window
