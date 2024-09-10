@@ -5097,9 +5097,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-r" 'conn-wincontrol-isearch-backward
   "," 'conn-wincontrol-maximize-horizontally
   ";" 'conn-wincontrol-exit-to-initial-win
-  "b" 'switch-to-buffer
+  "b" 'conn-tab-to-register
   "C" 'tab-bar-duplicate-tab
-  "'" 'conn-tab-to-register
   "c" (conn-remapping-command (key-parse "C-c"))
   "d" 'delete-window
   "e" 'conn-wincontrol-exit
