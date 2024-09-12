@@ -506,8 +506,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defun conn-remapping-command (from-keys)
   `(menu-item
-    ""
-    nil
+    ,(format "Remap %s" (key-description from-keys))
+    ,(conn--without-conn-maps (key-binding from-keys t))
     :filter ,(lambda (&rest _)
                (conn--without-conn-maps
                  (key-binding from-keys t)))))
