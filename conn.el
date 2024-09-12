@@ -1018,18 +1018,18 @@ If BUFFER is nil check `current-buffer'."
            thing beg end))
 
 (defun conn--things-in-region-default (thing beg end)
-  (save-excursion
-    (goto-char beg)
-    (forward-thing thing 1)
-    (cl-loop for bounds = (save-excursion
-                            (forward-thing thing -1)
-                            (bounds-of-thing-at-point thing))
-             while bounds collect bounds into regions
-             while (and (< (point) end)
-                        (ignore-errors
-                          (forward-thing thing 1)
-                          t))
-             finally return regions)))
+  (ignore-errors
+    (save-excursion
+      (goto-char beg)
+      (cl-loop for bounds = (save-excursion
+                              (forward-thing thing -1)
+                              (bounds-of-thing-at-point thing))
+               while bounds collect bounds into regions
+               while (and (< (point) end)
+                          (ignore-errors
+                            (forward-thing thing 1)
+                            t))
+               finally return regions))))
 
 (defun conn--region-bounds (beg end)
   (cl-loop for reg in (region-bounds)
