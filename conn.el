@@ -5526,9 +5526,13 @@ See `tab-close'."
 When ARG is nil the root window is used."
   (interactive "P")
   (let ((window
-         (when arg
-           (cl-loop for win = (selected-window) then (window-parent win)
-                    repeat (abs arg) while win finally return win))))
+         (or (when arg
+               (cl-loop with main = (window-main-window)
+                        for win = (selected-window) then (window-parent win)
+                        repeat (abs arg)
+                        while (and win (not (eq win main)))
+                        finally return win))
+             (window-main-window))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reverse-window (and arg (< arg 0)))
@@ -5539,9 +5543,13 @@ When ARG is nil the root window is used."
 When ARG is nil the root window is used."
   (interactive "P")
   (let ((window
-         (when arg
-           (cl-loop for win = (selected-window) then (window-parent win)
-                    repeat (abs arg) while win finally return win))))
+         (or (when arg
+               (cl-loop with main = (window-main-window)
+                        for win = (selected-window) then (window-parent win)
+                        repeat (abs arg)
+                        while (and win (not (eq win main)))
+                        finally return win))
+             (window-main-window))))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reflect-window)
@@ -5570,8 +5578,6 @@ When ARG is nil the root window is used."
   :prefix 'conn-region-map
   "RET" 'whitespace-cleanup
   "TAB" 'indent-rigidly
-  "C-s" 'conn-isearch-region-forward
-  "C-r" 'conn-isearch-region-backward
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
@@ -5631,8 +5637,8 @@ When ARG is nil the root window is used."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  "s" 'conn-isearch-forward-thing
-  "r" 'conn-isearch-backward-thing
+  "s" 'conn-isearch-forward-region
+  "r" 'conn-isearch-backward-region
   "o" 'occur
   "l" 'locate
   "m B" 'multi-isearch-buffers-regexp
