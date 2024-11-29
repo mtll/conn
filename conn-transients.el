@@ -111,7 +111,7 @@ Does not allow a null value.")
   :reader (lambda (&rest _)
             (read-string "Macro Counter Format: ")))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-kmacro-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kmacro-prefix ()
   "Transient menu for kmacro functions."
   [:description
@@ -604,7 +604,7 @@ apply to each contiguous component of the region."
       ("step-edit" (conn--kmacro-apply-step-edit -->))
       (_ (conn--kmacro-apply -->)))))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-prefix ()
   "Transient menu for keyboard macro application on regions."
   [:description
@@ -656,7 +656,7 @@ apply to each contiguous component of the region."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-kapply-prefix))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-isearch-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-isearch-kapply-prefix ()
   "Transient menu for keyboard macro application on isearch matches."
   [:description
@@ -703,7 +703,7 @@ apply to each contiguous component of the region."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-isearch-kapply-prefix))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-regions-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-regions-kapply-prefix (iterator)
   "Transient menu for keyboard macro application on regions."
   [:description
@@ -802,7 +802,7 @@ apply to each contiguous component of the region."
        (format ", %s"  (conn--format-narrowing
                         (cadr conn-narrow-ring)))))))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-narrow-ring-prefix "conn-transients" nil t)
 (transient-define-prefix conn-narrow-ring-prefix ()
   "Transient menu for narrow ring function."
   [:description
@@ -855,7 +855,7 @@ apply to each contiguous component of the region."
 
 ;;;; Register Prefix
 
-;;;###autoload
+;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
   ["Register Store:"
@@ -899,7 +899,7 @@ apply to each contiguous component of the region."
   :variable 'auto-fill-function
   :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-fill-prefix "conn-transients" nil t)
 (transient-define-prefix conn-fill-prefix ()
   "Transient menu for fill functions."
   [["Fill:"
@@ -919,7 +919,7 @@ apply to each contiguous component of the region."
   :variable 'sort-fold-case
   :reader (lambda (&rest _) (not sort-fold-case)))
 
-;;;###autoload
+;;;###autoload (autoload 'conn-sort-prefix "conn-transients" nil t)
 (transient-define-prefix conn-sort-prefix ()
   "Transient menu for buffer sorting functions."
   [["Sort Region: "
@@ -935,7 +935,7 @@ apply to each contiguous component of the region."
 
 ;;;; Case Prefix
 
-;;;###autoload
+;;;###autoload (autoload 'conn-region-case-prefix "conn-transients" nil t)
 (transient-define-prefix conn-region-case-prefix ()
   "Transient menu for case in region."
   ["Change Case"
