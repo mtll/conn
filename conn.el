@@ -1021,6 +1021,7 @@ If BUFFER is nil check `current-buffer'."
   (ignore-errors
     (save-excursion
       (goto-char beg)
+      (forward-thing thing 1)
       (cl-loop for bounds = (save-excursion
                               (forward-thing thing -1)
                               (bounds-of-thing-at-point thing))
@@ -3771,7 +3772,7 @@ instances of from-string.")
                               ""))
                     nil beg end))))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) conn-last-bounds-of-command))
+  (pcase-let ((`(,beg ,end . ,_) conn-last-bounds-of-command))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string query-flag nil
@@ -3797,7 +3798,7 @@ instances of from-string.")
                               ""))
                     t beg end))))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg . ,end) conn-last-bounds-of-command))
+  (pcase-let ((`(,beg ,end . ,_) conn-last-bounds-of-command))
     (save-window-excursion
       (save-excursion
         (perform-replace from-string to-string query-flag t
@@ -3886,24 +3887,6 @@ instances of from-string.")
   (set-register register (conn--make-tab-register)))
 
 ;;;;; Isearch Commands
-
-(defun conn-isearch-backward-thing (thing)
-  "Isearch forward for THING.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing "Thing")))
-  (pcase (bounds-of-thing-at-point thing)
-    (`(,beg . ,end) (conn-isearch-region-backward beg end))
-    (_ (user-error "No %s found" thing))))
-
-(defun conn-isearch-forward-thing (thing)
-  "Isearch backward for THING.
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (conn--read-thing "Thing")))
-  (pcase (bounds-of-thing-at-point thing)
-    (`(,beg . ,end) (conn-isearch-region-forward beg end))
-    (_ (user-error "No %s found" thing))))
 
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
