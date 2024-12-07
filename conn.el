@@ -5594,6 +5594,7 @@ When ARG is nil the root window is used."
   "e c" 'conn-split-region-on-regexp
   "g" 'conn-rgrep-region
   "i" 'clone-indirect-buffer
+  "k" 'delete-region
   "l" 'conn-join-lines
   "I" 'indent-rigidly
   "N" 'conn-narrow-indirect-to-region
