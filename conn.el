@@ -84,6 +84,11 @@
   :prefix "conn-"
   :group 'conn)
 
+(defgroup conn-faces nil
+  "Conn-mode faces."
+  :prefix "conn-"
+  :group 'conn)
+
 (defgroup conn-states nil
   "Conn-mode states."
   :prefix "conn-"
@@ -129,24 +134,19 @@ CONDITION has the same meaning as in `buffer-match-p'."
     (((background light)) (:inherit cursor :background "#b8a2f0"))
     (((background dark)) (:inherit cursor :background "#a742b0")))
   "Face for mark."
-  :group 'conn-marks)
+  :group 'conn-faces)
 
 (defface conn-window-prompt-face
   '((default (:height 2.5 :foreground "#d00000"))
     (((background light)) (:height 2.5 :foreground "#d00000"))
     (((background dark)) (:height 2.5 :foreground "#7c0000")))
   "Face for conn window prompt overlay."
-  :group 'conn-mode)
+  :group 'conn-faces)
 
 (defface conn-read-string-match-face
   '((t (:inherit isearch)))
   "Face for matches when reading strings."
-  :group 'conn)
-
-(defface conn-dot-face
-  '((t (:inherit match)))
-  "Face for dots."
-  :group 'conn)
+  :group 'conn-faces)
 
 (defcustom conn-mark-overlay-priority 2000
   "Priority of mark overlay."
@@ -181,7 +181,7 @@ CONDITION has the same meaning as in `buffer-match-p'."
 (defface conn-dispatch-label-face
   '((t (:background "#ff8bd1" :foreground "black" :bold t)))
   "Face for group in dispatch lead overlay."
-  :group 'conn)
+  :group 'conn-faces)
 
 (defcustom conn-dispatch-thing-ignored-modes
   (list 'image-mode 'doc-view-mode 'pdf-view-mode)
@@ -1185,17 +1185,17 @@ If BUFFER is nil check `current-buffer'."
 (defface conn-dot-face-1
   '((default (:inherit match)))
   "Face for dots."
-  :group 'conn)
+  :group 'conn-faces)
 
 (defface conn-dot-face-2
   '((default (:inherit highlight)))
   "Face for dots."
-  :group 'conn)
+  :group 'conn-faces)
 
 (defface conn-dot-face-3
   '((default (:inherit isearch)))
   "Face for dots."
-  :group 'conn)
+  :group 'conn-faces)
 
 (defcustom conn-dot-faces
   (list 'conn-dot-face-1 'conn-dot-face-2 'conn-dot-face-3)
