@@ -676,7 +676,7 @@ If BUFFER is nil check `current-buffer'."
             (push (match-beginning 0) matches)))
         (nreverse matches)))))
 
-(defun conn--read-from-with-preview (prompt &optional beg end regexp-flag)
+(defun conn--read-from-with-preview (prompt beg end &optional regexp-flag)
   (let ((default (conn--replace-read-default))
         (beg-shadow-ol (make-overlay (point-min) beg))
         (end-shadow-ol (make-overlay end (point-max))))
@@ -687,10 +687,7 @@ If BUFFER is nil check `current-buffer'."
           (minibuffer-with-setup-hook
               (minibuffer-lazy-highlight-setup
                :case-fold case-fold-search
-               :filter (when (or beg end)
-                         (lambda (mb me)
-                           (and (<= (or beg (point-min)) mb (or end (point-max)))
-                                (<= (or beg (point-min)) me (or end (point-max))))))
+               :filter (lambda (mb me) (<= beg mb me end))
                :highlight query-replace-lazy-highlight
                :regexp regexp-flag
                :regexp-function (or replace-regexp-function
@@ -3733,7 +3730,7 @@ instances of from-string.")
                  (from (minibuffer-with-setup-hook
                            (minibuffer-lazy-highlight-setup
                             :case-fold case-fold-search
-                            :filter (lambda (b e) (<= beg b e end))
+                            :filter (lambda (mb me) (<= beg mb me end))
                             :highlight query-replace-lazy-highlight
                             :regexp regexp-flag
                             :regexp-function (or replace-regexp-function
