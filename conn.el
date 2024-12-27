@@ -682,9 +682,9 @@ If BUFFER is nil check `current-buffer'."
         (minibuffer-lazy-highlight-setup
          :case-fold case-fold-search
          :filter (when (or beg end)
-                   (lambda (beg end)
-                     (and (<= (or beg (point-min)) beg (or end (point-max)))
-                          (<= (or beg (point-min)) end (or end (point-max))))))
+                   (lambda (mb me)
+                     (and (<= (or beg (point-min)) mb (or end (point-max)))
+                          (<= (or beg (point-min)) me (or end (point-max))))))
          :highlight query-replace-lazy-highlight
          :regexp regexp-flag
          :regexp-function (or replace-regexp-function
