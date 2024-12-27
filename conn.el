@@ -4020,6 +4020,11 @@ Interactively `region-beginning' and `region-end'."
     (delete-rectangle (region-beginning) (region-end))
     (yank-rectangle)))
 
+(defcustom conn-recenter-pulse t
+  "Momentarily highlight region after `conn-recenter-on-region'."
+  :group 'conn
+  :type 'boolean)
+
 (defvar conn-recenter-positions
   (list 'center 'top 'bottom)
   "Cycle order for `conn-recenter-on-region'.")
@@ -4056,7 +4061,14 @@ of `conn-recenter-positions'."
       ('bottom
        (save-excursion
          (goto-char end)
-         (recenter -1))))))
+         (recenter -1))))
+    (when conn-recenter-pulse
+      (pulse-momentary-highlight-region beg end))))
+
+(defun conn-recenter-on-region-other-window ()
+  (interactive)
+  (with-selected-window (other-window-for-scrolling)
+    (conn-recenter-on-region)))
 
 (defvar-local conn-mark-ring-right nil)
 (defvar-local conn-mark-ring-left nil)
@@ -5812,6 +5824,7 @@ When ARG is nil the root window is used."
   "C-=" 'balance-windows
   "C-M-0" 'kill-buffer-and-window
   "C-M-l" 'conn-recenter-on-region
+  "C-M-S-l" 'conn-recenter-on-region-other-window
   "C-t" (conn-remapping-command (key-parse "C-x t"))
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
