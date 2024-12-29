@@ -75,17 +75,16 @@ Does not allow a null value.")
                  'face 'transient-value)
      " - "
      (when (length> kmacro-ring 1)
-       (conn--thread -->
-           (car (last kmacro-ring))
-         (kmacro--keys -->)
-         (conn--kmacro-display --> 15)
-         (concat --> ", ")))
+       (thread-first
+         (car (last kmacro-ring))
+         (kmacro--keys)
+         (conn--kmacro-display 15)
+         (concat ", ")))
      (propertize (conn--kmacro-display last-kbd-macro 15)
                  'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
-       (conn--thread -->
-           (car kmacro-ring)
+       (conn--thread (car kmacro-ring) -->
          (kmacro--keys -->)
          (conn--kmacro-display --> 15)
          (concat ", " -->))))))
@@ -341,7 +340,7 @@ property."
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (conn--thread -->
+  (conn--thread
       (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
                    (conn-query-flag conn-query-flag)
                    (string (minibuffer-with-setup-hook
@@ -353,6 +352,7 @@ property."
                              (conn--read-from-with-preview "String" beg end nil))))
         (conn--kapply-matches string beg end nil (member "reverse" args)
                               current-prefix-arg conn-query-flag))
+      -->
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -376,7 +376,7 @@ property."
   :key "u"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
+  (conn--thread
       (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
                    (conn-query-flag conn-query-flag)
                    (regexp (minibuffer-with-setup-hook
@@ -388,6 +388,7 @@ property."
                              (conn--read-from-with-preview "Regexp" beg end t))))
         (conn--kapply-matches regexp beg end t (member "reverse" args)
                               current-prefix-arg conn-query-flag))
+      -->
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -415,8 +416,7 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,thing ,_beg ,_end . ,regions) (conn--read-thing-region "Things")))
-    (conn--thread -->
-        regions
+    (conn--thread regions -->
       (if (member "skip" args)
           (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
         -->)
@@ -447,12 +447,13 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
+  (conn--thread
       (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing" nil t)))
         (conn--kapply-thing-iterator
          (get cmd :conn-command-thing)
          (region-beginning) (region-end)
          (member "reverse" args) (member "skip" args) arg))
+      -->
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -478,8 +479,7 @@ apply to each contiguous component of the region."
   :description "Iterate"
   (interactive (list (transient-args transient-current-command)))
   (let ((count (read-number "Iterations: " 0)))
-    (conn--thread -->
-        (conn--kapply-infinite-iterator)
+    (conn--thread (conn--kapply-infinite-iterator) -->
       (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
       (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
       (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -499,8 +499,7 @@ apply to each contiguous component of the region."
   :description "Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (conn--thread -->
-      (funcall iterator (member "reverse" args))
+  (conn--thread (funcall iterator (member "reverse" args)) -->
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
     (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
@@ -525,7 +524,7 @@ apply to each contiguous component of the region."
   :key "m"
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread -->
+  (conn--thread
       (let ((matches
              (if (bound-and-true-p multi-isearch-buffer-list)
                  (mapcan 'conn--isearch-matches
@@ -541,6 +540,7 @@ apply to each contiguous component of the region."
         (cl-loop for (beg . end) in matches
                  collect (cons (conn--create-marker beg)
                                (conn--create-marker end))))
+      -->
     (conn--kapply-region-iterator --> (member "reverse" args))
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
@@ -576,7 +576,7 @@ apply to each contiguous component of the region."
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
-  (conn--thread -->
+  (conn--thread
       (save-excursion
         (goto-char (point-min))
         (let (regions)
@@ -585,6 +585,7 @@ apply to each contiguous component of the region."
                         (prop-match-end match))
                   regions))
           regions))
+      -->
     (conn--kapply-region-iterator --> (not (member "reverse" args)))
     (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
     (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)

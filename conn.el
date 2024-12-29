@@ -95,7 +95,7 @@
   :group 'conn)
 
 (defgroup conn-key-remapping nil
-  "Conn-mode states."
+  "Conn-mode key remapping."
   :prefix "conn-"
   :group 'conn)
 
@@ -454,12 +454,12 @@ Used to restore previous value when `conn-mode' is disabled.")
 ;;;; Utilities
 
 (eval-and-compile
-  (defmacro conn--thread (needle form &rest forms)
+  (defmacro conn--thread (form needle &rest forms)
     (declare (indent 2)
              (debug (symbolp form)))
     (if forms
         `(let ((,needle ,form))
-           (conn--thread ,needle ,@forms))
+           (conn--thread ,(car forms) ,needle ,@(cdr forms)))
       form))
 
   (defun conn--stringify (&rest symbols-or-strings)
@@ -568,8 +568,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
-  (cl-loop for mode in (conn--thread -mode->
-                           'major-mode
+  (cl-loop for mode in (conn--thread 'major-mode -mode->
                          (buffer-local-value -mode-> (or buffer (current-buffer)))
                          (conn--derived-mode-all-parents -mode->))
            for prop = (get mode property) when prop return prop))
@@ -1495,7 +1494,7 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-advance-region (region)
   (pcase region
     (`(,beg . ,end)
-     (when-let ((buffer (and region (marker-buffer beg))))
+     (when-let ((buffer (ignore-errors (marker-buffer beg))))
        (when (not (eq buffer (current-buffer)))
          (pop-to-buffer-same-window buffer)
          (deactivate-mark t)
@@ -1512,8 +1511,8 @@ Possibilities: \\<query-replace-map>
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
   (prog1
-      (conn--thread -->
-          (conn-bounds-of-things-in-region thing beg end)
+      (conn--thread
+          (conn-bounds-of-things-in-region thing beg end) -->
         (if skip-empty
             (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
           -->)
@@ -2949,8 +2948,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                   (when-let ((prefix (overlay-get ov 'prefix-overlay)))
                     (overlay-put prefix 'face nil)
                     (overlay-put prefix 'after-string nil))
-                (conn--thread -->
-                    (overlay-get ov prop)
+                (conn--thread (overlay-get ov prop) -->
                   (substring --> 1)
                   (overlay-put ov prop -->))
                 (move-overlay ov
@@ -3249,11 +3247,11 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
              ('backward-delete-arg
               (setq thing-arg (floor thing-arg 10)))
              ('forward-delete-arg
-              (setq thing-arg (conn--thread -->
-                                  (log thing-arg 10)
-                                (floor -->)
-                                (expt 10 -->)
-                                (mod thing-arg -->))))
+              (setq thing-arg (thread-last
+                                (log thing-arg 10)
+                                floor
+                                (expt 10)
+                                (mod thing-arg))))
              ('reset-arg
               (setq thing-arg nil))
              ('negative-argument
@@ -3557,8 +3555,9 @@ Expansions and contractions are provided by functions in
   (set-register register (conn--make-narrow-register)))
 
 (defun conn--narrow-ring-record (beg end)
-  (conn--thread -->
+  (conn--thread
       (cons (conn--create-marker beg) (conn--create-marker end))
+      -->
     (setq conn-narrow-ring (cons --> (delete --> conn-narrow-ring)))))
 
 (defun conn-cycle-narrowings (arg)
@@ -3885,8 +3884,7 @@ instances of from-string.")
                  (if (eq (selected-frame) (conn-tab-register-frame val))
                      (when-let ((index (conn--get-tab-index-by-cookie
                                         (conn-tab-register-cookie val))))
-                       (conn--thread -->
-                           index
+                       (conn--thread index -->
                          (nth --> (funcall tab-bar-tabs-function))
                          (if (eq (car -->) 'current-tab)
                              (propertize "*CURRENT TAB*" 'face 'error)
@@ -4699,14 +4697,14 @@ If ARG is a numeric prefix argument kill region to a register."
          (call-interactively (conn--without-conn-maps
                                (key-binding conn-backward-delete-char-keys t))))
         ((numberp arg)
-         (conn--thread -->
-             (concat "Kill "
-                     (if (bound-and-true-p rectangle-mark-mode)
-                         "Rectangle "
-                       " ")
-                     "to register:")
-           (register-read-with-preview -->)
-           (copy-to-register --> nil nil t t)))
+         (thread-first
+           (concat "Kill "
+                   (if (bound-and-true-p rectangle-mark-mode)
+                       "Rectangle "
+                     " ")
+                   "to register:")
+           (register-read-with-preview)
+           (copy-to-register nil nil t t)))
         (t (call-interactively
             (conn--without-conn-maps
               (key-binding conn-kill-region-keys t))))))
@@ -4922,7 +4920,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;; A simple version of hyperbole's hycontrol-windows
 
 (defgroup conn-wincontrol nil
-  "Conn-mode marks."
+  "Conn-mode WinControl."
   :prefix "conn-wincontrol-"
   :group 'conn)
 
@@ -5277,8 +5275,8 @@ When called interactively N is `last-command-event'."
 (defun conn-wincontrol-forward-delete-arg ()
   "Delete most significant digit of prefix arg."
   (interactive)
-  (setq conn--wincontrol-arg (conn--thread -->
-                                 (log conn--wincontrol-arg 10)
+  (setq conn--wincontrol-arg (conn--thread (log conn--wincontrol-arg 10)
+                                 -->
                                (floor -->)
                                (expt 10 -->)
                                (mod conn--wincontrol-arg -->))))

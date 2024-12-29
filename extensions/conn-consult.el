@@ -202,9 +202,12 @@ THING BEG and END are bound in BODY."
   (defun conn-kapply-grep-candidates (cands)
     (thread-last
       (mapcar (lambda (cand)
-                (pcase-let ((`(,line-pos (,beg . ,end) . _)
+                (pcase-let ((`(,line-marker (,beg . ,end) . _)
                              (consult--grep-position cand)))
-                  (cons (+ line-pos beg) (+ line-pos end))))
+                  (cons (move-marker line-marker
+                                     (+ line-marker beg)
+                                     (marker-buffer line-marker))
+                        (+ line-marker end))))
               cands)
       (apply-partially 'conn--kapply-region-iterator)
       (funcall-interactively 'conn-regions-kapply-prefix)))
@@ -223,9 +226,10 @@ THING BEG and END are bound in BODY."
                (dolist (line lines)
                  (set-marker line nil))
              (when-let ((line (pop lines)))
-               (cons line (save-excursion
-                            (goto-char line)
-                            (conn--create-marker (line-end-position)))))))))))
+               (conn--kapply-advance-region
+                (cons line (save-excursion
+                             (goto-char line)
+                             (conn--create-marker (line-end-position))))))))))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 
   (defvar-keymap conn-embark-consult-location-map
