@@ -1258,10 +1258,9 @@ If BUFFER is nil check `current-buffer'."
   (let* ((posn (event-start event))
 	 (point (posn-point posn)))
     (with-current-buffer (window-buffer (posn-window posn))
-      (dolist (ov (seq-filter (lambda (ov)
-                                (eq (overlay-get ov 'category) 'conn--dot-overlay))
-                              (overlays-at point)))
-        (delete-overlay ov)))))
+      (dolist (ov (overlays-at point))
+        (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
+          (delete-overlay ov))))))
 
 (defun conn-delete-dots ()
   (interactive)
@@ -1953,9 +1952,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--delete-mark-cursor ()
   (save-restriction
     (widen)
-    (dolist (ov (conn--all-overlays 'conn--mark-cursor-p
-                                    (point-min) (point-max)))
-      (delete-overlay ov)))
+    (thread-last
+      (conn--all-overlays 'conn--mark-cursor-p (point-min) (point-max))
+      (mapc #'delete-overlay)))
   (setq conn--mark-cursor nil))
 
 (defun conn-bounds-of-inner-thing (thing bounds)
@@ -3275,14 +3274,16 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                                   `(metadata
                                     ,(cons 'affixation-function
                                            (conn--dispatch-make-command-affixation
-                                            conn-dispatch-command-map))
+                                            (make-composed-keymap
+                                             action-maps
+                                             conn-dispatch-command-map)))
                                     (category . conn-dispatch-command))
                                 (complete-with-action action obarray string pred)))
                             (lambda (sym)
                               (and (functionp sym)
                                    (not (eq sym 'help))
                                    (or (get sym :conn-command-thing)
-                                       (where-is-internal sym (list conn-dispatch-command-map) t))))
+                                       (where-is-internal sym action-maps t))))
                             t))))
               (conn-dispatch-read-thing-mode 1)
               (go :loop))
@@ -3354,8 +3355,7 @@ seconds."
            (funcall action window pt conn-this-command-thing))
          while repeat)
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-        (dolist (ov ovs)
-          (delete-overlay ov))))))
+        (mapc #'delete-overlay ovs)))))
 
 (defun conn-dispatch-over-things (thing finder action arg &optional repeat)
   "See `conn-dispatch-on-things', with default action `conn-dispatch-over'."
@@ -3384,7 +3384,7 @@ seconds."
                (pt (overlay-start prefix)))
           (isearch-done)
           (goto-char pt))
-      (dolist (ov (cdar prefix-ovs)) (delete-overlay ov)))))
+      (mapc #'delete-overlay (cadr prefix-ovs)))))
 
 
 ;;;; Expand Region
