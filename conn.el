@@ -2503,12 +2503,6 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 (defvar conn-dispatch-all-things-collector-alist
   (list (cons t 'conn--dispatch-all-things-1)))
 
-(defvar-keymap conn-dispatch-command-map
-  "C-h" 'help
-  "." 'reset-arg
-  "C-d" 'forward-delete-arg
-  "C-w" 'backward-delete-arg)
-
 (defvar conn-dispatch-action-maps
   (list (define-keymap
           "[" 'conn-dispatch-kill-append
@@ -3213,7 +3207,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 (defun conn--dispatch-read-thing (action-maps &optional default-action)
   (let ((conn-dispatch-action-override-maps action-maps)
         (prompt (substitute-command-keys
-                 (concat "\\<conn-dispatch-command-map>Thing (arg: "
+                 (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
                          ", \\[reset-arg] reset arg; "
                          "\\[help] commands): %s")))
@@ -3222,8 +3216,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
     (conn--with-state conn-state
       (conn-dispatch-read-thing-mode 1)
       (unwind-protect
-          (cl-prog
-           nil
+          (cl-tagbody
            :read-command
            (setq keys (read-key-sequence
                        (format prompt
@@ -3274,16 +3267,14 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                                   `(metadata
                                     ,(cons 'affixation-function
                                            (conn--dispatch-make-command-affixation
-                                            (make-composed-keymap
-                                             action-maps
-                                             conn-dispatch-command-map)))
+                                            conn--dispatch-overriding-map))
                                     (category . conn-dispatch-command))
                                 (complete-with-action action obarray string pred)))
                             (lambda (sym)
                               (and (functionp sym)
                                    (not (eq sym 'help))
                                    (or (get sym :conn-command-thing)
-                                       (where-is-internal sym action-maps t))))
+                                       (where-is-internal sym (list conn--dispatch-overriding-map) t))))
                             t))))
               (conn-dispatch-read-thing-mode 1)
               (go :loop))
@@ -3293,7 +3284,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
                      current-prefix-arg)))
-             ((guard (where-is-internal cmd action-maps t))
+             ((guard (where-is-internal cmd (list conn--dispatch-overriding-map) t))
               (setq action (unless (eq cmd action) cmd)))
              (_
               (setq invalid t)))
