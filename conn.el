@@ -3218,7 +3218,8 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
     (conn--with-state conn-state
       (conn-dispatch-read-thing-mode 1)
       (unwind-protect
-          (cl-tagbody
+          (cl-prog
+           nil
            :read-command
            (setq keys (read-key-sequence
                        (format prompt
@@ -3919,6 +3920,82 @@ Interactively `region-beginning' and `region-end'."
   (interactive)
   (isearch-done)
   (conn--push-ephemeral-mark isearch-other-end))
+
+;;;;; Kmacro Commands
+
+(defun conn-kmacro-replace-region (string beg end)
+  (interactive
+   (nconc
+    (list (filter-buffer-substring (region-beginning) (region-end)))
+    (take 2 (cdr (conn--read-thing-region "Define Region")))))
+  (thread-first
+    (conn--kapply-matches string beg end nil nil current-prefix-arg)
+    conn--kapply-merge-undo
+    conn--kapply-save-restriction
+    conn--kapply-save-excursion
+    conn--kapply-change-region
+    (conn--kapply-with-state 'conn-emacs-state)
+    conn--kmacro-apply))
+
+(defun conn-kmacro-emacs-on-region (string beg end)
+  (interactive
+   (nconc
+    (list (filter-buffer-substring (region-beginning) (region-end)))
+    (take 2 (cdr (conn--read-thing-region "Define Region")))))
+  (thread-first
+    (conn--kapply-matches string beg end nil nil current-prefix-arg)
+    conn--kapply-merge-undo
+    conn--kapply-save-restriction
+    conn--kapply-save-excursion
+    (conn--kapply-with-state 'conn-emacs-state)
+    conn--kmacro-apply))
+
+(defun conn-kmacro-conn-on-region (string beg end)
+  (interactive
+   (nconc
+    (list (filter-buffer-substring (region-beginning) (region-end)))
+    (take 2 (cdr (conn--read-thing-region "Define Region")))))
+  (thread-first
+    (conn--kapply-matches string beg end nil nil current-prefix-arg)
+    conn--kapply-merge-undo
+    conn--kapply-save-restriction
+    conn--kapply-save-excursion
+    (conn--kapply-with-state 'conn-state)
+    conn--kmacro-apply))
+
+(defun conn-kmacro-replace-rectangle ()
+  (interactive)
+  (thread-first
+    (conn--kapply-region-iterator
+     (extract-rectangle-bounds (region-beginning) (region-end)))
+    conn--kapply-merge-undo
+    conn--kapply-save-restriction
+    conn--kapply-save-excursion
+    conn--kapply-change-region
+    (conn--kapply-with-state 'conn-emacs-state)
+    conn--kmacro-apply))
+
+(defun conn-kmacro-emacs-on-rectangle ()
+  (interactive)
+  (thread-first
+    (conn--kapply-region-iterator
+     (extract-rectangle-bounds (region-beginning) (region-end)))
+    conn--kapply-merge-undo
+    conn--kapply-save-restriction
+    conn--kapply-save-excursion
+    (conn--kapply-with-state 'conn-emacs-state)
+    conn--kmacro-apply))
+
+(defun conn-kmacro-conn-on-rectangle ()
+  (interactive)
+  (thread-first
+    (conn--kapply-region-iterator
+     (extract-rectangle-bounds (region-beginning) (region-end)))
+    conn--kapply-merge-undo
+    conn--kapply-save-restriction
+    conn--kapply-save-excursion
+    (conn--kapply-with-state 'conn-state)
+    conn--kmacro-apply))
 
 ;;;;; Editing Commands
 
@@ -5608,11 +5685,13 @@ When ARG is nil the root window is used."
   "c" 'conn-region-case-prefix
   "D" 'conn-duplicate-and-comment-region
   "d" 'conn-duplicate-region
-  "e c" 'conn-split-region-on-regexp
   "g" 'conn-rgrep-region
   "i" 'clone-indirect-buffer
   "k" 'delete-region
   "l" 'conn-join-lines
+  "m t" 'conn-kmacro-replace-region
+  "m e" 'conn-kmacro-emacs-on-region
+  "m c" 'conn-kmacro-conn-on-region
   "I" 'indent-rigidly
   "N" 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
@@ -5692,7 +5771,10 @@ When ARG is nil the root window is used."
   "d" 'open-rectangle
   "<backspace>" 'clear-rectangle
   "C-d" 'delete-whitespace-rectangle
-  "#" 'rectangle-number-lines)
+  "#" 'rectangle-number-lines
+  "r m t" 'conn-kmacro-replace-rectangle
+  "r m e" 'conn-kmacro-emacs-on-rectangle
+  "r m c" 'conn-kmacro-conn-on-rectangle)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
