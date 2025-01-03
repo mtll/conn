@@ -1564,11 +1564,12 @@ Possibilities: \\<query-replace-map>
        (when-let ((pt (pop points)))
          (conn--kapply-advance-region (cons pt pt)))))))
 
-(defun conn--kapply-matches (string beg end &optional regexp-flag reverse delimited-flag query-flag)
+(defun conn--kapply-matches (string beg end &optional regexp-flag reverse delimited-flag query-flag region-first-flag)
   (let ((matches (save-excursion
                    (goto-char beg)
                    (cl-loop
                     with matches = nil
+                    with region = nil
                     while (replace-search string end regexp-flag
                                           delimited-flag case-fold-search)
                     for (mb me . _) = (match-data t)
@@ -1577,6 +1578,12 @@ Possibilities: \\<query-replace-map>
                                 (conn--create-marker me))
                           matches)
                     finally return (if reverse matches (nreverse matches))))))
+    (when-let ((_ region-first-flag)
+               (first (seq-find (pcase-lambda (`(,mb . ,me))
+                                  (and (= mb (region-beginning))
+                                       (= me (region-end))))
+                                matches)))
+      (setq matches (cons first (delete first matches))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -3932,7 +3939,7 @@ Interactively `region-beginning' and `region-end'."
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg)
+      (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
       conn--kapply-merge-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
@@ -3947,7 +3954,7 @@ Interactively `region-beginning' and `region-end'."
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg)
+      (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
       conn--kapply-merge-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
@@ -3961,7 +3968,7 @@ Interactively `region-beginning' and `region-end'."
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg)
+      (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
       conn--kapply-merge-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
