@@ -504,12 +504,12 @@ Used to restore previous value when `conn-mode' is disabled.")
                                      #'eq)))
      ,(macroexp-progn body)))
 
-(defmacro conn--with-region-emphasis (&rest body)
-  (declare (indent 0))
+(defmacro conn--with-region-emphasis (beg end &rest body)
+  (declare (indent 2))
   (let ((beg-ol (gensym "beg-ol"))
         (end-ol (gensym "end-ol")))
-    `(let ((,beg-ol (make-overlay (point-min) beg))
-           (,end-ol (make-overlay end (point-max))))
+    `(let ((,beg-ol (make-overlay (point-min) ,beg))
+           (,end-ol (make-overlay ,end (point-max))))
        (unwind-protect
            (progn
              (overlay-put ,beg-ol 'face 'shadow)
@@ -691,7 +691,7 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--read-from-with-preview (prompt beg end &optional regexp-flag)
   (let ((default (conn--replace-read-default)))
-    (conn--with-region-emphasis
+    (conn--with-region-emphasis beg end
       (minibuffer-with-setup-hook
           (minibuffer-lazy-highlight-setup
            :case-fold case-fold-search
@@ -3709,7 +3709,7 @@ instances of from-string.")
 
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
   (unless noerror (barf-if-buffer-read-only))
-  (conn--with-region-emphasis
+  (conn--with-region-emphasis beg end
     (save-mark-and-excursion
       (let* ((delimited-flag (and current-prefix-arg
                                   (not (eq current-prefix-arg '-))))
