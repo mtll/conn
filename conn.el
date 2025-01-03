@@ -1569,7 +1569,6 @@ Possibilities: \\<query-replace-map>
                    (goto-char beg)
                    (cl-loop
                     with matches = nil
-                    with region = nil
                     while (replace-search string end regexp-flag
                                           delimited-flag case-fold-search)
                     for (mb me . _) = (match-data t)
@@ -1578,11 +1577,11 @@ Possibilities: \\<query-replace-map>
                                 (conn--create-marker me))
                           matches)
                     finally return (if reverse matches (nreverse matches))))))
-    (when-let ((_ region-first-flag)
-               (first (seq-find (pcase-lambda (`(,mb . ,me))
-                                  (and (= mb (region-beginning))
-                                       (= me (region-end))))
-                                matches)))
+    (when-let ((first (and region-first-flag
+                           (seq-find (pcase-lambda (`(,mb . ,me))
+                                       (and (= mb (region-beginning))
+                                            (= me (region-end))))
+                                     matches))))
       (setq matches (cons first (delete first matches))))
     (lambda (state)
       (pcase state
