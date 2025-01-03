@@ -3928,40 +3928,43 @@ Interactively `region-beginning' and `region-end'."
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
-  (thread-first
-    (conn--kapply-matches string beg end nil nil current-prefix-arg)
-    conn--kapply-merge-undo
-    conn--kapply-save-restriction
-    conn--kapply-save-excursion
-    conn--kapply-change-region
-    (conn--kapply-with-state 'conn-emacs-state)
-    conn--kmacro-apply))
+  (conn--with-region-emphasis beg end
+    (thread-first
+      (conn--kapply-matches string beg end nil nil current-prefix-arg)
+      conn--kapply-merge-undo
+      conn--kapply-save-restriction
+      conn--kapply-save-excursion
+      conn--kapply-change-region
+      (conn--kapply-with-state 'conn-emacs-state)
+      conn--kmacro-apply)))
 
 (defun conn-kmacro-emacs-on-region (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
-  (thread-first
-    (conn--kapply-matches string beg end nil nil current-prefix-arg)
-    conn--kapply-merge-undo
-    conn--kapply-save-restriction
-    conn--kapply-save-excursion
-    (conn--kapply-with-state 'conn-emacs-state)
-    conn--kmacro-apply))
+  (conn--with-region-emphasis beg end
+    (thread-first
+      (conn--kapply-matches string beg end nil nil current-prefix-arg)
+      conn--kapply-merge-undo
+      conn--kapply-save-restriction
+      conn--kapply-save-excursion
+      (conn--kapply-with-state 'conn-emacs-state)
+      conn--kmacro-apply)))
 
 (defun conn-kmacro-conn-on-region (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
-  (thread-first
-    (conn--kapply-matches string beg end nil nil current-prefix-arg)
-    conn--kapply-merge-undo
-    conn--kapply-save-restriction
-    conn--kapply-save-excursion
-    (conn--kapply-with-state 'conn-state)
-    conn--kmacro-apply))
+  (conn--with-region-emphasis beg end
+    (thread-first
+      (conn--kapply-matches string beg end nil nil current-prefix-arg)
+      conn--kapply-merge-undo
+      conn--kapply-save-restriction
+      conn--kapply-save-excursion
+      (conn--kapply-with-state 'conn-state)
+      conn--kmacro-apply)))
 
 (defun conn-kmacro-replace-rectangle ()
   (interactive)
