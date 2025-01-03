@@ -1668,17 +1668,19 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (prog1
           (funcall iterator state)
-        (when (eq state :finalize)
-          (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
-            (when state
-              (with-current-buffer buf
-                (funcall state)
-                (setq conn-previous-state prev-state)))))
-        (when conn-local-mode
-          (unless (alist-get (current-buffer) buffer-states)
-            (setf (alist-get (current-buffer) buffer-states)
-                  (list conn-current-state conn-previous-state)))
-          (funcall transition))))))
+        (pcase state
+          (:finalize
+           (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
+             (when state
+               (with-current-buffer buf
+                 (funcall state)
+                 (setq conn-previous-state prev-state)))))
+          (_
+           (when conn-local-mode
+             (unless (alist-get (current-buffer) buffer-states)
+               (setf (alist-get (current-buffer) buffer-states)
+                     (list conn-current-state conn-previous-state)))
+             (funcall transition))))))))
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
