@@ -1316,22 +1316,23 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--bounds-of-dots (&rest _)
   (conn--dot-mode 1)
-  (unwind-protect
-      (let ((dots (thread-last
-                    (progn
-                      (recursive-edit)
-                      (nreverse conn--dots))
-                    (seq-filter 'overlay-buffer)
-                    (mapcar (lambda (ov)
-                              (prog1
-                                  (if (overlay-get ov 'point)
-                                      (cons (conn--overlay-start-marker ov)
-                                            (conn--overlay-start-marker ov))
-                                    (conn--overlay-bounds-markers ov))
-                                (delete-overlay ov)))))))
-        (append (list (region-beginning) (region-end)) dots))
-    (conn--dot-mode -1)
-    (deactivate-mark t)))
+  (save-mark-and-excursion
+    (unwind-protect
+        (let ((dots (thread-last
+                      (progn
+                        (recursive-edit)
+                        (nreverse conn--dots))
+                      (seq-filter 'overlay-buffer)
+                      (mapcar (lambda (ov)
+                                (prog1
+                                    (if (overlay-get ov 'point)
+                                        (cons (conn--overlay-start-marker ov)
+                                              (conn--overlay-start-marker ov))
+                                      (conn--overlay-bounds-markers ov))
+                                  (delete-overlay ov)))))))
+          (append (list (region-beginning) (region-end)) dots))
+      (conn--dot-mode -1)
+      (deactivate-mark t))))
 
 (setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
       'conn--bounds-of-dots)
@@ -1962,8 +1963,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
 (defun conn--delete-mark-cursor ()
-  (save-restriction
-    (widen)
+  (without-restriction
     (thread-last
       (conn--all-overlays 'conn--mark-cursor-p (point-min) (point-max))
       (mapc #'delete-overlay)))
