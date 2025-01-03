@@ -35,6 +35,8 @@
   (require 'subr-x)
   (require 'map))
 
+(declare-function extract-rectangle-bounds "rect")
+
 
 ;;;; Variables
 
@@ -3968,6 +3970,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-kmacro-replace-rectangle ()
   (interactive)
+  (require 'rect)
   (thread-first
     (conn--kapply-region-iterator
      (extract-rectangle-bounds (region-beginning) (region-end)))
@@ -3980,6 +3983,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-kmacro-emacs-on-rectangle ()
   (interactive)
+  (require 'rect)
   (thread-first
     (conn--kapply-region-iterator
      (extract-rectangle-bounds (region-beginning) (region-end)))
@@ -3991,6 +3995,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-kmacro-conn-on-rectangle ()
   (interactive)
+  (require 'rect)
   (thread-first
     (conn--kapply-region-iterator
      (extract-rectangle-bounds (region-beginning) (region-end)))
