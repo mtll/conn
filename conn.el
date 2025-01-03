@@ -1617,6 +1617,8 @@ Possibilities: \\<query-replace-map>
         (:finalize
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
+           (if conn-kmacro-apply-error
+               (cancel-change-group handle))
            (accept-change-group handle)
            (undo-amalgamate-change-group handle)))
         (_
