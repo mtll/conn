@@ -1229,7 +1229,7 @@ If BUFFER is nil check `current-buffer'."
                    (delete-overlay ov)))))
     (let ((dot (make-overlay beg end buffer))
           (faces (thread-last
-                   (append (overlays-at (1- beg)) (overlays-at (1+ end)))
+                   (append (overlays-at (1- beg)) (overlays-at end))
                    (seq-filter (lambda (ov)
                                  (eq 'conn--dot-overlay (overlay-get ov 'category))))
                    (mapcar (lambda (ov) (overlay-get ov 'face)))
