@@ -3711,11 +3711,12 @@ instances of from-string.")
 (defun conn--replace-read-default ()
   (let* ((beg (region-beginning))
          (end (region-end)))
-    (when (or (< (- end beg) 32)
-              (<= end (save-excursion
-                        (goto-char beg)
-                        (pos-eol))))
-      (buffer-substring-no-properties beg end))))
+    (if (or (< (- end beg) 32)
+            (<= end (save-excursion
+                      (goto-char beg)
+                      (pos-eol))))
+        (buffer-substring-no-properties beg end)
+      "")))
 
 (defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
   (unless noerror (barf-if-buffer-read-only))
