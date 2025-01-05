@@ -761,21 +761,23 @@ If BUFFER is nil check `current-buffer'."
     ov))
 
 (defun conn--preview-get-windows (in-windows)
-  (cl-loop for win in (pcase-exhaustive in-windows
-                        ('nil (list (selected-window)))
-                        ('t (window-list-1 nil nil 'visible))
-                        ((pred listp)
-                         (cl-loop for win in (window-list-1 nil nil 'visible)
-                                  when (memq (buffer-local-value
-                                              'major-mode (window-buffer win))
-                                             in-windows)
-                                  collect win))
-                        ((pred functionp)
-                         (cl-loop for win in (window-list-1 nil nil 'visible)
-                                  when (funcall in-windows win) collect win)))
-           unless (memq (buffer-local-value 'major-mode (window-buffer win))
-                        conn-dispatch-thing-ignored-modes)
-           collect win))
+  (pcase-exhaustive in-windows
+    ((and 'nil
+          (guard (not (apply #'derived-mode-p conn-dispatch-thing-ignored-modes))))
+     (list (selected-window)))
+    ((pred functionp)
+     (cl-loop for win in (window-list-1 nil nil 'visible)
+              unless (or (apply #'provided-mode-derived-p
+                                (buffer-local-value 'major-mode (window-buffer win))
+                                conn-dispatch-thing-ignored-modes)
+                         (not (funcall in-windows win)))
+              collect win))
+    ('t
+     (cl-loop for win in (window-list-1 nil nil 'visible)
+              unless (apply #'provided-mode-derived-p
+                            (buffer-local-value 'major-mode (window-buffer win))
+                            conn-dispatch-thing-ignored-modes)
+              collect win))))
 
 (defun conn--string-preview-overlays-1 (win string &optional dir)
   (with-selected-window win
@@ -1258,7 +1260,7 @@ If BUFFER is nil check `current-buffer'."
 (defun conn-delete-dot-at-click (event)
   (interactive "e")
   (let* ((posn (event-start event))
-	 (point (posn-point posn)))
+         (point (posn-point posn)))
     (with-current-buffer (window-buffer (posn-window posn))
       (dolist (ov (overlays-at point))
         (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
@@ -2556,10 +2558,10 @@ All dispatch actions must be in a keymap in this list.")
           "l" 'forward-line
           "u" 'forward-symbol
           "U" `(symbol
-                ,(apply-partially 'conn--dispatch-all-things 'symbol)
+                ,(apply-partially 'conn--dispatch-all-things 'symbol t)
                 . conn-dispatch-goto)
           "O" `(word
-                ,(apply-partially 'conn--dispatch-all-things 'word)
+                ,(apply-partially 'conn--dispatch-all-things 'word t)
                 . conn-dispatch-goto)))
   "List of keymaps containing thing commands that overrides default bindings.
 Members of these keymaps can be either a command with a thing property or
@@ -2921,11 +2923,21 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
           (cancel-change-group cg1)
           (cancel-change-group cg2))))))
 
+(defun conn--dispatch-make-window-predicate (thing)
+  (if-let ((modes (get thing :conn-thing-modes)))
+      (lambda (win)
+        (apply #'provided-mode-derived-p
+               (buffer-local-value 'major-mode (window-buffer win))
+               modes))
+    (lambda (_) t)))
+
 (defun conn--dispatch-thing-bounds (thing arg)
-  (save-excursion
-    (forward-thing thing 1)
-    (forward-thing thing -1)
-    (cons (point) (progn (forward-thing thing arg) (point)))))
+  (if (get thing 'forward-op)
+      (save-excursion
+        (forward-thing thing 1)
+        (forward-thing thing -1)
+        (cons (point) (progn (forward-thing thing arg) (point))))
+    (bounds-of-thing-at-point thing)))
 
 (defun conn--dispatch-make-command-affixation (keymap)
   (lambda (command-names)
@@ -3049,11 +3061,32 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
              (conn--make-preview-overlay pt 1 thing))))
 
 (defun conn--dispatch-all-things (thing &optional in-windows)
-  (cl-loop for win in (conn--preview-get-windows in-windows)
+  (cl-loop for win in (conn--preview-get-windows
+                       (pcase in-windows
+                         ('t (conn--dispatch-make-window-predicate thing))
+                         ('nil nil)
+                         ((pred functionp)
+                          (let ((thing-pred (conn--dispatch-make-window-predicate thing)))
+                            (lambda (win)
+                              (and (funcall thing-pred win)
+                                   (funcall in-windows win)))))))
            nconc (with-selected-window win
                    (if-let ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
                        (funcall fn)
                      (funcall (alist-get t conn-dispatch-all-things-collector-alist) thing)))))
+
+(defun conn--dispatch-re-matches (regexp &optional in-windows)
+  (cl-loop for win in (conn--preview-get-windows in-windows)
+           nconc (with-selected-window win
+                   (with-restriction (window-start) (window-end)
+                     (save-excursion
+                       (goto-char (point-min))
+                       (save-match-data
+                         (cl-loop while (re-search-forward regexp nil t)
+                                  collect
+                                  (conn--make-preview-overlay
+                                   (match-beginning 0) (- (match-end 0)
+                                                          (match-beginning 0))))))))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))
@@ -3082,10 +3115,19 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                        (concat prefix)))))
     (unwind-protect
         (progn
-          (dolist (win (conn--preview-get-windows in-windows))
-            (setq ovs (nconc (with-selected-window win
-                               (conn--dispatch-things-with-prefix-1 things prefix))
-                             ovs)))
+          (dolist (thing (ensure-list things))
+            (dolist (win (conn--preview-get-windows
+                          (pcase in-windows
+                            ('t (conn--dispatch-make-window-predicate thing))
+                            ('nil nil)
+                            ((pred functionp)
+                             (let ((thing-pred (conn--dispatch-make-window-predicate thing)))
+                               (lambda (win)
+                                 (and (funcall thing-pred win)
+                                      (funcall in-windows win))))))))
+              (setq ovs (nconc (with-selected-window win
+                                 (conn--dispatch-things-with-prefix-1 things prefix))
+                               ovs))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -3115,7 +3157,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (progn
           (dolist (win (window-list-1 nil nil 'visible))
             (with-selected-window win
-              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+              (unless (apply #'derived-mode-p conn-dispatch-thing-ignored-modes)
                 (save-excursion
                   (with-restriction (window-start) (window-end)
                     (goto-char (point-min))
@@ -3143,7 +3185,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (progn
           (dolist (win (window-list-1 nil nil 'visible))
             (with-selected-window win
-              (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+              (unless (apply #'derived-mode-p conn-dispatch-thing-ignored-modes)
                 (save-excursion
                   (with-restriction (window-start) (window-end)
                     (goto-char (point-min))
@@ -3165,7 +3207,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
   (let (ovs)
     (dolist (win (window-list-1 nil nil 'visible) ovs)
       (with-selected-window win
-        (unless (memq major-mode conn-dispatch-thing-ignored-modes)
+        (unless (apply #'derived-mode-p conn-dispatch-thing-ignored-modes)
           (save-excursion
             (with-restriction (window-start) (window-end)
               (goto-char (point-min))
@@ -6122,6 +6164,8 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-end-of-subtree "org")
   (declare-function org-at-heading-p "org")
   (declare-function org-with-limited-levels "org-macs")
+  (declare-function org-in-regexp "org-macs")
+  (defvar org-link-any-re)
 
   (conn-register-thing
    'org-paragraph
@@ -6133,6 +6177,31 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing-commands
    'org-paragraph 'conn-sequential-thing-handler
    'org-forward-paragraph 'org-backward-paragraph)
+
+  (conn-register-thing
+   'org-link
+   :dispatch-provider (lambda () (conn--dispatch-re-matches org-link-any-re t))
+   :bounds-op (lambda () (org-in-regexp org-link-any-re))
+   :mark-key "O"
+   :modes 'org-mode)
+
+  (conn-define-dispatch-action (conn-open-org-link "Open Link")
+      (window pt _thing)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (org-open-at-point-global))))
+
+  (setf (alist-get 'org-link conn-dispatch-default-actions-alist)
+        'conn-open-org-link)
+
+  (conn-register-thing-commands
+   'org-link 'conn-individual-thing-handler
+   'org-next-link 'org-previous-link)
+
+  (conn-register-thing-commands
+   'org-link nil
+   'org-insert-link-global 'org-store-link 'org-insert-link)
 
   (defun conn-org-sentence-forward (arg)
     (interactive "p")
@@ -6154,11 +6223,11 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing
    'org-element
    :mark-key "m"
-   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-element '(org-mode))
    :beg-op 'org-backward-element
    :end-op 'org-forward-element
    :modes 'org-mode)
 
+  ;; FIXME: org-element all broken
   (conn-register-thing-commands
    'org-element
    (lambda (_beg)
@@ -6186,7 +6255,7 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing
    'org-heading
    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
-   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading '(org-mode))
+   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading t)
    :forward-op 'org-next-visible-heading
    :modes 'org-mode
    :mark-key "H")
@@ -6422,6 +6491,6 @@ determine if `conn-local-mode' should be enabled."
    'treesit-beginning-of-defun))
 
 ;; Local Variables:
-;; outline-regexp: ";;;;* [^ 	\n]"
+;; outline-regexp: ";;;;* [^    \n]"
 ;; End:
 ;;; conn.el ends here
