@@ -25,6 +25,25 @@
 (require 'embark)
 (require 'outline)
 
+(conn-define-dispatch-action (conn-embark-dwim "Embark-DWIM")
+    (window pt _thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (embark-dwim))))
+
+(conn-define-dispatch-action (conn-embark-act "Embark")
+    (window pt _thing)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (embark-act))))
+
+(defvar-keymap conn-embark-dispatch-map
+  "<tab>" 'conn-embark-dwim
+  "," 'conn-embark-act)
+(cl-pushnew conn-embark-dispatch-map conn-dispatch-action-maps)
+
 (defun conn-narrow-indirect-to-heading ()
   (interactive)
   (outline-mark-subtree)
