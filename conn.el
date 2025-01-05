@@ -3671,7 +3671,7 @@ With prefix arg REGISTER add to narrow ring register instead."
                   '((isearch-message-prefix . "[NARROW] ")))
     (isearch-backward)))
 
-
+  
 ;;;; Commands
 
 ;;;;; Replace
@@ -5751,8 +5751,8 @@ When ARG is nil the root window is used."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  "s" 'conn-isearch-forward-region
-  "r" 'conn-isearch-backward-region
+  "s" 'conn-isearch-region-forward
+  "r" 'conn-isearch-region-backward
   "o" 'occur
   "l" 'locate
   "m B" 'multi-isearch-buffers-regexp
@@ -6303,6 +6303,66 @@ determine if `conn-local-mode' should be enabled."
    'sexp 'conn-paredit-sexp-handler
    'paredit-forward
    'paredit-backward))
+
+(with-eval-after-load 'smartparens
+  (declare-function sp-forward-sexp "smartparens")
+  (declare-function sp-backward-sexp "smartparens")
+  (declare-function sp-end-of-sexp "smartparens")
+  (declare-function sp-beginning-of-sexp "smartparens")
+
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-state 'smartparens-mode)
+    "]" 'sp-down-sexp
+    "[" 'sp-backward-down-sexp
+    ")" 'sp-up-sexp
+    "(" 'sp-backward-up-sexp)
+
+  (defun conn-sp-list-handler (beg)
+    (cond ((> (point) beg)
+           (save-excursion
+             (sp-backward-sexp)
+             (conn--push-ephemeral-mark (point))))
+          ((< (point) beg)
+           (save-excursion
+             (sp-forward-sexp)
+             (conn--push-ephemeral-mark (point))))))
+
+  (conn-register-thing-commands
+   'list 'conn-sp-list-handler
+   'sp-up-sexp 'sp-backward-up-sexp)
+
+  (defun conn-sp-down-list-handler (beg)
+    (cond ((> (point) beg)
+           (save-excursion
+             (sp-beginning-of-sexp)
+             (conn--push-ephemeral-mark (point))))
+          ((< (point) beg)
+           (save-excursion
+             (sp-end-of-sexp)
+             (conn--push-ephemeral-mark (point))))))
+
+  (conn-register-thing-commands
+   'list 'conn-sp-down-list-handler
+   'sp-down-sexp 'sp-backward-down-sexp)
+
+  (defun conn-sp-sexp-handler (beg)
+    (pcase (save-excursion
+             (goto-char beg)
+             (ignore-errors (bounds-of-thing-at-point 'list)))
+      ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
+       (conn-sequential-thing-handler beg))
+      ((and `(,b1 . ,_) (guard (/= beg b1)))
+       (save-excursion
+         (cond ((> (point) beg)
+                (while (> (point) beg) (sp-backward-sexp)))
+               ((< (point) beg)
+                (while (< (point) beg) (sp-forward-sexp))))
+         (conn--push-ephemeral-mark)))
+      (_ (conn-sequential-thing-handler beg))))
+
+  (conn-register-thing-commands
+   'sexp 'conn-sp-sexp-handler
+   'sp-forward-sexp 'sp-backward-sexp))
 
 (with-eval-after-load 'edebug
   (defvar edebug-mode)
