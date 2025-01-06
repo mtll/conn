@@ -30,6 +30,7 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'kmacro)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x)
@@ -760,8 +761,8 @@ If BUFFER is nil check `current-buffer'."
     (overlay-put ov 'padding (overlay-get ov 'after-string))
     ov))
 
-(defun conn--preview-get-windows (in-windows)
-  (pcase-exhaustive in-windows
+(defun conn--preview-get-windows (window-predicate)
+  (pcase-exhaustive window-predicate
     ((and 'nil
           (guard (not (apply #'derived-mode-p conn-dispatch-thing-ignored-modes))))
      (list (selected-window)))
@@ -770,7 +771,7 @@ If BUFFER is nil check `current-buffer'."
               unless (or (apply #'provided-mode-derived-p
                                 (buffer-local-value 'major-mode (window-buffer win))
                                 conn-dispatch-thing-ignored-modes)
-                         (not (funcall in-windows win)))
+                         (not (funcall window-predicate win)))
               collect win))
     ('t
      (cl-loop for win in (window-list-1 nil nil 'visible)
@@ -784,30 +785,30 @@ If BUFFER is nil check `current-buffer'."
     (cl-loop for pt in (conn--visible-matches string dir)
              collect (conn--make-preview-overlay pt (length string)))))
 
-(defun conn--string-preview-overlays (string &optional dir in-windows)
-  (cl-loop for win in (conn--preview-get-windows in-windows)
+(defun conn--string-preview-overlays (string &optional dir window-predicate)
+  (cl-loop for win in (conn--preview-get-windows window-predicate)
            nconc (conn--string-preview-overlays-1 win string dir)))
 
-(defun conn--read-string-with-timeout-1 (&optional dir in-windows)
+(defun conn--read-string-with-timeout-1 (&optional dir window-predicate)
   (conn--with-input-method
     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
            (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir in-windows)))
+           (overlays (conn--string-preview-overlays string dir window-predicate)))
       (condition-case _err
           (progn
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                               conn-read-string-timeout)))
               (setq string (concat string (char-to-string next-char)))
               (mapc #'delete-overlay overlays)
-              (setq overlays (conn--string-preview-overlays string dir in-windows)))
+              (setq overlays (conn--string-preview-overlays string dir window-predicate)))
             (message nil)
             (cons string overlays))
         ((quit error)
          (mapc #'delete-overlay overlays))))))
 
-(defun conn--read-string-with-timeout (&optional dir in-windows)
+(defun conn--read-string-with-timeout (&optional dir window-predicate)
   (pcase-let ((`(,string . ,overlays)
-               (conn--read-string-with-timeout-1 dir in-windows)))
+               (conn--read-string-with-timeout-1 dir window-predicate)))
     (mapc #'delete-overlay overlays)
     string))
 
@@ -2923,7 +2924,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
           (cancel-change-group cg1)
           (cancel-change-group cg2))))))
 
-(defun conn--dispatch-make-window-predicate (thing)
+(defun conn--dispatch-make-thing-window-predicate (thing)
   (if-let ((modes (get thing :conn-thing-modes)))
       (lambda (win)
         (apply #'provided-mode-derived-p
@@ -3060,23 +3061,23 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
     (cl-loop for pt in ovs collect
              (conn--make-preview-overlay pt 1 thing))))
 
-(defun conn--dispatch-all-things (thing &optional in-windows)
+(defun conn--dispatch-all-things (thing &optional window-predicate)
   (cl-loop for win in (conn--preview-get-windows
-                       (pcase in-windows
-                         ('t (conn--dispatch-make-window-predicate thing))
+                       (pcase window-predicate
+                         ('t (conn--dispatch-make-thing-window-predicate thing))
                          ('nil nil)
                          ((pred functionp)
-                          (let ((thing-pred (conn--dispatch-make-window-predicate thing)))
+                          (let ((thing-pred (conn--dispatch-make-thing-window-predicate thing)))
                             (lambda (win)
                               (and (funcall thing-pred win)
-                                   (funcall in-windows win)))))))
+                                   (funcall window-predicate win)))))))
            nconc (with-selected-window win
                    (if-let ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
                        (funcall fn)
                      (funcall (alist-get t conn-dispatch-all-things-collector-alist) thing)))))
 
-(defun conn--dispatch-re-matches (regexp &optional in-windows)
-  (cl-loop for win in (conn--preview-get-windows in-windows)
+(defun conn--dispatch-re-matches (regexp &optional window-predicate)
+  (cl-loop for win in (conn--preview-get-windows window-predicate)
            nconc (with-selected-window win
                    (with-restriction (window-start) (window-end)
                      (save-excursion
@@ -3104,7 +3105,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
     (cl-loop for ov in ovs collect
              (apply 'conn--make-preview-overlay ov))))
 
-(defun conn--dispatch-things-with-prefix (things prefix-length &optional in-windows)
+(defun conn--dispatch-things-with-prefix (things prefix-length &optional window-predicate)
   (let ((prefix "")
         ovs success)
     (conn--with-input-method
@@ -3117,14 +3118,14 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (progn
           (dolist (thing (ensure-list things))
             (dolist (win (conn--preview-get-windows
-                          (pcase in-windows
-                            ('t (conn--dispatch-make-window-predicate thing))
+                          (pcase window-predicate
+                            ('t (conn--dispatch-make-thing-window-predicate thing))
                             ('nil nil)
                             ((pred functionp)
-                             (let ((thing-pred (conn--dispatch-make-window-predicate thing)))
+                             (let ((thing-pred (conn--dispatch-make-thing-window-predicate thing)))
                                (lambda (win)
                                  (and (funcall thing-pred win)
-                                      (funcall in-windows win))))))))
+                                      (funcall window-predicate win))))))))
               (setq ovs (nconc (with-selected-window win
                                  (conn--dispatch-things-with-prefix-1 things prefix))
                                ovs))))
