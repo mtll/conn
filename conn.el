@@ -6404,11 +6404,11 @@ determine if `conn-local-mode' should be enabled."
   (defun conn-sp-down-list-handler (beg)
     (cond ((> (point) beg)
            (save-excursion
-             (sp-beginning-of-sexp)
+             (sp-end-of-sexp)
              (conn--push-ephemeral-mark (point))))
           ((< (point) beg)
            (save-excursion
-             (sp-end-of-sexp)
+             (sp-beginning-of-sexp)
              (conn--push-ephemeral-mark (point))))))
 
   (conn-register-thing-commands
@@ -6416,19 +6416,23 @@ determine if `conn-local-mode' should be enabled."
    'sp-down-sexp 'sp-backward-down-sexp)
 
   (defun conn-sp-sexp-handler (beg)
-    (pcase (save-excursion
-             (goto-char beg)
-             (ignore-errors (bounds-of-thing-at-point 'list)))
-      ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
-       (conn-sequential-thing-handler beg))
-      ((and `(,b1 . ,_) (guard (/= beg b1)))
-       (save-excursion
-         (cond ((> (point) beg)
-                (while (> (point) beg) (sp-backward-sexp)))
-               ((< (point) beg)
-                (while (< (point) beg) (sp-forward-sexp))))
-         (conn--push-ephemeral-mark)))
-      (_ (conn-sequential-thing-handler beg))))
+    (unless (= (point) beg)
+      (pcase (save-excursion
+               (goto-char beg)
+               (ignore-errors (bounds-of-thing-at-point 'list)))
+        ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
+         (conn-sequential-thing-handler beg))
+        ((and `(,b1 . ,_) (guard (/= beg b1)))
+         (save-excursion
+           (cond ((> (point) beg)
+                  (while (> (point) beg) (sp-backward-sexp)))
+                 ((< (point) beg)
+                  (while (< (point) beg) (sp-forward-sexp))))
+           (conn--push-ephemeral-mark)))
+        (_
+         (if (sp-point-in-comment)
+             (conn-individual-thing-handler beg)
+           (conn-sequential-thing-handler beg))))))
 
   (conn-register-thing-commands
    'sexp 'conn-sp-sexp-handler
