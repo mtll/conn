@@ -30,11 +30,13 @@
 ;;;; Requires
 
 (require 'compat)
-(require 'kmacro)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x)
   (require 'map))
+
+(autoload 'kmacro-p "kmacro")
+(autoload 'kmacro-step-edit-macro "kmacro")
 
 (declare-function extract-rectangle-bounds "rect")
 
@@ -631,7 +633,7 @@ If BUFFER is nil check `current-buffer'."
            (progn
              (,state)
              ,@body)
-         (funcall ,saved-state)
+         (when ,saved-state (funcall ,saved-state))
          (setq conn-previous-state ,saved-prev-state)))))
 
 (defmacro conn--with-input-method (&rest body)
@@ -743,6 +745,288 @@ If BUFFER is nil check `current-buffer'."
                                                 (region-end)
                                               (point-max))))
              when (funcall predicate ov) collect ov)))
+
+
+;;;; States
+
+(defun conn--setup-major-mode-maps ()
+  (setq conn--major-mode-maps nil)
+  (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
+                     (list major-mode)
+                   (reverse (conn--derived-mode-all-parents major-mode))))
+         mark-map-keys mode-map)
+    (dolist (state conn-states)
+      (setq mark-map-keys
+            (where-is-internal conn-mark-thing-map
+                               (list (alist-get state conn--state-maps)
+                                     (conn-get-local-map state))))
+      (dolist (mode mmodes)
+        (setq mode-map (conn-get-mode-map state mode))
+        (push (cons state mode-map) conn--major-mode-maps)
+        (let ((mark-map (conn-get-mode-things-map mode)))
+          (when (cdr mark-map)
+            (dolist (key mark-map-keys)
+              (define-key mode-map key mark-map))))))))
+
+(defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
+  "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
+If INHIBIT-INHERIT-MAPS is non-nil then any maps defined using
+`conn-get-mode-map' for parents of MODE will not be made active
+when MODE is."
+  (put mode :conn-inhibit-inherit-maps inhibit-inherit-maps))
+
+(defun conn-get-mode-map (state mode)
+  "Get MODE keymap for STATE.
+If one does not exists assign a new sparse keymap for MODE
+in STATE and return it."
+  (or (alist-get mode (alist-get state conn--mode-maps))
+      (setf (alist-get mode (alist-get state conn--mode-maps))
+            (make-sparse-keymap))))
+
+(defun conn-get-mode-things-map (mode)
+  "Get MODE keymap for STATE things.
+If one does not exists assign a new sparse keymap for MODE things
+in STATE and return it."
+  (or (get mode :conn-mode-things)
+      (put mode :conn-mode-things (make-sparse-keymap))))
+
+(defun conn-get-local-map (state)
+  "Get local keymap for STATE in current buffer.
+If one does not exists assign a new sparse keymap for STATE
+and return it."
+  (or (alist-get state conn--local-maps)
+      (setf (alist-get state conn--local-maps) (make-sparse-keymap))))
+
+(defun conn-input-method-overriding-mode (mode &rest hooks)
+  "Make a MODE ignore `conn-mode' input method supression.
+If HOOKS are not specified checks are performed in MODE-hook to toggle
+the input method.  If HOOKS are specified checks are performed in those
+hooks instead."
+  (let ((hooks (or hooks (list (conn--symbolicate mode "-hook")))))
+    (add-to-list 'conn-input-method-overriding-modes (cons mode hooks))))
+
+(defun conn--activate-input-method ()
+  "Enable input method in states with nil :conn-suppress-input-method property.
+Also enable input methods when any `conn-input-method-overriding-mode'
+is on or when `conn-input-method-always' is t."
+  (let (input-method-activate-hook
+        input-method-deactivate-hook)
+    (if (seq-find (pcase-lambda (`(,mode . _))
+                    (symbol-value mode))
+                  conn-input-method-overriding-modes)
+        (when (and conn--input-method (not current-input-method))
+          (activate-input-method conn--input-method))
+      (pcase (get conn-current-state :conn-suppress-input-method)
+        ((and 'nil (guard current-input-method))
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title))
+        ((and 'nil (guard conn--input-method))
+         (activate-input-method conn--input-method))
+        ((guard (and current-input-method conn--input-method))
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title)
+         (deactivate-input-method))
+        ((guard current-input-method)
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title)
+         (deactivate-input-method))))))
+
+(defun conn--deactivate-input-method ()
+  "Disable input method in all states."
+  (setq conn--input-method nil
+        conn--input-method-title nil))
+
+(defun conn-toggle-input-method ()
+  (interactive)
+  (if (and conn--input-method (not current-input-method))
+      (let ((current-input-method conn--input-method))
+        (deactivate-input-method)
+        (setq conn--input-method nil
+              conn--input-method-title nil))
+    (call-interactively 'toggle-input-method)))
+
+(defun conn--input-method-mode-line ()
+  (cond
+   (conn-local-mode
+    (setq conn--prev-mode-line-mule-info mode-line-mule-info
+          mode-line-mule-info
+          `(""
+            (conn--input-method
+             (:propertize ("" conn--input-method-title)
+                          help-echo (concat
+                                     "Current input method: "
+                                     conn--input-method
+                                     "\n\
+mouse-2: Disable input method\n\
+mouse-3: Describe current input method")
+                          local-map ,mode-line-input-method-map
+                          mouse-face mode-line-highlight))
+            ,(propertize
+              "%z"
+              'help-echo 'mode-line-mule-info-help-echo
+              'mouse-face 'mode-line-highlight
+              'local-map mode-line-coding-system-map)
+            (:eval (mode-line-eol-desc)))))
+   (conn--prev-mode-line-mule-info
+    (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
+
+(defun conn--default-state-for-buffer (&optional buffer)
+  "Get default state for BUFFER."
+  (or (alist-get (or buffer (current-buffer))
+                 conn-buffer-default-state-alist
+                 nil nil #'buffer-match-p)
+      conn-default-state))
+
+(defmacro conn-define-state (name doc &rest rest)
+  "Define a conn state NAME.
+Defines a transition function and variable NAME.  NAME is non-nil when
+the state is active.
+
+:LIGHTER-FACE is the face for the conn mode-line lighter in NAME.
+
+:SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
+NAME.
+
+:KEYMAP is a keymap for the state.
+
+:CURSOR is the `cursor-type' for NAME.
+
+:EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral
+marks while in state NAME.
+
+BODY contains code to be executed each time the state is enabled or
+disabled.
+
+\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
+  (declare (indent defun))
+  (pcase-let* ((map-name (conn--symbolicate name "-map"))
+               (cursor-name (conn--symbolicate name "-cursor-type"))
+               (lighter-face-name (conn--symbolicate name "-lighter-face"))
+               (enter (gensym "enter"))
+               ((map :cursor
+                     :lighter-face
+                     :suppress-input-method
+                     (:keymap keymap '(make-sparse-keymap))
+                     :ephemeral-marks)
+                rest)
+               (body (cl-loop for sublist on rest by #'cddr
+                              unless (keywordp (car sublist))
+                              do (cl-return sublist))))
+    `(progn
+       (defvar-local ,name nil
+         ,(conn--stringify "Non-nil when `" name "' is active."))
+
+       (defvar ,map-name
+         (setf (alist-get ',name conn--state-maps) ,keymap)
+         ,(conn--stringify "Keymap active in `" name "'."))
+
+       (defface ,lighter-face-name
+         ',lighter-face
+         ,(conn--stringify "Face for `" name "' mode line lighter.")
+         :group 'conn-states)
+
+       (defcustom ,cursor-name
+         ,(if cursor `',cursor t)
+         ,(conn--stringify "`cursor-type' for " name ".")
+         :type '(choice
+                 (const :tag "Frame default" t)
+                 (const :tag "Filled box" box)
+                 (cons :tag "Box with specified size"
+                       (const box)
+                       integer)
+                 (const :tag "Hollow cursor" hollow)
+                 (const :tag "Vertical bar" bar)
+                 (cons :tag "Vertical bar with specified height"
+                       (const bar)
+                       integer)
+                 (const :tag "Horizontal bar" hbar)
+                 (cons :tag "Horizontal bar with specified width"
+                       (const hbar)
+                       integer))
+         :group 'conn-states)
+
+       ,(when ephemeral-marks
+          `(cl-pushnew ',name conn-ephemeral-mark-states))
+
+       (put ',name :conn-suppress-input-method ,suppress-input-method)
+       (put ',name :conn-cursor-type ',cursor-name)
+       (put ',name :conn-lighter-face ',lighter-face-name)
+
+       (cl-pushnew ',name conn-states)
+
+       (defun ,name ()
+         ,doc
+         (interactive)
+         (when conn-current-state
+           (funcall (get conn-current-state :conn-transition-fn) :exit))
+         (funcall (get ',name :conn-transition-fn) :enter))
+
+       (put ',name :conn-transition-fn
+            (lambda (,enter)
+              (when (xor ,name (and ,enter (not (eq ,enter :exit))))
+                (if ,name
+                    (setq ,name nil
+                          conn-current-state nil
+                          conn-previous-state ',name)
+                  (setq ,name t
+                        conn-current-state ',name
+                        conn--local-mode-maps (alist-get ',name conn--mode-maps))
+                  (when conn-lighter
+                    (put-text-property 0 (length conn-lighter)
+                                       'face ',lighter-face-name
+                                       conn-lighter))
+                  (conn--activate-input-method)
+                  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
+                      (setq cursor-type cursor)
+                    (setq cursor-type t))
+                  (when (not executing-kbd-macro)
+                    (force-mode-line-update)))
+                ,@body
+                (run-hook-wrapped
+                 'conn-transition-hook
+                 (lambda (hook)
+                   (condition-case _err
+                       (funcall hook)
+                     (error
+                      (remove-hook 'conn-transition-hook hook)
+                      (message "Error in transition hook %s" hook)))))))))))
+
+(conn-define-state conn-emacs-state
+  "Activate `conn-emacs-state' in the current buffer.
+A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
+bind anything except transition commands."
+  :lighter-face ((default (:inherit mode-line :background "#cae1ff"))
+                 (((background light)) (:inherit mode-line :background "#cae1ff"))
+                 (((background dark)) (:inherit mode-line :background "#49739f")))
+  :ephemeral-marks nil
+  :keymap (make-sparse-keymap))
+
+(conn-define-state conn-state
+  "Activate `conn-state' in the current buffer.
+A `conn-mode' state for editing text."
+  :lighter-face ((default (:inherit mode-line :background "#f3bdbd"))
+                 (((background light)) (:inherit mode-line :background "#f3bdbd"))
+                 (((background dark)) (:inherit mode-line :background "#8c3c3c")))
+  :suppress-input-method t
+  :ephemeral-marks t
+  :keymap (define-keymap :suppress t))
+
+(add-to-list 'conn-buffer-default-state-alist
+             '((derived-mode . prog-mode) . conn-state))
+(add-to-list 'conn-buffer-default-state-alist
+             '((derived-mode . text-mode) . conn-state))
+(add-to-list 'conn-buffer-default-state-alist
+             '((derived-mode . conf-mode) . conn-state))
+
+(conn-define-state conn-org-edit-state
+  "Activate `conn-org-edit-state' in the current buffer.
+A `conn-mode' state for structural editing of `org-mode' buffers."
+  :lighter-face ((default (:inherit mode-line :background "#f5c5ff"))
+                 (((background light)) (:inherit mode-line :background "#f5c5ff"))
+                 (((background dark)) (:inherit mode-line :background "#85508c")))
+  :suppress-input-method t
+  :keymap (define-keymap :suppress t)
+  :ephemeral-marks t)
 
 
 ;;;; Labels
@@ -2220,287 +2504,26 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'conn-beginning-of-inner-line
  'conn-end-of-inner-line)
 
-
-;;;; States
+(defvar org-link-any-re)
 
-(defun conn--setup-major-mode-maps ()
-  (setq conn--major-mode-maps nil)
-  (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
-                     (list major-mode)
-                   (reverse (conn--derived-mode-all-parents major-mode))))
-         mark-map-keys mode-map)
-    (dolist (state conn-states)
-      (setq mark-map-keys
-            (where-is-internal conn-mark-thing-map
-                               (list (alist-get state conn--state-maps)
-                                     (conn-get-local-map state))))
-      (dolist (mode mmodes)
-        (setq mode-map (conn-get-mode-map state mode))
-        (push (cons state mode-map) conn--major-mode-maps)
-        (let ((mark-map (conn-get-mode-things-map mode)))
-          (when (cdr mark-map)
-            (dolist (key mark-map-keys)
-              (define-key mode-map key mark-map))))))))
+(conn-register-thing
+ 'org-link
+ :dispatch-provider (lambda ()
+                      (require 'org)
+                      (conn--dispatch-re-matches org-link-any-re t))
+ :bounds-op (lambda ()
+              (require 'org)
+              (org-in-regexp org-link-any-re))
+ :mark-key "O"
+ :modes 'org-mode)
 
-(defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
-  "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
-If INHIBIT-INHERIT-MAPS is non-nil then any maps defined using
-`conn-get-mode-map' for parents of MODE will not be made active
-when MODE is."
-  (put mode :conn-inhibit-inherit-maps inhibit-inherit-maps))
+(conn-register-thing-commands
+ 'org-link 'conn-individual-thing-handler
+ 'org-next-link 'org-previous-link)
 
-(defun conn-get-mode-map (state mode)
-  "Get MODE keymap for STATE.
-If one does not exists assign a new sparse keymap for MODE
-in STATE and return it."
-  (or (alist-get mode (alist-get state conn--mode-maps))
-      (setf (alist-get mode (alist-get state conn--mode-maps))
-            (make-sparse-keymap))))
-
-(defun conn-get-mode-things-map (mode)
-  "Get MODE keymap for STATE things.
-If one does not exists assign a new sparse keymap for MODE things
-in STATE and return it."
-  (or (get mode :conn-mode-things)
-      (put mode :conn-mode-things (make-sparse-keymap))))
-
-(defun conn-get-local-map (state)
-  "Get local keymap for STATE in current buffer.
-If one does not exists assign a new sparse keymap for STATE
-and return it."
-  (or (alist-get state conn--local-maps)
-      (setf (alist-get state conn--local-maps) (make-sparse-keymap))))
-
-(defun conn-input-method-overriding-mode (mode &rest hooks)
-  "Make a MODE ignore `conn-mode' input method supression.
-If HOOKS are not specified checks are performed in MODE-hook to toggle
-the input method.  If HOOKS are specified checks are performed in those
-hooks instead."
-  (let ((hooks (or hooks (list (conn--symbolicate mode "-hook")))))
-    (add-to-list 'conn-input-method-overriding-modes (cons mode hooks))))
-
-(defun conn--activate-input-method ()
-  "Enable input method in states with nil :conn-suppress-input-method property.
-Also enable input methods when any `conn-input-method-overriding-mode'
-is on or when `conn-input-method-always' is t."
-  (let (input-method-activate-hook
-        input-method-deactivate-hook)
-    (if (seq-find (pcase-lambda (`(,mode . _))
-                    (symbol-value mode))
-                  conn-input-method-overriding-modes)
-        (when (and conn--input-method (not current-input-method))
-          (activate-input-method conn--input-method))
-      (pcase (get conn-current-state :conn-suppress-input-method)
-        ((and 'nil (guard current-input-method))
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title))
-        ((and 'nil (guard conn--input-method))
-         (activate-input-method conn--input-method))
-        ((guard (and current-input-method conn--input-method))
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title)
-         (deactivate-input-method))
-        ((guard current-input-method)
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title)
-         (deactivate-input-method))))))
-
-(defun conn--deactivate-input-method ()
-  "Disable input method in all states."
-  (setq conn--input-method nil
-        conn--input-method-title nil))
-
-(defun conn-toggle-input-method ()
-  (interactive)
-  (if (and conn--input-method (not current-input-method))
-      (let ((current-input-method conn--input-method))
-        (deactivate-input-method)
-        (setq conn--input-method nil
-              conn--input-method-title nil))
-    (call-interactively 'toggle-input-method)))
-
-(defun conn--input-method-mode-line ()
-  (cond
-   (conn-local-mode
-    (setq conn--prev-mode-line-mule-info mode-line-mule-info
-          mode-line-mule-info
-          `(""
-            (conn--input-method
-             (:propertize ("" conn--input-method-title)
-                          help-echo (concat
-                                     "Current input method: "
-                                     conn--input-method
-                                     "\n\
-mouse-2: Disable input method\n\
-mouse-3: Describe current input method")
-                          local-map ,mode-line-input-method-map
-                          mouse-face mode-line-highlight))
-            ,(propertize
-              "%z"
-              'help-echo 'mode-line-mule-info-help-echo
-              'mouse-face 'mode-line-highlight
-              'local-map mode-line-coding-system-map)
-            (:eval (mode-line-eol-desc)))))
-   (conn--prev-mode-line-mule-info
-    (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
-
-(defun conn--default-state-for-buffer (&optional buffer)
-  "Get default state for BUFFER."
-  (or (alist-get (or buffer (current-buffer))
-                 conn-buffer-default-state-alist
-                 nil nil #'buffer-match-p)
-      conn-default-state))
-
-(defmacro conn-define-state (name doc &rest rest)
-  "Define a conn state NAME.
-Defines a transition function and variable NAME.  NAME is non-nil when
-the state is active.
-
-:LIGHTER-FACE is the face for the conn mode-line lighter in NAME.
-
-:SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
-NAME.
-
-:KEYMAP is a keymap for the state.
-
-:CURSOR is the `cursor-type' for NAME.
-
-:EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral
-marks while in state NAME.
-
-BODY contains code to be executed each time the state is enabled or
-disabled.
-
-\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
-  (declare (indent defun))
-  (pcase-let* ((map-name (conn--symbolicate name "-map"))
-               (cursor-name (conn--symbolicate name "-cursor-type"))
-               (lighter-face-name (conn--symbolicate name "-lighter-face"))
-               (enter (gensym "enter"))
-               ((map :cursor
-                     :lighter-face
-                     :suppress-input-method
-                     (:keymap keymap '(make-sparse-keymap))
-                     :ephemeral-marks)
-                rest)
-               (body (cl-loop for sublist on rest by #'cddr
-                              unless (keywordp (car sublist))
-                              do (cl-return sublist))))
-    `(progn
-       (defvar-local ,name nil
-         ,(conn--stringify "Non-nil when `" name "' is active."))
-
-       (defvar ,map-name
-         (setf (alist-get ',name conn--state-maps) ,keymap)
-         ,(conn--stringify "Keymap active in `" name "'."))
-
-       (defface ,lighter-face-name
-         ',lighter-face
-         ,(conn--stringify "Face for `" name "' mode line lighter.")
-         :group 'conn-states)
-
-       (defcustom ,cursor-name
-         ,(if cursor `',cursor t)
-         ,(conn--stringify "`cursor-type' for " name ".")
-         :type '(choice
-                 (const :tag "Frame default" t)
-                 (const :tag "Filled box" box)
-                 (cons :tag "Box with specified size"
-                       (const box)
-                       integer)
-                 (const :tag "Hollow cursor" hollow)
-                 (const :tag "Vertical bar" bar)
-                 (cons :tag "Vertical bar with specified height"
-                       (const bar)
-                       integer)
-                 (const :tag "Horizontal bar" hbar)
-                 (cons :tag "Horizontal bar with specified width"
-                       (const hbar)
-                       integer))
-         :group 'conn-states)
-
-       ,(when ephemeral-marks
-          `(cl-pushnew ',name conn-ephemeral-mark-states))
-
-       (put ',name :conn-suppress-input-method ,suppress-input-method)
-       (put ',name :conn-cursor-type ',cursor-name)
-       (put ',name :conn-lighter-face ',lighter-face-name)
-
-       (cl-pushnew ',name conn-states)
-
-       (defun ,name ()
-         ,doc
-         (interactive)
-         (when conn-current-state
-           (funcall (get conn-current-state :conn-transition-fn) :exit))
-         (funcall (get ',name :conn-transition-fn) :enter))
-
-       (put ',name :conn-transition-fn
-            (lambda (,enter)
-              (when (xor ,name (and ,enter (not (eq ,enter :exit))))
-                (if ,name
-                    (setq ,name nil
-                          conn-current-state nil
-                          conn-previous-state ',name)
-                  (setq ,name t
-                        conn-current-state ',name
-                        conn--local-mode-maps (alist-get ',name conn--mode-maps))
-                  (when conn-lighter
-                    (put-text-property 0 (length conn-lighter)
-                                       'face ',lighter-face-name
-                                       conn-lighter))
-                  (conn--activate-input-method)
-                  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
-                      (setq cursor-type cursor)
-                    (setq cursor-type t))
-                  (when (not executing-kbd-macro)
-                    (force-mode-line-update)))
-                ,@body
-                (run-hook-wrapped
-                 'conn-transition-hook
-                 (lambda (hook)
-                   (condition-case _err
-                       (funcall hook)
-                     (error
-                      (remove-hook 'conn-transition-hook hook)
-                      (message "Error in transition hook %s" hook)))))))))))
-
-(conn-define-state conn-emacs-state
-  "Activate `conn-emacs-state' in the current buffer.
-A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
-bind anything except transition commands."
-  :lighter-face ((default (:inherit mode-line :background "#cae1ff"))
-                 (((background light)) (:inherit mode-line :background "#cae1ff"))
-                 (((background dark)) (:inherit mode-line :background "#49739f")))
-  :ephemeral-marks nil
-  :keymap (make-sparse-keymap))
-
-(conn-define-state conn-state
-  "Activate `conn-state' in the current buffer.
-A `conn-mode' state for editing text."
-  :lighter-face ((default (:inherit mode-line :background "#f3bdbd"))
-                 (((background light)) (:inherit mode-line :background "#f3bdbd"))
-                 (((background dark)) (:inherit mode-line :background "#8c3c3c")))
-  :suppress-input-method t
-  :ephemeral-marks t
-  :keymap (define-keymap :suppress t))
-
-(add-to-list 'conn-buffer-default-state-alist
-             '((derived-mode . prog-mode) . conn-state))
-(add-to-list 'conn-buffer-default-state-alist
-             '((derived-mode . text-mode) . conn-state))
-(add-to-list 'conn-buffer-default-state-alist
-             '((derived-mode . conf-mode) . conn-state))
-
-(conn-define-state conn-org-edit-state
-  "Activate `conn-org-edit-state' in the current buffer.
-A `conn-mode' state for structural editing of `org-mode' buffers."
-  :lighter-face ((default (:inherit mode-line :background "#f5c5ff"))
-                 (((background light)) (:inherit mode-line :background "#f5c5ff"))
-                 (((background dark)) (:inherit mode-line :background "#85508c")))
-  :suppress-input-method t
-  :keymap (define-keymap :suppress t)
-  :ephemeral-marks t)
+(conn-register-thing-commands
+ 'org-link nil
+ 'org-insert-link-global 'org-store-link 'org-insert-link)
 
 
 ;;;; Thing Dispatch
@@ -3238,6 +3261,8 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 (defvar conn--dispatch-overriding-map nil)
 
 (defvar conn-dispatch-action-override-maps nil)
+
+(defvar conn-dispatch-read-thing-mode-map)
 
 (define-minor-mode conn-dispatch-read-thing-mode
   "Read a thing for dispatch."
@@ -5861,7 +5886,6 @@ When ARG is nil the root window is used."
   "v" 'conn-region-to-narrow-ring
   "f" 'conn-thing-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
-  "s" 'conn-surround-thing
   "d" 'duplicate-dwim
   "w j" 'conn-kill-prepend-region
   "w l" 'conn-kill-append-region
@@ -5924,12 +5948,10 @@ When ARG is nil the root window is used."
   "." 'repeat
   "/" (conn-remapping-command conn-undo-keys)
   ";" 'conn-wincontrol
-  "<tab>" 'indent-region
-  "TAB" 'indent-region
+  ;; "<tab>" 'indent-region
+  ;; "TAB" 'indent-region
   "=" 'indent-relative
   "?" (conn-remapping-command conn-undo-redo-keys)
-  "\"" 'conn-surround-thing
-  "\\" 'conn-kapply-prefix
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command
   "M-0" 'tab-close
@@ -6179,13 +6201,6 @@ determine if `conn-local-mode' should be enabled."
    'org-paragraph 'conn-sequential-thing-handler
    'org-forward-paragraph 'org-backward-paragraph)
 
-  (conn-register-thing
-   'org-link
-   :dispatch-provider (lambda () (conn--dispatch-re-matches org-link-any-re t))
-   :bounds-op (lambda () (org-in-regexp org-link-any-re))
-   :mark-key "O"
-   :modes 'org-mode)
-
   (conn-define-dispatch-action (conn-open-org-link "Open Link")
       (window pt _thing)
     (with-selected-window window
@@ -6195,14 +6210,6 @@ determine if `conn-local-mode' should be enabled."
 
   (setf (alist-get 'org-link conn-dispatch-default-actions-alist)
         'conn-open-org-link)
-
-  (conn-register-thing-commands
-   'org-link 'conn-individual-thing-handler
-   'org-next-link 'org-previous-link)
-
-  (conn-register-thing-commands
-   'org-link nil
-   'org-insert-link-global 'org-store-link 'org-insert-link)
 
   (defun conn-org-sentence-forward (arg)
     (interactive "p")
@@ -6379,6 +6386,7 @@ determine if `conn-local-mode' should be enabled."
   (declare-function sp-backward-sexp "smartparens")
   (declare-function sp-end-of-sexp "smartparens")
   (declare-function sp-beginning-of-sexp "smartparens")
+  (declare-function sp-point-in-comment "smartparens")
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'smartparens-mode)
