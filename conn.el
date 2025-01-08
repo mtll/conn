@@ -625,16 +625,19 @@ If BUFFER is nil check `current-buffer'."
 (defmacro conn--with-state (state &rest body)
   (declare (indent 1))
   (let ((saved-state (make-symbol "saved-state"))
-        (saved-prev-state (make-symbol "saved-prev-state")))
+        (saved-prev-state (make-symbol "saved-prev-state"))
+        (buffer (make-symbol "buffer")))
     `(let ((,saved-state conn-current-state)
            (,saved-prev-state conn-previous-state)
+           (,buffer (current-buffer))
            (conn-transition-hook))
        (unwind-protect
            (progn
              (,state)
              ,@body)
-         (when ,saved-state (funcall ,saved-state))
-         (setq conn-previous-state ,saved-prev-state)))))
+         (with-current-buffer ,buffer
+           (when ,saved-state (funcall ,saved-state))
+           (setq conn-previous-state ,saved-prev-state))))))
 
 (defmacro conn--with-input-method (&rest body)
   (declare (indent 0))
@@ -2820,7 +2823,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (pulse-momentary-highlight-region beg end)
            (setq str (filter-buffer-substring beg end))))))
     (if str
-        (insert str)
+        (insert-for-yank str)
       (user-error "No thing at point"))))
 
 (conn-define-dispatch-action (conn-dispatch-goto "Goto")
@@ -3392,8 +3395,7 @@ the THING at the location selected is acted upon.
 
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
-  (interactive
-   (conn--dispatch-read-thing conn-dispatch-action-maps))
+  (interactive (conn--dispatch-read-thing conn-dispatch-action-maps))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
