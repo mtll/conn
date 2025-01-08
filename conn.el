@@ -5950,6 +5950,7 @@ When ARG is nil the root window is used."
   "." 'repeat
   "/" (conn-remapping-command conn-undo-keys)
   ";" 'conn-wincontrol
+  "\\" 'conn-kapply-prefix
   ;; "<tab>" 'indent-region
   ;; "TAB" 'indent-region
   "=" 'indent-relative
