@@ -2568,7 +2568,11 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
     (fixup-whitespace)
-    (indent-for-tab-command))
+    (if (progn (beginning-of-line)
+               (looking-at "
+"))
+        (join-line)
+      (indent-for-tab-command)))
   (when (save-excursion
           (beginning-of-line)
           (looking-at "\\s)*\n"))
