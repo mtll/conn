@@ -1427,57 +1427,6 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (pcase-let* ((`(,cmd ,arg) (conn--read-thing-mover prompt arg t)))
     (cons (get cmd :conn-command-thing) (conn-bounds-of-command cmd arg))))
 
-(defun conn--read-thing (prompt)
-  (conn--with-state conn-state
-    (conn-read-thing-mode 1)
-    (unwind-protect
-        (cl-prog
-         ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-thing-command-map>"
-                           prompt " (\\[help] commands, \\[recursive-edit] recursive edit): %s")))
-          invalid keys cmd)
-         :read-command
-         (setq keys (read-key-sequence
-                     (format prompt
-                             (if invalid
-                                 (propertize "Not a valid thing command"
-                                             'face 'error)
-                               "")))
-               cmd (key-binding keys t))
-         :test
-         (pcase cmd
-           ('keyboard-quit
-            (keyboard-quit))
-           ('help
-            (conn-read-thing-mode -1)
-            (save-window-excursion
-              (setq cmd (intern
-                         (completing-read
-                          "Command: "
-                          (lambda (string pred action)
-                            (if (eq action 'metadata)
-                                `(metadata
-                                  ,(cons 'affixation-function
-                                         (conn--dispatch-make-command-affixation
-                                          conn-read-thing-mode-map))
-                                  (category . conn-dispatch-command))
-                              (complete-with-action action obarray string pred)))
-                          (lambda (sym)
-                            (and (functionp sym)
-                                 (not (eq sym 'help))
-                                 (get sym :conn-command-thing)))
-                          t))))
-            (conn-read-thing-mode 1)
-            (go :test))
-           ((and (pred symbolp)
-                 (guard (get cmd :conn-command-thing)))
-            (cl-return (get cmd :conn-command-thing)))
-           (_
-            (setq invalid t)))
-         (go :read-command))
-      (message nil)
-      (conn-read-thing-mode -1))))
-
 ;;;;; Dots
 
 (defface conn-dot-face-1
