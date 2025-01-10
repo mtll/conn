@@ -39,6 +39,7 @@
 (autoload 'kmacro-step-edit-macro "kmacro")
 
 (declare-function extract-rectangle-bounds "rect")
+(declare-function easy-mmode--globalized-predicate-p "easy-mmode")
 
 
 ;;;; Variables
@@ -1200,22 +1201,24 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 (defvar conn--thing-overriding-maps nil)
 
+(defvar-keymap conn-read-thing-mover-mode-map
+  "C-w" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "C-<backspace>" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "M-DEL" 'reset-arg
+  "." 'reset-arg
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
+  "b" 'beginning-of-buffer
+  "C-h" 'help
+  "t" conn-mark-thing-map
+  "r" 'recursive-edit)
+
 (define-minor-mode conn-read-thing-mover-mode
   "Mode for reading a thing mover."
   :lighter " MOVER"
-  :keymap (define-keymap
-            "C-w" 'backward-delete-arg
-            "C-d" 'forward-delete-arg
-            "C-<backspace>" 'reset-arg
-            "M-<backspace>" 'reset-arg
-            "M-DEL" 'reset-arg
-            "." 'reset-arg
-            "<remap> <conn-forward-char>" 'forward-char
-            "<remap> <conn-backward-char>" 'backward-char
-            "b" 'beginning-of-buffer
-            "C-h" 'help
-            "t" conn-mark-thing-map
-            "r" 'recursive-edit)
+  :keymap conn-read-thing-mover-mode-map
   (if conn-read-thing-mover-mode
       (thread-first
         (setq conn--thing-overriding-maps
