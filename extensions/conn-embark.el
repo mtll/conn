@@ -39,10 +39,10 @@
       (goto-char pt)
       (embark-act))))
 
-(defvar-keymap conn-embark-dispatch-map
+(define-keymap
+  :keymap conn-dispatch-read-thing-mode-map
   "<tab>" 'conn-embark-dwim
   "," 'conn-embark-act)
-(cl-pushnew conn-embark-dispatch-map conn-dispatch-action-maps)
 
 (defun conn-narrow-indirect-to-heading ()
   (interactive)
