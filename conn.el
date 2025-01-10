@@ -1196,26 +1196,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 (defvar conn-bounds-of-things-in-region-default
   'conn--things-in-region-default)
 
-(defvar-local conn-read-thing-mover-override-maps nil)
-
-(defvar-local conn-read-thing-override-maps nil)
-
-(define-minor-mode conn-read-thing-mode
-  "Mode for reading a thing."
-  :keymap (define-keymap "C-h" 'help)
-  :lighter " THING"
-  (if conn-read-thing-mode
-      (progn
-        (setq conn--thing-overriding-maps
-              (thread-last
-                (append conn-read-thing-override-maps
-                        (list conn-read-thing-mode-map))
-                (delq nil)
-                (make-composed-keymap)))
-        (internal-push-keymap conn--thing-overriding-maps
-                              'overriding-terminal-local-map))
-    (internal-pop-keymap conn--thing-overriding-maps
-                         'overriding-terminal-local-map)))
+(defvar conn-read-thing-mover-maps-alist nil)
 
 (defvar conn--thing-overriding-maps nil)
 
@@ -1236,15 +1217,13 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
             "t" conn-mark-thing-map
             "r" 'recursive-edit)
   (if conn-read-thing-mover-mode
-      (progn
+      (thread-first
         (setq conn--thing-overriding-maps
-              (thread-last
-                (append conn-read-thing-mover-override-maps
-                        (list conn-read-thing-mover-mode-map))
-                (delq nil)
-                (make-composed-keymap)))
-        (internal-push-keymap conn--thing-overriding-maps
-                              'overriding-terminal-local-map))
+              (make-composed-keymap
+               (cl-loop for (var . map) in conn-read-thing-mover-maps-alist
+                        when var collect map)
+               conn-read-thing-mover-mode-map))
+        (internal-push-keymap 'overriding-terminal-local-map))
     (internal-pop-keymap conn--thing-overriding-maps
                          'overriding-terminal-local-map)))
 
@@ -2493,55 +2472,52 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defvar conn-dispatch-all-things-collector-alist
   (list (cons t 'conn--dispatch-all-things-1)))
 
-(defvar conn-dispatch-action-maps
-  (list (define-keymap
-          "[" 'conn-dispatch-kill-append
-          "a" 'conn-dispatch-copy-append
-          "]" 'conn-dispatch-kill-prepend
-          "p" 'conn-dispatch-copy-prepend
-          "w" 'conn-dispatch-kill
-          "s" 'conn-dispatch-grab
-          "y" 'conn-dispatch-yank
-          "q" 'conn-dispatch-transpose
-          "c" 'conn-dispatch-copy
-          "f" 'conn-dispatch-yank-replace
-          "d" 'conn-dispatch-grab-replace
-          "g" 'conn-dispatch-goto
-          "e" 'conn-dispatch-over
-          "z" 'conn-dispatch-jump))
-  "List of keymap containing dispatch actions.
-All dispatch actions must be in a keymap in this list.")
+(defvar conn-dispatch-maps-alist nil)
 
-(defvar conn-dispatch-over-action-maps
-  (list (define-keymap
-          "[" 'conn-dispatch-kill-append-over
-          "{" 'conn-dispatch-kill-append-over
-          "a" 'conn-dispatch-copy-append-over
-          "A" 'conn-dispatch-copy-append-over
-          "]" 'conn-dispatch-kill-prepend-over
-          "}" 'conn-dispatch-kill-prepend-over
-          "p" 'conn-dispatch-copy-prepend-over
-          "P" 'conn-dispatch-copy-prepend-over
-          "w" 'conn-dispatch-kill-over
-          "W" 'conn-dispatch-kill-over
-          "c" 'conn-dispatch-copy-over
-          "C" 'conn-dispatch-copy-over))
-  "List of keymap containing dispatch actions.
-All dispatch actions must be in a keymap in this list.")
+(defvar conn--dispatch-overriding-map nil)
 
-(defvar conn-dispatch-thing-override-maps
-  (list (define-keymap
-          "l" 'forward-line
-          "u" 'forward-symbol
-          "U" `(symbol
-                ,(apply-partially 'conn--dispatch-all-things 'symbol t)
-                . conn-dispatch-goto)
-          "O" `(word
-                ,(apply-partially 'conn--dispatch-all-things 'word t)
-                . conn-dispatch-goto)))
-  "List of keymaps containing thing commands that overrides default bindings.
-Members of these keymaps can be either a command with a thing property or
-a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
+(defvar-keymap conn-dispatch-read-thing-mode-map
+  "[" 'conn-dispatch-kill-append
+  "a" 'conn-dispatch-copy-append
+  "]" 'conn-dispatch-kill-prepend
+  "p" 'conn-dispatch-copy-prepend
+  "w" 'conn-dispatch-kill
+  "s" 'conn-dispatch-grab
+  "y" 'conn-dispatch-yank
+  "q" 'conn-dispatch-transpose
+  "c" 'conn-dispatch-copy
+  "f" 'conn-dispatch-yank-replace
+  "d" 'conn-dispatch-grab-replace
+  "g" 'conn-dispatch-goto
+  "e" 'conn-dispatch-over
+  "z" 'conn-dispatch-jump
+  "l" 'forward-line
+  "u" 'forward-symbol
+  "U" `(symbol
+        ,(apply-partially 'conn--dispatch-all-things 'symbol t)
+        . conn-dispatch-goto)
+  "O" `(word
+        ,(apply-partially 'conn--dispatch-all-things 'word t)
+        . conn-dispatch-goto)
+  "C-h" 'help
+  "." 'reset-arg
+  "C-d" 'forward-delete-arg
+  "C-w" 'backward-delete-arg)
+
+(define-minor-mode conn-dispatch-read-thing-mode
+  "Read a thing for dispatch."
+  :lighter " DISPATCH"
+  :keymap conn-dispatch-read-thing-mode-map
+  (if conn-dispatch-read-thing-mode
+      (thread-first
+        (setq conn--dispatch-overriding-map
+              (make-composed-keymap
+               (cl-loop for (var . map) in conn-dispatch-maps-alist
+                        when var collect map)
+               conn-dispatch-read-thing-mode-map))
+        (internal-push-keymap 'overriding-terminal-local-map))
+    (internal-pop-keymap conn--dispatch-overriding-map
+                         'overriding-terminal-local-map)))
 
 (defun conn--dispatch-finder (command)
   (or (alist-get command conn-dispatch-providers-alist)
@@ -2591,16 +2567,6 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (message "Killed: %s" str)))
         (_ (user-error "No thing at point"))))))
 
-(conn-define-dispatch-action (conn-dispatch-kill-over "Kill")
-    (window pt thing)
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point))
-             (or (bounds-of-thing-at-point thing)
-                 (user-error "No %s at point" thing)))
-    (conn-dispatch-over window pt thing)
-    (kill-region (region-beginning) (region-end))
-    (conn--dispatch-fixup-whitespace)))
-
 (conn-define-dispatch-action (conn-dispatch-kill-append "Kill Append")
     (window pt thing)
   (with-selected-window window
@@ -2615,18 +2581,6 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (message "Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
-(conn-define-dispatch-action (conn-dispatch-kill-append-over "Kill Append")
-    (window pt thing)
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point))
-             (or (bounds-of-thing-at-point thing)
-                 (user-error "No %s at point" thing)))
-    (conn-dispatch-over window pt thing)
-    (let ((str (filter-buffer-substring (region-beginning) (region-end))))
-      (kill-append str nil)
-      (delete-region (region-beginning) (region-end))
-      (conn--dispatch-fixup-whitespace))))
-
 (conn-define-dispatch-action (conn-dispatch-kill-prepend "Kill Prepend")
     (window pt thing)
   (with-selected-window window
@@ -2640,18 +2594,6 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (conn--dispatch-fixup-whitespace)
            (message "Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
-
-(conn-define-dispatch-action (conn-dispatch-kill-prepend-over "Kill Prepend")
-    (window pt thing)
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point))
-             (or (bounds-of-thing-at-point thing)
-                 (user-error "No %s at point" thing)))
-    (conn-dispatch-over window pt thing)
-    (let ((str (filter-buffer-substring (region-beginning) (region-end))))
-      (kill-append str t)
-      (delete-region (region-beginning) (region-end))
-      (conn--dispatch-fixup-whitespace))))
 
 (conn-define-dispatch-action (conn-dispatch-copy "Copy")
     (window pt thing)
@@ -2688,19 +2630,6 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (message "Copy Appended: %s" str)))
         (_ (user-error "No thing at point"))))))
 
-(conn-define-dispatch-action (conn-dispatch-copy-append-over "Copy Append")
-    (window pt thing)
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point))
-             (or (bounds-of-thing-at-point thing)
-                 (user-error "No %s at point" thing)))
-    (save-mark-and-excursion
-      (conn-dispatch-over window pt thing)
-      (let ((str (filter-buffer-substring (region-beginning) (region-end))))
-        (kill-append str nil)
-        (pulse-momentary-highlight-region (region-beginning) (region-end))
-        (conn--dispatch-fixup-whitespace)))))
-
 (conn-define-dispatch-action (conn-dispatch-copy-prepend "Copy Prepend")
     (window pt thing)
   (with-selected-window window
@@ -2712,19 +2641,6 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
            (kill-append str t)
            (message "Copy Prepended: %s" str)))
         (_ (user-error "No thing at point"))))))
-
-(conn-define-dispatch-action (conn-dispatch-copy-prepend-over "Copy Prepend")
-    (window pt thing)
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point))
-             (or (bounds-of-thing-at-point thing)
-                 (user-error "No %s at point" thing)))
-    (save-mark-and-excursion
-      (conn-dispatch-over window pt thing)
-      (let ((str (filter-buffer-substring (region-beginning) (region-end))))
-        (kill-append str t)
-        (pulse-momentary-highlight-region (region-beginning) (region-end))
-        (conn--dispatch-fixup-whitespace)))))
 
 (conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
     (window pt thing)
@@ -3214,35 +3130,8 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
-(defvar conn--dispatch-overriding-map nil)
-
-(defvar conn-dispatch-action-override-maps nil)
-
-(defvar conn-dispatch-read-thing-mode-map)
-
-(define-minor-mode conn-dispatch-read-thing-mode
-  "Read a thing for dispatch."
-  :lighter " DISPATCH"
-  :keymap (define-keymap
-            "C-h" 'help
-            "." 'reset-arg
-            "C-d" 'forward-delete-arg
-            "C-w" 'backward-delete-arg)
-  (if conn-dispatch-read-thing-mode
-      (thread-first
-        (setq conn--dispatch-overriding-map
-              (make-composed-keymap
-               (reverse
-                (append (list conn-dispatch-read-thing-mode-map)
-                        conn-dispatch-thing-override-maps
-                        conn-dispatch-action-override-maps))))
-        (internal-push-keymap 'overriding-terminal-local-map))
-    (internal-pop-keymap conn--dispatch-overriding-map
-                         'overriding-terminal-local-map)))
-
-(defun conn--dispatch-read-thing (action-maps &optional default-action)
-  (let ((conn-dispatch-action-override-maps action-maps)
-        (prompt (substitute-command-keys
+(defun conn--dispatch-read-thing (&optional default-action override-maps)
+  (let ((prompt (substitute-command-keys
                  (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
                          ", \\[reset-arg] reset arg; "
@@ -3250,7 +3139,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
         (action default-action)
         keys cmd invalid thing-arg thing-sign)
     (conn--with-state conn-state
-      (conn-dispatch-read-thing-mode 1)
+      (apply #'conn-dispatch-read-thing-mode 1 override-maps)
       (unwind-protect
           (cl-prog
            nil
@@ -3313,7 +3202,7 @@ a list of the form (THING DISAPTCH-FINDER . DEFAULT-ACTION).")
                                    (or (get sym :conn-command-thing)
                                        (where-is-internal sym (list conn--dispatch-overriding-map) t))))
                             t))))
-              (conn-dispatch-read-thing-mode 1)
+              (apply #'conn-dispatch-read-thing-mode 1 override-maps)
               (go :loop))
              ((let (and thing (pred identity)) (get cmd :conn-command-thing))
               (cl-return
@@ -3336,19 +3225,12 @@ The user is first prompted for a either a THING or an ACTION
 to be performed followed by a THING to perform it on.  If
 no ACTION is selected the default ACTION is to go to the THING.
 
-Actions and things are selected via keybindings.  Actions are
-bound in the keymaps in `conn-dispatch-action-maps' which are
-active during prompting.  Things are associated with movement
-commands and pressing the binding for a movement command selects
-that commands THING (e.g. forward-sexp will select sexp as the
-THING to operate on).
-
 Once a THING has been selected the user is prompted for a string and
 the THING at the location selected is acted upon.
 
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
-  (interactive (conn--dispatch-read-thing conn-dispatch-action-maps))
+  (interactive (conn--dispatch-read-thing))
   (let ((current-prefix-arg arg)
         prefix-ovs labels)
     (unwind-protect
@@ -3383,13 +3265,6 @@ seconds."
          while repeat)
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs)))))
-
-(defun conn-dispatch-over-things (thing finder action arg &optional repeat)
-  "See `conn-dispatch-on-things', with default action `conn-dispatch-over'."
-  (interactive
-   (conn--dispatch-read-thing conn-dispatch-over-action-maps
-                              'conn-dispatch-over))
-  (conn-dispatch-on-things thing finder action arg repeat))
 
 (defun conn--dispatch-isearch-matches ()
   (with-restriction (window-start) (window-end)
@@ -4049,10 +3924,11 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (let ((conn--thing-overriding-maps
           (list (define-keymap "k" 'forward-line))))
-     (conn--read-thing-mover "Mover"
-                             (when current-prefix-arg
-                               (prefix-numeric-value current-prefix-arg))
-                             t)))
+     (conn--read-thing-mover
+      "Mover"
+      (when current-prefix-arg
+        (prefix-numeric-value current-prefix-arg))
+      t)))
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
@@ -4583,10 +4459,11 @@ When KILL-FLAG is non-nil kill the region as well."
 (defun conn-narrow-to-region (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (append (conn--read-thing-mover "Thing Mover"
-                                   (when current-prefix-arg
-                                     (prefix-numeric-value current-prefix-arg))
-                                   t)
+   (append (conn--read-thing-mover
+            "Thing Mover"
+            (when current-prefix-arg
+              (prefix-numeric-value current-prefix-arg))
+            t)
            (list t)))
   (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
     (narrow-to-region beg end)
