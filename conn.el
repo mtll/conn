@@ -591,7 +591,8 @@ If BUFFER is nil check `current-buffer'."
   (cl-loop for mode in (conn--thread 'major-mode -mode->
                          (buffer-local-value -mode-> (or buffer (current-buffer)))
                          (conn--derived-mode-all-parents -mode->))
-           for prop = (get mode property) when prop return prop))
+           for prop = (get mode property)
+           when prop return prop))
 
 (defun conn--merge-regions (regions)
   (let (merged)
@@ -5486,11 +5487,21 @@ See `tab-close'."
 
 (defun conn-wincontrol-maximize-horizontally ()
   (interactive)
-  (enlarge-window-horizontally (window-max-delta nil t)))
+  (conn-wincontrol-maximize-vertically t))
 
-(defun conn-wincontrol-maximize-vertically ()
+(defun conn-wincontrol-maximize-vertically (&optional horizontal)
   (interactive)
-  (enlarge-window (window-max-delta)))
+  (when (window-combined-p (selected-window) horizontal)
+    (cl-loop for sub = (thread-first
+                         (selected-window)
+                         window-parent
+                         window-child)
+             then (window-right sub)
+             while sub
+             unless (or (window-parameter sub 'no-delete-other-windows)
+                        (eq sub (selected-window)))
+             collect sub into to-delete
+             finally (mapc #'delete-window to-delete))))
 
 (defun conn--wincontrol-split-window-state (state)
   (let (params windows)
@@ -5797,8 +5808,6 @@ When ARG is nil the root window is used."
   "M-7" 'kill-buffer
   "M-8" 'tear-off-window
   "M-9" 'tab-detach
-  "M-R" 'conn-wincontrol-maximize-horizontally
-  "M-V" 'conn-wincontrol-maximize-vertically
   "M-y" 'conn-completing-yank-replace
   "C-+" 'maximize-window
   "C--" 'shrink-window-if-larger-than-buffer
@@ -5905,7 +5914,9 @@ When ARG is nil the root window is used."
   "C-x t s" 'tab-switch
   "C-x t a" 'conn-tab-to-register
   "C-`" 'other-window
-  "C-x m" 'conn-kmacro-prefix)
+  "C-x m" 'conn-kmacro-prefix
+  "M-H" 'conn-wincontrol-maximize-horizontally
+  "M-V" 'conn-wincontrol-maximize-vertically)
 
 (defvar-keymap conn-mode-map
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
