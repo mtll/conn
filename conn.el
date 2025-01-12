@@ -30,16 +30,15 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'easy-mmode)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x)
   (require 'map))
 
-(autoload 'kmacro-p "kmacro")
-(autoload 'kmacro-step-edit-macro "kmacro")
-
 (declare-function extract-rectangle-bounds "rect")
-(declare-function easy-mmode--globalized-predicate-p "easy-mmode")
+(declare-function kmacro-p "kmacro")
+(declare-function kmacro-step-edit-macro "kmacro")
 
 
 ;;;; Variables
@@ -246,7 +245,6 @@ Must be of a form accepted by `define-globalized-minor-mode'
 
 (defvar conn-enable-in-buffer-hook
   (list (lambda ()
-          (require 'easy-mmode)
           (easy-mmode--globalized-predicate-p conn-in-modes)))
   "Hook to determine if `conn-local-mode' should be enabled in a buffer.
 Each function is run without any arguments and if any of them return
@@ -1949,6 +1947,7 @@ The iterator must be the first argument in ARGLIST.
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
        ,docstring
+       (require 'kmacro)
        (let* ((undo-outer-limit nil)
               (undo-limit most-positive-fixnum)
               (undo-strong-limit most-positive-fixnum)
@@ -5620,9 +5619,9 @@ When ARG is nil the root window is used."
   "i" 'clone-indirect-buffer
   "k" 'delete-region
   "l" 'conn-join-lines
-  "m t" 'conn-kmacro-replace-region
-  "m e" 'conn-kmacro-emacs-on-region
-  "m c" 'conn-kmacro-conn-on-region
+  "m t" 'conn-kapply-replace-region
+  "m e" 'conn-kapply-emacs-on-region
+  "m c" 'conn-kapply-conn-on-region
   "I" 'indent-rigidly
   "N" 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
@@ -5703,9 +5702,9 @@ When ARG is nil the root window is used."
   "<backspace>" 'clear-rectangle
   "C-d" 'delete-whitespace-rectangle
   "#" 'rectangle-number-lines
-  "r m t" 'conn-kmacro-replace-rectangle
-  "r m e" 'conn-kmacro-emacs-on-rectangle
-  "r m c" 'conn-kmacro-conn-on-rectangle)
+  "r m t" 'conn-kapply-replace-rectangle
+  "r m e" 'conn-kapply-emacs-on-rectangle
+  "r m c" 'conn-kapply-conn-on-rectangle)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
