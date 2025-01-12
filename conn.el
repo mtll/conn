@@ -1540,19 +1540,18 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (conn--dot-mode 1)
   (save-mark-and-excursion
     (unwind-protect
-        (let ((dots (thread-last
-                      (progn
-                        (recursive-edit)
-                        (nreverse conn--dots))
-                      (seq-filter 'overlay-buffer)
-                      (mapcar (lambda (ov)
-                                (prog1
-                                    (if (overlay-get ov 'point)
-                                        (cons (conn--overlay-start-marker ov)
-                                              (conn--overlay-start-marker ov))
-                                      (conn--overlay-bounds-markers ov))
-                                  (delete-overlay ov)))))))
-          (append (list (region-beginning) (region-end)) dots))
+        (let ((dots
+               (cl-loop for dot in (progn (recursive-edit) conn--dots)
+                        when (overlay-buffer dot)
+                        collect (if (overlay-get dot 'point)
+                                    (cons (conn--overlay-start-marker dot)
+                                          (conn--overlay-start-marker dot))
+                                  (conn--overlay-bounds-markers dot)))))
+          (append (cl-loop for (b . e) in dots
+                           minimize b into beg
+                           maximize e into end
+                           finally return (list beg end))
+                  (nreverse dots)))
       (conn--dot-mode -1)
       (deactivate-mark t))))
 
