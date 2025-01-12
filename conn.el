@@ -3834,9 +3834,9 @@ Interactively `region-beginning' and `region-end'."
   (isearch-done)
   (conn--push-ephemeral-mark isearch-other-end))
 
-;;;;; Kmacro Commands
+;;;;; Kapply Commands
 
-(defun conn-kmacro-replace-region (string beg end)
+(defun conn-kapply-replace-region (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
@@ -3851,7 +3851,7 @@ Interactively `region-beginning' and `region-end'."
       (conn--kapply-with-state 'conn-emacs-state)
       conn--kmacro-apply)))
 
-(defun conn-kmacro-emacs-on-region (string beg end)
+(defun conn-kapply-emacs-on-region (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
@@ -3865,7 +3865,7 @@ Interactively `region-beginning' and `region-end'."
       (conn--kapply-with-state 'conn-emacs-state)
       conn--kmacro-apply)))
 
-(defun conn-kmacro-conn-on-region (string beg end)
+(defun conn-kapply-conn-on-region (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
@@ -3879,7 +3879,7 @@ Interactively `region-beginning' and `region-end'."
       (conn--kapply-with-state 'conn-state)
       conn--kmacro-apply)))
 
-(defun conn-kmacro-replace-rectangle ()
+(defun conn-kapply-replace-rectangle ()
   (interactive)
   (require 'rect)
   (thread-first
@@ -3892,7 +3892,7 @@ Interactively `region-beginning' and `region-end'."
     (conn--kapply-with-state 'conn-emacs-state)
     conn--kmacro-apply))
 
-(defun conn-kmacro-emacs-on-rectangle ()
+(defun conn-kapply-emacs-on-rectangle ()
   (interactive)
   (require 'rect)
   (thread-first
@@ -3904,7 +3904,7 @@ Interactively `region-beginning' and `region-end'."
     (conn--kapply-with-state 'conn-emacs-state)
     conn--kmacro-apply))
 
-(defun conn-kmacro-conn-on-rectangle ()
+(defun conn-kapply-conn-on-rectangle ()
   (interactive)
   (require 'rect)
   (thread-first
