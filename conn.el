@@ -5491,7 +5491,9 @@ See `tab-close'."
 
 (defun conn-wincontrol-maximize-vertically (&optional horizontal)
   (interactive)
-  (when (window-combined-p (selected-window) horizontal)
+  (when (and (not (window-minibuffer-p (selected-window)))
+             (not (window-parameter (selected-window) 'window-side))
+             (window-combined-p (selected-window) horizontal))
     (cl-loop for sub = (thread-first
                          (selected-window)
                          window-parent
