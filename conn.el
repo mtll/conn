@@ -990,11 +990,11 @@ disabled.
                 (run-hook-wrapped
                  'conn-transition-hook
                  (lambda (hook)
-                   (condition-case _err
+                   (condition-case err
                        (funcall hook)
                      (error
                       (remove-hook 'conn-transition-hook hook)
-                      (message "Error in transition hook %s" hook)))))))))))
+                      (message "Error in conn-transition-hook %s" (car err))))))))))))
 
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
