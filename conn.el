@@ -501,13 +501,13 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defmacro conn--without-conn-maps (&rest body)
   (declare (indent 0))
-  `(let ((emulation-mode-map-alists (seq-difference
-                                     emulation-mode-map-alists
-                                     '(conn--local-mode-maps
-                                       conn--major-mode-maps
-                                       conn--local-maps
-                                       conn--state-maps)
-                                     #'eq)))
+  `(let ((emulation-mode-map-alists
+          (seq-difference emulation-mode-map-alists
+                          '(conn--local-mode-maps
+                            conn--major-mode-maps
+                            conn--local-maps
+                            conn--state-maps)
+                          #'eq)))
      ,(macroexp-progn body)))
 
 (defmacro conn--with-region-emphasis (beg end &rest body)
@@ -857,20 +857,19 @@ is on or when `conn-input-method-always' is t."
           mode-line-mule-info
           `(""
             (conn--input-method
-             (:propertize ("" conn--input-method-title)
-                          help-echo (concat
-                                     "Current input method: "
-                                     conn--input-method
-                                     "\n\
+             ( :propertize ("" conn--input-method-title)
+               help-echo (concat
+                          "Current input method: "
+                          conn--input-method
+                          "\n\
 mouse-2: Disable input method\n\
 mouse-3: Describe current input method")
-                          local-map ,mode-line-input-method-map
-                          mouse-face mode-line-highlight))
-            ,(propertize
-              "%z"
-              'help-echo 'mode-line-mule-info-help-echo
-              'mouse-face 'mode-line-highlight
-              'local-map mode-line-coding-system-map)
+               local-map ,mode-line-input-method-map
+               mouse-face mode-line-highlight))
+            ,( propertize "%z"
+               'help-echo 'mode-line-mule-info-help-echo
+               'mouse-face 'mode-line-highlight
+               'local-map mode-line-coding-system-map)
             (:eval (mode-line-eol-desc)))))
    (conn--prev-mode-line-mule-info
     (setq mode-line-mule-info conn--prev-mode-line-mule-info))))
