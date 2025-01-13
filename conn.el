@@ -5757,7 +5757,7 @@ When ARG is nil the root window is used."
         nil
         :filter ,(lambda (&rest _)
                    (let ((binding (key-binding conn-backward-char-keys t)))
-                     (if (eq binding 'forward-char)
+                     (if (eq binding 'backward-char)
                          'conn-backward-char
                        binding))))
   "K" (conn-remapping-command conn-forward-paragraph-keys)
