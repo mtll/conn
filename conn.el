@@ -1447,12 +1447,11 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                          end (max end (overlay-end ov)))
                    (delete-overlay ov)))))
     (let ((dot (make-overlay beg end buffer))
-          (faces (thread-last
-                   (append (overlays-at (1- beg)) (overlays-at end))
-                   (seq-filter (lambda (ov)
-                                 (eq 'conn--dot-overlay (overlay-get ov 'category))))
-                   (mapcar (lambda (ov) (overlay-get ov 'face)))
-                   (seq-difference conn-dot-faces))))
+          (faces
+           (cl-loop for ov in (append (overlays-at (1- beg)) (overlays-at end))
+                    when (eq 'conn--dot-overlay (overlay-get ov 'category))
+                    collect (overlay-get ov 'face) into faces
+                    finally return (seq-difference conn-dot-faces faces))))
       (overlay-put dot 'category 'conn--dot-overlay)
       (overlay-put dot 'point point)
       (overlay-put dot 'face (car faces))
@@ -1486,9 +1485,9 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 (defun conn-delete-dots ()
   (interactive)
   (cl-flet ((get-dots (ovs)
-              (seq-filter (lambda (ov)
-                            (eq (overlay-get ov 'category) 'conn--dot-overlay))
-                          ovs)))
+              (cl-loop for ov in ovs
+                       when (eq (overlay-get ov 'category) 'conn--dot-overlay)
+                       collect ov)))
     (dolist (ov (if (use-region-p)
                     (get-dots (overlays-in (region-beginning) (region-end)))
                   (or (get-dots (overlays-at (point)))
@@ -1544,11 +1543,10 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                                     (cons (conn--overlay-start-marker dot)
                                           (conn--overlay-start-marker dot))
                                   (conn--overlay-bounds-markers dot)))))
-          (append (cl-loop for (b . e) in dots
-                           minimize b into beg
-                           maximize e into end
-                           finally return (list beg end))
-                  (nreverse dots)))
+          (cl-loop for (b . e) in dots
+                   minimize b into beg
+                   maximize e into end
+                   finally return (append (list beg end) (nreverse dots))))
       (conn--dot-mode -1)
       (deactivate-mark t))))
 
@@ -3252,17 +3250,16 @@ seconds."
                                (setq sum (+ sum (length (cdr p))))))
                            conn-dispatch-label-characters)
                           (user-error "No matching candidates")))
-         do
-         (let* ((prefix (conn--read-labels
-                         prefix-ovs
-                         labels
-                         'conn--dispatch-label-overlays
-                         'prefix-overlay))
-                (window (overlay-get prefix 'window))
-                (pt (overlay-start prefix)))
-           (setq conn-this-command-thing
-                 (or (overlay-get prefix 'thing) thing))
-           (funcall action window pt conn-this-command-thing))
+         do (let* ((prefix (conn--read-labels
+                            prefix-ovs
+                            labels
+                            'conn--dispatch-label-overlays
+                            'prefix-overlay))
+                   (window (overlay-get prefix 'window))
+                   (pt (overlay-start prefix)))
+              (setq conn-this-command-thing
+                    (or (overlay-get prefix 'thing) thing))
+              (funcall action window pt conn-this-command-thing))
          while repeat)
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs)))))
@@ -6156,10 +6153,6 @@ determine if `conn-local-mode' should be enabled."
                      'conn-goto-char-backward
                      'conn-forward-char
                      'conn-goto-char-forward
-                     'paredit-forward
-                     'paredit-forward-up
-                     'paredit-backward
-                     'paredit-backward-up
                      'conn-dispatch-on-things))
 
 (with-eval-after-load 'paredit
@@ -6167,6 +6160,12 @@ determine if `conn-local-mode' should be enabled."
   (declare-function paredit-backward-down "paredit")
   (declare-function paredit-forward-up "paredit")
   (declare-function paredit-backward-up "paredit")
+
+  (with-eval-after-load 'eldoc
+    (eldoc-add-command 'paredit-forward
+                       'paredit-forward-up
+                       'paredit-backward
+                       'paredit-backward-up))
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'paredit-mode)
@@ -6233,6 +6232,14 @@ determine if `conn-local-mode' should be enabled."
   (declare-function sp-end-of-sexp "smartparens")
   (declare-function sp-beginning-of-sexp "smartparens")
   (declare-function sp-point-in-comment "smartparens")
+
+  (with-eval-after-load 'eldoc
+    (eldoc-add-command 'sp-down-sexp
+                       'sp-backward-down-sexp
+                       'sp-up-sexp
+                       'sp-backward-up-sexp
+                       'sp-backward-sexp
+                       'sp-forward-sexp))
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-state 'smartparens-mode)
