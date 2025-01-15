@@ -586,9 +586,10 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
-  (cl-loop for mode in (conn--thread 'major-mode -mode->
-                         (buffer-local-value -mode-> (or buffer (current-buffer)))
-                         (conn--derived-mode-all-parents -mode->))
+  (cl-loop for mode in (thread-first
+                         'major-mode
+                         (buffer-local-value (or buffer (current-buffer)))
+                         (conn--derived-mode-all-parents))
            for prop = (get mode property)
            when prop return prop))
 
@@ -2867,9 +2868,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (when-let ((prefix (overlay-get ov 'prefix-overlay)))
                     (overlay-put prefix 'face nil)
                     (overlay-put prefix 'after-string nil))
-                (conn--thread (overlay-get ov prop) -->
-                  (substring --> 1)
-                  (overlay-put ov prop -->))
+                (thread-first
+                  (overlay-get ov prop)
+                  (substring 1)
+                  (conn--thread --> (overlay-put ov prop -->)))
                 (move-overlay ov
                               (overlay-start ov)
                               (+ (overlay-start ov)
@@ -3462,10 +3464,10 @@ Expansions and contractions are provided by functions in
   (set-register register (conn--make-narrow-register)))
 
 (defun conn--narrow-ring-record (beg end)
-  (conn--thread
-      (cons (conn--create-marker beg) (conn--create-marker end))
-      -->
-    (setq conn-narrow-ring (cons --> (delete --> conn-narrow-ring)))))
+  (let ((narrowing (cons (conn--create-marker beg)
+                         (conn--create-marker end))))
+    (setq conn-narrow-ring
+          (cons narrowing (delete narrowing conn-narrow-ring)))))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
@@ -5261,11 +5263,11 @@ When called interactively N is `last-command-event'."
 (defun conn-wincontrol-forward-delete-arg ()
   "Delete most significant digit of prefix arg."
   (interactive)
-  (setq conn--wincontrol-arg (conn--thread (log conn--wincontrol-arg 10)
-                                 -->
-                               (floor -->)
-                               (expt 10 -->)
-                               (mod conn--wincontrol-arg -->))))
+  (setq conn--wincontrol-arg (thread-last
+                               (log conn--wincontrol-arg 10)
+                               (floor)
+                               (expt 10)
+                               (mod conn--wincontrol-arg))))
 
 (defun conn-wincontrol-exit ()
   "Exit `conn-wincontrol-mode'."
