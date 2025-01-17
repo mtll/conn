@@ -1520,7 +1520,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 (define-minor-mode conn--dot-mode
   "Minor mode for multiple dots."
   :global t
-  :lighter ""
+  :lighter " DOT"
   :interactive nil
   (if conn--dot-mode
       (progn
