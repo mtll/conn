@@ -4798,6 +4798,19 @@ there's a region, all lines that region covers will be duplicated."
    nil "[current-window]")
   (message "Display next command buffer in current window…"))
 
+(defun conn-transpose-window (window)
+  "Prompt for window and swap current window and other window."
+  (interactive
+   (list (conn--prompt-for-window
+          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+  (window-swap-states nil window))
+
+(defun conn-yank-window (window)
+  (interactive
+   (list (conn--prompt-for-window
+          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+  (save-selected-window (window-swap-states nil window)))
+
 ;;;;; Transition Functions
 
 (defun conn-change-whole-line (&optional arg)
@@ -5830,7 +5843,7 @@ When ARG is nil the root window is used."
   "C" 'conn-copy-region
   "d" (conn-remapping-command conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
-  "F" 'conn-dispatch-over-things
+  "F" 'conn-yank-window
   "g" (conn-remapping-command (key-parse "M-g"))
   "h" 'conn-expand
   "H" conn-mark-thing-map
@@ -5840,6 +5853,7 @@ When ARG is nil the root window is used."
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
   "s" (conn-remapping-command (key-parse "M-s"))
+  "T" 'conn-transpose-window
   "V" 'conn-narrow-to-region
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
@@ -5865,7 +5879,6 @@ When ARG is nil the root window is used."
   ">" 'org-demote-subtree
   "?" (conn-remapping-command conn-undo-redo-keys)
   "f" 'conn-dispatch-on-things
-  "F" 'conn-dispatch-over-things
   "C" 'org-toggle-comment
   "c" (conn-remapping-command (key-parse "C-c"))
   "b" conn-edit-map
