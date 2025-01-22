@@ -4805,6 +4805,15 @@ there's a region, all lines that region covers will be duplicated."
           (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
   (window-swap-states nil window))
 
+(defun conn-throw-buffer (window)
+  (interactive
+   (list (conn--prompt-for-window
+          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+  (display-buffer
+   (current-buffer)
+   (lambda (_ _) (cons (conn--prompt-for-window window) 'reuse)))
+  (next-buffer))
+
 (defun conn-yank-window (window)
   (interactive
    (list (conn--prompt-for-window
@@ -4966,7 +4975,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
    "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
    "split vert/right; "
-   "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-yank-window]: transpose/yank; "
+   "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-throw-buffer] \\[conn-wincontrol-yank-window]: "
+   "transpose/throw/yank; "
    "\\[conn-wincontrol-mru-window]: last win"))
 
 (defconst conn--wincontrol-window-format-2
@@ -5144,6 +5154,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "v" 'conn-wincontrol-split-vertically
   "w" 'enlarge-window-horizontally
   "q" 'conn-wincontrol-transpose-window
+  "Q" 'conn-wincontrol-throw-buffer
   "y" 'conn-wincontrol-yank-window
   "z" 'conn-wincontrol-zoom-out
   "Z" 'conn-wincontrol-zoom-in)
@@ -5465,6 +5476,13 @@ When called interactively N is `last-command-event'."
   "Prompt for window and swap current window and other window."
   (interactive)
   (window-swap-states nil (get-mru-window 0 nil t t)))
+
+(defun conn-wincontrol-throw-buffer ()
+  (interactive)
+  (display-buffer
+   (current-buffer)
+   (lambda (_ _) (cons (get-mru-window 0 nil t t) 'reuse)))
+  (switch-to-prev-buffer))
 
 (defun conn-wincontrol-yank-window ()
   (interactive)
@@ -5854,6 +5872,7 @@ When ARG is nil the root window is used."
   "R" 'conn-rectangle-mark
   "s" (conn-remapping-command (key-parse "M-s"))
   "T" 'conn-transpose-window
+  "Q" 'conn-throw-buffer
   "V" 'conn-narrow-to-region
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
