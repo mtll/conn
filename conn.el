@@ -2972,6 +2972,26 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (funcall fn)
                      (funcall (alist-get t conn-dispatch-all-things-collector-alist) thing)))))
 
+(defun conn--dispatch-all-buttons (&optional window-predicate)
+  (let (ovs success)
+    (unwind-protect
+        (cl-loop for win in (conn--preview-get-windows
+                             (pcase window-predicate
+                               ('t (lambda (_) t))
+                               ('nil nil)
+                               ((pred functionp)
+                                (funcall window-predicate win))))
+                 do (with-selected-window win
+                      (with-restriction (window-start) (window-end)
+                        (save-excursion
+                          (goto-char (point-min))
+                          (when (button-at (point))
+                            (push (conn--make-preview-overlay (point) 1 nil) ovs))
+                          (while (forward-button 1 nil nil t)
+                            (push (conn--make-preview-overlay (point) 1 nil) ovs)))))
+                 finally return (progn (setq success t) ovs))
+      (unless success (mapc #'delete-overlay ovs)))))
+
 (defun conn--dispatch-re-matches (regexp &optional window-predicate)
   (cl-loop for win in (conn--preview-get-windows window-predicate)
            nconc (with-selected-window win
@@ -3265,6 +3285,17 @@ seconds."
          while repeat)
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs)))))
+
+(defun conn-dispatch-on-buttons ()
+  "Dispatch on buttons."
+  (interactive)
+  (conn-dispatch-on-things
+   nil
+   (apply-partially 'conn--dispatch-all-buttons t)
+   (lambda (win pt _thing)
+     (select-window win)
+     (push-button pt))
+   nil))
 
 (defun conn--dispatch-isearch-matches ()
   (with-restriction (window-start) (window-end)
@@ -5813,6 +5844,7 @@ When ARG is nil the root window is used."
   :keymap conn-state-map
   :parent conn-movement-map
   "e" 'conn-emacs-state
+  "E" 'conn-dispatch-on-buttons
   "t" 'conn-change
   ":" 'conn-wincontrol-one-command
   "<remap> <toggle-input-method>" 'conn-toggle-input-method
