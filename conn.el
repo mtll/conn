@@ -3388,7 +3388,11 @@ potential expansions.  Functions may return invalid expansions
 
 If the region is active only the `point' is moved.
 Expansions are provided by functions in `conn-expansion-functions'."
-  (interactive "p")
+  (interactive "P")
+  (when (consp arg)
+    (conn--push-ephemeral-mark)
+    (setq arg (log (prefix-numeric-value arg) 4)))
+  (setq arg (prefix-numeric-value arg))
   (unless (conn--valid-expansions-p)
     (setq conn--current-expansions (conn--expand-create-expansions)))
   (if (< arg 0)
@@ -3413,7 +3417,8 @@ Expansions are provided by functions in `conn-expansion-functions'."
                               conn--current-expansions)
                (`(,beg . ,end)
                 (goto-char (if (= (point) (region-beginning)) beg end))
-                (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
+                (conn--push-ephemeral-mark
+                 (if (= (point) (region-beginning)) end beg)))
                ('nil
                 (user-error "No more expansions")))))))
   (unless (or (region-active-p)
