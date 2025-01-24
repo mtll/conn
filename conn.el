@@ -6147,6 +6147,10 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'org-element
+   :bounds-op (lambda ()
+                (save-mark-and-excursion
+                  (org-mark-element)
+                  (cons (region-beginning) (region-end))))
    :mark-key "m"
    :beg-op 'org-backward-element
    :end-op 'org-forward-element
@@ -6182,8 +6186,7 @@ determine if `conn-local-mode' should be enabled."
    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading t)
    :forward-op 'org-next-visible-heading
-   :modes 'org-mode
-   :mark-key "H")
+   :modes 'org-mode)
 
   (conn-register-thing-commands
    'org-heading 'conn-sequential-thing-handler
