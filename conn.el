@@ -5052,7 +5052,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
    "\\[conn-wincontrol-exit]: exit; "
-   "\\[conn-tab-to-register]: store"
+   "\\[conn-tab-to-register]: store; "
+   "\\[tab-switch]: switch"
    "\n"
    "\\[tab-bar-move-window-to-tab]: win to new tab; "
    "\\[tab-previous] \\[tab-next]: next/prev; "
@@ -5164,12 +5165,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-b" 'conn-wincontrol-help-backward
   "H" 'maximize-window
   "h" 'enlarge-window
-  "i" 'conn-wincontrol-tab-new
-  "I" 'tab-next
+  "I" 'conn-wincontrol-tab-new
+  "i" 'tab-next
   "j" 'previous-buffer
   "J" 'bury-buffer
-  "k" 'conn-wincontrol-tab-close
-  "K" 'tab-previous
+  "K" 'conn-wincontrol-tab-close
+  "k" 'tab-previous
   "l" 'next-buffer
   "L" 'unbury-buffer
   "M" 'tab-bar-move-window-to-tab
@@ -5210,7 +5211,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol ()
   "Enable `conn-wincontrol-mode'."
   (interactive)
-  (conn-wincontrol-mode 1))
+  (if (= (minibuffer-depth) 0)
+      (conn-wincontrol-mode 1)
+    (user-error "Cannot activate wincontrol while minibuffer is active.")))
 
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
