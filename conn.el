@@ -4237,7 +4237,7 @@ Interactively `region-beginning' and `region-end'."
                                     'grep-regexp-history)))
     (occur search-string)))
 
-(defun conn-org-tree-edit-insert-heading ()
+(defun conn-org-edit-insert-heading ()
   (interactive)
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content))
@@ -4834,22 +4834,29 @@ there's a region, all lines that region covers will be duplicated."
   (interactive
    (list (conn--prompt-for-window
           (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
-  (window-swap-states nil window))
+  (if window
+      (window-swap-states nil window)
+    (user-error "No other visible windows")))
 
 (defun conn-throw-buffer (window)
   (interactive
    (list (conn--prompt-for-window
           (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
-  (display-buffer
-   (current-buffer)
-   (lambda (_ _) (cons (conn--prompt-for-window window) 'reuse)))
-  (next-buffer))
+  (if window
+      (progn
+        (display-buffer
+         (current-buffer)
+         (lambda (_ _) (cons (conn--prompt-for-window window) 'reuse)))
+        (next-buffer))
+    (user-error "No other visible windows")))
 
 (defun conn-yank-window (window)
   (interactive
    (list (conn--prompt-for-window
           (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
-  (save-selected-window (window-swap-states nil window)))
+  (if window
+      (save-selected-window (window-swap-states nil window))
+    (user-error "No other visible windows")))
 
 ;;;;; Transition Functions
 
@@ -5856,8 +5863,6 @@ When ARG is nil the root window is used."
   "/" (conn-remapping-command conn-undo-keys)
   ";" 'conn-wincontrol
   "\\" 'conn-kapply-prefix
-  ;; "<tab>" 'indent-region
-  ;; "TAB" 'indent-region
   "=" 'indent-relative
   "?" (conn-remapping-command conn-undo-redo-keys)
   "_" 'repeat-complex-command
@@ -5903,8 +5908,8 @@ When ARG is nil the root window is used."
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
   "s" (conn-remapping-command (key-parse "M-s"))
-  "T" 'conn-transpose-window
-  "Q" 'conn-throw-buffer
+  "Q" 'conn-transpose-window
+  "T" 'conn-throw-buffer
   "V" 'conn-narrow-to-region
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
@@ -5925,9 +5930,9 @@ When ARG is nil the root window is used."
   "/" (conn-remapping-command conn-undo-keys)
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "*" 'conn-org-tree-edit-insert-heading
-  "<" 'org-promote-subtree
-  ">" 'org-demote-subtree
+  "*" 'conn-org-edit-insert-heading
+  "<" 'org-drag-element-backward
+  ">" 'org-drag-element-forward
   "?" (conn-remapping-command conn-undo-redo-keys)
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
@@ -5943,8 +5948,8 @@ When ARG is nil the root window is used."
   "L" 'org-metaright
   "l" 'org-next-visible-heading
   "M" 'org-mark-subtree
-  "m" 'org-backward-element
-  "n" 'org-forward-element
+  "m" 'org-forward-element
+  "n" 'org-backward-element
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
   "p" 'conn-register-load
