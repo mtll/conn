@@ -459,7 +459,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (eval-and-compile
   (defmacro conn--thread (form needle &rest forms)
-    (declare (indent 2)
+    (declare (indent 1)
              (debug (symbolp form)))
     (if forms
         `(let ((,needle ,form))
@@ -1737,18 +1737,22 @@ Possibilities: \\<query-replace-map>
 
 (defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
   (prog1
-      (conn--thread
-          (conn-bounds-of-things-in-region thing beg end) -->
-        (if skip-empty
-            (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
-          -->)
-        (if (or (null nth) (= 1 nth))
-            -->
-          (cl-loop with stack = -->
-                   while stack
-                   collect (car stack)
-                   do (cl-loop repeat nth do (pop stack))))
-        (conn--kapply-region-iterator (if reverse (nreverse -->) -->)))
+      (thread-first
+        (conn-bounds-of-things-in-region thing beg end)
+        (conn--thread regions
+          (if skip-empty
+              (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
+                          regions)
+            regions))
+        (conn--thread regions
+          (if (or (null nth) (= 1 nth))
+              regions
+            (cl-loop with stack = regions
+                     while stack
+                     collect (car stack)
+                     do (cl-loop repeat nth do (pop stack)))))
+        (conn--thread regions
+          (conn--kapply-region-iterator (if reverse (nreverse regions) regions))))
     (deactivate-mark)))
 
 (defun conn--kapply-region-iterator (regions &optional reverse)
@@ -2871,7 +2875,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (thread-first
                   (overlay-get ov prop)
                   (substring 1)
-                  (conn--thread --> (overlay-put ov prop -->)))
+                  (conn--thread suffix (overlay-put ov prop suffix)))
                 (move-overlay ov
                               (overlay-start ov)
                               (+ (overlay-start ov)
@@ -3824,11 +3828,12 @@ instances of from-string.")
                  (if (eq (selected-frame) (conn-tab-register-frame val))
                      (when-let ((index (conn--get-tab-index-by-cookie
                                         (conn-tab-register-cookie val))))
-                       (conn--thread index -->
-                         (nth --> (funcall tab-bar-tabs-function))
-                         (if (eq (car -->) 'current-tab)
-                             (propertize "*CURRENT TAB*" 'face 'error)
-                           (alist-get 'name -->))))
+                       (thread-first
+                         (nth index (funcall tab-bar-tabs-function))
+                         (conn--thread tab
+                           (if (eq (car tab) 'current-tab)
+                               (propertize "*CURRENT TAB*" 'face 'error)
+                             (alist-get 'name tab)))))
                    "on another frame"))))
 
 (defun conn-tab-to-register (register)
