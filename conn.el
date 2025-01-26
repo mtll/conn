@@ -519,13 +519,22 @@ Used to restore previous value when `conn-mode' is disabled.")
          (delete-overlay ,beg-ol)
          (delete-overlay ,end-ol)))))
 
-(defun conn-remapping-command (from-keys)
+(defun conn-remap-key (from-keys)
   `(menu-item
     ,(format "Remap %s" (key-description from-keys))
     ,(conn--without-conn-maps (key-binding from-keys t))
-    :filter ,(lambda (&rest _)
+    :filter ,(lambda (_real-binding)
                (conn--without-conn-maps
                  (key-binding from-keys t)))))
+
+(defun conn-remap-keymap (from-keys)
+  `(menu-item
+    ,(format "Remap %s Keymap" (key-description from-keys))
+    ,(conn--without-conn-maps (key-binding from-keys t))
+    :filter ,(lambda (real-binding)
+               (conn--without-conn-maps
+                 (let ((binding (key-binding from-keys t)))
+                   (if (keymapp binding) binding real-binding))))))
 
 ;; From orderless
 (defun conn--escapable-split-on-char (string char)
@@ -5175,7 +5184,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   ";" 'conn-wincontrol-exit-to-initial-win
   "b" 'conn-tab-to-register
   "C" 'tab-bar-duplicate-tab
-  "c" (conn-remapping-command (key-parse "C-c"))
+  "c" (conn-remap-key (key-parse "C-c"))
   "d" 'delete-window
   "e" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
@@ -5201,7 +5210,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "O" 'tear-off-window
   "p" 'conn-register-load
   "P" 'window-configuration-to-register
-  "x" (conn-remapping-command (key-parse "C-x"))
+  "x" (conn-remap-key (key-parse "C-x"))
   "X" 'conn-wincontrol-mru-window
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
@@ -5818,18 +5827,18 @@ When ARG is nil the root window is used."
 (defvar-keymap conn-movement-map
   ">" 'forward-line
   "<" 'conn-backward-line
-  "o" (conn-remapping-command conn-forward-word-keys)
+  "o" (conn-remap-key conn-forward-word-keys)
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
-  "u" (conn-remapping-command conn-backward-word-keys)
-  "(" (conn-remapping-command conn-backward-list-keys)
-  ")" (conn-remapping-command conn-forward-list-keys)
-  "[" (conn-remapping-command conn-backward-up-list-keys)
-  "]" (conn-remapping-command conn-down-list-keys)
-  "{" (conn-remapping-command conn-backward-sentence-keys)
-  "}" (conn-remapping-command conn-forward-sentence-keys)
-  "I" (conn-remapping-command conn-backward-paragraph-keys)
-  "i" (conn-remapping-command conn-previous-line-keys)
+  "u" (conn-remap-key conn-backward-word-keys)
+  "(" (conn-remap-key conn-backward-list-keys)
+  ")" (conn-remap-key conn-forward-list-keys)
+  "[" (conn-remap-key conn-backward-up-list-keys)
+  "]" (conn-remap-key conn-down-list-keys)
+  "{" (conn-remap-key conn-backward-sentence-keys)
+  "}" (conn-remap-key conn-forward-sentence-keys)
+  "I" (conn-remap-key conn-backward-paragraph-keys)
+  "i" (conn-remap-key conn-previous-line-keys)
   "J" 'conn-beginning-of-inner-line
   "j" `(menu-item
         ""
@@ -5839,8 +5848,8 @@ When ARG is nil the root window is used."
                      (if (eq binding 'backward-char)
                          'conn-backward-char
                        binding))))
-  "K" (conn-remapping-command conn-forward-paragraph-keys)
-  "k" (conn-remapping-command conn-next-line-keys)
+  "K" (conn-remap-key conn-forward-paragraph-keys)
+  "k" (conn-remap-key conn-next-line-keys)
   "L" 'conn-end-of-inner-line
   "l" `(menu-item
         ""
@@ -5850,10 +5859,10 @@ When ARG is nil the root window is used."
                      (if (eq binding 'forward-char)
                          'conn-forward-char
                        binding))))
-  "M" (conn-remapping-command conn-end-of-defun-keys)
-  "m" (conn-remapping-command conn-forward-sexp-keys)
-  "N" (conn-remapping-command conn-beginning-of-defun-keys)
-  "n" (conn-remapping-command conn-backward-sexp-keys))
+  "M" (conn-remap-key conn-end-of-defun-keys)
+  "m" (conn-remap-key conn-forward-sexp-keys)
+  "N" (conn-remap-key conn-beginning-of-defun-keys)
+  "n" (conn-remap-key conn-backward-sexp-keys))
 
 (define-keymap
   :keymap conn-state-map
@@ -5868,11 +5877,11 @@ When ARG is nil the root window is used."
   "'" 'conn-other-place-prefix
   "+" 'conn-set-register-seperator
   "." 'repeat
-  "/" (conn-remapping-command conn-undo-keys)
+  "/" (conn-remap-key conn-undo-keys)
   ";" 'conn-wincontrol
   "\\" 'conn-kapply-prefix
   "=" 'indent-relative
-  "?" (conn-remapping-command conn-undo-redo-keys)
+  "?" (conn-remap-key conn-undo-redo-keys)
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command
   "M-0" 'tab-close
@@ -5889,25 +5898,25 @@ When ARG is nil the root window is used."
   "C-1" 'delete-other-windows
   "C-2" 'split-window-below
   "C-3" 'split-window-right
-  "C-4" (conn-remapping-command (key-parse "C-x 4"))
-  "C-5" (conn-remapping-command (key-parse "C-x 5"))
+  "C-4" (conn-remap-key (key-parse "C-x 4"))
+  "C-5" (conn-remap-key (key-parse "C-x 5"))
   "C-8" 'conn-tab-to-register
   "C-9" 'quit-window
   "C-=" 'balance-windows
   "C-M-0" 'kill-buffer-and-window
   "C-M-l" 'conn-recenter-on-region
   "C-M-S-l" 'conn-recenter-on-region-other-window
-  "C-t" (conn-remapping-command (key-parse "C-x t"))
+  "C-t" (conn-remap-key (key-parse "C-x t"))
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" conn-edit-map
-  "c" (conn-remapping-command (key-parse "C-c"))
+  "c" (conn-remap-key (key-parse "C-c"))
   "C" 'conn-copy-region
-  "d" (conn-remapping-command conn-delete-char-keys)
+  "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-yank-window
-  "g" (conn-remapping-command (key-parse "M-g"))
+  "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
   "H" conn-mark-thing-map
   "p" 'conn-register-load
@@ -5915,7 +5924,7 @@ When ARG is nil the root window is used."
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
-  "s" (conn-remapping-command (key-parse "M-s"))
+  "s" (conn-remap-keymap (key-parse "M-s"))
   "Q" 'conn-transpose-window
   "T" 'conn-throw-buffer
   "V" 'conn-narrow-to-region
@@ -5923,9 +5932,9 @@ When ARG is nil the root window is used."
   "w" 'conn-kill-region
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
-  "x" (conn-remapping-command (key-parse "C-x"))
+  "x" (conn-remap-key (key-parse "C-x"))
   "Y" 'yank-from-kill-ring
-  "y" (conn-remapping-command conn-yank-keys)
+  "y" (conn-remap-key conn-yank-keys)
   "z" 'conn-exchange-mark-command)
 
 (define-keymap
@@ -5935,18 +5944,18 @@ When ARG is nil the root window is used."
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
   "." 'point-to-register
-  "/" (conn-remapping-command conn-undo-keys)
+  "/" (conn-remap-key conn-undo-keys)
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "*" 'conn-org-edit-insert-heading
   "<" 'org-drag-element-backward
   ">" 'org-drag-element-forward
-  "?" (conn-remapping-command conn-undo-redo-keys)
+  "?" (conn-remap-key conn-undo-redo-keys)
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
-  "c" (conn-remapping-command (key-parse "C-c"))
+  "c" (conn-remap-key (key-parse "C-c"))
   "b" conn-edit-map
-  "g" (conn-remapping-command (key-parse "M-g"))
+  "g" (conn-remap-keymap (key-parse "M-g"))
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
   "J" 'org-metaleft
@@ -5961,14 +5970,14 @@ When ARG is nil the root window is used."
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
   "p" 'conn-register-load
-  "s" (conn-remapping-command (key-parse "M-s"))
+  "s" (conn-remap-keymap (key-parse "M-g"))
   "T" 'org-todo
   "t" 'org-sparse-tree
   "U" 'org-previous-block
   "u" 'org-up-element
   "W" 'widen
   "w" 'org-refile
-  "x" (conn-remapping-command (key-parse "C-x"))
+  "x" (conn-remap-key (key-parse "C-x"))
   "z" 'conn-exchange-mark-command)
 
 (define-keymap
