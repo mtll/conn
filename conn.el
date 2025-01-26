@@ -194,9 +194,6 @@ CONDITION has the same meaning as in `buffer-match-p'."
   :group 'conn
   :type '(list symbol))
 
-(defvar conn-window-label-sort-function 'conn--sort-window-mru
-  "Sort function for window labels when prompting for a window.")
-
 ;;;;; State Variables
 
 (defvar conn-states nil)
@@ -1145,27 +1142,37 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
       (mapcar #'delete-overlay candidates))))
 
 (defun conn--create-window-labels (labels windows)
-  (cl-loop with scroll-margin = 0
-           for win in windows
-           for lbl in labels
-           collect (with-selected-window win
-                     (let ((overlay (make-overlay (window-start) (window-end))))
-                       (goto-char (window-start))
-                       (forward-line)
-                       (overlay-put overlay 'conn-overlay t)
-                       (overlay-put overlay 'face 'shadow)
-                       (overlay-put overlay 'window win)
-                       (overlay-put overlay 'before-string
-                                    (propertize lbl 'face 'conn-window-prompt-face))
-                       overlay))))
+  (let* ((to-label (seq-filter (lambda (win)
+                                 (not (window-parameter win 'conn-label)))
+                               windows))
+         (labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
+                              (window-list-1 nil 'no-minibuff t)))
+         (labels (thread-first
+                   (lambda (win) (window-parameter win 'conn-label))
+                   (mapcar labeled)
+                   (conn--thread used (seq-difference labels used)))))
+    (cl-loop with scroll-margin = 0
+             for win in windows
+             for label = (or (window-parameter win 'conn-label)
+                             (set-window-parameter win 'conn-label (pop labels)))
+             collect (with-selected-window win
+                       (let ((overlay (make-overlay (window-start) (window-end))))
+                         (goto-char (window-start))
+                         (forward-line)
+                         (overlay-put overlay 'conn-overlay t)
+                         (overlay-put overlay 'face 'shadow)
+                         (overlay-put overlay 'window win)
+                         (overlay-put overlay 'before-string
+                                      (propertize label 'face 'conn-window-prompt-face))
+                         overlay)))))
 
-(defun conn--sort-window-mru (a b)
-  "Sort windows for most to least recently used."
-  (> (window-use-time a) (window-use-time b)))
+(defun conn--destroy-window-labels ()
+  (dolist (win (window-list-1 nil 'no-minibuf t))
+    (set-window-parameter win 'conn-label nil)))
 
-(defun conn--prompt-for-window (windows)
-  (when (setq windows (seq-sort conn-window-label-sort-function
-                                (seq-remove 'window-dedicated-p windows)))
+(defun conn--prompt-for-window (windows &optional dedicated)
+  (when (or (and dedicated windows)
+            (setq windows (seq-remove 'window-dedicated-p windows)))
     (if (length= windows 1)
         (car windows)
       (let ((window-state
@@ -1176,15 +1183,18 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
         (unwind-protect
             (conn--read-labels
              windows
-             (conn--create-label-strings (length windows)
-                                         conn-window-label-characters)
+             (conn--create-label-strings
+              (length (window-list-1 nil 'no-minibuf t))
+              conn-window-label-characters)
              'conn--create-window-labels
              'window)
           (cl-loop for win in windows
                    for (pt vscroll hscroll) in window-state do
                    (set-window-point win pt)
                    (set-window-hscroll win hscroll)
-                   (set-window-vscroll win vscroll)))))))
+                   (set-window-vscroll win vscroll))
+          (unless conn-wincontrol-mode
+            (conn--destroy-window-labels)))))))
 
 
 ;;;; Read Things
@@ -2476,7 +2486,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defvar conn-dispatch-all-things-collector-alist
   (list (cons t 'conn--dispatch-all-things-1)))
 
-(defvar conn-dispatch-maps-alist nil)
+(defvar conn-dispatch-things-maps-alist nil)
 
 (defvar conn--dispatch-overriding-map nil)
 
@@ -2516,7 +2526,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (thread-first
         (setq conn--dispatch-overriding-map
               (make-composed-keymap
-               (cl-loop for (var . map) in conn-dispatch-maps-alist
+               (cl-loop for (var . map) in conn-dispatch-things-maps-alist
                         when var collect map)
                conn-dispatch-read-thing-mode-map))
         (internal-push-keymap 'overriding-terminal-local-map))
@@ -5023,7 +5033,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[delete-window] \\[delete-other-windows]: delete win/other; "
    "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
    "split vert/right; "
-   "\\[conn-wincontrol-transpose-window] \\[conn-wincontrol-throw-buffer] \\[conn-wincontrol-yank-window]: "
+   "\\[conn-transpose-window] \\[conn-throw-buffer] \\[conn-yank-window]: "
    "transpose/throw/yank; "
    "\\[conn-wincontrol-mru-window]: last win"))
 
@@ -5202,9 +5212,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
   "w" 'enlarge-window-horizontally
-  "q" 'conn-wincontrol-transpose-window
-  "Q" 'conn-wincontrol-throw-buffer
-  "y" 'conn-wincontrol-yank-window
+  "q" 'conn-transpose-window
+  "Q" 'conn-throw-buffer
+  "y" 'conn-yank-window
   "z" 'conn-wincontrol-zoom-out
   "Z" 'conn-wincontrol-zoom-in)
 
@@ -5252,6 +5262,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                      conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
+  (conn--destroy-window-labels)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -5274,6 +5285,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
+  (conn--destroy-window-labels)
   (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -5522,23 +5534,6 @@ When called interactively N is `last-command-event'."
   (interactive)
   (when-let ((mru (get-mru-window 0 nil t t)))
     (select-window mru)))
-
-(defun conn-wincontrol-transpose-window ()
-  "Prompt for window and swap current window and other window."
-  (interactive)
-  (window-swap-states nil (get-mru-window 0 nil t t)))
-
-(defun conn-wincontrol-throw-buffer ()
-  (interactive)
-  (display-buffer
-   (current-buffer)
-   (lambda (_ _) (cons (get-mru-window 0 nil t t) 'reuse)))
-  (switch-to-prev-buffer))
-
-(defun conn-wincontrol-yank-window ()
-  (interactive)
-  (save-selected-window
-    (window-swap-states nil (get-mru-window 0 nil t t))))
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
