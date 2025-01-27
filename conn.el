@@ -1663,6 +1663,12 @@ If any function returns a nil value then macro application it halted.")
 
 (defvar conn--kapply-automatic-flag nil)
 
+(defun conn--kapply-construct-iterator (regions &rest ctors)
+  (let ((iterator regions))
+    (pcase-dolist ((or `(,constructor . ,args) constructor) ctors)
+      (setq iterator (apply constructor iterator args)))
+    iterator))
+
 (defun conn-kapply-kbd-macro-query (flag)
   "Query user during kbd macro execution.
 
