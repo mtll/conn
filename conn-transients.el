@@ -23,34 +23,88 @@
 (require 'transient)
 (require 'sort)
 
-;;;; Classes
+;;;; Transient Classes
 
-(defclass conn-transient-switches (transient-switches)
-  ((required :initarg :required :initform nil))
-  "Class used for sets of mutually exclusive switches.
-Does not allow a null value.")
+(defun conn--transient-arg-value (arg args)
+  (if (stringp arg)
+      (transient-arg-value arg args)
+    (cdr (cl-find-if (lambda (a)
+                       (and (consp a)
+                            (equal (car a) arg)))
+                     args))))
 
-(cl-defmethod transient-infix-read ((obj conn-transient-switches))
-  "Cycle through the mutually exclusive switches."
-  (let ((choices (mapcar (apply-partially #'format (oref obj argument-format))
-                         (oref obj choices))))
-    (if-let ((value (oref obj value)))
-        (or (cadr (member value choices))
-            (when (oref obj required) (car choices)))
-      (car choices))))
+;;;;; Lisp Values
 
-(cl-defmethod transient-format-value ((obj conn-transient-switches))
-  (with-slots (value argument-format choices) obj
+(defclass conn-transient-lisp-value (transient-infix)
+  ((keyword :initarg :keyword :initform (error "Keyword required."))
+   (value-transform :initarg :value-transform :initform #'identity))
+  "Abstract super class for lisp values."
+  :abstract t)
+
+;;;;;; Switch
+
+(defclass conn-transient-lisp-bool (transient-value)
+  nil)
+
+(cl-defmethod transient-init-value ((_obj conn-transient-lisp-bool))
+  "Noop" nil)
+
+(cl-defmethod transient-infix-read ((obj conn-transient-lisp-bool))
+  (not (oref obj value)))
+
+(cl-defmethod transient-infix-set ((obj conn-transient-lisp-bool) newval)
+  (oset obj value newval))
+
+(cl-defmethod transient-format-value ((obj conn-transient-lisp-bool))
+  (propertize (oref obj description)
+              'face
+              (if (oref obj value)
+                  'transient-argument
+                'transient-inactive-value)))
+
+(cl-defmethod transient-infix-value ((obj conn-transient-lisp-bool))
+  (cons (oref obj keyword) (oref obj value)))
+
+;;;;;; Choices
+
+(defclass conn-transient-lisp-choices (transient-value)
+  ((choices :initarg :choices :initform nil)
+   (default :initarg :default)
+   (index :initform 0)))
+
+(cl-defmethod transient-init-value ((obj conn-transient-lisp-choices))
+  (with-slots (value index choices default) obj
+    (when (slot-boundp obj 'default)
+      (setf choices (cons nil choices)))
+    (setf value (nth index choices))
+    (setf index (mod (1+ index) (length choices)))))
+
+(cl-defmethod transient-infix-read ((obj conn-transient-lisp-choices))
+  (nth (oref obj index) (oref obj choices)))
+
+(cl-defmethod transient-infix-set ((obj conn-transient-lisp-choices) newval)
+  (with-slots (index choices value) obj
+    (setf value newval)
+    (setf index (mod (1+ index) (length choices)))))
+
+(cl-defmethod transient-format-value ((obj conn-transient-lisp-choices))
+  (with-slots (value choices) obj
     (format
      (propertize "%s" 'face 'transient-delimiter)
      (mapconcat
       (lambda (choice)
         (propertize choice 'face
-                    (if (equal (format argument-format choice) value)
+                    (if (and value (string= (car value) choice))
                         'transient-argument
                       'transient-inactive-value)))
-      choices
+      (mapcar #'car (remq nil choices))
       (propertize "|" 'face 'transient-delimiter)))))
+
+(cl-defmethod transient-infix-value ((obj conn-transient-lisp-choices))
+  (when-let ((val (or (cdr (oref obj value))
+                      (oref obj default))))
+    (cons (oref obj keyword)
+          (funcall (oref obj value-transform) val))))
 
 ;;;; Kmacro Prefix
 
@@ -173,8 +227,8 @@ Does not allow a null value.")
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
-Press \\[exit-recursive-edit] to exit the recursive edit and abort
-the edit in the macro."
+Press \\[exit-recursive-edit] to exit the recursive edit and abort the
+edit in the macro."
   (interactive "P")
   (save-mark-and-excursion
     (save-window-excursion
@@ -229,54 +283,57 @@ the edit in the macro."
 
 (transient-define-argument conn--kapply-empty-infix ()
   "Include empty regions in dispatch."
-  :class 'transient-switch
+  :class 'conn-transient-lisp-bool
   :key "o"
-  :description "Skip Empty"
-  :argument "skip")
+  :keyword :skip-empty
+  :description "Skip Empty")
 
 (transient-define-argument conn--kapply-macro-infix ()
   "Dispatch `last-kbd-macro'.
-APPLY simply executes the macro at each region.  APPEND executes
-the macro and records additional keys on the first iteration.
-STEP-EDIT uses `kmacro-step-edit-macro' to edit the macro before
-dispatch."
-  :class 'conn-transient-switches
+  APPLY simply executes the macro at each region.  APPEND executes
+  the macro and records additional keys on the first iteration.
+  STEP-EDIT uses `kmacro-step-edit-macro' to edit the macro before
+  dispatch."
+  :class 'conn-transient-lisp-choices
   :description "Last Kmacro"
   :key "k"
-  :argument "last-kmacro="
-  :argument-format "last-kmacro=%s"
-  :argument-regexp "\\(last-kmacro=\\(apply\\|append\\|step-edit\\)\\)"
-  :choices '("apply" "step-edit" "append"))
+  :keyword :kmacro
+  :default 'conn--kmacro-apply
+  :choices `(("apply" . ,(lambda (it)
+                           (conn--kmacro-apply it 0 last-kbd-macro)))
+             ("step-edit" . conn--kmacro-apply-append)
+             ("append" . conn--kmacro-apply-step-edit)))
 
 (transient-define-argument conn--kapply-matches-infix ()
   "Restrict dispatch to only some isearch matches.
 AFTER means only those matchs after, and including, the current match.
 BEFORE means only those matches before, and including, the current match."
-  :class 'conn-transient-switches
+  :class 'conn-transient-lisp-choices
   :description "Restrict Matches Inclusive"
   :if-not (lambda () (bound-and-true-p multi-isearch-buffer-list))
   :key "j"
-  :argument "matches="
-  :argument-format "matches=%s"
-  :argument-regexp "\\(matches=\\(after\\|before\\)\\)"
-  :choices '("after" "before"))
+  :keyword :matches
+  :choices '(("after" . 'after)
+             ("before" . 'before)))
 
 (transient-define-argument conn--kapply-state-infix ()
   "Dispatch in a specific state."
-  :class 'conn-transient-switches
-  :required t
+  :class 'conn-transient-lisp-choices
   :description "In State"
   :key "g"
-  :argument "state="
-  :argument-format "state=%s"
-  :argument-regexp "\\(state=\\(emacs\\|conn\\)\\)"
-  :choices '("conn" "emacs")
+  :keyword :state
+  :choices '(("conn" . conn-state)
+             ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
-                (oset obj value
-                      (format "state=%s"
-                              (pcase conn-current-state
-                                ('conn-emacs-state "emacs")
-                                (_ "conn"))))))
+                (with-slots (index choices value) obj
+                  (when-let ((pos (seq-position choices conn-current-state
+                                                (lambda (e elt)
+                                                  (eq (cdr e) elt)))))
+                    (setf index pos))
+                  (setf value (nth index choices))))
+  :value-transform (lambda (val)
+                     (lambda (it)
+                       (conn--kapply-with-state it val))))
 
 (transient-define-argument conn--kapply-region-infix ()
   "How to dispatch on each region.
@@ -284,53 +341,56 @@ START means place the point at the start of the region before
 each iteration.  END means place the point at the end of the
 region before each iteration.  CHANGE means delete the region
 before each iteration."
-  :class 'conn-transient-switches
-  :required t
+  :class 'conn-transient-lisp-choices
   :key "t"
+  :keyword :regions
   :description "Regions"
-  :argument "region="
-  :argument-format "region=%s"
-  :argument-regexp "\\(region=\\(start\\|change\\|end\\)\\)"
-  :choices '("start" "end" "change")
-  :init-value (lambda (obj) (oset obj value "region=start")))
+  :choices '(("start" . identity)
+             ("end" . conn--kapply-at-end)
+             ("change" . conn--kapply-change-region)))
 
 (transient-define-argument conn--kapply-order-infix ()
   "Dispatch on regions from last to first."
-  :class 'transient-switch
+  :class 'conn-transient-lisp-bool
   :key "b"
-  :description "Order"
-  :argument "reverse")
+  :description "Reverse"
+  :keyword :reverse)
 
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
-  :class 'transient-switch
+  :class 'conn-transient-lisp-choices
   :key "se"
+  :keyword :excursions
   :description "Excursions"
-  :argument "excursions"
-  :init-value (lambda (obj) (oset obj value "excursions")))
+  :default 'identity
+  :choices '(("Excursions" . 'conn--kapply-save-excursion)))
 
 (transient-define-argument conn--kapply-save-restriction-infix ()
   "Save and restore the current restriction in each buffer during dispatch."
-  :class 'transient-switch
+  :class 'conn-transient-lisp-choices
   :key "sr"
+  :keyword :restrictions
   :description "Restrictions"
-  :argument "restrictions"
-  :init-value (lambda (obj) (oset obj value "restrictions")))
+  :default 'identity
+  :choices '(("Restrictions" . 'conn--kapply-save-restriction)))
 
 (transient-define-argument conn--kapply-merge-undo-infix ()
   "Merge all macro iterations into a single undo in each buffer."
-  :class 'transient-switch
+  :class 'conn-transient-lisp-choices
   :key "su"
+  :keyword :undo
   :description "Merge Undo"
-  :argument "undo"
-  :init-value (lambda (obj) (oset obj value "undo")))
+  :default 'identity
+  :choices '(("Undo" . 'conn--kapply-merge-undo)))
 
 (transient-define-argument conn--kapply-save-windows-infix ()
   "Save and restore current window configuration during dispatch."
-  :class 'transient-switch
+  :class 'conn-transient-lisp-choices
   :key "sw"
+  :keyword :window-conf
   :description "Window Conf"
-  :argument "windows")
+  :default 'identity
+  :choices '(("Windows" . 'conn--kapply-save-windows)))
 
 (transient-define-suffix conn--kapply-string-suffix (args)
   "Apply keyboard macro to every occurance of a string within a region.
@@ -341,71 +401,53 @@ property."
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (conn--thread
-      (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
-                   (conn-query-flag conn-query-flag)
-                   (string (minibuffer-with-setup-hook
-                               (lambda ()
-                                 (thread-last
-                                   (current-local-map)
-                                   (make-composed-keymap conn-replace-map)
-                                   (use-local-map)))
-                             (conn--read-from-with-preview "String" beg end nil))))
-        (conn--kapply-matches string beg end nil (member "reverse" args)
-                              current-prefix-arg conn-query-flag))
-    -->
-    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (thread-last
+    (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
+                 (conn-query-flag conn-query-flag)
+                 (string (minibuffer-with-setup-hook
+                             (lambda ()
+                               (thread-last
+                                 (current-local-map)
+                                 (make-composed-keymap conn-replace-map)
+                                 (use-local-map)))
+                           (conn--read-from-with-preview "String" beg end nil))))
+      (conn--kapply-matches string beg end nil
+                            (conn--transient-arg-value :reverse args)
+                            current-prefix-arg conn-query-flag))
+    (funcall (conn--transient-arg-value :undo args))
+    (funcall (conn--transient-arg-value :restrictions args))
+    (funcall (conn--transient-arg-value :excursions args))
+    (funcall (conn--transient-arg-value :state args))
+    (funcall (conn--transient-arg-value :regions args))
+    (conn--kapply-pulse-region)
+    (funcall (conn--transient-arg-value :window-conf args))
+    (funcall (conn--transient-arg-value :kmacro args))))
 
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   :transient 'transient--do-exit
   :key "u"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread
-      (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
-                   (conn-query-flag conn-query-flag)
-                   (regexp (minibuffer-with-setup-hook
-                               (lambda ()
-                                 (thread-last
-                                   (current-local-map)
-                                   (use-local-map)))
-                             (conn--read-from-with-preview "Regexp" beg end t))))
-        (conn--kapply-matches regexp beg end t (member "reverse" args)
-                              current-prefix-arg conn-query-flag))
-    -->
-    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (thread-last
+    (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
+                 (conn-query-flag conn-query-flag)
+                 (regexp (minibuffer-with-setup-hook
+                             (lambda ()
+                               (thread-last
+                                 (current-local-map)
+                                 (use-local-map)))
+                           (conn--read-from-with-preview "Regexp" beg end t))))
+      (conn--kapply-matches regexp beg end t
+                            (conn--transient-arg-value :reverse args)
+                            current-prefix-arg conn-query-flag))
+    (funcall (conn--transient-arg-value :undo args))
+    (funcall (conn--transient-arg-value :restrictions args))
+    (funcall (conn--transient-arg-value :excursions args))
+    (funcall (conn--transient-arg-value :state args))
+    (funcall (conn--transient-arg-value :regions args))
+    (conn--kapply-pulse-region)
+    (funcall (conn--transient-arg-value :window-conf args))
+    (funcall (conn--transient-arg-value :kmacro args))))
 
 (transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
@@ -416,30 +458,22 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,thing ,_beg ,_end . ,regions) (conn--read-thing-region "Things")))
-    (conn--thread
-        regions
-      -->
-      (if (member "skip" args)
-          (seq-remove (lambda (reg) (conn-thing-empty-p thing reg)) -->)
-        -->)
-      (conn--kapply-region-iterator --> (member "reverse" args))
-      (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-      (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-      (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-      (pcase-exhaustive (transient-arg-value "state=" args)
-        ("conn" (conn--kapply-with-state --> 'conn-state))
-        ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-      (pcase-exhaustive (transient-arg-value "region=" args)
-        ("change" (conn--kapply-change-region -->))
-        ("end" (conn--kapply-at-end -->))
-        ("start" -->))
-      (conn--kapply-pulse-region -->)
-      (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-      (pcase (transient-arg-value "last-kmacro=" args)
-        ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-        ("append" (conn--kmacro-apply-append -->))
-        ("step-edit" (conn--kmacro-apply-step-edit -->))
-        (_ (conn--kmacro-apply -->))))))
+    (thread-last
+      (conn--kapply-region-iterator
+       (if (conn--transient-arg-value :skip-empty args)
+           (seq-remove (lambda (reg)
+                         (conn-thing-empty-p thing reg))
+                       regions)
+         regions)
+       (conn--transient-arg-value :reverse args))
+      (funcall (conn--transient-arg-value :undo args))
+      (funcall (conn--transient-arg-value :restrictions args))
+      (funcall (conn--transient-arg-value :excursions args))
+      (funcall (conn--transient-arg-value :state args))
+      (funcall (conn--transient-arg-value :regions args))
+      (conn--kapply-pulse-region)
+      (funcall (conn--transient-arg-value :window-conf args))
+      (funcall (conn--transient-arg-value :kmacro args)))))
 
 (transient-define-suffix conn--kapply-things-in-region-suffix (args)
   "Apply keyboard macro on the current region.
@@ -449,30 +483,22 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread
-      (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing" nil t)))
-        (conn--kapply-thing-iterator
-         (get cmd :conn-command-thing)
-         (region-beginning) (region-end)
-         (member "reverse" args) (member "skip" args) arg))
-    -->
-    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (thread-last
+    (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing" nil t)))
+      (conn--kapply-thing-iterator
+       (get cmd :conn-command-thing)
+       (region-beginning) (region-end)
+       (conn--transient-arg-value :reverse args)
+       (conn--transient-arg-value :skip-empty args)
+       arg))
+    (funcall (conn--transient-arg-value :undo args))
+    (funcall (conn--transient-arg-value :restrictions args))
+    (funcall (conn--transient-arg-value :excursions args))
+    (funcall (conn--transient-arg-value :state args))
+    (funcall (conn--transient-arg-value :regions args))
+    (conn--kapply-pulse-region)
+    (funcall (conn--transient-arg-value :window-conf args))
+    (funcall (conn--transient-arg-value :kmacro args))))
 
 (transient-define-suffix conn--kapply-iterate-suffix (args)
   "Apply keyboard macro a specified number of times."
@@ -480,21 +506,14 @@ apply to each contiguous component of the region."
   :key "i"
   :description "Iterate"
   (interactive (list (transient-args transient-current-command)))
-  (let ((count (read-number "Iterations: " 0)))
-    (conn--thread
-        (conn--kapply-infinite-iterator)
-      -->
-      (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-      (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-      (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-      (pcase-exhaustive (transient-arg-value "state=" args)
-        ("conn" (conn--kapply-with-state --> 'conn-state))
-        ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-      (pcase (transient-arg-value "last-kmacro=" args)
-        ("apply" (conn--kmacro-apply --> count last-kbd-macro))
-        ("append" (conn--kmacro-apply-append --> count))
-        ("step-edit" (conn--kmacro-apply-step-edit --> count))
-        (_ (conn--kmacro-apply --> count))))))
+  (let* ((count (read-number "Iterations: " 0))
+         (it (thread-last
+               (conn--kapply-infinite-iterator)
+               (funcall (conn--transient-arg-value :undo args))
+               (funcall (conn--transient-arg-value :restrictions args))
+               (funcall (conn--transient-arg-value :excursions args))
+               (funcall (conn--transient-arg-value :state args)))))
+    (funcall (conn--transient-arg-value :kmacro args) it count)))
 
 (transient-define-suffix conn--kapply-regions-suffix (iterator args)
   "Apply keyboard macro on regions."
@@ -503,26 +522,16 @@ apply to each contiguous component of the region."
   :description "Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (conn--thread
-      (funcall iterator (member "reverse" args))
-    -->
-    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (thread-last
+    (funcall iterator (conn--transient-arg-value :reverse args))
+    (funcall (conn--transient-arg-value :undo args))
+    (funcall (conn--transient-arg-value :restrictions args))
+    (funcall (conn--transient-arg-value :excursions args))
+    (funcall (conn--transient-arg-value :state args))
+    (funcall (conn--transient-arg-value :regions args))
+    (conn--kapply-pulse-region)
+    (funcall (conn--transient-arg-value :window-conf args))
+    (funcall (conn--transient-arg-value :kmacro args))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
@@ -530,41 +539,30 @@ apply to each contiguous component of the region."
   :key "m"
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
-  (conn--thread
-      (let ((matches
-             (if (bound-and-true-p multi-isearch-buffer-list)
-                 (mapcan 'conn--isearch-matches
-                         (append
-                          (remq (current-buffer) multi-isearch-buffer-list)
-                          (list (current-buffer))))
-               (conn--isearch-matches
-                (current-buffer)
-                (pcase (transient-arg-value "matches=" args)
-                  ("after" 'after)
-                  ("before" 'before))))))
-        (isearch-done)
-        (cl-loop for (beg . end) in matches
-                 collect (cons (conn--create-marker beg)
-                               (conn--create-marker end))))
-    -->
-    (conn--kapply-region-iterator --> (member "reverse" args))
-    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (thread-last
+    (conn--kapply-region-iterator
+     (let ((matches
+            (if (bound-and-true-p multi-isearch-buffer-list)
+                (mapcan 'conn--isearch-matches
+                        (append
+                         (remq (current-buffer) multi-isearch-buffer-list)
+                         (list (current-buffer))))
+              (conn--isearch-matches
+               (current-buffer)
+               (conn--transient-arg-value :matches args)))))
+       (isearch-done)
+       (cl-loop for (beg . end) in matches
+                collect (cons (conn--create-marker beg)
+                              (conn--create-marker end))))
+     (conn--transient-arg-value :reverse args))
+    (funcall (conn--transient-arg-value :undo args))
+    (funcall (conn--transient-arg-value :restrictions args))
+    (funcall (conn--transient-arg-value :excursions args))
+    (funcall (conn--transient-arg-value :state args))
+    (funcall (conn--transient-arg-value :regions args))
+    (conn--kapply-pulse-region)
+    (funcall (conn--transient-arg-value :window-conf args))
+    (funcall (conn--transient-arg-value :kmacro args))))
 
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
@@ -582,34 +580,25 @@ apply to each contiguous component of the region."
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
-  (conn--thread
-      (save-excursion
-        (goto-char (point-min))
-        (let (regions)
-          (while-let ((match (text-property-search-forward prop value t)))
-            (push (cons (prop-match-beginning match)
-                        (prop-match-end match))
-                  regions))
-          regions))
-    -->
-    (conn--kapply-region-iterator --> (not (member "reverse" args)))
-    (if (member "undo" args) (conn--kapply-merge-undo -->) -->)
-    (if (member "restriction" args) (conn--kapply-save-restriction -->) -->)
-    (if (member "excursions" args) (conn--kapply-save-excursion -->) -->)
-    (pcase-exhaustive (transient-arg-value "state=" args)
-      ("conn" (conn--kapply-with-state --> 'conn-state))
-      ("emacs" (conn--kapply-with-state --> 'conn-emacs-state)))
-    (pcase-exhaustive (transient-arg-value "region=" args)
-      ("change" (conn--kapply-change-region -->))
-      ("end" (conn--kapply-at-end -->))
-      ("start" -->))
-    (conn--kapply-pulse-region -->)
-    (if (member "windows" args) (conn--kapply-save-windows -->) -->)
-    (pcase (transient-arg-value "last-kmacro=" args)
-      ("apply" (conn--kmacro-apply --> 0 last-kbd-macro))
-      ("append" (conn--kmacro-apply-append -->))
-      ("step-edit" (conn--kmacro-apply-step-edit -->))
-      (_ (conn--kmacro-apply -->)))))
+  (thread-last
+    (save-excursion
+      (goto-char (point-min))
+      (conn--kapply-region-iterator
+       (let (regions)
+         (while-let ((match (text-property-search-forward prop value t)))
+           (push (cons (prop-match-beginning match)
+                       (prop-match-end match))
+                 regions))
+         regions)
+       (conn--transient-arg-value :reverse args)))
+    (funcall (conn--transient-arg-value :undo args))
+    (funcall (conn--transient-arg-value :restrictions args))
+    (funcall (conn--transient-arg-value :excursions args))
+    (funcall (conn--transient-arg-value :state args))
+    (funcall (conn--transient-arg-value :regions args))
+    (conn--kapply-pulse-region)
+    (funcall (conn--transient-arg-value :window-conf args))
+    (funcall (conn--transient-arg-value :kmacro args))))
 
 ;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-prefix ()
