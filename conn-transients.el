@@ -480,51 +480,47 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-prefix ()
   "Transient menu for keyboard macro application on regions."
-  [:description
-   conn--kmacro-ring-display
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("M" "Display"
-     (lambda ()
-       (interactive)
-       (kmacro-display last-kbd-macro t))
-     :transient t)]
-   [("c" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]
-   [("e" "Edit Macro"
-     (lambda (arg)
-       (interactive "P")
-       (conn-recursive-edit-kmacro arg)
-       (transient-resume))
-     :transient transient--do-suspend)
-    ("E" "Edit Lossage"
-     (lambda ()
-       (interactive)
-       (conn-recursive-edit-lossage)
-       (transient-resume))
-     :transient transient--do-suspend)]]
-  [:description
-   "Options:"
-   [(conn--kapply-order-infix)
-    (conn--kapply-state-infix)
-    (conn--kapply-empty-infix)]
-   [(conn--kapply-region-infix)
-    (conn--kapply-macro-infix)]]
-  [[:description
-    "Apply Kmacro On:"
-    (conn--kapply-string-suffix)
-    (conn--kapply-regexp-suffix)
-    (conn--kapply-things-suffix)
-    (conn--kapply-things-in-region-suffix)
-    (conn--kapply-text-property-suffix)
-    (conn--kapply-iterate-suffix)]
-   [:description
-    "Save State:"
-    (conn--kapply-merge-undo-infix)
-    (conn--kapply-save-windows-infix)
-    (conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]]
+  [ :description conn--kmacro-ring-display
+    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("M" "Display"
+       (lambda ()
+         (interactive)
+         (kmacro-display last-kbd-macro t))
+       :transient t)]
+    [ ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix)
+      ("g" "Push Register" conn--push-macro-ring :transient t)]
+    [ ("e" "Edit Macro"
+       (lambda (arg)
+         (interactive "P")
+         (conn-recursive-edit-kmacro arg)
+         (transient-resume))
+       :transient transient--do-suspend)
+      ("E" "Edit Lossage"
+       (lambda ()
+         (interactive)
+         (conn-recursive-edit-lossage)
+         (transient-resume))
+       :transient transient--do-suspend)]]
+  [ :description "Options:"
+    [ (conn--kapply-order-infix)
+      (conn--kapply-state-infix)
+      (conn--kapply-empty-infix)]
+    [ (conn--kapply-region-infix)
+      (conn--kapply-macro-infix)]]
+  [ [ :description "Apply Kmacro On:"
+      (conn--kapply-string-suffix)
+      (conn--kapply-regexp-suffix)
+      (conn--kapply-things-suffix)
+      (conn--kapply-things-in-region-suffix)
+      (conn--kapply-text-property-suffix)
+      (conn--kapply-iterate-suffix)]
+    [ :description "Save State:"
+      (conn--kapply-merge-undo-infix)
+      (conn--kapply-save-windows-infix)
+      (conn--kapply-save-restriction-infix)
+      (conn--kapply-save-excursion-infix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-kapply-prefix))
@@ -532,46 +528,42 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-isearch-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-isearch-kapply-prefix ()
   "Transient menu for keyboard macro application on isearch matches."
-  [:description
-   conn--kmacro-ring-display
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("M" "Display"
-     (lambda ()
-       (interactive)
-       (kmacro-display last-kbd-macro t))
-     :transient t)]
-   [("c" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]
-   [("e" "Edit Macro"
-     (lambda (arg)
-       (interactive "P")
-       (conn-recursive-edit-kmacro arg)
-       (transient-resume))
-     :transient transient--do-suspend)
-    ("E" "Edit Lossage"
-     (lambda ()
-       (interactive)
-       (conn-recursive-edit-lossage)
-       (transient-resume))
-     :transient transient--do-suspend)]]
-  [:description
-   "Options:"
-   [(conn--kapply-order-infix)
-    (conn--kapply-region-infix)
-    (conn--kapply-state-infix)]
-   [(conn--kapply-matches-infix)
-    (conn--kapply-macro-infix)]]
-  [[:description
-    "Apply Kmacro On:"
-    (conn--kapply-isearch-suffix)]
-   [:description
-    "Save State:"
-    (conn--kapply-merge-undo-infix)
-    (conn--kapply-save-windows-infix)
-    (conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]]
+  [ :description conn--kmacro-ring-display
+    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("M" "Display"
+       (lambda ()
+         (interactive)
+         (kmacro-display last-kbd-macro t))
+       :transient t)]
+    [ ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix)
+      ("g" "Push Register" conn--push-macro-ring :transient t)]
+    [ ("e" "Edit Macro"
+       (lambda (arg)
+         (interactive "P")
+         (conn-recursive-edit-kmacro arg)
+         (transient-resume))
+       :transient transient--do-suspend)
+      ("E" "Edit Lossage"
+       (lambda ()
+         (interactive)
+         (conn-recursive-edit-lossage)
+         (transient-resume))
+       :transient transient--do-suspend)]]
+  [ :description "Options:"
+    [ (conn--kapply-order-infix)
+      (conn--kapply-region-infix)
+      (conn--kapply-state-infix)]
+    [ (conn--kapply-matches-infix)
+      (conn--kapply-macro-infix)]]
+  [ [ :description "Apply Kmacro On:"
+      (conn--kapply-isearch-suffix)]
+    [ :description "Save State:"
+      (conn--kapply-merge-undo-infix)
+      (conn--kapply-save-windows-infix)
+      (conn--kapply-save-restriction-infix)
+      (conn--kapply-save-excursion-infix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-isearch-kapply-prefix))
@@ -579,45 +571,41 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-regions-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-regions-kapply-prefix (iterator)
   "Transient menu for keyboard macro application on regions."
-  [:description
-   conn--kmacro-ring-display
-   [("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("M" "Display"
-     (lambda ()
-       (interactive)
-       (kmacro-display last-kbd-macro t))
-     :transient t)]
-   [("c" "Set Counter" kmacro-set-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)
-    ("g" "Push Register" conn--push-macro-ring :transient t)]
-   [("e" "Edit Macro"
-     (lambda (arg)
-       (interactive "P")
-       (conn-recursive-edit-kmacro arg)
-       (transient-resume))
-     :transient transient--do-suspend)
-    ("E" "Edit Lossage"
-     (lambda ()
-       (interactive)
-       (conn-recursive-edit-lossage)
-       (transient-resume))
-     :transient transient--do-suspend)]]
-  [:description
-   "Options:"
-   [(conn--kapply-order-infix)
-    (conn--kapply-state-infix)]
-   [(conn--kapply-region-infix)
-    (conn--kapply-macro-infix)]]
-  [[:description
-    "Apply Kmacro On:"
-    (conn--kapply-regions-suffix)]
-   [:description
-    "Save State:"
-    (conn--kapply-merge-undo-infix)
-    (conn--kapply-save-windows-infix)
-    (conn--kapply-save-restriction-infix)
-    (conn--kapply-save-excursion-infix)]]
+  [ :description conn--kmacro-ring-display
+    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("M" "Display"
+       (lambda ()
+         (interactive)
+         (kmacro-display last-kbd-macro t))
+       :transient t)]
+    [ ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix)
+      ("g" "Push Register" conn--push-macro-ring :transient t)]
+    [ ("e" "Edit Macro"
+       (lambda (arg)
+         (interactive "P")
+         (conn-recursive-edit-kmacro arg)
+         (transient-resume))
+       :transient transient--do-suspend)
+      ("E" "Edit Lossage"
+       (lambda ()
+         (interactive)
+         (conn-recursive-edit-lossage)
+         (transient-resume))
+       :transient transient--do-suspend)]]
+  [ :description "Options:"
+    [ (conn--kapply-order-infix)
+      (conn--kapply-state-infix)]
+    [ (conn--kapply-region-infix)
+      (conn--kapply-macro-infix)]]
+  [ [ :description "Apply Kmacro On:"
+      (conn--kapply-regions-suffix)]
+    [ :description "Save State:"
+      (conn--kapply-merge-undo-infix)
+      (conn--kapply-save-windows-infix)
+      (conn--kapply-save-restriction-infix)
+      (conn--kapply-save-excursion-infix)]]
   (interactive (list nil))
   (unless iterator (user-error "No regions"))
   (kmacro-display last-kbd-macro t)
@@ -685,60 +673,54 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-kmacro-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kmacro-prefix ()
   "Transient menu for kmacro functions."
-  [:description
-   conn--kmacro-ring-display
-   :if-not conn--in-kbd-macro-p
-   [("l" "List Macros" list-keyboard-macros
-     :if (lambda () (version<= "30" emacs-version)))
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("w" "Swap" kmacro-swap-ring :transient t)
-    ("o" "Pop" kmacro-delete-ring-head :transient t)]
-   [("i" "Insert Counter" kmacro-insert-counter)
-    ("c" "Set Counter" kmacro-set-counter :transient t)
-    ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix :transient t)]
-   [:if
-    (lambda () (version<= "30" emacs-version))
-    ("q<" "Quit Counter Less" kmacro-quit-counter-less)
-    ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
-    ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
-  [:if
-   (lambda () (version<= "30" emacs-version))
-   :description
-   "Counter Registers"
-   [("rs" "Save Counter Register" kmacro-reg-save-counter)
-    ("rl" "Load Counter Register" kmacro-reg-load-counter)]
-   [("r<" "Register Add Counter <" kmacro-reg-add-counter-less)
-    ("r>" "Register Add Counter >" kmacro-reg-add-counter-greater)
-    ("r=" "Register Add Counter =" kmacro-reg-add-counter-equal)]]
-  ["Commands"
-   :if-not conn--in-kbd-macro-p
-   [("m" "Record Macro" kmacro-start-macro)
-    ("k" "Call Macro" kmacro-call-macro)
-    ("a" "Append to Macro" (lambda ()
-                             (interactive)
-                             (kmacro-start-macro '(4))))
-    ("A" "Append w/o Executing" (lambda ()
-                                  (interactive)
-                                  (kmacro-start-macro '(16))))
-    ("d" "Name Last Macro" kmacro-name-last-macro)]
-   [("e" "Edit Macro" kmacro-edit-macro)
-    ("E" "Edit Lossage" kmacro-edit-lossage)
-    ("s" "Register Save" kmacro-to-register)
-    ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
-    ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
-  [:if
-   conn--in-kbd-macro-p
-   ["Commands"
-    ("q" "Query" kbd-macro-query)
-    ("d" "Redisplay" kmacro-redisplay)]
-   [:description
-    conn--kmacro-counter-display
-    ("i" "Insert Counter" kmacro-insert-counter)
-    ("c" "Set Counter" kmacro-set-counter :transient t)
-    ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]])
+  [ :description conn--kmacro-ring-display
+    :if-not conn--in-kbd-macro-p
+    [ ("l" "List Macros" list-keyboard-macros
+       :if (lambda () (version<= "30" emacs-version)))
+      ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("w" "Swap" kmacro-swap-ring :transient t)
+      ("o" "Pop" kmacro-delete-ring-head :transient t)]
+    [ ("i" "Insert Counter" kmacro-insert-counter)
+      ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("+" "Add to Counter" kmacro-add-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix :transient t)]
+    [ :if (lambda () (version<= "30" emacs-version))
+      ("q<" "Quit Counter Less" kmacro-quit-counter-less)
+      ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
+      ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
+  [ :if (lambda () (version<= "30" emacs-version))
+    :description "Counter Registers"
+    [ ("rs" "Save Counter Register" kmacro-reg-save-counter)
+      ("rl" "Load Counter Register" kmacro-reg-load-counter)]
+    [ ("r<" "Register Add Counter <" kmacro-reg-add-counter-less)
+      ("r>" "Register Add Counter >" kmacro-reg-add-counter-greater)
+      ("r=" "Register Add Counter =" kmacro-reg-add-counter-equal)]]
+  [ "Commands"
+    :if-not conn--in-kbd-macro-p
+    [ ("m" "Record Macro" kmacro-start-macro)
+      ("k" "Call Macro" kmacro-call-macro)
+      ("a" "Append to Macro" (lambda ()
+                               (interactive)
+                               (kmacro-start-macro '(4))))
+      ("A" "Append w/o Executing" (lambda ()
+                                    (interactive)
+                                    (kmacro-start-macro '(16))))
+      ("d" "Name Last Macro" kmacro-name-last-macro)]
+    [ ("e" "Edit Macro" kmacro-edit-macro)
+      ("E" "Edit Lossage" kmacro-edit-lossage)
+      ("s" "Register Save" kmacro-to-register)
+      ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
+      ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
+  [ :if conn--in-kbd-macro-p
+    [ "Commands"
+      ("q" "Query" kbd-macro-query)
+      ("d" "Redisplay" kmacro-redisplay)]
+    [ :description conn--kmacro-counter-display
+      ("i" "Insert Counter" kmacro-insert-counter)
+      ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("+" "Add to Counter" kmacro-add-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix)]])
 
 ;;;; Narrow Ring Prefix
 
@@ -795,45 +777,44 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-narrow-ring-prefix "conn-transients" nil t)
 (transient-define-prefix conn-narrow-ring-prefix ()
   "Transient menu for narrow ring function."
-  [:description
-   conn--narrow-ring-display
-   [("i" "Isearch forward" conn-isearch-narrow-ring-forward)
-    ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
-    ("N" "In Indired Buffer"
-     (lambda ()
-       (interactive)
-       (let ((beg (point-min))
-             (end (point-max))
-             (buf (current-buffer))
-             (win (selected-window)))
+  [ :description conn--narrow-ring-display
+    [ ("i" "Isearch forward" conn-isearch-narrow-ring-forward)
+      ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
+      ("N" "In Indired Buffer"
+       (lambda ()
+         (interactive)
+         (let ((beg (point-min))
+               (end (point-max))
+               (buf (current-buffer))
+               (win (selected-window)))
+           (widen)
+           (conn--narrow-indirect beg end)
+           (with-current-buffer buf
+             (if (eq (window-buffer win) buf)
+                 (with-selected-window win
+                   (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
+               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
+      ("s" "Register Store" conn-narrow-ring-to-register :transient t)
+      ("l" "Register Load" conn-register-load :transient t)]
+    [ ("m" "Merge" conn-merge-narrow-ring :transient t)
+      ("w" "Widen"
+       (lambda ()
+         (interactive)
          (widen)
-         (conn--narrow-indirect beg end)
-         (with-current-buffer buf
-           (if (eq (window-buffer win) buf)
-               (with-selected-window win
-                 (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
-             (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
-    ("s" "Register Store" conn-narrow-ring-to-register :transient t)
-    ("l" "Register Load" conn-register-load :transient t)]
-   [("m" "Merge" conn-merge-narrow-ring :transient t)
-    ("w" "Widen"
-     (lambda ()
-       (interactive)
-       (widen)
-       (conn-recenter-on-region)))
-    ("c" "Clear" conn-clear-narrow-ring)
-    ("v" "Add Region" conn-region-to-narrow-ring)]
-   [("n" "Cycle Next" conn-cycle-narrowings :transient t)
-    ("p" "Cycle Previous"
-     (lambda (arg)
-       (interactive "p")
-       (conn-cycle-narrowings (- arg)))
-     :transient t)
-    ("d" "Pop" conn-pop-narrow-ring :transient t)
-    ("a" "Abort Cycling"
-     (lambda ()
-       (interactive)
-       (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))]]
+         (conn-recenter-on-region)))
+      ("c" "Clear" conn-clear-narrow-ring)
+      ("v" "Add Region" conn-region-to-narrow-ring)]
+    [ ("n" "Cycle Next" conn-cycle-narrowings :transient t)
+      ("p" "Cycle Previous"
+       (lambda (arg)
+         (interactive "p")
+         (conn-cycle-narrowings (- arg)))
+       :transient t)
+      ("d" "Pop" conn-pop-narrow-ring :transient t)
+      ("a" "Abort Cycling"
+       (lambda ()
+         (interactive)
+         (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
@@ -848,19 +829,19 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
-  ["Register Store:"
-   [("v" "Point" point-to-register)
-    ("m" "Macro" kmacro-to-register)
-    ("t" "Tab" conn-tab-to-register)]
-   [("f" "Frameset" frameset-to-register)
-    ("r" "Rectangle" copy-rectangle-to-register)
-    ("w" "Window Configuration" window-configuration-to-register)]]
-  ["Register Commands:"
-   [("e" "Set Seperator" conn-set-register-seperator)
-    ("i" "Increment" increment-register :transient t)
-    ("s" "List" list-registers :transient t)]
-   [("l" "Load" conn-register-load)
-    ("u" "Unset" conn-unset-register :transient t)]])
+  [ "Register Store:"
+    [ ("v" "Point" point-to-register)
+      ("m" "Macro" kmacro-to-register)
+      ("t" "Tab" conn-tab-to-register)]
+    [ ("f" "Frameset" frameset-to-register)
+      ("r" "Rectangle" copy-rectangle-to-register)
+      ("w" "Window Configuration" window-configuration-to-register)]]
+  [ "Register Commands:"
+    [ ("e" "Set Seperator" conn-set-register-seperator)
+      ("i" "Increment" increment-register :transient t)
+      ("s" "List" list-registers :transient t)]
+    [ ("l" "Load" conn-register-load)
+      ("u" "Unset" conn-unset-register :transient t)]])
 
 ;;;; Fill Prefix
 
@@ -892,14 +873,14 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-fill-prefix "conn-transients" nil t)
 (transient-define-prefix conn-fill-prefix ()
   "Transient menu for fill functions."
-  [["Fill:"
-    ("r" "Region" fill-region)
-    ("i" "Paragraph" fill-paragraph)
-    ("k" "Region as Paragraph" fill-region-as-paragraph)]
-   ["Options:"
-    ("c" "Column" conn--set-fill-column-infix)
-    ("p" "Prefix" conn--set-fill-prefix-infix)
-    ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
+  [ [ "Fill:"
+      ("r" "Region" fill-region)
+      ("i" "Paragraph" fill-paragraph)
+      ("k" "Region as Paragraph" fill-region-as-paragraph)]
+    [ "Options:"
+      ("c" "Column" conn--set-fill-column-infix)
+      ("p" "Prefix" conn--set-fill-prefix-infix)
+      ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
 
 ;;;; Sort Prefix
 
@@ -912,32 +893,32 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-sort-prefix "conn-transients" nil t)
 (transient-define-prefix conn-sort-prefix ()
   "Transient menu for buffer sorting functions."
-  [["Sort Region: "
-    ("a" "sort pages" sort-pages)
-    ("c" "sort columns" sort-columns)
-    ("l" "sort lines" sort-lines)
-    ("o" "org sort" org-sort
-     :if (lambda () (eq major-mode 'org-mode)))]
-   [("f" "case fold" conn--case-fold-infix)
-    ("n" "sort numeric fields" sort-numeric-fields)
-    ("p" "sort paragraphs" sort-paragraphs)
-    ("r" "sort regexp fields" sort-regexp-fields)]])
+  [ [ "Sort Region: "
+      ("a" "sort pages" sort-pages)
+      ("c" "sort columns" sort-columns)
+      ("l" "sort lines" sort-lines)
+      ("o" "org sort" org-sort
+       :if (lambda () (eq major-mode 'org-mode)))]
+    [ ("f" "case fold" conn--case-fold-infix)
+      ("n" "sort numeric fields" sort-numeric-fields)
+      ("p" "sort paragraphs" sort-paragraphs)
+      ("r" "sort regexp fields" sort-regexp-fields)]])
 
 ;;;; Case Prefix
 
 ;;;###autoload (autoload 'conn-region-case-prefix "conn-transients" nil t)
 (transient-define-prefix conn-region-case-prefix ()
   "Transient menu for case in region."
-  ["Change Case"
-   [("k" "kebab-case" conn-kebab-case-region)
-    ("a" "CapitalCase" conn-capital-case-region)
-    ("m" "camelCase" conn-camel-case-region)]
-   [("n" "Snake_Case" conn-capital-snake-case-region)
-    ("s" "snake_case" conn-snake-case-region)
-    ("w" "individual words" conn-case-to-words-region)]
-   [("u" "UPCASE" upcase-region)
-    ("c" "Capitalize" capitalize-region)
-    ("d" "downcase" downcase-region)]])
+  [ "Change Case"
+    [ ("k" "kebab-case" conn-kebab-case-region)
+      ("a" "CapitalCase" conn-capital-case-region)
+      ("m" "camelCase" conn-camel-case-region)]
+    [ ("n" "Snake_Case" conn-capital-snake-case-region)
+      ("s" "snake_case" conn-snake-case-region)
+      ("w" "individual words" conn-case-to-words-region)]
+    [ ("u" "UPCASE" upcase-region)
+      ("c" "Capitalize" capitalize-region)
+      ("d" "downcase" downcase-region)]])
 
 (provide 'conn-transients)
 
