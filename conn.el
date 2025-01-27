@@ -1151,10 +1151,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
       (mapcar #'delete-overlay candidates))))
 
 (defun conn--create-window-labels (labels windows)
-  (let* ((to-label (seq-filter (lambda (win)
-                                 (not (window-parameter win 'conn-label)))
-                               windows))
-         (labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
+  (let* ((labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
                               (window-list-1 nil 'no-minibuff t)))
          (labels (thread-first
                    (lambda (win) (window-parameter win 'conn-label))
@@ -3003,8 +3000,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                              (pcase window-predicate
                                ('t (lambda (_) t))
                                ('nil nil)
-                               ((pred functionp)
-                                (funcall window-predicate win))))
+                               ((pred functionp) window-predicate)))
                  do (with-selected-window win
                       (with-restriction (window-start) (window-end)
                         (save-excursion
@@ -6120,6 +6116,8 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-at-heading-p "org")
   (declare-function org-with-limited-levels "org-macs")
   (declare-function org-in-regexp "org-macs")
+  (declare-function org-backward-element "org")
+  (declare-function org-mark-element "org")
   (defvar org-link-any-re)
 
   (conn-register-thing
