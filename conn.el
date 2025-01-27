@@ -1577,7 +1577,8 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 ;;;; Advice
 
 (defun conn--read-from-suggestions-ad (&rest app)
-  (if (and (not (use-region-p))
+  (if (and (mark t)
+           (not (use-region-p))
            (not (save-excursion
                   (goto-char (region-beginning))
                   (search-forward "\n" (region-end) t))))
