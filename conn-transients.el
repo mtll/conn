@@ -102,123 +102,6 @@
         (funcall (oref obj value-transform)
                  (cdr (oref obj value)))))
 
-;;;; Kmacro Prefix
-
-(defun conn--kmacro-display (macro &optional trunc)
-  (pcase macro
-    ((or 'nil '[] "") "nil")
-    (_ (let* ((m (format-kbd-macro macro))
-              (l (length m))
-              (z (and trunc (> l trunc))))
-         (format "%s%s"
-                 (if z (substring m 0 (1- trunc)) m)
-                 (if z "…" ""))))))
-
-(defun conn--kmacro-ring-display ()
-  (with-temp-message ""
-    (concat
-     (propertize "Kmacro Ring: " 'face 'transient-heading)
-     (propertize (format "%s" (or (if defining-kbd-macro
-                                      kmacro-counter
-                                    kmacro-initial-counter-value)
-                                  (format "[%s]" kmacro-counter)))
-                 'face 'transient-value)
-     " - "
-     (when (length> kmacro-ring 1)
-       (thread-first
-         (car (last kmacro-ring))
-         (kmacro--keys)
-         (conn--kmacro-display 15)
-         (concat ", ")))
-     (propertize (conn--kmacro-display last-kbd-macro 15)
-                 'face 'transient-value)
-     (if (kmacro-ring-empty-p)
-         ""
-       (thread-first
-         (car kmacro-ring)
-         (kmacro--keys)
-         (conn--kmacro-display 15)
-         (conn--thread disc (concat ", " disc)))))))
-
-(defun conn--kmacro-counter-display ()
-  (with-temp-message ""
-    (concat
-     (propertize "Kmacro Counter: " 'face 'transient-heading)
-     (propertize (format "%s" (or (if defining-kbd-macro
-                                      kmacro-counter
-                                    kmacro-initial-counter-value)
-                                  (format "[%s]" kmacro-counter)))
-                 'face 'transient-value))))
-
-(defun conn--in-kbd-macro-p ()
-  (or defining-kbd-macro executing-kbd-macro))
-
-(transient-define-infix conn--set-counter-format-infix ()
-  "Set `kmacro-counter-format'."
-  :class 'transient-lisp-variable
-  :set-value (lambda (_ format) (kmacro-set-format format))
-  :variable 'kmacro-counter-format
-  :reader (lambda (&rest _)
-            (read-string "Macro Counter Format: ")))
-
-;;;###autoload (autoload 'conn-kmacro-prefix "conn-transients" nil t)
-(transient-define-prefix conn-kmacro-prefix ()
-  "Transient menu for kmacro functions."
-  [:description
-   conn--kmacro-ring-display
-   :if-not conn--in-kbd-macro-p
-   [("l" "List Macros" list-keyboard-macros
-     :if (lambda () (version<= "30" emacs-version)))
-    ("n" "Next" kmacro-cycle-ring-previous :transient t)
-    ("p" "Previous" kmacro-cycle-ring-next :transient t)
-    ("w" "Swap" kmacro-swap-ring :transient t)
-    ("o" "Pop" kmacro-delete-ring-head :transient t)]
-   [("i" "Insert Counter" kmacro-insert-counter)
-    ("c" "Set Counter" kmacro-set-counter :transient t)
-    ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix :transient t)]
-   [:if
-    (lambda () (version<= "30" emacs-version))
-    ("q<" "Quit Counter Less" kmacro-quit-counter-less)
-    ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
-    ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
-  [:if
-   (lambda () (version<= "30" emacs-version))
-   :description
-   "Counter Registers"
-   [("rs" "Save Counter Register" kmacro-reg-save-counter)
-    ("rl" "Load Counter Register" kmacro-reg-load-counter)]
-   [("r<" "Register Add Counter <" kmacro-reg-add-counter-less)
-    ("r>" "Register Add Counter >" kmacro-reg-add-counter-greater)
-    ("r=" "Register Add Counter =" kmacro-reg-add-counter-equal)]]
-  ["Commands"
-   :if-not conn--in-kbd-macro-p
-   [("m" "Record Macro" kmacro-start-macro)
-    ("k" "Call Macro" kmacro-call-macro)
-    ("a" "Append to Macro" (lambda ()
-                             (interactive)
-                             (kmacro-start-macro '(4))))
-    ("A" "Append w/o Executing" (lambda ()
-                                  (interactive)
-                                  (kmacro-start-macro '(16))))
-    ("d" "Name Last Macro" kmacro-name-last-macro)]
-   [("e" "Edit Macro" kmacro-edit-macro)
-    ("E" "Edit Lossage" kmacro-edit-lossage)
-    ("s" "Register Save" kmacro-to-register)
-    ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
-    ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
-  [:if
-   conn--in-kbd-macro-p
-   ["Commands"
-    ("q" "Query" kbd-macro-query)
-    ("d" "Redisplay" kmacro-redisplay)]
-   [:description
-    conn--kmacro-counter-display
-    ("i" "Insert Counter" kmacro-insert-counter)
-    ("c" "Set Counter" kmacro-set-counter :transient t)
-    ("+" "Add to Counter" kmacro-add-counter :transient t)
-    ("f" "Set Format" conn--set-counter-format-infix)]])
-
 ;;;; Kapply Prefix
 
 (defun conn-recursive-edit-kmacro (arg)
@@ -739,6 +622,123 @@ apply to each contiguous component of the region."
   (unless iterator (user-error "No regions"))
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-regions-kapply-prefix nil nil :scope iterator))
+
+;;;; Kmacro Prefix
+
+(defun conn--kmacro-display (macro &optional trunc)
+  (pcase macro
+    ((or 'nil '[] "") "nil")
+    (_ (let* ((m (format-kbd-macro macro))
+              (l (length m))
+              (z (and trunc (> l trunc))))
+         (format "%s%s"
+                 (if z (substring m 0 (1- trunc)) m)
+                 (if z "…" ""))))))
+
+(defun conn--kmacro-ring-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Ring: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value)
+     " - "
+     (when (length> kmacro-ring 1)
+       (thread-first
+         (car (last kmacro-ring))
+         (kmacro--keys)
+         (conn--kmacro-display 15)
+         (concat ", ")))
+     (propertize (conn--kmacro-display last-kbd-macro 15)
+                 'face 'transient-value)
+     (if (kmacro-ring-empty-p)
+         ""
+       (thread-first
+         (car kmacro-ring)
+         (kmacro--keys)
+         (conn--kmacro-display 15)
+         (conn--thread disc (concat ", " disc)))))))
+
+(defun conn--kmacro-counter-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Counter: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value))))
+
+(defun conn--in-kbd-macro-p ()
+  (or defining-kbd-macro executing-kbd-macro))
+
+(transient-define-infix conn--set-counter-format-infix ()
+  "Set `kmacro-counter-format'."
+  :class 'transient-lisp-variable
+  :set-value (lambda (_ format) (kmacro-set-format format))
+  :variable 'kmacro-counter-format
+  :reader (lambda (&rest _)
+            (read-string "Macro Counter Format: ")))
+
+;;;###autoload (autoload 'conn-kmacro-prefix "conn-transients" nil t)
+(transient-define-prefix conn-kmacro-prefix ()
+  "Transient menu for kmacro functions."
+  [:description
+   conn--kmacro-ring-display
+   :if-not conn--in-kbd-macro-p
+   [("l" "List Macros" list-keyboard-macros
+     :if (lambda () (version<= "30" emacs-version)))
+    ("n" "Next" kmacro-cycle-ring-previous :transient t)
+    ("p" "Previous" kmacro-cycle-ring-next :transient t)
+    ("w" "Swap" kmacro-swap-ring :transient t)
+    ("o" "Pop" kmacro-delete-ring-head :transient t)]
+   [("i" "Insert Counter" kmacro-insert-counter)
+    ("c" "Set Counter" kmacro-set-counter :transient t)
+    ("+" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix :transient t)]
+   [:if
+    (lambda () (version<= "30" emacs-version))
+    ("q<" "Quit Counter Less" kmacro-quit-counter-less)
+    ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
+    ("q=" "Quit Counter Equal" kmacro-quit-counter-equal)]]
+  [:if
+   (lambda () (version<= "30" emacs-version))
+   :description
+   "Counter Registers"
+   [("rs" "Save Counter Register" kmacro-reg-save-counter)
+    ("rl" "Load Counter Register" kmacro-reg-load-counter)]
+   [("r<" "Register Add Counter <" kmacro-reg-add-counter-less)
+    ("r>" "Register Add Counter >" kmacro-reg-add-counter-greater)
+    ("r=" "Register Add Counter =" kmacro-reg-add-counter-equal)]]
+  ["Commands"
+   :if-not conn--in-kbd-macro-p
+   [("m" "Record Macro" kmacro-start-macro)
+    ("k" "Call Macro" kmacro-call-macro)
+    ("a" "Append to Macro" (lambda ()
+                             (interactive)
+                             (kmacro-start-macro '(4))))
+    ("A" "Append w/o Executing" (lambda ()
+                                  (interactive)
+                                  (kmacro-start-macro '(16))))
+    ("d" "Name Last Macro" kmacro-name-last-macro)]
+   [("e" "Edit Macro" kmacro-edit-macro)
+    ("E" "Edit Lossage" kmacro-edit-lossage)
+    ("s" "Register Save" kmacro-to-register)
+    ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
+    ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
+  [:if
+   conn--in-kbd-macro-p
+   ["Commands"
+    ("q" "Query" kbd-macro-query)
+    ("d" "Redisplay" kmacro-redisplay)]
+   [:description
+    conn--kmacro-counter-display
+    ("i" "Insert Counter" kmacro-insert-counter)
+    ("c" "Set Counter" kmacro-set-counter :transient t)
+    ("+" "Add to Counter" kmacro-add-counter :transient t)
+    ("f" "Set Format" conn--set-counter-format-infix)]])
 
 ;;;; Narrow Ring Prefix
 
