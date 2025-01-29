@@ -3028,8 +3028,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          (cl-loop while (re-search-forward regexp nil t)
                                   collect
                                   (conn--make-preview-overlay
-                                   (match-beginning 0) (- (match-end 0)
-                                                          (match-beginning 0))))))))))
+                                   (match-beginning 0)
+                                   (- (match-end 0)
+                                      (match-beginning 0))))))))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))
@@ -4870,17 +4871,13 @@ there's a region, all lines that region covers will be duplicated."
       (window-swap-states nil window)
     (user-error "No other visible windows")))
 
-(defun conn-throw-buffer (window)
-  (interactive
-   (list (conn--prompt-for-window
-          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
-  (if window
-      (progn
-        (display-buffer
-         (current-buffer)
-         (lambda (_ _) (cons (conn--prompt-for-window window) 'reuse)))
-        (next-buffer))
-    (user-error "No other visible windows")))
+(defun conn-throw-buffer ()
+  (interactive)
+  (display-buffer
+   (current-buffer)
+   (lambda (_ _)
+     (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse)))
+  (next-buffer))
 
 (defun conn-yank-window (window)
   (interactive
