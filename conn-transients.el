@@ -60,33 +60,31 @@
 ;;;;;; Choices
 
 (defclass conn-transient-lisp-choices (conn-transient-lisp-value)
-  ((choices :initarg :choices :initform nil)
-   (index :initform 0)))
+  ((choices :initarg :choices :initform nil)))
 
 (cl-defmethod transient-init-value ((obj conn-transient-lisp-choices))
-  (with-slots (value index choices) obj
-    (setf value (nth index choices))
-    (setf index (mod (1+ index) (length choices)))))
+  (with-slots (value choices) obj
+    (setf value (car choices))))
 
 (cl-defmethod transient-infix-read ((obj conn-transient-lisp-choices))
-  (nth (oref obj index) (oref obj choices)))
+  (with-slots (choices value) obj
+    (nth (mod (1+ (seq-position choices value #'eq)) (length choices))
+         choices)))
 
 (cl-defmethod transient-infix-set ((obj conn-transient-lisp-choices) newval)
-  (with-slots (index choices value) obj
-    (setf value newval)
-    (setf index (mod (1+ index) (length choices)))))
+  (setf (oref obj value) newval))
 
 (cl-defmethod transient-format-value ((obj conn-transient-lisp-choices))
   (with-slots (value choices) obj
     (format
      (propertize "%s" 'face 'transient-delimiter)
      (mapconcat
-      (lambda (choice)
-        (propertize choice 'face
-                    (if (and value (string= (car value) choice))
-                        'transient-argument
-                      'transient-inactive-value)))
-      (remq nil (mapcar #'car choices))
+      (pcase-lambda ((and `(,description . ,_) choice))
+        (propertize description
+                    'face (if (eq choice value)
+                              'transient-argument
+                            'transient-inactive-value)))
+      (seq-filter #'car choices)
       (propertize "|" 'face 'transient-delimiter)))))
 
 (cl-defmethod transient-infix-value ((obj conn-transient-lisp-choices))
@@ -196,12 +194,8 @@ BEFORE means only those matches before, and including, the current match."
   :choices '(("conn" . conn-state)
              ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
-                (with-slots (index choices value) obj
-                  (when-let ((pos (seq-position choices conn-current-state
-                                                (lambda (e elt)
-                                                  (eq (cdr e) elt)))))
-                    (setf index pos))
-                  (setf value (nth index choices))))
+                (with-slots (choices value) obj
+                  (setf value (rassq conn-current-state choices))))
   :value-transform (lambda (val)
                      (lambda (it)
                        (conn--kapply-with-state it val))))
