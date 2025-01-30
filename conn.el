@@ -54,14 +54,17 @@
 (defvar conn-emacs-state)
 (defvar conn-state-map)
 (defvar conn-transition-hook)
+(defvar conn-wincontrol-mode)
 
-(defvar conn-dispatch-providers-alist
-  (list (cons t 'conn--dispatch-chars)))
+(defvar conn-dispatch-provider-default 'conn--dispatch-chars)
 
-(defvar conn-dispatch-default-actions-alist
-  (list (cons t 'conn-dispatch-goto)))
+(defvar conn-dispatch-providers-alist nil)
 
-(defvar conn-mark-handler-alist nil)
+(defvar conn-dispatch-action-default 'conn-dispatch-goto)
+
+(defvar conn-dispatch-action-defaults-alist nil)
+
+(defvar conn-mark-handler-overrides-alist nil)
 
 (defvar conn--mark-cursor-timer nil
   "`run-with-idle-timer' timer to update `mark' cursor.")
@@ -1588,7 +1591,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (unwind-protect
       (apply app)
     (setq conn-this-command-thing (conn--command-property :conn-command-thing)
-          conn-this-command-handler (or (alist-get this-command conn-mark-handler-alist)
+          conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
                                         (conn--command-property :conn-mark-handler)))))
 
 (defun conn--push-mark-ad (&rest _)
@@ -2042,7 +2045,7 @@ The iterator must be the first argument in ARGLIST.
 ;;;; Mark
 
 (defun conn-get-mark-handler (command)
-  (or (alist-get command conn-mark-handler-alist)
+  (or (alist-get command conn-mark-handler-overrides-alist)
       (ignore-errors (get command :conn-mark-handler))))
 
 (defun conn-register-thing (thing &rest rest)
@@ -2053,7 +2056,7 @@ The iterator must be the first argument in ARGLIST.
   (when-let ((finder (plist-get rest :dispatch-provider)))
     (setf (alist-get thing conn-dispatch-providers-alist) finder))
   (when-let ((action (plist-get rest :default-action)))
-    (setf (alist-get thing conn-dispatch-default-actions-alist) action))
+    (setf (alist-get thing conn-dispatch-action-defaults-alist) action))
   (when-let ((forward (plist-get rest :forward-op)))
     (put thing 'forward-op forward))
   (when-let ((beg (plist-get rest :beg-op)))
@@ -2119,9 +2122,6 @@ of the movement command unless `region-active-p'."
   (dolist (cmd (ensure-list commands))
     (put cmd :conn-mark-handler handler)))
 
-(defun conn--thing-parent (thing)
-  (get thing :conn-thing-parent))
-
 (defun conn--mark-cursor-p (ov)
   (eq (overlay-get ov 'category) 'conn--mark-cursor))
 
@@ -2177,7 +2177,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--mark-pre-command-hook ()
   (set-marker conn-this-command-start (point))
-  (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-alist)
+  (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
                                       (conn--command-property :conn-mark-handler))
         conn-this-command-thing (conn--command-property :conn-command-thing)))
 
@@ -2473,7 +2473,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (require 'org)
               (org-in-regexp org-link-any-re))
  :mark-key "O"
- :modes 'org-mode)
+ :modes '(org-mode))
 
 (conn-register-thing-commands
  'org-link 'conn-individual-thing-handler
@@ -2486,18 +2486,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;; Thing Dispatch
 
-(defmacro conn-define-dispatch-action (name-and-description arglist &rest body)
-  "\(fn (NAME DESCRIPTION) ARGLIST &body BODY)"
-  (declare (indent 2))
-  (pcase-exhaustive name-and-description
-    (`(,name ,description)
-     `(progn
-        (defun ,name ,arglist ,@body)
-        (put ',name :conn-action-description ,description)
-        (put ',name :conn-action t)))))
+(defvar conn-dispatch-all-things-collector-default
+  'conn--dispatch-all-things-1)
 
-(defvar conn-dispatch-all-things-collector-alist
-  (list (cons t 'conn--dispatch-all-things-1)))
+(defvar conn-dispatch-all-things-collector-alist nil)
 
 (defvar conn-dispatch-things-maps-alist nil)
 
@@ -2549,12 +2541,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--dispatch-finder (command)
   (or (alist-get command conn-dispatch-providers-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-providers-alist)
-      (alist-get t conn-dispatch-providers-alist)))
+      conn-dispatch-provider-default))
 
 (defun conn--dispatch-default-action (command)
-  (or (alist-get command conn-dispatch-default-actions-alist)
-      (alist-get (get command :conn-command-thing) conn-dispatch-default-actions-alist)
-      (alist-get t conn-dispatch-default-actions-alist)))
+  (or (alist-get command conn-dispatch-action-defaults-alist)
+      (alist-get (get command :conn-command-thing) conn-dispatch-action-defaults-alist)
+      conn-dispatch-action-default))
 
 (setf (alist-get 'conn-end-of-inner-line conn-dispatch-providers-alist)
       'conn--dispatch-inner-lines-end)
@@ -2580,6 +2572,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (beginning-of-line)
           (looking-at "\\s)*\n"))
     (join-line)))
+
+(defmacro conn-define-dispatch-action (name-and-description arglist &rest body)
+  "\(fn (NAME DESCRIPTION) ARGLIST &body BODY)"
+  (declare (indent 2))
+  (pcase-exhaustive name-and-description
+    (`(,name ,description)
+     `(progn
+        (defun ,name ,arglist ,@body)
+        (put ',name :conn-action-description ,description)
+        (put ',name :conn-action t)))))
 
 (conn-define-dispatch-action (conn-dispatch-kill "Kill")
     (window pt thing)
@@ -2745,7 +2747,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              (/= pt (point)))
     (unless (region-active-p)
       (push-mark nil t))
-    (pcase (alist-get thing conn-dispatch-default-actions-alist)
+    (pcase (alist-get thing conn-dispatch-action-defaults-alist)
       ((or 'conn-dispatch-goto 'nil)
        (pcase (cons (or (bounds-of-thing-at-point thing)
                         (point))
@@ -6128,7 +6130,7 @@ determine if `conn-local-mode' should be enabled."
    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
    :forward-op 'org-forward-paragraph
    :mark-key "I"
-   :modes 'org-mode)
+   :modes '(org-mode))
 
   (conn-register-thing-commands
    'org-paragraph 'conn-sequential-thing-handler
@@ -6141,7 +6143,7 @@ determine if `conn-local-mode' should be enabled."
         (goto-char pt)
         (org-open-at-point-global))))
 
-  (setf (alist-get 'org-link conn-dispatch-default-actions-alist)
+  (setf (alist-get 'org-link conn-dispatch-action-defaults-alist)
         'conn-open-org-link)
 
   (defun conn-org-sentence-forward (arg)
@@ -6154,7 +6156,7 @@ determine if `conn-local-mode' should be enabled."
    'org-sentence
    :forward-op 'conn-org-sentence-forward
    :mark-key "{"
-   :modes 'org-mode)
+   :modes '(org-mode))
 
   (conn-register-thing-commands
    'org-sentence 'conn-sequential-thing-handler
@@ -6170,7 +6172,7 @@ determine if `conn-local-mode' should be enabled."
    :mark-key "m"
    :beg-op 'org-backward-element
    :end-op 'org-forward-element
-   :modes 'org-mode)
+   :modes '(org-mode))
 
   ;; FIXME: org-element all broken
   (conn-register-thing-commands
@@ -6202,7 +6204,7 @@ determine if `conn-local-mode' should be enabled."
    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading t)
    :forward-op 'org-next-visible-heading
-   :modes 'org-mode)
+   :modes '(org-mode))
 
   (conn-register-thing-commands
    'org-heading 'conn-sequential-thing-handler
