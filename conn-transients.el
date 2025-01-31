@@ -49,10 +49,9 @@
 
 (cl-defmethod transient-format-value ((obj conn-transient-lisp-bool))
   (propertize (oref obj description)
-              'face
-              (if (oref obj value)
-                  'transient-argument
-                'transient-inactive-value)))
+              'face (if (oref obj value)
+                        'transient-argument
+                      'transient-inactive-value)))
 
 (cl-defmethod transient-infix-value ((obj conn-transient-lisp-bool))
   (cons (oref obj keyword) (oref obj value)))
@@ -68,8 +67,10 @@
 
 (cl-defmethod transient-infix-read ((obj conn-transient-lisp-choices))
   (with-slots (choices value) obj
-    (nth (mod (1+ (seq-position choices value #'eq)) (length choices))
-         choices)))
+    (thread-first
+      (1+ (seq-position choices value #'eq))
+      (mod (length choices))
+      (nth choices))))
 
 (cl-defmethod transient-infix-set ((obj conn-transient-lisp-choices) newval)
   (setf (oref obj value) newval))

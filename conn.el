@@ -62,7 +62,7 @@
 
 (defvar conn-dispatch-action-default 'conn-dispatch-goto)
 
-(defvar conn-dispatch-action-defaults-alist nil)
+(defvar conn-dispatch-default-action-alist nil)
 
 (defvar conn-mark-handler-overrides-alist nil)
 
@@ -2056,7 +2056,7 @@ The iterator must be the first argument in ARGLIST.
   (when-let ((finder (plist-get rest :dispatch-provider)))
     (setf (alist-get thing conn-dispatch-providers-alist) finder))
   (when-let ((action (plist-get rest :default-action)))
-    (setf (alist-get thing conn-dispatch-action-defaults-alist) action))
+    (setf (alist-get thing conn-dispatch-default-action-alist) action))
   (when-let ((forward (plist-get rest :forward-op)))
     (put thing 'forward-op forward))
   (when-let ((beg (plist-get rest :beg-op)))
@@ -2544,8 +2544,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       conn-dispatch-provider-default))
 
 (defun conn--dispatch-default-action (command)
-  (or (alist-get command conn-dispatch-action-defaults-alist)
-      (alist-get (get command :conn-command-thing) conn-dispatch-action-defaults-alist)
+  (or (alist-get command conn-dispatch-default-action-alist)
+      (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
       conn-dispatch-action-default))
 
 (setf (alist-get 'conn-end-of-inner-line conn-dispatch-providers-alist)
@@ -2747,7 +2747,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              (/= pt (point)))
     (unless (region-active-p)
       (push-mark nil t))
-    (pcase (alist-get thing conn-dispatch-action-defaults-alist)
+    (pcase (alist-get thing conn-dispatch-default-action-alist)
       ((or 'conn-dispatch-goto 'nil)
        (pcase (cons (or (bounds-of-thing-at-point thing)
                         (point))
@@ -6143,7 +6143,7 @@ determine if `conn-local-mode' should be enabled."
         (goto-char pt)
         (org-open-at-point-global))))
 
-  (setf (alist-get 'org-link conn-dispatch-action-defaults-alist)
+  (setf (alist-get 'org-link conn-dispatch-default-action-alist)
         'conn-open-org-link)
 
   (defun conn-org-sentence-forward (arg)
