@@ -39,6 +39,7 @@
 (declare-function extract-rectangle-bounds "rect")
 (declare-function kmacro-p "kmacro")
 (declare-function kmacro-step-edit-macro "kmacro")
+(declare-function project-files "project")
 
 
 ;;;; Variables
@@ -684,7 +685,8 @@ If BUFFER is nil check `current-buffer'."
                with case-fold-search = isearch-case-fold-search
                while (isearch-search-string isearch-string bound t)
                when (funcall isearch-filter-predicate (match-beginning 0) (match-end 0))
-               collect (cons (match-beginning 0) (match-end 0))
+               collect (cons (conn--create-marker (match-beginning 0) (current-buffer))
+                             (conn--create-marker (match-end 0) (current-buffer)))
                when (and (= (match-beginning 0) (match-end 0))
                          (not (if isearch-forward (eobp) (bobp))))
                do (forward-char (if isearch-forward 1 -1))))))
@@ -3891,6 +3893,14 @@ instances of from-string.")
 
 ;;;;; Isearch Commands
 
+(defun conn-multi-isearch-project ()
+  (interactive)
+  (require 'project)
+  (multi-isearch-files
+   (seq-uniq (cons (buffer-file-name)
+                   (project-files (project-current)))
+             'file-equal-p)))
+
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
 Interactively `region-beginning' and `region-end'."
@@ -5781,6 +5791,7 @@ When ARG is nil the root window is used."
   "m B" 'multi-isearch-buffers-regexp
   "m F" 'multi-isearch-files-regexp
   "m b" 'multi-isearch-buffers
+  "m p" 'conn-multi-isearch-project
   "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-pop-mark-repeat-map

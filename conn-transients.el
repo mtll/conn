@@ -185,7 +185,9 @@ AFTER means only those matchs after, and including, the current match.
 BEFORE means only those matches before, and including, the current match."
   :class 'conn-transient-lisp-choices
   :description "Restrict Matches Inclusive"
-  :if-not (lambda () (bound-and-true-p multi-isearch-buffer-list))
+  :if-not (lambda ()
+            (or (bound-and-true-p multi-isearch-buffer-list)
+                (bound-and-true-p multi-isearch-file-list)))
   :key "j"
   :keyword :matches
   :choices '(("after" . 'after)
@@ -410,19 +412,24 @@ apply to each contiguous component of the region."
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-construct-iterator
-   (let ((matches
-          (if (bound-and-true-p multi-isearch-buffer-list)
+   (prog1
+       (cond ((bound-and-true-p multi-isearch-file-list)
+              (mapcan 'conn--isearch-matches
+                      (append
+                       (remq (current-buffer)
+                             (mapcar 'find-file-noselect
+                                     multi-isearch-file-list))
+                       (list (current-buffer)))))
+             ((bound-and-true-p multi-isearch-buffer-list)
               (mapcan 'conn--isearch-matches
                       (append
                        (remq (current-buffer) multi-isearch-buffer-list)
-                       (list (current-buffer))))
-            (conn--isearch-matches
-             (current-buffer)
-             (alist-get :matches args)))))
-     (isearch-done)
-     (cl-loop for (beg . end) in matches
-              collect (cons (conn--create-marker beg)
-                            (conn--create-marker end))))
+                       (list (current-buffer)))))
+             (t
+              (conn--isearch-matches
+               (current-buffer)
+               (alist-get :matches args))))
+     (isearch-done))
    `(conn--kapply-region-iterator ,(alist-get :reverse args))
    (alist-get :undo args)
    (alist-get :restrictions args)
