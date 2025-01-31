@@ -5234,12 +5234,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "s" 'shrink-window
   "S" 'conn-wincontrol-isearch-other-window
   "t" 'tab-switch
+  "T" 'conn-throw-buffer
   "u" 'conn-wincontrol-previous-window
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
   "w" 'enlarge-window-horizontally
   "q" 'conn-transpose-window
-  "Q" 'conn-throw-buffer
   "y" 'conn-yank-window
   "z" 'conn-wincontrol-zoom-out
   "Z" 'conn-wincontrol-zoom-in)
@@ -6440,8 +6440,6 @@ determine if `conn-local-mode' should be enabled."
    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
    :bounds-op (lambda ()
                 (save-mark-and-excursion
-                  (unless (outline-on-heading-p)
-                    (outline-up-heading 1))
                   (outline-mark-subtree)
                   (cons (region-beginning) (region-end))))
    :forward-op 'conn-forward-heading-op)
