@@ -2063,7 +2063,7 @@ The iterator must be the first argument in ARGLIST.
 (defun conn-register-thing (thing &rest rest)
   "Register a new THING.
 
-\(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-KEY)"
+\(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
   (when-let ((finder (plist-get rest :dispatch-provider)))
     (setf (alist-get thing conn-dispatch-providers-alist) finder))
@@ -2079,23 +2079,31 @@ The iterator must be the first argument in ARGLIST.
     (put thing 'bounds-of-thing-at-point bounds))
   (when-let ((inner-bounds-op (plist-get rest :inner-bounds-op)))
     (put thing :conn-inner-bounds-op inner-bounds-op))
-  (when-let ((binding (plist-get rest :mark-key))
-             (mark-command (conn--symbolicate "conn-mark-" thing)))
-    (fset mark-command
-          (lambda ()
-            (interactive)
-            (pcase (bounds-of-thing-at-point thing)
-              (`(,beg . ,end)
-               (goto-char beg)
-               (conn--push-ephemeral-mark end))
-              (_ (user-error "Point not in %s" thing)))))
-    (put mark-command :conn-command-thing thing)
-    (if (plist-get rest :modes)
-        (dolist (mode (put thing :conn-thing-modes
-                           (ensure-list (plist-get rest :modes))))
-          (keymap-set (conn-get-mode-things-map mode)
-                      binding mark-command))
-      (keymap-set conn-mark-thing-map binding mark-command))))
+  (cl-flet ((make-mark-command ()
+              (let ((mark-command (conn--symbolicate "conn-mark-" thing)))
+                (fset mark-command
+                      (lambda ()
+                        (interactive)
+                        (pcase (bounds-of-thing-at-point thing)
+                          (`(,beg . ,end)
+                           (goto-char beg)
+                           (conn--push-ephemeral-mark end))
+                          (_ (user-error "Point not in %s" thing)))))
+                (put mark-command :conn-command-thing thing)
+                mark-command)))
+    (let* ((mark-key (plist-get rest :mark-key))
+           (mark-command (pcase (plist-get rest :mark-cmd)
+                           ((or 't (guard (key-valid-p mark-key)))
+                            (make-mark-command))
+                           ((and cmd (pred symbolp) (pred functionp))
+                            (put cmd :conn-command-thing thing)))))
+      (when (key-valid-p mark-key)
+        (if (plist-get rest :modes)
+            (dolist (mode (put thing :conn-thing-modes
+                               (ensure-list (plist-get rest :modes))))
+              (keymap-set (conn-get-mode-things-map mode)
+                          mark-key mark-command))
+          (keymap-set conn-mark-thing-map mark-key mark-command))))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
@@ -6436,13 +6444,16 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'heading
-   :mark-key "H"
+   :mark-cmd t
    :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
    :bounds-op (lambda ()
                 (save-mark-and-excursion
                   (outline-mark-subtree)
                   (cons (region-beginning) (region-end))))
    :forward-op 'conn-forward-heading-op)
+
+  (keymap-set (conn-get-mode-map 'conn-state 'outline-minor-mode)
+              "H H" 'conn-mark-heading)
 
   (conn-register-thing-commands
    'heading 'conn-sequential-thing-handler
