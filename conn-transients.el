@@ -28,10 +28,15 @@
 ;;;;; Lisp Values
 
 (defclass conn-transient-lisp-value (transient-infix)
-  ((keyword :initarg :keyword :initform (error "Keyword required."))
-   (value-transform :initarg :value-transform :initform #'identity))
+  ((keyword :initarg :keyword))
   "Abstract super class for lisp values."
   :abstract t)
+
+(cl-defmethod transient-infix-value ((obj conn-transient-lisp-value))
+  (cons (if (slot-boundp obj 'keyword)
+            (oref obj keyword)
+          (oref obj description))
+        (oref obj value)))
 
 ;;;;;; Switch
 
@@ -53,13 +58,11 @@
                         'transient-argument
                       'transient-inactive-value)))
 
-(cl-defmethod transient-infix-value ((obj conn-transient-lisp-bool))
-  (cons (oref obj keyword) (oref obj value)))
-
 ;;;;;; Choices
 
 (defclass conn-transient-lisp-choices (conn-transient-lisp-value)
-  ((choices :initarg :choices :initform nil)))
+  ((choices :initarg :choices :initform nil)
+   (value-transform :initarg :value-transform :initform #'identity)))
 
 (cl-defmethod transient-init-value ((obj conn-transient-lisp-choices))
   (with-slots (value choices) obj
@@ -89,7 +92,9 @@
       (propertize "|" 'face 'transient-delimiter)))))
 
 (cl-defmethod transient-infix-value ((obj conn-transient-lisp-choices))
-  (cons (oref obj keyword)
+  (cons (if (slot-boundp obj 'keyword)
+            (oref obj keyword)
+          (oref obj description))
         (funcall (oref obj value-transform)
                  (cdr (oref obj value)))))
 

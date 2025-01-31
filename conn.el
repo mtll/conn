@@ -459,8 +459,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (eval-and-compile
   (defmacro conn--thread (form needle &rest forms)
-    (declare (indent 1)
-             (debug (symbolp form)))
+    (declare (debug (form symbolp body))
+             (indent 1))
     (if forms
         `(let ((,needle ,form))
            (conn--thread ,(car forms) ,needle ,@(cdr forms)))
@@ -487,7 +487,8 @@ Used to restore previous value when `conn-mode' is disabled.")
       (buffer-string))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
-  (declare (indent 1))
+  (declare (debug (form body))
+           (indent 1))
   (pcase-dolist (`(,symbol ,how ,function . ,props) (nreverse advice-forms))
     (setq body (let ((fn (gensym "advice")))
                  `(let ((,fn ,function))
@@ -498,7 +499,8 @@ Used to restore previous value when `conn-mode' is disabled.")
   body)
 
 (defmacro conn--without-conn-maps (&rest body)
-  (declare (indent 0))
+  (declare (debug (body))
+           (indent 0))
   `(let ((emulation-mode-map-alists
           (seq-difference emulation-mode-map-alists
                           '(conn--local-mode-maps
@@ -509,7 +511,8 @@ Used to restore previous value when `conn-mode' is disabled.")
      ,(macroexp-progn body)))
 
 (defmacro conn--with-region-emphasis (beg end &rest body)
-  (declare (indent 2))
+  (declare (debug (form form body))
+           (indent 2))
   (let ((beg-ol (gensym "beg-ol"))
         (end-ol (gensym "end-ol")))
     `(let ((,beg-ol (make-overlay (point-min) ,beg))
@@ -633,7 +636,8 @@ If BUFFER is nil check `current-buffer'."
     (deactivate-mark)))
 
 (defmacro conn--with-state (state &rest body)
-  (declare (indent 1))
+  (declare (debug (form body))
+           (indent 1))
   (let ((saved-state (make-symbol "saved-state"))
         (saved-prev-state (make-symbol "saved-prev-state"))
         (buffer (make-symbol "buffer")))
@@ -650,7 +654,8 @@ If BUFFER is nil check `current-buffer'."
            (setq conn-previous-state ,saved-prev-state))))))
 
 (defmacro conn--with-input-method (&rest body)
-  (declare (indent 0))
+  (declare (debug (body))
+           (indent 0))
   `(unwind-protect
        (progn
          (when conn--input-method
@@ -910,7 +915,10 @@ BODY contains code to be executed each time the state is enabled or
 disabled.
 
 \(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
-  (declare (indent defun))
+  (declare (debug ( name stringp
+                    [&rest keywordp sexp]
+                    def-body))
+           (indent defun))
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-face-name (conn--symbolicate name "-lighter-face"))
@@ -1971,7 +1979,11 @@ Possibilities: \\<query-replace-map>
 The iterator must be the first argument in ARGLIST.
 
 \(fn NAME ARGLIST [DOCSTRING] BODY...)"
-  (declare (doc-string 3) (indent 2))
+  (declare (debug ( name lambda-list
+                    [&optional lambda-doc]
+                    def-body))
+           (doc-string 3)
+           (indent 2))
   (let ((iterator (car arglist))
         (docstring (if (stringp (car body)) (pop body) "")))
     `(defun ,name ,arglist
@@ -2575,7 +2587,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defmacro conn-define-dispatch-action (name-and-description arglist &rest body)
   "\(fn (NAME DESCRIPTION) ARGLIST &body BODY)"
-  (declare (indent 2))
+  (declare (debug ( (name stringp)
+                    lambda-list
+                    body))
+           (indent 2))
   (pcase-exhaustive name-and-description
     (`(,name ,description)
      `(progn

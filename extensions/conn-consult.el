@@ -31,7 +31,8 @@
   "Iterate over each THING in buffer.
 
 THING BEG and END are bound in BODY."
-  (declare (indent 3))
+  (declare (debug (form form form body))
+           (indent 3))
   (cl-with-gensyms (max bounds)
     `(save-excursion
        (let ((,max (point-max)))
