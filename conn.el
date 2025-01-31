@@ -58,11 +58,9 @@
 (defvar conn-wincontrol-mode)
 
 (defvar conn-dispatch-provider-default 'conn--dispatch-chars)
-
 (defvar conn-dispatch-providers-alist nil)
 
 (defvar conn-dispatch-action-default 'conn-dispatch-goto)
-
 (defvar conn-dispatch-default-action-alist nil)
 
 (defvar conn-mark-handler-overrides-alist nil)
@@ -633,7 +631,7 @@ If BUFFER is nil check `current-buffer'."
                              (string-trim)
                              (substring 0 20)))))
     (clone-indirect-buffer-other-window name t)
-    (conn-narrow-to-region beg end record)
+    (conn--narrow-to-region-1 beg end record)
     (deactivate-mark)))
 
 (defmacro conn--with-state (state &rest body)
@@ -998,7 +996,7 @@ disabled.
                                        'face ',lighter-face-name
                                        conn-lighter))
                   (conn--activate-input-method)
-                  (if-let ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
+                  (if-let* ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
                       (setq cursor-type cursor)
                     (setq cursor-type t))
                   (when (not executing-kbd-macro)
@@ -1917,7 +1915,7 @@ Possibilities: \\<query-replace-map>
         (_
          (prog1
              (funcall iterator state)
-           (if-let ((restriction (alist-get (current-buffer) kapply-saved-restrictions)))
+           (if-let* ((restriction (alist-get (current-buffer) kapply-saved-restrictions)))
                (progn
                  (widen)
                  (narrow-to-region (car restriction) (cdr restriction)))
@@ -2874,7 +2872,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (cancel-change-group cg2))))))
 
 (defun conn--dispatch-make-thing-window-predicate (thing)
-  (if-let ((modes (get thing :conn-thing-modes)))
+  (if-let* ((modes (get thing :conn-thing-modes)))
       (lambda (win)
         (apply #'provided-mode-derived-p
                (buffer-local-value 'major-mode (window-buffer win))
@@ -2932,10 +2930,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                  (min (length (overlay-get ov prop))
                                       (- (overlay-end ov)
                                          (overlay-start ov)))))
-                (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
-                  (if-let ((pos (string-search "\n" after-str)))
-                      (overlay-put ov 'after-string (substring after-str pos))
-                    (overlay-put ov 'after-string nil)))
+                (if-let* ((after-str (buffer-substring (overlay-start ov) (overlay-end ov)))
+                          (pos (string-search "\n" after-str)))
+                    (overlay-put ov 'after-string (substring after-str pos))
+                  (overlay-put ov 'after-string nil))
                 (push ov narrowed)))))
         (mapcar #'copy-overlay narrowed))
     (mapc #'delete-overlay overlays)))
@@ -3022,7 +3020,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                               (and (funcall thing-pred win)
                                    (funcall window-predicate win)))))))
            nconc (with-selected-window win
-                   (if-let ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
+                   (if-let* ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
                        (funcall fn)
                      (funcall (alist-get t conn-dispatch-all-things-collector-alist) thing)))))
 
@@ -4555,6 +4553,10 @@ When KILL-FLAG is non-nil kill the region as well."
     (unless executing-kbd-macro
       (pulse-momentary-highlight-region beg end))))
 
+(defun conn--narrow-to-region-1 (beg end &optional record)
+  (narrow-to-region beg end)
+  (when record (conn--narrow-ring-record beg end)))
+
 (defun conn-narrow-to-region (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
@@ -4565,8 +4567,7 @@ When KILL-FLAG is non-nil kill the region as well."
             t)
            (list t)))
   (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
-    (narrow-to-region beg end)
-    (when record (conn--narrow-ring-record beg end))
+    (conn--narrow-to-region-1 beg end record)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed"))))
 
@@ -4575,10 +4576,11 @@ When KILL-FLAG is non-nil kill the region as well."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (append (conn--read-thing-mover "Thing Mover"
-                                   (when current-prefix-arg
-                                     (prefix-numeric-value current-prefix-arg))
-                                   t)
+   (append (conn--read-thing-mover
+            "Thing Mover"
+            (when current-prefix-arg
+              (prefix-numeric-value current-prefix-arg))
+            t)
            (list t)))
   (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
