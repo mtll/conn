@@ -5942,7 +5942,6 @@ When ARG is nil the root window is used."
   "C-M-0" 'kill-buffer-and-window
   "C-M-l" 'conn-recenter-on-region
   "C-M-S-l" 'conn-recenter-on-region-other-window
-  "C-t" (conn-remap-key (key-parse "C-x t"))
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
@@ -6016,8 +6015,8 @@ When ARG is nil the root window is used."
   "x" (conn-remap-key (key-parse "C-x"))
   "z" 'conn-exchange-mark-command)
 
-(define-keymap
-  :keymap global-map
+(defvar-keymap conn-global-map
+  "C-t" (conn-remap-key (key-parse "C-x t"))
   "C-S-w" 'delete-region
   "C-x /" 'tab-bar-history-back
   "C-x 4 /" 'tab-bar-history-back
@@ -6120,6 +6119,7 @@ determine if `conn-local-mode' should be enabled."
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn-initialize-buffer
   :group 'conn
+  :keymap conn-global-map
   (progn
     (conn--setup-keymaps)
     (conn--setup-mark)

@@ -412,7 +412,7 @@ apply to each contiguous component of the region."
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-construct-iterator
-   (prog1
+   (unwind-protect
        (cond ((bound-and-true-p multi-isearch-file-list)
               (mapcan 'conn--isearch-matches
                       (append
