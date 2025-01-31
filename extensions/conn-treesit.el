@@ -52,20 +52,20 @@
                          typescript-ts-mode))
 
 (defun conn--dispatch-all-ts-defuns ()
-  (conn--thread -->
-      (cl-loop for n in (with-restriction (window-start) (window-end)
-                          (thread-first
-                            (treesit-buffer-root-node)
-                            (treesit-induce-sparse-tree treesit-defun-type-regexp)
-                            (flatten-tree)))
-               for beg = (treesit-node-start n)
-               for end = (treesit-node-end n)
-               when (and (conn--region-visible-p beg end)
-                         (>= beg (window-start))
-                         (<= beg (window-end)))
-               collect beg)
-    (seq-sort '< -->)
-    (cl-loop for pt in --> collect (conn--make-preview-overlay pt 1 'defun))))
+  (cl-loop for node in (with-restriction (window-start) (window-end)
+                         (thread-first
+                           (treesit-buffer-root-node)
+                           (treesit-induce-sparse-tree treesit-defun-type-regexp)
+                           (flatten-tree)))
+           for beg = (treesit-node-start node)
+           for end = (treesit-node-end node)
+           when (and (conn--region-visible-p beg end)
+                     (>= beg (window-start))
+                     (<= beg (window-end)))
+           collect beg into dfns
+           finally return (mapcar (lambda (pt)
+                                    (conn--make-preview-overlay pt 1 'defun))
+                                  (seq-sort '< dfns))))
 
 (dolist (mode conn--ts-modes)
   (add-hook (conn--symbolicate mode "-hook")
