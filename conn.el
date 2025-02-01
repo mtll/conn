@@ -130,7 +130,10 @@
   :type 'symbol
   :group 'conn-states)
 
-(defcustom conn-buffer-default-state-alist nil
+(defcustom conn-buffer-default-state-alist
+  '(((derived-mode . prog-mode) . conn-state)
+    ((derived-mode . text-mode) . conn-state)
+    ((derived-mode . conf-mode) . conn-state))
   "Alist of the form ((CONDITION . STATE) ...).
 Elements specify default STATE for buffers matching CONDITION.
 CONDITION has the same meaning as in `buffer-match-p'."
@@ -822,7 +825,8 @@ If HOOKS are not specified checks are performed in MODE-hook to toggle
 the input method.  If HOOKS are specified checks are performed in those
 hooks instead."
   (let ((hooks (or hooks (list (conn--symbolicate mode "-hook")))))
-    (add-to-list 'conn-input-method-overriding-modes (cons mode hooks))))
+    (cl-pushnew (cons mode hooks) conn-input-method-overriding-modes
+                :test #'equal)))
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property.
@@ -1031,13 +1035,6 @@ A `conn-mode' state for editing text."
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :suppress t))
-
-(add-to-list 'conn-buffer-default-state-alist
-             '((derived-mode . prog-mode) . conn-state))
-(add-to-list 'conn-buffer-default-state-alist
-             '((derived-mode . text-mode) . conn-state))
-(add-to-list 'conn-buffer-default-state-alist
-             '((derived-mode . conf-mode) . conn-state))
 
 (conn-define-state conn-org-edit-state
   "Activate `conn-org-edit-state' in the current buffer.
@@ -6277,7 +6274,7 @@ determine if `conn-local-mode' should be enabled."
                conn-current-state
                conn-state
                conn-emacs-state))
-    (add-to-list 'polymode-move-these-vars-from-old-buffer v)))
+    (cl-pushnew v polymode-move-these-vars-from-old-buffer)))
 
 (with-eval-after-load 'eldoc
   (eldoc-add-command 'conn-end-of-inner-line
