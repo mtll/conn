@@ -75,6 +75,7 @@
   "h" 'conn-expand)
 
 (defvar-keymap conn-mark-thing-map
+  :prefix 'conn-mark-thing-map
   "L" 'forward-line
   ")" 'forward-list
   "(" 'backward-list)
@@ -775,7 +776,7 @@ If BUFFER is nil check `current-buffer'."
          mark-map-keys mode-map)
     (dolist (state conn-states)
       (setq mark-map-keys
-            (where-is-internal conn-mark-thing-map
+            (where-is-internal 'conn-mark-thing-map
                                (list (alist-get state conn--state-maps)
                                      (conn-get-local-map state))))
       (dolist (mode mmodes)
@@ -1238,7 +1239,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "<remap> <conn-backward-char>" 'backward-char
   "b" 'beginning-of-buffer
   "C-h" 'help
-  "t" conn-mark-thing-map
+  "t" 'conn-mark-thing-map
   "r" 'recursive-edit)
 
 (define-minor-mode conn-read-thing-mover-mode
@@ -5835,6 +5836,7 @@ When ARG is nil the root window is used."
   "?" 'tab-bar-history-forward)
 
 (defvar-keymap conn-edit-map
+  :prefix 'conn-edit-map
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
@@ -5947,7 +5949,7 @@ When ARG is nil the root window is used."
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" conn-edit-map
+  "b" 'conn-edit-map
   "c" (conn-remap-key (key-parse "C-c"))
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys)
@@ -5955,7 +5957,7 @@ When ARG is nil the root window is used."
   "F" 'conn-yank-window
   "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
-  "H" conn-mark-thing-map
+  "H" 'conn-mark-thing-map
   "p" 'conn-register-load
   "P" 'conn-register-prefix
   "q" 'conn-transpose-regions
@@ -5991,7 +5993,7 @@ When ARG is nil the root window is used."
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "c" (conn-remap-key (key-parse "C-c"))
-  "b" conn-edit-map
+  "b" 'conn-edit-map
   "g" (conn-remap-keymap (key-parse "M-g"))
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
