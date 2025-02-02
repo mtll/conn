@@ -2465,7 +2465,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
  'next-line 'previous-line
- 'rectangle-next-line 'rectangle-previous-line)
+ 'rectangle-next-line 'rectangle-previous-line
+ 'dired-previous-line 'dired-next-line)
 
 (conn-register-thing
  'outer-line
