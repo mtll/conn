@@ -2,7 +2,7 @@
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") consult conn)
+;; Package-Requires: ((emacs "29.1") (compat "30.0.0.0") consult conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

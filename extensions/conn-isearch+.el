@@ -4,7 +4,7 @@
 ;; Description: Isearch+ extensions for Conn Mode
 ;; Author: David Feller
 ;; Package-Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "29.1.4.4") isearch+ conn)
+;; Package-Requires: ((emacs "29.1") (compat "30.0.0.0") isearch+ conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by

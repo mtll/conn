@@ -35,3 +35,4 @@
               (nerd-icons-sucicon "nf-custom-orgmode")))
 
 (provide 'conn-nerd-icons)
+;;; conn-nerd-icons.el ends here
