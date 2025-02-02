@@ -921,6 +921,8 @@ mouse-3: Describe current input method")
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
+:LIGHTER is the lighter text for NAME.
+
 :LIGHTER-COLOR is the background color for the conn mode-line lighter in NAME.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
@@ -943,9 +945,11 @@ disabled.
            (indent defun))
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
+               (lighter-name (conn--symbolicate name "-lighter"))
                (lighter-color-name (conn--symbolicate name "-lighter-color"))
                (enter (gensym "enter"))
                ((map :cursor
+                     :lighter
                      :lighter-color
                      :suppress-input-method
                      (:keymap keymap '(make-sparse-keymap))
@@ -961,6 +965,12 @@ disabled.
        (defvar ,map-name
          (setf (alist-get ',name conn--state-maps) ,keymap)
          ,(conn--stringify "Keymap active in `" name "'."))
+
+       (defvar ,lighter-name ,lighter
+         ,(conn--stringify "Lighter text when "
+                           name
+                           " is active.\n\n"
+                           "If nil use the default lighter text."))
 
        (defvar ,lighter-color-name ,lighter-color
          ,(conn--stringify "Background color for the Conn mode lighter when "
@@ -1011,13 +1021,10 @@ disabled.
                   (setq ,name t
                         conn-current-state ',name
                         conn--local-mode-maps (alist-get ',name conn--mode-maps))
+                  (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
                   (when (and conn-lighter conn-lighter-colors)
-                    (setq-local conn-lighter (conn--set-background conn-lighter
-                                                                   ,lighter-color-name))
-                    ;; (put-text-property 0 (length conn-lighter)
-                    ;;                    'face ',lighter-face-name
-                    ;;                    conn-lighter)
-                    )
+                    (setq-local conn-lighter
+                                (conn--set-background conn-lighter ,lighter-color-name)))
                   (conn--activate-input-method)
                   (setq cursor-type (or ,cursor-name t))
                   (when (not executing-kbd-macro)
