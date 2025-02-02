@@ -125,6 +125,12 @@
   :type '(choice string (const nil))
   :group 'conn-states)
 
+(defcustom conn-lighter-colors nil
+  "Whether the lighter background color should be used to indicate the
+current state."
+  :type 'boolean
+  :group 'conn-states)
+
 (defcustom conn-default-state 'conn-emacs-state
   "Default conn state for new buffers."
   :type 'symbol
@@ -1005,7 +1011,7 @@ disabled.
                   (setq ,name t
                         conn-current-state ',name
                         conn--local-mode-maps (alist-get ',name conn--mode-maps))
-                  (when conn-lighter
+                  (when (and conn-lighter conn-lighter-colors)
                     (setq-local conn-lighter (conn--set-background conn-lighter
                                                                    ,lighter-color-name))
                     ;; (put-text-property 0 (length conn-lighter)
