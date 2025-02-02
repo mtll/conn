@@ -2473,7 +2473,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
  'next-line 'previous-line
- 'rectangle-next-line 'rectangle-previous-line
+ 'rectangle-next-line 'rectangle-previous-line)
+
+(conn-register-thing
+ 'dired-line
+ :dispatch-provider 'conn--dispatch-dired-lines)
+
+(conn-register-thing-commands
+ 'dired-line nil
  'dired-previous-line 'dired-next-line)
 
 (conn-register-thing
@@ -3121,6 +3128,23 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (setq ovs (nconc (with-selected-window win
                                  (conn--dispatch-things-with-prefix-1 things prefix))
                                ovs))))
+          (setq success t)
+          ovs)
+      (unless success (mapc #'delete-overlay ovs)))))
+
+(defun conn--dispatch-dired-lines ()
+  (let ((dired-movement-style 'bounded)
+        ovs success)
+    (unwind-protect
+        (progn
+          (save-excursion
+            (with-restriction (window-start) (window-end)
+              (goto-char (point-min))
+              (while (/= (point)
+                         (progn
+                           (dired-next-line 1)
+                           (point)))
+                (push (conn--make-preview-overlay (point) 1) ovs))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
