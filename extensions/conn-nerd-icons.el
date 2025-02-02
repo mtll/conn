@@ -33,3 +33,5 @@
       conn-org-edit-state-lighter
       (concat (nerd-icons-codicon "nf-cod-blank")
               (nerd-icons-sucicon "nf-custom-orgmode")))
+
+(provide 'conn-nerd-icons)
