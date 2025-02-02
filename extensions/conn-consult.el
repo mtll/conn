@@ -191,7 +191,7 @@ THING BEG and END are bound in BODY."
     (thread-last
       (mapcar (lambda (cand)
                 (pcase-let ((`(,line-marker (,beg . ,end) . _)
-                             (consult--grep-position cand)))
+                             (consult--grep-position cand 'find-file-noselect)))
                   (cons (move-marker line-marker
                                      (+ line-marker beg)
                                      (marker-buffer line-marker))
