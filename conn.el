@@ -649,17 +649,22 @@ If BUFFER is nil check `current-buffer'."
            (indent 1))
   (let ((saved-state (make-symbol "saved-state"))
         (saved-prev-state (make-symbol "saved-prev-state"))
+        (saved-cursor-type (make-symbol "saved-cursor-type"))
         (buffer (make-symbol "buffer")))
     `(let ((,saved-state conn-current-state)
            (,saved-prev-state conn-previous-state)
            (,buffer (current-buffer))
+           (,saved-cursor-type cursor-type)
            (conn-transition-hook))
        (unwind-protect
            (progn
              (,state)
              ,@body)
          (with-current-buffer ,buffer
-           (when ,saved-state (funcall ,saved-state))
+           (if ,saved-state
+               (funcall ,saved-state)
+             (funcall (get ',state :conn-transition-fn) :exit)
+             (setq cursor-type ,saved-cursor-type))
            (setq conn-previous-state ,saved-prev-state))))))
 
 (defmacro conn--with-input-method (&rest body)
@@ -849,27 +854,30 @@ hooks instead."
   "Enable input method in states with nil :conn-suppress-input-method property.
 Also enable input methods when any `conn-input-method-overriding-mode'
 is on or when `conn-input-method-always' is t."
-  (let (input-method-activate-hook
-        input-method-deactivate-hook)
-    (if (seq-find (pcase-lambda (`(,mode . _))
-                    (symbol-value mode))
-                  conn-input-method-overriding-modes)
-        (when (and conn--input-method (not current-input-method))
-          (activate-input-method conn--input-method))
-      (pcase (get conn-current-state :conn-suppress-input-method)
-        ((and 'nil (guard current-input-method))
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title))
-        ((and 'nil (guard conn--input-method))
-         (activate-input-method conn--input-method))
-        ((guard (and current-input-method conn--input-method))
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title)
-         (deactivate-input-method))
-        ((guard current-input-method)
-         (setq conn--input-method current-input-method
-               conn--input-method-title current-input-method-title)
-         (deactivate-input-method))))))
+  ;; Ensure conn-local-mode is t since this can be run by conn--with-state
+  ;; in buffers without conn-local-mode enabled.
+  (when conn-local-mode
+    (let (input-method-activate-hook
+          input-method-deactivate-hook)
+      (if (seq-find (pcase-lambda (`(,mode . _))
+                      (symbol-value mode))
+                    conn-input-method-overriding-modes)
+          (when (and conn--input-method (not current-input-method))
+            (activate-input-method conn--input-method))
+        (pcase (get conn-current-state :conn-suppress-input-method)
+          ((and 'nil (guard current-input-method))
+           (setq conn--input-method current-input-method
+                 conn--input-method-title current-input-method-title))
+          ((and 'nil (guard conn--input-method))
+           (activate-input-method conn--input-method))
+          ((guard (and current-input-method conn--input-method))
+           (setq conn--input-method current-input-method
+                 conn--input-method-title current-input-method-title)
+           (deactivate-input-method))
+          ((guard current-input-method)
+           (setq conn--input-method current-input-method
+                 conn--input-method-title current-input-method-title)
+           (deactivate-input-method)))))))
 
 (defun conn--deactivate-input-method ()
   "Disable input method in all states."
