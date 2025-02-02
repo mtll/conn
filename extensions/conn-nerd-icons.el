@@ -32,7 +32,19 @@
               (nerd-icons-devicon "nf-dev-emacs"))
       conn-org-edit-state-lighter
       (concat (nerd-icons-codicon "nf-cod-blank")
-              (nerd-icons-sucicon "nf-custom-orgmode")))
+              (nerd-icons-sucicon "nf-custom-orgmode"))
+      (alist-get 'conn-wincontrol-mode minor-mode-alist)
+      (list (concat (nerd-icons-codicon "nf-cod-blank")
+                    (nerd-icons-codicon "nf-cod-window")))
+      (alist-get 'conn-read-thing-mover-mode minor-mode-alist)
+      (list (concat (nerd-icons-codicon "nf-cod-blank")
+                    (nerd-icons-mdicon "nf-md-truck_cargo_container")))
+      (alist-get 'conn-dispatch-read-thing-mode minor-mode-alist)
+      (list (concat (nerd-icons-codicon "nf-cod-blank")
+                    (nerd-icons-octicon "nf-oct-container")))
+      (alist-get 'conn-read-thing-mode minor-mode-alist)
+      (list (concat (nerd-icons-codicon "nf-cod-blank")
+                    (nerd-icons-octicon "nf-oct-container"))))
 
 (provide 'conn-nerd-icons)
 ;;; conn-nerd-icons.el ends here
