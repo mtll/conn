@@ -184,19 +184,6 @@ THING BEG and END are bound in BODY."
              (goto-char marker))
      (car (consult--get-location cand))))
 
-  (defun conn-dot-consult-location-candidate (cand)
-    (let ((marker (car (consult--get-location cand))))
-      (goto-char marker)
-      (unless (bolp) (beginning-of-line))
-      (conn--create-dots (cons (point) (progn (end-of-line) (point))))))
-
-  (defun conn-dot-consult-grep-candidate (cand)
-    (let ((marker (car (consult--grep-position cand))))
-      (with-current-buffer (marker-buffer marker)
-        (goto-char marker)
-        (unless (bolp) (beginning-of-line))
-        (conn--create-dots (cons (point) (progn (end-of-line) (point)))))))
-
   (defvar embark-multitarget-actions)
   (defvar embark-keymap-alist)
 
@@ -236,7 +223,6 @@ THING BEG and END are bound in BODY."
   (defvar-keymap conn-embark-consult-location-map
     :parent embark-general-map
     "\\" 'conn-kapply-location-candidates
-    "D"   'conn-dot-consult-location-candidate
     "c"   '("clone-indirect-buffer" .
             conn-clone-indirect-buffer-location-candidate))
   (cl-pushnew 'conn-embark-consult-location-map
@@ -244,8 +230,7 @@ THING BEG and END are bound in BODY."
 
   (defvar-keymap conn-embark-consult-grep-map
     :parent embark-general-map
-    "\\" 'conn-kapply-grep-candidates
-    "D"   'conn-dot-consult-grep-candidate)
+    "\\" 'conn-kapply-grep-candidates)
   (cl-pushnew 'conn-embark-consult-grep-map
               (alist-get 'consult-grep embark-keymap-alist)))
 ;;; conn-consult.el ends here
