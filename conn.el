@@ -492,7 +492,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defmacro conn--with-advice (advice-forms &rest body)
   (declare (debug (form body))
            (indent 1))
-  (pcase-dolist (`(,symbol ,how ,function . ,props) (nreverse advice-forms))
+  (pcase-dolist (`(,symbol ,how ,function . ,props) (reverse advice-forms))
     (setq body (let ((fn (gensym "advice")))
                  `(let ((,fn ,function))
                     (advice-add ,symbol ,how ,fn ,(car props))
@@ -746,7 +746,7 @@ If BUFFER is nil check `current-buffer'."
                             (cons default (query-replace-read-from-suggestions)))
                          (query-replace-read-from-suggestions))
                        t)))
-            (or (and (zerop (length from)) default)
+            (or (and (length= from 0) default)
                 from)))))))
 
 (defun conn-overlay-p (overlay)
@@ -770,6 +770,17 @@ If BUFFER is nil check `current-buffer'."
 
 
 ;;;; States
+
+(defun conn--set-background (string color)
+  (with-temp-buffer
+    (insert string)
+    (alter-text-property
+     (point-min) (point-max)
+     'face
+     (lambda (spec)
+       (setf (plist-get spec :background) color)
+       spec))
+    (buffer-string)))
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
@@ -904,7 +915,7 @@ mouse-3: Describe current input method")
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
-:LIGHTER-FACE is the face for the conn mode-line lighter in NAME.
+:LIGHTER-COLOR is the background color for the conn mode-line lighter in NAME.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
@@ -919,17 +930,17 @@ marks while in state NAME.
 BODY contains code to be executed each time the state is enabled or
 disabled.
 
-\(fn NAME DOC &key CURSOR LIGHTER-FACE SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
+\(fn NAME DOC &key CURSOR LIGHTER-COLOR SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
   (declare (debug ( name stringp
                     [&rest keywordp sexp]
                     def-body))
            (indent defun))
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
-               (lighter-face-name (conn--symbolicate name "-lighter-face"))
+               (lighter-color-name (conn--symbolicate name "-lighter-color"))
                (enter (gensym "enter"))
                ((map :cursor
-                     :lighter-face
+                     :lighter-color
                      :suppress-input-method
                      (:keymap keymap '(make-sparse-keymap))
                      :ephemeral-marks)
@@ -945,10 +956,10 @@ disabled.
          (setf (alist-get ',name conn--state-maps) ,keymap)
          ,(conn--stringify "Keymap active in `" name "'."))
 
-       (defface ,lighter-face-name
-         ',lighter-face
-         ,(conn--stringify "Face for `" name "' mode line lighter.")
-         :group 'conn-states)
+       (defvar ,lighter-color-name ,lighter-color
+         ,(conn--stringify "Background color for the Conn mode lighter when "
+                           name
+                           " is active."))
 
        (defcustom ,cursor-name
          ,(if cursor `',cursor t)
@@ -974,8 +985,6 @@ disabled.
           `(cl-pushnew ',name conn-ephemeral-mark-states))
 
        (put ',name :conn-suppress-input-method ,suppress-input-method)
-       (put ',name :conn-cursor-type ',cursor-name)
-       (put ',name :conn-lighter-face ',lighter-face-name)
 
        (cl-pushnew ',name conn-states)
 
@@ -997,13 +1006,14 @@ disabled.
                         conn-current-state ',name
                         conn--local-mode-maps (alist-get ',name conn--mode-maps))
                   (when conn-lighter
-                    (put-text-property 0 (length conn-lighter)
-                                       'face ',lighter-face-name
-                                       conn-lighter))
+                    (setq-local conn-lighter (conn--set-background conn-lighter
+                                                                   ,lighter-color-name))
+                    ;; (put-text-property 0 (length conn-lighter)
+                    ;;                    'face ',lighter-face-name
+                    ;;                    conn-lighter)
+                    )
                   (conn--activate-input-method)
-                  (if-let* ((cursor (symbol-value (get conn-current-state :conn-cursor-type))))
-                      (setq cursor-type cursor)
-                    (setq cursor-type t))
+                  (setq cursor-type (or ,cursor-name t))
                   (when (not executing-kbd-macro)
                     (force-mode-line-update)))
                 ,@body
@@ -1020,18 +1030,14 @@ disabled.
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
 bind anything except transition commands."
-  :lighter-face ((default (:inherit mode-line :background "#cae1ff"))
-                 (((background light)) (:inherit mode-line :background "#cae1ff"))
-                 (((background dark)) (:inherit mode-line :background "#49739f")))
+  :lighter-color "#cae1ff"
   :ephemeral-marks nil
   :keymap (make-sparse-keymap))
 
 (conn-define-state conn-state
   "Activate `conn-state' in the current buffer.
 A `conn-mode' state for editing text."
-  :lighter-face ((default (:inherit mode-line :background "#f3bdbd"))
-                 (((background light)) (:inherit mode-line :background "#f3bdbd"))
-                 (((background dark)) (:inherit mode-line :background "#8c3c3c")))
+  :lighter-color "#f3bdbd"
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :suppress t))
@@ -1039,9 +1045,7 @@ A `conn-mode' state for editing text."
 (conn-define-state conn-org-edit-state
   "Activate `conn-org-edit-state' in the current buffer.
 A `conn-mode' state for structural editing of `org-mode' buffers."
-  :lighter-face ((default (:inherit mode-line :background "#f5c5ff"))
-                 (((background light)) (:inherit mode-line :background "#f5c5ff"))
-                 (((background dark)) (:inherit mode-line :background "#85508c")))
+  :lighter-color "#f5c5ff"
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t)
