@@ -3390,9 +3390,14 @@ seconds."
   (let ((current-prefix-arg arg)
         (conn-dispatch-window-predicates
          (if predicate
-             (cons predicate conn-dispatch-window-predicates)
+             (append conn-dispatch-window-predicates
+                     (list predicate))
            conn-dispatch-window-predicates))
         prefix-ovs labels)
+    (unless (run-hook-with-args-until-failure
+             'conn-dispatch-window-predicates
+             (selected-window))
+      (user-error "Cannot dispatch on %s here." thing))
     (unwind-protect
         (progn
           (setf prefix-ovs (thread-last
