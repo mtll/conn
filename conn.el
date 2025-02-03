@@ -669,6 +669,33 @@ If BUFFER is nil check `current-buffer'."
              (setq cursor-type ,saved-cursor-type))
            (setq conn-previous-state ,saved-prev-state))))))
 
+(defmacro conn--maybe-with-state (test state &rest body)
+  (declare (debug (form form body))
+           (indent 2))
+  (let ((saved-state (make-symbol "saved-state"))
+        (saved-prev-state (make-symbol "saved-prev-state"))
+        (saved-cursor-type (make-symbol "saved-cursor-type"))
+        (test-result (make-symbol "test-result"))
+        (buffer (make-symbol "buffer")))
+    `(let ((,saved-state conn-current-state)
+           (,saved-prev-state conn-previous-state)
+           (,buffer (current-buffer))
+           (,saved-cursor-type cursor-type)
+           (,test-result nil)
+           (conn-transition-hook))
+       (unwind-protect
+           (progn
+             (when (setq ,test-result ,test)
+               (,state))
+             ,@body)
+         (when ,test-result
+           (with-current-buffer ,buffer
+             (if ,saved-state
+                 (funcall ,saved-state)
+               (funcall (get ',state :conn-transition-fn) :exit)
+               (setq cursor-type ,saved-cursor-type))
+             (setq conn-previous-state ,saved-prev-state)))))))
+
 (defmacro conn--with-input-method (&rest body)
   (declare (debug (body))
            (indent 0))
@@ -2167,9 +2194,10 @@ of the movement command unless `region-active-p'."
 (defun conn--push-ephemeral-mark (&optional location msg activate)
   "Push a mark at LOCATION that will not be added to `mark-ring'.
 For the meaning of MSG and ACTIVATE see `push-mark'."
-  (push-mark location (not msg) activate)
-  (setq conn--ephemeral-mark t)
-  nil)
+  (when conn-local-mode
+    (push-mark location (not msg) activate)
+    (setq conn--ephemeral-mark t)
+    nil))
 
 (defun conn--hide-mark-cursor-p (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
@@ -2548,17 +2576,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (define-keymap
     :keymap (conn-get-mode-dispatch-map mode)
     "[" 'conn-dispatch-kill-append
-    "a" 'conn-dispatch-copy-append
     "]" 'conn-dispatch-kill-prepend
-    "p" 'conn-dispatch-copy-prepend
     "w" 'conn-dispatch-kill
     "s" 'conn-dispatch-grab
-    "y" 'conn-dispatch-yank
     "q" 'conn-dispatch-transpose
-    "c" 'conn-dispatch-copy
-    "f" 'conn-dispatch-yank-replace
     "d" 'conn-dispatch-grab-replace
-    "e" 'conn-dispatch-over))
+    "e" 'conn-dispatch-over
+    "f" 'conn-dispatch-yank-replace
+    "y" 'conn-dispatch-yank
+    "c" 'conn-dispatch-copy
+    "a" 'conn-dispatch-copy-append
+    "p" 'conn-dispatch-copy-prepend))
 
 (defvar-keymap conn-dispatch-read-thing-mode-map
   "l" 'forward-line
@@ -2921,17 +2949,29 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
 
-(defun conn--dispatch-window-predicate (thing binding action)
+(defun conn--dispatch-window-predicate (thing binding _action)
   (let ((modes (get thing :conn-thing-modes)))
     (lambda (win)
       (with-selected-window win
         (let ((map (conn--create-dispatch-map)))
-          (and (or (where-is-internal binding (list map) t)
-                   (where-is-internal binding nil t))
-               (or (null action)
-                   (where-is-internal action (list map) t))
-               (or (null modes)
-                   (apply #'provided-mode-derived-p 'major-mode modes))))))))
+          (and (or (null modes)
+                   (apply #'provided-mode-derived-p 'major-mode modes))
+               ;; FIXME: a good way to do this
+               ;; (or (null action)
+               ;;     (where-is-internal action (list map) t))
+               (or
+                (where-is-internal binding (list map) t)
+                (pcase binding
+                  ((and (pred symbolp)
+                        (let (and op (pred identity))
+                          (get (get binding :conn-command-thing) 'forward-op)))
+                   (where-is-internal op (list map) t)
+                   (where-is-internal op nil t))
+                  ((and `(,thing . ,_)
+                        (let (and op (pred identity))
+                          (get thing :conn-command-thing)))
+                   (where-is-internal op (list map) t)
+                   (where-is-internal op nil t))))))))))
 
 (defun conn--dispatch-thing-bounds (thing arg)
   (if (get thing 'forward-op)
@@ -3246,7 +3286,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          "\\[help] commands): %s")))
         (action default-action)
         keys cmd invalid thing-arg thing-sign)
-    (conn--with-state conn-state
+    (conn--maybe-with-state conn-local-mode conn-state
       (apply #'conn-dispatch-read-thing-mode 1 override-maps)
       (unwind-protect
           (cl-prog
@@ -3352,36 +3392,36 @@ seconds."
            conn-dispatch-window-predicates))
         prefix-ovs labels)
     (unwind-protect
-        (cl-loop
-         initially do
-         (setf prefix-ovs (thread-last
-                            (funcall finder)
-                            (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                            (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-               (alist-get (selected-window) prefix-ovs)
-               (seq-sort (lambda (a b)
-                           (< (abs (- (overlay-start a) (point)))
-                              (abs (- (overlay-start b) (point)))))
-                         (alist-get (selected-window) prefix-ovs))
-               labels (or (conn--create-label-strings
-                           (let ((sum 0))
-                             (dolist (p prefix-ovs sum)
-                               (setq sum (+ sum (length (cdr p))))))
-                           conn-dispatch-label-characters)
-                          (user-error "No matching candidates")))
-         do (let* ((prefix (conn--read-labels
-                            prefix-ovs
-                            labels
-                            'conn--dispatch-label-overlays
-                            'prefix-overlay))
-                   (window (overlay-get prefix 'window))
-                   (pt (overlay-start prefix)))
-              (setq conn-this-command-thing
-                    (or (overlay-get prefix 'thing) thing))
-              (funcall action window pt conn-this-command-thing))
-         while repeat)
+        (progn
+          (setf prefix-ovs (thread-last
+                             (funcall finder)
+                             (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                             (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                (alist-get (selected-window) prefix-ovs)
+                (seq-sort (lambda (a b)
+                            (< (abs (- (overlay-start a) (point)))
+                               (abs (- (overlay-start b) (point)))))
+                          (alist-get (selected-window) prefix-ovs))
+                labels (or (conn--create-label-strings
+                            (let ((sum 0))
+                              (dolist (p prefix-ovs sum)
+                                (setq sum (+ sum (length (cdr p))))))
+                            conn-dispatch-label-characters)
+                           (user-error "No matching candidates")))
+          (let* ((prefix (conn--read-labels
+                          prefix-ovs
+                          labels
+                          'conn--dispatch-label-overlays
+                          'prefix-overlay))
+                 (window (overlay-get prefix 'window))
+                 (pt (overlay-start prefix)))
+            (setq conn-this-command-thing
+                  (or (overlay-get prefix 'thing) thing))
+            (funcall action window pt conn-this-command-thing)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-        (mapc #'delete-overlay ovs)))))
+        (mapc #'delete-overlay ovs)))
+    (when repeat
+      (conn-dispatch-on-things thing finder action arg predicate repeat))))
 
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
@@ -6577,12 +6617,12 @@ determine if `conn-local-mode' should be enabled."
           (end (window-end))
           ovs success)
       (unwind-protect
-          (progn
+          (save-excursion
             (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
               (when (<= start marker end)
                 (goto-char marker)
                 (push (conn--make-preview-overlay
-                       (+ 2 marker) (- (line-end-position) marker 2) 1)
+                       (+ 2 marker) (- (line-end-position) marker 2))
                       ovs)))
             (setq success t)
             ovs)
@@ -6640,12 +6680,14 @@ determine if `conn-local-mode' should be enabled."
 
   (define-keymap
     :keymap (conn-get-mode-dispatch-map 'dired-mode)
-    "z" 'conn-dispatch-dired-mark
+    "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
     "d" 'conn-dispatch-dired-kill-subdir
     "m" 'dired-next-subdir
     "n" 'dired-prev-subdir
-    "u" 'dired-next-dirline))
+    "u" 'dired-next-dirline
+    "k" 'dired-next-line
+    "i" 'dired-previous-line))
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^    \n]"
