@@ -77,6 +77,144 @@
    :border-color conn-posframe-border-color)
   (add-hook 'pre-command-hook 'conn-posframe--hide))
 
+;; Implementation from window.el
+(defun conn-posframe--next-buffers (&optional window)
+  (let* ((window (window-normalize-window window t))
+         (frame (window-frame window))
+         (window-side (window-parameter window 'window-side))
+         (old-buffer (window-buffer window))
+         (next-buffers (window-next-buffers window))
+         (pred (frame-parameter frame 'buffer-predicate))
+         (skip
+          (cond
+           ((or (functionp switch-to-prev-buffer-skip)
+                (memq switch-to-prev-buffer-skip '(t visible 0)))
+            switch-to-prev-buffer-skip)
+           ((or switch-to-prev-buffer-skip
+                (not switch-to-visible-buffer))
+            frame)))
+         found-buffers new-buffer killed-buffers skipped)
+
+    (catch 'found
+      (dolist (buffer next-buffers)
+        (when (and (or (buffer-live-p buffer)
+                       (not (setq killed-buffers
+                                  (cons buffer killed-buffers))))
+                   (not (eq buffer old-buffer))
+                   (or (null pred) (funcall pred buffer))
+                   (assq buffer (window-prev-buffers window)))
+          (if (switch-to-prev-buffer-skip-p skip window buffer)
+              (setq skipped buffer)
+            (setq new-buffer buffer)
+            (push new-buffer found-buffers)
+            (when (length= found-buffers 5)
+              (throw 'found t)))))
+
+      (unless window-side
+        (dolist (buffer (buffer-list frame))
+          (when (and (buffer-live-p buffer)
+                     (not (eq buffer old-buffer))
+                     (or (null pred) (funcall pred buffer))
+                     ;; Skip buffers whose names start with a space.
+                     (not (eq (aref (buffer-name buffer) 0) ?\s))
+                     ;; Skip buffers shown in a side window before.
+                     (not (buffer-local-value 'window--sides-shown buffer))
+                     (not (assq buffer (window-prev-buffers window))))
+            (if (switch-to-prev-buffer-skip-p skip window buffer)
+                (setq skipped (or skipped buffer))
+              (setq new-buffer buffer)
+              (push new-buffer found-buffers)
+              (when (length= found-buffers 5)
+                (throw 'found t))))))
+
+      (dolist (entry (reverse (window-prev-buffers window)))
+        (when (and (not (eq new-buffer (car entry)))
+                   (not (eq old-buffer (car entry)))
+                   (setq new-buffer (car entry))
+                   (or (buffer-live-p new-buffer)
+                       (not (setq killed-buffers
+                                  (cons new-buffer killed-buffers))))
+                   (or (null pred) (funcall pred new-buffer)))
+          (if (switch-to-prev-buffer-skip-p skip window new-buffer)
+              (setq skipped (or skipped new-buffer))
+            (push new-buffer found-buffers)
+            (when (length= found-buffers 5)
+              (throw 'found t)))))
+
+      (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
+        (setq new-buffer skipped)
+        (push new-buffer found-buffers)))
+
+    found-buffers))
+
+;; Implementation from window.el
+(defun conn-posframe--previous-buffers (&optional window)
+  (let* ((window (window-normalize-window window t))
+         (frame (window-frame window))
+         (window-side (window-parameter window 'window-side))
+         (old-buffer (window-buffer window))
+         (next-buffers (window-next-buffers window))
+         (pred (frame-parameter frame 'buffer-predicate))
+         (skip
+          (cond
+           ((or (functionp switch-to-prev-buffer-skip)
+                (memq switch-to-prev-buffer-skip '(t visible 0)))
+            switch-to-prev-buffer-skip)
+           ((or switch-to-prev-buffer-skip
+                (not switch-to-visible-buffer))
+            frame)))
+         found-buffers new-buffer killed-buffers skipped)
+
+    (catch 'found
+      (dolist (entry (window-prev-buffers window))
+        (when (and (not (eq (car entry) old-buffer))
+                   (setq new-buffer (car entry))
+                   (or (buffer-live-p new-buffer)
+                       (not (setq killed-buffers
+                                  (cons new-buffer killed-buffers))))
+                   (or (null pred) (funcall pred new-buffer))
+                   (not (memq new-buffer next-buffers)))
+          (if (switch-to-prev-buffer-skip-p skip window new-buffer)
+              (setq skipped new-buffer)
+            (push new-buffer found-buffers)
+            (when (length= found-buffers 5)
+              (throw 'found t)))))
+
+      (unless window-side
+        (dolist (buffer (nreverse (buffer-list frame)))
+          (when (and (buffer-live-p buffer)
+                     (not (eq buffer old-buffer))
+                     (or (null pred) (funcall pred buffer))
+                     (not (eq (aref (buffer-name buffer) 0) ?\s))
+                     (not (buffer-local-value 'window--sides-shown buffer))
+                     (not (memq buffer next-buffers)))
+            (if (switch-to-prev-buffer-skip-p skip window buffer)
+                (setq skipped (or skipped buffer))
+              (setq new-buffer buffer)
+              (push new-buffer found-buffers)
+              (when (length= found-buffers 5)
+                (throw 'found t))))))
+
+      (dolist (buffer (reverse next-buffers))
+        (when (and (or (buffer-live-p buffer)
+                       (not (setq killed-buffers
+                                  (cons buffer killed-buffers))))
+                   (not (eq buffer old-buffer))
+                   (or (null pred) (funcall pred buffer))
+                   (assq buffer (window-prev-buffers window)))
+          (if (switch-to-prev-buffer-skip-p skip window buffer)
+              (setq skipped (or skipped buffer))
+            (setq new-buffer buffer)
+            (push new-buffer found-buffers)
+            (when (length= found-buffers 5)
+              (throw 'found t)))))
+
+      (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
+        (setq new-buffer skipped)
+        (push new-buffer found-buffers)))
+
+    (nreverse found-buffers)))
+
 (defun conn-posframe--switch-buffer-display ()
   (posframe-show
    " *conn-list-posframe*"
@@ -86,25 +224,9 @@
                   (propertize (buffer-name buf)
                               'face 'conn-posframe-highlight)
                 (buffer-name buf)))
-            (let* ((save-blist (window-prev-buffers))
-                   (save-nlist (window-next-buffers))
-                   (prev (prog1
-                             (save-window-excursion
-                               (cl-loop repeat 5
-                                        until (memq (current-buffer) bufs)
-                                        collect (switch-to-prev-buffer) into bufs
-                                        finally return bufs))
-                           (set-window-prev-buffers (selected-window) save-blist)
-                           (set-window-next-buffers (selected-window) save-nlist)))
-                   (next (prog1
-                             (save-window-excursion
-                               (cl-loop repeat 5
-                                        until (memq (current-buffer) bufs)
-                                        collect (switch-to-next-buffer) into bufs
-                                        finally return bufs))
-                           (set-window-prev-buffers (selected-window) save-blist)
-                           (set-window-next-buffers (selected-window) save-nlist))))
-              (append (reverse next) (list (current-buffer)) prev))
+            (append (conn-posframe--next-buffers)
+                    (list (current-buffer))
+                    (conn-posframe--previous-buffers))
             "\n")
    :min-width 60
    :poshandler conn-posframe-poshandler
@@ -159,6 +281,6 @@
 (provide 'conn-posframe)
 
 ;; Local Variables:
-;; outline-regexp: ";;;;* [^ 	\n]"
+;; outline-regexp: ";;;;* [^    \n]"
 ;; End:
 ;;; conn-posframe.el ends here
