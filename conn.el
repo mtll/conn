@@ -6583,7 +6583,10 @@ determine if `conn-local-mode' should be enabled."
           (progn
             (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
               (when (<= start marker end)
-                (push (conn--make-preview-overlay marker 1) ovs)))
+                (goto-char marker)
+                (push (conn--make-preview-overlay
+                       (+ 2 marker) (- (line-end-position) marker 2) 1)
+                      ovs)))
             (setq success t)
             ovs)
         (unless success (mapc #'delete-overlay ovs)))))
