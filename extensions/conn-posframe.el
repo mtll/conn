@@ -51,7 +51,7 @@
   :group 'conn-posframe)
 
 (defcustom conn-posframe-poshandler
-  'posframe-poshandler-frame-center
+  'posframe-poshandler-window-center
   "Timeout for conn posframes."
   :type 'symbol
   :group 'conn-posframe)
@@ -106,7 +106,7 @@
           (if (switch-to-prev-buffer-skip-p skip window buffer)
               (setq skipped buffer)
             (setq new-buffer buffer)
-            (push new-buffer found-buffers)
+            (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers 5)
               (throw 'found t)))))
 
@@ -123,7 +123,7 @@
             (if (switch-to-prev-buffer-skip-p skip window buffer)
                 (setq skipped (or skipped buffer))
               (setq new-buffer buffer)
-              (push new-buffer found-buffers)
+              (cl-pushnew new-buffer found-buffers)
               (when (length= found-buffers 5)
                 (throw 'found t))))))
 
@@ -137,13 +137,13 @@
                    (or (null pred) (funcall pred new-buffer)))
           (if (switch-to-prev-buffer-skip-p skip window new-buffer)
               (setq skipped (or skipped new-buffer))
-            (push new-buffer found-buffers)
+            (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers 5)
               (throw 'found t)))))
 
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
         (setq new-buffer skipped)
-        (push new-buffer found-buffers)))
+        (cl-pushnew new-buffer found-buffers)))
 
     found-buffers))
 
@@ -176,7 +176,7 @@
                    (not (memq new-buffer next-buffers)))
           (if (switch-to-prev-buffer-skip-p skip window new-buffer)
               (setq skipped new-buffer)
-            (push new-buffer found-buffers)
+            (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers 5)
               (throw 'found t)))))
 
@@ -191,7 +191,7 @@
             (if (switch-to-prev-buffer-skip-p skip window buffer)
                 (setq skipped (or skipped buffer))
               (setq new-buffer buffer)
-              (push new-buffer found-buffers)
+              (cl-pushnew new-buffer found-buffers)
               (when (length= found-buffers 5)
                 (throw 'found t))))))
 
@@ -205,13 +205,13 @@
           (if (switch-to-prev-buffer-skip-p skip window buffer)
               (setq skipped (or skipped buffer))
             (setq new-buffer buffer)
-            (push new-buffer found-buffers)
+            (cl-pushnew new-buffer found-buffers)
             (when (length= found-buffers 5)
               (throw 'found t)))))
 
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
         (setq new-buffer skipped)
-        (push new-buffer found-buffers)))
+        (cl-pushnew new-buffer found-buffers)))
 
     (nreverse found-buffers)))
 
