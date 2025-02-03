@@ -2553,6 +2553,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;; Thing Dispatch
 
+(defvar conn--last-dispatch-command nil)
+
 (defvar conn-dispatch-all-things-collector-default
   'conn--dispatch-all-things-1)
 
@@ -3420,8 +3422,14 @@ seconds."
             (funcall action window pt conn-this-command-thing)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs)))
+    (setq conn--last-dispatch-command (list thing finder action arg predicate repeat))
     (when repeat
       (conn-dispatch-on-things thing finder action arg predicate repeat))))
+
+(defun conn-repeat-last-dispatch ()
+  (interactive)
+  (when conn--last-dispatch-command
+    (apply #'conn-dispatch-on-things conn--last-dispatch-command)))
 
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
@@ -5985,6 +5993,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap conn-state-map
   :parent conn-movement-map
+  "\"" 'conn-yank-window
   "e" 'conn-emacs-state
   "E" 'conn-dispatch-on-buttons
   "t" 'conn-change
@@ -6032,7 +6041,7 @@ When ARG is nil the root window is used."
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
-  "F" 'conn-yank-window
+  "F" 'conn-repeat-last-dispatch
   "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
   "H" 'conn-mark-thing-map
