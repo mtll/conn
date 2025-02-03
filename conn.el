@@ -1091,54 +1091,47 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
     (overlay-put ov 'padding (overlay-get ov 'after-string))
     ov))
 
-(defun conn--preview-get-windows (window-predicate)
-  (pcase-exhaustive window-predicate
-    ((and 'nil
-          (guard (not (apply #'derived-mode-p conn-dispatch-thing-ignored-modes))))
-     (list (selected-window)))
-    ((pred functionp)
-     (cl-loop for win in (window-list-1 nil nil 'visible)
-              unless (or (apply #'provided-mode-derived-p
-                                (buffer-local-value 'major-mode (window-buffer win))
-                                conn-dispatch-thing-ignored-modes)
-                         (not (funcall window-predicate win)))
-              collect win))
-    ('t
-     (cl-loop for win in (window-list-1 nil nil 'visible)
-              unless (apply #'provided-mode-derived-p
-                            (buffer-local-value 'major-mode (window-buffer win))
-                            conn-dispatch-thing-ignored-modes)
-              collect win))))
+(defun conn--preview-get-windows (all-windows)
+  (cond (all-windows
+         (cl-loop for win in (window-list-1 nil nil 'visible)
+                  when (run-hook-with-args-until-failure
+                        'conn-dispatch-window-predicates
+                        win)
+                  collect win))
+        ((run-hook-with-args-until-failure
+          'conn-dispatch-window-predicates
+          (selected-window))
+         (list (selected-window)))))
 
 (defun conn--string-preview-overlays-1 (win string &optional dir)
   (with-selected-window win
     (cl-loop for pt in (conn--visible-matches string dir)
              collect (conn--make-preview-overlay pt (length string)))))
 
-(defun conn--string-preview-overlays (string &optional dir window-predicate)
-  (cl-loop for win in (conn--preview-get-windows window-predicate)
+(defun conn--string-preview-overlays (string &optional dir all-windows)
+  (cl-loop for win in (conn--preview-get-windows all-windows)
            nconc (conn--string-preview-overlays-1 win string dir)))
 
-(defun conn--read-string-with-timeout-1 (&optional dir window-predicate)
+(defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
            (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir window-predicate)))
+           (overlays (conn--string-preview-overlays string dir all-windows)))
       (condition-case _err
           (progn
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                               conn-read-string-timeout)))
               (setq string (concat string (char-to-string next-char)))
               (mapc #'delete-overlay overlays)
-              (setq overlays (conn--string-preview-overlays string dir window-predicate)))
+              (setq overlays (conn--string-preview-overlays string dir all-windows)))
             (message nil)
             (cons string overlays))
         ((quit error)
          (mapc #'delete-overlay overlays))))))
 
-(defun conn--read-string-with-timeout (&optional dir window-predicate)
+(defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
-               (conn--read-string-with-timeout-1 dir window-predicate)))
+               (conn--read-string-with-timeout-1 dir all-windows)))
     (mapc #'delete-overlay overlays)
     string))
 
@@ -2543,6 +2536,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar conn--dispatch-overriding-map nil)
 
+(defvar conn-dispatch-window-predicates
+  '(conn-dispatch-ignored-mode))
+
 (defun conn-get-mode-dispatch-map (mode)
   (or (alist-get mode conn--dispatch-mode-maps)
       (setf (alist-get mode conn--dispatch-mode-maps)
@@ -2562,13 +2558,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     "c" 'conn-dispatch-copy
     "f" 'conn-dispatch-yank-replace
     "d" 'conn-dispatch-grab-replace
-    "g" 'conn-dispatch-goto
-    "e" 'conn-dispatch-over
-    "z" 'conn-dispatch-jump))
+    "e" 'conn-dispatch-over))
 
 (defvar-keymap conn-dispatch-read-thing-mode-map
   "l" 'forward-line
   "u" 'forward-symbol
+  "j" 'backward-char
   "U" `(symbol
         ,(apply-partially 'conn--dispatch-all-things 'symbol t)
         . conn-dispatch-goto)
@@ -2578,7 +2573,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "C-h" 'help
   "." 'reset-arg
   "C-d" 'forward-delete-arg
-  "C-w" 'backward-delete-arg)
+  "C-w" 'backward-delete-arg
+  "z" 'conn-dispatch-jump
+  "g" 'conn-dispatch-goto)
 
 (defun conn--create-dispatch-map ()
   (make-composed-keymap
@@ -2592,8 +2589,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                               (list major-mode)
                             (reverse (conn--derived-mode-all-parents major-mode)))
              collect (conn-get-mode-dispatch-map mmode))
-    conn--dispatch-major-modes-maps)
-   conn-dispatch-read-thing-mode-map))
+    conn--dispatch-major-modes-maps
+    (list conn-dispatch-read-thing-mode-map))))
 
 (define-minor-mode conn-dispatch-read-thing-mode
   "Read a thing for dispatch."
@@ -2919,13 +2916,22 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (cancel-change-group cg1)
           (cancel-change-group cg2))))))
 
-(defun conn--dispatch-make-thing-window-predicate (thing)
-  (if-let* ((modes (get thing :conn-thing-modes)))
-      (lambda (win)
-        (apply #'provided-mode-derived-p
-               (buffer-local-value 'major-mode (window-buffer win))
-               modes))
-    (lambda (_) t)))
+(defun conn-dispatch-ignored-mode (win)
+  (not (apply #'provided-mode-derived-p
+              (buffer-local-value 'major-mode (window-buffer win))
+              conn-dispatch-thing-ignored-modes)))
+
+(defun conn--dispatch-window-predicate (thing binding action)
+  (let ((modes (get thing :conn-thing-modes)))
+    (lambda (win)
+      (with-selected-window win
+        (let ((map (conn--create-dispatch-map)))
+          (and (or (where-is-internal binding (list map) t)
+                   (where-is-internal binding nil t))
+               (or (null action)
+                   (where-is-internal action (list map) t))
+               (or (null modes)
+                   (apply #'provided-mode-derived-p 'major-mode modes))))))))
 
 (defun conn--dispatch-thing-bounds (thing arg)
   (if (get thing 'forward-op)
@@ -3057,29 +3063,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (cl-loop for pt in ovs collect
              (conn--make-preview-overlay pt 1 thing))))
 
-(defun conn--dispatch-all-things (thing &optional window-predicate)
-  (cl-loop for win in (conn--preview-get-windows
-                       (pcase window-predicate
-                         ('t (conn--dispatch-make-thing-window-predicate thing))
-                         ('nil nil)
-                         ((pred functionp)
-                          (let ((thing-pred (conn--dispatch-make-thing-window-predicate thing)))
-                            (lambda (win)
-                              (and (funcall thing-pred win)
-                                   (funcall window-predicate win)))))))
+(defun conn--dispatch-all-things (thing &optional all-windows)
+  (cl-loop for win in (conn--preview-get-windows all-windows)
            nconc (with-selected-window win
                    (if-let* ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
                        (funcall fn)
-                     (funcall (alist-get t conn-dispatch-all-things-collector-alist) thing)))))
+                     (funcall conn-dispatch-all-things-collector-default thing)))))
 
-(defun conn--dispatch-all-buttons (&optional window-predicate)
+(defun conn--dispatch-all-buttons (&optional all-windows)
   (let (ovs success)
     (unwind-protect
-        (cl-loop for win in (conn--preview-get-windows
-                             (pcase window-predicate
-                               ('t (lambda (_) t))
-                               ('nil nil)
-                               ((pred functionp) window-predicate)))
+        (cl-loop for win in (conn--preview-get-windows all-windows)
                  do (with-selected-window win
                       (with-restriction (window-start) (window-end)
                         (save-excursion
@@ -3091,8 +3085,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  finally return (progn (setq success t) ovs))
       (unless success (mapc #'delete-overlay ovs)))))
 
-(defun conn--dispatch-re-matches (regexp &optional window-predicate)
-  (cl-loop for win in (conn--preview-get-windows window-predicate)
+(defun conn--dispatch-re-matches (regexp &optional all-windows)
+  (cl-loop for win in (conn--preview-get-windows all-windows)
            nconc (with-selected-window win
                    (with-restriction (window-start) (window-end)
                      (save-excursion
@@ -3121,7 +3115,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (cl-loop for ov in ovs collect
              (apply 'conn--make-preview-overlay ov))))
 
-(defun conn--dispatch-things-with-prefix (things prefix-length &optional window-predicate)
+(defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix "")
         ovs success)
     (conn--with-input-method
@@ -3132,19 +3126,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (concat prefix)))))
     (unwind-protect
         (progn
-          (dolist (thing (ensure-list things))
-            (dolist (win (conn--preview-get-windows
-                          (pcase window-predicate
-                            ('t (conn--dispatch-make-thing-window-predicate thing))
-                            ('nil nil)
-                            ((pred functionp)
-                             (let ((thing-pred (conn--dispatch-make-thing-window-predicate thing)))
-                               (lambda (win)
-                                 (and (funcall thing-pred win)
-                                      (funcall window-predicate win))))))))
-              (setq ovs (nconc (with-selected-window win
-                                 (conn--dispatch-things-with-prefix-1 things prefix))
-                               ovs))))
+          (dolist (win (conn--preview-get-windows all-windows))
+            (setq ovs (nconc (with-selected-window win
+                               (conn--dispatch-things-with-prefix-1 things prefix))
+                             ovs)))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -3172,26 +3157,25 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (let (ovs success)
     (unwind-protect
         (progn
-          (dolist (win (window-list-1 nil nil 'visible))
+          (dolist (win (conn--preview-get-windows t))
             (with-selected-window win
-              (unless (apply #'derived-mode-p conn-dispatch-thing-ignored-modes)
-                (save-excursion
-                  (with-restriction (window-start) (window-end)
-                    (goto-char (point-min))
+              (save-excursion
+                (with-restriction (window-start) (window-end)
+                  (goto-char (point-min))
+                  (when (and (bolp)
+                             (<= (+ (point) (window-hscroll)) (line-end-position))
+                             (goto-char (+ (point) (window-hscroll)))
+                             (not (invisible-p (point))))
+                    (push (conn--make-preview-overlay (point) 1) ovs))
+                  (while (/= (point) (point-max))
+                    (forward-line)
                     (when (and (bolp)
-                               (<= (+ (point) (window-hscroll)) (line-end-position))
+                               (<= (+ (point) (window-hscroll))
+                                   (line-end-position) (point-max))
                                (goto-char (+ (point) (window-hscroll)))
-                               (not (invisible-p (point))))
-                      (push (conn--make-preview-overlay (point) 1) ovs))
-                    (while (/= (point) (point-max))
-                      (forward-line)
-                      (when (and (bolp)
-                                 (<= (+ (point) (window-hscroll))
-                                     (line-end-position) (point-max))
-                                 (goto-char (+ (point) (window-hscroll)))
-                                 (not (invisible-p (point)))
-                                 (not (invisible-p (1- (point)))))
-                        (push (conn--make-preview-overlay (point) 1) ovs))))))))
+                               (not (invisible-p (point)))
+                               (not (invisible-p (1- (point)))))
+                      (push (conn--make-preview-overlay (point) 1) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -3200,53 +3184,56 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (let (ovs success)
     (unwind-protect
         (progn
-          (dolist (win (window-list-1 nil nil 'visible))
+          (dolist (win (conn--preview-get-windows t))
             (with-selected-window win
-              (unless (apply #'derived-mode-p conn-dispatch-thing-ignored-modes)
-                (save-excursion
-                  (with-restriction (window-start) (window-end)
-                    (goto-char (point-min))
+              (save-excursion
+                (with-restriction (window-start) (window-end)
+                  (goto-char (point-min))
+                  (move-end-of-line nil)
+                  (when (and (eolp) (not (invisible-p (point))))
+                    (push (conn--make-preview-overlay (point) 1) ovs))
+                  (while (/= (point) (point-max))
+                    (forward-line)
                     (move-end-of-line nil)
-                    (when (and (eolp) (not (invisible-p (point))))
-                      (push (conn--make-preview-overlay (point) 1) ovs))
-                    (while (/= (point) (point-max))
-                      (forward-line)
-                      (move-end-of-line nil)
-                      (when (and (eolp)
-                                 (not (invisible-p (point)))
-                                 (not (invisible-p (1- (point)))))
-                        (push (conn--make-preview-overlay (point) 1) ovs))))))))
+                    (when (and (eolp)
+                               (not (invisible-p (point)))
+                               (not (invisible-p (1- (point)))))
+                      (push (conn--make-preview-overlay (point) 1) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-inner-lines (&optional end)
-  (let (ovs)
-    (dolist (win (window-list-1 nil nil 'visible) ovs)
-      (with-selected-window win
-        (unless (apply #'derived-mode-p conn-dispatch-thing-ignored-modes)
-          (save-excursion
-            (with-restriction (window-start) (window-end)
-              (goto-char (point-min))
-              (when (and (bolp)
-                         (progn
-                           (if end
-                               (conn--end-of-inner-line-1)
-                             (back-to-indentation))
-                           (not (eobp)))
-                         (not (invisible-p (point))))
-                (push (conn--make-preview-overlay (point) 1) ovs))
-              (while (/= (point) (point-max))
-                (forward-line)
-                (when (and (bolp)
-                           (progn
-                             (if end
-                                 (conn--end-of-inner-line-1)
-                               (back-to-indentation))
-                             (not (eobp)))
-                           (not (invisible-p (point)))
-                           (not (invisible-p (1- (point)))))
-                  (push (conn--make-preview-overlay (point) 1) ovs))))))))))
+  (let (ovs success)
+    (unwind-protect
+        (progn
+          (dolist (win (conn--preview-get-windows t))
+            (with-selected-window win
+              (save-excursion
+                (with-restriction (window-start) (window-end)
+                  (goto-char (point-min))
+                  (when (and (bolp)
+                             (progn
+                               (if end
+                                   (conn--end-of-inner-line-1)
+                                 (back-to-indentation))
+                               (not (eobp)))
+                             (not (invisible-p (point))))
+                    (push (conn--make-preview-overlay (point) 1) ovs))
+                  (while (/= (point) (point-max))
+                    (forward-line)
+                    (when (and (bolp)
+                               (progn
+                                 (if end
+                                     (conn--end-of-inner-line-1)
+                                   (back-to-indentation))
+                                 (not (eobp)))
+                               (not (invisible-p (point)))
+                               (not (invisible-p (1- (point)))))
+                      (push (conn--make-preview-overlay (point) 1) ovs)))))))
+          (setq success t)
+          ovs)
+      (unless success (mapc 'delete-overlay ovs)))))
 
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
@@ -3282,8 +3269,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (pcase cmd
              (`(,thing ,finder . ,default-action)
               (cl-return
-               (list thing finder (or action default-action)
+               (list thing
+                     finder
+                     (or action default-action)
                      (* (if thing-sign -1 1) (or thing-arg 1))
+                     (conn--dispatch-window-predicate
+                      thing cmd (or action default-action))
                      current-prefix-arg)))
              ('keyboard-quit
               (keyboard-quit))
@@ -3327,9 +3318,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (go :loop))
              ((let (and thing (pred identity)) (get cmd :conn-command-thing))
               (cl-return
-               (list thing (conn--dispatch-finder cmd)
+               (list thing
+                     (conn--dispatch-finder cmd)
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
+                     (conn--dispatch-window-predicate thing cmd action)
                      current-prefix-arg)))
              ((guard (where-is-internal cmd (list conn--dispatch-overriding-map) t))
               (setq action (unless (eq cmd action) cmd)))
@@ -3339,7 +3332,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (message nil)
         (conn-dispatch-read-thing-mode -1)))))
 
-(defun conn-dispatch-on-things (thing finder action arg &optional repeat)
+(defun conn-dispatch-on-things (thing finder action arg &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -3353,6 +3346,10 @@ The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
   (let ((current-prefix-arg arg)
+        (conn-dispatch-window-predicates
+         (if predicate
+             (cons predicate conn-dispatch-window-predicates)
+           conn-dispatch-window-predicates))
         prefix-ovs labels)
     (unwind-protect
         (cl-loop
