@@ -6689,6 +6689,83 @@ determine if `conn-local-mode' should be enabled."
     "k" 'dired-next-line
     "i" 'dired-previous-line))
 
+(with-eval-after-load 'ibuffer
+  (declare-function ibuffer-mark-region-or-n-with-char "ibuffer")
+  (declare-function ibuffer-backward-line "ibuffer")
+
+  (defvar ibuffer-movement-cycle)
+  (defvar ibuffer-marked-char)
+
+  (defun conn--dispatch-ibuffer-lines ()
+    (let ((ibuffer-movement-cycle nil)
+          ovs success)
+      (unwind-protect
+          (progn
+            (save-excursion
+              (with-restriction (window-start) (window-end)
+                (goto-char (point-max))
+                (while (/= (point)
+                           (progn
+                             (ibuffer-backward-line)
+                             (point)))
+                  (unless (get-text-property (point) 'ibuffer-filter-group-name)
+                    (push (conn--make-preview-overlay (point) 1) ovs)))))
+            (setq success t)
+            ovs)
+        (unless success (mapc #'delete-overlay ovs)))))
+
+  (defun conn--dispatch-ibuffer-filter-group ()
+    (let ((ibuffer-movement-cycle nil)
+          ovs success)
+      (unwind-protect
+          (progn
+            (save-excursion
+              (with-restriction (window-start) (window-end)
+                (goto-char (point-max))
+                (while (/= (point)
+                           (progn
+                             (ibuffer-backward-filter-group)
+                             (point)))
+                  (push (conn--make-preview-overlay (point) 1) ovs))))
+            (setq success t)
+            ovs)
+        (unless success (mapc #'delete-overlay ovs)))))
+
+  (conn-register-thing
+   'ibuffer-line
+   :dispatch-provider 'conn--dispatch-ibuffer-lines)
+
+  (conn-register-thing-commands
+   'ibuffer-line nil
+   'ibuffer-backward-line 'ibuffer-forward-line)
+
+  (conn-register-thing
+   'ibuffer-filter-group
+   :dispatch-provider 'conn--dispatch-ibuffer-filter-group)
+
+  (conn-register-thing-commands
+   'ibuffer-filter-group nil
+   'ibuffer-forward-filter-group
+   'ibuffer-backward-filter-group)
+
+  (conn-define-dispatch-action (conn-dispatch-ibuffer-mark "Mark")
+      (window pt thing)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (if (or (null (ibuffer-current-mark))
+                (= (ibuffer-current-mark) ? ))
+            (ibuffer-mark-forward nil nil 1)
+          (ibuffer-unmark-forward nil nil 1)))))
+
+  (define-keymap
+    :keymap (conn-get-mode-dispatch-map 'ibuffer-mode)
+    "f" 'conn-dispatch-ibuffer-mark
+    "i" 'ibuffer-backward-line
+    "k" 'ibuffer-forward-line
+    "n" 'ibuffer-backward-filter-group
+    "m" 'ibuffer-forward-filter-group))
+
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^    \n]"
 ;; End:
