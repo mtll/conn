@@ -29,6 +29,11 @@
   :prefix "conn-posframe-"
   :group 'conn)
 
+(defface conn-posframe-highlight
+  '((t (:inherit eldoc-highlight-function-argument)))
+  "Face for selection in Conn posframes."
+  :group 'conn-posframe)
+
 (defcustom conn-posframe-border-width 2
   "Border width for conn posframes."
   :type 'integer
@@ -40,7 +45,7 @@
   :type 'string
   :group 'conn-posframe)
 
-(defcustom conn-posframe-timeout 1.5
+(defcustom conn-posframe-timeout nil
   "Timeout for conn posframes."
   :type 'integer
   :group 'conn-posframe)
@@ -51,36 +56,105 @@
   :type 'symbol
   :group 'conn-posframe)
 
-(defun conn-posframe-switch-tab-ad (&rest _)
+(defun conn-posframe--hide ()
+  (posframe-hide " *conn-list-posframe*")
+  (remove-hook 'pre-command-hook 'conn-posframe--hide))
+
+(defun conn-posframe--switch-tab-display (&rest _)
   (posframe-show
    " *conn-list-posframe*"
-   :string (mapconcat (lambda (tab)
-                        (if (eq (car tab) 'current-tab)
-                            (propertize (alist-get 'name (cdr tab))
-                                        'face 'transient-value)
-                          (alist-get 'name (cdr tab))))
-                      (reverse (funcall tab-bar-tabs-function))
-                      "\n")
+   :string (mapconcat
+            (lambda (tab)
+              (if (eq (car tab) 'current-tab)
+                  (propertize (alist-get 'name (cdr tab))
+                              'face 'conn-posframe-highlight)
+                (alist-get 'name (cdr tab))))
+            (reverse (funcall tab-bar-tabs-function))
+            "\n")
    :poshandler conn-posframe-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
-   :border-color conn-posframe-border-color))
+   :border-color conn-posframe-border-color)
+  (add-hook 'pre-command-hook 'conn-posframe--hide))
+
+(defun conn-posframe--switch-buffer-display ()
+  (posframe-show
+   " *conn-list-posframe*"
+   :string (mapconcat
+            (lambda (buf)
+              (if (eq (current-buffer) buf)
+                  (propertize (buffer-name buf)
+                              'face 'conn-posframe-highlight)
+                (buffer-name buf)))
+            (let* ((save-blist (window-prev-buffers))
+                   (save-nlist (window-next-buffers))
+                   (prev (prog1
+                             (save-window-excursion
+                               (cl-loop repeat 5
+                                        until (memq (current-buffer) bufs)
+                                        collect (switch-to-prev-buffer) into bufs
+                                        finally return bufs))
+                           (set-window-prev-buffers (selected-window) save-blist)
+                           (set-window-next-buffers (selected-window) save-nlist)))
+                   (next (prog1
+                             (save-window-excursion
+                               (cl-loop repeat 5
+                                        until (memq (current-buffer) bufs)
+                                        collect (switch-to-next-buffer) into bufs
+                                        finally return bufs))
+                           (set-window-prev-buffers (selected-window) save-blist)
+                           (set-window-next-buffers (selected-window) save-nlist))))
+              (append (reverse next) (list (current-buffer)) prev))
+            "\n")
+   :min-width 60
+   :poshandler conn-posframe-poshandler
+   :timeout conn-posframe-timeout
+   :border-width conn-posframe-border-width
+   :border-color conn-posframe-border-color)
+  (add-hook 'pre-command-hook 'conn-posframe--hide))
+
+(defun conn-prev-buffer (&optional arg)
+  (interactive "P")
+  (previous-buffer arg t)
+  (conn-posframe--switch-buffer-display))
+
+(defun conn-next-buffer (&optional arg)
+  (interactive "P")
+  (next-buffer arg t)
+  (conn-posframe--switch-buffer-display))
+
+(defun conn-next-tab (&optional arg)
+  (interactive "P")
+  (tab-bar-switch-to-next-tab arg)
+  (conn-posframe--switch-tab-display))
+
+(defun conn-prev-tab (&optional arg)
+  (interactive "P")
+  (tab-bar-switch-to-prev-tab arg)
+  (conn-posframe--switch-tab-display))
+
+(defun conn-tab-new (&optional arg)
+  (interactive "P")
+  (tab-bar-new-tab arg)
+  (conn-posframe--switch-tab-display))
+
+(defun conn-tab-close (&optional arg)
+  (interactive "P")
+  (tab-bar-close-tab arg)
+  (conn-posframe--switch-tab-display))
 
 ;;;###autoload
 (define-minor-mode conn-posframe-mode
   "Posframes for Conn."
   :global t
   :lighter ""
-  (if conn-posframe-mode
-      (progn
-        (advice-add 'tab-bar-switch-to-next-tab :after 'conn-posframe-switch-tab-ad)
-        (advice-add 'tab-bar-switch-to-prev-tab :after 'conn-posframe-switch-tab-ad)
-        (advice-add 'tab-bar-new-tab :after 'conn-posframe-switch-tab-ad)
-        (advice-add 'tab-bar-close :after 'conn-posframe-switch-tab-ad))
-    (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe-switch-tab-ad)
-    (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe-switch-tab-ad)
-    (advice-remove 'tab-bar-new-tab 'conn-posframe-switch-tab-ad)
-    (advice-remove 'tab-bar-close 'conn-posframe-switch-tab-ad)))
+  :keymap (define-keymap
+            "<remap> <tab-new>" 'conn-tab-new
+            "<remap> <tab-close>" 'conn-tab-close
+            "<remap> <tab-next>" 'conn-next-tab
+            "<remap> <tab-previous>" 'conn-prev-tab
+            "<remap> <previous-buffer>" 'conn-prev-buffer
+            "<remap> <next-buffer>" 'conn-next-buffer))
 
 (provide 'conn-posframe)
 
