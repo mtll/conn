@@ -16,8 +16,8 @@
 ┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │          │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │          │          │   yank   │          │   mark   │  ←inner  │  →para   │  →inner  │ one win  │          │                   ┃
-┃                │          │          │          │  buffer  │          │   map    │   line   │          │   line   │ control  │          │                   ┃
+┃                │   M-X    │          │          │  repeat  │          │   mark   │  ←inner  │  →para   │  →inner  │ one win  │  yank    │                   ┃
+┃                │          │          │          │ dispatch │          │   map    │   line   │          │   line   │ control  │  window  │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ ' other  │                   ┃
 ┃                │   M-x    │   M-s    │  →delete │  thing   │   M-g    │  expand  │  ←char   │  ↓column │  →char   │   win    │   place  │                   ┃
