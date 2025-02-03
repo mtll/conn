@@ -41,6 +41,8 @@
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function project-files "project")
 
+(defvar dired-movement-style)
+
 
 ;;;; Variables
 
@@ -794,7 +796,8 @@ If BUFFER is nil check `current-buffer'."
     (buffer-string)))
 
 (defun conn--setup-major-mode-maps ()
-  (setq conn--major-mode-maps nil)
+  (setq conn--major-mode-maps nil
+        conn--dispatch-major-modes-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
                    (reverse (conn--derived-mode-all-parents major-mode))))
@@ -2476,14 +2479,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'rectangle-next-line 'rectangle-previous-line)
 
 (conn-register-thing
- 'dired-line
- :dispatch-provider 'conn--dispatch-dired-lines)
-
-(conn-register-thing-commands
- 'dired-line nil
- 'dired-previous-line 'dired-next-line)
-
-(conn-register-thing
  'outer-line
  :beg-op (lambda () (move-beginning-of-line nil))
  :end-op (lambda () (move-end-of-line nil))
@@ -2542,25 +2537,36 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar conn-dispatch-all-things-collector-alist nil)
 
-(defvar conn-dispatch-things-maps-alist nil)
+(defvar conn--dispatch-mode-maps nil)
+
+(defvar-local conn--dispatch-major-modes-maps nil)
 
 (defvar conn--dispatch-overriding-map nil)
 
+(defun conn-get-mode-dispatch-map (mode)
+  (or (alist-get mode conn--dispatch-mode-maps)
+      (setf (alist-get mode conn--dispatch-mode-maps)
+            (make-sparse-keymap))))
+
+(dolist (mode '(text-mode prog-mode))
+  (define-keymap
+    :keymap (conn-get-mode-dispatch-map mode)
+    "[" 'conn-dispatch-kill-append
+    "a" 'conn-dispatch-copy-append
+    "]" 'conn-dispatch-kill-prepend
+    "p" 'conn-dispatch-copy-prepend
+    "w" 'conn-dispatch-kill
+    "s" 'conn-dispatch-grab
+    "y" 'conn-dispatch-yank
+    "q" 'conn-dispatch-transpose
+    "c" 'conn-dispatch-copy
+    "f" 'conn-dispatch-yank-replace
+    "d" 'conn-dispatch-grab-replace
+    "g" 'conn-dispatch-goto
+    "e" 'conn-dispatch-over
+    "z" 'conn-dispatch-jump))
+
 (defvar-keymap conn-dispatch-read-thing-mode-map
-  "[" 'conn-dispatch-kill-append
-  "a" 'conn-dispatch-copy-append
-  "]" 'conn-dispatch-kill-prepend
-  "p" 'conn-dispatch-copy-prepend
-  "w" 'conn-dispatch-kill
-  "s" 'conn-dispatch-grab
-  "y" 'conn-dispatch-yank
-  "q" 'conn-dispatch-transpose
-  "c" 'conn-dispatch-copy
-  "f" 'conn-dispatch-yank-replace
-  "d" 'conn-dispatch-grab-replace
-  "g" 'conn-dispatch-goto
-  "e" 'conn-dispatch-over
-  "z" 'conn-dispatch-jump
   "l" 'forward-line
   "u" 'forward-symbol
   "U" `(symbol
@@ -2574,17 +2580,28 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "C-d" 'forward-delete-arg
   "C-w" 'backward-delete-arg)
 
+(defun conn--create-dispatch-map ()
+  (make-composed-keymap
+   (nconc
+    (cl-loop for (var . map) in conn--dispatch-mode-maps
+             when (ignore-errors
+                    (and (not (plist-member (symbol-plist var) 'derived-mode-parent))
+                         (eq t (symbol-value var))))
+             collect map)
+    (cl-loop for mmode in (if (get major-mode :conn-inhibit-inherit-maps)
+                              (list major-mode)
+                            (reverse (conn--derived-mode-all-parents major-mode)))
+             collect (conn-get-mode-dispatch-map mmode))
+    conn--dispatch-major-modes-maps)
+   conn-dispatch-read-thing-mode-map))
+
 (define-minor-mode conn-dispatch-read-thing-mode
   "Read a thing for dispatch."
   :lighter " DISPATCH"
   :keymap conn-dispatch-read-thing-mode-map
   (if conn-dispatch-read-thing-mode
       (thread-first
-        (setq conn--dispatch-overriding-map
-              (make-composed-keymap
-               (cl-loop for (var . map) in conn-dispatch-things-maps-alist
-                        when var collect map)
-               conn-dispatch-read-thing-mode-map))
+        (setq conn--dispatch-overriding-map (conn--create-dispatch-map))
         (internal-push-keymap 'overriding-terminal-local-map))
     (internal-pop-keymap conn--dispatch-overriding-map
                          'overriding-terminal-local-map)))
@@ -3128,23 +3145,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (setq ovs (nconc (with-selected-window win
                                  (conn--dispatch-things-with-prefix-1 things prefix))
                                ovs))))
-          (setq success t)
-          ovs)
-      (unless success (mapc #'delete-overlay ovs)))))
-
-(defun conn--dispatch-dired-lines ()
-  (let ((dired-movement-style 'bounded)
-        ovs success)
-    (unwind-protect
-        (progn
-          (save-excursion
-            (with-restriction (window-start) (window-end)
-              (goto-char (point-min))
-              (while (/= (point)
-                         (progn
-                           (dired-next-line 1)
-                           (point)))
-                (push (conn--make-preview-overlay (point) 1) ovs))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -6530,6 +6530,122 @@ determine if `conn-local-mode' should be enabled."
    'defun 'conn-sequential-thing-handler
    'treesit-end-of-defun
    'treesit-beginning-of-defun))
+
+(with-eval-after-load 'dired
+  (declare-function dired-mark "dired")
+  (declare-function dired-unmark "dired")
+  (declare-function dired-next-line "dired")
+  (declare-function dired-next-dirline "dired")
+  (declare-function dired-marker-regexp "dired")
+  (declare-function dired-kill-subdir "dired-aux")
+  (declare-function dired-kill-line "dired-aux")
+
+  (defvar dired-subdir-alist)
+
+  (defun conn--dispatch-dired-lines ()
+    (let ((dired-movement-style 'bounded)
+          ovs success)
+      (unwind-protect
+          (progn
+            (save-excursion
+              (with-restriction (window-start) (window-end)
+                (goto-char (point-min))
+                (while (/= (point)
+                           (progn
+                             (dired-next-line 1)
+                             (point)))
+                  (push (conn--make-preview-overlay (point) 1) ovs))))
+            (setq success t)
+            ovs)
+        (unless success (mapc #'delete-overlay ovs)))))
+
+  (defun conn--dispatch-dired-dirline ()
+    (let (ovs success)
+      (unwind-protect
+          (progn
+            (save-excursion
+              (with-restriction (window-start) (window-end)
+                (goto-char (point-min))
+                (while (/= (point)
+                           (progn
+                             (dired-next-dirline 1)
+                             (point)))
+                  (push (conn--make-preview-overlay (point) 1) ovs))))
+            (setq success t)
+            ovs)
+        (unless success (mapc #'delete-overlay ovs)))))
+
+  (defun conn--dispatch-dired-subdir ()
+    (let ((start (window-start))
+          (end (window-end))
+          ovs success)
+      (unwind-protect
+          (progn
+            (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
+              (when (<= start marker end)
+                (push (conn--make-preview-overlay marker 1) ovs)))
+            (setq success t)
+            ovs)
+        (unless success (mapc #'delete-overlay ovs)))))
+
+  (conn-register-thing
+   'dired-line
+   :dispatch-provider 'conn--dispatch-dired-lines)
+
+  (conn-register-thing-commands
+   'dired-line nil
+   'dired-previous-line 'dired-next-line)
+
+  (conn-register-thing
+   'dired-subdir
+   :dispatch-provider 'conn--dispatch-dired-subdir)
+
+  (conn-register-thing-commands
+   'dired-subdir nil
+   'dired-next-subdir 'dired-prev-subdir
+   'dired-tree-up 'dired-tree-down)
+
+  (conn-register-thing
+   'dired-dirline
+   :dispatch-provider 'conn--dispatch-dired-dirline)
+
+  (conn-register-thing-commands
+   'dired-dirline nil
+   'dired-next-dirline 'dired-prev-dirline)
+
+  (conn-define-dispatch-action (conn-dispatch-dired-mark "Mark")
+      (window pt _thing)
+    (with-selected-window window
+      (save-excursion
+        (let ((regexp (dired-marker-regexp)))
+          (goto-char pt)
+          (goto-char (line-beginning-position))
+          (if (looking-at regexp)
+              (dired-unmark 1)
+            (dired-mark 1))))))
+
+  (conn-define-dispatch-action (conn-dispatch-dired-kill-line "Kill Line")
+      (window pt _thing)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (dired-kill-line))))
+
+  (conn-define-dispatch-action (conn-dispatch-dired-kill-subdir "Kill Subdir")
+      (window pt _thing)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (dired-kill-subdir))))
+
+  (define-keymap
+    :keymap (conn-get-mode-dispatch-map 'dired-mode)
+    "z" 'conn-dispatch-dired-mark
+    "w" 'conn-dispatch-dired-kill-line
+    "d" 'conn-dispatch-dired-kill-subdir
+    "m" 'dired-next-subdir
+    "n" 'dired-prev-subdir
+    "u" 'dired-next-dirline))
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^    \n]"
