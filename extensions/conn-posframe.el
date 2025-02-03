@@ -26,7 +26,8 @@
 
 (defgroup conn-posframe nil
   "Conn posframes."
-  :prefix "conn-posframe-")
+  :prefix "conn-posframe-"
+  :group 'conn)
 
 (defcustom conn-posframe-border-width 2
   "Border width for conn posframes."
