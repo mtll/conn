@@ -47,4 +47,8 @@
                     (nerd-icons-octicon "nf-oct-container"))))
 
 (provide 'conn-nerd-icons)
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn-nerd-icons.el ends here

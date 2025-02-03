@@ -44,13 +44,6 @@
   "<tab>" 'conn-embark-dwim
   "," 'conn-embark-act)
 
-(defun conn-narrow-indirect-to-heading ()
-  (interactive)
-  (outline-mark-subtree)
-  (conn--narrow-indirect (region-beginning)
-                         (region-end))
-  (outline-show-subtree))
-
 (defun conn-embark-conn-bindings ()
   (interactive)
   (embark-bindings-in-keymap (alist-get conn-current-state conn--state-maps)))
@@ -64,4 +57,8 @@
              '(conn-change-pair embark--ignore-target))
 
 (provide 'conn-embark)
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn-embark.el ends here

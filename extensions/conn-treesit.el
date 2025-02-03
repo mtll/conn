@@ -76,3 +76,7 @@
 
 (provide 'conn-treesit)
 
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
+;;; conn-treesit.el ends here

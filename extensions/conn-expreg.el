@@ -37,5 +37,8 @@
             expreg-functions)))
 
 (provide 'conn-expreg)
-;;; conn-expreg.el ends here
 
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
+;;; conn-expreg.el ends here

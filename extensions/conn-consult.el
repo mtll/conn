@@ -233,4 +233,8 @@ THING BEG and END are bound in BODY."
     "\\" 'conn-kapply-grep-candidates)
   (cl-pushnew 'conn-embark-consult-grep-map
               (alist-get 'consult-grep embark-keymap-alist)))
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn-consult.el ends here

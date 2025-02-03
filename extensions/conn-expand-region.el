@@ -61,5 +61,9 @@
          (cl-return expansions))))))
 
 (provide 'conn-expand-region)
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn-expand-region.el ends here
 

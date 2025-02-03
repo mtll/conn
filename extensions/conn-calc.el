@@ -37,4 +37,8 @@
 (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad)
 
 (provide 'conn-calc)
+
+;; Local Variables:
+;; outline-regexp: ";;;;* [^ 	\n]"
+;; End:
 ;;; conn-calc.el ends here
