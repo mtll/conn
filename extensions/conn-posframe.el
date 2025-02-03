@@ -1,8 +1,8 @@
-;;; conn-embark.el --- Conn embark extension -*- lexical-binding: t -*-
+;;; conn-posframe.el --- Conn posframe extension -*- lexical-binding: t -*-
 ;;
 ;; Author: David Feller
 ;; Version: 0.1
-;; Package-Requires: ((emacs "29.1") (compat "30.0.0.0") (embark "1.0") conn)
+;; Package-Requires: ((emacs "29.1") (compat "30.0.0.0") posframe conn)
 ;;
 ;; This program is free software; you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
