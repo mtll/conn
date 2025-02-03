@@ -6690,8 +6690,11 @@ determine if `conn-local-mode' should be enabled."
     "i" 'dired-previous-line))
 
 (with-eval-after-load 'ibuffer
-  (declare-function ibuffer-mark-region-or-n-with-char "ibuffer")
   (declare-function ibuffer-backward-line "ibuffer")
+  (declare-function ibuffer-unmark-forward "ibuffer")
+  (declare-function ibuffer-mark-forward "ibuffer")
+  (declare-function ibuffer-current-mark "ibuffer")
+  (declare-function ibuffer-backward-filter-group "ibuffer")
 
   (defvar ibuffer-movement-cycle)
   (defvar ibuffer-marked-char)
@@ -6749,7 +6752,7 @@ determine if `conn-local-mode' should be enabled."
    'ibuffer-backward-filter-group)
 
   (conn-define-dispatch-action (conn-dispatch-ibuffer-mark "Mark")
-      (window pt thing)
+      (window pt _thing)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
