@@ -36,7 +36,7 @@
   :group 'conn-posframe)
 
 (defface conn-posframe-header
-  '((t ( :inverse-video nil :extend t
+  '((t ( :inverse-video nil :extend t :bold t
          :box nil :underline (:style line :position t)
          :inherit mode-line)))
   "Face for selection in Conn posframes."
@@ -142,7 +142,13 @@
         (setq new-buffer skipped)
         (cl-pushnew new-buffer found-buffers)))
 
-    found-buffers))
+    (mapcar (lambda (buf)
+              (with-current-buffer buf
+                (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                            (concat (nerd-icons-icon-for-buffer) " ")
+                          "")
+                        (buffer-name buf))))
+            found-buffers)))
 
 ;; Implementation from window.el
 (defun conn-posframe--previous-buffers (&optional window)
@@ -210,7 +216,14 @@
         (setq new-buffer skipped)
         (cl-pushnew new-buffer found-buffers)))
 
-    (nreverse found-buffers)))
+    (nreverse
+     (mapcar (lambda (buf)
+               (with-current-buffer buf
+                 (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                             (concat (nerd-icons-icon-for-buffer) " ")
+                           "")
+                         (buffer-name buf))))
+             found-buffers))))
 
 (defun conn-posframe--switch-buffer-display ()
   (posframe-show
@@ -221,9 +234,15 @@
             (mapconcat
              (lambda (buf)
                (if (eq (current-buffer) buf)
-                   (propertize (concat (buffer-name buf) "\n")
-                               'face 'conn-posframe-highlight)
-                 (concat (buffer-name buf) "\n")))
+                   (with-temp-buffer
+                     (insert (when (fboundp 'nerd-icons-icon-for-buffer)
+                               (nerd-icons-icon-for-buffer))
+                             " " (buffer-name buf) "\n")
+                     (add-face-text-property (point-min) (point-max)
+                                             'conn-posframe-highlight
+                                             'append)
+                     (buffer-string))
+                 (concat buf "\n")))
              (append (conn-posframe--next-buffers)
                      (list (current-buffer))
                      (conn-posframe--previous-buffers))))
@@ -245,8 +264,9 @@
              (lambda (tab)
                (concat
                 (if (eq (car tab) 'current-tab)
-                    (propertize (concat (alist-get 'name (cdr tab)) "\n")
-                                'face 'conn-posframe-highlight)
+                    (propertize
+                     (concat (alist-get 'name (cdr tab)) "\n")
+                     'face 'conn-posframe-highlight)
                   (concat (alist-get 'name (cdr tab)) "\n"))))
              (reverse (funcall tab-bar-tabs-function))))
    :background-color (face-attribute 'corfu-default :background)
