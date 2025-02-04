@@ -34,8 +34,19 @@
   "Face for selection in Conn posframes."
   :group 'conn-posframe)
 
+(defface conn-posframe-header
+  '((t ( :inherit diff-hunk-header :extend t
+         :underline (:style line :position t))))
+  "Face for selection in Conn posframes."
+  :group 'conn-posframe)
+
 (defcustom conn-posframe-border-width 2
   "Border width for conn posframes."
+  :type 'integer
+  :group 'conn-posframe)
+
+(defcustom conn-posframe-min-width 50
+  "Minimum width for conn posframes."
   :type 'integer
   :group 'conn-posframe)
 
@@ -51,7 +62,7 @@
   :group 'conn-posframe)
 
 (defcustom conn-posframe-poshandler
-  'posframe-poshandler-window-center
+  'posframe-poshandler-frame-center
   "Timeout for conn posframes."
   :type 'symbol
   :group 'conn-posframe)
@@ -59,23 +70,6 @@
 (defun conn-posframe--hide ()
   (posframe-hide " *conn-list-posframe*")
   (remove-hook 'pre-command-hook 'conn-posframe--hide))
-
-(defun conn-posframe--switch-tab-display (&rest _)
-  (posframe-show
-   " *conn-list-posframe*"
-   :string (mapconcat
-            (lambda (tab)
-              (if (eq (car tab) 'current-tab)
-                  (propertize (alist-get 'name (cdr tab))
-                              'face 'conn-posframe-highlight)
-                (alist-get 'name (cdr tab))))
-            (reverse (funcall tab-bar-tabs-function))
-            "\n")
-   :poshandler conn-posframe-poshandler
-   :timeout conn-posframe-timeout
-   :border-width conn-posframe-border-width
-   :border-color conn-posframe-border-color)
-  (add-hook 'pre-command-hook 'conn-posframe--hide))
 
 ;; Implementation from window.el
 (defun conn-posframe--next-buffers (&optional window)
@@ -218,17 +212,40 @@
 (defun conn-posframe--switch-buffer-display ()
   (posframe-show
    " *conn-list-posframe*"
-   :string (mapconcat
-            (lambda (buf)
-              (if (eq (current-buffer) buf)
-                  (propertize (buffer-name buf)
-                              'face 'conn-posframe-highlight)
-                (buffer-name buf)))
-            (append (conn-posframe--next-buffers)
-                    (list (current-buffer))
-                    (conn-posframe--previous-buffers))
-            "\n")
-   :min-width 60
+   :string (concat
+            (propertize " Buffers:\n"
+                        'face 'conn-posframe-header)
+            (mapconcat
+             (lambda (buf)
+               (if (eq (current-buffer) buf)
+                   (propertize (buffer-name buf)
+                               'face 'conn-posframe-highlight)
+                 (buffer-name buf)))
+             (append (conn-posframe--next-buffers)
+                     (list (current-buffer))
+                     (conn-posframe--previous-buffers))
+             "\n"))
+   :min-width conn-posframe-min-width
+   :poshandler conn-posframe-poshandler
+   :timeout conn-posframe-timeout
+   :border-width conn-posframe-border-width
+   :border-color conn-posframe-border-color)
+  (add-hook 'pre-command-hook 'conn-posframe--hide))
+
+(defun conn-posframe--switch-tab-display (&rest _)
+  (posframe-show
+   " *conn-list-posframe*"
+   :string (concat
+            (propertize " Tabs:\n"
+                        'face 'conn-posframe-header)
+            (mapconcat
+             (lambda (tab)
+               (if (eq (car tab) 'current-tab)
+                   (propertize (alist-get 'name (cdr tab))
+                               'face 'conn-posframe-highlight)
+                 (alist-get 'name (cdr tab))))
+             (reverse (funcall tab-bar-tabs-function))
+             "\n"))
    :poshandler conn-posframe-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
