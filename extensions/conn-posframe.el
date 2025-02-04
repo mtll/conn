@@ -71,7 +71,6 @@
 
 (defun conn-posframe--hide ()
   (posframe-hide " *conn-list-posframe*")
-  ;; (posframe-delete " *conn-list-posframe*")
   (remove-hook 'pre-command-hook 'conn-posframe--hide))
 
 ;; Implementation from window.el
@@ -229,7 +228,7 @@
   (posframe-show
    " *conn-list-posframe*"
    :string (concat
-            (propertize " Buffers:\n"
+            (propertize " Buffers\n"
                         'face 'conn-posframe-header)
             (mapconcat
              (lambda (buf)
@@ -258,7 +257,7 @@
   (posframe-show
    " *conn-list-posframe*"
    :string (concat
-            (propertize " Tabs:\n"
+            (propertize " Tabs\n"
                         'face 'conn-posframe-header)
             (mapconcat
              (lambda (tab)
