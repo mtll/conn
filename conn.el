@@ -665,36 +665,10 @@ If BUFFER is nil check `current-buffer'."
          (with-current-buffer ,buffer
            (if ,saved-state
                (funcall ,saved-state)
-             (funcall (get ',state :conn-transition-fn) :exit)
-             (setq cursor-type ,saved-cursor-type))
+             (when conn-current-state
+               (funcall (get conn-current-state :conn-transition-fn) :exit)
+               (setq cursor-type ,saved-cursor-type)))
            (setq conn-previous-state ,saved-prev-state))))))
-
-(defmacro conn--maybe-with-state (test state &rest body)
-  (declare (debug (form form body))
-           (indent 2))
-  (let ((saved-state (make-symbol "saved-state"))
-        (saved-prev-state (make-symbol "saved-prev-state"))
-        (saved-cursor-type (make-symbol "saved-cursor-type"))
-        (test-result (make-symbol "test-result"))
-        (buffer (make-symbol "buffer")))
-    `(let ((,saved-state conn-current-state)
-           (,saved-prev-state conn-previous-state)
-           (,buffer (current-buffer))
-           (,saved-cursor-type cursor-type)
-           (,test-result nil)
-           (conn-transition-hook))
-       (unwind-protect
-           (progn
-             (when (setq ,test-result ,test)
-               (,state))
-             ,@body)
-         (when ,test-result
-           (with-current-buffer ,buffer
-             (if ,saved-state
-                 (funcall ,saved-state)
-               (funcall (get ',state :conn-transition-fn) :exit)
-               (setq cursor-type ,saved-cursor-type))
-             (setq conn-previous-state ,saved-prev-state)))))))
 
 (defmacro conn--with-input-method (&rest body)
   (declare (debug (body))
@@ -3288,7 +3262,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          "\\[help] commands): %s")))
         (action default-action)
         keys cmd invalid thing-arg thing-sign)
-    (conn--maybe-with-state conn-local-mode conn-state
+    (conn--with-state (lambda () (when conn-local-mode (conn-state)))
       (apply #'conn-dispatch-read-thing-mode 1 override-maps)
       (unwind-protect
           (cl-prog
