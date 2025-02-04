@@ -47,7 +47,7 @@
   :type 'integer
   :group 'conn-posframe)
 
-(defcustom conn-posframe-min-width 50
+(defcustom conn-posframe-width 55
   "Minimum width for conn posframes."
   :type 'integer
   :group 'conn-posframe)
@@ -80,9 +80,14 @@
   :type 'symbol
   :group 'conn-posframe)
 
-(defun conn-posframe--hide ()
+(defun conn-posframe--hide-pre ()
+  ;; (posframe-hide " *conn-list-posframe*")
+  (add-hook 'post-command-hook 'conn-posframe--hide-post)
+  (remove-hook 'pre-command-hook 'conn-posframe--hide-pre))
+
+(defun conn-posframe--hide-post ()
   (posframe-hide " *conn-list-posframe*")
-  (remove-hook 'pre-command-hook 'conn-posframe--hide))
+  (remove-hook 'post-command-hook 'conn-posframe--hide-post))
 
 ;; Implementation from window.el
 (defun conn-posframe--next-buffers (&optional window)
@@ -235,6 +240,18 @@
                          (buffer-name buf))))
              found-buffers))))
 
+(defun conn-posframe--window-poshandler ()
+  (let (init-width init-height)
+    (lambda (info)
+      (unless init-width
+        (setf init-width (plist-get info :posframe-width)))
+      (unless init-height
+        (setf init-height (plist-get info :posframe-heigh)))
+      (cons (/ (- (plist-get info :parent-frame-width) init-width)
+               2)
+            (/ (- (plist-get info :parent-frame-height) init-height)
+               2)))))
+
 (defun conn-posframe--switch-buffer-display ()
   (posframe-show
    " *conn-list-posframe*"
@@ -257,12 +274,14 @@
                      (list (current-buffer))
                      (conn-posframe--previous-buffers))))
    :background-color (face-attribute 'corfu-default :background)
-   :min-width conn-posframe-min-width
+   :width conn-posframe-width
    :poshandler conn-posframe-buffer-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
-   :border-color conn-posframe-border-color)
-  (add-hook 'pre-command-hook 'conn-posframe--hide))
+   :border-color conn-posframe-border-color
+   :lines-truncate t)
+  (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+  (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
 
 (defun conn-posframe--switch-tab-display (&rest _)
   (posframe-show
@@ -284,7 +303,8 @@
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
    :border-color conn-posframe-border-color)
-  (add-hook 'pre-command-hook 'conn-posframe--hide))
+  (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+  (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
 
 (defun conn-prev-buffer (&optional arg)
   (interactive "P")
