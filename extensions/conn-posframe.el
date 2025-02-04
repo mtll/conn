@@ -60,11 +60,22 @@
 
 (defcustom conn-posframe-timeout nil
   "Timeout for conn posframes."
+  :type (or 'integer 'nil)
+  :group 'conn-posframe)
+
+(defcustom conn-posframe-buffers-lines 5
+  "Number of context lines for buffer cycling posframe."
   :type 'integer
   :group 'conn-posframe)
 
-(defcustom conn-posframe-poshandler
+(defcustom conn-posframe-tab-poshandler
   'posframe-poshandler-frame-center
+  "Timeout for conn posframes."
+  :type 'symbol
+  :group 'conn-posframe)
+
+(defcustom conn-posframe-buffer-poshandler
+  'posframe-poshandler-window-center
   "Timeout for conn posframes."
   :type 'symbol
   :group 'conn-posframe)
@@ -103,7 +114,7 @@
               (setq skipped buffer)
             (setq new-buffer buffer)
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers 5)
+            (when (length= found-buffers conn-posframe-buffers-lines)
               (throw 'found t)))))
 
       (unless window-side
@@ -120,7 +131,7 @@
                 (setq skipped (or skipped buffer))
               (setq new-buffer buffer)
               (cl-pushnew new-buffer found-buffers)
-              (when (length= found-buffers 5)
+              (when (length= found-buffers conn-posframe-buffers-lines)
                 (throw 'found t))))))
 
       (dolist (entry (reverse (window-prev-buffers window)))
@@ -134,7 +145,7 @@
           (if (switch-to-prev-buffer-skip-p skip window new-buffer)
               (setq skipped (or skipped new-buffer))
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers 5)
+            (when (length= found-buffers conn-posframe-buffers-lines)
               (throw 'found t)))))
 
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
@@ -179,7 +190,7 @@
           (if (switch-to-prev-buffer-skip-p skip window new-buffer)
               (setq skipped new-buffer)
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers 5)
+            (when (length= found-buffers conn-posframe-buffers-lines)
               (throw 'found t)))))
 
       (unless window-side
@@ -194,7 +205,7 @@
                 (setq skipped (or skipped buffer))
               (setq new-buffer buffer)
               (cl-pushnew new-buffer found-buffers)
-              (when (length= found-buffers 5)
+              (when (length= found-buffers conn-posframe-buffers-lines)
                 (throw 'found t))))))
 
       (dolist (buffer (reverse next-buffers))
@@ -208,7 +219,7 @@
               (setq skipped (or skipped buffer))
             (setq new-buffer buffer)
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers 5)
+            (when (length= found-buffers conn-posframe-buffers-lines)
               (throw 'found t)))))
 
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
@@ -247,7 +258,7 @@
                      (conn-posframe--previous-buffers))))
    :background-color (face-attribute 'corfu-default :background)
    :min-width conn-posframe-min-width
-   :poshandler conn-posframe-poshandler
+   :poshandler conn-posframe-buffer-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
    :border-color conn-posframe-border-color)
@@ -269,7 +280,7 @@
                   (concat (alist-get 'name (cdr tab)) "\n"))))
              (reverse (funcall tab-bar-tabs-function))))
    :background-color (face-attribute 'corfu-default :background)
-   :poshandler conn-posframe-poshandler
+   :poshandler conn-posframe-tab-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
    :border-color conn-posframe-border-color)
