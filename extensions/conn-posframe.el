@@ -30,13 +30,15 @@
   :group 'conn)
 
 (defface conn-posframe-highlight
-  '((t (:inherit eldoc-highlight-function-argument)))
+  '((t ( :inherit completions-highlight
+         :extend t)))
   "Face for selection in Conn posframes."
   :group 'conn-posframe)
 
 (defface conn-posframe-header
-  '((t ( :inherit diff-hunk-header :extend t
-         :underline (:style line :position t))))
+  '((t ( :inverse-video nil :extend t
+         :box nil :underline (:style line :position t)
+         :inherit mode-line)))
   "Face for selection in Conn posframes."
   :group 'conn-posframe)
 
@@ -69,6 +71,7 @@
 
 (defun conn-posframe--hide ()
   (posframe-hide " *conn-list-posframe*")
+  ;; (posframe-delete " *conn-list-posframe*")
   (remove-hook 'pre-command-hook 'conn-posframe--hide))
 
 ;; Implementation from window.el
@@ -218,13 +221,13 @@
             (mapconcat
              (lambda (buf)
                (if (eq (current-buffer) buf)
-                   (propertize (buffer-name buf)
+                   (propertize (concat (buffer-name buf) "\n")
                                'face 'conn-posframe-highlight)
-                 (buffer-name buf)))
+                 (concat (buffer-name buf) "\n")))
              (append (conn-posframe--next-buffers)
                      (list (current-buffer))
-                     (conn-posframe--previous-buffers))
-             "\n"))
+                     (conn-posframe--previous-buffers))))
+   :background-color (face-attribute 'corfu-default :background)
    :min-width conn-posframe-min-width
    :poshandler conn-posframe-poshandler
    :timeout conn-posframe-timeout
@@ -240,12 +243,13 @@
                         'face 'conn-posframe-header)
             (mapconcat
              (lambda (tab)
-               (if (eq (car tab) 'current-tab)
-                   (propertize (alist-get 'name (cdr tab))
-                               'face 'conn-posframe-highlight)
-                 (alist-get 'name (cdr tab))))
-             (reverse (funcall tab-bar-tabs-function))
-             "\n"))
+               (concat
+                (if (eq (car tab) 'current-tab)
+                    (propertize (concat (alist-get 'name (cdr tab)) "\n")
+                                'face 'conn-posframe-highlight)
+                  (concat (alist-get 'name (cdr tab)) "\n"))))
+             (reverse (funcall tab-bar-tabs-function))))
+   :background-color (face-attribute 'corfu-default :background)
    :poshandler conn-posframe-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width

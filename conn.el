@@ -5422,7 +5422,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           conn--wincontrol-initial-window (selected-window)
           conn--wincontrol-initial-winconf (current-window-configuration)))
   (conn-wincontrol-help)
-  (invert-face 'mode-line)
+  (set-face-inverse-video 'mode-line t)
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
@@ -5433,7 +5433,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
-  (invert-face 'mode-line))
+  (set-face-inverse-video 'mode-line nil))
 
 (defun conn-wincontrol-one-command ()
   (interactive)
