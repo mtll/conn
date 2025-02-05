@@ -660,7 +660,7 @@ If BUFFER is nil check `current-buffer'."
            (conn-transition-hook))
        (unwind-protect
            (progn
-             (,state)
+             (funcall ,state)
              ,@body)
          (with-current-buffer ,buffer
            (if ,saved-state
@@ -2925,29 +2925,29 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
 
-(defun conn--dispatch-window-predicate (thing binding _action)
+(defun conn--dispatch-window-predicate (thing binding keys)
   (let ((modes (get thing :conn-thing-modes)))
     (lambda (win)
       (with-selected-window win
-        (let ((map (conn--create-dispatch-map)))
-          (and (or (null modes)
-                   (apply #'provided-mode-derived-p 'major-mode modes))
-               ;; FIXME: a good way to do this
-               ;; (or (null action)
-               ;;     (where-is-internal action (list map) t))
-               (or
-                (where-is-internal binding (list map) t)
-                (pcase binding
-                  ((and (pred symbolp)
-                        (let (and op (pred identity))
-                          (get (get binding :conn-command-thing) 'forward-op)))
-                   (where-is-internal op (list map) t)
-                   (where-is-internal op nil t))
-                  ((and `(,thing . ,_)
-                        (let (and op (pred identity))
-                          (get thing :conn-command-thing)))
-                   (where-is-internal op (list map) t)
-                   (where-is-internal op nil t))))))))))
+        (conn--with-state (lambda () (when conn-local-mode (conn-state)))
+          (let ((map (conn--create-dispatch-map)))
+            (and
+             (or (null modes)
+                 (apply #'provided-mode-derived-p 'major-mode modes))
+             (or
+              (when-let* ((cmd (key-binding keys t))
+                          ((symbolp cmd)))
+                (eq thing (get cmd :conn-command-thing)))
+              (where-is-internal binding (list map) t)
+              (pcase binding
+                ((and (pred symbolp)
+                      (let (and op (pred identity))
+                        (get (get binding :conn-command-thing) 'forward-op)))
+                 (where-is-internal op (list map (current-global-map)) t))
+                ((and `(,thing . ,_)
+                      (guard (symbolp thing))
+                      (let op (get thing 'forward-op)))
+                 (where-is-internal op (list map (current-global-map)) t)))))))))))
 
 (defun conn--dispatch-thing-bounds (thing arg)
   (if (get thing 'forward-op)
@@ -3289,8 +3289,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      finder
                      (or action default-action)
                      (* (if thing-sign -1 1) (or thing-arg 1))
-                     (conn--dispatch-window-predicate
-                      thing cmd (or action default-action))
+                     (conn--dispatch-window-predicate thing cmd keys)
                      current-prefix-arg)))
              ('keyboard-quit
               (keyboard-quit))
@@ -3338,7 +3337,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (conn--dispatch-finder cmd)
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
-                     (conn--dispatch-window-predicate thing cmd action)
+                     (conn--dispatch-window-predicate thing cmd keys)
                      current-prefix-arg)))
              ((guard (where-is-internal cmd (list conn--dispatch-overriding-map) t))
               (setq action (unless (eq cmd action) cmd)))
