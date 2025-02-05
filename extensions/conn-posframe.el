@@ -75,7 +75,7 @@
   :group 'conn-posframe)
 
 (defcustom conn-posframe-buffer-poshandler
-  'posframe-poshandler-window-center
+  'posframe-poshandler-frame-center
   "Timeout for conn posframes."
   :type 'symbol
   :group 'conn-posframe)
@@ -256,15 +256,20 @@
   (posframe-show
    " *conn-list-posframe*"
    :string (concat
-            (propertize " Buffers\n"
-                        'face 'conn-posframe-header)
+            (with-temp-buffer
+              (insert (when (fboundp 'nerd-icons-icon-for-buffer)
+                        (concat " " (nerd-icons-faicon "nf-fa-buffer")))
+                      " Buffers\n")
+              (add-face-text-property (point-min) (point-max)
+                                      'conn-posframe-header 'append)
+              (buffer-string))
             (mapconcat
              (lambda (buf)
                (if (eq (current-buffer) buf)
                    (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-icon-for-buffer)
-                               (nerd-icons-icon-for-buffer))
-                             " " (buffer-name buf) "\n")
+                               (concat (nerd-icons-icon-for-buffer) " "))
+                             (buffer-name buf) "\n")
                      (add-face-text-property (point-min) (point-max)
                                              'conn-posframe-highlight
                                              'append)
@@ -287,8 +292,13 @@
   (posframe-show
    " *conn-list-posframe*"
    :string (concat
-            (propertize " Tabs\n"
-                        'face 'conn-posframe-header)
+            (with-temp-buffer
+              (insert (when (fboundp 'nerd-icons-icon-for-buffer)
+                        (concat " " (nerd-icons-mdicon "nf-md-tab")))
+                      " Tabs\n")
+              (add-face-text-property (point-min) (point-max)
+                                      'conn-posframe-header 'append)
+              (buffer-string))
             (mapconcat
              (lambda (tab)
                (concat
