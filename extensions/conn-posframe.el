@@ -80,6 +80,13 @@
   :type 'symbol
   :group 'conn-posframe)
 
+;; From nerd-icons-corfu
+(defconst conn-posframe--padding
+  (if (display-graphic-p)
+      (propertize " " 'display '(space :width 0.5))
+    " ")
+  "Padding for posframe.")
+
 (defun conn-posframe--hide-pre ()
   ;; (posframe-hide " *conn-list-posframe*")
   (add-hook 'post-command-hook 'conn-posframe--hide-post)
@@ -160,8 +167,10 @@
     (mapcar (lambda (buf)
               (with-current-buffer buf
                 (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                            (concat (nerd-icons-icon-for-buffer) " ")
-                          "")
+                            (concat conn-posframe--padding
+                                    (nerd-icons-icon-for-buffer)
+                                    conn-posframe--padding)
+                          conn-posframe--padding)
                         (buffer-name buf))))
             found-buffers)))
 
@@ -235,8 +244,10 @@
      (mapcar (lambda (buf)
                (with-current-buffer buf
                  (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                             (concat (nerd-icons-icon-for-buffer) " ")
-                           "")
+                             (concat conn-posframe--padding
+                                     (nerd-icons-icon-for-buffer)
+                                     conn-posframe--padding)
+                           conn-posframe--padding)
                          (buffer-name buf))))
              found-buffers))))
 
@@ -257,9 +268,11 @@
    " *conn-list-posframe*"
    :string (concat
             (with-temp-buffer
-              (insert (when (fboundp 'nerd-icons-icon-for-buffer)
-                        (concat " " (nerd-icons-faicon "nf-fa-buffer")))
-                      " Buffers\n")
+              (insert (when (fboundp 'nerd-icons-faicon)
+                        (concat conn-posframe--padding
+                                (nerd-icons-faicon "nf-fa-buffer")
+                                conn-posframe--padding))
+                      "Buffers\n")
               (add-face-text-property (point-min) (point-max)
                                       'conn-posframe-header 'append)
               (buffer-string))
@@ -268,7 +281,9 @@
                (if (eq (current-buffer) buf)
                    (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-icon-for-buffer)
-                               (concat (nerd-icons-icon-for-buffer) " "))
+                               (concat conn-posframe--padding
+                                       (nerd-icons-icon-for-buffer)
+                                       conn-posframe--padding))
                              (buffer-name buf) "\n")
                      (add-face-text-property (point-min) (point-max)
                                              'conn-posframe-highlight
@@ -278,6 +293,8 @@
              (append (conn-posframe--next-buffers)
                      (list (current-buffer))
                      (conn-posframe--previous-buffers))))
+   :left-fringe 0
+   :right-fringe 0
    :background-color (face-attribute 'corfu-default :background)
    :width conn-posframe-width
    :poshandler conn-posframe-buffer-poshandler
@@ -293,9 +310,11 @@
    " *conn-list-posframe*"
    :string (concat
             (with-temp-buffer
-              (insert (when (fboundp 'nerd-icons-icon-for-buffer)
-                        (concat " " (nerd-icons-mdicon "nf-md-tab")))
-                      " Tabs\n")
+              (insert (when (fboundp 'nerd-icons-mdicon)
+                        (concat conn-posframe--padding
+                                (nerd-icons-mdicon "nf-md-tab")
+                                conn-posframe--padding))
+                      "Tabs\n")
               (add-face-text-property (point-min) (point-max)
                                       'conn-posframe-header 'append)
               (buffer-string))
@@ -308,6 +327,8 @@
                      'face 'conn-posframe-highlight)
                   (concat (alist-get 'name (cdr tab)) "\n"))))
              (reverse (funcall tab-bar-tabs-function))))
+   :left-fringe 0
+   :right-fringe 0
    :background-color (face-attribute 'corfu-default :background)
    :poshandler conn-posframe-tab-poshandler
    :timeout conn-posframe-timeout
