@@ -164,15 +164,17 @@
         (setq new-buffer skipped)
         (cl-pushnew new-buffer found-buffers)))
 
-    (mapcar (lambda (buf)
-              (with-current-buffer buf
-                (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                            (concat conn-posframe--padding
-                                    (nerd-icons-icon-for-buffer)
-                                    conn-posframe--padding)
-                          conn-posframe--padding)
-                        (buffer-name buf))))
-            found-buffers)))
+    (mapconcat
+     (lambda (buf)
+       (with-current-buffer buf
+         (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                     (concat conn-posframe--padding
+                             (nerd-icons-icon-for-buffer)
+                             conn-posframe--padding)
+                   conn-posframe--padding)
+                 (buffer-name buf))))
+     found-buffers
+     "\n")))
 
 ;; Implementation from window.el
 (defun conn-posframe--previous-buffers (&optional window)
@@ -240,68 +242,52 @@
         (setq new-buffer skipped)
         (cl-pushnew new-buffer found-buffers)))
 
-    (nreverse
-     (mapcar (lambda (buf)
-               (with-current-buffer buf
-                 (concat (if (fboundp 'nerd-icons-icon-for-buffer)
-                             (concat conn-posframe--padding
-                                     (nerd-icons-icon-for-buffer)
-                                     conn-posframe--padding)
-                           conn-posframe--padding)
-                         (buffer-name buf))))
-             found-buffers))))
-
-(defun conn-posframe--window-poshandler ()
-  (let (init-width init-height)
-    (lambda (info)
-      (unless init-width
-        (setf init-width (plist-get info :posframe-width)))
-      (unless init-height
-        (setf init-height (plist-get info :posframe-heigh)))
-      (cons (/ (- (plist-get info :parent-frame-width) init-width)
-               2)
-            (/ (- (plist-get info :parent-frame-height) init-height)
-               2)))))
+    (mapconcat
+     (lambda (buf)
+       (with-current-buffer buf
+         (concat (if (fboundp 'nerd-icons-icon-for-buffer)
+                     (concat conn-posframe--padding
+                             (nerd-icons-icon-for-buffer)
+                             conn-posframe--padding)
+                   conn-posframe--padding)
+                 (buffer-name buf))))
+     (nreverse found-buffers)
+     "\n")))
 
 (defun conn-posframe--switch-buffer-display ()
-  (posframe-show
-   " *conn-list-posframe*"
-   :string (concat
-            (with-temp-buffer
-              (insert (when (fboundp 'nerd-icons-faicon)
-                        (concat conn-posframe--padding
-                                (nerd-icons-faicon "nf-fa-buffer")
-                                conn-posframe--padding))
-                      "Buffers\n")
-              (add-face-text-property (point-min) (point-max)
-                                      'conn-posframe-header 'append)
-              (buffer-string))
-            (mapconcat
-             (lambda (buf)
-               (if (eq (current-buffer) buf)
-                   (with-temp-buffer
-                     (insert (when (fboundp 'nerd-icons-icon-for-buffer)
-                               (concat conn-posframe--padding
-                                       (nerd-icons-icon-for-buffer)
-                                       conn-posframe--padding))
-                             (buffer-name buf) "\n")
-                     (add-face-text-property (point-min) (point-max)
-                                             'conn-posframe-highlight
-                                             'append)
-                     (buffer-string))
-                 (concat buf "\n")))
-             (append (conn-posframe--next-buffers)
-                     (list (current-buffer))
-                     (conn-posframe--previous-buffers))))
-   :left-fringe 0
-   :right-fringe 0
-   :background-color (face-attribute 'corfu-default :background)
-   :width conn-posframe-width
-   :poshandler conn-posframe-buffer-poshandler
-   :timeout conn-posframe-timeout
-   :border-width conn-posframe-border-width
-   :border-color conn-posframe-border-color
-   :lines-truncate t)
+  (let* ((header (with-temp-buffer
+                   (insert (when (fboundp 'nerd-icons-faicon)
+                             (concat conn-posframe--padding
+                                     (nerd-icons-faicon "nf-fa-buffer")
+                                     conn-posframe--padding))
+                           "Buffers\n")
+                   (add-face-text-property (point-min) (point-max)
+                                           'conn-posframe-header 'append)
+                   (buffer-string)))
+         (current (concat
+                   (when (fboundp 'nerd-icons-icon-for-buffer)
+                     (concat conn-posframe--padding
+                             (nerd-icons-icon-for-buffer)))
+                   conn-posframe--padding
+                   (buffer-name (current-buffer))
+                   "\n"))
+         (prev (conn-posframe--previous-buffers))
+         (next (conn-posframe--next-buffers)))
+    (add-face-text-property 0 (length current)
+                            'conn-posframe-highlight
+                            'append current)
+    (posframe-show
+     " *conn-list-posframe*"
+     :string (concat header next "\n" current prev)
+     :left-fringe 0
+     :right-fringe 0
+     :background-color (face-attribute 'corfu-default :background)
+     :width conn-posframe-width
+     :poshandler conn-posframe-buffer-poshandler
+     :timeout conn-posframe-timeout
+     :border-width conn-posframe-border-width
+     :border-color conn-posframe-border-color
+     :lines-truncate t))
   (remove-hook 'post-command-hook 'conn-posframe--hide-post)
   (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
 
