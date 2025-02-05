@@ -1096,11 +1096,11 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (cond (all-windows
          (cl-loop for win in (window-list-1 nil nil 'visible)
                   when (run-hook-with-args-until-failure
-                        'conn-dispatch-window-predicates
+                        'conn-dispatch-target-filters
                         win)
                   collect win))
         ((run-hook-with-args-until-failure
-          'conn-dispatch-window-predicates
+          'conn-dispatch-target-filters
           (selected-window))
          (list (selected-window)))))
 
@@ -2540,7 +2540,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar conn--dispatch-overriding-map nil)
 
-(defvar conn-dispatch-window-predicates
+(defvar conn-dispatch-target-filters
   '(conn-dispatch-ignored-mode))
 
 (defun conn-get-mode-dispatch-map (mode)
@@ -2548,23 +2548,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (setf (alist-get mode conn--dispatch-mode-maps)
             (make-sparse-keymap))))
 
-(dolist (mode '(text-mode prog-mode))
-  (define-keymap
-    :keymap (conn-get-mode-dispatch-map mode)
-    "[" 'conn-dispatch-kill-append
-    "]" 'conn-dispatch-kill-prepend
-    "w" 'conn-dispatch-kill
-    "s" 'conn-dispatch-grab
-    "q" 'conn-dispatch-transpose
-    "d" 'conn-dispatch-grab-replace
-    "e" 'conn-dispatch-over
-    "f" 'conn-dispatch-yank-replace
-    "y" 'conn-dispatch-yank
-    "c" 'conn-dispatch-copy
-    "a" 'conn-dispatch-copy-append
-    "p" 'conn-dispatch-copy-prepend))
-
 (defvar-keymap conn-dispatch-read-thing-mode-map
+  "[" 'conn-dispatch-kill-append
+  "]" 'conn-dispatch-kill-prepend
+  "w" 'conn-dispatch-kill
+  "s" 'conn-dispatch-grab
+  "q" 'conn-dispatch-transpose
+  "d" 'conn-dispatch-grab-replace
+  "e" 'conn-dispatch-over
+  "f" 'conn-dispatch-yank-replace
+  "y" 'conn-dispatch-yank
+  "c" 'conn-dispatch-copy
+  "a" 'conn-dispatch-copy-append
+  "p" 'conn-dispatch-copy-prepend
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'backward-char
@@ -2642,21 +2638,39 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (looking-at "\\s)*\n"))
     (join-line)))
 
-(defmacro conn-define-dispatch-action (name-and-description arglist &rest body)
-  "\(fn (NAME DESCRIPTION) ARGLIST &body BODY)"
-  (declare (debug ( (name stringp)
-                    lambda-list
-                    body))
-           (indent 2))
-  (pcase-exhaustive name-and-description
-    (`(,name ,description)
-     `(progn
-        (defun ,name ,arglist ,@body)
-        (put ',name :conn-action-description ,description)
-        (put ',name :conn-action t)))))
+(defmacro conn-define-dispatch-action (name arglist &rest rest)
+  "\(fn NAME ARGLIST &key DESCRIPTION FILTER TARGET-FILTER KEY MODES &body BODY)"
+  (declare (indent 2))
+  (pcase-let* (((map :description :filter :target-filter :key :modes)
+                rest)
+               (menu-item `( 'menu-item
+                             ,(or description (symbol-name name))
+                             ',name
+                             ,@(when filter
+                                 `(:filter (lambda (_)
+                                             (unless (funcall ,filter)
+                                               ',name))))))
+               (body (cl-loop for sublist on rest by #'cddr
+                              unless (keywordp (car sublist))
+                              do (cl-return sublist))))
+    `(progn
+       (defun ,name ,arglist ,@body)
+       (put ',name :conn-action t)
+       (put ',name :conn-action-description ,(cadr menu-item))
+       (put ',name :conn-action-target-filter ,target-filter)
+       (put ',name :conn-action-key ,key)
+       ,(when key
+          (if modes
+              `(dolist (mode ',(ensure-list modes))
+                 (keymap-set (conn-get-mode-dispatch-map mode)
+                             ,key (list ,@menu-item)))
+            `(keymap-set conn-dispatch-read-thing-mode-map
+                         ,key (list ,@menu-item)))))))
 
-(conn-define-dispatch-action (conn-dispatch-kill "Kill")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-kill (window pt thing)
+  :description "Kill"
+  :key "w"
+  :target-filter (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2666,10 +2680,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace)
            (message "Killed: %s" str)))
-        (_ (user-error "No thing at point"))))))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action (conn-dispatch-kill-append "Kill Append")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-kill-append (window pt thing)
+  :description "Kill Append"
+  :key "]"
+  :target-filter (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2680,10 +2696,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (delete-region beg end)
            (conn--dispatch-fixup-whitespace)
            (message "Appended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action (conn-dispatch-kill-prepend "Kill Prepend")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-kill-prepend (window pt thing)
+  :description "Kill Prepend"
+  :key "["
+  :target-filter (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2694,10 +2712,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (delete-region beg end)
            (conn--dispatch-fixup-whitespace)
            (message "Prepended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action (conn-dispatch-copy "Copy")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-copy (window pt thing)
+  :description "Copy"
+  :key "c"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2706,21 +2725,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (let ((str (filter-buffer-substring beg end)))
            (pulse-momentary-highlight-region beg end)
            (kill-new str)))
-        (_ (user-error "No thing at point"))))))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action (conn-dispatch-copy-over "Copy")
-    (window pt thing)
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point))
-             (or (bounds-of-thing-at-point thing)
-                 (user-error "No %s at point" thing)))
-    (save-mark-and-excursion
-      (conn-dispatch-over window pt thing)
-      (copy-region-as-kill (region-beginning) (region-end))
-      (pulse-momentary-highlight-region (region-beginning) (region-end)))))
-
-(conn-define-dispatch-action (conn-dispatch-copy-append "Copy Append")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-copy-append (window pt thing)
+  :description "Copy Append"
+  :key "a"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2729,10 +2738,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str nil)
            (message "Copy Appended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action (conn-dispatch-copy-prepend "Copy Prepend")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing)
+  :description "Copy Prepend"
+  :key "p"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2741,10 +2751,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (let ((str (filter-buffer-substring beg end)))
            (kill-append str t)
            (message "Copy Prepended: %s" str)))
-        (_ (user-error "No thing at point"))))))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action (conn-dispatch-yank-replace "Yank")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-yank-replace (window pt thing)
+  :description "Yank Replace"
+  :key "f"
+  :filter (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2753,12 +2765,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (pulse-momentary-highlight-region beg end)
          (copy-region-as-kill beg end)
          (conn--dispatch-fixup-whitespace))
-        (_ (user-error "No thing at point")))))
+        (_ (user-error "Cannot find %s at point" thing)))))
   (delete-region (region-beginning) (region-end))
   (yank))
 
-(conn-define-dispatch-action (conn-dispatch-grab-replace "Grab Replace")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-grab-replace (window pt thing)
+  :description "Grab Replace"
+  :key "d"
+  :filter (lambda () buffer-read-only)
+  :target-filter (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2766,12 +2781,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (`(,beg . ,end)
          (kill-region beg end)
          (conn--dispatch-fixup-whitespace))
-        (_ (user-error "No thing at point")))))
+        (_ (user-error "Cannot find %s at point" thing)))))
   (delete-region (region-beginning) (region-end))
   (yank))
 
-(conn-define-dispatch-action (conn-dispatch-grab "Grab")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-grab (window pt thing)
+  :description "Grab"
+  :key "s"
+  :filter (lambda () buffer-read-only)
+  :target-filter (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2779,11 +2797,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (`(,beg . ,end)
          (kill-region beg end)
          (conn--dispatch-fixup-whitespace))
-        (_ (user-error "No thing at point")))))
+        (_ (user-error "Cannot find %s at point" thing)))))
   (yank))
 
-(conn-define-dispatch-action (conn-dispatch-yank "Yank")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-yank (window pt thing)
+  :description "Yank"
+  :key "y"
+  :filter (lambda () buffer-read-only)
   (let (str)
     (with-selected-window window
       (save-excursion
@@ -2794,10 +2814,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (setq str (filter-buffer-substring beg end))))))
     (if str
         (insert-for-yank str)
-      (user-error "No thing at point"))))
+      (user-error "Cannot find %s at point" thing))))
 
-(conn-define-dispatch-action (conn-dispatch-goto "Goto")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-goto (window pt thing)
+  :description "Goto"
+  :key "g"
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
       (unless (region-active-p)
@@ -2813,8 +2834,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (unless (or (= pt beg) (= pt end))
            (goto-char beg)))))))
 
-(conn-define-dispatch-action (conn-dispatch-over "Over")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-over (window pt thing)
+  :description "Over"
+  :key "e"
   (when (and (eq (window-buffer window) (current-buffer))
              (/= pt (point)))
     (unless (region-active-p)
@@ -2848,8 +2870,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       ('conn-dispatch-jump (conn-dispatch-jump window pt thing))
       (_ (error "Can't jump to %s" thing)))))
 
-(conn-define-dispatch-action (conn-dispatch-jump "Jump")
-    (window pt _thing)
+(conn-define-dispatch-action conn-dispatch-jump (window pt _thing)
+  :description "Jump"
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
       (unless (region-active-p)
@@ -2857,17 +2879,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (select-window window)
       (goto-char pt))))
 
-(conn-define-dispatch-action (conn-dispatch-narrow-ring "Narrow Ring")
-    (window pt thing)
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
-        (`(,beg . ,end)
-         (conn--narrow-ring-record beg end))))))
-
-(conn-define-dispatch-action (conn-dispatch-transpose "Transpose")
-    (window pt thing)
+(conn-define-dispatch-action conn-dispatch-transpose (window pt thing)
+  :description "Transpose"
+  :key "q"
+  :filter (lambda () buffer-read-only)
+  :target-filter (lambda () buffer-read-only)
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
                  (cons (region-beginning) (region-end))
@@ -2887,8 +2903,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (goto-char pt)
                   (transpose-regions beg1 end1 beg2 end2))
               (user-error "Invalid regions")))
-           (_ (user-error "No thing at point"))))
-        (_ (user-error "No thing at point")))
+           (_ (user-error "Cannot find %s at point" thing))))
+        (_ (user-error "Cannot find %s at point" thing)))
     (let ((cg1 (prepare-change-group))
           (cg2 (with-current-buffer (window-buffer window)
                  (prepare-change-group)))
@@ -2900,7 +2916,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (bounds-of-thing-at-point thing))
               (`(,beg . ,end)
                (setq str1 (filter-buffer-substring beg end)))
-              (_ (user-error "No thing at point")))
+              (_ (user-error "Cannot find %s at point" thing)))
             (with-selected-window window
               (save-excursion
                 (goto-char pt)
@@ -2909,7 +2925,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                    (setq str2 (filter-buffer-substring beg end))
                    (delete-region beg end)
                    (insert str1))
-                  (_ (user-error "No thing at point")))))
+                  (_ (user-error "Cannot find %s at point" thing)))))
             (delete-region (region-beginning) (region-end))
             (insert str2)
             (setq success t))
@@ -2925,29 +2941,28 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
 
-(defun conn--dispatch-window-predicate (thing binding keys)
-  (let ((modes (get thing :conn-thing-modes)))
-    (lambda (win)
-      (with-selected-window win
-        (conn--with-state (lambda () (when conn-local-mode (conn-state)))
-          (let ((map (conn--create-dispatch-map)))
-            (and
-             (or (null modes)
-                 (apply #'provided-mode-derived-p 'major-mode modes))
-             (or
-              (when-let* ((cmd (key-binding keys t))
-                          ((symbolp cmd)))
-                (eq thing (get cmd :conn-command-thing)))
-              (where-is-internal binding (list map) t)
-              (pcase binding
-                ((and (pred symbolp)
-                      (let (and op (pred identity))
-                        (get (get binding :conn-command-thing) 'forward-op)))
-                 (where-is-internal op (list map (current-global-map)) t))
-                ((and `(,thing . ,_)
-                      (guard (symbolp thing))
-                      (let op (get thing 'forward-op)))
-                 (where-is-internal op (list map (current-global-map)) t)))))))))))
+(defun conn--dispatch-target-filter (action thing binding keys)
+  (lambda (win)
+    (with-selected-window win
+      (conn--with-state (lambda () (when conn-local-mode (conn-state)))
+        (let ((map (conn--create-dispatch-map))
+              (target-filter (get action :conn-action-target-filter)))
+          (and
+           (or (null target-filter)
+               (not (funcall target-filter)))
+           (or (when-let* ((cmd (key-binding keys t))
+                           ((symbolp cmd)))
+                 (eq thing (get cmd :conn-command-thing)))
+               (where-is-internal binding (list map) t)
+               (pcase binding
+                 ((and (pred symbolp)
+                       (let (and op (pred identity))
+                         (get (get binding :conn-command-thing) 'forward-op)))
+                  (where-is-internal op (list map (current-global-map)) t))
+                 ((and `(,thing . ,_)
+                       (guard (symbolp thing))
+                       (let op (get thing 'forward-op)))
+                  (where-is-internal op (list map (current-global-map)) t))))))))))
 
 (defun conn--dispatch-thing-bounds (thing arg)
   (if (get thing 'forward-op)
@@ -3289,7 +3304,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      finder
                      (or action default-action)
                      (* (if thing-sign -1 1) (or thing-arg 1))
-                     (conn--dispatch-window-predicate thing cmd keys)
+                     (conn--dispatch-target-filter action thing cmd keys)
                      current-prefix-arg)))
              ('keyboard-quit
               (keyboard-quit))
@@ -3337,7 +3352,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (conn--dispatch-finder cmd)
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
-                     (conn--dispatch-window-predicate thing cmd keys)
+                     (conn--dispatch-target-filter action thing cmd keys)
                      current-prefix-arg)))
              ((guard (where-is-internal cmd (list conn--dispatch-overriding-map) t))
               (setq action (unless (eq cmd action) cmd)))
@@ -3361,16 +3376,12 @@ The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
   (let ((current-prefix-arg arg)
-        (conn-dispatch-window-predicates
+        (conn-dispatch-target-filters
          (if predicate
-             (append conn-dispatch-window-predicates
+             (append conn-dispatch-target-filters
                      (list predicate))
-           conn-dispatch-window-predicates))
+           conn-dispatch-target-filters))
         prefix-ovs labels)
-    (unless (run-hook-with-args-until-failure
-             'conn-dispatch-window-predicates
-             (selected-window))
-      (user-error "Cannot dispatch on %s here." thing))
     (unwind-protect
         (progn
           (setf prefix-ovs (thread-last
@@ -6228,8 +6239,8 @@ determine if `conn-local-mode' should be enabled."
    'org-paragraph 'conn-sequential-thing-handler
    'org-forward-paragraph 'org-backward-paragraph)
 
-  (conn-define-dispatch-action (conn-open-org-link "Open Link")
-      (window pt _thing)
+  (conn-define-dispatch-action conn-open-org-link (window pt _thing)
+    :description "Open Link"
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -6629,8 +6640,11 @@ determine if `conn-local-mode' should be enabled."
    'dired-dirline nil
    'dired-next-dirline 'dired-prev-dirline)
 
-  (conn-define-dispatch-action (conn-dispatch-dired-mark "Mark")
-      (window pt _thing)
+  (conn-define-dispatch-action conn-dispatch-dired-mark (window pt _thing)
+    :description "Mark"
+    :key "f"
+    :modes (dired-mode)
+    :target-filter (lambda () (eq major-mode 'dired-mode))
     (with-selected-window window
       (save-excursion
         (let ((regexp (dired-marker-regexp)))
@@ -6640,15 +6654,21 @@ determine if `conn-local-mode' should be enabled."
               (dired-unmark 1)
             (dired-mark 1))))))
 
-  (conn-define-dispatch-action (conn-dispatch-dired-kill-line "Kill Line")
-      (window pt _thing)
+  (conn-define-dispatch-action conn-dispatch-dired-kill-line (window pt _thing)
+    :description "Kill Line"
+    :key "w"
+    :modes (dired-mode)
+    :target-filter (lambda () (eq major-mode 'dired-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
         (dired-kill-line))))
 
-  (conn-define-dispatch-action (conn-dispatch-dired-kill-subdir "Kill Subdir")
-      (window pt _thing)
+  (conn-define-dispatch-action conn-dispatch-dired-kill-subdir (window pt _thing)
+    :description "Kill Subdir"
+    :key "d"
+    :modes (dired-mode)
+    :target-filter (lambda () (eq major-mode 'dired-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -6727,8 +6747,11 @@ determine if `conn-local-mode' should be enabled."
    'ibuffer-forward-filter-group
    'ibuffer-backward-filter-group)
 
-  (conn-define-dispatch-action (conn-dispatch-ibuffer-mark "Mark")
-      (window pt _thing)
+  (conn-define-dispatch-action conn-dispatch-ibuffer-mark (window pt _thing)
+    :description "Mark"
+    :key "f"
+    :modes (ibuffer-mode)
+    :target-filter (lambda () (eq major-mode 'ibuffer-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
