@@ -2945,7 +2945,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (lambda (win)
     (with-selected-window win
       (conn--with-state (lambda () (when conn-local-mode (conn-state)))
-        (let ((map (conn--create-dispatch-map))
+        (let ((maps (list (conn--create-dispatch-map)
+                          (current-global-map)))
               (target-filter (get action :conn-action-target-filter)))
           (and
            (or (null target-filter)
@@ -2953,16 +2954,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (or (when-let* ((cmd (key-binding keys t))
                            ((symbolp cmd)))
                  (eq thing (get cmd :conn-command-thing)))
-               (where-is-internal binding (list map) t)
+               (where-is-internal binding maps t)
                (pcase binding
                  ((and (pred symbolp)
                        (let (and op (pred identity))
-                         (get (get binding :conn-command-thing) 'forward-op)))
-                  (where-is-internal op (list map (current-global-map)) t))
+                         (thread-first
+                           (get binding :conn-command-thing)
+                           (get 'forward-op))))
+                  (where-is-internal op maps t))
                  ((and `(,thing . ,_)
                        (guard (symbolp thing))
-                       (let op (get thing 'forward-op)))
-                  (where-is-internal op (list map (current-global-map)) t))))))))))
+                       (let (and op (pred identity))
+                         (get thing 'forward-op)))
+                  (where-is-internal op maps t))))))))))
 
 (defun conn--dispatch-thing-bounds (thing arg)
   (if (get thing 'forward-op)
