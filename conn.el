@@ -2640,7 +2640,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defmacro conn-define-dispatch-action (name arglist &rest rest)
   "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-FILTER KEY MODES &body BODY)"
-  (declare (indent 2))
+  (declare (debug ( name lambda-expr
+                    [&rest keywordp form]
+                    def-body))
+           (indent 2))
   (pcase-let* (((map :description :filter :window-filter :key :modes)
                 rest)
                (menu-item `( 'menu-item
@@ -5933,6 +5936,7 @@ When ARG is nil the root window is used."
   "c j" 'conn-append-region
   "c l" 'conn-append-region
   "c v" 'conn-copy-thing
+  "c i" 'copy-from-above-command
   "y" 'yank-in-context)
 
 (defvar-keymap conn-movement-map
