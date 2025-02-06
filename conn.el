@@ -1369,7 +1369,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
            collect reg))
 
 (defun conn--read-thing-mover (prompt &optional arg recursive-edit)
-  (conn--with-state conn-state
+  (conn--with-state 'conn-state
     (conn-read-thing-mover-mode 1)
     (unwind-protect
         (cl-prog
