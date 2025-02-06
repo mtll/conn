@@ -2658,7 +2658,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
        (put ',name :conn-action t)
        (put ',name :conn-action-description ,(cadr menu-item))
        (put ',name :conn-action-target-filter ,target-filter)
-       (put ',name :conn-action-key ,key)
        ,(when key
           (if modes
               `(dolist (mode ',(ensure-list modes))
@@ -3294,8 +3293,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                        thing-arg)
                                (cond
                                 (invalid
-                                 (propertize "Not a valid thing command"
-                                             'face 'error))
+                                 (concat
+                                  (when-let* ((desc (get action :conn-action-description)))
+                                    (concat desc " "))
+                                  (propertize "Not a valid thing command"
+                                              'face 'error)))
                                 (action (get action :conn-action-description))
                                 (t ""))))
                  cmd (key-binding keys t)
@@ -3358,7 +3360,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (* (if thing-sign -1 1) (or thing-arg 1))
                      (conn--dispatch-target-filter action thing cmd keys)
                      current-prefix-arg)))
-             ((guard (where-is-internal cmd (list conn--dispatch-overriding-map) t))
+             ((and (pred symbolp)
+                   (guard (get cmd :conn-action)))
               (setq action (unless (eq cmd action) cmd)))
              (_
               (setq invalid t)))
