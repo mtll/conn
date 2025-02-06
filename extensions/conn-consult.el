@@ -27,84 +27,69 @@
   (require 'cl-lib)
   (require 'subr-x))
 
-(defmacro conn--each-thing (thing beg end &rest body)
-  "Iterate over each THING in buffer.
-
-THING BEG and END are bound in BODY."
-  (declare (debug (form form form body))
-           (indent 3))
-  (cl-with-gensyms (max bounds)
-    `(save-excursion
-       (let ((,max (point-max)))
-         (goto-char (point-min))
-         (unless (bounds-of-thing-at-point ,thing)
-           (forward-thing ,thing 1))
-         (while (< (point) ,max)
-           (let* ((,bounds (bounds-of-thing-at-point ,thing))
-                  (,beg (car ,bounds))
-                  (,end (cdr ,bounds)))
-             ,@body
-             (forward-thing ,thing 1)))))))
-
-(defun conn--thing-candidates (thing)
-  "Return list of thing candidates."
-  (consult--forbid-minibuffer)
-  (consult--fontify-all)
-  (let* ((buffer (current-buffer))
-         default-cand candidates)
-    (conn--each-thing thing beg end
-      (let ((line (line-number-at-pos)))
-        (push (consult--location-candidate
-               (consult--buffer-substring beg end)
-               (cons buffer beg) line line)
-              candidates))
-      (when (not default-cand)
-        (setq default-cand candidates)))
-    (unless candidates
-      (user-error "No lines"))
-    (nreverse candidates)))
-
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-ripgrep nil (funcall conn-completion-region-quote-function
-                                (buffer-substring-no-properties beg end))))
+  (consult-ripgrep
+   nil
+   (when (and (< (- end beg) 1000)
+              (= (count-lines beg end) 1))
+     (funcall conn-completion-region-quote-function
+              (buffer-substring-no-properties beg end)))))
 
 ;;;###autoload
 (defun conn-consult-line-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-line (funcall conn-completion-region-quote-function
-                         (buffer-substring-no-properties beg end))))
+  (consult-line
+   (when (and (< (- end beg) 1000)
+              (= (count-lines beg end) 1))
+     (funcall conn-completion-region-quote-function
+              (buffer-substring-no-properties beg end)))))
 
 ;;;###autoload
 (defun conn-consult-line-multi-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-line-multi nil (funcall conn-completion-region-quote-function
-                                   (buffer-substring-no-properties beg end))))
+  (consult-line-multi
+   nil
+   (when (and (< (- end beg) 1000)
+              (= (count-lines beg end) 1))
+     (funcall conn-completion-region-quote-function
+              (buffer-substring-no-properties beg end)))))
 
 ;;;###autoload
 (defun conn-consult-locate-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-locate (funcall conn-completion-region-quote-function
-                           (buffer-substring-no-properties beg end))))
+  (consult-locate
+   (when (and (< (- end beg) 1000)
+              (= (count-lines beg end) 1))
+     (funcall conn-completion-region-quote-function
+              (buffer-substring-no-properties beg end)))))
 
 ;;;###autoload
 (defun conn-consult-git-grep-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-git-grep nil (funcall conn-completion-region-quote-function
-                                 (buffer-substring-no-properties beg end))))
+  (consult-git-grep
+   nil
+   (when (and (< (- end beg) 1000)
+              (= (count-lines beg end) 1))
+     (funcall conn-completion-region-quote-function
+              (buffer-substring-no-properties beg end)))))
 
 ;;;###autoload
 (defun conn-consult-find-region (beg end)
   (interactive (list (region-beginning)
                      (region-end)))
-  (consult-find nil (funcall conn-completion-region-quote-function
-                             (buffer-substring-no-properties beg end))))
+  (consult-find
+   nil
+   (when (and (< (- end beg) 1000)
+              (= (count-lines beg end) 1))
+     (funcall conn-completion-region-quote-function
+              (buffer-substring-no-properties beg end)))))
 
 (defun conn-consult--isearch-matches (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
@@ -235,6 +220,6 @@ THING BEG and END are bound in BODY."
               (alist-get 'consult-grep embark-keymap-alist)))
 
 ;; Local Variables:
-;; outline-regexp: ";;;;* [^ 	\n]"
+;; outline-regexp: ";;;;* [^    \n]"
 ;; End:
 ;;; conn-consult.el ends here
