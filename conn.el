@@ -4023,7 +4023,7 @@ Interactively `region-beginning' and `region-end'."
   (conn--with-region-emphasis beg end
     (thread-first
       (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
-      conn--kapply-merge-undo
+      conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
       conn--kapply-change-region
@@ -4038,7 +4038,7 @@ Interactively `region-beginning' and `region-end'."
   (conn--with-region-emphasis beg end
     (thread-first
       (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
-      conn--kapply-merge-undo
+      conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
       (conn--kapply-with-state 'conn-emacs-state)
@@ -4052,7 +4052,7 @@ Interactively `region-beginning' and `region-end'."
   (conn--with-region-emphasis beg end
     (thread-first
       (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
-      conn--kapply-merge-undo
+      conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
       (conn--kapply-with-state 'conn-state)
@@ -4064,7 +4064,7 @@ Interactively `region-beginning' and `region-end'."
   (thread-first
     (conn--kapply-region-iterator
      (extract-rectangle-bounds (region-beginning) (region-end)))
-    conn--kapply-merge-undo
+    conn--kapply-per-buffer-undo
     conn--kapply-save-restriction
     conn--kapply-save-excursion
     conn--kapply-change-region
@@ -4077,7 +4077,7 @@ Interactively `region-beginning' and `region-end'."
   (thread-first
     (conn--kapply-region-iterator
      (extract-rectangle-bounds (region-beginning) (region-end)))
-    conn--kapply-merge-undo
+    conn--kapply-per-buffer-undo
     conn--kapply-save-restriction
     conn--kapply-save-excursion
     (conn--kapply-with-state 'conn-emacs-state)
@@ -4089,7 +4089,7 @@ Interactively `region-beginning' and `region-end'."
   (thread-first
     (conn--kapply-region-iterator
      (extract-rectangle-bounds (region-beginning) (region-end)))
-    conn--kapply-merge-undo
+    conn--kapply-per-buffer-undo
     conn--kapply-save-restriction
     conn--kapply-save-excursion
     (conn--kapply-with-state 'conn-state)
@@ -5818,7 +5818,7 @@ When ARG is nil the root window is used."
   "y" 'yank-rectangle
   "j" 'join-line
   "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing
+  "r" 'conn-regexp-replace-in-thing
   "DEL" 'clear-rectangle)
 
 (when (version<= "30" emacs-version)
