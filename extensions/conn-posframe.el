@@ -254,101 +254,104 @@
      "\n")))
 
 (defun conn-posframe--switch-buffer-display ()
-  (let* ((header (with-temp-buffer
-                   (insert (when (fboundp 'nerd-icons-faicon)
-                             (concat conn-posframe--padding
-                                     (nerd-icons-faicon "nf-fa-buffer")
-                                     conn-posframe--padding))
-                           "Buffers\n")
-                   (add-face-text-property (point-min) (point-max)
-                                           'conn-posframe-header 'append)
-                   (buffer-string)))
-         (current (concat
-                   (when (fboundp 'nerd-icons-icon-for-buffer)
-                     (concat conn-posframe--padding
-                             (nerd-icons-icon-for-buffer)))
-                   conn-posframe--padding
-                   (buffer-name (current-buffer))
-                   "\n"))
-         (prev (conn-posframe--previous-buffers))
-         (next (conn-posframe--next-buffers)))
-    (add-face-text-property 0 (length current)
-                            'conn-posframe-highlight
-                            'append current)
+  (unless executing-kbd-macro
+    (let* ((header (with-temp-buffer
+                     (insert (when (fboundp 'nerd-icons-faicon)
+                               (concat conn-posframe--padding
+                                       (nerd-icons-faicon "nf-fa-buffer")
+                                       conn-posframe--padding))
+                             "Buffers\n")
+                     (add-face-text-property (point-min) (point-max)
+                                             'conn-posframe-header 'append)
+                     (buffer-string)))
+           (current (concat
+                     (when (fboundp 'nerd-icons-icon-for-buffer)
+                       (concat conn-posframe--padding
+                               (nerd-icons-icon-for-buffer)))
+                     conn-posframe--padding
+                     (buffer-name (current-buffer))
+                     "\n"))
+           (prev (conn-posframe--previous-buffers))
+           (next (conn-posframe--next-buffers)))
+      (add-face-text-property 0 (length current)
+                              'conn-posframe-highlight
+                              'append current)
+      (posframe-show
+       " *conn-list-posframe*"
+       :string (concat header next "\n" current prev)
+       :left-fringe 0
+       :right-fringe 0
+       :background-color (face-attribute 'menu :background)
+       :width conn-posframe-width
+       :poshandler conn-posframe-buffer-poshandler
+       :timeout conn-posframe-timeout
+       :border-width conn-posframe-border-width
+       :border-color conn-posframe-border-color
+       :lines-truncate t))
+    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+
+(defun conn-posframe--switch-tab-display (&rest _)
+  (unless executing-kbd-macro
     (posframe-show
      " *conn-list-posframe*"
-     :string (concat header next "\n" current prev)
+     :string (concat
+              (with-temp-buffer
+                (insert (when (fboundp 'nerd-icons-mdicon)
+                          (concat conn-posframe--padding
+                                  (nerd-icons-mdicon "nf-md-tab")
+                                  conn-posframe--padding))
+                        "Tabs\n")
+                (add-face-text-property (point-min) (point-max)
+                                        'conn-posframe-header 'append)
+                (buffer-string))
+              (mapconcat
+               (lambda (tab)
+                 (concat
+                  (if (eq (car tab) 'current-tab)
+                      (propertize
+                       (concat (alist-get 'name (cdr tab)) "\n")
+                       'face 'conn-posframe-highlight)
+                    (concat (alist-get 'name (cdr tab)) "\n"))))
+               (reverse (funcall tab-bar-tabs-function))))
      :left-fringe 0
      :right-fringe 0
      :background-color (face-attribute 'menu :background)
-     :width conn-posframe-width
-     :poshandler conn-posframe-buffer-poshandler
+     :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
-     :border-color conn-posframe-border-color
-     :lines-truncate t))
-  (remove-hook 'post-command-hook 'conn-posframe--hide-post)
-  (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
-
-(defun conn-posframe--switch-tab-display (&rest _)
-  (posframe-show
-   " *conn-list-posframe*"
-   :string (concat
-            (with-temp-buffer
-              (insert (when (fboundp 'nerd-icons-mdicon)
-                        (concat conn-posframe--padding
-                                (nerd-icons-mdicon "nf-md-tab")
-                                conn-posframe--padding))
-                      "Tabs\n")
-              (add-face-text-property (point-min) (point-max)
-                                      'conn-posframe-header 'append)
-              (buffer-string))
-            (mapconcat
-             (lambda (tab)
-               (concat
-                (if (eq (car tab) 'current-tab)
-                    (propertize
-                     (concat (alist-get 'name (cdr tab)) "\n")
-                     'face 'conn-posframe-highlight)
-                  (concat (alist-get 'name (cdr tab)) "\n"))))
-             (reverse (funcall tab-bar-tabs-function))))
-   :left-fringe 0
-   :right-fringe 0
-   :background-color (face-attribute 'menu :background)
-   :poshandler conn-posframe-tab-poshandler
-   :timeout conn-posframe-timeout
-   :border-width conn-posframe-border-width
-   :border-color conn-posframe-border-color)
-  (remove-hook 'post-command-hook 'conn-posframe--hide-post)
-  (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
+     :border-color conn-posframe-border-color)
+    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--switch-kmacro-display (&rest _)
-  (posframe-show
-   " *conn-list-posframe*"
-   :string (concat
-            (propertize (format " %s Kmacro Ring\n"
-                                (or (if defining-kbd-macro
-                                        kmacro-counter
-                                      kmacro-initial-counter-value)
-                                    (format "[%s]" kmacro-counter)))
-                        'face 'conn-posframe-header)
-            (propertize (concat (conn--kmacro-display last-kbd-macro)
-                                "\n")
-                        'face 'conn-posframe-highlight)
-            (mapconcat
-             (lambda (km)
-               (conn--kmacro-display (kmacro--keys km)))
-             kmacro-ring
-             "\n"))
-   :left-fringe 0
-   :right-fringe 0
-   :background-color (face-attribute 'menu :background)
-   :poshandler conn-posframe-tab-poshandler
-   :timeout conn-posframe-timeout
-   :border-width conn-posframe-border-width
-   :border-color conn-posframe-border-color)
-  (remove-hook 'post-command-hook 'conn-posframe--hide-post)
-  (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
+  (unless executing-kbd-macro
+    (posframe-show
+     " *conn-list-posframe*"
+     :string (concat
+              (propertize (format " %s Kmacro Ring\n"
+                                  (or (if defining-kbd-macro
+                                          kmacro-counter
+                                        kmacro-initial-counter-value)
+                                      (format "[%s]" kmacro-counter)))
+                          'face 'conn-posframe-header)
+              (propertize (concat (conn--kmacro-display last-kbd-macro)
+                                  "\n")
+                          'face 'conn-posframe-highlight)
+              (mapconcat
+               (lambda (km)
+                 (conn--kmacro-display (kmacro--keys km)))
+               kmacro-ring
+               "\n"))
+     :left-fringe 0
+     :right-fringe 0
+     :background-color (face-attribute 'menu :background)
+     :poshandler conn-posframe-tab-poshandler
+     :timeout conn-posframe-timeout
+     :border-width conn-posframe-border-width
+     :border-color conn-posframe-border-color)
+    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-prev-buffer (&optional arg)
   (interactive "P")
