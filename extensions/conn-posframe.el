@@ -88,7 +88,6 @@
   "Padding for posframe.")
 
 (defun conn-posframe--hide-pre ()
-  ;; (posframe-hide " *conn-list-posframe*")
   (add-hook 'post-command-hook 'conn-posframe--hide-post)
   (remove-hook 'pre-command-hook 'conn-posframe--hide-pre))
 
@@ -323,6 +322,34 @@
   (remove-hook 'post-command-hook 'conn-posframe--hide-post)
   (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
 
+(defun conn-posframe--switch-kmacro-display (&rest _)
+  (posframe-show
+   " *conn-list-posframe*"
+   :string (concat
+            (propertize (format " %s Kmacro Ring\n"
+                                (or (if defining-kbd-macro
+                                        kmacro-counter
+                                      kmacro-initial-counter-value)
+                                    (format "[%s]" kmacro-counter)))
+                        'face 'conn-posframe-header)
+            (propertize (concat (conn--kmacro-display last-kbd-macro)
+                                "\n")
+                        'face 'conn-posframe-highlight)
+            (mapconcat
+             (lambda (km)
+               (conn--kmacro-display (kmacro--keys km)))
+             kmacro-ring
+             "\n"))
+   :left-fringe 0
+   :right-fringe 0
+   :background-color (face-attribute 'corfu-default :background)
+   :poshandler conn-posframe-tab-poshandler
+   :timeout conn-posframe-timeout
+   :border-width conn-posframe-border-width
+   :border-color conn-posframe-border-color)
+  (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+  (add-hook 'pre-command-hook 'conn-posframe--hide-pre))
+
 (defun conn-prev-buffer (&optional arg)
   (interactive "P")
   (previous-buffer arg t)
@@ -364,7 +391,17 @@
             "<remap> <tab-next>" 'conn-next-tab
             "<remap> <tab-previous>" 'conn-prev-tab
             "<remap> <previous-buffer>" 'conn-prev-buffer
-            "<remap> <next-buffer>" 'conn-next-buffer))
+            "<remap> <next-buffer>" 'conn-next-buffer)
+  (if conn-posframe-mode
+      (progn
+        (advice-add 'kmacro-cycle-ring-next :after
+                    'conn-posframe--switch-kmacro-display)
+        (advice-add 'kmacro-cycle-ring-previous :after
+                    'conn-posframe--switch-kmacro-display))
+    (advice-remove 'kmacro-cycle-ring-next
+                   'conn-posframe--switch-kmacro-display)
+    (advice-remove 'kmacro-cycle-ring-previous
+                   'conn-posframe--switch-kmacro-display)))
 
 (provide 'conn-posframe)
 

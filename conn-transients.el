@@ -232,38 +232,38 @@ before each iteration."
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
   :class 'conn-transient-lisp-choices
-  :key "se"
+  :key "x"
   :keyword :excursions
   :description "Excursions"
-  :choices '(("Excursions" . conn--kapply-save-excursion)
+  :choices '(("Save" . conn--kapply-save-excursion)
              (nil . identity)))
 
 (transient-define-argument conn--kapply-save-restriction-infix ()
   "Save and restore the current restriction in each buffer during dispatch."
   :class 'conn-transient-lisp-choices
-  :key "sr"
+  :key "r"
   :keyword :restrictions
   :description "Restrictions"
-  :choices '(("Restrictions" . conn--kapply-save-restriction)
+  :choices '(("Save" . conn--kapply-save-restriction)
              (nil . identity)))
 
 (transient-define-argument conn--kapply-merge-undo-infix ()
   "Merge all macro iterations into a single undo in each buffer."
   :class 'conn-transient-lisp-choices
-  :key "su"
+  :key "u"
   :keyword :undo
-  :description "Merge Undo"
-  :choices '(("Undo" . conn--kapply-merge-undo)
+  :description "Undo"
+  :choices '(("Merge" . conn--kapply-merge-undo)
              (nil . identity)))
 
 (transient-define-argument conn--kapply-save-windows-infix ()
   "Save and restore current window configuration during dispatch."
   :class 'conn-transient-lisp-choices
-  :key "sw"
+  :key "w"
   :keyword :window-conf
   :description "Window Conf"
   :choices '((nil . identity)
-             ("Windows" . conn--kapply-save-windows)))
+             ("Save" . conn--kapply-save-windows)))
 
 (transient-define-suffix conn--kapply-string-suffix (args)
   "Apply keyboard macro to every occurance of a string within a region.
@@ -443,7 +443,7 @@ apply to each contiguous component of the region."
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
-  :key "x"
+  :key "y"
   :description "Text Prop"
   (interactive
    (let* ((prop (intern (completing-read
@@ -633,20 +633,25 @@ apply to each contiguous component of the region."
                  'face 'transient-value)
      " - "
      (when (length> kmacro-ring 1)
-       (thread-first
-         (car (last kmacro-ring))
-         (kmacro--keys)
-         (conn--kmacro-display 15)
-         (concat ", ")))
-     (propertize (conn--kmacro-display last-kbd-macro 15)
-                 'face 'transient-value)
+       (concat "[ "
+               (thread-first
+                 (car (last kmacro-ring))
+                 (kmacro--keys)
+                 (conn--kmacro-display 15)
+                 (concat " "))
+               " ] "))
+     (propertize
+      (concat "[ " (conn--kmacro-display last-kbd-macro 15) " ]")
+      'face 'transient-value)
      (if (kmacro-ring-empty-p)
          ""
-       (thread-first
-         (car kmacro-ring)
-         (kmacro--keys)
-         (conn--kmacro-display 15)
-         (conn--thread disc (concat ", " disc)))))))
+       (concat " [ "
+               (thread-first
+                 (car kmacro-ring)
+                 (kmacro--keys)
+                 (conn--kmacro-display 15)
+                 (conn--thread disc (concat " " disc)))
+               " ]")))))
 
 (defun conn--kmacro-counter-display ()
   (with-temp-message ""
