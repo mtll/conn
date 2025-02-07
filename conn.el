@@ -1050,6 +1050,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                 (goto-char pt)
                 (line-end-position)))
          (ov (make-overlay pt (min (+ pt length) eol))))
+    (overlay-put ov 'conn-overlay t)
     (overlay-put ov 'thing thing)
     (overlay-put ov 'category 'conn-read-string-match)
     (overlay-put ov 'window (selected-window))
@@ -1221,6 +1222,8 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "M-<backspace>" 'reset-arg
   "M-DEL" 'reset-arg
   "." 'reset-arg
+  "k" 'forward-line
+  "o" 'move-end-of-line
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "b" 'beginning-of-buffer
@@ -1841,6 +1844,7 @@ Possibilities: \\<query-replace-map>
          (if query-flag
              (let ((hl (make-overlay (point) (point))))
                (overlay-put hl 'face 'query-replace)
+               (overlay-put hl 'conn-overlay t)
                (unwind-protect
                    (cl-loop
                     with len = (length matches)
@@ -2651,6 +2655,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-thing symbol
   :key "U"
   :target-finder (apply-partially 'conn--dispatch-all-things 'symbol t))
+
+(conn-define-dispatch-action conn-dispatch-comment (window pt thing)
+  :description "Comment"
+  :key ";"
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
+        (`(,beg . ,end)
+         (comment-or-uncomment-region beg end)
+         (message "Commented %s" thing))
+        (_ (user-error "Cannot find %s at point" thing))))))
 
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing)
   :description "Kill"
@@ -4149,14 +4166,13 @@ Interactively `region-beginning' and `region-end'."
   ;; FIXME: see crux smart open line
   (indent-according-to-mode))
 
-(defun conn-comment-or-uncomment-region-and-empty (beg end)
-  (interactive (list (region-beginning)
-                     (region-end)))
-  (comment-normalize-vars)
-  (if (comment-only-p beg end)
-      (uncomment-region beg end)
-    (let ((comment-empty-lines t))
-      (comment-region beg end))))
+(defun conn-comment-or-uncomment-region (thing-mover arg)
+  (interactive (conn--read-thing-mover "Thing Mover"))
+  (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
+    (if (comment-only-p beg end)
+        (uncomment-region beg end)
+      (let ((comment-empty-lines t))
+        (comment-region beg end)))))
 
 (defun conn-backward-symbol (arg)
   "`forward-symbol' in reverse."
@@ -4913,10 +4929,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (goto-char end)
     (conn--push-ephemeral-mark (+ (point) (length region)))))
 
-(defun conn-duplicate-region (beg end &optional arg)
-  "Duplicates the current region ARG times.
-Attempts to intelligently insert separating whitespace between
-regions."
+(defun conn-duplicate (beg end arg)
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
@@ -4930,18 +4943,54 @@ regions."
         (set-marker end nil)
         (indent-region (region-beginning) (region-end))))))
 
-(defun conn-duplicate-and-comment-region (beg end &optional arg)
-  "Duplicates the current line or region ARG times.
-If there's no region, the current line will be duplicated.  However, if
-there's a region, all lines that region covers will be duplicated."
+(defun conn-duplicate-and-comment (beg end &optional arg)
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
-  (comment-normalize-vars)
-  (save-mark-and-excursion
-    (conn-duplicate-region beg end arg)
-    (comment-region (region-beginning)
-                    (region-end))))
+  (pcase-let* ((origin (point))
+               (region (buffer-substring-no-properties beg end)))
+    (comment-or-uncomment-region beg end)
+    (setq end (line-end-position))
+    (dotimes (_ arg)
+      (goto-char end)
+      (newline)
+      (insert region)
+      (setq end (point)))
+    (goto-char (+ origin (* (length region) arg) arg))))
+
+(defun conn-duplicate-region (thing-mover thing-arg N)
+  (interactive (append (conn--read-thing-mover "Thing Mover" nil t)
+                       (list (prefix-numeric-value current-prefix-arg))))
+  (pcase (conn-bounds-of-command thing-mover thing-arg)
+    (`(,beg ,end . ,_)
+     (if (use-region-p)
+         (duplicate-dwim)
+       (let ((end (set-marker (make-marker) end)))
+         (unwind-protect
+             (dotimes (_ N)
+               (conn--duplicate-region-1 beg end))
+           (goto-char end)
+           (indent-region beg (point))
+           (set-marker end nil)))))))
+
+(defun conn-duplicate-and-comment-region (thing-mover thing-arg N)
+  (interactive (append (conn--read-thing-mover "Thing Mover" nil t)
+                       (list (prefix-numeric-value current-prefix-arg))))
+  (pcase (conn-bounds-of-command thing-mover thing-arg)
+    (`(,beg ,end . ,_)
+     (pcase-let* ((offset (- (point) end))
+                  (mark-offset (- (point) (mark t)))
+                  (region (buffer-substring-no-properties beg end)))
+       (goto-char end)
+       (comment-or-uncomment-region beg end)
+       (setq end (if (bolp) (point) (line-end-position)))
+       (dotimes (_ N)
+         (goto-char end)
+         (newline)
+         (insert region)
+         (setq end (point)))
+       (goto-char (+ (point) offset))
+       (conn--push-ephemeral-mark (- (point) mark-offset))))))
 
 ;;;;; Window Commands
 
@@ -5784,31 +5833,31 @@ When ARG is nil the root window is used."
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  ":" 'conn-comment-or-uncomment-region-and-empty
+  "." 'conn-duplicate
+  "'" 'conn-duplicate-and-comment
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
+  "b" 'conn-comment-or-uncomment-region
   "c" 'conn-region-case-prefix
-  "D" 'conn-duplicate-and-comment-region
-  "d" 'conn-duplicate-region
+  "d" 'conn-duplicate-and-comment-region
+  "e" 'conn-duplicate-region
   "g" 'conn-rgrep-region
-  "i" 'clone-indirect-buffer
   "k" 'delete-region
-  "l" 'conn-join-lines
+  "j" 'conn-join-lines
   "m t" 'conn-kapply-replace-region
   "m e" 'conn-kapply-emacs-on-region
   "m c" 'conn-kapply-conn-on-region
   "I" 'indent-rigidly
-  "N" 'conn-narrow-indirect-to-region
+  "," 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
   "s" 'conn-sort-prefix
   "o" 'conn-occur-region
   "V" 'vc-region-history
   "y" 'yank-rectangle
-  "j" 'join-line
   "q" 'conn-replace-in-thing
   "r" 'conn-regexp-replace-in-thing
   "DEL" 'clear-rectangle)
@@ -5896,6 +5945,7 @@ When ARG is nil the root window is used."
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
+  "," 'clone-indirect-buffer
   "h" 'conn-change-line
   "_" 'conn-command-to-register
   "o" 'conn-open-line-and-indent
