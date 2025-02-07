@@ -772,7 +772,7 @@ If BUFFER is nil check `current-buffer'."
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
                    (reverse (conn--derived-mode-all-parents major-mode))))
-         mark-map-keys mode-map mode-mark-maps)
+         mark-map-keys mode-map mode-mark-map)
     (dolist (state conn-states)
       (setq mark-map-keys
             (where-is-internal 'conn-mark-thing-map
@@ -2107,8 +2107,8 @@ The iterator must be the first argument in ARGLIST.
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER."
   (dolist (cmd commands)
-    (put cmd :conn-command-thing thing))
-  (apply 'conn-set-command-handler handler commands))
+    (put cmd :conn-command-thing thing)
+    (put cmd :conn-mark-handler handler)))
 
 (defun conn-sequential-thing-handler (beg)
   (ignore-errors
