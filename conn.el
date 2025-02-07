@@ -41,8 +41,6 @@
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function project-files "project")
 
-(defvar dired-movement-style)
-
 
 ;;;; Variables
 
@@ -453,12 +451,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn--seperator-history nil
   "History var for `conn-set-register-seperator'.")
 
-(defvar conn--read-string-timeout-history nil)
-
-(defvar conn--read-string-history nil)
-
-(defvar conn--read-regexp-history nil)
-
 
 ;;;; Utilities
 
@@ -724,7 +716,7 @@ If BUFFER is nil check `current-buffer'."
         (if regexp-flag
             (read-regexp (format-prompt prompt default)
                          (regexp-quote default)
-                         'conn--read-regexp-history)
+                         'minibuffer-history)
           (let ((from (read-from-minibuffer
                        (format-prompt prompt default)
                        nil nil nil nil
@@ -6574,6 +6566,7 @@ determine if `conn-local-mode' should be enabled."
   (declare-function dired-kill-line "dired-aux")
 
   (defvar dired-subdir-alist)
+  (defvar dired-movement-style)
 
   (defun conn--dispatch-dired-lines ()
     (let ((dired-movement-style 'bounded)
