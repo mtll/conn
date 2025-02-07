@@ -241,7 +241,7 @@ before each iteration."
 (transient-define-argument conn--kapply-save-restriction-infix ()
   "Save and restore the current restriction in each buffer during dispatch."
   :class 'conn-transient-lisp-choices
-  :key "r"
+  :key "N"
   :keyword :restrictions
   :description "Restrictions"
   :choices '(("Save" . conn--kapply-save-restriction)
@@ -299,7 +299,7 @@ property."
 
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   :transient 'transient--do-exit
-  :key "u"
+  :key "r"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
