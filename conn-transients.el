@@ -632,26 +632,9 @@ apply to each contiguous component of the region."
                                   (format "[%s]" kmacro-counter)))
                  'face 'transient-value)
      " - "
-     (when (length> kmacro-ring 1)
-       (concat "[ "
-               (thread-first
-                 (car (last kmacro-ring))
-                 (kmacro--keys)
-                 (conn--kmacro-display 15)
-                 (concat " "))
-               " ] "))
      (propertize
-      (concat "[ " (conn--kmacro-display last-kbd-macro 15) " ]")
-      'face 'transient-value)
-     (if (kmacro-ring-empty-p)
-         ""
-       (concat " [ "
-               (thread-first
-                 (car kmacro-ring)
-                 (kmacro--keys)
-                 (conn--kmacro-display 15)
-                 (conn--thread disc (concat " " disc)))
-               " ]")))))
+      (conn--kmacro-display last-kbd-macro 35)
+      'face 'transient-value))))
 
 (defun conn--kmacro-counter-display ()
   (with-temp-message ""
