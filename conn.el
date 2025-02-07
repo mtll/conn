@@ -1865,7 +1865,7 @@ Possibilities: \\<query-replace-map>
         (_
          (conn--kapply-advance-region (pop matches)))))))
 
-(defun conn--kapply-merge-undo (iterator)
+(defun conn--kapply-per-buffer-undo (iterator)
   (let (undo-handles)
     (lambda (state)
       (pcase state
@@ -1884,7 +1884,7 @@ Possibilities: \\<query-replace-map>
               (setf (alist-get (current-buffer) undo-handles)
                     (prepare-change-group))))))))))
 
-(defun conn--kapply-individual-undos (iterator)
+(defun conn--kapply-per-iteration-undo (iterator)
   (let (handle)
     (lambda (state)
       (pcase state
