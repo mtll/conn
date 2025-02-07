@@ -5328,10 +5328,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "_" 'shrink-window-if-larger-than-buffer
   "<down>" 'conn-wincontrol-windmove-down
   "<left>" 'conn-wincontrol-windmove-left
-  "<next>" 'conn-wincontrol-scroll-up
-  "<prior>" 'conn-wincontrol-scroll-down
   "<right>" 'conn-wincontrol-windmove-right
   "<up>" 'conn-wincontrol-windmove-up
+  "M-i" 'conn-wincontrol-windmove-down
+  "M-j" 'conn-wincontrol-windmove-left
+  "M-l" 'conn-wincontrol-windmove-right
+  "M-k" 'conn-wincontrol-windmove-up
+  "<next>" 'conn-wincontrol-scroll-up
+  "<prior>" 'conn-wincontrol-scroll-down
   "<tab>" 'conn-wincontrol-other-window-scroll-up
   "TAB" 'conn-wincontrol-other-window-scroll-up
   "DEL" 'conn-wincontrol-scroll-down
