@@ -280,7 +280,7 @@
      :string (concat header next "\n" current prev)
      :left-fringe 0
      :right-fringe 0
-     :background-color (face-attribute 'corfu-default :background)
+     :background-color (face-attribute 'menu :background)
      :width conn-posframe-width
      :poshandler conn-posframe-buffer-poshandler
      :timeout conn-posframe-timeout
@@ -314,7 +314,7 @@
              (reverse (funcall tab-bar-tabs-function))))
    :left-fringe 0
    :right-fringe 0
-   :background-color (face-attribute 'corfu-default :background)
+   :background-color (face-attribute 'menu :background)
    :poshandler conn-posframe-tab-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
@@ -342,7 +342,7 @@
              "\n"))
    :left-fringe 0
    :right-fringe 0
-   :background-color (face-attribute 'corfu-default :background)
+   :background-color (face-attribute 'menu :background)
    :poshandler conn-posframe-tab-poshandler
    :timeout conn-posframe-timeout
    :border-width conn-posframe-border-width
