@@ -223,12 +223,6 @@ CONDITION has the same meaning as in `buffer-match-p'."
 (defvar-local conn--prev-mode-line-mule-info nil)
 (put 'conn--prev-mode-line-mule-info 'risky-local-variable t)
 
-(defvar conn-input-method-overriding-modes
-  (list (list 'isearch-mode 'isearch-mode-hook 'isearch-mode-end-hook))
-  "List of modes which override a state's input suppression property.
-Each element may be either a symbol or a list of the form
-(symbol . hooks).")
-
 (defvar-local conn-current-state nil
   "Current conn state for buffer.")
 
@@ -487,15 +481,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (intern (apply #'conn--stringify symbols-or-strings)))
-
-  (defun conn--string-fill (string col)
-    (with-temp-buffer
-      (insert string)
-      (let ((fill-column col)
-            (adaptive-fill-mode nil))
-        (fill-region (point-min) (point-max)))
-      (buffer-string))))
+    (intern (apply #'conn--stringify symbols-or-strings))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   (declare (debug (form body))
@@ -552,19 +538,6 @@ Used to restore previous value when `conn-mode' is disabled.")
                (conn--without-conn-maps
                  (let ((binding (key-binding from-keys t)))
                    (if (keymapp binding) binding real-binding))))))
-
-;; From orderless
-(defun conn--escapable-split-on-char (string char)
-  "Split STRING on CHAR, which can be escaped with backslash."
-  (let ((quoted (concat "\\" char)))
-    (mapcar
-     (lambda (piece) (replace-regexp-in-string (string 0) char piece))
-     (split-string (replace-regexp-in-string
-                    (concat "\\\\\\" (substring quoted 0 (1- (length quoted)))
-                            "\\|\\\\" quoted)
-                    (lambda (x) (if (equal x quoted) (string 0) x))
-                    string 'fixedcase 'literal)
-                   (concat quoted "+")))))
 
 ;; From repeat-mode
 (defun conn--command-property (property)
@@ -786,34 +759,34 @@ If BUFFER is nil check `current-buffer'."
 ;;;; States
 
 (defun conn--set-background (string color)
-  (with-temp-buffer
-    (insert string)
-    (alter-text-property
-     (point-min) (point-max)
-     'face
-     (lambda (spec)
-       (setf (plist-get spec :background) color)
-       spec))
-    (buffer-string)))
+  (alter-text-property
+   0 (length string)
+   'face
+   (lambda (spec)
+     (setf (plist-get spec :background) color)
+     spec)
+   string))
 
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
                    (reverse (conn--derived-mode-all-parents major-mode))))
-         mark-map-keys mode-map)
+         mark-map-keys mode-map mode-mark-maps)
     (dolist (state conn-states)
       (setq mark-map-keys
             (where-is-internal 'conn-mark-thing-map
                                (list (alist-get state conn--state-maps)
                                      (conn-get-local-map state))))
       (dolist (mode mmodes)
-        (setq mode-map (conn-get-mode-map state mode))
-        (push (cons state mode-map) conn--major-mode-maps)
+        (setq mode-map (conn-get-mode-map state mode)
+              mode-mark-map (make-sparse-keymap))
         (let ((mark-map (conn-get-mode-things-map mode)))
           (when (cdr mark-map)
             (dolist (key mark-map-keys)
-              (define-key mode-map key mark-map))))))))
+              (define-key mode-mark-map key mark-map))))
+        (push (cons state (make-composed-keymap mode-mark-map mode-map))
+              conn--major-mode-maps)))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
   "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
@@ -844,57 +817,60 @@ and return it."
   (or (alist-get state conn--local-maps)
       (setf (alist-get state conn--local-maps) (make-sparse-keymap))))
 
-(defun conn-input-method-overriding-mode (mode &rest hooks)
-  "Make a MODE ignore `conn-mode' input method supression.
-If HOOKS are not specified checks are performed in MODE-hook to toggle
-the input method.  If HOOKS are specified checks are performed in those
-hooks instead."
-  (let ((hooks (or hooks (list (conn--symbolicate mode "-hook")))))
-    (cl-pushnew (cons mode hooks) conn-input-method-overriding-modes
-                :test #'equal)))
+(defmacro conn--without-input-method-hooks (&rest body)
+  (declare (indent 0))
+  `(unwind-protect
+       (progn
+         (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+         (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
+         ,@body)
+     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)))
 
 (defun conn--activate-input-method ()
-  "Enable input method in states with nil :conn-suppress-input-method property.
-Also enable input methods when any `conn-input-method-overriding-mode'
-is on or when `conn-input-method-always' is t."
+  "Enable input method in states with nil :conn-suppress-input-method property."
   ;; Ensure conn-local-mode is t since this can be run by conn--with-state
   ;; in buffers without conn-local-mode enabled.
   (when conn-local-mode
     (let (input-method-activate-hook
           input-method-deactivate-hook)
-      (if (seq-find (pcase-lambda (`(,mode . _))
-                      (symbol-value mode))
-                    conn-input-method-overriding-modes)
-          (when (and conn--input-method (not current-input-method))
-            (activate-input-method conn--input-method))
-        (pcase (get conn-current-state :conn-suppress-input-method)
-          ((and 'nil (guard current-input-method))
-           (setq conn--input-method current-input-method
-                 conn--input-method-title current-input-method-title))
-          ((and 'nil (guard conn--input-method))
-           (activate-input-method conn--input-method))
-          ((guard (and current-input-method conn--input-method))
-           (setq conn--input-method current-input-method
-                 conn--input-method-title current-input-method-title)
-           (deactivate-input-method))
-          ((guard current-input-method)
-           (setq conn--input-method current-input-method
-                 conn--input-method-title current-input-method-title)
-           (deactivate-input-method)))))))
+      (pcase (get conn-current-state :conn-suppress-input-method)
+        ((and 'nil (guard current-input-method))
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title))
+        ((and 'nil (guard conn--input-method))
+         (activate-input-method conn--input-method))
+        ((guard (and current-input-method conn--input-method))
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title)
+         (deactivate-input-method))
+        ((guard current-input-method)
+         (setq conn--input-method current-input-method
+               conn--input-method-title current-input-method-title)
+         (deactivate-input-method))))))
+(put 'conn--activate-input-method 'permanent-local-hook t)
 
 (defun conn--deactivate-input-method ()
-  "Disable input method in all states."
   (setq conn--input-method nil
         conn--input-method-title nil))
+(put 'conn--deactivate-input-method 'permanent-local-hook t)
 
-(defun conn-toggle-input-method ()
-  (interactive)
-  (if (and conn--input-method (not current-input-method))
-      (let ((current-input-method conn--input-method))
-        (deactivate-input-method)
-        (setq conn--input-method nil
-              conn--input-method-title nil))
-    (call-interactively 'toggle-input-method)))
+(defun conn--toggle-input-method-ad (&rest app)
+  (if (or (not conn-local-mode)
+          (get conn-current-state :conn-suppress-input-method))
+      (apply app)
+    (let ((current-input-method conn--input-method))
+      (apply app))))
+
+(defun conn--isearch-input-method ()
+  (when (and conn--input-method isearch-mode)
+    (conn--without-input-method-hooks
+      (let ((overriding-terminal-local-map nil))
+        (activate-input-method conn--input-method))
+      (setq isearch-input-method-function input-method-function)
+      (setq-local input-method-function nil)
+      (isearch-update))))
+(put 'conn--isearch-input-method 'permanent-local-hook t)
 
 (defun conn--input-method-mode-line ()
   (cond
@@ -1647,6 +1623,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
+        (advice-add 'toggle-input-method :around 'conn--toggle-input-method-ad)
         (advice-add 'query-replace-read-from-suggestions :around
                     'conn--read-from-suggestions-ad)
         (advice-add 'read-regexp-suggestions :around
@@ -1659,6 +1636,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad))
+    (advice-remove 'toggle-input-method 'conn--toggle-input-method-ad)
     (advice-remove 'query-replace-read-from-suggestions
                    'conn--read-from-suggestions-ad)
     (advice-remove 'read-regexp-suggestions
@@ -5997,7 +5975,6 @@ When ARG is nil the root window is used."
   "E" 'conn-dispatch-on-buttons
   "t" 'conn-change
   ":" 'conn-wincontrol-one-command
-  "<remap> <toggle-input-method>" 'conn-toggle-input-method
   "`" 'other-window
   "|" 'conn-shell-command-on-region
   "'" 'conn-other-place-prefix
@@ -6173,26 +6150,24 @@ When ARG is nil the root window is used."
         (setq-local conn-lighter (seq-copy conn-lighter))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
-        (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
-          (dolist (hook hooks)
-            (add-hook hook 'conn--activate-input-method nil t)))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
+        (add-hook 'isearch-mode-end-hook 'conn--activate-input-method nil t)
+        (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
     (when conn-current-state
       (funcall (get conn-current-state :conn-transition-fn) :exit))
     (conn--clear-overlays)
-    (pcase-dolist (`(_ . ,hooks) conn-input-method-overriding-modes)
-      (dolist (hook hooks)
-        (remove-hook hook #'conn--activate-input-method t)))
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
     (remove-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor t)
+    (remove-hook 'isearch-mode-end-hook 'conn--activate-input-method t)
+    (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
