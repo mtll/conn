@@ -25,24 +25,21 @@
 (require 'embark)
 (require 'outline)
 
-(conn-define-dispatch-action (conn-embark-dwim "Embark-DWIM")
-    (window pt _thing)
+(conn-define-dispatch-action conn-embark-dwim (window pt _thing)
+  :description "Embark-DWIM"
+  :key "<tab>"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (embark-dwim))))
 
-(conn-define-dispatch-action (conn-embark-act "Embark")
-    (window pt _thing)
+(conn-define-dispatch-action conn-embark-act (window pt _thing)
+  :description "Embark"
+  :key ","
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (embark-act))))
-
-(define-keymap
-  :keymap conn-dispatch-read-thing-mode-map
-  "<tab>" 'conn-embark-dwim
-  "," 'conn-embark-act)
 
 (defun conn-embark-conn-bindings ()
   (interactive)
