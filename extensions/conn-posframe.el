@@ -324,34 +324,44 @@
     (remove-hook 'post-command-hook 'conn-posframe--hide-post)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
-(defun conn-posframe--switch-kmacro-display (&rest _)
-  (unless executing-kbd-macro
-    (posframe-show
-     " *conn-list-posframe*"
-     :string (concat
-              (propertize (format " %s Kmacro Ring\n"
-                                  (or (if defining-kbd-macro
-                                          kmacro-counter
-                                        kmacro-initial-counter-value)
-                                      (format "[%s]" kmacro-counter)))
-                          'face 'conn-posframe-header)
-              (propertize (concat (conn--kmacro-display last-kbd-macro)
-                                  "\n")
-                          'face 'conn-posframe-highlight)
-              (mapconcat
-               (lambda (km)
-                 (conn--kmacro-display (kmacro--keys km)))
-               kmacro-ring
-               "\n"))
-     :left-fringe 0
-     :right-fringe 0
-     :background-color (face-attribute 'menu :background)
-     :poshandler conn-posframe-tab-poshandler
-     :timeout conn-posframe-timeout
-     :border-width conn-posframe-border-width
-     :border-color conn-posframe-border-color)
-    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
-    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+(with-eval-after-load 'conn-transient
+  (require 'kmacro)
+
+  (defvar kmacro-counter)
+  (defvar kmacro-initial-counter-value)
+  (defvar kmacro-ring)
+
+  (declare-function conn--kmacro-display "conn-transient")
+  (declare-function kmacro--keys "kmacro")
+
+  (defun conn-posframe--switch-kmacro-display (&rest _)
+    (unless executing-kbd-macro
+      (posframe-show
+       " *conn-list-posframe*"
+       :string (concat
+                (propertize (format " %s Kmacro Ring\n"
+                                    (or (if defining-kbd-macro
+                                            kmacro-counter
+                                          kmacro-initial-counter-value)
+                                        (format "[%s]" kmacro-counter)))
+                            'face 'conn-posframe-header)
+                (propertize (concat (conn--kmacro-display last-kbd-macro)
+                                    "\n")
+                            'face 'conn-posframe-highlight)
+                (mapconcat
+                 (lambda (km)
+                   (conn--kmacro-display (kmacro--keys km)))
+                 kmacro-ring
+                 "\n"))
+       :left-fringe 0
+       :right-fringe 0
+       :background-color (face-attribute 'menu :background)
+       :poshandler conn-posframe-tab-poshandler
+       :timeout conn-posframe-timeout
+       :border-width conn-posframe-border-width
+       :border-color conn-posframe-border-color)
+      (remove-hook 'post-command-hook 'conn-posframe--hide-post)
+      (add-hook 'pre-command-hook 'conn-posframe--hide-pre))))
 
 (defun conn-prev-buffer (&optional arg)
   (interactive "P")
