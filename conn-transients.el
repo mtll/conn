@@ -254,6 +254,7 @@ before each iteration."
   :keyword :undo
   :description "Undo"
   :choices '(("Merge" . conn--kapply-merge-undo)
+             ("Individual" . conn--kapply-individual-undos)
              (nil . identity)))
 
 (transient-define-argument conn--kapply-save-windows-infix ()

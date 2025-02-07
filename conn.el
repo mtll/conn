@@ -1884,6 +1884,28 @@ Possibilities: \\<query-replace-map>
               (setf (alist-get (current-buffer) undo-handles)
                     (prepare-change-group))))))))))
 
+(defun conn--kapply-individual-undos (iterator)
+  (let (handle)
+    (lambda (state)
+      (pcase state
+        (:record
+         (prog1
+             (funcall iterator state)
+           (setq handle (prepare-change-group))
+           (activate-change-group handle)))
+        (:finalize
+         (accept-change-group handle)
+         (undo-amalgamate-change-group handle)
+         (funcall iterator state))
+        (_
+         (accept-change-group handle)
+         (undo-amalgamate-change-group handle)
+         (prog1
+             (funcall iterator state)
+           (undo-boundary)
+           (setq handle (prepare-change-group))
+           (activate-change-group handle)))))))
+
 (defun conn--kapply-save-excursion (iterator)
   (let (saved-excursions)
     (lambda (state)
