@@ -274,7 +274,7 @@ property."
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
                 (conn-query-flag conn-query-flag)
                 (string (minibuffer-with-setup-hook
@@ -301,7 +301,7 @@ property."
   :key "u"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
                 (conn-query-flag conn-query-flag)
                 (regexp (minibuffer-with-setup-hook
@@ -331,7 +331,7 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,thing ,_beg ,_end . ,regions) (conn--read-thing-region "Things")))
-    (conn--kapply-construct-iterator
+    (conn--kapply-compose-iterator
      (if (alist-get :skip-empty args)
          (seq-remove (lambda (reg)
                        (conn-thing-empty-p thing reg))
@@ -355,7 +355,7 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing" nil t)))
      (conn--kapply-thing-iterator
       (get cmd :conn-command-thing)
@@ -378,7 +378,7 @@ apply to each contiguous component of the region."
   :key "i"
   :description "Iterate"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (conn--kapply-infinite-iterator)
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -394,7 +394,7 @@ apply to each contiguous component of the region."
   :description "Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (funcall iterator (alist-get :reverse args))
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -411,7 +411,7 @@ apply to each contiguous component of the region."
   :key "m"
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (unwind-protect
        (cond ((bound-and-true-p multi-isearch-file-list)
               (mapcan 'conn--isearch-matches
@@ -456,7 +456,7 @@ apply to each contiguous component of the region."
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
-  (conn--kapply-construct-iterator
+  (conn--kapply-compose-iterator
    (save-excursion
      (goto-char (point-min))
      (let (regions)

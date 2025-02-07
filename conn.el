@@ -1590,12 +1590,14 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
             (apply app))
     (apply app)))
 
-(defun conn--repeat-advice (&rest app)
+(defun conn--repeat-ad (&rest app)
   (unwind-protect
       (apply app)
-    (setq conn-this-command-thing (conn--command-property :conn-command-thing)
-          conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
-                                        (conn--command-property :conn-mark-handler)))))
+    (setq conn-this-command-thing
+          (conn--command-property :conn-command-thing)
+          conn-this-command-handler
+          (or (alist-get this-command conn-mark-handler-overrides-alist)
+              (conn--command-property :conn-mark-handler)))))
 
 (defun conn--push-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
@@ -1628,7 +1630,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                     'conn--read-from-suggestions-ad)
         (advice-add 'read-regexp-suggestions :around
                     'conn--read-from-suggestions-ad)
-        (advice-add 'repeat :around #'conn--repeat-advice)
+        (advice-add 'repeat :around #'conn--repeat-ad)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'pop-mark :before #'conn--pop-mark-ad)
         (advice-add 'set-mark :before #'conn--set-mark-ad)
@@ -1642,7 +1644,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
     (advice-remove 'read-regexp-suggestions
                    'conn--read-from-suggestions-ad)
     (advice-remove 'set-mark #'conn--set-mark-ad)
-    (advice-remove 'repeat #'conn--repeat-advice)
+    (advice-remove 'repeat #'conn--repeat-ad)
     (advice-remove 'pop-mark #'conn--pop-mark-ad)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
@@ -1671,7 +1673,7 @@ If any function returns a nil value then macro application it halted.")
 
 (defvar conn--kapply-automatic-flag nil)
 
-(defun conn--kapply-construct-iterator (regions &rest ctors)
+(defun conn--kapply-compose-iterator (regions &rest ctors)
   (let ((iterator regions))
     (pcase-dolist ((or `(,constructor . ,args) constructor) ctors)
       (setq iterator (apply constructor iterator args)))
@@ -2128,16 +2130,8 @@ The iterator must be the first argument in ARGLIST.
      (conn--push-ephemeral-mark (if (= (point) end) beg end)))))
 
 (defun conn-jump-handler (beg)
-  "Mark trail handler.
-The mark trail handler pushes an ephemeral mark at the starting point
-of the movement command unless `region-active-p'."
   (unless (= beg (point))
     (conn--push-ephemeral-mark beg)))
-
-(defun conn-set-command-handler (handler &rest commands)
-  "Register a thing movement command for THING."
-  (dolist (cmd (ensure-list commands))
-    (put cmd :conn-mark-handler handler)))
 
 (defun conn--mark-cursor-p (ov)
   (eq (overlay-get ov 'category) 'conn--mark-cursor))
@@ -2311,7 +2305,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'char nil
- 'forward-char 'backward-char
+ 'forward-char 'backward-char)
+
+(conn-register-thing-commands
+ 'char 'conn--goto-string-handler
  'conn-forward-char 'conn-backward-char)
 
 (conn-register-thing
@@ -2479,19 +2476,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'back-to-indentation
  'conn-beginning-of-inner-line
  'conn-end-of-inner-line)
-
-(defvar org-link-any-re)
-
-(conn-register-thing
- 'org-link
- :dispatch-target-finder (lambda ()
-                      (require 'org)
-                      (conn--dispatch-re-matches org-link-any-re t))
- :bounds-op (lambda ()
-              (require 'org)
-              (org-in-regexp org-link-any-re))
- :mark-key "O"
- :modes '(org-mode))
 
 (conn-register-thing-commands
  'org-link 'conn-individual-thing-handler
@@ -4463,10 +4447,6 @@ When called interactively reads STRING with timeout
              (not (eq this-command last-command)))
     (push-mark beg t)))
 
-(conn-set-command-handler 'conn--goto-string-handler
-                          'conn-forward-char
-                          'conn-backward-char)
-
 (defun conn--apply-region-transform (transform-func)
   "Apply TRANSFORM-FUNC to region contents.
 Handles rectangular regions."
@@ -6223,6 +6203,17 @@ determine if `conn-local-mode' should be enabled."
   (declare-function org-backward-element "org")
   (declare-function org-mark-element "org")
   (defvar org-link-any-re)
+
+  (conn-register-thing
+   'org-link
+   :dispatch-target-finder (lambda ()
+                             (require 'org)
+                             (conn--dispatch-re-matches org-link-any-re t))
+   :bounds-op (lambda ()
+                (require 'org)
+                (org-in-regexp org-link-any-re))
+   :mark-key "O"
+   :modes '(org-mode))
 
   (conn-register-thing
    'org-paragraph
