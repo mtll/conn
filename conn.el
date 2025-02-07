@@ -59,8 +59,8 @@
 (defvar conn-transition-hook)
 (defvar conn-wincontrol-mode)
 
-(defvar conn-dispatch-provider-default 'conn--dispatch-chars)
-(defvar conn-dispatch-providers-alist nil)
+(defvar conn-dispatch-target-finder-default 'conn--dispatch-chars)
+(defvar conn-dispatch-target-finders-alist nil)
 
 (defvar conn-dispatch-action-default 'conn-dispatch-goto)
 (defvar conn-dispatch-default-action-alist nil)
@@ -797,8 +797,7 @@ If BUFFER is nil check `current-buffer'."
     (buffer-string)))
 
 (defun conn--setup-major-mode-maps ()
-  (setq conn--major-mode-maps nil
-        conn--dispatch-major-modes-maps nil)
+  (setq conn--major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
                    (reverse (conn--derived-mode-all-parents major-mode))))
@@ -1096,11 +1095,11 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (cond (all-windows
          (cl-loop for win in (window-list-1 nil nil 'visible)
                   when (run-hook-with-args-until-failure
-                        'conn-dispatch-window-filters
+                        'conn-dispatch-window-predicates
                         win)
                   collect win))
         ((run-hook-with-args-until-failure
-          'conn-dispatch-window-filters
+          'conn-dispatch-window-predicates
           (selected-window))
          (list (selected-window)))))
 
@@ -2085,8 +2084,8 @@ The iterator must be the first argument in ARGLIST.
 
 \(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
-  (when-let ((finder (plist-get rest :dispatch-provider)))
-    (setf (alist-get thing conn-dispatch-providers-alist) finder))
+  (when-let ((finder (plist-get rest :dispatch-target-finder)))
+    (setf (alist-get thing conn-dispatch-target-finders-alist) finder))
   (when-let ((action (plist-get rest :default-action)))
     (setf (alist-get thing conn-dispatch-default-action-alist) action))
   (when-let ((forward (plist-get rest :forward-op)))
@@ -2276,7 +2275,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'defun
  :forward-op 'conn-forward-defun
- :dispatch-provider (apply-partially 'conn--dispatch-all-things 'defun t))
+ :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'defun t))
 
 (conn-register-thing
  'region
@@ -2317,7 +2316,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'symbol
  :forward-op 'forward-symbol
- :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
+ :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
 
 (conn-register-thing-commands
  'symbol 'conn-sequential-thing-handler
@@ -2340,7 +2339,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'word
  :forward-op 'forward-word
- :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
+ :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
 
 (conn-register-thing-commands
  'word 'conn-sequential-thing-handler
@@ -2349,7 +2348,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'sexp
  :forward-op 'forward-sexp
- :dispatch-provider (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
+ :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
 
 (conn-register-thing-commands
  'sexp 'conn-sequential-thing-handler
@@ -2415,7 +2414,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'sentence
  :forward-op 'forward-sentence
- :dispatch-provider (apply-partially 'conn--dispatch-all-things 'sentence t))
+ :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'sentence t))
 
 (conn-register-thing-commands
  'sentence 'conn-sequential-thing-handler
@@ -2424,7 +2423,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'paragraph
  :forward-op 'forward-paragraph
- :dispatch-provider (apply-partially 'conn--dispatch-all-things 'paragraph t))
+ :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'paragraph t))
 
 (conn-register-thing-commands
  'paragraph 'conn-sequential-thing-handler
@@ -2455,7 +2454,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'line
  :forward-op 'conn-line-forward-op
  :inner-bounds-op (lambda (beg end) (cons beg (1- end)))
- :dispatch-provider 'conn--dispatch-lines)
+ :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'line 'conn-sequential-thing-handler
@@ -2465,7 +2464,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'line-column
  :forward-op 'next-line
- :dispatch-provider 'conn--dispatch-columns
+ :dispatch-target-finder 'conn--dispatch-columns
  :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
@@ -2477,7 +2476,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'outer-line
  :beg-op (lambda () (move-beginning-of-line nil))
  :end-op (lambda () (move-end-of-line nil))
- :dispatch-provider 'conn--dispatch-lines)
+ :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
  'outer-line 'conn-individual-thing-handler
@@ -2495,7 +2494,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing
  'inner-line
  :bounds-op 'conn--bounds-of-inner-line
- :dispatch-provider 'conn--dispatch-inner-lines)
+ :dispatch-target-finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
  'inner-line 'conn-individual-thing-handler
@@ -2507,7 +2506,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing
  'org-link
- :dispatch-provider (lambda ()
+ :dispatch-target-finder (lambda ()
                       (require 'org)
                       (conn--dispatch-re-matches org-link-any-re t))
  :bounds-op (lambda ()
@@ -2536,11 +2535,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar conn--dispatch-mode-maps nil)
 
-(defvar-local conn--dispatch-major-modes-maps nil)
-
 (defvar conn--dispatch-overriding-map nil)
 
-(defvar conn-dispatch-window-filters
+(defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
 
 (defun conn-get-mode-dispatch-map (mode)
@@ -2561,15 +2558,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "c" 'conn-dispatch-copy
   "a" 'conn-dispatch-copy-append
   "p" 'conn-dispatch-copy-prepend
-  "l" 'forward-line
-  "u" 'forward-symbol
-  "j" 'backward-char
-  "U" `(symbol
-        ,(apply-partially 'conn--dispatch-all-things 'symbol t)
-        . conn-dispatch-goto)
-  "O" `(word
-        ,(apply-partially 'conn--dispatch-all-things 'word t)
-        . conn-dispatch-goto)
   "C-h" 'help
   "." 'reset-arg
   "C-d" 'forward-delete-arg
@@ -2583,13 +2571,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (cl-loop for (var . map) in conn--dispatch-mode-maps
              when (ignore-errors
                     (and (not (plist-member (symbol-plist var) 'derived-mode-parent))
-                         (eq t (symbol-value var))))
+                         (symbol-value var)))
              collect map)
     (cl-loop for mmode in (if (get major-mode :conn-inhibit-inherit-maps)
                               (list major-mode)
-                            (reverse (conn--derived-mode-all-parents major-mode)))
+                            (conn--derived-mode-all-parents major-mode))
              collect (conn-get-mode-dispatch-map mmode))
-    conn--dispatch-major-modes-maps
     (list conn-dispatch-read-thing-mode-map))))
 
 (define-minor-mode conn-dispatch-read-thing-mode
@@ -2604,25 +2591,25 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          'overriding-terminal-local-map)))
 
 (defun conn--dispatch-finder (command)
-  (or (alist-get command conn-dispatch-providers-alist)
-      (alist-get (get command :conn-command-thing) conn-dispatch-providers-alist)
-      conn-dispatch-provider-default))
+  (or (alist-get command conn-dispatch-target-finders-alist)
+      (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
+      conn-dispatch-target-finder-default))
 
 (defun conn--dispatch-default-action (command)
   (or (alist-get command conn-dispatch-default-action-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
       conn-dispatch-action-default))
 
-(setf (alist-get 'conn-end-of-inner-line conn-dispatch-providers-alist)
+(setf (alist-get 'conn-end-of-inner-line conn-dispatch-target-finders-alist)
       'conn--dispatch-inner-lines-end)
 
-(setf (alist-get 'move-end-of-line conn-dispatch-providers-alist)
+(setf (alist-get 'move-end-of-line conn-dispatch-target-finders-alist)
       'conn--dispatch-lines-end)
 
-(setf (alist-get 'conn-backward-symbol conn-dispatch-providers-alist)
+(setf (alist-get 'conn-backward-symbol conn-dispatch-target-finders-alist)
       (apply-partially 'conn--dispatch-all-things 'symbol t))
 
-(setf (alist-get 'backward-word conn-dispatch-providers-alist)
+(setf (alist-get 'backward-word conn-dispatch-target-finders-alist)
       (apply-partially 'conn--dispatch-all-things 'word t))
 
 (defun conn--dispatch-fixup-whitespace ()
@@ -2639,20 +2626,21 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (join-line)))
 
 (defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-FILTER KEY MODES &body BODY)"
+  "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
   (declare (debug ( name lambda-expr
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :description :filter :window-filter :key :modes)
+  (pcase-let* (((map :description :filter :window-predicate :key :modes)
                 rest)
                (menu-item `( 'menu-item
                              ,(or description (symbol-name name))
                              ',name
                              ,@(when filter
                                  `(:filter (lambda (_)
-                                             (unless (funcall ,filter)
-                                               ',name))))))
+                                             (pcase (funcall ,filter)
+                                               ('this ',name)
+                                               (res res)))))))
                (body (cl-loop for sublist on rest by #'cddr
                               unless (keywordp (car sublist))
                               do (cl-return sublist))))
@@ -2660,7 +2648,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
        (defun ,name ,arglist ,@body)
        (put ',name :conn-action t)
        (put ',name :conn-action-description ,(cadr menu-item))
-       (put ',name :conn-action-window-filter ,window-filter)
+       (put ',name :conn-action-window-predicate ,window-predicate)
        ,(when key
           (if modes
               `(dolist (mode ',(ensure-list modes))
@@ -2669,10 +2657,43 @@ If MMODE-OR-STATE is a mode it must be a major mode."
             `(keymap-set conn-dispatch-read-thing-mode-map
                          ,key (list ,@menu-item)))))))
 
+(defmacro conn-define-dispatch-thing (thing &rest rest)
+  "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
+  (declare (debug (name [&rest keywordp form]))
+           (indent 1))
+  (pcase-let* (((map :key :modes :target-finder :default-action)
+                rest))
+    (if modes
+        `(dolist (mode ',(ensure-list modes))
+           (keymap-set (conn-get-mode-dispatch-map mode)
+                       ,key `(,',thing
+                              ,(or ,target-finder
+                                   (conn--dispatch-finder ',thing))
+                              .
+                              ,',default-action)))
+      `(keymap-set conn-dispatch-read-thing-mode-map
+                   ,key `(,',thing
+                          ,(or ,target-finder
+                               (conn--dispatch-finder ',thing))
+                          .
+                          ,',default-action)))))
+
+(conn-define-dispatch-thing line :key "l")
+(conn-define-dispatch-thing symbol :key "u")
+(conn-define-dispatch-thing char :key "j")
+
+(conn-define-dispatch-thing word
+  :key "O"
+  :target-finder (apply-partially 'conn--dispatch-all-things 'word t))
+
+(conn-define-dispatch-thing symbol
+  :key "U"
+  :target-finder (apply-partially 'conn--dispatch-all-things 'symbol t))
+
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing)
   :description "Kill"
   :key "w"
-  :window-filter (lambda () buffer-read-only)
+  :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2687,7 +2708,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-kill-append (window pt thing)
   :description "Kill Append"
   :key "]"
-  :window-filter (lambda () buffer-read-only)
+  :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2703,7 +2724,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-kill-prepend (window pt thing)
   :description "Kill Prepend"
   :key "["
-  :window-filter (lambda () buffer-read-only)
+  :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2758,7 +2779,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-yank-replace (window pt thing)
   :description "Yank Replace"
   :key "f"
-  :filter (lambda () buffer-read-only)
+  :filter (lambda () (unless buffer-read-only 'this))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2774,8 +2795,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-grab-replace (window pt thing)
   :description "Grab Replace"
   :key "d"
-  :filter (lambda () buffer-read-only)
-  :window-filter (lambda () buffer-read-only)
+  :filter (lambda () (unless buffer-read-only 'this))
+  :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2790,8 +2811,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-grab (window pt thing)
   :description "Grab"
   :key "s"
-  :filter (lambda () buffer-read-only)
-  :window-filter (lambda () buffer-read-only)
+  :filter (lambda () (unless buffer-read-only 'this))
+  :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2805,7 +2826,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-yank (window pt thing)
   :description "Yank"
   :key "y"
-  :filter (lambda () buffer-read-only)
+  :filter (lambda () (unless buffer-read-only 'this))
   (let (str)
     (with-selected-window window
       (save-excursion
@@ -2884,8 +2905,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-transpose (window pt thing)
   :description "Transpose"
   :key "q"
-  :filter (lambda () buffer-read-only)
-  :window-filter (lambda () buffer-read-only)
+  :filter (lambda () (unless buffer-read-only 'this))
+  :window-predicate (lambda () buffer-read-only)
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
                  (cons (region-beginning) (region-end))
@@ -2943,16 +2964,16 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
 
-(defun conn--dispatch-window-filter (action thing binding keys)
+(defun conn--dispatch-window-predicate (action thing binding keys)
   (lambda (win)
     (with-selected-window win
       (conn--with-state (lambda () (when conn-local-mode (conn-state)))
         (let ((maps (list (conn--create-dispatch-map)
                           (current-global-map)))
-              (window-filter (get action :conn-action-window-filter)))
+              (window-predicate (get action :conn-action-window-predicate)))
           (and
-           (or (null window-filter)
-               (not (funcall window-filter)))
+           (or (null window-predicate)
+               (not (funcall window-predicate)))
            (or (when-let* ((cmd (key-binding keys t))
                            ((symbolp cmd)))
                  (eq thing (get cmd :conn-command-thing)))
@@ -3311,9 +3332,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (cl-return
                (list thing
                      finder
-                     (or action default-action)
+                     (or action
+                         default-action
+                         (conn--dispatch-default-action thing))
                      (* (if thing-sign -1 1) (or thing-arg 1))
-                     (conn--dispatch-window-filter action thing cmd keys)
+                     (conn--dispatch-window-predicate action thing cmd keys)
                      current-prefix-arg)))
              ('keyboard-quit
               (keyboard-quit))
@@ -3361,7 +3384,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (conn--dispatch-finder cmd)
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
-                     (conn--dispatch-window-filter action thing cmd keys)
+                     (conn--dispatch-window-predicate action thing cmd keys)
                      current-prefix-arg)))
              ((and (pred symbolp)
                    (guard (get cmd :conn-action)))
@@ -3386,11 +3409,11 @@ The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
   (let ((current-prefix-arg arg)
-        (conn-dispatch-window-filters
+        (conn-dispatch-window-predicates
          (if predicate
-             (append conn-dispatch-window-filters
+             (append conn-dispatch-window-predicates
                      (list predicate))
-           conn-dispatch-window-filters))
+           conn-dispatch-window-predicates))
         prefix-ovs labels)
     (unwind-protect
         (progn
@@ -6241,7 +6264,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'org-paragraph
-   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
+   :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
    :forward-op 'org-forward-paragraph
    :mark-key "I"
    :modes '(org-mode))
@@ -6316,7 +6339,7 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing
    'org-heading
    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
-   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'org-heading t)
+   :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'org-heading t)
    :forward-op 'org-next-visible-heading
    :modes '(org-mode))
 
@@ -6536,7 +6559,7 @@ determine if `conn-local-mode' should be enabled."
   (conn-register-thing
    'heading
    :mark-cmd t
-   :dispatch-provider (apply-partially 'conn--dispatch-all-things 'heading t)
+   :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'heading t)
    :bounds-op (lambda ()
                 (save-mark-and-excursion
                   (outline-mark-subtree)
@@ -6628,7 +6651,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'dired-line
-   :dispatch-provider 'conn--dispatch-dired-lines)
+   :dispatch-target-finder 'conn--dispatch-dired-lines)
 
   (conn-register-thing-commands
    'dired-line nil
@@ -6636,7 +6659,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'dired-subdir
-   :dispatch-provider 'conn--dispatch-dired-subdir)
+   :dispatch-target-finder 'conn--dispatch-dired-subdir)
 
   (conn-register-thing-commands
    'dired-subdir nil
@@ -6645,7 +6668,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'dired-dirline
-   :dispatch-provider 'conn--dispatch-dired-dirline)
+   :dispatch-target-finder 'conn--dispatch-dired-dirline)
 
   (conn-register-thing-commands
    'dired-dirline nil
@@ -6655,7 +6678,7 @@ determine if `conn-local-mode' should be enabled."
     :description "Mark"
     :key "f"
     :modes (dired-mode)
-    :window-filter (lambda () (eq major-mode 'dired-mode))
+    :window-predicate (lambda () (eq major-mode 'dired-mode))
     (with-selected-window window
       (save-excursion
         (let ((regexp (dired-marker-regexp)))
@@ -6669,7 +6692,7 @@ determine if `conn-local-mode' should be enabled."
     :description "Kill Line"
     :key "w"
     :modes (dired-mode)
-    :window-filter (lambda () (eq major-mode 'dired-mode))
+    :window-predicate (lambda () (eq major-mode 'dired-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -6679,7 +6702,7 @@ determine if `conn-local-mode' should be enabled."
     :description "Kill Subdir"
     :key "d"
     :modes (dired-mode)
-    :window-filter (lambda () (eq major-mode 'dired-mode))
+    :window-predicate (lambda () (eq major-mode 'dired-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -6743,7 +6766,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'ibuffer-line
-   :dispatch-provider 'conn--dispatch-ibuffer-lines)
+   :dispatch-target-finder 'conn--dispatch-ibuffer-lines)
 
   (conn-register-thing-commands
    'ibuffer-line nil
@@ -6751,7 +6774,7 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'ibuffer-filter-group
-   :dispatch-provider 'conn--dispatch-ibuffer-filter-group)
+   :dispatch-target-finder 'conn--dispatch-ibuffer-filter-group)
 
   (conn-register-thing-commands
    'ibuffer-filter-group nil
@@ -6762,7 +6785,7 @@ determine if `conn-local-mode' should be enabled."
     :description "Mark"
     :key "f"
     :modes (ibuffer-mode)
-    :window-filter (lambda () (eq major-mode 'ibuffer-mode))
+    :window-predicate (lambda () (eq major-mode 'ibuffer-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
