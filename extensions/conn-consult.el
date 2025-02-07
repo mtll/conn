@@ -138,22 +138,7 @@
      :state (consult--location-state candidates)
      :group #'consult--line-multi-group)))
 
-;;;###autoload
-(defvar-keymap conn-consult-region-search-map
-  :prefix 'conn-consult-region-search-map
-  "o" 'conn-consult-line-region
-  "O" 'conn-consult-line-multi-region
-  "l" 'conn-consult-locate-region
-  "i" 'conn-consult-git-grep-region
-  "f" 'conn-consult-find-region
-  "g" 'conn-consult-ripgrep-region)
-
-(keymap-set conn-region-map "o" 'conn-consult-line-region)
-(keymap-set conn-region-map "O" 'conn-consult-line-multi-region)
-(keymap-set conn-region-map "g" 'conn-consult-ripgrep-region)
-(keymap-set conn-region-map "h" 'conn-consult-region-search-map)
 (keymap-set isearch-mode-map "M-s o" 'conn-consult-isearch-matches)
-(keymap-global-set "M-s T" 'conn-consult-thing)
 
 (provide 'conn-consult)
 
