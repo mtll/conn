@@ -2546,24 +2546,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
             (make-sparse-keymap))))
 
 (defvar-keymap conn-dispatch-read-thing-mode-map
-  "[" 'conn-dispatch-kill-append
-  "]" 'conn-dispatch-kill-prepend
-  "w" 'conn-dispatch-kill
-  "s" 'conn-dispatch-grab
-  "q" 'conn-dispatch-transpose
-  "d" 'conn-dispatch-grab-replace
-  "e" 'conn-dispatch-over
-  "f" 'conn-dispatch-yank-replace
-  "y" 'conn-dispatch-yank
-  "c" 'conn-dispatch-copy
-  "a" 'conn-dispatch-copy-append
-  "p" 'conn-dispatch-copy-prepend
   "C-h" 'help
   "." 'reset-arg
   "C-d" 'forward-delete-arg
-  "C-w" 'backward-delete-arg
-  "z" 'conn-dispatch-jump
-  "g" 'conn-dispatch-goto)
+  "C-w" 'backward-delete-arg)
 
 (defun conn--create-dispatch-map ()
   (make-composed-keymap
@@ -2895,6 +2881,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-define-dispatch-action conn-dispatch-jump (window pt _thing)
   :description "Jump"
+  :key "z"
   (with-current-buffer (window-buffer window)
     (unless (= pt (point))
       (unless (region-active-p)
