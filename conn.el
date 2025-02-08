@@ -4929,7 +4929,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (goto-char end)
     (conn--push-ephemeral-mark (+ (point) (length region)))))
 
-(defun conn-duplicate (beg end arg)
+(defun conn-duplicate-region (beg end arg)
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
@@ -4943,22 +4943,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (set-marker end nil)
         (indent-region (region-beginning) (region-end))))))
 
-(defun conn-duplicate-and-comment (beg end &optional arg)
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (prefix-numeric-value current-prefix-arg)))
-  (pcase-let* ((origin (point))
-               (region (buffer-substring-no-properties beg end)))
-    (comment-or-uncomment-region beg end)
-    (setq end (line-end-position))
-    (dotimes (_ arg)
-      (goto-char end)
-      (newline)
-      (insert region)
-      (setq end (point)))
-    (goto-char (+ origin (* (length region) arg) arg))))
-
-(defun conn-duplicate-region (thing-mover thing-arg N)
+(defun conn-duplicate-thing (thing-mover thing-arg N)
   (interactive (append (conn--read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
@@ -4973,7 +4958,22 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
            (indent-region beg (point))
            (set-marker end nil)))))))
 
-(defun conn-duplicate-and-comment-region (thing-mover thing-arg N)
+(defun conn-duplicate-and-comment-region (beg end &optional arg)
+  (interactive (list (region-beginning)
+                     (region-end)
+                     (prefix-numeric-value current-prefix-arg)))
+  (pcase-let* ((origin (point))
+               (region (buffer-substring-no-properties beg end)))
+    (comment-or-uncomment-region beg end)
+    (setq end (line-end-position))
+    (dotimes (_ arg)
+      (goto-char end)
+      (newline)
+      (insert region)
+      (setq end (point)))
+    (goto-char (+ origin (* (length region) arg) arg))))
+
+(defun conn-duplicate-and-comment-thing (thing-mover thing-arg N)
   (interactive (append (conn--read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
@@ -5468,12 +5468,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (interactive)
   (let ((pre-hook (make-symbol "one-command-pre-hook")))
     (fset pre-hook (lambda ()
-                     (unless (memq this-command '(conn-wincontrol-forward-delete-arg
-                                                  conn-wincontrol-backward-delete-arg
-                                                  conn-wincontrol-digit-argument-reset
-                                                  conn-wincontrol-invert-argument
-                                                  conn-wincontrol-digit-argument
-                                                  conn-wincontrol-universal-arg))
+                     (unless (memq this-command
+                                   '(conn-wincontrol-forward-delete-arg
+                                     conn-wincontrol-backward-delete-arg
+                                     conn-wincontrol-digit-argument-reset
+                                     conn-wincontrol-invert-argument
+                                     conn-wincontrol-digit-argument
+                                     conn-wincontrol-universal-arg))
                        (remove-hook 'pre-command-hook pre-hook)
                        (conn-wincontrol-exit))))
     (conn-wincontrol)
@@ -5493,8 +5494,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 When called interactively N is `last-command-event'."
   (interactive (list (- (logand last-command-event ?\177) ?0)))
   (if conn--wincontrol-arg
-      (setq conn--wincontrol-arg (+ (if (>= (or conn--wincontrol-arg 1) 0) N (- N))
-                                    (* 10 (or conn--wincontrol-arg 1))))
+      (setq conn--wincontrol-arg
+            (+ (if (>= (or conn--wincontrol-arg 1) 0) N (- N))
+               (* 10 (or conn--wincontrol-arg 1))))
     (setq conn--wincontrol-arg N))
   (setq this-command 'conn-wincontrol-digit-argument))
 
@@ -5837,8 +5839,8 @@ When ARG is nil the root window is used."
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  "." 'conn-duplicate
-  "'" 'conn-duplicate-and-comment
+  "," 'conn-duplicate-region
+  "'" 'conn-duplicate-and-comment-region
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -5847,8 +5849,8 @@ When ARG is nil the root window is used."
   "a u" 'align-unhighlight-rule
   "b" 'conn-comment-or-uncomment-region
   "c" 'conn-region-case-prefix
-  "d" 'conn-duplicate-and-comment-region
-  "e" 'conn-duplicate-region
+  "d" 'conn-duplicate-and-comment-thing
+  "e" 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
   "j" 'conn-join-lines
@@ -5856,7 +5858,7 @@ When ARG is nil the root window is used."
   "m e" 'conn-kapply-emacs-on-region
   "m c" 'conn-kapply-conn-on-region
   "I" 'indent-rigidly
-  "," 'conn-narrow-indirect-to-region
+  "." 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
   "s" 'conn-sort-prefix
   "o" 'conn-occur-region
