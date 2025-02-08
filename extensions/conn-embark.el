@@ -45,14 +45,6 @@
   (interactive)
   (embark-bindings-in-keymap (alist-get conn-current-state conn--state-maps)))
 
-(setf (alist-get 'conn-replace-region-substring embark-target-injection-hooks)
-      (list #'embark--ignore-target))
-
-(add-to-list 'embark-target-injection-hooks
-             '(conn-insert-pair embark--ignore-target))
-(add-to-list 'embark-target-injection-hooks
-             '(conn-change-pair embark--ignore-target))
-
 (provide 'conn-embark)
 
 ;; Local Variables:
