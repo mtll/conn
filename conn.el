@@ -2592,12 +2592,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (join-line)))
 
 (defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
+  "\(fn NAME ARGLIST &key READER DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
   (declare (debug ( name lambda-expr
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :description :filter :window-predicate :key :modes)
+  (pcase-let* (((map :description :reader :filter :window-predicate :key :modes)
                 rest)
                (menu-item `( 'menu-item
                              ,(or description (symbol-name name))
@@ -2613,6 +2613,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     `(progn
        (defun ,name ,arglist ,@body)
        (put ',name :conn-action t)
+       (put ',name :conn-action-reader (lambda () ,reader))
        (put ',name :conn-action-description ,(cadr menu-item))
        (put ',name :conn-action-window-predicate ,window-predicate)
        ,(when key
@@ -2669,14 +2670,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (message "Commented %s" thing))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-register (window pt thing)
+(conn-define-dispatch-action conn-dispatch-register (window pt thing register)
   :description "Register"
   :key "p"
-  (let ((register (register-read-with-preview "Register: ")))
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (conn-register-load register)))))
+  :reader (list (register-read-with-preview "Register: "))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (conn-register-load register))))
 
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing)
   :description "Kill"
@@ -3285,7 +3286,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
+(defvar conn--dispatch-action-args nil)
+
+(defun conn--read-action-args (action)
+  (setq conn--dispatch-action-args
+        (when (ignore-errors (get action :conn-action-reader))
+          (funcall (get action :conn-action-reader)))))
+
 (defun conn--dispatch-read-thing (&optional default-action override-maps)
+  (setq conn--dispatch-action-args nil)
   (let ((prompt (substitute-command-keys
                  (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
@@ -3318,6 +3327,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            :loop
            (pcase cmd
              (`(,thing ,finder . ,default-action)
+              (unless action
+                (conn--read-action-args
+                 (or default-action
+                     (conn--dispatch-default-action thing))))
               (cl-return
                (list thing
                      finder
@@ -3368,6 +3381,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (apply #'conn-dispatch-read-thing-mode 1 override-maps)
               (go :loop))
              ((let (and thing (pred identity)) (get cmd :conn-command-thing))
+              (unless action
+                (conn--read-action-args (conn--dispatch-default-action cmd)))
               (cl-return
                (list thing
                      (conn--dispatch-finder cmd)
@@ -3377,7 +3392,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      current-prefix-arg)))
              ((and (pred symbolp)
                    (guard (get cmd :conn-action)))
-              (setq action (unless (eq cmd action) cmd)))
+              (setq action (unless (eq cmd action) cmd))
+              (conn--read-action-args action))
              (_
               (setq invalid t)))
            (go :read-command))
@@ -3430,7 +3446,7 @@ seconds."
                  (pt (overlay-start prefix)))
             (setq conn-this-command-thing
                   (or (overlay-get prefix 'thing) thing))
-            (funcall action window pt conn-this-command-thing)))
+            (apply action window pt conn-this-command-thing conn--dispatch-action-args)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs)))
     (setq conn--last-dispatch-command (list thing finder action arg predicate repeat))
@@ -4889,7 +4905,7 @@ If ARG is a numeric prefix argument kill region to a register."
            (concat "Kill "
                    (if (bound-and-true-p rectangle-mark-mode)
                        "Rectangle "
-                     " ")
+                     "")
                    "to register:")
            (register-read-with-preview)
            (copy-to-register nil nil t t)))
