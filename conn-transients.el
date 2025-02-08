@@ -820,7 +820,8 @@ apply to each contiguous component of the region."
   [ "Register Store:"
     [ ("v" "Point" point-to-register)
       ("m" "Macro" kmacro-to-register)
-      ("t" "Tab" conn-tab-to-register)]
+      ("t" "Tab" conn-tab-to-register)
+      ("d" "Command" conn-command-to-register)]
     [ ("f" "Frameset" frameset-to-register)
       ("r" "Rectangle" copy-rectangle-to-register)
       ("w" "Window Configuration" window-configuration-to-register)]]

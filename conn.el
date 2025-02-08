@@ -2669,6 +2669,15 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (message "Commented %s" thing))
         (_ (user-error "Cannot find %s at point" thing))))))
 
+(conn-define-dispatch-action conn-dispatch-register (window pt thing)
+  :description "Register"
+  :key "p"
+  (let ((register (register-read-with-preview "Register: ")))
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (conn-register-load register)))))
+
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing)
   :description "Kill"
   :key "w"
@@ -2731,7 +2740,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-define-dispatch-action conn-dispatch-copy-append (window pt thing)
   :description "Copy Append"
-  :key "a"
+  :key "}"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -2744,7 +2753,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing)
   :description "Copy Prepend"
-  :key "p"
+  :key "{"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -5839,8 +5848,8 @@ When ARG is nil the root window is used."
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  "," 'conn-duplicate-region
-  "'" 'conn-duplicate-and-comment-region
+  "e" 'conn-duplicate-region
+  "d" 'conn-duplicate-and-comment-region
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -5849,8 +5858,8 @@ When ARG is nil the root window is used."
   "a u" 'align-unhighlight-rule
   "b" 'conn-comment-or-uncomment-region
   "c" 'conn-region-case-prefix
-  "d" 'conn-duplicate-and-comment-thing
-  "e" 'conn-duplicate-thing
+  "'" 'conn-duplicate-and-comment-thing
+  "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
   "u" 'conn-join-lines
@@ -5954,7 +5963,6 @@ When ARG is nil the root window is used."
   "DEL" 'conn-change-whole-line
   "," 'clone-indirect-buffer
   "h" 'conn-change-line
-  "_" 'conn-command-to-register
   "o" 'conn-open-line-and-indent
   "n" 'conn-open-line-above
   "m" 'conn-open-line
