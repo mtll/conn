@@ -5853,7 +5853,7 @@ When ARG is nil the root window is used."
   "e" 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "j" 'conn-join-lines
+  "u" 'conn-join-lines
   "m t" 'conn-kapply-replace-region
   "m e" 'conn-kapply-emacs-on-region
   "m c" 'conn-kapply-conn-on-region
@@ -5948,6 +5948,7 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "u" 'join-line
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
