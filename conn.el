@@ -3341,33 +3341,29 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
-(defvar conn--dispatch-action-args nil)
-
-(defun conn--read-action-args (action)
-  (setq conn--dispatch-action-args
-        (when (ignore-errors (get action :conn-action-reader))
-          (funcall (get action :conn-action-reader)))))
-
 (defun conn--dispatch-read-thing (&optional default-action override-maps)
-  (cl-flet ((action-description (action)
-              (if-let* ((desc (get action :conn-action-description)))
-                  (propertize
-                   (if (stringp desc)
-                       (apply #'format desc conn--dispatch-action-args)
-                     (apply desc conn--dispatch-action-args))
-                   'face 'eldoc-highlight-function-argument)
-                "")))
-    (setq conn--dispatch-action-args nil)
-    (let ((prompt (substitute-command-keys
-                   (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
-                           (propertize "%s" 'face 'read-multiple-choice-face)
-                           ", \\[reset-arg] reset arg; "
-                           "\\[repeat] %s; "
-                           "\\[help] commands): %s")))
-          (repeat-indicator "repeatedly")
-          (action default-action)
-          keys cmd invalid thing-arg thing-sign repeat)
-      (conn--read-action-args action)
+  (let* ((prompt (substitute-command-keys
+                  (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
+                          (propertize "%s" 'face 'read-multiple-choice-face)
+                          ", \\[reset-arg] reset arg; "
+                          "\\[repeat] %s; "
+                          "\\[help] commands): %s")))
+         (repeat-indicator "repeatedly")
+         (action default-action)
+         action-args keys cmd invalid thing-arg thing-sign repeat)
+    (cl-flet
+        ((action-description (action)
+           (if-let* ((desc (get action :conn-action-description)))
+               (propertize
+                (if (stringp desc)
+                    (apply #'format desc action-args)
+                  (apply desc action-args))
+                'face 'eldoc-highlight-function-argument)
+             ""))
+         (read-action-args (action)
+           (when (ignore-errors (get action :conn-action-reader))
+             (funcall (get action :conn-action-reader)))))
+      (setq action-args (read-action-args action))
       (conn--with-state (lambda () (when conn-local-mode (conn-state)))
         (apply #'conn-dispatch-read-thing-mode 1 override-maps)
         (unwind-protect
@@ -3394,17 +3390,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              :loop
              (pcase cmd
                (`(,thing ,finder . ,default-action)
-                (unless action
-                  (conn--read-action-args
-                   (or default-action
-                       (conn--dispatch-default-action thing))))
                 (cl-return
                  (list thing
+                       (* (if thing-sign -1 1) (or thing-arg 1))
                        finder
                        (or action
                            default-action
                            (conn--dispatch-default-action thing))
-                       (* (if thing-sign -1 1) (or thing-arg 1))
+                       (if action
+                           action-args
+                         (read-action-args
+                          (or default-action
+                              (conn--dispatch-default-action thing))))
                        (conn--dispatch-window-predicate action thing cmd keys)
                        repeat)))
                ('keyboard-quit
@@ -3454,26 +3451,28 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (apply #'conn-dispatch-read-thing-mode 1 override-maps)
                 (go :loop))
                ((let (and thing (pred identity)) (get cmd :conn-command-thing))
-                (unless action
-                  (conn--read-action-args (conn--dispatch-default-action cmd)))
                 (cl-return
                  (list thing
+                       (* (if thing-sign -1 1) (or thing-arg 1))
                        (conn--dispatch-finder cmd)
                        (or action (conn--dispatch-default-action cmd))
-                       (* (if thing-sign -1 1) (or thing-arg 1))
+                       (if action
+                           action-args
+                         (read-action-args (conn--dispatch-default-action cmd)))
                        (conn--dispatch-window-predicate action thing cmd keys)
                        repeat)))
                ((and (pred symbolp)
                      (guard (get cmd :conn-action)))
-                (setq action (unless (eq cmd action) cmd))
-                (conn--read-action-args action))
+                (setq action (unless (eq cmd action) cmd)
+                      action-args (read-action-args action)))
                (_
                 (setq invalid t)))
              (go :read-command))
           (message nil)
           (conn-dispatch-read-thing-mode -1))))))
 
-(defun conn-dispatch-on-things (thing finder action arg &optional predicate repeat)
+(defun conn-dispatch-on-things ( thing thing-arg finder action action-args
+                                 &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -3486,7 +3485,7 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
-  (let ((current-prefix-arg arg)
+  (let ((current-prefix-arg thing-arg)
         (conn-dispatch-window-predicates
          (if predicate
              (append conn-dispatch-window-predicates
@@ -3524,12 +3523,13 @@ seconds."
                 ;;        aggressive-indent-mode not to indent for
                 ;;        some reason
                 (undo-boundary)
-                (apply action window pt conn-this-command-thing conn--dispatch-action-args))
+                (apply action window pt conn-this-command-thing action-args))
            ;; TODO: allow undo while repeating
            while repeat))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs))
-      (setq conn--last-dispatch-command (list thing finder action arg predicate repeat)))))
+      (setq conn--last-dispatch-command (list thing thing-arg finder action
+                                              action-args predicate repeat)))))
 
 (defun conn-repeat-last-dispatch ()
   (interactive)
