@@ -3522,10 +3522,11 @@ seconds."
                       (or (overlay-get prefix 'thing) thing))
                 (apply action window pt conn-this-command-thing conn--dispatch-action-args))
            while repeat
+           ;; TODO: allow undo while repeating
            do (undo-boundary)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-        (mapc #'delete-overlay ovs)))
-    (setq conn--last-dispatch-command (list thing finder action arg predicate repeat))))
+        (mapc #'delete-overlay ovs))
+      (setq conn--last-dispatch-command (list thing finder action arg predicate repeat)))))
 
 (defun conn-repeat-last-dispatch ()
   (interactive)
