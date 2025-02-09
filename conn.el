@@ -1221,7 +1221,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "C-<backspace>" 'reset-arg
   "M-<backspace>" 'reset-arg
   "M-DEL" 'reset-arg
-  "," 'reset-arg
+  "`" 'reset-arg
   "k" 'forward-line
   "o" 'move-end-of-line
   "<remap> <conn-forward-char>" 'forward-char
@@ -2527,7 +2527,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar-keymap conn-dispatch-read-thing-mode-map
   "C-h" 'help
-  "," 'reset-arg
+  "`" 'reset-arg
   "." 'repeat
   "C-d" 'forward-delete-arg
   "C-w" 'backward-delete-arg)
@@ -5374,7 +5374,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-u" 'conn-wincontrol-universal-arg
   "`" 'quit-window
   "-" 'conn-wincontrol-invert-argument
-  "." 'conn-wincontrol-digit-argument-reset
+  "," 'conn-wincontrol-digit-argument-reset
   "/" 'tab-bar-history-back
   "0" 'conn-wincontrol-digit-argument
   "1" 'conn-wincontrol-digit-argument
@@ -5409,7 +5409,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-<tab>" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
-  "," 'conn-wincontrol-maximize-horizontally
+  "." 'conn-wincontrol-maximize-horizontally
   ";" 'conn-wincontrol-exit-to-initial-win
   "b" 'conn-tab-to-register
   "C" 'tab-bar-duplicate-tab

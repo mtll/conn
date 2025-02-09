@@ -27,7 +27,7 @@
 
 (conn-define-dispatch-action conn-embark-dwim (window pt _thing)
   :description "Embark-DWIM"
-  :key "<tab>"
+  :key "TAB"
   (with-selected-window window
     (save-excursion
       (goto-char pt)
