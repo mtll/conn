@@ -1221,7 +1221,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "C-<backspace>" 'reset-arg
   "M-<backspace>" 'reset-arg
   "M-DEL" 'reset-arg
-  "." 'reset-arg
+  "," 'reset-arg
   "k" 'forward-line
   "o" 'move-end-of-line
   "<remap> <conn-forward-char>" 'forward-char
@@ -2527,7 +2527,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar-keymap conn-dispatch-read-thing-mode-map
   "C-h" 'help
-  "." 'reset-arg
+  "," 'reset-arg
+  "." 'repeat
   "C-d" 'forward-delete-arg
   "C-w" 'backward-delete-arg)
 
@@ -2670,7 +2671,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (message "Commented %s" thing))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-register (window pt thing register)
+(conn-define-dispatch-action conn-dispatch-register (window pt _thing register)
   :description "Register"
   :key "p"
   :reader (list (register-read-with-preview "Register: "))
@@ -2679,89 +2680,112 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (goto-char pt)
       (conn-register-load register))))
 
-(conn-define-dispatch-action conn-dispatch-kill (window pt thing)
+(conn-define-dispatch-action conn-dispatch-kill (window pt thing register)
   :description "Kill"
   :key "w"
   :window-predicate (lambda () buffer-read-only)
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
-           (kill-region beg end)
+           (if register
+               (copy-to-register register beg end t)
+             (kill-region beg end))
            (conn--dispatch-fixup-whitespace)
            (message "Killed: %s" str)))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-kill-append (window pt thing)
+(conn-define-dispatch-action conn-dispatch-kill-append (window pt thing register)
   :description "Kill Append"
   :key "]"
   :window-predicate (lambda () buffer-read-only)
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
-           (kill-append str nil)
-           (delete-region beg end)
+           (if register
+               (copy-to-register register beg end t)
+             (kill-append str nil)
+             (delete-region beg end))
            (conn--dispatch-fixup-whitespace)
            (message "Appended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-kill-prepend (window pt thing)
+(conn-define-dispatch-action conn-dispatch-kill-prepend (window pt thing register)
   :description "Kill Prepend"
   :key "["
   :window-predicate (lambda () buffer-read-only)
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
-           (kill-append str t)
-           (delete-region beg end)
+           (if register
+               (prepend-to-register register beg end t)
+             (kill-append str t)
+             (delete-region beg end))
            (conn--dispatch-fixup-whitespace)
            (message "Prepended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-copy (window pt thing)
+(conn-define-dispatch-action conn-dispatch-copy (window pt thing register)
   :description "Copy"
   :key "c"
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (pulse-momentary-highlight-region beg end)
-           (kill-new str)))
+         (pulse-momentary-highlight-region beg end)
+         (if register
+             (copy-to-register register beg end)
+           (kill-new (filter-buffer-substring beg end))))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-copy-append (window pt thing)
+(conn-define-dispatch-action conn-dispatch-copy-append (window pt thing register)
   :description "Copy Append"
   :key "}"
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
-           (kill-append str nil)
+           (if register
+               (append-to-register register beg end)
+             (kill-append str nil))
            (message "Copy Appended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing))))))
 
-(conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing)
+(conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing register)
   :description "Copy Prepend"
   :key "{"
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
         (`(,beg . ,end)
          (let ((str (filter-buffer-substring beg end)))
-           (kill-append str t)
+           (if register
+               (prepend-to-register register beg end)
+             (kill-append str t))
            (message "Copy Prepended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing))))))
 
@@ -2812,9 +2836,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (_ (user-error "Cannot find %s at point" thing)))))
   (yank))
 
-(conn-define-dispatch-action conn-dispatch-yank (window pt thing)
+(conn-define-dispatch-action conn-dispatch-yank (window pt thing register)
   :description "Yank"
   :key "y"
+  :reader (list (when current-prefix-arg
+                  (register-read-with-preview "Register: ")))
   :filter (lambda () (unless buffer-read-only 'this))
   (let (str)
     (with-selected-window window
@@ -2823,10 +2849,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
-           (setq str (filter-buffer-substring beg end))))))
-    (if str
-        (insert-for-yank str)
-      (user-error "Cannot find %s at point" thing))))
+           (if register
+               (copy-to-register register beg end)
+             (setq str (filter-buffer-substring beg end)))))))
+    (cond (str
+           (insert-for-yank str))
+          ((null register)
+           (user-error "Cannot find %s at point" thing)))))
 
 (conn-define-dispatch-action conn-dispatch-goto (window pt thing)
   :description "Goto"
@@ -3299,9 +3328,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
                          ", \\[reset-arg] reset arg; "
+                         "\\[repeat] repeat; "
                          "\\[help] commands): %s")))
         (action default-action)
-        keys cmd invalid thing-arg thing-sign)
+        keys cmd invalid thing-arg thing-sign repeat)
     (conn--with-state (lambda () (when conn-local-mode (conn-state)))
       (apply #'conn-dispatch-read-thing-mode 1 override-maps)
       (unwind-protect
@@ -3339,9 +3369,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          (conn--dispatch-default-action thing))
                      (* (if thing-sign -1 1) (or thing-arg 1))
                      (conn--dispatch-window-predicate action thing cmd keys)
-                     current-prefix-arg)))
+                     repeat)))
              ('keyboard-quit
               (keyboard-quit))
+             ('repeat
+              (setq repeat (not repeat)))
              ('digit-argument
               (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
                 (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
@@ -3389,7 +3421,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (or action (conn--dispatch-default-action cmd))
                      (* (if thing-sign -1 1) (or thing-arg 1))
                      (conn--dispatch-window-predicate action thing cmd keys)
-                     current-prefix-arg)))
+                     repeat)))
              ((and (pred symbolp)
                    (guard (get cmd :conn-action)))
               (setq action (unless (eq cmd action) cmd))
