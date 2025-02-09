@@ -1049,7 +1049,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (let* ((eol (save-excursion
                 (goto-char pt)
                 (line-end-position)))
-         (ov (make-overlay pt (min (+ pt length) eol))))
+         (ov (make-overlay pt (min (+ pt length) eol) nil t)))
     (overlay-put ov 'conn-overlay t)
     (overlay-put ov 'thing thing)
     (overlay-put ov 'category 'conn-read-string-match)
