@@ -2680,6 +2680,19 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (goto-char pt)
       (conn-register-load register))))
 
+(conn-define-dispatch-action conn-dispatch-register-replace (window pt thing register)
+  :description "Register Replace"
+  :key "P"
+  :reader (list (register-read-with-preview "Register: "))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
+        (`(,beg . ,end)
+         (delete-region beg end)
+         (conn-register-load register))
+        (_ (user-error "Cannot find %s at point" thing))))))
+
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing register)
   :description "Kill"
   :key "w"
@@ -2836,11 +2849,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (_ (user-error "Cannot find %s at point" thing)))))
   (yank))
 
-(conn-define-dispatch-action conn-dispatch-yank (window pt thing register)
+(conn-define-dispatch-action conn-dispatch-yank (window pt thing)
   :description "Yank"
   :key "y"
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
   :filter (lambda () (unless buffer-read-only 'this))
   (let (str)
     (with-selected-window window
@@ -2849,13 +2860,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
-           (if register
-               (copy-to-register register beg end)
-             (setq str (filter-buffer-substring beg end)))))))
-    (cond (str
-           (insert-for-yank str))
-          ((null register)
-           (user-error "Cannot find %s at point" thing)))))
+           (setq str (filter-buffer-substring beg end))))))
+    (if str
+        (insert-for-yank str)
+      (user-error "Cannot find %s at point" thing))))
 
 (conn-define-dispatch-action conn-dispatch-goto (window pt thing)
   :description "Goto"
