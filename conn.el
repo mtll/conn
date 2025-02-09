@@ -3510,21 +3510,22 @@ seconds."
                                 (setq sum (+ sum (length (cdr p))))))
                             conn-dispatch-label-characters)
                            (user-error "No matching candidates")))
-          (let* ((prefix (conn--read-labels
-                          prefix-ovs
-                          labels
-                          'conn--dispatch-label-overlays
-                          'prefix-overlay))
-                 (window (overlay-get prefix 'window))
-                 (pt (overlay-start prefix)))
-            (setq conn-this-command-thing
-                  (or (overlay-get prefix 'thing) thing))
-            (apply action window pt conn-this-command-thing conn--dispatch-action-args)))
+          (cl-loop
+           do (let* ((prefix (conn--read-labels
+                              prefix-ovs
+                              labels
+                              'conn--dispatch-label-overlays
+                              'prefix-overlay))
+                     (window (overlay-get prefix 'window))
+                     (pt (overlay-start prefix)))
+                (setq conn-this-command-thing
+                      (or (overlay-get prefix 'thing) thing))
+                (apply action window pt conn-this-command-thing conn--dispatch-action-args))
+           while repeat
+           do (undo-boundary)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs)))
-    (setq conn--last-dispatch-command (list thing finder action arg predicate repeat))
-    (when repeat
-      (conn-dispatch-on-things thing finder action arg predicate repeat))))
+    (setq conn--last-dispatch-command (list thing finder action arg predicate repeat))))
 
 (defun conn-repeat-last-dispatch ()
   (interactive)
