@@ -3520,10 +3520,13 @@ seconds."
                      (pt (overlay-start prefix)))
                 (setq conn-this-command-thing
                       (or (overlay-get prefix 'thing) thing))
+                ;; FIXME: inserting the undo boundary here causes
+                ;;        aggressive-indent-mode not to indent for
+                ;;        some reason
+                (undo-boundary)
                 (apply action window pt conn-this-command-thing conn--dispatch-action-args))
-           while repeat
            ;; TODO: allow undo while repeating
-           do (undo-boundary)))
+           while repeat))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs))
       (setq conn--last-dispatch-command (list thing finder action arg predicate repeat)))))
