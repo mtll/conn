@@ -5415,8 +5415,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-o" 'other-frame
   "M-c" 'clone-frame
   "M-d" 'delete-frame
+  "`" 'conn-wincontrol-next-window
   "C-u" 'conn-wincontrol-universal-arg
-  "`" 'quit-window
   "-" 'conn-wincontrol-invert-argument
   "," 'conn-wincontrol-digit-argument-reset
   "/" 'tab-bar-history-back
@@ -5504,6 +5504,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "v" 'conn-wincontrol-split-vertically
   "w" 'enlarge-window-horizontally
   "q" 'conn-transpose-window
+  "Q" 'quit-window
   "y" 'conn-yank-window
   "z" 'conn-wincontrol-zoom-out
   "Z" 'conn-wincontrol-zoom-in)
