@@ -1561,10 +1561,12 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                                     (cons (conn--overlay-start-marker dot)
                                           (conn--overlay-start-marker dot))
                                   (conn--overlay-bounds-markers dot)))))
-          (cl-loop for (b . e) in dots
-                   minimize b into beg
-                   maximize e into end
-                   finally return (append (list beg end) (nreverse dots))))
+          (if dots
+              (cl-loop for (b . e) in dots
+                       minimize b into beg
+                       maximize e into end
+                       finally return (append (list beg end) (nreverse dots)))
+            (list (region-beginning) (region-end))))
       (conn--dot-mode -1)
       (deactivate-mark t))))
 
@@ -3540,7 +3542,7 @@ seconds."
   "Dispatch on buttons."
   (interactive)
   (conn-dispatch-on-things
-   nil
+   nil nil
    (apply-partially 'conn--dispatch-all-buttons t)
    (lambda (win pt _thing)
      (select-window win)
@@ -4987,6 +4989,8 @@ If ARG is a numeric prefix argument kill region to a register."
                    "to register:")
            (register-read-with-preview)
            (copy-to-register nil nil t t)))
+        (rectangle-mark-mode
+         (kill-rectangle (region-beginning) (region-end)))
         (t (call-interactively
             (conn--without-conn-maps
               (key-binding conn-kill-region-keys t))))))
@@ -5403,8 +5407,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-g" 'conn-wincontrol-abort
   "C-M-0" 'kill-buffer-and-window
   "C-M-d" 'delete-other-frames
-  "M-1" 'iconify-or-deiconify-frame
-  "M-2" 'make-frame-command
   "M-/" 'undelete-frame
   "M-o" 'other-frame
   "M-c" 'clone-frame
@@ -5433,10 +5435,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "<left>" 'conn-wincontrol-windmove-left
   "<right>" 'conn-wincontrol-windmove-right
   "<up>" 'conn-wincontrol-windmove-up
-  "M-i" 'conn-wincontrol-windmove-down
-  "M-j" 'conn-wincontrol-windmove-left
-  "M-l" 'conn-wincontrol-windmove-right
-  "M-k" 'conn-wincontrol-windmove-up
+  "M-<down>" 'windmove-swap-states-down
+  "M-<left>" 'windmove-swap-states-left
+  "M-<right>" 'windmove-swap-states-right
+  "M-<up>" 'windmove-swap-states-up
+  "M-I" 'windmove-swap-states-up
+  "M-J" 'windmove-swap-states-left
+  "M-L" 'windmove-swap-states-right
+  "M-K" 'windmove-swap-states-down
+  "M-i" 'conn-wincontrol-windmove-up
+  "M-j" 'conn-wincontrol-windmove-right
+  "M-l" 'conn-wincontrol-windmove-left
+  "M-k" 'conn-wincontrol-windmove-down
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
   "<tab>" 'conn-wincontrol-other-window-scroll-up
@@ -6123,6 +6133,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap conn-state-map
   :parent conn-movement-map
+  "&" 'mode-line-other-buffer
   "\"" 'conn-yank-window
   "e" 'conn-emacs-state
   "E" 'conn-dispatch-on-buttons
@@ -6140,13 +6151,6 @@ When ARG is nil the root window is used."
   "?" (conn-remap-key conn-undo-redo-keys)
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command
-  "M-0" 'tab-close
-  "M-1" 'delete-other-windows-vertically
-  "M-2" 'tab-new
-  "M-3" 'make-frame-command
-  "M-7" 'kill-buffer
-  "M-8" 'tear-off-window
-  "M-9" 'tab-detach
   "M-y" 'conn-completing-yank-replace
   "C-+" 'maximize-window
   "C--" 'shrink-window-if-larger-than-buffer
