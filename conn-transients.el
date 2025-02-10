@@ -190,8 +190,9 @@ BEFORE means only those matches before, and including, the current match."
                 (bound-and-true-p multi-isearch-file-list)))
   :key "j"
   :keyword :matches
-  :choices '(("after" . 'after)
-             ("before" . 'before)))
+  :choices '(nil
+             ("after" . after)
+             ("before" . before)))
 
 (transient-define-argument conn--kapply-state-infix ()
   "Dispatch in a specific state."
@@ -414,22 +415,30 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
    (unwind-protect
-       (cond ((bound-and-true-p multi-isearch-file-list)
-              (mapcan 'conn--isearch-matches
-                      (append
-                       (remq (current-buffer)
-                             (mapcar 'find-file-noselect
-                                     multi-isearch-file-list))
-                       (list (current-buffer)))))
-             ((bound-and-true-p multi-isearch-buffer-list)
-              (mapcan 'conn--isearch-matches
-                      (append
-                       (remq (current-buffer) multi-isearch-buffer-list)
-                       (list (current-buffer)))))
-             (t
-              (conn--isearch-matches
-               (current-buffer)
-               (alist-get :matches args))))
+       (let* ((matches
+               (cond ((bound-and-true-p multi-isearch-file-list)
+                      (mapcan 'conn--isearch-matches
+                              (append
+                               (remq (current-buffer)
+                                     (mapcar 'find-file-noselect
+                                             multi-isearch-file-list))
+                               (list (current-buffer)))))
+                     ((bound-and-true-p multi-isearch-buffer-list)
+                      (mapcan 'conn--isearch-matches
+                              (append
+                               (remq (current-buffer) multi-isearch-buffer-list)
+                               (list (current-buffer)))))
+                     (t
+                      (conn--isearch-matches
+                       (current-buffer)
+                       (alist-get :matches args)))))
+              (at-pt
+               (seq-find (lambda (m)
+                           (and (eq (current-buffer) (marker-buffer (car m)))
+                                (or (= (car m) (point))
+                                    (= (cdr m) (point)))))
+                         matches)))
+         (cons at-pt (delq at-pt matches)))
      (isearch-done))
    `(conn--kapply-region-iterator ,(alist-get :reverse args))
    (alist-get :undo args)
