@@ -4989,7 +4989,7 @@ If ARG is a numeric prefix argument kill region to a register."
                    "to register:")
            (register-read-with-preview)
            (copy-to-register nil nil t t)))
-        (rectangle-mark-mode
+        ((bound-and-true-p rectangle-mark-mode)
          (kill-rectangle (region-beginning) (region-end)))
         (t (call-interactively
             (conn--without-conn-maps
