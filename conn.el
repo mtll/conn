@@ -545,6 +545,13 @@ Used to restore previous value when `conn-mode' is disabled.")
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
 
+(defun conn--nmin-first (ord list)
+  (cl-loop with min = (car list)
+           for item in (cdr list)
+           when (funcall ord item min)
+           do (setq min item)
+           finally return (cons min (delq min list))))
+
 (defun conn--create-marker (pos &optional buffer)
   "Create marker at POS in BUFFER."
   (let ((marker (make-marker)))
@@ -1765,7 +1772,7 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) t))
 
-(defun conn--kapply-thing-iterator (thing beg end &optional reverse skip-empty nth)
+(defun conn--kapply-thing-iterator (thing beg end &optional order skip-empty nth)
   (prog1
       (thread-first
         (conn-bounds-of-things-in-region thing beg end)
@@ -1781,12 +1788,25 @@ Possibilities: \\<query-replace-map>
                      while stack
                      collect (car stack)
                      do (cl-loop repeat nth do (pop stack)))))
-        (conn--thread regions
-          (conn--kapply-region-iterator (if reverse (nreverse regions) regions))))
+        (conn--kapply-region-iterator order))
     (deactivate-mark)))
 
-(defun conn--kapply-region-iterator (regions &optional reverse)
-  (if reverse (setq regions (nreverse regions)))
+(defun conn--kapply-region-iterator (regions &optional order)
+  (unless regions
+    (user-error "No regions for kapply."))
+  (pcase order
+    ('forward)
+    ('reverse
+     (setq regions (nreverse regions)))
+    (_
+     (setq regions (conn--nmin-first
+                    (pcase-lambda (`(,mb1 . ,me1)
+                                   `(,mb2 . ,me2))
+                      (< (min (abs (- mb1 (point)))
+                              (abs (- me1 (point))))
+                         (min (abs (- mb2 (point)))
+                              (abs (- me2 (point))))))
+                    regions))))
   (pcase-dolist ((and reg `(,beg . ,end)) regions)
     (unless (markerp beg)
       (setcar reg (conn--create-marker beg)))
@@ -1801,10 +1821,15 @@ Possibilities: \\<query-replace-map>
       (_
        (conn--kapply-advance-region (pop regions))))))
 
-(defun conn--kapply-point-iterator (points &optional reverse)
-  (setq points (cl-loop for pt in (if reverse
-                                      (nreverse points)
-                                    points)
+(defun conn--kapply-point-iterator (points &optional order)
+  (unless points
+    (user-error "No points for kapply."))
+  (pcase order
+    ('forward)
+    ('reverse (setq points (nreverse points)))
+    (_
+     (setq points (conn--nmin-first #'< points))))
+  (setq points (cl-loop for pt in points
                         collect (if (markerp pt)
                                     pt
                                   (conn--create-marker pt))))
@@ -1816,25 +1841,30 @@ Possibilities: \\<query-replace-map>
        (when-let ((pt (pop points)))
          (conn--kapply-advance-region (cons pt pt)))))))
 
-(defun conn--kapply-matches (string beg end &optional regexp-flag reverse delimited-flag query-flag region-first-flag)
+(defun conn--kapply-matches (string beg end &optional regexp-flag order delimited-flag query-flag)
   (let ((matches (save-excursion
                    (goto-char beg)
                    (cl-loop
-                    with matches = nil
                     while (replace-search string end regexp-flag
                                           delimited-flag case-fold-search)
                     for (mb me . _) = (match-data t)
-                    do
-                    (push (cons (conn--create-marker mb)
-                                (conn--create-marker me))
-                          matches)
-                    finally return (if reverse matches (nreverse matches))))))
-    (when-let ((first (and region-first-flag
-                           (seq-find (pcase-lambda (`(,mb . ,me))
-                                       (and (= mb (region-beginning))
-                                            (= me (region-end))))
-                                     matches))))
-      (setq matches (cons first (delete first matches))))
+                    collect (cons (conn--create-marker mb)
+                                  (conn--create-marker me))))))
+    (unless matches
+      (user-error "No matches for kapply."))
+    (pcase order
+      ('reverse
+       (setq matches (nreverse matches)))
+      ('forward)
+      (_
+       (setq matches (conn--nmin-first
+                      (pcase-lambda (`(,mb1 . ,me1)
+                                     `(,mb2 . ,me2))
+                        (< (min (abs (- mb1 (point)))
+                                (abs (- me1 (point))))
+                           (min (abs (- mb2 (point)))
+                                (abs (- me2 (point))))))
+                      matches))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -4129,14 +4159,14 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Kapply Commands
 
-(defun conn-kapply-replace-region (string beg end)
+(defun conn-kapply-replace-matches (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
+      (conn--kapply-matches string beg end nil nil current-prefix-arg nil)
       conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
@@ -4144,28 +4174,28 @@ Interactively `region-beginning' and `region-end'."
       (conn--kapply-with-state 'conn-emacs-state)
       conn--kmacro-apply)))
 
-(defun conn-kapply-emacs-on-region (string beg end)
+(defun conn-kapply-emacs-on-matches (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
+      (conn--kapply-matches string beg end nil nil current-prefix-arg nil)
       conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
       (conn--kapply-with-state 'conn-emacs-state)
       conn--kmacro-apply)))
 
-(defun conn-kapply-conn-on-region (string beg end)
+(defun conn-kapply-conn-on-matches (string beg end)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg nil t)
+      (conn--kapply-matches string beg end nil nil current-prefix-arg nil)
       conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
@@ -4177,7 +4207,10 @@ Interactively `region-beginning' and `region-end'."
   (require 'rect)
   (thread-first
     (conn--kapply-region-iterator
-     (extract-rectangle-bounds (region-beginning) (region-end)))
+     (extract-rectangle-bounds (region-beginning) (region-end))
+     (if (eq (point) (region-beginning))
+         'forward
+       'backward))
     conn--kapply-per-buffer-undo
     conn--kapply-save-restriction
     conn--kapply-save-excursion
@@ -4190,7 +4223,10 @@ Interactively `region-beginning' and `region-end'."
   (require 'rect)
   (thread-first
     (conn--kapply-region-iterator
-     (extract-rectangle-bounds (region-beginning) (region-end)))
+     (extract-rectangle-bounds (region-beginning) (region-end))
+     (if (eq (point) (region-beginning))
+         'forward
+       'backward))
     conn--kapply-per-buffer-undo
     conn--kapply-save-restriction
     conn--kapply-save-excursion
@@ -4202,7 +4238,10 @@ Interactively `region-beginning' and `region-end'."
   (require 'rect)
   (thread-first
     (conn--kapply-region-iterator
-     (extract-rectangle-bounds (region-beginning) (region-end)))
+     (extract-rectangle-bounds (region-beginning) (region-end))
+     (if (eq (point) (region-beginning))
+         'forward
+       'backward))
     conn--kapply-per-buffer-undo
     conn--kapply-save-restriction
     conn--kapply-save-excursion
@@ -5972,9 +6011,9 @@ When ARG is nil the root window is used."
   "g" 'conn-rgrep-region
   "k" 'delete-region
   "u" 'conn-join-lines
-  "m t" 'conn-kapply-replace-region
-  "m e" 'conn-kapply-emacs-on-region
-  "m c" 'conn-kapply-conn-on-region
+  "m t" 'conn-kapply-replace-matches
+  "m e" 'conn-kapply-emacs-on-matches
+  "m c" 'conn-kapply-conn-on-matches
   "I" 'indent-rigidly
   "." 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region

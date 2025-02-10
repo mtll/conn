@@ -223,12 +223,15 @@ before each iteration."
              ("end" . conn--kapply-at-end)
              ("change" . conn--kapply-change-region)))
 
-(transient-define-argument conn--kapply-order-infix ()
+(transient-define-argument conn--kapply-maybe-order-infix ()
   "Dispatch on regions from last to first."
-  :class 'conn-transient-lisp-bool
+  :class 'conn-transient-lisp-choices
   :key "b"
   :description "Reverse"
-  :keyword :reverse)
+  :keyword :maybe-order
+  :choices '(nil
+             ("Forward" . forward)
+             ("Reverse" . reverse)))
 
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
@@ -287,7 +290,7 @@ property."
                                 (use-local-map)))
                           (conn--read-from-with-preview "String" beg end nil))))
      (conn--kapply-matches string beg end nil
-                           (alist-get :reverse args)
+                           (alist-get :maybe-order args)
                            current-prefix-arg conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -313,7 +316,7 @@ property."
                                 (use-local-map)))
                           (conn--read-from-with-preview "Regexp" beg end t))))
      (conn--kapply-matches regexp beg end t
-                           (alist-get :reverse args)
+                           (alist-get :maybe-order args)
                            current-prefix-arg conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -326,7 +329,7 @@ property."
 
 (transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
-If the region is discontiguous (e.g. a rectangular region) then
+If the region is discontinuous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :transient 'transient--do-exit
   :key "f"
@@ -339,7 +342,7 @@ apply to each contiguous component of the region."
                        (conn-thing-empty-p thing reg))
                      regions)
        regions)
-     `(conn--kapply-region-iterator ,(alist-get :reverse args))
+     `(conn--kapply-region-iterator ,(alist-get :maybe-order args))
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -362,7 +365,7 @@ apply to each contiguous component of the region."
      (conn--kapply-thing-iterator
       (get cmd :conn-command-thing)
       (region-beginning) (region-end)
-      (alist-get :reverse args)
+      (alist-get :maybe-order args)
       (alist-get :skip-empty args)
       arg))
    (alist-get :undo args)
@@ -397,7 +400,7 @@ apply to each contiguous component of the region."
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (funcall iterator (alist-get :reverse args))
+   (funcall iterator (alist-get :maybe-order args))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -476,7 +479,7 @@ apply to each contiguous component of the region."
                regions))
        regions))
    `(conn--kapply-region-iterator
-     ,(alist-get :reverse args))
+     ,(alist-get :maybe-order args))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -513,7 +516,7 @@ apply to each contiguous component of the region."
          (transient-resume))
        :transient transient--do-suspend)]]
   [ :description "Options:"
-    [ (conn--kapply-order-infix)
+    [ (conn--kapply-maybe-order-infix)
       (conn--kapply-state-infix)
       (conn--kapply-empty-infix)]
     [ (conn--kapply-region-infix)
@@ -603,7 +606,7 @@ apply to each contiguous component of the region."
          (transient-resume))
        :transient transient--do-suspend)]]
   [ :description "Options:"
-    [ (conn--kapply-order-infix)
+    [ (conn--kapply-maybe-order-infix)
       (conn--kapply-state-infix)]
     [ (conn--kapply-region-infix)
       (conn--kapply-macro-infix)]]
