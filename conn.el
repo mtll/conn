@@ -5101,6 +5101,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 ;;;;; Window Commands
 
+(defun conn-other-buffer ()
+  (interactive)
+  (switch-to-buffer nil))
+
 (defun conn-other-place-prefix ()
   (interactive)
   (pcase (car (read-multiple-choice
@@ -6130,10 +6134,14 @@ When ARG is nil the root window is used."
   "N" (conn-remap-key conn-beginning-of-defun-keys)
   "n" (conn-remap-key conn-backward-sexp-keys))
 
+(defvar-keymap conn-other-buffer-repeat-map
+  :repeat t
+  "&" 'conn-other-buffer)
+
 (define-keymap
   :keymap conn-state-map
   :parent conn-movement-map
-  "&" 'mode-line-other-buffer
+  "&" 'conn-other-buffer
   "\"" 'conn-yank-window
   "e" 'conn-emacs-state
   "E" 'conn-dispatch-on-buttons
