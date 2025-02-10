@@ -440,7 +440,7 @@ apply to each contiguous component of the region."
                          matches)))
          (cons at-pt (delq at-pt matches)))
      (isearch-done))
-   `(conn--kapply-region-iterator ,(alist-get :reverse args))
+   'conn--kapply-region-iterator
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -561,8 +561,7 @@ apply to each contiguous component of the region."
          (transient-resume))
        :transient transient--do-suspend)]]
   [ :description "Options:"
-    [ (conn--kapply-order-infix)
-      (conn--kapply-region-infix)
+    [ (conn--kapply-region-infix)
       (conn--kapply-state-infix)]
     [ (conn--kapply-matches-infix)
       (conn--kapply-macro-infix)]]
