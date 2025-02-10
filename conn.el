@@ -2530,7 +2530,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defvar-keymap conn-dispatch-read-thing-mode-map
   "C-h" 'help
   "`" 'reset-arg
-  "." 'repeat
+  "'" 'repeat
   "C-d" 'forward-delete-arg
   "C-w" 'backward-delete-arg)
 
@@ -6149,9 +6149,9 @@ When ARG is nil the root window is used."
   ":" 'conn-wincontrol-one-command
   "`" 'other-window
   "|" 'conn-shell-command-on-region
-  "'" 'conn-other-place-prefix
+  "'" 'repeat
   "+" 'conn-set-register-seperator
-  "." 'repeat
+  "." 'conn-other-place-prefix
   "/" (conn-remap-key conn-undo-keys)
   ";" 'conn-wincontrol
   "\\" 'conn-kapply-prefix
