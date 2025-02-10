@@ -6248,7 +6248,6 @@ When ARG is nil the root window is used."
   "z" 'conn-exchange-mark-command)
 
 (defvar-keymap conn-global-map
-  "C-t" (conn-remap-key (key-parse "C-x t"))
   "C-S-w" 'delete-region
   "C-x /" 'tab-bar-history-back
   "C-x 4 /" 'tab-bar-history-back
