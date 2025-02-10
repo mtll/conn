@@ -1211,6 +1211,8 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 ;;;; Read Things
 
+(defvar conn-read-thing-state 'conn-state)
+
 (defvar conn-bounds-of-command-alist nil)
 
 (defvar conn-bounds-of-things-in-region-alist nil)
@@ -3396,7 +3398,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (when (ignore-errors (get action :conn-action-reader))
              (funcall (get action :conn-action-reader)))))
       (setq action-args (read-action-args action))
-      (conn--with-state (lambda () (when conn-local-mode (conn-state)))
+      (conn--with-state conn-read-thing-state
         (apply #'conn-dispatch-read-thing-mode 1 override-maps)
         (unwind-protect
             (cl-prog
@@ -5922,7 +5924,6 @@ Uses `split-window-right'."
                                                   (_   elem)))
             (mapcar #'conn--wincontrol-reflect-window windows))))
 
-;; FIXME: vertical columns shrink horizontally when reversed for some reason
 (defun conn--wincontrol-reverse-window (state &optional recursive)
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state)))
