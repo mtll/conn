@@ -1800,10 +1800,10 @@ Possibilities: \\<query-replace-map>
   (lambda (_state) t))
 
 (defun conn--kapply-highlights-iterator (&optional order)
-  (require 'hi-lock)
   (let* (matches)
     (save-excursion
-      (pcase-dolist (`(,fn (,subexp . ,_)) hi-lock-interactive-patterns)
+      (pcase-dolist (`(,fn (,subexp . ,_))
+                     (ignore-errors hi-lock-interactive-patterns))
         (goto-char (point-min))
         (cl-loop for match = (funcall fn (point-max))
                  while match
