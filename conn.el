@@ -1799,6 +1799,34 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) t))
 
+(defun conn--kapply-highlights-iterator (&optional order)
+  (require 'hi-lock)
+  (let* (matches)
+    (save-excursion
+      (pcase-dolist (`(,fn (,subexp . ,_)) hi-lock-interactive-patterns)
+        (goto-char (point-min))
+        (cl-loop for match = (funcall fn (point-max))
+                 while match
+                 do (push (cons (conn--create-marker (match-beginning subexp))
+                                (conn--create-marker (match-end subexp)))
+                          matches))))
+    (unless matches
+      (user-error "No highlights for kapply."))
+    (setq matches (pcase order
+                    ('forward (seq-sort-by #'car #'< matches))
+                    ('reverse (seq-sort-by #'car #'> matches))
+                    (_        (conn--nearest-first
+                               (seq-sort-by #'car #'< matches)))))
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (mapc (pcase-lambda (`(,beg . ,end))
+                 (set-marker beg nil)
+                 (set-marker end nil))
+               matches))
+        (_
+         (conn--kapply-advance-region (pop matches)))))))
+
 (defun conn--kapply-thing-iterator (thing beg end &optional order skip-empty nth)
   (prog1
       (thread-first
@@ -1843,6 +1871,26 @@ Possibilities: \\<query-replace-map>
          (conn--kapply-advance-region (pop regions)))
         (_
          (conn--kapply-advance-region (pop regions)))))))
+
+(defun conn--kapply-highlight-iterator (&optional order)
+  (save-excursion
+    (goto-char (point-min))
+    (let (regions)
+      (while-let ((match (text-property-search-forward prop value t)))
+        (push (cons (prop-match-beginning match)
+                    (prop-match-end match))
+              regions))
+      regions))
+  (let* ((prop (intern (completing-read
+                        "Property: "
+                        (cl-loop for prop in (text-properties-at (point))
+                                 by #'cddr collect prop)
+                        nil t)))
+         (vals (mapcar (lambda (s) (cons (format "%s" s) s))
+                       (ensure-list (get-text-property (point) prop))))
+         (val (alist-get (completing-read "Value: " vals) vals
+                         nil nil #'string=)))
+    (list prop val (transient-args transient-current-command))))
 
 (defun conn--kapply-point-iterator (points &optional order)
   (unless points

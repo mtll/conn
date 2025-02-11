@@ -454,6 +454,24 @@ apply to each contiguous component of the region."
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
 
+(transient-define-suffix conn--kapply-highlights (args)
+  "Apply keyboard macro on regions of text with a specified text property."
+  :transient 'transient--do-exit
+  :key "h"
+  :description "Highlights"
+  (interactive (list (transient-args transient-current-command)))
+  (conn--kapply-compose-iterator
+   (alist-get :maybe-order args)
+   'conn--kapply-highlights-iterator
+   (alist-get :undo args)
+   (alist-get :restrictions args)
+   (alist-get :excursions args)
+   (alist-get :state args)
+   (alist-get :regions args)
+   'conn--kapply-pulse-region
+   (alist-get :window-conf args)
+   (alist-get :kmacro args)))
+
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
@@ -526,7 +544,9 @@ apply to each contiguous component of the region."
       (conn--kapply-string-suffix)
       (conn--kapply-regexp-suffix)
       (conn--kapply-things-suffix)
-      (conn--kapply-things-in-region-suffix)
+      (conn--kapply-things-in-region-suffix)]
+    [ :description ""
+      (conn--kapply-highlights)
       (conn--kapply-text-property-suffix)
       (conn--kapply-iterate-suffix)]
     [ :description "Save State:"
