@@ -233,6 +233,13 @@ before each iteration."
              ("Forward" . forward)
              ("Reverse" . reverse)))
 
+(transient-define-argument conn--kapply-read-hl-patterns ()
+  "Dispatch on regions from last to first."
+  :class 'conn-transient-lisp-bool
+  :key "r"
+  :description "Read Patterns"
+  :keyword :read-patterns)
+
 (transient-define-argument conn--kapply-highlights-in-thing ()
   "Dispatch on regions from last to first."
   :class 'conn-transient-lisp-choices
@@ -478,7 +485,8 @@ apply to each contiguous component of the region."
      (conn--kapply-highlights-iterator
       (or beg (point-min))
       (or end (point-max))
-      (alist-get :maybe-order args))
+      (alist-get :maybe-order args)
+      (alist-get :read-patterns args))
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -603,7 +611,8 @@ apply to each contiguous component of the region."
       (conn--kapply-state-infix)
       (conn--kapply-highlights-in-thing)]
     [ (conn--kapply-region-infix)
-      (conn--kapply-macro-infix)]]
+      (conn--kapply-macro-infix)
+      (conn--kapply-read-hl-patterns)]]
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-highlights)]
     [ :description "Save State:"

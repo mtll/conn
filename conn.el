@@ -1799,13 +1799,26 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) t))
 
-(defun conn--kapply-highlights-iterator (beg end &optional order)
-  (let* (matches)
+(defun conn--kapply-highlights-iterator (beg end &optional order read-patterns)
+  (let ((patterns
+         (when (and (boundp 'hi-lock-interactive-patterns)
+                    (boundp 'hi-lock-interactive-lighters))
+           (if read-patterns
+               (mapcar (lambda (regexp)
+                         (alist-get regexp hi-lock-interactive-lighters nil nil #'equal))
+                       (completing-read-multiple
+                        "Regexps for kapply: "
+                        (mapcar (lambda (pattern)
+                                  (cons (or (car (rassq pattern hi-lock-interactive-lighters))
+                                            (car pattern))
+                                        pattern))
+                                hi-lock-interactive-patterns)
+                        nil t nil nil))
+             hi-lock-interactive-patterns)))
+        matches)
     (save-excursion
       (with-restriction beg end
-        (pcase-dolist (`(,fn (,subexp . ,_))
-                       (when (bound-and-true-p hi-lock-interactive-patterns)
-                         hi-lock-interactive-patterns))
+        (pcase-dolist (`(,fn (,subexp . ,_)) patterns)
           (goto-char (point-min))
           (cl-loop for match = (funcall fn (point-max))
                    while match
