@@ -1830,15 +1830,13 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (pcase state
         (:finalize
+         (mapc #'delete-overlay overlays)
          (pcase-dolist (`(,beg . ,end) regions)
            (set-marker beg nil)
            (set-marker end nil)))
         (:record
          (conn--kapply-advance-region (pop regions)))
         (_
-         (when overlays
-           (mapc #'delete-overlay overlays)
-           (setq overlays nil))
          (conn--kapply-advance-region (pop regions)))))))
 
 (defun conn--kapply-point-iterator (points &optional order)
@@ -1883,6 +1881,7 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (pcase state
         (:finalize
+         (mapc #'delete-overlay overlays)
          (mapc (pcase-lambda (`(,beg . ,end))
                  (set-marker beg nil)
                  (set-marker end nil))
@@ -1906,9 +1905,6 @@ Possibilities: \\<query-replace-map>
                  (delete-overlay hl)))
            (conn--kapply-advance-region (pop matches))))
         (_
-         (when overlays
-           (mapc #'delete-overlay overlays)
-           (setq overlays nil))
          (conn--kapply-advance-region (pop matches)))))))
 
 (defun conn--kapply-per-buffer-undo (iterator)
