@@ -233,6 +233,15 @@ before each iteration."
              ("Forward" . forward)
              ("Reverse" . reverse)))
 
+(transient-define-argument conn--kapply-highlights-in-thing ()
+  "Dispatch on regions from last to first."
+  :class 'conn-transient-lisp-choices
+  :key "o"
+  :description "In"
+  :keyword :in-thing
+  :choices '(("Buffer" . nil)
+             ("Thing" . t)))
+
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
   :class 'conn-transient-lisp-choices
@@ -291,7 +300,8 @@ property."
                           (conn--read-from-with-preview "String" beg end nil))))
      (conn--kapply-matches string beg end nil
                            (alist-get :maybe-order args)
-                           current-prefix-arg conn-query-flag))
+                           (oref transient-current-prefix scope)
+                           conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -317,7 +327,8 @@ property."
                           (conn--read-from-with-preview "Regexp" beg end t))))
      (conn--kapply-matches regexp beg end t
                            (alist-get :maybe-order args)
-                           current-prefix-arg conn-query-flag))
+                           (oref transient-current-prefix scope)
+                           conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -460,17 +471,22 @@ apply to each contiguous component of the region."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-compose-iterator
-   (alist-get :maybe-order args)
-   'conn--kapply-highlights-iterator
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (alist-get :regions args)
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :kmacro args)))
+  (pcase-let ((`(,beg ,end)
+               (when (alist-get :in-thing args)
+                 (seq-subseq (conn--read-thing-region "Thing Mover") 1 3))))
+    (conn--kapply-compose-iterator
+     (conn--kapply-highlights-iterator
+      (or beg (point-min))
+      (or end (point-max))
+      (alist-get :maybe-order args))
+     (alist-get :undo args)
+     (alist-get :restrictions args)
+     (alist-get :excursions args)
+     (alist-get :state args)
+     (alist-get :regions args)
+     'conn--kapply-pulse-region
+     (alist-get :window-conf args)
+     (alist-get :kmacro args))))
 
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
@@ -509,7 +525,7 @@ apply to each contiguous component of the region."
    (alist-get :kmacro args)))
 
 ;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
-(transient-define-prefix conn-kapply-prefix ()
+(transient-define-prefix conn-kapply-prefix (arg)
   "Transient menu for keyboard macro application on regions."
   [ :description conn--kmacro-ring-display
     [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
@@ -544,9 +560,7 @@ apply to each contiguous component of the region."
       (conn--kapply-string-suffix)
       (conn--kapply-regexp-suffix)
       (conn--kapply-things-suffix)
-      (conn--kapply-things-in-region-suffix)]
-    [ :description ""
-      (conn--kapply-highlights)
+      (conn--kapply-things-in-region-suffix)
       (conn--kapply-text-property-suffix)
       (conn--kapply-iterate-suffix)]
     [ :description "Save State:"
@@ -554,9 +568,52 @@ apply to each contiguous component of the region."
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
       (conn--kapply-save-excursion-infix)]]
+  (interactive "P")
+  (kmacro-display last-kbd-macro t)
+  (transient-setup 'conn-kapply-prefix nil nil :scope arg))
+
+;;;###autoload (autoload 'conn-kapply-hightlight-prefix "conn-transients" nil t)
+(transient-define-prefix conn-kapply-hightlight-prefix ()
+  "Transient menu for keyboard macro application on highlights."
+  [ :description conn--kmacro-ring-display
+    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("M" "Display"
+       (lambda ()
+         (interactive)
+         (kmacro-display last-kbd-macro t))
+       :transient t)]
+    [ ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix)
+      ("g" "Push Register" conn--push-macro-ring :transient t)]
+    [ ("e" "Edit Macro"
+       (lambda (arg)
+         (interactive "P")
+         (conn-recursive-edit-kmacro arg)
+         (transient-resume))
+       :transient transient--do-suspend)
+      ("E" "Edit Lossage"
+       (lambda ()
+         (interactive)
+         (conn-recursive-edit-lossage)
+         (transient-resume))
+       :transient transient--do-suspend)]]
+  [ :description "Options:"
+    [ (conn--kapply-maybe-order-infix)
+      (conn--kapply-state-infix)
+      (conn--kapply-highlights-in-thing)]
+    [ (conn--kapply-region-infix)
+      (conn--kapply-macro-infix)]]
+  [ [ :description "Apply Kmacro On:"
+      (conn--kapply-highlights)]
+    [ :description "Save State:"
+      (conn--kapply-merge-undo-infix)
+      (conn--kapply-save-windows-infix)
+      (conn--kapply-save-restriction-infix)
+      (conn--kapply-save-excursion-infix)]]
   (interactive)
   (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-kapply-prefix))
+  (transient-setup 'conn-kapply-hightlight-prefix))
 
 ;;;###autoload (autoload 'conn-isearch-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-isearch-kapply-prefix ()

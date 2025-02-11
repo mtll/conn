@@ -1799,17 +1799,19 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) t))
 
-(defun conn--kapply-highlights-iterator (&optional order)
+(defun conn--kapply-highlights-iterator (beg end &optional order)
   (let* (matches)
     (save-excursion
-      (pcase-dolist (`(,fn (,subexp . ,_))
-                     (ignore-errors hi-lock-interactive-patterns))
-        (goto-char (point-min))
-        (cl-loop for match = (funcall fn (point-max))
-                 while match
-                 do (push (cons (conn--create-marker (match-beginning subexp))
-                                (conn--create-marker (match-end subexp)))
-                          matches))))
+      (with-restriction beg end
+        (pcase-dolist (`(,fn (,subexp . ,_))
+                       (when (bound-and-true-p hi-lock-interactive-patterns)
+                         hi-lock-interactive-patterns))
+          (goto-char (point-min))
+          (cl-loop for match = (funcall fn (point-max))
+                   while match
+                   do (push (cons (conn--create-marker (match-beginning subexp))
+                                  (conn--create-marker (match-end subexp)))
+                            matches)))))
     (unless matches
       (user-error "No highlights for kapply."))
     (setq matches (pcase order
@@ -1871,26 +1873,6 @@ Possibilities: \\<query-replace-map>
          (conn--kapply-advance-region (pop regions)))
         (_
          (conn--kapply-advance-region (pop regions)))))))
-
-(defun conn--kapply-highlight-iterator (&optional order)
-  (save-excursion
-    (goto-char (point-min))
-    (let (regions)
-      (while-let ((match (text-property-search-forward prop value t)))
-        (push (cons (prop-match-beginning match)
-                    (prop-match-end match))
-              regions))
-      regions))
-  (let* ((prop (intern (completing-read
-                        "Property: "
-                        (cl-loop for prop in (text-properties-at (point))
-                                 by #'cddr collect prop)
-                        nil t)))
-         (vals (mapcar (lambda (s) (cons (format "%s" s) s))
-                       (ensure-list (get-text-property (point) prop))))
-         (val (alist-get (completing-read "Value: " vals) vals
-                         nil nil #'string=)))
-    (list prop val (transient-args transient-current-command))))
 
 (defun conn--kapply-point-iterator (points &optional order)
   (unless points
@@ -6118,6 +6100,7 @@ When ARG is nil the root window is used."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
+  "\\" 'conn-kapply-hightlight-prefix
   "s" 'conn-isearch-region-forward
   "r" 'conn-isearch-region-backward
   "o" 'occur
