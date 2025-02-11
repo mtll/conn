@@ -1772,6 +1772,15 @@ Possibilities: \\<query-replace-map>
             (help-mode))))
        (_ (ding)))))))
 
+(defun conn--kapply-preview-overlays (regions)
+  (cl-loop for (beg . end) in regions
+           when (and (eq (current-buffer) (marker-buffer beg))
+                     (or (< (window-start) beg (window-end))
+                         (< (window-start) end (window-end))))
+           collect (let ((ov (make-overlay beg end (marker-buffer beg) t)))
+                     (overlay-put ov 'category 'kapply-preview)
+                     ov)))
+
 (defun conn--kapply-advance-region (region)
   (pcase region
     (`(,beg . ,end)
@@ -1822,11 +1831,7 @@ Possibilities: \\<query-replace-map>
       (setcar reg (conn--create-marker beg)))
     (unless (markerp end)
       (setcdr reg (conn--create-marker end))))
-  (let (overlays)
-    (pcase-dolist (`(,beg . ,end) (cdr regions))
-      (let ((ov (make-overlay beg end (marker-buffer beg) t)))
-        (overlay-put ov 'category 'kapply-preview)
-        (push ov overlays)))
+  (let ((overlays (conn--kapply-preview-overlays (cdr regions))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -1868,16 +1873,13 @@ Possibilities: \\<query-replace-map>
                      collect (cons (conn--create-marker mb)
                                    (conn--create-marker me)))))
          overlays)
-    (pcase order
-      ('forward)
-      ('reverse (setq matches (nreverse matches)))
-      (_        (setq matches (conn--nearest-first matches))))
-    (pcase-dolist (`(,beg . ,end) (cdr matches))
-      (let ((ov (make-overlay beg end (marker-buffer beg) t)))
-        (overlay-put ov 'category 'kapply-preview)
-        (push ov overlays)))
     (unless matches
       (user-error "No matches for kapply."))
+    (setq matches (pcase order
+                    ('forward)
+                    ('reverse (nreverse matches))
+                    (_        (conn--nearest-first matches))))
+    (setq overlays (conn--kapply-preview-overlays (cdr matches)))
     (lambda (state)
       (pcase state
         (:finalize
