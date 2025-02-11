@@ -335,7 +335,8 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,thing ,_beg ,_end . ,regions) (conn--read-thing-region "Things")))
+  (pcase-let ((`(,thing ,_beg ,_end . ,regions)
+               (conn--read-thing-region "Things")))
     (conn--kapply-compose-iterator
      (if (alist-get :skip-empty args)
          (seq-remove (lambda (reg)

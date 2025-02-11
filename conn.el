@@ -427,6 +427,11 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;; Overlay Category Properties
 
+;;;;;; Kapply Preview
+
+(put 'kapply-preview 'priority 1900)
+(put 'kapply-preview 'face 'match)
+
 ;;;;;; Mark Cursor
 
 (put 'conn--mark-cursor 'permanent-local t)
@@ -545,12 +550,26 @@ Used to restore previous value when `conn-mode' is disabled.")
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
 
-(defun conn--nmin-first (ord list)
-  (cl-loop with min = (car list)
-           for item in (cdr list)
-           when (funcall ord item min)
-           do (setq min item)
-           finally return (cons min (delq min list))))
+(defun conn--nearest-first (list &optional buffer)
+  (let ((in-buffer (seq-filter
+                    (pcase-lambda (`(,beg . ,_end))
+                      (or (not (markerp beg))
+                          (eq (marker-buffer beg) (or buffer (current-buffer)))))
+                    list)))
+    (if (null in-buffer)
+        list
+      (cl-loop with min = (car in-buffer)
+               with min-dist = (min (abs (- (point) (car min)))
+                                    (abs (- (point) (cdr min))))
+               for region in (cdr in-buffer)
+               do (pcase-let*
+                      ((`(,beg . ,end) region)
+                       (new-dist (min (abs (- (point) beg))
+                                      (abs (- (point) end)))))
+                    (when (< new-dist min-dist)
+                      (setq min region
+                            min-dist new-dist)))
+               finally return (cons min (delq min list))))))
 
 (defun conn--create-marker (pos &optional buffer)
   "Create marker at POS in BUFFER."
@@ -1793,77 +1812,74 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-region-iterator (regions &optional order)
   (unless regions
     (user-error "No regions for kapply."))
-  (pcase order
-    ('forward)
-    ('reverse
-     (setq regions (nreverse regions)))
-    (_
-     (setq regions (conn--nmin-first
-                    (pcase-lambda (`(,mb1 . ,me1)
-                                   `(,mb2 . ,me2))
-                      (< (min (abs (- mb1 (point)))
-                              (abs (- me1 (point))))
-                         (min (abs (- mb2 (point)))
-                              (abs (- me2 (point))))))
-                    regions))))
-  (pcase-dolist ((and reg `(,beg . ,end)) regions)
+  (pcase-dolist ((and reg `(,beg . ,end))
+                 (setq regions
+                       (pcase order
+                         ('forward)
+                         ('reverse (nreverse regions))
+                         (_        (conn--nearest-first regions)))))
     (unless (markerp beg)
       (setcar reg (conn--create-marker beg)))
     (unless (markerp end)
       (setcdr reg (conn--create-marker end))))
-  (lambda (state)
-    (pcase state
-      (:finalize
-       (pcase-dolist (`(,beg . ,end) regions)
-         (set-marker beg nil)
-         (set-marker end nil)))
-      (_
-       (conn--kapply-advance-region (pop regions))))))
+  (let (overlays)
+    (pcase-dolist (`(,beg . ,end) (cdr regions))
+      (let ((ov (make-overlay beg end (marker-buffer beg) t)))
+        (overlay-put ov 'category 'kapply-preview)
+        (push ov overlays)))
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (pcase-dolist (`(,beg . ,end) regions)
+           (set-marker beg nil)
+           (set-marker end nil)))
+        (:record
+         (conn--kapply-advance-region (pop regions)))
+        (_
+         (when overlays
+           (mapc #'delete-overlay overlays)
+           (setq overlays nil))
+         (conn--kapply-advance-region (pop regions)))))))
 
 (defun conn--kapply-point-iterator (points &optional order)
   (unless points
     (user-error "No points for kapply."))
-  (pcase order
-    ('forward)
-    ('reverse (setq points (nreverse points)))
-    (_
-     (setq points (conn--nmin-first #'< points))))
-  (setq points (cl-loop for pt in points
-                        collect (if (markerp pt)
-                                    pt
-                                  (conn--create-marker pt))))
-  (lambda (state)
-    (pcase state
-      (:finalize
-       (dolist (pt points) (set-marker pt nil)))
-      (_
-       (when-let ((pt (pop points)))
-         (conn--kapply-advance-region (cons pt pt)))))))
+  (let ((points (cl-loop for pt in (pcase order
+                                     ('forward points)
+                                     ('reverse (nreverse points))
+                                     (_        (conn--nearest-first points)))
+                         collect (if (markerp pt)
+                                     pt
+                                   (conn--create-marker pt)))))
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (dolist (pt points) (set-marker pt nil)))
+        (_
+         (when-let ((pt (pop points)))
+           (conn--kapply-advance-region (cons pt pt))))))))
 
-(defun conn--kapply-matches (string beg end &optional regexp-flag order delimited-flag query-flag)
-  (let ((matches (save-excursion
-                   (goto-char beg)
-                   (cl-loop
-                    while (replace-search string end regexp-flag
-                                          delimited-flag case-fold-search)
-                    for (mb me . _) = (match-data t)
-                    collect (cons (conn--create-marker mb)
-                                  (conn--create-marker me))))))
+(defun conn--kapply-matches ( string beg end
+                              &optional regexp-flag order delimited-flag query-flag)
+  (let* ((matches (save-excursion
+                    (goto-char beg)
+                    (cl-loop
+                     while (replace-search string end regexp-flag
+                                           delimited-flag case-fold-search)
+                     for (mb me . _) = (match-data t)
+                     collect (cons (conn--create-marker mb)
+                                   (conn--create-marker me)))))
+         overlays)
+    (pcase order
+      ('forward)
+      ('reverse (setq matches (nreverse matches)))
+      (_        (setq matches (conn--nearest-first matches))))
+    (pcase-dolist (`(,beg . ,end) (cdr matches))
+      (let ((ov (make-overlay beg end (marker-buffer beg) t)))
+        (overlay-put ov 'category 'kapply-preview)
+        (push ov overlays)))
     (unless matches
       (user-error "No matches for kapply."))
-    (pcase order
-      ('reverse
-       (setq matches (nreverse matches)))
-      ('forward)
-      (_
-       (setq matches (conn--nmin-first
-                      (pcase-lambda (`(,mb1 . ,me1)
-                                     `(,mb2 . ,me2))
-                        (< (min (abs (- mb1 (point)))
-                                (abs (- me1 (point))))
-                           (min (abs (- mb2 (point)))
-                                (abs (- me2 (point))))))
-                      matches))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -1890,6 +1906,9 @@ Possibilities: \\<query-replace-map>
                  (delete-overlay hl)))
            (conn--kapply-advance-region (pop matches))))
         (_
+         (when overlays
+           (mapc #'delete-overlay overlays)
+           (setq overlays nil))
          (conn--kapply-advance-region (pop matches)))))))
 
 (defun conn--kapply-per-buffer-undo (iterator)
