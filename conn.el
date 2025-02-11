@@ -1231,11 +1231,8 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "M-<backspace>" 'reset-arg
   "M-DEL" 'reset-arg
   "`" 'reset-arg
-  "k" 'forward-line
-  "o" 'move-end-of-line
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
-  "b" 'beginning-of-buffer
   "C-h" 'help
   "t" 'conn-mark-thing-map
   "r" 'recursive-edit)
