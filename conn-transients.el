@@ -305,10 +305,11 @@ property."
                                 (make-composed-keymap conn-replace-map)
                                 (use-local-map)))
                           (conn--read-from-with-preview "String" beg end nil))))
-     (conn--kapply-matches string beg end nil
-                           (alist-get :maybe-order args)
-                           (oref transient-current-prefix scope)
-                           conn-query-flag))
+     (conn--kapply-match-iterator
+      string beg end nil
+      (alist-get :maybe-order args)
+      (oref transient-current-prefix scope)
+      conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -332,10 +333,11 @@ property."
                                 (current-local-map)
                                 (use-local-map)))
                           (conn--read-from-with-preview "Regexp" beg end t))))
-     (conn--kapply-matches regexp beg end t
-                           (alist-get :maybe-order args)
-                           (oref transient-current-prefix scope)
-                           conn-query-flag))
+     (conn--kapply-match-iterator
+      regexp beg end t
+      (alist-get :maybe-order args)
+      (oref transient-current-prefix scope)
+      conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -482,7 +484,7 @@ apply to each contiguous component of the region."
                (when (alist-get :in-thing args)
                  (seq-subseq (conn--read-thing-region "Thing Mover") 1 3))))
     (conn--kapply-compose-iterator
-     (conn--kapply-highlights-iterator
+     (conn--kapply-highlight-iterator
       (or beg (point-min))
       (or end (point-max))
       (alist-get :maybe-order args)

@@ -1799,7 +1799,7 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) t))
 
-(defun conn--kapply-highlights-iterator (beg end &optional order read-patterns)
+(defun conn--kapply-highlight-iterator (beg end &optional order read-patterns)
   (let ((patterns
          (when (and (boundp 'hi-lock-interactive-patterns)
                     (boundp 'hi-lock-interactive-lighters))
@@ -1905,8 +1905,8 @@ Possibilities: \\<query-replace-map>
          (when-let ((pt (pop points)))
            (conn--kapply-advance-region (cons pt pt))))))))
 
-(defun conn--kapply-matches ( string beg end
-                              &optional regexp-flag order delimited-flag query-flag)
+(defun conn--kapply-match-iterator ( string beg end
+                                     &optional regexp-flag order delimited-flag query-flag)
   (let* ((matches (save-excursion
                     (goto-char beg)
                     (cl-loop
@@ -4225,7 +4225,7 @@ Interactively `region-beginning' and `region-end'."
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg nil)
+      (conn--kapply-match-iterator string beg end nil nil current-prefix-arg nil)
       conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
@@ -4240,7 +4240,7 @@ Interactively `region-beginning' and `region-end'."
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg nil)
+      (conn--kapply-match-iterator string beg end nil nil current-prefix-arg nil)
       conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
@@ -4254,7 +4254,7 @@ Interactively `region-beginning' and `region-end'."
     (take 2 (cdr (conn--read-thing-region "Define Region")))))
   (conn--with-region-emphasis beg end
     (thread-first
-      (conn--kapply-matches string beg end nil nil current-prefix-arg nil)
+      (conn--kapply-match-iterator string beg end nil nil current-prefix-arg nil)
       conn--kapply-per-buffer-undo
       conn--kapply-save-restriction
       conn--kapply-save-excursion
