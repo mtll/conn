@@ -1772,14 +1772,27 @@ Possibilities: \\<query-replace-map>
             (help-mode))))
        (_ (ding)))))))
 
+(defvar conn-kapply-preview-max-overlays 200)
+
 (defun conn--kapply-preview-overlays (regions)
-  (cl-loop for (beg . end) in regions
-           when (and (eq (current-buffer) (marker-buffer beg))
-                     (or (< (window-start) beg (window-end))
-                         (< (window-start) end (window-end))))
-           collect (let ((ov (make-overlay beg end (marker-buffer beg) t)))
-                     (overlay-put ov 'category 'kapply-preview)
-                     ov)))
+  (let* ((nearest (pcase-lambda (`(,b1 . ,e1) `(,b2 . ,e2))
+                    (< (min (abs (- b1 (point)))
+                            (abs (- e1 (point))))
+                       (min (abs (- b2 (point)))
+                            (abs (- e2 (point)))))))
+         (this-bufferp (lambda (a _)
+                         (eq (current-buffer) (marker-buffer (car a)))))
+         (regions (thread-first
+                    (seq-group-by (pcase-lambda (`(,beg . ,_end))
+                                    (marker-buffer beg))
+                                  regions)
+                    (sort :lessp this-bufferp))))
+    (cl-loop repeat conn-kapply-preview-max-overlays
+             for (b . e) in (nconc (sort (cdar regions) :lessp nearest)
+                                   (mapcar #'cdr (cdr regions)))
+             collect (let ((ov (make-overlay b e (marker-buffer b) t)))
+                       (overlay-put ov 'category 'kapply-preview)
+                       ov))))
 
 (defun conn--kapply-advance-region (region)
   (pcase region
@@ -1874,7 +1887,7 @@ Possibilities: \\<query-replace-map>
       (setcar reg (conn--create-marker beg)))
     (unless (markerp end)
       (setcdr reg (conn--create-marker end))))
-  (let ((overlays (conn--kapply-preview-overlays (cdr regions))))
+  (let (overlays)
     (lambda (state)
       (pcase state
         (:finalize
@@ -1883,8 +1896,12 @@ Possibilities: \\<query-replace-map>
            (set-marker beg nil)
            (set-marker end nil)))
         (:record
+         (setq overlays (conn--kapply-preview-overlays (cdr regions)))
          (conn--kapply-advance-region (pop regions)))
         (_
+         (when overlays
+           (mapc #'delete-overlay overlays)
+           (setq overlays nil))
          (conn--kapply-advance-region (pop regions)))))))
 
 (defun conn--kapply-point-iterator (points &optional order)
@@ -1905,8 +1922,8 @@ Possibilities: \\<query-replace-map>
          (when-let ((pt (pop points)))
            (conn--kapply-advance-region (cons pt pt))))))))
 
-(defun conn--kapply-match-iterator ( string beg end
-                                     &optional regexp-flag order delimited-flag query-flag)
+(defun conn--kapply-match-iterator ( string beg end &optional
+                                     regexp-flag order delimited-flag query-flag)
   (let* ((matches (save-excursion
                     (goto-char beg)
                     (cl-loop
@@ -1922,7 +1939,6 @@ Possibilities: \\<query-replace-map>
                     ('forward)
                     ('reverse (nreverse matches))
                     (_        (conn--nearest-first matches))))
-    (setq overlays (conn--kapply-preview-overlays (cdr matches)))
     (lambda (state)
       (pcase state
         (:finalize
@@ -1932,8 +1948,10 @@ Possibilities: \\<query-replace-map>
                  (set-marker end nil))
                matches))
         (:record
+         (setq overlays (conn--kapply-preview-overlays (cdr matches)))
          (if query-flag
              (let ((hl (make-overlay (point) (point))))
+               (overlay-put hl 'priority 2000)
                (overlay-put hl 'face 'query-replace)
                (overlay-put hl 'conn-overlay t)
                (unwind-protect
@@ -1950,6 +1968,9 @@ Possibilities: \\<query-replace-map>
                  (delete-overlay hl)))
            (conn--kapply-advance-region (pop matches))))
         (_
+         (when overlays
+           (mapc #'delete-overlay overlays)
+           (setq overlays nil))
          (conn--kapply-advance-region (pop matches)))))))
 
 (defun conn--kapply-per-buffer-undo (iterator)
