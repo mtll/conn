@@ -219,7 +219,7 @@ before each iteration."
   :key "t"
   :keyword :regions
   :description "Regions"
-  :choices '(("start" . identity)
+  :choices '(("start" . nil)
              ("end" . conn--kapply-at-end)
              ("change" . conn--kapply-change-region)))
 
@@ -256,7 +256,7 @@ before each iteration."
   :keyword :excursions
   :description "Excursions"
   :choices '(("Save" . conn--kapply-save-excursion)
-             (nil . identity)))
+             nil))
 
 (transient-define-argument conn--kapply-save-restriction-infix ()
   "Save and restore the current restriction in each buffer during dispatch."
@@ -265,7 +265,7 @@ before each iteration."
   :keyword :restrictions
   :description "Restrictions"
   :choices '(("Save" . conn--kapply-save-restriction)
-             (nil . identity)))
+             nil))
 
 (transient-define-argument conn--kapply-merge-undo-infix ()
   "Merge all macro iterations into a single undo in each buffer."
@@ -275,7 +275,7 @@ before each iteration."
   :description "Merge Undo"
   :choices '(("Per Buffer" . conn--kapply-per-buffer-undo)
              ("Per Iteration" . conn--kapply-per-iteration-undo)
-             (nil . identity)))
+             nil))
 
 (transient-define-argument conn--kapply-save-windows-infix ()
   "Save and restore current window configuration during dispatch."
@@ -283,7 +283,7 @@ before each iteration."
   :key "w"
   :keyword :window-conf
   :description "Window Conf"
-  :choices '((nil . identity)
+  :choices '(nil
              ("Save" . conn--kapply-save-windows)))
 
 (transient-define-suffix conn--kapply-string-suffix (args)

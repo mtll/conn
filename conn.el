@@ -400,12 +400,12 @@ Used to restore previous value when `conn-mode' is disabled.")
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-up-list-keys (key-parse "C-M-<up>")
+(defcustom conn-backward-up-list-keys (key-parse "C-M-u")
   "`backward-up-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-down-list-keys (key-parse "C-M-<down>")
+(defcustom conn-down-list-keys (key-parse "C-M-d")
   "`down-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
@@ -1695,11 +1695,11 @@ If any function returns a nil value then macro application it halted.")
 
 (defvar conn--kapply-automatic-flag nil)
 
-(defun conn--kapply-compose-iterator (regions &rest ctors)
-  (let ((iterator regions))
-    (pcase-dolist ((or `(,constructor . ,args) constructor) ctors)
-      (setq iterator (apply constructor iterator args)))
-    iterator))
+(defun conn--kapply-compose-iterator (iterator &rest ctors)
+  (seq-reduce (pcase-lambda (iterator (or `(,ctor . ,args) ctor))
+                (apply ctor iterator args))
+              (delq nil ctors)
+              iterator))
 
 (defun conn-kapply-kbd-macro-query (flag)
   "Query user during kbd macro execution.
