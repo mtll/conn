@@ -1452,7 +1452,8 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 (defun conn--read-thing-region (prompt &optional arg)
   (pcase-let* ((`(,cmd ,arg) (conn--read-thing-mover prompt arg t)))
-    (cons (get cmd :conn-command-thing) (conn-bounds-of-command cmd arg))))
+    (cons (get cmd :conn-command-thing)
+          (conn-bounds-of-command cmd arg))))
 
 ;;;;; Dots
 
@@ -1778,7 +1779,7 @@ Possibilities: \\<query-replace-map>
 
 (defvar conn-kapply-preview-max-overlays 200)
 
-(defun conn--kapply-preview-overlays (regions)
+(defun conn--kapply-preview-overlays (regions &optional face)
   (let* ((nearest (pcase-lambda (`(,b1 . ,e1) `(,b2 . ,e2))
                     (< (min (abs (- b1 (point)))
                             (abs (- e1 (point))))
@@ -1796,6 +1797,7 @@ Possibilities: \\<query-replace-map>
                                    (mapcar #'cdr (cdr regions)))
              collect (let ((ov (make-overlay b e (marker-buffer b) t)))
                        (overlay-put ov 'category 'kapply-preview)
+                       (when face (overlay-put ov 'face face))
                        ov))))
 
 (defun conn--kapply-advance-region (region)
@@ -1878,13 +1880,17 @@ Possibilities: \\<query-replace-map>
         (conn--kapply-region-iterator order))
     (deactivate-mark)))
 
-(defun conn--kapply-region-iterator (regions &optional order)
+(defun conn--kapply-region-iterator (regions &optional order skip-empty)
+  (when skip-empty
+    (setq regions (seq-remove (pcase-lambda (`(,beg . ,end))
+                                (eq beg end))
+                              regions)))
   (unless regions
     (user-error "No regions for kapply."))
   (pcase-dolist ((and reg `(,beg . ,end))
                  (setq regions
                        (pcase order
-                         ('forward)
+                         ('forward regions)
                          ('reverse (nreverse regions))
                          (_        (conn--nearest-first regions)))))
     (unless (markerp beg)
@@ -1900,7 +1906,7 @@ Possibilities: \\<query-replace-map>
            (set-marker beg nil)
            (set-marker end nil)))
         (:record
-         (setq overlays (conn--kapply-preview-overlays (cdr regions)))
+         (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region))
          (conn--kapply-advance-region (pop regions)))
         (_
          (when overlays
@@ -1942,7 +1948,7 @@ Possibilities: \\<query-replace-map>
     (unless matches
       (user-error "No matches for kapply."))
     (setq matches (pcase order
-                    ('forward)
+                    ('forward matches)
                     ('reverse (nreverse matches))
                     (_        (conn--nearest-first matches))))
     (lambda (state)
@@ -4247,97 +4253,6 @@ Interactively `region-beginning' and `region-end'."
   (isearch-done)
   (conn--push-ephemeral-mark isearch-other-end))
 
-;;;;; Kapply Commands
-
-(defun conn-kapply-replace-matches (string regions)
-  (interactive
-   (nconc
-    (list (filter-buffer-substring (region-beginning) (region-end)))
-    (drop 3 (conn--read-thing-region "Define Region"))))
-  (conn--with-region-emphasis regions
-      (thread-first
-        (conn--kapply-match-iterator string regions nil nil current-prefix-arg nil)
-        conn--kapply-per-buffer-undo
-        conn--kapply-save-restriction
-        conn--kapply-save-excursion
-        conn--kapply-change-region
-        (conn--kapply-with-state 'conn-emacs-state)
-        conn--kmacro-apply)))
-
-(defun conn-kapply-emacs-on-matches (string regions)
-  (interactive
-   (nconc
-    (list (filter-buffer-substring (region-beginning) (region-end)))
-    (drop 3 (conn--read-thing-region "Define Region"))))
-  (conn--with-region-emphasis regions
-      (thread-first
-        (conn--kapply-match-iterator string regions nil nil current-prefix-arg nil)
-        conn--kapply-per-buffer-undo
-        conn--kapply-save-restriction
-        conn--kapply-save-excursion
-        (conn--kapply-with-state 'conn-emacs-state)
-        conn--kmacro-apply)))
-
-(defun conn-kapply-conn-on-matches (string regions)
-  (interactive
-   (nconc
-    (list (filter-buffer-substring (region-beginning) (region-end)))
-    (drop 3 (conn--read-thing-region "Define Region"))))
-  (conn--with-region-emphasis regions
-      (thread-first
-        (conn--kapply-match-iterator string regions nil nil current-prefix-arg nil)
-        conn--kapply-per-buffer-undo
-        conn--kapply-save-restriction
-        conn--kapply-save-excursion
-        (conn--kapply-with-state 'conn-state)
-        conn--kmacro-apply)))
-
-(defun conn-kapply-replace-rectangle ()
-  (interactive)
-  (require 'rect)
-  (thread-first
-    (conn--kapply-region-iterator
-     (extract-rectangle-bounds (region-beginning) (region-end))
-     (if (eq (point) (region-beginning))
-         'forward
-       'backward))
-    conn--kapply-per-buffer-undo
-    conn--kapply-save-restriction
-    conn--kapply-save-excursion
-    conn--kapply-change-region
-    (conn--kapply-with-state 'conn-emacs-state)
-    conn--kmacro-apply))
-
-(defun conn-kapply-emacs-on-rectangle ()
-  (interactive)
-  (require 'rect)
-  (thread-first
-    (conn--kapply-region-iterator
-     (extract-rectangle-bounds (region-beginning) (region-end))
-     (if (eq (point) (region-beginning))
-         'forward
-       'backward))
-    conn--kapply-per-buffer-undo
-    conn--kapply-save-restriction
-    conn--kapply-save-excursion
-    (conn--kapply-with-state 'conn-emacs-state)
-    conn--kmacro-apply))
-
-(defun conn-kapply-conn-on-rectangle ()
-  (interactive)
-  (require 'rect)
-  (thread-first
-    (conn--kapply-region-iterator
-     (extract-rectangle-bounds (region-beginning) (region-end))
-     (if (eq (point) (region-beginning))
-         'forward
-       'backward))
-    conn--kapply-per-buffer-undo
-    conn--kapply-save-restriction
-    conn--kapply-save-excursion
-    (conn--kapply-with-state 'conn-state)
-    conn--kmacro-apply))
-
 ;;;;; Editing Commands
 
 (defun conn-forward-defun (N)
@@ -6080,6 +5995,7 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
+  "\\" 'conn-kapply-on-region-prefix
   "RET" 'whitespace-cleanup
   "TAB" 'indent-rigidly
   "$" 'ispell-region
@@ -6144,7 +6060,7 @@ When ARG is nil the root window is used."
   ">" 'next-error-no-select)
 
 (defvar-keymap conn-search-map
-  "\\" 'conn-kapply-hightlight-prefix
+  "h \\" 'conn-kapply-hightlight-prefix
   "s" 'conn-isearch-region-forward
   "r" 'conn-isearch-region-backward
   "o" 'occur
@@ -6174,6 +6090,7 @@ When ARG is nil the root window is used."
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
+  "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle
   "+" 'calc-grab-sum-down
