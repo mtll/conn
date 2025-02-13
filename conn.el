@@ -1928,7 +1928,7 @@ Possibilities: \\<query-replace-map>
 
 (defun conn--kapply-match-iterator ( string regions &optional
                                      regexp-flag order delimited-flag query-flag)
-  (let* (matches overlays)
+  (let (matches overlays)
     (save-excursion
       (pcase-dolist (`(,beg . ,end) regions)
         (goto-char beg)
@@ -1936,9 +1936,9 @@ Possibilities: \\<query-replace-map>
          while (replace-search string end regexp-flag
                                delimited-flag case-fold-search)
          for (mb me . _) = (match-data t)
-         collect (push (cons (conn--create-marker mb)
-                             (conn--create-marker me))
-                       matches))))
+         do (push (cons (conn--create-marker mb)
+                        (conn--create-marker me))
+                  matches))))
     (unless matches
       (user-error "No matches for kapply."))
     (setq matches (pcase order
@@ -4020,9 +4020,9 @@ instances of from-string.")
         (buffer-substring-no-properties beg end)
       "")))
 
-(defun conn--replace-read-args (prompt regexp-flag beg end &optional noerror)
+(defun conn--replace-read-args (prompt regexp-flag regions &optional noerror)
   (unless noerror (barf-if-buffer-read-only))
-  (conn--with-region-emphasis `(,beg ,end)
+  (conn--with-region-emphasis regions
       (save-mark-and-excursion
         (let* ((delimited-flag (and current-prefix-arg
                                     (not (eq current-prefix-arg '-))))
@@ -4039,7 +4039,11 @@ instances of from-string.")
                (from (minibuffer-with-setup-hook
                          (minibuffer-lazy-highlight-setup
                           :case-fold case-fold-search
-                          :filter (lambda (mb me) (<= beg mb me end))
+                          :filter (lambda (mb me)
+                                    (catch 'valid
+                                      (pcase-dolist (`(,beg . ,end) regions)
+                                        (when (<= beg mb me end)
+                                          (throw 'valid t)))))
                           :highlight query-replace-lazy-highlight
                           :regexp regexp-flag
                           :regexp-function (or replace-regexp-function
@@ -4071,12 +4075,12 @@ instances of from-string.")
                 (and current-prefix-arg (eq current-prefix-arg '-))
                 conn-query-flag)))))
 
-(defun conn-replace-in-thing (thing-mover arg from-string to-string
-                                          &optional delimited backward query-flag)
+(defun conn-replace-in-thing ( thing-mover arg from-string to-string
+                               &optional delimited backward query-flag)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil t))
-                (`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg))
+                (regions (drop 2 (conn-bounds-of-command thing-mover arg)))
                 (common
                  (minibuffer-with-setup-hook
                      (lambda ()
@@ -4089,20 +4093,20 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    nil beg end))))
+                    nil regions))))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg ,end . ,_) conn-last-bounds-of-command))
-    (save-window-excursion
+  (with-undo-amalgamate
+    (pcase-dolist (`(,beg . ,end) (drop 2 conn-last-bounds-of-command))
       (save-excursion
         (perform-replace from-string to-string query-flag nil
                          delimited nil nil beg end backward)))))
 
-(defun conn-regexp-replace-in-thing (thing-mover arg from-string to-string
-                                                 &optional delimited backward query-flag)
+(defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
+                                      &optional delimited backward query-flag)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil t))
-                (`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg))
+                (regions (drop 2 (conn-bounds-of-command thing-mover arg)))
                 (common
                  (minibuffer-with-setup-hook
                      (lambda ()
@@ -4115,10 +4119,10 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    t beg end))))
+                    t regions))))
      (append (list thing-mover arg) common)))
-  (pcase-let ((`(,beg ,end . ,_) conn-last-bounds-of-command))
-    (save-window-excursion
+  (with-undo-amalgamate
+    (pcase-dolist (`(,beg . ,end) (drop 2 conn-last-bounds-of-command))
       (save-excursion
         (perform-replace from-string to-string query-flag t
                          delimited nil nil beg end backward)))))
@@ -4245,14 +4249,14 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Kapply Commands
 
-(defun conn-kapply-replace-matches (string beg end)
+(defun conn-kapply-replace-matches (string regions)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
-    (take 2 (cdr (conn--read-thing-region "Define Region")))))
-  (conn--with-region-emphasis `(,beg ,end)
+    (drop 3 (conn--read-thing-region "Define Region"))))
+  (conn--with-region-emphasis regions
       (thread-first
-        (conn--kapply-match-iterator string beg end nil nil current-prefix-arg nil)
+        (conn--kapply-match-iterator string regions nil nil current-prefix-arg nil)
         conn--kapply-per-buffer-undo
         conn--kapply-save-restriction
         conn--kapply-save-excursion
@@ -4260,28 +4264,28 @@ Interactively `region-beginning' and `region-end'."
         (conn--kapply-with-state 'conn-emacs-state)
         conn--kmacro-apply)))
 
-(defun conn-kapply-emacs-on-matches (string beg end)
+(defun conn-kapply-emacs-on-matches (string regions)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
-    (take 2 (cdr (conn--read-thing-region "Define Region")))))
-  (conn--with-region-emphasis `(,beg ,end)
+    (drop 3 (conn--read-thing-region "Define Region"))))
+  (conn--with-region-emphasis regions
       (thread-first
-        (conn--kapply-match-iterator string beg end nil nil current-prefix-arg nil)
+        (conn--kapply-match-iterator string regions nil nil current-prefix-arg nil)
         conn--kapply-per-buffer-undo
         conn--kapply-save-restriction
         conn--kapply-save-excursion
         (conn--kapply-with-state 'conn-emacs-state)
         conn--kmacro-apply)))
 
-(defun conn-kapply-conn-on-matches (string beg end)
+(defun conn-kapply-conn-on-matches (string regions)
   (interactive
    (nconc
     (list (filter-buffer-substring (region-beginning) (region-end)))
-    (take 2 (cdr (conn--read-thing-region "Define Region")))))
-  (conn--with-region-emphasis `(,beg ,end)
+    (drop 3 (conn--read-thing-region "Define Region"))))
+  (conn--with-region-emphasis regions
       (thread-first
-        (conn--kapply-match-iterator string beg end nil nil current-prefix-arg nil)
+        (conn--kapply-match-iterator string regions nil nil current-prefix-arg nil)
         conn--kapply-per-buffer-undo
         conn--kapply-save-restriction
         conn--kapply-save-excursion
