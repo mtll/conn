@@ -287,7 +287,7 @@ before each iteration."
              ("Save" . conn--kapply-save-windows)))
 
 (transient-define-suffix conn--kapply-string-suffix (args)
-  "Apply keyboard macro to every occurance of a string within a region.
+  "Apply keyboard macro to every occurrence of a string within a region.
 The region is read by prompting for a command with a `:conn-command-thing'
 property."
   :transient 'transient--do-exit
@@ -296,20 +296,20 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--kapply-compose-iterator
-   (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
-                (conn-query-flag conn-query-flag)
-                (string (minibuffer-with-setup-hook
-                            (lambda ()
-                              (thread-last
-                                (current-local-map)
-                                (make-composed-keymap conn-replace-map)
-                                (use-local-map)))
-                          (conn--read-from-with-preview "String" beg end nil))))
+   (let* ((delimited (oref transient-current-prefix scope))
+          (regions (drop 3 (conn--read-thing-region "Define Region")))
+          (conn-query-flag conn-query-flag)
+          (string (minibuffer-with-setup-hook
+                      (lambda ()
+                        (thread-last
+                          (current-local-map)
+                          (make-composed-keymap conn-replace-map)
+                          (use-local-map)))
+                    (conn--read-from-with-preview "String" regions nil))))
      (conn--kapply-match-iterator
-      string beg end nil
+      string regions nil
       (alist-get :maybe-order args)
-      (oref transient-current-prefix scope)
-      conn-query-flag))
+      delimited conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -325,19 +325,19 @@ property."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (pcase-let* ((`(,beg ,end . ,_) (cdr (conn--read-thing-region "Define Region")))
-                (conn-query-flag conn-query-flag)
-                (regexp (minibuffer-with-setup-hook
-                            (lambda ()
-                              (thread-last
-                                (current-local-map)
-                                (use-local-map)))
-                          (conn--read-from-with-preview "Regexp" beg end t))))
+   (let* ((delimited (oref transient-current-prefix scope))
+          (regions (drop 3 (conn--read-thing-region "Define Region")))
+          (conn-query-flag conn-query-flag)
+          (regexp (minibuffer-with-setup-hook
+                      (lambda ()
+                        (thread-last
+                          (current-local-map)
+                          (use-local-map)))
+                    (conn--read-from-with-preview "Regexp" regions t))))
      (conn--kapply-match-iterator
-      regexp beg end t
+      regexp regions t
       (alist-get :maybe-order args)
-      (oref transient-current-prefix scope)
-      conn-query-flag))
+      delimited conn-query-flag))
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
