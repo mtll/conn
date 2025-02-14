@@ -2052,17 +2052,24 @@ Possibilities: \\<query-replace-map>
          (pcase-dolist (`(,buffer ,beg . ,end) kapply-saved-restrictions)
            (with-current-buffer buffer
              (widen)
-             (narrow-to-region beg end))))
+             (narrow-to-region (or beg (point-min))
+                               (or end (point-max))))))
         (_
          (prog1
              (funcall iterator state)
-           (if-let* ((restriction (alist-get (current-buffer) kapply-saved-restrictions)))
-               (progn
-                 (widen)
-                 (narrow-to-region (car restriction) (cdr restriction)))
-             (setf (alist-get (current-buffer) kapply-saved-restrictions)
-                   (cons (point-min-marker)
-                         (point-max-marker))))))))))
+           (pcase (alist-get (current-buffer) kapply-saved-restrictions)
+             ('nil
+              (let ((beg (point-min-marker))
+                    (end (point-max-marker)))
+                (without-restriction
+                  (setf (alist-get (current-buffer) kapply-saved-restrictions)
+                        (cons (when (/= beg (point-min)) beg)
+                              (when (/= end (point-max)) end))))))
+             (`(nil . nil) (widen))
+             (`(,beg . ,end)
+              (widen)
+              (narrow-to-region (or beg (point-min))
+                                (or end (point-max)))))))))))
 
 (defun conn--kapply-change-region (iterator)
   (lambda (state)
@@ -2071,7 +2078,7 @@ Possibilities: \\<query-replace-map>
       ret)))
 
 (defun conn--kapply-with-state (iterator transition)
-  (let ((buffer-states nil))
+  (let (buffer-states)
     (lambda (state)
       (prog1
           (funcall iterator state)
