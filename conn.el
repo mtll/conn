@@ -514,8 +514,8 @@ Used to restore previous value when `conn-mode' is disabled.")
                                          (list (point-max)))
                 by #'cddr
                 while beg
-                for ov = (make-overlay beg end) do
-                (overlay-put ov 'face 'shadow)
+                for ov = (make-overlay beg end)
+                do (overlay-put ov 'face 'shadow)
                 (push ov ,overlays))
        (unwind-protect
            ,(macroexp-progn body)
@@ -612,10 +612,11 @@ If BUFFER is nil check `current-buffer'."
 (defun conn--merge-regions (regions)
   (let (merged)
     (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
-      (pcase (seq-find (pcase-lambda (`(,beg2 . ,end2))
-                         (and (eq (marker-buffer beg2) (marker-buffer beg1))
-                              (not (or (< end2 beg1) (< end1 beg2)))))
-                       merged)
+      (pcase (catch 'found
+               (pcase-dolist ((and r `(,beg2 . ,end2)) merged)
+                 (when (and (eq (marker-buffer beg2) (marker-buffer beg1))
+                            (not (or (< end2 beg1) (< end1 beg2))))
+                   (throw 'found r))))
         ((and cons `(,beg2 . ,end2))
          (setcar cons (if (< beg1 beg2)
                           (prog1 beg1 (set-marker beg2 nil))
@@ -628,13 +629,13 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn--narrow-indirect (beg end &optional record)
   (let* ((line-beg (line-number-at-pos beg))
-         (linenum  (- (line-number-at-pos end) line-beg))
-         (name     (format "%s@%s+%s - %s"
-                           (buffer-name (current-buffer)) line-beg linenum
-                           (thread-first
-                             (buffer-substring-no-properties beg end)
-                             (string-trim)
-                             (substring 0 20)))))
+         (linenum (- (line-number-at-pos end) line-beg))
+         (name (format "%s@%s+%s - %s"
+                       (buffer-name (current-buffer)) line-beg linenum
+                       (thread-first
+                         (buffer-substring-no-properties beg end)
+                         (string-trim)
+                         (substring 0 20)))))
     (clone-indirect-buffer-other-window name t)
     (conn--narrow-to-region-1 beg end record)
     (deactivate-mark)))
@@ -656,9 +657,7 @@ If BUFFER is nil check `current-buffer'."
          (with-current-buffer ,buffer
            (if ,saved-state
                (funcall ,saved-state)
-             (when conn-current-state
-               (funcall (get conn-current-state :conn-transition-fn) :exit)
-               (setq cursor-type ,saved-cursor-type)))
+             (conn-exit-state conn-current-state))
            (setq conn-previous-state ,saved-prev-state))))))
 
 (defmacro conn--with-input-method (&rest body)
@@ -728,7 +727,7 @@ If BUFFER is nil check `current-buffer'."
             (minibuffer-lazy-highlight-setup
              :case-fold case-fold-search
              :filter (lambda (mb me)
-                       (cl-loop for (beg . end) in regions
+                       (cl-loop for (beg . end) in bounds
                                 when (<= beg mb me end) return t))
              :highlight query-replace-lazy-highlight
              :regexp regexp-flag
@@ -923,6 +922,32 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
+(cl-defgeneric conn-enter-state (state)
+  ( :method (_state)
+    (run-hook-wrapped
+     'conn-transition-hook
+     (lambda (hook)
+       (condition-case err
+           (funcall hook)
+         (error
+          (remove-hook 'conn-transition-hook hook)
+          (message "Error in conn-transition-hook %s" (car err)))))))
+  ( :method ((_state (eql nil)))
+    "Noop" nil))
+
+(cl-defgeneric conn-exit-state (state)
+  ( :method (_state)
+    (run-hook-wrapped
+     'conn-transition-hook
+     (lambda (hook)
+       (condition-case err
+           (funcall hook)
+         (error
+          (remove-hook 'conn-transition-hook hook)
+          (message "Error in conn-transition-hook %s" (car err)))))))
+  ( :method ((_state (eql nil)))
+    "Noop" nil))
+
 (defmacro conn-define-state (name doc &rest rest)
   "Define a conn state NAME.
 Defines a transition function and variable NAME.  NAME is non-nil when
@@ -954,7 +979,6 @@ disabled.
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-name (conn--symbolicate name "-lighter"))
                (lighter-color-name (conn--symbolicate name "-lighter-color"))
-               (enter (gensym "enter"))
                ((map :cursor
                      :lighter
                      :lighter-color
@@ -1011,40 +1035,33 @@ disabled.
 
        (cl-pushnew ',name conn-states)
 
+       (cl-defmethod conn-exit-state ((_state (eql ',name)) &context (,name (eql t)))
+         (setq ,name nil
+               conn-current-state nil
+               conn-previous-state ',name)
+         ,@body
+         (cl-call-next-method))
+
+       (cl-defmethod conn-enter-state ((_state (eql ',name)) &context (,name (eql nil)))
+         (setq ,name t
+               conn-current-state ',name
+               conn--local-mode-maps (alist-get ',name conn--mode-maps))
+         (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
+         (when (and conn-lighter conn-lighter-colors)
+           (setq-local conn-lighter
+                       (conn--set-background conn-lighter ,lighter-color-name)))
+         (conn--activate-input-method)
+         (setq cursor-type (or ,cursor-name t))
+         (when (not executing-kbd-macro)
+           (force-mode-line-update))
+         ,@body
+         (cl-call-next-method))
+
        (defun ,name ()
          ,doc
          (interactive)
-         (when conn-current-state
-           (funcall (get conn-current-state :conn-transition-fn) :exit))
-         (funcall (get ',name :conn-transition-fn) :enter))
-
-       (put ',name :conn-transition-fn
-            (lambda (,enter)
-              (when (xor ,name (and ,enter (not (eq ,enter :exit))))
-                (if ,name
-                    (setq ,name nil
-                          conn-current-state nil
-                          conn-previous-state ',name)
-                  (setq ,name t
-                        conn-current-state ',name
-                        conn--local-mode-maps (alist-get ',name conn--mode-maps))
-                  (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
-                  (when (and conn-lighter conn-lighter-colors)
-                    (setq-local conn-lighter
-                                (conn--set-background conn-lighter ,lighter-color-name)))
-                  (conn--activate-input-method)
-                  (setq cursor-type (or ,cursor-name t))
-                  (when (not executing-kbd-macro)
-                    (force-mode-line-update)))
-                ,@body
-                (run-hook-wrapped
-                 'conn-transition-hook
-                 (lambda (hook)
-                   (condition-case err
-                       (funcall hook)
-                     (error
-                      (remove-hook 'conn-transition-hook hook)
-                      (message "Error in conn-transition-hook %s" (car err))))))))))))
+         (conn-exit-state conn-current-state)
+         (conn-enter-state ',name)))))
 
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
@@ -1148,14 +1165,14 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
           (conn--create-label-strings count
                                       conn-dispatch-label-characters
                                       new-labels))
-      (catch 'term
+      (catch 'done
         (let ((n (length labels)))
           (setq labels (nreverse labels))
           (dolist (prefix (nreverse prefixes))
             (dolist (c alphabet)
               (push (concat prefix c) labels)
               (when (= (cl-incf n) count)
-                (throw 'term nil))))))
+                (throw 'done nil))))))
       (dolist (l labels)
         (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
       (nreverse labels))))
@@ -1164,17 +1181,16 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   (let ((candidates (funcall label-fn labels things))
         (prompt "char:"))
     (unwind-protect
-        (catch 'return
-          (while t
-            (pcase candidates
-              ('nil
-               (setq candidates (funcall label-fn labels things)
-                     prompt "char: (no matches)"))
-              (`(,it . nil)
-               (throw 'return (overlay-get it payload)))
-              (_
-               (setq prompt "char:")))
-            (setq candidates (conn--dispatch-narrow-labels prompt candidates))))
+        (cl-loop
+         (pcase candidates
+           ('nil
+            (setq candidates (funcall label-fn labels things)
+                  prompt "char: (no matches)"))
+           (`(,it . nil)
+            (cl-return (overlay-get it payload)))
+           (_
+            (setq prompt "char:")))
+         (setq candidates (conn--dispatch-narrow-labels prompt candidates)))
       (mapcar #'delete-overlay candidates))))
 
 (defun conn--create-window-labels (labels windows)
@@ -1222,8 +1238,8 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
              'conn--create-window-labels
              'window)
           (cl-loop for win in windows
-                   for (pt vscroll hscroll) in window-state do
-                   (set-window-point win pt)
+                   for (pt vscroll hscroll) in window-state
+                   do (set-window-point win pt)
                    (set-window-hscroll win hscroll)
                    (set-window-vscroll win vscroll))
           (unless conn-wincontrol-mode
@@ -1236,12 +1252,17 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 (defvar conn-bounds-of-command-alist nil)
 
+(defvar conn-bounds-of-command-default
+  'conn--bounds-of-thing-command-default)
+
 (defvar conn-bounds-of-things-in-region-alist nil)
 
 (defvar conn-bounds-of-things-in-region-default
   'conn--things-in-region-default)
 
 (defvar conn-read-thing-mover-maps-alist nil)
+
+(defvar conn-last-bounds-of-command nil)
 
 (defvar conn--thing-overriding-maps nil)
 
@@ -1280,12 +1301,10 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "q" 'abort-recursive-edit
   "<t>" 'ignore)
 
-(defvar conn-last-bounds-of-command nil)
-
 (defun conn-bounds-of-command (cmd arg)
   (setq conn-last-bounds-of-command
         (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                     (apply-partially 'conn--bounds-of-thing-command-default cmd))
+                     (apply-partially conn-bounds-of-command-default cmd))
                  arg)))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
@@ -1318,23 +1337,23 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
           (funcall exit)))
       (list (region-beginning) (region-end)))))
 
-(setf (alist-get 'conn-expand conn-bounds-of-command-alist)
-      (apply-partially 'conn--bounds-of-expansion 'conn-expand))
-
-(setf (alist-get 'conn-contract conn-bounds-of-command-alist)
-      (apply-partially 'conn--bounds-of-expansion 'conn-contract))
-
 (defun conn--bounds-of-region (_arg)
   (append (list (region-beginning) (region-end))
           (region-bounds)))
 
 (setf (alist-get 'conn-toggle-mark-command conn-bounds-of-command-alist)
-      'conn--bounds-of-region)
+      'conn--bounds-of-region
 
-(setf (alist-get 'set-mark-command conn-bounds-of-command-alist)
-      'conn--bounds-of-region)
+      (alist-get 'conn-expand conn-bounds-of-command-alist)
+      (apply-partially 'conn--bounds-of-expansion 'conn-expand)
 
-(setf (alist-get 'conn-set-mark-command conn-bounds-of-command-alist)
+      (alist-get 'conn-contract conn-bounds-of-command-alist)
+      (apply-partially 'conn--bounds-of-expansion 'conn-contract)
+
+      (alist-get 'set-mark-command conn-bounds-of-command-alist)
+      'conn--bounds-of-region
+
+      (alist-get 'conn-set-mark-command conn-bounds-of-command-alist)
       'conn--bounds-of-region)
 
 (defun conn-bounds-of-things-in-region (thing beg end)
@@ -1484,14 +1503,14 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 (defun conn--create-dot (beg end &optional buffer point)
   (with-current-buffer (or buffer (current-buffer))
-    (cl-loop for ov in (overlays-in beg end) do
-             (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
-               (let ((b (overlay-start ov))
-                     (e (overlay-end ov)))
-                 (when (or (< beg b end) (< beg e end))
-                   (setq beg (min beg (overlay-start ov))
-                         end (max end (overlay-end ov)))
-                   (delete-overlay ov)))))
+    (cl-loop for ov in (overlays-in beg end)
+             do (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
+                  (let ((b (overlay-start ov))
+                        (e (overlay-end ov)))
+                    (when (or (< beg b end) (< beg e end))
+                      (setq beg (min beg (overlay-start ov))
+                            end (max end (overlay-end ov)))
+                      (delete-overlay ov)))))
     (let ((dot (make-overlay beg end buffer))
           (faces
            (cl-loop for ov in (append (overlays-at (1- beg)) (overlays-at end))
@@ -1738,34 +1757,33 @@ Your options are: \\<query-replace-map>
      with msg = (substitute-command-keys
                  "Proceed with macro?\\<query-replace-map>\
  (\\[act], \\[skip], \\[exit], \\[recenter], \\[edit], \\[automatic]) ")
-     do
-     (pcase (let ((executing-kbd-macro nil)
-                  (defining-kbd-macro nil))
-              (message "%s" msg)
-              (lookup-key query-replace-map (vector (read-event))))
-       ('act (cl-return))
-       ('skip
-        (setq executing-kbd-macro "")
-        (cl-return))
-       ('exit
-        (setq executing-kbd-macro t)
-        (cl-return))
-       ('recenter
-        (recenter nil))
-       ('edit
-        (let (executing-kbd-macro defining-kbd-macro)
-          (recursive-edit)))
-       ('quit
-        (setq quit-flag t)
-        (cl-return))
-       ('automatic
-        (setq conn--kapply-automatic-flag t)
-        (cl-return))
-       ('help
-        (with-output-to-temp-buffer "*Help*"
-          (princ
-           (substitute-command-keys
-            "Specify how to proceed with keyboard macro execution.
+     do (pcase (let ((executing-kbd-macro nil)
+                     (defining-kbd-macro nil))
+                 (message "%s" msg)
+                 (lookup-key query-replace-map (vector (read-event))))
+          ('act (cl-return))
+          ('skip
+           (setq executing-kbd-macro "")
+           (cl-return))
+          ('exit
+           (setq executing-kbd-macro t)
+           (cl-return))
+          ('recenter
+           (recenter nil))
+          ('edit
+           (let (executing-kbd-macro defining-kbd-macro)
+             (recursive-edit)))
+          ('quit
+           (setq quit-flag t)
+           (cl-return))
+          ('automatic
+           (setq conn--kapply-automatic-flag t)
+           (cl-return))
+          ('help
+           (with-output-to-temp-buffer "*Help*"
+             (princ
+              (substitute-command-keys
+               "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
@@ -1773,9 +1791,9 @@ Possibilities: \\<query-replace-map>
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
 \\[automatic]   Apply keyboard macro to rest."))
-          (with-current-buffer standard-output
-            (help-mode))))
-       (_ (ding)))))))
+             (with-current-buffer standard-output
+               (help-mode))))
+          (_ (ding)))))))
 
 (defvar conn-kapply-preview-max-overlays 200)
 
@@ -3180,21 +3198,21 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
       (cl-loop
        for command-name in command-names
-       collect
-       (let* ((fun (and (stringp command-name) (intern-soft command-name)))
-              (binding (where-is-internal fun
-                                          (cons keymap (current-active-maps t))
-                                          t))
-              (binding (if (and binding (not (stringp binding)))
-                           (format " {%s}" (key-description binding))
-                         ""))
-              (thing (format " (%s)" (or (get fun :conn-command-thing)
-                                         "action"))))
-         (put-text-property 0 (length binding)
-                            'face 'help-key-binding binding)
-         (put-text-property 0 (length thing)
-                            'face 'completions-annotations thing)
-         (list command-name "" (concat thing binding)))))))
+       collect (let* ((fun (and (stringp command-name) (intern-soft command-name)))
+                      (binding (where-is-internal
+                                fun
+                                (cons keymap (current-active-maps t))
+                                t))
+                      (binding (if (and binding (not (stringp binding)))
+                                   (format " {%s}" (key-description binding))
+                                 ""))
+                      (thing (format " (%s)" (or (get fun :conn-command-thing)
+                                                 "action"))))
+                 (put-text-property 0 (length binding)
+                                    'face 'help-key-binding binding)
+                 (put-text-property 0 (length thing)
+                                    'face 'completions-annotations thing)
+                 (list command-name "" (concat thing binding)))))))
 
 (defun conn--dispatch-narrow-labels (prompt overlays)
   (unwind-protect
@@ -3294,8 +3312,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                (/= beg (car ovs)))))
                (push beg ovs))))
           (forward-thing thing 1))))
-    (cl-loop for pt in ovs collect
-             (conn--make-preview-overlay pt 1 thing))))
+    (cl-loop for pt in ovs
+             collect (conn--make-preview-overlay pt 1 thing))))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (cl-loop for win in (conn--preview-get-windows all-windows)
@@ -3327,11 +3345,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (goto-char (point-min))
                        (save-match-data
                          (cl-loop while (re-search-forward regexp nil t)
-                                  collect
-                                  (conn--make-preview-overlay
-                                   (match-beginning 0)
-                                   (- (match-end 0)
-                                      (match-beginning 0))))))))))
+                                  collect (conn--make-preview-overlay
+                                           (match-beginning 0)
+                                           (- (match-end 0)
+                                              (match-beginning 0))))))))))
 
 (defun conn--dispatch-things-with-prefix-1 (things prefix)
   (let ((case-fold-search (conn--string-no-upper-case-p prefix))
@@ -3346,8 +3363,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (conn--region-visible-p beg end)
                        (not (eql (point) (caar ovs))))
               (push (list (point) (length prefix) thing) ovs))))))
-    (cl-loop for ov in ovs collect
-             (apply 'conn--make-preview-overlay ov))))
+    (cl-loop for ov in ovs
+             collect (apply 'conn--make-preview-overlay ov))))
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix "")
@@ -3947,8 +3964,8 @@ With prefix arg REGISTER add to narrow ring register instead."
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
-  (cl-loop for (beg . end) in conn-narrow-ring do
-           (set-marker beg nil)
+  (cl-loop for (beg . end) in conn-narrow-ring
+           do (set-marker beg nil)
            (set-marker end nil))
   (setq conn-narrow-ring nil))
 
@@ -4091,7 +4108,7 @@ instances of from-string.")
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil t))
-                (regions (drop 2 (conn-bounds-of-command thing-mover arg)))
+                (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
                      (lambda ()
@@ -4104,10 +4121,13 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    nil regions))))
+                    nil (or (drop 2 regions) (cons (car regions) (cadr regions)))))))
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
-    (pcase-dolist (`(,beg . ,end) (drop 2 conn-last-bounds-of-command))
+    (pcase-dolist (`(,beg . ,end)
+                   (or (drop 2 conn-last-bounds-of-command)
+                       (cons (car conn-last-bounds-of-command)
+                             (cadr conn-last-bounds-of-command))))
       (save-excursion
         (perform-replace from-string to-string query-flag nil
                          delimited nil nil beg end backward)))))
@@ -4117,7 +4137,7 @@ instances of from-string.")
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn--read-thing-mover "Thing Mover" nil t))
-                (regions (drop 2 (conn-bounds-of-command thing-mover arg)))
+                (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
                      (lambda ()
@@ -4130,10 +4150,13 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    t regions))))
+                    t (or (drop 2 regions) (cons (car regions) (cadr regions)))))))
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
-    (pcase-dolist (`(,beg . ,end) (drop 2 conn-last-bounds-of-command))
+    (pcase-dolist (`(,beg . ,end)
+                   (or (drop 2 conn-last-bounds-of-command)
+                       (cons (car conn-last-bounds-of-command)
+                             (cadr conn-last-bounds-of-command))))
       (save-excursion
         (perform-replace from-string to-string query-flag t
                          delimited nil nil beg end backward)))))
@@ -5941,8 +5964,8 @@ Uses `split-window-right'."
             (car windows) (assq-delete-all 'last (car windows))))
     (append params
             (if recursive
-                (cl-loop for win in windows collect
-                         (conn--wincontrol-reverse-window win t))
+                (cl-loop for win in windows
+                         collect (conn--wincontrol-reverse-window win t))
               windows))))
 
 (defun conn-wincontrol-reverse (arg)
@@ -6375,8 +6398,7 @@ When ARG is nil the root window is used."
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
-    (when conn-current-state
-      (funcall (get conn-current-state :conn-transition-fn) :exit))
+    (conn-exit-state conn-current-state)
     (conn--clear-overlays)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
