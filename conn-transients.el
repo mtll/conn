@@ -421,7 +421,7 @@ property."
      (alist-get :restrictions args)
      (alist-get :excursions args)
      '(conn--kapply-with-state conn-emacs-state)
-     (unless (> (point) (caar regions))
+     (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region
      (alist-get :window-conf args)
@@ -445,7 +445,7 @@ property."
      (alist-get :restrictions args)
      (alist-get :excursions args)
      '(conn--kapply-with-state conn-state)
-     (unless (> (point) (caar regions))
+     (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region
      (alist-get :window-conf args)
