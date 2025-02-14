@@ -728,10 +728,8 @@ If BUFFER is nil check `current-buffer'."
             (minibuffer-lazy-highlight-setup
              :case-fold case-fold-search
              :filter (lambda (mb me)
-                       (catch 'valid
-                         (pcase-dolist (`(,beg . ,end) bounds)
-                           (when (<= beg mb me end)
-                             (throw 'valid t)))))
+                       (cl-loop for (beg . end) in regions
+                                when (<= beg mb me end) return t))
              :highlight query-replace-lazy-highlight
              :regexp regexp-flag
              :regexp-function (or replace-regexp-function
@@ -1279,7 +1277,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   :parent conn-expand-repeat-map
   "v" 'conn-toggle-mark-command
   "e" 'exit-recursive-edit
-  "C-g" 'abort-recursive-edit
+  "q" 'abort-recursive-edit
   "<t>" 'ignore)
 
 (defvar conn-last-bounds-of-command nil)
@@ -1562,7 +1560,9 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "S-<mouse-3>" 'conn-delete-dot-at-click
   "S-<down-mouse-3>" 'conn-delete-dot-at-click
   "<escape>" 'exit-recursive-edit
-  "DEL" 'conn-delete-dots)
+  "DEL" 'conn-delete-dots
+  "e" 'exit-recursive-edit
+  "q" 'abort-recursive-edit)
 
 (define-minor-mode conn--dot-mode
   "Minor mode for multiple dots."
@@ -4053,10 +4053,8 @@ instances of from-string.")
                          (minibuffer-lazy-highlight-setup
                           :case-fold case-fold-search
                           :filter (lambda (mb me)
-                                    (catch 'valid
-                                      (pcase-dolist (`(,beg . ,end) regions)
-                                        (when (<= beg mb me end)
-                                          (throw 'valid t)))))
+                                    (cl-loop for (beg . end) in regions
+                                             when (<= beg mb me end) return t))
                           :highlight query-replace-lazy-highlight
                           :regexp regexp-flag
                           :regexp-function (or replace-regexp-function
