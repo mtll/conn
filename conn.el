@@ -212,10 +212,10 @@ For the meaning of CONDITION see `buffer-match-p'."
   :group 'conn
   :type 'number)
 
-(defcustom conn-dispatch-label-characters
+(defcustom conn-simple-label-characters
   (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e" "r"
         "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
-  "Chars to use for dispatch label overlays."
+  "Chars to use for label overlays for the default labeling function."
   :group 'conn
   :type '(list integer))
 
@@ -741,7 +741,7 @@ If BUFFER is nil check `current-buffer'."
              ,@body)
          (with-current-buffer ,buffer
            (if ,saved-state
-               (conn-enter-state ',saved-state)
+               (conn-enter-state ,saved-state)
              (conn-exit-state conn-current-state))
            (setq conn-previous-state ,saved-prev-state))))))
 
@@ -1110,42 +1110,44 @@ disabled.
 
        (cl-pushnew ',name conn-states)
 
-       (cl-defmethod conn-exit-state ((state (eql ',name)) &context (,name (eql t)))
-         (setq ,name nil
-               conn-current-state nil
-               conn-previous-state state)
-         ,@body
-         (run-hook-wrapped
-          'conn-exit-functions
-          (lambda (fn)
-            (condition-case err
-                (funcall fn state)
-              (error
-               (remove-hook 'conn-exit-functions fn)
-               (message "Error in conn-exit-functions: %s" (car err)))))))
+       (cl-defmethod conn-exit-state ((state (eql ',name)))
+         (when ,name
+           (setq ,name nil
+                 conn-current-state nil
+                 conn-previous-state state)
+           ,@body
+           (run-hook-wrapped
+            'conn-exit-functions
+            (lambda (fn)
+              (condition-case err
+                  (funcall fn state)
+                (error
+                 (remove-hook 'conn-exit-functions fn)
+                 (message "Error in conn-exit-functions: %s" (car err))))))))
 
-       (cl-defmethod conn-enter-state ((state (eql ',name)) &context (,name (eql nil)))
-         (conn-exit-state conn-current-state)
-         (setq ,name t
-               conn-current-state state
-               conn--local-mode-maps (alist-get state conn--mode-maps))
-         (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
-         (when (and conn-lighter conn-lighter-colors)
-           (setq-local conn-lighter
-                       (conn--set-background conn-lighter ,lighter-color-name)))
-         (conn--activate-input-method)
-         (setq cursor-type (or ,cursor-name t))
-         (when (not executing-kbd-macro)
-           (force-mode-line-update))
-         ,@body
-         (run-hook-wrapped
-          'conn-entery-functions
-          (lambda (fn)
-            (condition-case err
-                (funcall fn state)
-              (error
-               (remove-hook 'conn-entery-functions fn)
-               (message "Error in conn-entry-functions: %s" (car err)))))))
+       (cl-defmethod conn-enter-state ((state (eql ',name)))
+         (unless ,name
+           (conn-exit-state conn-current-state)
+           (setq ,name t
+                 conn-current-state state
+                 conn--local-mode-maps (alist-get state conn--mode-maps))
+           (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
+           (when (and conn-lighter conn-lighter-colors)
+             (setq-local conn-lighter
+                         (conn--set-background conn-lighter ,lighter-color-name)))
+           (conn--activate-input-method)
+           (setq cursor-type (or ,cursor-name t))
+           (when (not executing-kbd-macro)
+             (force-mode-line-update))
+           ,@body
+           (run-hook-wrapped
+            'conn-entery-functions
+            (lambda (fn)
+              (condition-case err
+                  (funcall fn state)
+                (error
+                 (remove-hook 'conn-entery-functions fn)
+                 (message "Error in conn-entry-functions: %s" (car err))))))))
 
        (defun ,name ()
          ,doc
@@ -1185,6 +1187,11 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 ;; Functions to provide the basic machinery for labeling a set of things
 ;; (buffer regions, windows, etc.) and prompting the user to select from
 ;; a set of labels.
+
+(defvar conn-labeling-function 'conn-simple-labels
+  "Function to create a set of labels for a number of elements.
+
+Is a function of one arguments, the number of labels required.")
 
 (defun conn--make-preview-overlay (pt length &optional thing)
   (let* ((eol (save-excursion
@@ -1245,33 +1252,33 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
     (mapc #'delete-overlay overlays)
     string))
 
-(defun conn--create-label-strings (count alphabet &optional labels)
-  (let* ((labels (or labels (take count alphabet)))
-         (prefixes nil))
-    (while (and labels
-                (> count (+ (length labels)
-                            (* (length prefixes)
-                               (length alphabet)))))
-      (push (pop labels) prefixes))
-    (if (and (null labels) (> count 0))
-        (let ((new-labels))
-          (dolist (a prefixes)
-            (dolist (b alphabet)
-              (push (concat a b) new-labels)))
-          (conn--create-label-strings count
-                                      conn-dispatch-label-characters
-                                      new-labels))
-      (catch 'done
-        (let ((n (length labels)))
-          (setq labels (nreverse labels))
-          (dolist (prefix (nreverse prefixes))
-            (dolist (c alphabet)
-              (push (concat prefix c) labels)
-              (when (= (cl-incf n) count)
-                (throw 'done nil))))))
-      (dolist (l labels)
-        (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
-      (nreverse labels))))
+(defun conn-simple-labels (count &optional labels)
+  (named-let rec ((count count)
+                  (labels (or labels
+                              (take count conn-simple-label-characters))))
+    (let* ((prefixes nil))
+      (while (and labels
+                  (> count (+ (length labels)
+                              (* (length prefixes)
+                                 (length conn-simple-label-characters)))))
+        (push (pop labels) prefixes))
+      (if (and (null labels) (> count 0))
+          (let ((new-labels))
+            (dolist (a prefixes)
+              (dolist (b conn-simple-label-characters)
+                (push (concat a b) new-labels)))
+            (rec count new-labels))
+        (catch 'done
+          (let ((n (length labels)))
+            (setq labels (nreverse labels))
+            (dolist (prefix (nreverse prefixes))
+              (dolist (c conn-simple-label-characters)
+                (push (concat prefix c) labels)
+                (when (= (cl-incf n) count)
+                  (throw 'done nil))))))
+        (dolist (l labels)
+          (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
+        (nreverse labels)))))
 
 (defun conn--read-labels (things labels label-fn payload)
   (let ((candidates (funcall label-fn labels things))
@@ -1328,9 +1335,9 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
         (unwind-protect
             (conn--read-labels
              windows
-             (conn--create-label-strings
-              (length (window-list-1 nil 'no-minibuf t))
-              conn-window-label-characters)
+             (funcall
+              conn-labeling-function
+              (length (window-list-1 nil 'no-minibuf t)))
              'conn--create-window-labels
              'window)
           (cl-loop for win in windows
@@ -3776,11 +3783,11 @@ seconds."
                             (< (abs (- (overlay-start a) (point)))
                                (abs (- (overlay-start b) (point)))))
                           (alist-get (selected-window) prefix-ovs))
-                labels (or (conn--create-label-strings
+                labels (or (funcall
+                            conn-labeling-function
                             (let ((sum 0))
                               (dolist (p prefix-ovs sum)
-                                (setq sum (+ sum (length (cdr p))))))
-                            conn-dispatch-label-characters)
+                                (setq sum (+ sum (length (cdr p)))))))
                            (user-error "No matching candidates")))
           (cl-loop
            do (let* ((prefix (conn--read-labels
@@ -3831,8 +3838,7 @@ seconds."
   (let* ((prefix-ovs `((,(selected-window) . ,(conn--dispatch-isearch-matches))))
          (count (length (cdar prefix-ovs))))
     (unwind-protect
-        (let* ((labels (conn--create-label-strings
-                        count conn-dispatch-label-characters))
+        (let* ((labels (funcall conn-labeling-function count))
                (prefix (conn--read-labels prefix-ovs
                                           labels
                                           'conn--dispatch-label-overlays
@@ -3923,21 +3929,21 @@ Expansions are provided by functions in `conn-expansion-functions'."
     (dotimes (_ arg)
       (cond ((and (region-active-p)
                   (= (point) (region-beginning)))
-             (catch 'term
-               (pcase-dolist (`(,beg . _) conn--current-expansions)
-                 (when (< beg (point)) (throw 'term (goto-char beg))))
-               (user-error "No more expansions")))
+             (cl-loop for (beg . _end) in conn--current-expansions
+                      when (< beg (point)) return (goto-char beg)
+                      finally (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-end)))
-             (catch 'term
-               (pcase-dolist (`(_ . ,end) conn--current-expansions)
-                 (when (> end (point)) (throw 'term (goto-char end))))
-               (user-error "No more expansions")))
+             (cl-loop for (_beg . end) in conn--current-expansions
+                      when (> end (point)) return (goto-char end)
+                      finally (user-error "No more expansions")))
             (t
-             (pcase (seq-find (pcase-lambda (`(,beg . ,end))
-                                (or (< beg (region-beginning))
-                                    (> end (region-end))))
-                              conn--current-expansions)
+             (pcase (catch 'found
+                      (pcase-dolist ((and cons `(,beg . ,end))
+                                     conn--current-expansions)
+                        (when (or (< beg (region-beginning))
+                                  (> end (region-end)))
+                          (throw 'found cons))))
                (`(,beg . ,end)
                 (goto-char (if (= (point) (region-beginning)) beg end))
                 (conn--push-ephemeral-mark
@@ -3963,21 +3969,21 @@ Expansions and contractions are provided by functions in
     (dotimes (_ arg)
       (cond ((and (region-active-p)
                   (= (point) (region-beginning)))
-             (catch 'term
-               (pcase-dolist (`(,beg . _) (reverse conn--current-expansions))
-                 (when (> beg (point)) (throw 'term (goto-char beg))))
-               (user-error "No more expansions")))
+             (cl-loop for (beg . _end) in (reverse conn--current-expansions)
+                      when (> beg (point)) return (goto-char beg)
+                      finally (user-error "No more expansions")))
             ((and (region-active-p)
                   (= (point) (region-end)))
-             (catch 'term
-               (pcase-dolist (`(_ . ,end) (reverse conn--current-expansions))
-                 (when (< end (point)) (throw 'term (goto-char end))))
-               (user-error "No more expansions")))
+             (cl-loop for (_beg . end) in (reverse conn--current-expansions)
+                      when (< end (point)) return (goto-char end)
+                      finally (user-error "No more expansions")))
             (t
-             (pcase (seq-find (pcase-lambda (`(,beg . ,end))
-                                (or (> beg (region-beginning))
-                                    (< end (region-end))))
-                              (reverse conn--current-expansions))
+             (pcase (catch 'found
+                      (pcase-dolist ((and cons `(,beg . ,end))
+                                     (reverse conn--current-expansions))
+                        (when (or (> beg (region-beginning))
+                                  (< end (region-end)))
+                          (throw 'found cons))))
                (`(,beg . ,end)
                 (goto-char (if (= (point) (region-beginning)) beg end))
                 (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
@@ -4246,7 +4252,8 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    nil (or (drop 2 regions) (cons (car regions) (cadr regions)))))))
+                    nil (or (drop 2 regions)
+                            (list (cons (car regions) (cadr regions))))))))
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
     (pcase-dolist (`(,beg . ,end)
@@ -4275,7 +4282,8 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    t (or (drop 2 regions) (cons (car regions) (cadr regions)))))))
+                    t (or (drop 2 regions)
+                          (list (cons (car regions) (cadr regions))))))))
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
     (pcase-dolist (`(,beg . ,end)
@@ -4730,11 +4738,10 @@ When called interactively reads STRING with timeout
     (with-restriction (window-start) (window-end)
       (when-let ((pos (or (save-excursion
                             (backward-char)
-                            (catch 'term
-                              (while (search-backward string nil t)
-                                (when (conn--region-visible-p (match-beginning 0)
-                                                              (match-end 0))
-                                  (throw 'term (match-beginning 0))))))
+                            (cl-loop while (search-backward string nil t)
+                                     when (conn--region-visible-p (match-beginning 0)
+                                                                  (match-end 0))
+                                     return (match-beginning 0)))
                           (user-error "\"%s\" not found." string))))
         (goto-char pos)))))
 
@@ -4764,11 +4771,10 @@ When called interactively reads STRING with timeout
     (let ((case-fold-search (conn--string-no-upper-case-p string)))
       (when-let ((pos (or (save-excursion
                             (forward-char)
-                            (catch 'term
-                              (while (search-forward string nil t)
-                                (when (conn--region-visible-p (match-beginning 0)
-                                                              (match-end 0))
-                                  (throw 'term (match-beginning 0))))))
+                            (cl-loop while (search-forward string nil t)
+                                     when (conn--region-visible-p (match-beginning 0)
+                                                                  (match-end 0))
+                                     return (match-beginning 0)))
                           (user-error "\"%s\" not found." string))))
         (goto-char pos)))))
 
