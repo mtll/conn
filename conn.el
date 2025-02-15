@@ -1934,7 +1934,7 @@ Possibilities: \\<query-replace-map>
                        (min (abs (- b2 (point)))
                             (abs (- e2 (point)))))))
          (this-bufferp (lambda (a _)
-                         (eq (current-buffer) (marker-buffer (car a)))))
+                         (eq (current-buffer) (car a))))
          (regions (thread-first
                     (seq-group-by (pcase-lambda (`(,beg . ,_end))
                                     (marker-buffer beg))
@@ -1942,7 +1942,7 @@ Possibilities: \\<query-replace-map>
                     (sort :lessp this-bufferp))))
     (cl-loop repeat conn-kapply-preview-max-overlays
              for (b . e) in (nconc (sort (cdar regions) :lessp nearest)
-                                   (mapcar #'cdr (cdr regions)))
+                                   (mapcan #'cdr (cdr regions)))
              collect (let ((ov (make-overlay b e (marker-buffer b) t)))
                        (overlay-put ov 'category 'kapply-preview)
                        (when face (overlay-put ov 'face face))
@@ -2002,10 +2002,9 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (pcase state
         (:finalize
-         (mapc (pcase-lambda (`(,beg . ,end))
-                 (set-marker beg nil)
-                 (set-marker end nil))
-               matches))
+         (pcase-dolist (`(,beg . ,end) matches)
+           (set-marker beg nil)
+           (set-marker end nil)))
         (_
          (conn--kapply-advance-region (pop matches)))))))
 
@@ -2042,9 +2041,7 @@ Possibilities: \\<query-replace-map>
                          ('reverse (nreverse regions))
                          (_        (conn--nnearest-first regions)))))
     (unless (markerp beg)
-      (setcar reg (conn--create-marker beg)))
-    (unless (markerp end)
-      (setcdr reg (conn--create-marker end))))
+      (setcar reg (conn--create-marker beg))))
   (let (overlays)
     (lambda (state)
       (pcase state
@@ -2052,7 +2049,7 @@ Possibilities: \\<query-replace-map>
          (mapc #'delete-overlay overlays)
          (pcase-dolist (`(,beg . ,end) regions)
            (set-marker beg nil)
-           (set-marker end nil)))
+           (when (markerp end) (set-marker end nil))))
         (:record
          (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region))
          (conn--kapply-advance-region (pop regions)))
