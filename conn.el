@@ -54,19 +54,49 @@
 (defvar conn-org-edit-state)
 (defvar conn-emacs-state)
 (defvar conn-state-map)
-(defvar conn-transition-hook)
 (defvar conn-wincontrol-mode)
 
-(defvar conn-dispatch-target-finder-default 'conn--dispatch-chars)
-(defvar conn-dispatch-target-finders-alist nil)
+(defvar conn-dispatch-target-finder-default 'conn--dispatch-chars
+  "Default target finder for dispatch.
 
-(defvar conn-dispatch-action-default 'conn-dispatch-goto)
-(defvar conn-dispatch-default-action-alist nil)
+A target finder function should return a list of overlays.")
 
-(defvar conn-mark-handler-overrides-alist nil)
+(defvar conn-dispatch-target-finders-alist nil
+  "Default target finders for for things or commands.
+
+Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
+determining the target finder for a command in
+`conn-dispatch-read-thing-mode', which see, actions associated with a
+command have higher precedence than actions associated with a thing.
+
+For the meaning of TARGET-FINDER see
+`conn-dispatch-target-finder-default'.")
+
+(defvar conn-dispatch-action-default 'conn-dispatch-goto
+  "Default action function for `conn-dispatch-on-things'.
+
+For the meaning of action function see `conn-define-dispatch-action'.")
+
+(defvar conn-dispatch-default-action-alist nil
+  "Default action functions for things or commands.
+
+Is an alist of the form (((or THING CMD) . ACTION) ...).  When
+determining the default action for a command in
+`conn-dispatch-read-thing-mode', which see, actions associated with a
+command have higher precedence than actions associated with a command's
+thing.
+
+For the meaning of ACTION see `conn-define-dispatch-action'.")
+
+(defvar-local conn-mark-handler-overrides-alist nil
+  "Buffer local overrides for command mark handlers.
+
+Is an alist of the form ((CMD . MARK-HANDLER) ...).
+
+For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
 
 (defvar conn--mark-cursor-timer nil
-  "`run-with-idle-timer' timer to update `mark' cursor.")
+  "The idle timer which updates `mark' cursor.")
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
@@ -141,8 +171,9 @@ current state."
     ((derived-mode . text-mode) . conn-state)
     ((derived-mode . conf-mode) . conn-state))
   "Alist of the form ((CONDITION . STATE) ...).
+
 Elements specify default STATE for buffers matching CONDITION.
-CONDITION has the same meaning as in `buffer-match-p'."
+For the meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
@@ -150,7 +181,7 @@ CONDITION has the same meaning as in `buffer-match-p'."
   '((default (:inherit cursor :background "#b8a2f0"))
     (((background light)) (:inherit cursor :background "#b8a2f0"))
     (((background dark)) (:inherit cursor :background "#a742b0")))
-  "Face for mark."
+  "Face for conn mark cursor."
   :group 'conn-faces)
 
 (defface conn-window-prompt-face
@@ -208,10 +239,27 @@ CONDITION has the same meaning as in `buffer-match-p'."
 
 ;;;;; State Variables
 
-(defvar conn-states nil)
+(defvar conn-states nil
+  "All defined conn states.")
+
+(defvar conn-exit-functions nil
+  "Abnormal hook run when a state is exited.
+
+Each function is passed the state being exited
+(eg '`conn-state' or '`conn-emacs-state').
+
+See also `conn-entry-functions'.")
+
+(defvar conn-entry-functions nil
+  "Abnormal hook run when a state is entered.
+
+Each function is passed the state being entered
+(eg '`conn-state' or '`conn-emacs-state').
+
+See also `conn-exit-functions'.")
 
 (defvar-local conn--input-method nil
-  "Current input for buffer.")
+  "Input method for current buffer.")
 (put 'conn--input-method 'permanent-local t)
 
 (defvar-local conn--input-method-title nil
@@ -222,10 +270,10 @@ CONDITION has the same meaning as in `buffer-match-p'."
 (put 'conn--prev-mode-line-mule-info 'risky-local-variable t)
 
 (defvar-local conn-current-state nil
-  "Current conn state for buffer.")
+  "Current conn state in buffer.")
 
 (defvar-local conn-previous-state nil
-  "Previous conn state for buffer.")
+  "Previous conn state in buffer.")
 
 (defvar conn-in-modes
   (list 'occur-mode
@@ -274,16 +322,19 @@ nil `conn-local-mode' will be not enabled in the buffer.")
 
 (defvar conn-this-command-handler nil
   "Mark handler for current command.
-Commands can set this variable if they need to change their handler
+
+Commands may set this variable if they need to change their handler
 dynamically.")
 
-(defvar conn-this-command-thing nil)
+(defvar conn-this-command-thing nil
+  "`this-command''s thing.")
 
 (defvar conn-this-command-start (make-marker)
   "Start position for current mark movement command.")
 
 (defvar conn--prev-mark-even-if-inactive nil
   "Previous value of `mark-even-if-inactive'.
+
 Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar-local conn--ephemeral-mark nil)
@@ -481,6 +532,10 @@ Used to restore previous value when `conn-mode' is disabled.")
     (intern (apply #'conn--stringify symbols-or-strings))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
+  "Run BODY with ADVICE-FORMS temporarily applied.
+
+ADVICE-FORMS are of the form (SYMBOL HOW FUNCTION . PROPS), for the
+meaning of these see `advice-add'."
   (declare (debug (form body))
            (indent 1))
   (pcase-dolist (`(,symbol ,how ,function . ,props) (reverse advice-forms))
@@ -493,6 +548,9 @@ Used to restore previous value when `conn-mode' is disabled.")
   body)
 
 (defmacro conn--without-conn-maps (&rest body)
+  "Run BODY without any state, mode, or local maps active.
+
+`conn-local-mode-map' and `conn-global-map' will still be active."
   (declare (debug (body))
            (indent 0))
   `(let ((emulation-mode-map-alists
@@ -505,6 +563,7 @@ Used to restore previous value when `conn-mode' is disabled.")
      ,(macroexp-progn body)))
 
 (defmacro conn--with-region-emphasis (regions &rest body)
+  "Run BODY with the text in the complement of REGIONS shadowed."
   (declare (debug (form form body))
            (indent 2))
   (cl-with-gensyms (overlays)
@@ -522,6 +581,11 @@ Used to restore previous value when `conn-mode' is disabled.")
          (mapc #'delete-overlay ,overlays)))))
 
 (defun conn-remap-key (from-keys)
+  "Map to whatever is bound at FROM-KEYS.
+
+This allows for transparently binding keys to commands which may be
+conceptually the same but vary in implementation by mode, for example
+paredit or smartparens commands.  Also see `conn-remap-key'."
   `(menu-item
     ,(format "Remap %s" (key-description from-keys))
     ,(conn--without-conn-maps (key-binding from-keys t))
@@ -530,6 +594,11 @@ Used to restore previous value when `conn-mode' is disabled.")
                  (key-binding from-keys t)))))
 
 (defun conn-remap-keymap (from-keys)
+  "Map to the keymap at FROM-KEYS.
+
+If the binding at FROM-KEYS is for any reason not a keymap, say because
+a minor mode has shadowed the keymap originally bound there, then map to
+the original binding.  Also see `conn-remap-key'."
   `(menu-item
     ,(format "Remap %s Keymap" (key-description from-keys))
     ,(conn--without-conn-maps (key-binding from-keys t))
@@ -539,20 +608,29 @@ Used to restore previous value when `conn-mode' is disabled.")
                    (if (keymapp binding) binding real-binding))))))
 
 ;; From repeat-mode
-(defun conn--command-property (property)
+(defun conn--command-property (propname)
+  "Return the value of the current commands PROPNAME property."
   (or (and (symbolp this-command)
-           (get this-command property))
+           (get this-command propname))
       (and (symbolp real-this-command)
-           (get real-this-command property))))
+           (get real-this-command propname))))
 
 ;; From expand-region
 (defun conn--point-in-comment-p ()
-  "t if point is in comment, otherwise nil"
+  "Check if point is within a comment."
   (or (nth 4 (syntax-ppss))
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
 
-(defun conn--nearest-first (list &optional buffer)
+(defun conn--nnearest-first (list &optional buffer)
+  "Move the region nearest point in LIST to the front.
+
+LIST is of the form ((BEG . END) ...) where BEG and END are either
+markers in any buffer or points in the current buffer.
+
+If BUFFER is non-nil find region nearest to point in BUFFER.
+
+This function destructively modifies LIST."
   (let ((in-buffer (seq-filter
                     (pcase-lambda (`(,beg . ,_end))
                       (or (not (markerp beg))
@@ -580,12 +658,15 @@ Used to restore previous value when `conn-mode' is disabled.")
     marker))
 
 (defun conn--overlay-start-marker (ov)
+  "Return marker pointing to the start of overlay OV."
   (conn--create-marker (overlay-start ov) (overlay-buffer ov)))
 
 (defun conn--overlay-end-marker (ov)
+  "Return marker pointing to the end of overlay OV."
   (conn--create-marker (overlay-end ov) (overlay-buffer ov)))
 
 (defun conn--overlay-bounds-markers (ov)
+  "Return (BEG . END) where BEG and END are markers at each end of OV."
   (cons (conn--overlay-start-marker ov)
         (conn--overlay-end-marker ov)))
 
@@ -610,6 +691,7 @@ If BUFFER is nil check `current-buffer'."
            when prop return prop))
 
 (defun conn--merge-regions (regions)
+  "Merge all overlapping regions in REGIONS."
   (let (merged)
     (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
       (pcase (catch 'found
@@ -628,6 +710,7 @@ If BUFFER is nil check `current-buffer'."
     merged))
 
 (defun conn--narrow-indirect (beg end &optional record)
+  "Narrow from BEG to END in an indirect buffer."
   (let* ((line-beg (line-number-at-pos beg))
          (linenum (- (line-number-at-pos end) line-beg))
          (name (format "%s@%s+%s - %s"
@@ -640,7 +723,8 @@ If BUFFER is nil check `current-buffer'."
     (conn--narrow-to-region-1 beg end record)
     (deactivate-mark)))
 
-(defmacro conn--with-state (state &rest body)
+(defmacro conn--with-state (transition-fn &rest body)
+  "Call TRANSITION-FN and run BODY preserving state."
   (declare (debug (form body))
            (indent 1))
   (cl-with-gensyms ( saved-state saved-prev-state
@@ -649,18 +733,20 @@ If BUFFER is nil check `current-buffer'."
            (,saved-prev-state conn-previous-state)
            (,buffer (current-buffer))
            (,saved-cursor-type cursor-type)
-           (conn-transition-hook))
+           (conn-exit-functions)
+           (conn-entry-functions))
        (unwind-protect
            (progn
-             (funcall ,state)
+             (funcall ,transition-fn)
              ,@body)
          (with-current-buffer ,buffer
            (if ,saved-state
-               (funcall ,saved-state)
+               (conn-enter-state ',saved-state)
              (conn-exit-state conn-current-state))
            (setq conn-previous-state ,saved-prev-state))))))
 
 (defmacro conn--with-input-method (&rest body)
+  "Run BODY ensuring `conn--input-method' is active."
   (declare (debug (body))
            (indent 0))
   `(unwind-protect
@@ -882,6 +968,7 @@ and return it."
       (apply app))))
 
 (defun conn--isearch-input-method ()
+  "Ensure input method is enabled in isearch-mode."
   (when (and conn--input-method isearch-mode)
     (conn--without-input-method-hooks
       (let ((overriding-terminal-local-map nil))
@@ -923,46 +1010,34 @@ mouse-3: Describe current input method")
       conn-default-state))
 
 (cl-defgeneric conn-enter-state (state)
-  ( :method (_state)
-    (run-hook-wrapped
-     'conn-transition-hook
-     (lambda (hook)
-       (condition-case err
-           (funcall hook)
-         (error
-          (remove-hook 'conn-transition-hook hook)
-          (message "Error in conn-transition-hook %s" (car err)))))))
-  ( :method ((_state (eql nil)))
-    "Noop" nil))
+  "Enter conn state STATE.
+
+This function takes care of calling `conn-exit-state' on the current
+state."
+  ( :method ((_state (eql nil))) "Noop" nil)
+  ( :method (state) (error "Attempting to enter unknown state: %s" state)))
 
 (cl-defgeneric conn-exit-state (state)
-  ( :method (_state)
-    (run-hook-wrapped
-     'conn-transition-hook
-     (lambda (hook)
-       (condition-case err
-           (funcall hook)
-         (error
-          (remove-hook 'conn-transition-hook hook)
-          (message "Error in conn-transition-hook %s" (car err)))))))
-  ( :method ((_state (eql nil)))
-    "Noop" nil))
+  "Exit conn state STATE."
+  ( :method ((_state (eql nil))) "Noop" nil)
+  ( :method (state) (error "Attempting to exit unknown state: %s" state)))
 
 (defmacro conn-define-state (name doc &rest rest)
   "Define a conn state NAME.
+
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
-:LIGHTER is the lighter text for NAME.
+:LIGHTER is the mode-line lighter text for NAME.
 
-:LIGHTER-COLOR is the background color for the conn mode-line lighter in NAME.
+:LIGHTER-COLOR is the background color for the mode-line lighter.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
 
-:KEYMAP is a keymap for the state.
+:KEYMAP is the state keymap for NAME.
 
-:CURSOR is the `cursor-type' for NAME.
+:CURSOR is the `cursor-type' in NAME.
 
 :EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral
 marks while in state NAME.
@@ -970,7 +1045,7 @@ marks while in state NAME.
 BODY contains code to be executed each time the state is enabled or
 disabled.
 
-\(fn NAME DOC &key CURSOR LIGHTER-COLOR SUPPRESS-INPUT-METHOD KEYMAP EPHEMERAL-MARKS &rest BODY)"
+\(fn NAME DOC &key LIGHTER LIGHTER-COLOR SUPPRESS-INPUT-METHOD KEYMAP CURSOR EPHEMERAL-MARKS &rest BODY)"
   (declare (debug ( name stringp
                     [&rest keywordp sexp]
                     def-body))
@@ -1035,17 +1110,25 @@ disabled.
 
        (cl-pushnew ',name conn-states)
 
-       (cl-defmethod conn-exit-state ((_state (eql ',name)) &context (,name (eql t)))
+       (cl-defmethod conn-exit-state ((state (eql ',name)) &context (,name (eql t)))
          (setq ,name nil
                conn-current-state nil
-               conn-previous-state ',name)
+               conn-previous-state state)
          ,@body
-         (cl-call-next-method))
+         (run-hook-wrapped
+          'conn-exit-functions
+          (lambda (fn)
+            (condition-case err
+                (funcall fn state)
+              (error
+               (remove-hook 'conn-exit-functions fn)
+               (message "Error in conn-exit-functions: %s" (car err)))))))
 
-       (cl-defmethod conn-enter-state ((_state (eql ',name)) &context (,name (eql nil)))
+       (cl-defmethod conn-enter-state ((state (eql ',name)) &context (,name (eql nil)))
+         (conn-exit-state conn-current-state)
          (setq ,name t
-               conn-current-state ',name
-               conn--local-mode-maps (alist-get ',name conn--mode-maps))
+               conn-current-state state
+               conn--local-mode-maps (alist-get state conn--mode-maps))
          (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
          (when (and conn-lighter conn-lighter-colors)
            (setq-local conn-lighter
@@ -1055,18 +1138,25 @@ disabled.
          (when (not executing-kbd-macro)
            (force-mode-line-update))
          ,@body
-         (cl-call-next-method))
+         (run-hook-wrapped
+          'conn-entery-functions
+          (lambda (fn)
+            (condition-case err
+                (funcall fn state)
+              (error
+               (remove-hook 'conn-entery-functions fn)
+               (message "Error in conn-entry-functions: %s" (car err)))))))
 
        (defun ,name ()
          ,doc
          (interactive)
-         (conn-exit-state conn-current-state)
          (conn-enter-state ',name)))))
 
 (conn-define-state conn-emacs-state
   "Activate `conn-emacs-state' in the current buffer.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
 bind anything except transition commands."
+  :ligher " emacs"
   :lighter-color "#cae1ff"
   :ephemeral-marks nil
   :keymap (make-sparse-keymap))
@@ -1074,6 +1164,7 @@ bind anything except transition commands."
 (conn-define-state conn-state
   "Activate `conn-state' in the current buffer.
 A `conn-mode' state for editing text."
+  :ligher " conn"
   :lighter-color "#f3bdbd"
   :suppress-input-method t
   :ephemeral-marks t
@@ -1082,6 +1173,7 @@ A `conn-mode' state for editing text."
 (conn-define-state conn-org-edit-state
   "Activate `conn-org-edit-state' in the current buffer.
 A `conn-mode' state for structural editing of `org-mode' buffers."
+  :ligher " org-edit"
   :lighter-color "#f5c5ff"
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
@@ -1089,6 +1181,10 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 
 ;;;; Labels
+
+;; Functions to provide the basic machinery for labeling a set of things
+;; (buffer regions, windows, etc.) and prompting the user to select from
+;; a set of labels.
 
 (defun conn--make-preview-overlay (pt length &optional thing)
   (let* ((eol (save-excursion
@@ -1199,7 +1295,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
          (labels (thread-first
                    (lambda (win) (window-parameter win 'conn-label))
                    (mapcar labeled)
-                   (conn--thread used (seq-difference labels used)))))
+                   (thread-last (seq-difference labels)))))
     (cl-loop with scroll-margin = 0
              for win in windows
              for label = (or (window-parameter win 'conn-label)
@@ -1248,17 +1344,31 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 ;;;; Read Things
 
-(defvar conn-read-thing-state 'conn-state)
+;; Provides facilities for reading Things, Thing Movers, and regions
+;; defined by them.
+
+(defvar conn-read-thing-state 'conn-state
+  "State which should be active in `conn-read-thing-mover-mode'.")
 
 (defvar conn-bounds-of-command-alist nil)
 
 (defvar conn-bounds-of-command-default
   'conn--bounds-of-thing-command-default)
 
-(defvar conn-bounds-of-things-in-region-alist nil)
+(defvar conn-bounds-of-things-in-region-alist nil
+  "Alist of ((CMD . THING-IN-REGION-FN) ...).
+
+THING-IN-REGION-FN is a function of three arguments (THING BEG END).
+BEG and END define the region and THING is the things to find within the
+region.")
 
 (defvar conn-bounds-of-things-in-region-default
-  'conn--things-in-region-default)
+  'conn--things-in-region-default
+  "Default `conn-bounds-of-things-in-region' finder.
+
+Is function of three arguments (THING BEG END).
+BEG and END define the region and THING is the things to find within the
+region.")
 
 (defvar conn-read-thing-mover-maps-alist nil)
 
@@ -1302,6 +1412,12 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "<t>" 'ignore)
 
 (defun conn-bounds-of-command (cmd arg)
+  "Return bounds of CMD with ARGS.
+
+Bounds list is of the form (BEG END . SUBREGIONS).  Commands may return
+multiple SUBREGIONS when it makes sense to do so.  For example
+`forward-sexp' with a ARG of 3 would return the BEG and END of the group
+of 3 sexps moved over as well as the bounds of each individual sexp."
   (setq conn-last-bounds-of-command
         (funcall (or (alist-get cmd conn-bounds-of-command-alist)
                      (apply-partially conn-bounds-of-command-default cmd))
@@ -1357,6 +1473,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
       'conn--bounds-of-region)
 
 (defun conn-bounds-of-things-in-region (thing beg end)
+  "Return list of bounds of THING's in region from BEG to END."
   (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
                (ignore-errors
                  (alist-get (get thing :conn-command-thing)
@@ -1379,12 +1496,14 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                             t))
                finally return regions))))
 
-(defun conn--region-bounds (beg end)
-  (cl-loop for reg in (region-bounds)
-           when (<= beg (car reg) (cdr reg) end)
-           collect reg))
+(defun conn-read-thing-mover (prompt &optional arg recursive-edit)
+  "Interactively read a thing command and arg.
 
-(defun conn--read-thing-mover (prompt &optional arg recursive-edit)
+PROMPT is the prompt that will be displayed to the user.
+ARG is the initial value for the arg to be returned.
+RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
+command.  See `conn-dot-mode' for how bounds of `recursive-edit'
+are read."
   (conn--with-state 'conn-state
     (conn-read-thing-mover-mode 1)
     (unwind-protect
@@ -1467,8 +1586,12 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
       (message nil)
       (conn-read-thing-mover-mode -1))))
 
-(defun conn--read-thing-region (prompt &optional arg)
-  (pcase-let* ((`(,cmd ,arg) (conn--read-thing-mover prompt arg t)))
+(defun conn-read-thing-region (prompt &optional arg)
+  "Interactively read a thing region from the user.
+
+See `conn-read-thing-mover' and `conn-bounds-of-command' for the region
+is read."
+  (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover prompt arg t)))
     (cons (get cmd :conn-command-thing)
           (conn-bounds-of-command cmd arg))))
 
@@ -1560,7 +1683,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
       (delete-overlay ov))
     (deactivate-mark t)))
 
-(defun conn--dot-mode-command-hook ()
+(defun conn-dot-mode-command-hook ()
   (when (overlay-buffer mouse-secondary-overlay)
     (with-current-buffer (overlay-buffer mouse-secondary-overlay)
       (let* ((beg (overlay-start mouse-secondary-overlay))
@@ -1570,7 +1693,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
         (push ov conn--dots)
         (delete-overlay mouse-secondary-overlay)))))
 
-(defvar-keymap conn--dot-mode-map
+(defvar-keymap conn-dot-mode-map
   "C-w" 'conn-region-to-dot
   "C-d" 'conn-point-to-dot
   "S-<mouse-1>" 'conn-mouse-click-dot
@@ -1583,24 +1706,24 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit)
 
-(define-minor-mode conn--dot-mode
+(define-minor-mode conn-dot-mode
   "Minor mode for multiple dots."
   :global t
   :lighter " DOT"
   :interactive nil
-  (if conn--dot-mode
+  (if conn-dot-mode
       (progn
-        (internal-push-keymap conn--dot-mode-map 'overriding-terminal-local-map)
+        (internal-push-keymap conn-dot-mode-map 'overriding-terminal-local-map)
         (delete-overlay mouse-secondary-overlay)
         (setq conn--dots nil)
-        (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
-    (internal-pop-keymap conn--dot-mode-map 'overriding-terminal-local-map)
-    (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
+        (add-hook 'post-command-hook 'conn-dot-mode-command-hook))
+    (internal-pop-keymap conn-dot-mode-map 'overriding-terminal-local-map)
+    (remove-hook 'post-command-hook 'conn-dot-mode-command-hook)
     (mapc #'delete-overlay conn--dots)
     (setq conn--dots nil)))
 
 (defun conn--bounds-of-dots (&rest _)
-  (conn--dot-mode 1)
+  (conn-dot-mode 1)
   (save-mark-and-excursion
     (unwind-protect
         (let ((dots
@@ -1616,7 +1739,7 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
                        maximize e into end
                        finally return (append (list beg end) (nreverse dots)))
             (list (region-beginning) (region-end))))
-      (conn--dot-mode -1)
+      (conn-dot-mode -1)
       (deactivate-mark t))))
 
 (setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
@@ -1867,7 +1990,7 @@ Possibilities: \\<query-replace-map>
     (setq matches (pcase order
                     ('forward (seq-sort-by #'car #'< matches))
                     ('reverse (seq-sort-by #'car #'> matches))
-                    (_        (conn--nearest-first
+                    (_        (conn--nnearest-first
                                (seq-sort-by #'car #'< matches)))))
     (lambda (state)
       (pcase state
@@ -1910,7 +2033,7 @@ Possibilities: \\<query-replace-map>
                        (pcase order
                          ('forward regions)
                          ('reverse (nreverse regions))
-                         (_        (conn--nearest-first regions)))))
+                         (_        (conn--nnearest-first regions)))))
     (unless (markerp beg)
       (setcar reg (conn--create-marker beg)))
     (unless (markerp end)
@@ -1938,7 +2061,7 @@ Possibilities: \\<query-replace-map>
   (let ((points (cl-loop for pt in (pcase order
                                      ('forward points)
                                      ('reverse (nreverse points))
-                                     (_        (conn--nearest-first points)))
+                                     (_        (conn--nnearest-first points)))
                          collect (if (markerp pt)
                                      pt
                                    (conn--create-marker pt)))))
@@ -1968,7 +2091,7 @@ Possibilities: \\<query-replace-map>
     (setq matches (pcase order
                     ('forward matches)
                     ('reverse (nreverse matches))
-                    (_        (conn--nearest-first matches))))
+                    (_        (conn--nnearest-first matches))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -3161,7 +3284,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--dispatch-window-predicate (action thing binding keys)
   (lambda (win)
     (with-selected-window win
-      (conn--with-state (lambda () (when conn-local-mode (conn-state)))
+      (conn--with-state (lambda ()
+                          (when conn-local-mode
+                            (conn-enter-state 'conn-state)))
         (let ((maps (list (conn--create-dispatch-map)
                           (current-global-map)))
               (window-predicate (get action :conn-action-window-predicate)))
@@ -3943,7 +4068,7 @@ With prefix arg REGISTER add to narrow ring register instead."
    (progn
      (deactivate-mark)
      (append
-      (conn--read-thing-mover "Thing Mover" nil t)
+      (conn-read-thing-mover "Thing Mover" nil t)
       (list t))))
   (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
     (conn--narrow-ring-record beg end)
@@ -4107,7 +4232,7 @@ instances of from-string.")
                                &optional delimited backward query-flag)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil t))
+                 (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
@@ -4126,8 +4251,8 @@ instances of from-string.")
   (with-undo-amalgamate
     (pcase-dolist (`(,beg . ,end)
                    (or (drop 2 conn-last-bounds-of-command)
-                       (cons (car conn-last-bounds-of-command)
-                             (cadr conn-last-bounds-of-command))))
+                       (list (cons (car conn-last-bounds-of-command)
+                                   (cadr conn-last-bounds-of-command)))))
       (save-excursion
         (perform-replace from-string to-string query-flag nil
                          delimited nil nil beg end backward)))))
@@ -4136,7 +4261,7 @@ instances of from-string.")
                                       &optional delimited backward query-flag)
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn--read-thing-mover "Thing Mover" nil t))
+                 (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (minibuffer-with-setup-hook
@@ -4155,8 +4280,8 @@ instances of from-string.")
   (with-undo-amalgamate
     (pcase-dolist (`(,beg . ,end)
                    (or (drop 2 conn-last-bounds-of-command)
-                       (cons (car conn-last-bounds-of-command)
-                             (cadr conn-last-bounds-of-command))))
+                       (list (cons (car conn-last-bounds-of-command)
+                                   (cadr conn-last-bounds-of-command)))))
       (save-excursion
         (perform-replace from-string to-string query-flag t
                          delimited nil nil beg end backward)))))
@@ -4293,7 +4418,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (let ((conn--thing-overriding-maps
           (list (define-keymap "k" 'forward-line))))
-     (conn--read-thing-mover
+     (conn-read-thing-mover
       "Mover"
       (when current-prefix-arg
         (prefix-numeric-value current-prefix-arg))
@@ -4344,7 +4469,7 @@ Interactively `region-beginning' and `region-end'."
   (indent-according-to-mode))
 
 (defun conn-comment-or-uncomment-region (thing-mover arg)
-  (interactive (conn--read-thing-mover "Thing Mover"))
+  (interactive (conn-read-thing-mover "Thing Mover"))
   (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
     (if (comment-only-p beg end)
         (uncomment-region beg end)
@@ -4812,7 +4937,7 @@ When KILL-FLAG is non-nil kill the region as well."
 (defun conn-copy-thing (thing-mover arg &optional register)
   "Copy THING at point."
   (interactive
-   (append (conn--read-thing-mover "Thing Mover")
+   (append (conn-read-thing-mover "Thing Mover")
            (when current-prefix-arg
              (list (register-read-with-preview "Register: ")))))
   (pcase-let ((`(,beg ,end . ,_) (conn-bounds-of-command thing-mover arg)))
@@ -4827,7 +4952,7 @@ When KILL-FLAG is non-nil kill the region as well."
 (defun conn-narrow-to-region (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (append (conn--read-thing-mover
+   (append (conn-read-thing-mover
             "Thing Mover"
             (when current-prefix-arg
               (prefix-numeric-value current-prefix-arg))
@@ -4843,7 +4968,7 @@ When KILL-FLAG is non-nil kill the region as well."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (append (conn--read-thing-mover
+   (append (conn-read-thing-mover
             "Thing Mover"
             (when current-prefix-arg
               (prefix-numeric-value current-prefix-arg))
@@ -5123,7 +5248,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
         (indent-region (region-beginning) (region-end))))))
 
 (defun conn-duplicate-thing (thing-mover thing-arg N)
-  (interactive (append (conn--read-thing-mover "Thing Mover" nil t)
+  (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     (`(,beg ,end . ,_)
@@ -5153,7 +5278,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (goto-char (+ origin (* (length region) arg) arg))))
 
 (defun conn-duplicate-and-comment-thing (thing-mover thing-arg N)
-  (interactive (append (conn--read-thing-mover "Thing Mover" nil t)
+  (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     (`(,beg ,end . ,_)
@@ -5237,12 +5362,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (kill-whole-line arg)
   (open-line 1)
   (indent-according-to-mode)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-change-line ()
   (interactive)
   (call-interactively (key-binding conn-kill-line-keys t))
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
   "Open line above and enter `conn-emacs-state'.
@@ -5255,7 +5380,7 @@ If ARG is non-nil move up ARG lines before opening line."
   (forward-line -1)
   ;; FIXME: see crux smart open line
   (indent-according-to-mode)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line (&optional arg)
   "Open line and enter `conn-emacs-state'.
@@ -5264,7 +5389,7 @@ If ARG is non-nil move down ARG lines before opening line."
   (interactive "p")
   (move-end-of-line arg)
   (newline-and-indent)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-overwrite (&optional arg)
   "Enter emacs state in `overwrite-mode'.
@@ -5272,12 +5397,11 @@ If ARG is non-nil move down ARG lines before opening line."
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
   (let ((hook (make-symbol "emacs-state-overwrite-hook")))
-    (conn-emacs-state)
-    (fset hook (lambda ()
-                 (unless (eq conn-current-state 'conn-emacs-state)
-                   (overwrite-mode -1)
-                   (remove-hook 'conn-transition-hook hook))))
-    (add-hook 'conn-transition-hook hook)
+    (conn-enter-state 'conn-emacs-state)
+    (fset hook (lambda (_state)
+                 (overwrite-mode -1)
+                 (remove-hook 'conn-exit-functions hook)))
+    (add-hook 'conn-exit-functions hook)
     (if arg
         (binary-overwrite-mode 1)
       (overwrite-mode 1))))
@@ -5303,36 +5427,36 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (funcall (conn--without-conn-maps
                     (key-binding conn-kill-region-keys t))
                   start end)
-         (conn-emacs-state))
+         (conn-enter-state 'conn-emacs-state))
         (t
          (funcall (conn--without-conn-maps
                     (key-binding conn-delete-region-keys t))
                   start end)
-         (conn-emacs-state))))
+         (conn-enter-state 'conn-emacs-state))))
 
 (defun conn-emacs-state-eol (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (end-of-line N)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-bol (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (beginning-of-line N)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-eoil (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-end-of-inner-line N)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-boil (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-beginning-of-inner-line N)
-  (conn-emacs-state))
+  (conn-enter-state 'conn-emacs-state))
 
 
 ;;;; WinControl
@@ -6442,9 +6566,9 @@ determine if `conn-local-mode' should be enabled."
 ;;; Load Extensions
 
 (with-eval-after-load 'corfu
-  (defun conn--exit-completion ()
+  (defun conn--exit-completion (_state)
     (completion-in-region-mode -1))
-  (add-hook 'conn-transition-hook 'conn--exit-completion))
+  (add-hook 'conn-exit-functions 'conn--exit-completion))
 
 (with-eval-after-load 'org
   (defvar org-mode-map)
@@ -6746,7 +6870,7 @@ determine if `conn-local-mode' should be enabled."
   (defvar edebug-mode)
   (defun conn--edebug-toggle-emacs-state ()
     (if edebug-mode
-        (conn-emacs-state)
+        (conn-enter-state 'conn-emacs-state)
       (when conn-previous-state
         (funcall conn-previous-state))))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
@@ -7015,6 +7139,6 @@ determine if `conn-local-mode' should be enabled."
     "m" 'ibuffer-forward-filter-group))
 
 ;; Local Variables:
-;; outline-regexp: ";;;;* [^    \n]"
+;; outline-regexp: "^;;;;* [^    \n]"
 ;; End:
 ;;; conn.el ends here

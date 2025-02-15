@@ -298,7 +298,7 @@ property."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`(,beg ,end . ,regions)
-                 (cdr (conn--read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region "Define Region")))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -328,7 +328,7 @@ property."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`(,beg ,end . ,regions)
-                 (cdr (conn--read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region "Define Region")))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -357,7 +357,7 @@ property."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`(,beg ,end . ,regions)
-                 (cdr (conn--read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region "Define Region")))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -463,7 +463,7 @@ property."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`(,beg ,end . ,regions)
-                 (cdr (conn--read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region "Define Region")))
                 (conn-query-flag conn-query-flag)
                 (string (minibuffer-with-setup-hook
                             (lambda ()
@@ -496,7 +496,7 @@ property."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`(,beg ,end . ,regions)
-                 (cdr (conn--read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region "Define Region")))
                 (conn-query-flag conn-query-flag)
                 (regexp (minibuffer-with-setup-hook
                             (lambda ()
@@ -529,7 +529,7 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,thing ,_beg ,_end . ,regions)
-               (conn--read-thing-region "Things")))
+               (conn-read-thing-region "Things")))
     (conn--kapply-compose-iterator
      (if (alist-get :skip-empty args)
          (seq-remove (lambda (reg)
@@ -555,7 +555,7 @@ apply to each contiguous component of the region."
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (pcase-let ((`(,cmd ,arg) (conn--read-thing-mover "Thing" nil t)))
+   (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover "Thing" nil t)))
      (conn--kapply-thing-iterator
       (get cmd :conn-command-thing)
       (region-beginning) (region-end)
@@ -655,7 +655,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,beg ,end)
                (when (alist-get :in-thing args)
-                 (seq-subseq (conn--read-thing-region "Thing Mover") 1 3))))
+                 (seq-subseq (conn-read-thing-region "Thing Mover") 1 3))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
