@@ -2033,14 +2033,16 @@ Possibilities: \\<query-replace-map>
                               regions)))
   (unless regions
     (user-error "No regions for kapply."))
-  (pcase-dolist ((and reg `(,beg . ,_end))
+  (pcase-dolist ((and reg `(,beg . ,end))
                  (setq regions
                        (pcase order
                          ('forward regions)
                          ('reverse (nreverse regions))
                          (_        (conn--nnearest-first regions)))))
     (unless (markerp beg)
-      (setcar reg (conn--create-marker beg))))
+      (setcar reg (conn--create-marker beg)))
+    (unless (markerp beg)
+      (setcdr reg (conn--create-marker end))))
   (let (overlays)
     (lambda (state)
       (pcase state
@@ -2048,7 +2050,7 @@ Possibilities: \\<query-replace-map>
          (mapc #'delete-overlay overlays)
          (pcase-dolist (`(,beg . ,end) regions)
            (set-marker beg nil)
-           (when (markerp end) (set-marker end nil))))
+           (set-marker end nil)))
         (:record
          (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region))
          (conn--kapply-advance-region (pop regions)))
