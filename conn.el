@@ -6916,33 +6916,19 @@ determine if `conn-local-mode' should be enabled."
    'sp-down-sexp 'sp-backward-down-sexp)
 
   (defun conn-sp-sexp-handler (beg)
-    (cl-flet ((seq-handler ()
-                (ignore-errors
-                  (pcase (abs (prefix-numeric-value current-prefix-arg))
-                    (0)
-                    ((let dir (pcase (- (point) beg)
-                                (0 0)
-                                ((pred (< 0)) 1)
-                                ((pred (> 0)) -1)))
-                     (save-excursion
-                       (goto-char beg)
-                       (sp-forward-sexp dir)
-                       (sp-forward-sexp (- dir))
-                       (conn--push-ephemeral-mark)))))))
-      (unless (= (point) beg)
-        (pcase (save-excursion
-                 (goto-char beg)
-                 (ignore-errors (bounds-of-thing-at-point 'list)))
-          ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
-           (seq-handler))
-          ((and `(,b1 . ,_) (guard (/= beg b1)))
-           (save-excursion
-             (cond ((> (point) beg)
-                    (while (> (point) beg) (sp-backward-sexp)))
-                   ((< (point) beg)
-                    (while (< (point) beg) (sp-forward-sexp))))
-             (conn--push-ephemeral-mark)))
-          (_ (seq-handler))))))
+    (unless (= (point) beg)
+      (save-excursion
+        (cond ((< (point) beg)
+               (let ((beg-sexp (save-excursion
+                                 (goto-char beg)
+                                 (min (point) (plist-get (sp-get-thing t) :end)))))
+                 (while (and (< (point) beg-sexp) (sp-forward-sexp)))))
+              ((> (point) beg)
+               (let ((beg-sexp (save-excursion
+                                 (goto-char beg)
+                                 (max (point) (plist-get (sp-get-thing) :beg)))))
+                 (while (and (> (point) beg-sexp) (sp-backward-sexp))))))
+        (conn--push-ephemeral-mark))))
 
   (conn-register-thing-commands
    'sexp 'conn-sp-sexp-handler
