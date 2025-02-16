@@ -1427,6 +1427,9 @@ multiple SUBREGIONS when it makes sense to do so.  For example
 of 3 sexps moved over as well as the bounds of each individual sexp."
   (setq conn-last-bounds-of-command
         (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                     (ignore-errors
+                       (alist-get (get cmd :conn-command-thing)
+                                  conn-bounds-of-command-alist))
                      (apply-partially conn-bounds-of-command-default cmd))
                  arg)))
 
@@ -1464,6 +1467,9 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
   (append (list (region-beginning) (region-end))
           (region-bounds)))
 
+(defun conn--bounds-of-window (_arg)
+  (list (window-start) (window-end)))
+
 (setf (alist-get 'conn-toggle-mark-command conn-bounds-of-command-alist)
       'conn--bounds-of-region
 
@@ -1477,7 +1483,10 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
       'conn--bounds-of-region
 
       (alist-get 'conn-set-mark-command conn-bounds-of-command-alist)
-      'conn--bounds-of-region)
+      'conn--bounds-of-region
+
+      (alist-get 'visible conn-bounds-of-command-alist)
+      'conn--bounds-of-window)
 
 (defun conn-bounds-of-things-in-region (thing beg end)
   "Return list of bounds of THING's in region from BEG to END."
