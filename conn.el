@@ -2417,8 +2417,13 @@ The iterator must be the first argument in ARGLIST.
     (put cmd :conn-mark-handler handler)))
 
 (defun conn-symbol-handler (beg)
-  (let ((list (bounds-of-thing-at-point 'list)))
-    (cond ((equal list (save-excursion
+  (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
+    (cond ((or (conn--point-in-comment-p)
+               (save-excursion
+                 (goto-char beg)
+                 (conn--point-in-comment-p)))
+           (conn-sequential-thing-handler beg))
+          ((equal list (save-excursion
                          (goto-char beg)
                          (bounds-of-thing-at-point 'list)))
            (conn-sequential-thing-handler beg))
