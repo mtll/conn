@@ -622,6 +622,15 @@ the original binding.  Also see `conn-remap-key'."
       (memq (get-text-property (point) 'face)
             '(font-lock-comment-face font-lock-comment-delimiter-face))))
 
+(defun conn--point-in-string-p ()
+  "Check if point is within a string."
+  (ignore-errors (nth 3 (syntax-ppss))))
+
+(defun conn--point-in-comment-or-string-p ()
+  "Check if point is within a string."
+  (or (conn--point-in-string-p)
+      (conn--point-in-comment-p)))
+
 (defun conn--nnearest-first (list &optional buffer)
   "Move the region nearest point in LIST to the front.
 
@@ -2420,15 +2429,15 @@ The iterator must be the first argument in ARGLIST.
   (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
     (cond ((not (derived-mode-p 'prog-mode))
            (conn-sequential-thing-handler beg))
-          ((and (conn--point-in-comment-p)
+          ((and (conn--point-in-comment-or-string-p)
                 (save-excursion
                   (goto-char beg)
-                  (conn--point-in-comment-p)))
+                  (conn--point-in-comment-or-string-p)))
            (conn-sequential-thing-handler beg))
-          ((or (conn--point-in-comment-p)
+          ((or (conn--point-in-comment-or-string-p)
                (save-excursion
                  (goto-char beg)
-                 (conn--point-in-comment-p)))
+                 (conn--point-in-comment-or-string-p)))
            (conn-individual-thing-handler beg))
           ((equal list (save-excursion
                          (goto-char beg)
@@ -2910,12 +2919,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (join-line)))
 
 (defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key READER DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
+  "\(fn NAME ARGLIST &key INTERACTIVE DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
   (declare (debug ( name lambda-expr
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :description :reader :filter :window-predicate :key :modes)
+  (pcase-let* (((map :description :interactive :filter :window-predicate :key :modes)
                 rest)
                (menu-item `( 'menu-item
                              ,(or description (symbol-name name))
@@ -2931,7 +2940,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     `(progn
        (defun ,name ,arglist ,@body)
        (put ',name :conn-action t)
-       (put ',name :conn-action-reader (lambda () ,reader))
+       (put ',name :conn-action-interactive (lambda () ,interactive))
        (put ',name :conn-action-description ,(cadr menu-item))
        (put ',name :conn-action-window-predicate ,window-predicate)
        ,(when key
@@ -3003,7 +3012,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-register (window pt _thing register)
   :description "Register <%c>"
   :key "p"
-  :reader (list (register-read-with-preview "Register: "))
+  :interactive (list (register-read-with-preview "Register: "))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3012,7 +3021,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-register-replace (window pt thing register)
   :description "Register Replace <%c>"
   :key "P"
-  :reader (list (register-read-with-preview "Register: "))
+  :interactive (list (register-read-with-preview "Register: "))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3029,8 +3038,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                    "Kill"))
   :key "w"
   :window-predicate (lambda () buffer-read-only)
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
+  :interactive (list (when current-prefix-arg
+                       (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3051,8 +3060,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                    "Kill Append"))
   :key "]"
   :window-predicate (lambda () buffer-read-only)
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
+  :interactive (list (when current-prefix-arg
+                       (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3074,8 +3083,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                    "Kill Prepend"))
   :key "["
   :window-predicate (lambda () buffer-read-only)
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
+  :interactive (list (when current-prefix-arg
+                       (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3096,8 +3105,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (format "Copy to Register <%c>" register)
                    "Copy"))
   :key "c"
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
+  :interactive (list (when current-prefix-arg
+                       (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3115,8 +3124,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (format "Copy Append to Register <%c>" register)
                    "Copy Append"))
   :key "}"
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
+  :interactive (list (when current-prefix-arg
+                       (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3135,8 +3144,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (format "Copy Prepend to Register <%c>" register)
                    "Copy Prepend"))
   :key "{"
-  :reader (list (when current-prefix-arg
-                  (register-read-with-preview "Register: ")))
+  :interactive (list (when current-prefix-arg
+                       (register-read-with-preview "Register: ")))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3691,8 +3700,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 'face 'eldoc-highlight-function-argument)
              ""))
          (read-action-args (action)
-           (when (ignore-errors (get action :conn-action-reader))
-             (funcall (get action :conn-action-reader)))))
+           (when (ignore-errors (get action :conn-action-interactive))
+             (funcall (get action :conn-action-interactive)))))
       (setq action-args (read-action-args action))
       (conn--with-state conn-read-thing-state
         (apply #'conn-dispatch-read-thing-mode 1 override-maps)
