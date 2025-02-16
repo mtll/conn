@@ -1722,12 +1722,14 @@ is read."
       (progn
         (internal-push-keymap conn-dot-mode-map 'overriding-terminal-local-map)
         (delete-overlay mouse-secondary-overlay)
-        (setq conn--dots nil)
+        (setq conn--dots nil
+              buffer-read-only t)
         (add-hook 'post-command-hook 'conn-dot-mode-command-hook))
     (internal-pop-keymap conn-dot-mode-map 'overriding-terminal-local-map)
     (remove-hook 'post-command-hook 'conn-dot-mode-command-hook)
     (mapc #'delete-overlay conn--dots)
-    (setq conn--dots nil)))
+    (setq conn--dots nil
+          buffer-read-only nil)))
 
 (defun conn--bounds-of-dots (&rest _)
   (conn-dot-mode 1)
@@ -2935,6 +2937,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   :key "U"
   :target-finder (apply-partially 'conn--dispatch-all-things 'symbol t))
 
+(conn-define-dispatch-action conn-dispatch-dot (window pt thing)
+  :description "Dot"
+  :key "d"
+  :filter (lambda () (when conn-dot-mode 'this))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (conn--dispatch-thing-bounds thing current-prefix-arg)
+        (`(,beg . ,end)
+         (conn--create-dot beg end))
+        (_ (user-error "Cannot find %s at point" thing))))))
+
 (conn-define-dispatch-action conn-dispatch-comment (window pt thing)
   :description "Comment"
   :key ";"
@@ -3696,11 +3710,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                ('backward-delete-arg
                 (setq thing-arg (floor thing-arg 10)))
                ('forward-delete-arg
-                (setq thing-arg (thread-last
-                                  (log thing-arg 10)
-                                  floor
-                                  (expt 10)
-                                  (mod thing-arg))))
+                (setq thing-arg (when thing-arg
+                                  (thread-last
+                                    (log thing-arg 10)
+                                    floor
+                                    (expt 10)
+                                    (mod thing-arg)))))
                ('reset-arg
                 (setq thing-arg nil))
                ('negative-argument
