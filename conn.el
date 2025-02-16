@@ -1987,11 +1987,10 @@ Possibilities: \\<query-replace-map>
       (with-restriction beg end
         (pcase-dolist (`(,fn (,subexp . ,_)) patterns)
           (goto-char (point-min))
-          (cl-loop for match = (funcall fn (point-max))
-                   while match
-                   do (push (cons (conn--create-marker (match-beginning subexp))
-                                  (conn--create-marker (match-end subexp)))
-                            matches)))))
+          (while-let ((match (funcall fn (point-max))))
+            (push (cons (conn--create-marker (match-beginning subexp))
+                        (conn--create-marker (match-end subexp)))
+                  matches)))))
     (unless matches
       (user-error "No highlights for kapply."))
     (setq matches (pcase order
@@ -2034,7 +2033,7 @@ Possibilities: \\<query-replace-map>
                               regions)))
   (unless regions
     (user-error "No regions for kapply."))
-  (pcase-dolist ((and reg `(,beg . ,end))
+  (pcase-dolist ((and reg `(,beg . ,_end))
                  (setq regions
                        (pcase order
                          ('forward regions)
