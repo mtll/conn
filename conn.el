@@ -476,6 +476,14 @@ Used to restore previous value when `conn-mode' is disabled.")
   :group 'conn-key-remapping
   :type '(vector integer))
 
+;;;;; Errors
+
+(define-error 'conn-error "Conn error")
+
+(define-error 'conn-ephemeral-mark-out-of-mode
+              "Ephemeral mark pushed when conn-local-mode inactive"
+              'conn-error)
+
 ;;;;; Overlay Category Properties
 
 ;;;;;; Kapply Preview
@@ -786,8 +794,8 @@ If BUFFER is nil check `current-buffer'."
                with case-fold-search = isearch-case-fold-search
                while (isearch-search-string isearch-string bound t)
                when (funcall isearch-filter-predicate (match-beginning 0) (match-end 0))
-               collect (cons (conn--create-marker (match-beginning 0) (current-buffer))
-                             (conn--create-marker (match-end 0) (current-buffer)))
+               collect (cons (conn--create-marker (match-beginning 0))
+                             (conn--create-marker (match-end 0)))
                when (and (= (match-beginning 0) (match-end 0))
                          (not (if isearch-forward (eobp) (bobp))))
                do (forward-char (if isearch-forward 1 -1))))))
@@ -1451,7 +1459,11 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (conn-this-command-start (point-marker)))
     (save-mark-and-excursion
       (call-interactively cmd)
-      (funcall conn-this-command-handler conn-this-command-start)
+      (condition-case err
+          (funcall conn-this-command-handler conn-this-command-start)
+        (conn-ephemeral-mark-out-of-mode
+         (message "%s" err)
+         (push-mark (cadr err) t)))
       (cons (cons (region-beginning) (region-end))
             (conn-bounds-of-things-in-region
              conn-this-command-thing (region-beginning) (region-end))))))
@@ -2212,6 +2224,25 @@ Possibilities: \\<query-replace-map>
              (setf (alist-get (current-buffer) saved-excursions)
                    (cons (point-marker) (save-mark-and-excursion--save))))))))))
 
+(defun conn--kapply-ibuffer-overview (iterator &optional force)
+  (let (buffers)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (when (and (not conn-kmacro-apply-error)
+                    (not (eq force 'never))
+                    (or (eq force 'always)
+                        (length> buffers 1)))
+           (run-with-timer
+            0 nil (lambda ()
+                    (ibuffer t "*Kapply Ibuffer*"
+                             `((predicate . (memq (current-buffer) ',buffers))))))))
+        (_
+         (prog1 (funcall iterator state)
+           (unless (memq (current-buffer) buffers)
+             (push (current-buffer) buffers))))))))
+
 (defun conn--kapply-save-restriction (iterator)
   (let (kapply-saved-restrictions)
     (lambda (state)
@@ -2477,7 +2508,9 @@ The iterator must be the first argument in ARGLIST.
 (defun conn--push-ephemeral-mark (&optional location msg activate)
   "Push a mark at LOCATION that will not be added to `mark-ring'.
 For the meaning of MSG and ACTIVATE see `push-mark'."
-  (when conn-local-mode
+  (if (not conn-local-mode)
+      (signal 'conn-ephemeral-mark-out-of-mode
+              (list (or location (point)) msg activate))
     (push-mark location (not msg) activate)
     (setq conn--ephemeral-mark t)
     nil))
@@ -6865,6 +6898,9 @@ determine if `conn-local-mode' should be enabled."
   (declare-function sp-end-of-sexp "smartparens")
   (declare-function sp-beginning-of-sexp "smartparens")
   (declare-function sp-point-in-comment "smartparens")
+  (declare-function sp-get-thing "smartparens")
+  (defvar smartparens-global-mode)
+  (defvar bounds-of-thing-at-point-provider-alist nil)
 
   (defun conn-sp-bounds-of-sexp ()
     (pcase-let (((map :beg :end) (sp-get-thing)))

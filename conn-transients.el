@@ -179,6 +179,16 @@ the edit in the macro."
              ("step-edit" . conn--kmacro-apply-append)
              ("append" . conn--kmacro-apply-step-edit)))
 
+(transient-define-argument conn--kapply-ibuffer-infix ()
+  "Display buffers touched in an `ibuffer' buffer."
+  :class 'conn-transient-lisp-choices
+  :description "Ibuffer"
+  :key "i"
+  :keyword :ibuffer
+  :choices `(("auto")
+             ("always" . always)
+             ("never" . never)))
+
 (transient-define-argument conn--kapply-matches-infix ()
   "Restrict dispatch to only some isearch matches.
 AFTER means only those matchs after, and including, the current match.
@@ -576,7 +586,7 @@ apply to each contiguous component of the region."
 (transient-define-suffix conn--kapply-iterate-suffix (args)
   "Apply keyboard macro a specified number of times."
   :transient 'transient--do-exit
-  :key "i"
+  :key "I"
   :description "Iterate"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
@@ -585,6 +595,7 @@ apply to each contiguous component of the region."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    (alist-get :state args)
+   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
    (list (alist-get :kmacro args)
          (read-number "Iterations: " 0))))
 
@@ -604,6 +615,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
+   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
@@ -637,7 +649,9 @@ apply to each contiguous component of the region."
                                 (or (= (car m) (point))
                                     (= (cdr m) (point)))))
                          matches)))
-         (cons at-pt (delq at-pt matches)))
+         (if at-pt
+             (cons at-pt (delq at-pt matches))
+           matches))
      (isearch-done))
    'conn--kapply-region-iterator
    (alist-get :undo args)
@@ -647,6 +661,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
+   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-highlights (args)
@@ -699,6 +714,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
+   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-compilation (args)
@@ -735,6 +751,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
+   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
@@ -826,6 +843,7 @@ apply to each contiguous component of the region."
       (conn--kapply-text-property-suffix)
       (conn--kapply-iterate-suffix)]
     [ :description "Save State:"
+      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -869,6 +887,7 @@ apply to each contiguous component of the region."
       (conn--kapply-emacs-region-string)
       (conn--kapply-conn-region-string)]
     [ :description "Save State:"
+      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -913,6 +932,7 @@ apply to each contiguous component of the region."
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-highlights)]
     [ :description "Save State:"
+      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -955,6 +975,7 @@ apply to each contiguous component of the region."
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-isearch-suffix)]
     [ :description "Save State:"
+      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -997,6 +1018,7 @@ apply to each contiguous component of the region."
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-regions-suffix)]
     [ :description "Save State:"
+      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
