@@ -8,7 +8,7 @@
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │ transpose│  widen   │ dispatch │ rectangle│  throw   │   yank   │  ←symbol │  ←para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
+┃              │ transpose│  widen   │ dispatch │ rectangle│  throw   │   yank   │  ←symbol │  ↑para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
 ┃              │ windows  │          │  button  │   mark   │  buffer  │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
@@ -16,7 +16,7 @@
 ┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │          │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │          │          │  repeat  │          │   mark   │  ←inner  │  →para   │  →inner  │ one win  │  yank    │                   ┃
+┃                │   M-X    │          │          │  repeat  │          │   mark   │  ←inner  │  ↓para   │  →inner  │ one win  │  yank    │                   ┃
 ┃                │          │          │          │ dispatch │          │   map    │   line   │          │   line   │ control  │  window  │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ ' other  │                   ┃
