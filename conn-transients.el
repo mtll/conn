@@ -524,6 +524,7 @@ property."
   "Apply keyboard macro on the current region.
 If the region is discontinuous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
+  :if (lambda () conn-local-mode)
   :transient 'transient--do-exit
   :key "f"
   :description "Things"
@@ -550,6 +551,7 @@ apply to each contiguous component of the region."
   "Apply keyboard macro on the current region.
 If the region is discontiguous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
+  :if (lambda () conn-local-mode)
   :transient 'transient--do-exit
   :key "v"
   :description "Things in Region"
@@ -713,12 +715,15 @@ apply to each contiguous component of the region."
       (cl-loop for match = (text-property-search-forward 'compilation-message)
                while match
                collect (pcase (compilation--message->loc (prop-match-value match))
-                         (`(,char ,line (,file . ,_) . ,_)
+                         (`(,col ,line (,file . ,_) . ,_)
                           (with-current-buffer
-                              (find-file-noselect (apply #'expand-file-name file))
-                            (goto-line line)
-                            (forward-char char)
-                            (cons (point-marker) (line-end-position)))))))
+                              (let ((name (apply #'expand-file-name file)))
+                                (or (get-file-buffer name)
+                                    (find-file-noselect name)))
+                            (save-excursion
+                              (goto-line line)
+                              (forward-char col)
+                              (cons (point-marker) (line-end-position))))))))
     (alist-get :maybe-order args)
     (alist-get :skip-empty args))
    (alist-get :undo args)
