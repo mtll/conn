@@ -2418,11 +2418,18 @@ The iterator must be the first argument in ARGLIST.
 
 (defun conn-symbol-handler (beg)
   (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
-    (cond ((or (conn--point-in-comment-p)
+    (cond ((not (derived-mode-p 'prog-mode))
+           (conn-sequential-thing-handler beg))
+          ((and (conn--point-in-comment-p)
+                (save-excursion
+                  (goto-char beg)
+                  (conn--point-in-comment-p)))
+           (conn-sequential-thing-handler beg))
+          ((or (conn--point-in-comment-p)
                (save-excursion
                  (goto-char beg)
                  (conn--point-in-comment-p)))
-           (conn-sequential-thing-handler beg))
+           (conn-individual-thing-handler beg))
           ((equal list (save-excursion
                          (goto-char beg)
                          (bounds-of-thing-at-point 'list)))
