@@ -6866,6 +6866,23 @@ determine if `conn-local-mode' should be enabled."
   (declare-function sp-beginning-of-sexp "smartparens")
   (declare-function sp-point-in-comment "smartparens")
 
+  (defun conn-sp-bounds-of-sexp ()
+    (pcase-let (((map :beg :end) (sp-get-thing)))
+      (if (<= beg (point) end)
+          (cons beg end)
+        (pcase-let (((map :beg :end) (sp-get-thing t)))
+          (cons beg end)))))
+
+  (defun conn-sp-bounds-provider ()
+    (if smartparens-global-mode
+        (push '(sexp . conn-sp-bounds-of-sexp)
+              bounds-of-thing-at-point-provider-alist)
+      (setq bounds-of-thing-at-point-provider-alist
+            (delete '(sexp . conn-sp-bounds-of-sexp)
+                    bounds-of-thing-at-point-provider-alist))))
+
+  (add-hook 'smartparens-global-mode-hook 'conn-sp-bounds-provider)
+
   (with-eval-after-load 'eldoc
     (eldoc-add-command 'sp-down-sexp
                        'sp-backward-down-sexp
