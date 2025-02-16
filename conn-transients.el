@@ -297,7 +297,7 @@ property."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`(,beg ,end . ,regions)
+                (`((,beg . ,end) . ,regions)
                  (cdr (conn-read-thing-region "Define Region")))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
@@ -327,7 +327,7 @@ property."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`(,beg ,end . ,regions)
+                (`((,beg . ,end) . ,regions)
                  (cdr (conn-read-thing-region "Define Region")))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
@@ -356,7 +356,7 @@ property."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`(,beg ,end . ,regions)
+                (`((,beg . ,end) . ,regions)
                  (cdr (conn-read-thing-region "Define Region")))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
@@ -462,7 +462,7 @@ property."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`(,beg ,end . ,regions)
+                (`((,beg . ,end) . ,regions)
                  (cdr (conn-read-thing-region "Define Region")))
                 (conn-query-flag conn-query-flag)
                 (string (minibuffer-with-setup-hook
@@ -495,7 +495,7 @@ property."
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`(,beg ,end . ,regions)
+                (`((,beg . ,end) . ,regions)
                  (cdr (conn-read-thing-region "Define Region")))
                 (conn-query-flag conn-query-flag)
                 (regexp (minibuffer-with-setup-hook
@@ -529,7 +529,7 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,thing ,_beg ,_end . ,regions)
+  (pcase-let ((`(,thing ,_outer-bounds . ,regions)
                (conn-read-thing-region "Things")))
     (conn--kapply-compose-iterator
      (if (alist-get :skip-empty args)
@@ -655,9 +655,9 @@ apply to each contiguous component of the region."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,beg ,end)
+  (pcase-let ((`(,beg . ,end)
                (when (alist-get :in-thing args)
-                 (seq-subseq (conn-read-thing-region "Thing Mover") 1 3))))
+                 (nth 1 (conn-read-thing-region "Thing Mover")))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
