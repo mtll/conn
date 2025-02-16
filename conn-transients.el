@@ -721,7 +721,9 @@ apply to each contiguous component of the region."
                                 (or (get-file-buffer name)
                                     (find-file-noselect name)))
                             (save-excursion
-                              (goto-line line)
+                              (if (eq selective-display t)
+                                  (re-search-forward "[\n\C-m]" nil 'end (1- line))
+                                (forward-line (1- line)))
                               (forward-char col)
                               (cons (point-marker) (line-end-position))))))))
     (alist-get :maybe-order args)
