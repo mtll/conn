@@ -2407,6 +2407,23 @@ The iterator must be the first argument in ARGLIST.
     (put cmd :conn-command-thing thing)
     (put cmd :conn-mark-handler handler)))
 
+(defun conn-symbol-handler (beg)
+  (let ((list (bounds-of-thing-at-point 'list)))
+    (cond ((equal list (save-excursion
+                         (goto-char beg)
+                         (bounds-of-thing-at-point 'list)))
+           (conn-sequential-thing-handler beg))
+          ((> (point) beg)
+           (conn--push-ephemeral-mark (save-excursion
+                                        (goto-char (car list))
+                                        (down-list)
+                                        (point))))
+          ((< (point) beg)
+           (conn--push-ephemeral-mark (save-excursion
+                                        (goto-char (cdr list))
+                                        (down-list -1)
+                                        (point)))))))
+
 (defun conn-sequential-thing-handler (beg)
   (ignore-errors
     (pcase (abs (prefix-numeric-value current-prefix-arg))
@@ -2614,7 +2631,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
 
 (conn-register-thing-commands
- 'word 'conn-sequential-thing-handler
+ 'word 'conn-symbol-handler
  'forward-word 'backward-word)
 
 (conn-register-thing
@@ -6832,7 +6849,13 @@ determine if `conn-local-mode' should be enabled."
     "]" 'sp-down-sexp
     "[" 'sp-backward-down-sexp
     ")" 'sp-up-sexp
-    "(" 'sp-backward-up-sexp)
+    "(" 'sp-backward-up-sexp
+    "U" 'sp-backward-symbol
+    "O" 'sp-forward-symbol)
+
+  (conn-register-thing-commands
+   'symbol 'conn-symbol-handler
+   'sp-forward-symbol 'sp-backward-symbol)
 
   (defun conn-sp-list-handler (beg)
     (cond ((> (point) beg)
