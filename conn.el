@@ -1404,7 +1404,7 @@ region.")
 (defvar-keymap conn-read-thing-mover-mode-map
   "DEL" 'backward-delete-arg
   "C-d" 'forward-delete-arg
-  "`" 'reset-arg
+  "," 'reset-arg
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
@@ -2889,7 +2889,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar-keymap conn-dispatch-read-thing-mode-map
   "C-h" 'help
-  "`" 'reset-arg
+  "," 'reset-arg
   "'" 'repeat
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg)

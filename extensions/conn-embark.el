@@ -35,7 +35,7 @@
 
 (conn-define-dispatch-action conn-embark-act (window pt _thing)
   :description "Embark"
-  :key ","
+  :key "C-TAB"
   (with-selected-window window
     (save-excursion
       (goto-char pt)

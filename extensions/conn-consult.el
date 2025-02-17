@@ -27,6 +27,59 @@
   (require 'cl-lib)
   (require 'subr-x))
 
+;; TODO: do this with treesit
+;; (defmacro conn--each-thing (thing beg end &rest body)
+;;   "Iterate over each THING in buffer.
+;; THING BEG and END are bound in BODY."
+;;   (declare (debug (form form form body))
+;;            (indent 3))
+;;   (cl-with-gensyms (max bounds)
+;;     `(save-excursion
+;;        (let ((,max (point-max)))
+;;          (goto-char (point-min))
+;;          (unless (bounds-of-thing-at-point ,thing)
+;;            (forward-thing ,thing 1))
+;;          (while (< (point) ,max)
+;;            (let* ((,bounds (bounds-of-thing-at-point ,thing))
+;;                   (,beg (car ,bounds))
+;;                   (,end (cdr ,bounds)))
+;;              ,@body
+;;              (forward-thing ,thing 1)))))))
+
+;; (defun conn--thing-candidates (thing)
+;;   "Return list of thing candidates."
+;;   (consult--forbid-minibuffer)
+;;   (consult--fontify-all)
+;;   (let* ((buffer (current-buffer))
+;;          default-cand candidates)
+;;     (conn--each-thing thing beg end
+;;       (let ((line (line-number-at-pos)))
+;;         (push (consult--location-candidate
+;;                (consult--buffer-substring beg end)
+;;                (cons buffer beg) line line)
+;;               candidates))
+;;       (when (not default-cand)
+;;         (setq default-cand candidates)))
+;;     (unless candidates
+;;       (user-error "No lines"))
+;;     (nreverse candidates)))
+
+;; ;;;###autoload
+;; (defun conn-consult-thing (thing)
+;;   (interactive
+;;    (list (get (car (conn-read-thing-mover "Thing")) :conn-command-thing)))
+;;   (let ((candidates (conn--thing-candidates thing)))
+;;     (consult--read
+;;      candidates
+;;      :prompt "Go to thing: "
+;;      :annotate (consult--line-prefix)
+;;      :category 'consult-location
+;;      :sort nil
+;;      :require-match t
+;;      :lookup #'consult--line-match
+;;      :add-history (thing-at-point 'symbol)
+;;      :state (consult--location-state candidates))))
+
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
@@ -122,23 +175,21 @@
          (candidates (consult--slow-operation "Collecting matches..."
                        (if (bound-and-true-p multi-isearch-buffer-list)
                            (mapcan 'conn-consult--isearch-matches multi-isearch-buffer-list)
-                         (conn-consult--isearch-matches))))
-         result)
+                         (conn-consult--isearch-matches)))))
     (with-isearch-suspended
-     (setq result
-           (consult--read
-            candidates
-            :prompt "Go to line: "
-            :annotate (consult--line-prefix curr-line)
-            :category 'consult-location
-            :sort nil
-            :require-match t
-            :add-history (list (thing-at-point 'symbol) isearch-string)
-            :history '(:input consult--line-multi-history)
-            :lookup #'consult--line-match
-            :default (car candidates)
-            :state (consult--location-state candidates)
-            :group #'consult--line-multi-group)))))
+     (consult--read
+      candidates
+      :prompt "Go to line: "
+      :annotate (consult--line-prefix curr-line)
+      :category 'consult-location
+      :sort nil
+      :require-match t
+      :add-history (list (thing-at-point 'symbol) isearch-string)
+      :history '(:input consult--line-multi-history)
+      :lookup #'consult--line-match
+      :default (car candidates)
+      :state (consult--location-state candidates)
+      :group #'consult--line-multi-group))))
 
 (keymap-set isearch-mode-map "M-s o" 'conn-consult-isearch-matches)
 
