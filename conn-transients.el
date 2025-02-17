@@ -237,9 +237,9 @@ before each iteration."
   "Dispatch on regions from last to first."
   :class 'conn-transient-lisp-choices
   :key "b"
-  :description "Reverse"
+  :description "Order"
   :keyword :maybe-order
-  :choices '(nil
+  :choices '(("Nearest")
              ("Forward" . forward)
              ("Reverse" . reverse)))
 
@@ -826,7 +826,8 @@ apply to each contiguous component of the region."
       (conn--kapply-state-infix)
       (conn--kapply-empty-infix)]
     [ (conn--kapply-region-infix)
-      (conn--kapply-macro-infix)]]
+      (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)]]
   [ [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "With State:"
       (conn--kapply-replace-rectangle-string)
@@ -843,7 +844,6 @@ apply to each contiguous component of the region."
       (conn--kapply-text-property-suffix)
       (conn--kapply-iterate-suffix)]
     [ :description "Save State:"
-      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -880,14 +880,14 @@ apply to each contiguous component of the region."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-maybe-order-infix)
-      (conn--kapply-empty-infix)
-      (conn--kapply-macro-infix)]]
+      (conn--kapply-empty-infix)]
+    [ (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)]]
   [ [ :description "With State:"
       (conn--kapply-replace-region-string)
       (conn--kapply-emacs-region-string)
       (conn--kapply-conn-region-string)]
     [ :description "Save State:"
-      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -928,11 +928,11 @@ apply to each contiguous component of the region."
       (conn--kapply-highlights-in-thing)]
     [ (conn--kapply-region-infix)
       (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)
       (conn--kapply-read-hl-patterns)]]
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-highlights)]
     [ :description "Save State:"
-      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -971,11 +971,11 @@ apply to each contiguous component of the region."
     [ (conn--kapply-region-infix)
       (conn--kapply-state-infix)]
     [ (conn--kapply-matches-infix)
-      (conn--kapply-macro-infix)]]
+      (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)]]
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-isearch-suffix)]
     [ :description "Save State:"
-      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
@@ -1014,11 +1014,11 @@ apply to each contiguous component of the region."
     [ (conn--kapply-maybe-order-infix)
       (conn--kapply-state-infix)]
     [ (conn--kapply-region-infix)
-      (conn--kapply-macro-infix)]]
+      (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)]]
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-regions-suffix)]
     [ :description "Save State:"
-      (conn--kapply-ibuffer-infix)
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
