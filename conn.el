@@ -2234,10 +2234,8 @@ Possibilities: \\<query-replace-map>
                     (not (eq force 'never))
                     (or (eq force 'always)
                         (length> buffers 1)))
-           (run-with-timer
-            0 nil (lambda ()
-                    (ibuffer t "*Kapply Ibuffer*"
-                             `((predicate . (memq (current-buffer) ',buffers))))))))
+           (ibuffer t "*Kapply Ibuffer*"
+                    `((predicate . (memq (current-buffer) ',buffers))))))
         (_
          (prog1 (funcall iterator state)
            (unless (memq (current-buffer) buffers)
@@ -5623,8 +5621,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defconst conn--wincontrol-window-format-1
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "Window: " 'face 'bold)
-   "prefix arg: "
+   (propertize "Window: " 'face 'minibuffer-prompt)
+   "arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
@@ -5651,8 +5649,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defconst conn--wincontrol-window-format-2
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "Window: " 'face 'bold)
-   "prefix arg: "
+   (propertize "Window: " 'face 'minibuffer-prompt)
+   "arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
@@ -5677,8 +5675,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defconst conn--wincontrol-tab-format
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "Tab: " 'face 'bold)
-   "prefix arg: "
+   (propertize "Tab: " 'face 'minibuffer-prompt)
+   "arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
@@ -5695,8 +5693,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defconst conn--wincontrol-frame-format
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "Frame: " 'face 'bold)
-   "prefix arg: "
+   (propertize "Frame: " 'face 'minibuffer-prompt)
+   "arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
@@ -5709,14 +5707,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[toggle-frame-fullscreen]: fullscreen"
    "\n"
    "\\[conn-wincontrol-reverse] \\[conn-wincontrol-reflect]: reverse/reflect; "
-   "\\[iconify-or-deiconify-frame] \\[make-frame-command]: iconify/create; "
+   "\\[make-frame-command]: iconify/create; "
    "\\[delete-frame] \\[delete-other-frames]: delete/other"))
 
 (defconst conn--wincontrol-simple-format
   (concat
    "\\<conn-wincontrol-map>"
    (propertize "WinControl: " 'face 'minibuffer-prompt)
-   "prefix arg: "
+   "arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
@@ -5725,12 +5723,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[conn-wincontrol-scroll-down]: "
    "scroll"))
 
+;; TODO: what should be done with the arg stuff?
+;;       only persist on certain commands maybe?
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
   "C-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
-  "M-DEL" 'conn-wincontrol-digit-argument-reset
   "C-w" 'conn-wincontrol-backward-delete-arg
   "C-d" 'conn-wincontrol-forward-delete-arg
   "C-0" 'delete-window
@@ -6227,35 +6226,21 @@ Uses `split-window-right'."
                          collect (conn--wincontrol-reverse-window win t))
               windows))))
 
-(defun conn-wincontrol-reverse (arg)
+(defun conn-wincontrol-reverse ()
   "Reverse order of windows in ARGth parent window.
 When ARG is nil the root window is used."
-  (interactive "P")
-  (let ((window
-         (or (when arg
-               (cl-loop with main = (window-main-window)
-                        for win = (selected-window) then (window-parent win)
-                        repeat (abs arg)
-                        while (and win (not (eq win main)))
-                        finally return win))
-             (window-main-window))))
+  (interactive)
+  (let ((window (window-main-window)))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reverse-window (and arg (< arg 0)))
       (window-state-put window))))
 
-(defun conn-wincontrol-reflect (arg)
+(defun conn-wincontrol-reflect ()
   "Rotate all window arrangements within ARGth parent window of `selected-window'.
 When ARG is nil the root window is used."
-  (interactive "P")
-  (let ((window
-         (or (when arg
-               (cl-loop with main = (window-main-window)
-                        for win = (selected-window) then (window-parent win)
-                        repeat (abs arg)
-                        while (and win (not (eq win main)))
-                        finally return win))
-             (window-main-window))))
+  (interactive)
+  (let ((window (window-main-window)))
     (thread-first
       (window-state-get window)
       (conn--wincontrol-reflect-window)
@@ -6940,10 +6925,11 @@ determine if `conn-local-mode' should be enabled."
 
   (defun conn-sp-bounds-of-sexp ()
     (pcase-let (((map :beg :end) (sp-get-thing)))
-      (if (<= beg (point) end)
+      (if (and beg end (<= beg (point) end))
           (cons beg end)
         (pcase-let (((map :beg :end) (sp-get-thing t)))
-          (cons beg end)))))
+          (when (and beg end)
+            (cons beg end))))))
 
   (defun conn-sp-bounds-provider ()
     (if smartparens-global-mode
