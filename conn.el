@@ -1402,11 +1402,8 @@ region.")
 (defvar conn--thing-overriding-maps nil)
 
 (defvar-keymap conn-read-thing-mover-mode-map
-  "C-w" 'backward-delete-arg
+  "DEL" 'backward-delete-arg
   "C-d" 'forward-delete-arg
-  "C-<backspace>" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "M-DEL" 'reset-arg
   "`" 'reset-arg
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
@@ -2895,7 +2892,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   "`" 'reset-arg
   "'" 'repeat
   "C-d" 'forward-delete-arg
-  "C-w" 'backward-delete-arg)
+  "DEL" 'backward-delete-arg)
 
 (defun conn--create-dispatch-map ()
   (make-composed-keymap
