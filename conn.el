@@ -576,16 +576,17 @@ meaning of these see `advice-add'."
            (indent 2))
   (cl-with-gensyms (overlays)
     `(let (,overlays)
-       (cl-loop for (beg end) on (append (list (point-min))
-                                         (flatten-tree ,regions)
-                                         (list (point-max)))
-                by #'cddr
-                while beg
-                for ov = (make-overlay beg end)
-                do (overlay-put ov 'face 'shadow)
-                (push ov ,overlays))
        (unwind-protect
-           ,(macroexp-progn body)
+           (progn
+             (cl-loop for (beg end) on (append (list (point-min))
+                                               (flatten-tree ,regions)
+                                               (list (point-max)))
+                      by #'cddr
+                      while beg
+                      for ov = (make-overlay beg end)
+                      do (overlay-put ov 'face 'shadow)
+                      (push ov ,overlays))
+             ,@body)
          (mapc #'delete-overlay ,overlays)))))
 
 (defun conn-remap-key (from-keys)
@@ -1442,13 +1443,14 @@ Bounds list is of the form (BEG END . SUBREGIONS).  Commands may return
 multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
-  (setq conn-last-bounds-of-command
-        (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                     (ignore-errors
-                       (alist-get (get cmd :conn-command-thing)
-                                  conn-bounds-of-command-alist))
-                     (apply-partially conn-bounds-of-command-default cmd))
-                 arg)))
+  (or (alist-get (recursion-depth) conn-last-bounds-of-command)
+      (setf (alist-get (recursion-depth) conn-last-bounds-of-command)
+            (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                         (ignore-errors
+                           (alist-get (get cmd :conn-command-thing)
+                                      conn-bounds-of-command-alist))
+                         (apply-partially conn-bounds-of-command-default cmd))
+                     arg))))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
   (let ((current-prefix-arg arg)
@@ -1554,7 +1556,8 @@ are read."
         (cl-prog
          ((prompt (substitute-command-keys
                    (concat "\\<conn-read-thing-mover-mode-map>"
-                           prompt " (arg: "
+                           (propertize prompt 'face 'minibuffer-prompt)
+                           " (arg: "
                            (propertize "%s" 'face 'read-multiple-choice-face)
                            ", \\[reset-arg] reset arg; \\[help] commands"
                            (if recursive-edit
@@ -1779,8 +1782,8 @@ is read."
               (cl-loop for (b . e) in dots
                        minimize b into beg
                        maximize e into end
-                       finally return (append (list beg end) (nreverse dots)))
-            (list (region-beginning) (region-end))))
+                       finally return (cons (cons beg end) (nreverse dots)))
+            (list (cons (region-beginning) (region-end)))))
       (conn-dot-mode -1)
       (deactivate-mark t))))
 
@@ -2562,10 +2565,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (set-marker conn-this-command-start (point))
   (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
                                       (conn--command-property :conn-mark-handler))
-        conn-this-command-thing (conn--command-property :conn-command-thing)
-        conn-last-bounds-of-command nil))
+        conn-this-command-thing (conn--command-property :conn-command-thing)))
 
 (defun conn--mark-post-command-hook ()
+  (setf (alist-get (recursion-depth) conn-last-bounds-of-command) nil)
   (when (and conn-local-mode
              (eq (current-buffer) (marker-buffer conn-this-command-start))
              conn-this-command-thing
@@ -3714,7 +3717,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--dispatch-read-thing (&optional default-action override-maps)
   (let* ((prompt (substitute-command-keys
-                  (concat "\\<conn-dispatch-read-thing-mode-map>Thing (arg: "
+                  (concat "\\<conn-dispatch-read-thing-mode-map>"
+                          (propertize "Targets" 'face 'minibuffer-prompt)
+                          " (arg: "
                           (propertize "%s" 'face 'read-multiple-choice-face)
                           ", \\[reset-arg] reset arg; "
                           "\\[repeat] %s; "
@@ -4274,13 +4279,13 @@ instances of from-string.")
         (buffer-substring-no-properties beg end)
       "")))
 
-(defun conn--replace-read-args (prompt regexp-flag regions &optional noerror)
+(defun conn--replace-read-args (prompt regexp-flag regions &optional noerror default)
   (unless noerror (barf-if-buffer-read-only))
   (conn--with-region-emphasis regions
       (save-mark-and-excursion
         (let* ((delimited-flag (and current-prefix-arg
                                     (not (eq current-prefix-arg '-))))
-               (default (conn--replace-read-default))
+               (default (or default (conn--replace-read-default)))
                (query-replace-read-from-default
                 (if default
                     (lambda () default)
@@ -4330,7 +4335,8 @@ instances of from-string.")
 (defun conn-replace-in-thing ( thing-mover arg from-string to-string
                                &optional delimited backward query-flag)
   (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
+   (pcase-let* ((default (conn--replace-read-default))
+                (`(,thing-mover ,arg)
                  (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
@@ -4345,22 +4351,39 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    nil (or (cdr regions) regions)))))
+                    nil (or (cdr regions) regions) nil default))))
      (append (list thing-mover arg) common)))
-  (unless conn-last-bounds-of-command
-    (conn-bounds-of-command thing-mover arg))
   (with-undo-amalgamate
-    (pcase-dolist (`(,beg . ,end)
-                   (or (cdr conn-last-bounds-of-command)
-                       conn-last-bounds-of-command))
-      (save-excursion
-        (perform-replace from-string to-string query-flag nil
-                         delimited nil nil beg end backward)))))
+    (save-excursion
+      (pcase-let ((`((,beg . ,end) . ,regions)
+                   (conn-bounds-of-command thing-mover arg)))
+        (if regions
+            (let ((region-extract-function
+                   (lambda (method)
+                     (pcase method
+                       ('nil
+                        (cl-loop for (beg . end) in regions
+                                 collect (buffer-substring beg end)))
+                       ('delete-only
+                        (cl-loop for (beg . end) in regions
+                                 do (delete-region beg end)))
+                       ('bounds regions)
+                       (_
+                        (prog1
+                            (cl-loop for (beg . end) in regions
+                                     collect (filter-buffer-substring beg end method))
+                          (cl-loop for (beg . end) in regions
+                                   do (delete-region beg end))))))))
+              (perform-replace from-string to-string query-flag nil
+                               delimited nil nil beg end backward t))
+          (perform-replace from-string to-string query-flag nil
+                           delimited nil nil beg end backward))))))
 
 (defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
                                       &optional delimited backward query-flag)
   (interactive
-   (pcase-let* ((`(,thing-mover ,arg)
+   (pcase-let* ((default (conn--replace-read-default))
+                (`(,thing-mover ,arg)
                  (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
@@ -4375,17 +4398,33 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    t (or (cdr regions) regions)))))
+                    t (or (cdr regions) regions) nil default))))
      (append (list thing-mover arg) common)))
-  (unless conn-last-bounds-of-command
-    (conn-bounds-of-command thing-mover arg))
   (with-undo-amalgamate
-    (pcase-dolist (`(,beg . ,end)
-                   (or (cdr conn-last-bounds-of-command)
-                       conn-last-bounds-of-command))
-      (save-excursion
-        (perform-replace from-string to-string query-flag t
-                         delimited nil nil beg end backward)))))
+    (save-excursion
+      (pcase-let ((`((,beg . ,end) . ,regions)
+                   (conn-bounds-of-command thing-mover arg)))
+        (if regions
+            (let ((region-extract-function
+                   (lambda (method)
+                     (pcase method
+                       ('nil
+                        (cl-loop for (beg . end) in regions
+                                 collect (buffer-substring beg end)))
+                       ('delete-only
+                        (cl-loop for (beg . end) in regions
+                                 do (delete-region beg end)))
+                       ('bounds regions)
+                       (_
+                        (prog1
+                            (cl-loop for (beg . end) in regions
+                                     collect (filter-buffer-substring beg end method))
+                          (cl-loop for (beg . end) in regions
+                                   do (delete-region beg end))))))))
+              (perform-replace from-string to-string query-flag t
+                               delimited nil nil beg end backward t))
+          (perform-replace from-string to-string query-flag t
+                           delimited nil nil beg end backward t))))))
 
 ;;;;; Command Registers
 
@@ -5679,7 +5718,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defconst conn--wincontrol-simple-format
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "WinControl: " 'face 'bold)
+   (propertize "WinControl: " 'face 'minibuffer-prompt)
    "prefix arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
