@@ -70,12 +70,7 @@
   :type (or 'integer 'nil)
   :group 'conn-posframe)
 
-(defcustom conn-posframe-buffers-lines 10
-  "Number of context lines for buffer cycling posframe."
-  :type 'integer
-  :group 'conn-posframe)
-
-(defcustom conn-posframe-buffers-always-visible 2
+(defcustom conn-posframe-buffer-context-lines 5
   "Number of context lines for buffer cycling posframe."
   :type 'integer
   :group 'conn-posframe)
@@ -108,7 +103,7 @@
   (remove-hook 'post-command-hook 'conn-posframe--hide-post))
 
 ;; Implementation from window.el
-(defun conn-posframe--next-buffers (N &optional window)
+(defun conn-posframe--next-buffers (&optional window)
   (let* ((window (window-normalize-window window t))
          (frame (window-frame window))
          (window-side (window-parameter window 'window-side))
@@ -137,7 +132,7 @@
               (setq skipped buffer)
             (setq new-buffer buffer)
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers N)
+            (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
 
       (unless window-side
@@ -154,7 +149,7 @@
                 (setq skipped (or skipped buffer))
               (setq new-buffer buffer)
               (cl-pushnew new-buffer found-buffers)
-              (when (length= found-buffers N)
+              (when (length= found-buffers conn-posframe-buffer-context-lines)
                 (throw 'found t))))))
 
       (dolist (entry (reverse (window-prev-buffers window)))
@@ -168,7 +163,7 @@
           (if (switch-to-prev-buffer-skip-p skip window new-buffer)
               (setq skipped (or skipped new-buffer))
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers N)
+            (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
 
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
@@ -188,7 +183,7 @@
      "\n")))
 
 ;; Implementation from window.el
-(defun conn-posframe--previous-buffers (N &optional window)
+(defun conn-posframe--previous-buffers (&optional window)
   (let* ((window (window-normalize-window window t))
          (frame (window-frame window))
          (window-side (window-parameter window 'window-side))
@@ -217,7 +212,7 @@
           (if (switch-to-prev-buffer-skip-p skip window new-buffer)
               (setq skipped new-buffer)
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers N)
+            (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
 
       (unless window-side
@@ -232,7 +227,7 @@
                 (setq skipped (or skipped buffer))
               (setq new-buffer buffer)
               (cl-pushnew new-buffer found-buffers)
-              (when (length= found-buffers N)
+              (when (length= found-buffers conn-posframe-buffer-context-lines)
                 (throw 'found t))))))
 
       (dolist (buffer (reverse next-buffers))
@@ -246,7 +241,7 @@
               (setq skipped (or skipped buffer))
             (setq new-buffer buffer)
             (cl-pushnew new-buffer found-buffers)
-            (when (length= found-buffers N)
+            (when (length= found-buffers conn-posframe-buffer-context-lines)
               (throw 'found t)))))
 
       (when (and skipped (not (functionp switch-to-prev-buffer-skip)))
@@ -267,25 +262,7 @@
 
 (defun conn-posframe--switch-buffer-display ()
   (unless executing-kbd-macro
-    (let* ((offset (if (memq last-command '(conn-next-buffer conn-prev-buffer))
-                       (pcase this-command
-                         ('conn-next-buffer
-                          (put 'conn-posframe--switch-buffer-display
-                               'offset
-                               (min (1+ (get 'conn-posframe--switch-buffer-display 'offset))
-                                    (- (floor conn-posframe-buffers-lines 2)
-                                       conn-posframe-buffers-always-visible))))
-                         ('conn-prev-buffer
-                          (put 'conn-posframe--switch-buffer-display
-                               'offset
-                               (max (1- (get 'conn-posframe--switch-buffer-display 'offset))
-                                    (- conn-posframe-buffers-always-visible
-                                       (ceiling conn-posframe-buffers-lines 2))))))
-                     (put 'conn-posframe--switch-buffer-display 'offset
-                          (pcase this-command
-                            ('conn-next-buffer 1)
-                            ('conn-prev-buffer -1)))))
-           (header (with-temp-buffer
+    (let* ((header (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-faicon)
                                (concat conn-posframe--padding
                                        (nerd-icons-faicon "nf-fa-buffer")
@@ -301,8 +278,8 @@
                      conn-posframe--padding
                      (buffer-name (current-buffer))
                      "\n"))
-           (prev (conn-posframe--previous-buffers (+ (ceiling conn-posframe-buffers-lines 2) offset)))
-           (next (conn-posframe--next-buffers (- (floor conn-posframe-buffers-lines 2) offset))))
+           (prev (conn-posframe--previous-buffers))
+           (next (conn-posframe--next-buffers)))
       (add-face-text-property 0 (length current)
                               'conn-posframe-highlight
                               'append current)
