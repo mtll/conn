@@ -265,7 +265,7 @@
      (nreverse found-buffers)
      "\n")))
 
-(defun conn-posframe--switch-buffer-display (&optional backward)
+(defun conn-posframe--switch-buffer-display ()
   (unless executing-kbd-macro
     (let* ((offset (if (memq last-command '(conn-next-buffer conn-prev-buffer))
                        (pcase this-command
@@ -387,7 +387,7 @@
 (defun conn-prev-buffer (&optional arg)
   (interactive "P")
   (previous-buffer arg t)
-  (conn-posframe--switch-buffer-display t))
+  (conn-posframe--switch-buffer-display))
 
 (defun conn-next-buffer (&optional arg)
   (interactive "P")

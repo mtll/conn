@@ -6233,7 +6233,7 @@ When ARG is nil the root window is used."
   (let ((window (window-main-window)))
     (thread-first
       (window-state-get window)
-      (conn--wincontrol-reverse-window (and arg (< arg 0)))
+      (conn--wincontrol-reverse-window)
       (window-state-put window))))
 
 (defun conn-wincontrol-reflect ()
