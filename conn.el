@@ -476,14 +476,6 @@ Used to restore previous value when `conn-mode' is disabled.")
   :group 'conn-key-remapping
   :type '(vector integer))
 
-;;;;; Errors
-
-(define-error 'conn-error "Conn error")
-
-(define-error 'conn-ephemeral-mark-out-of-mode
-              "Ephemeral mark pushed when conn-local-mode inactive"
-              'conn-error)
-
 ;;;;; Overlay Category Properties
 
 ;;;;;; Kapply Preview
@@ -760,7 +752,8 @@ If BUFFER is nil check `current-buffer'."
          (with-current-buffer ,buffer
            (if ,saved-state
                (conn-enter-state ,saved-state)
-             (conn-exit-state conn-current-state))
+             (conn-exit-state conn-current-state)
+             (setq cursor-type ,saved-cursor-type))
            (setq conn-previous-state ,saved-prev-state))))))
 
 (defmacro conn--with-input-method (&rest body)
@@ -1132,7 +1125,8 @@ disabled.
          (when ,name
            (setq ,name nil
                  conn-current-state nil
-                 conn-previous-state state)
+                 conn-previous-state state
+                 cursor-type t)
            ,@body
            (run-hook-wrapped
             'conn-exit-functions
@@ -1458,11 +1452,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (conn-this-command-start (point-marker)))
     (save-mark-and-excursion
       (call-interactively cmd)
-      (condition-case err
-          (funcall conn-this-command-handler conn-this-command-start)
-        (conn-ephemeral-mark-out-of-mode
-         (message "%s" err)
-         (push-mark (cadr err) t)))
+      (funcall conn-this-command-handler conn-this-command-start)
       (cons (cons (region-beginning) (region-end))
             (conn-bounds-of-things-in-region
              conn-this-command-thing (region-beginning) (region-end))))))
@@ -1993,7 +1983,8 @@ Possibilities: \\<query-replace-map>
          (unless (eq buffer (window-buffer (selected-window)))
            (error "Could not pop to buffer %s" buffer))))
      (goto-char beg)
-     (conn--push-ephemeral-mark end)
+     (when conn-local-mode
+       (conn--push-ephemeral-mark end))
      (when (markerp beg) (set-marker beg nil))
      (when (markerp end) (set-marker end nil))
      t)))
@@ -2433,7 +2424,9 @@ The iterator must be the first argument in ARGLIST.
                         (pcase (bounds-of-thing-at-point thing)
                           (`(,beg . ,end)
                            (goto-char beg)
-                           (conn--push-ephemeral-mark end))
+                           (if conn-local-mode
+                               (conn--push-ephemeral-mark end)
+                             (push-mark end t)))
                           (_ (user-error "Point not in %s" thing)))))
                 (put mark-command :conn-command-thing thing)
                 mark-command)))
@@ -2507,8 +2500,7 @@ The iterator must be the first argument in ARGLIST.
   "Push a mark at LOCATION that will not be added to `mark-ring'.
 For the meaning of MSG and ACTIVATE see `push-mark'."
   (if (not conn-local-mode)
-      (signal 'conn-ephemeral-mark-out-of-mode
-              (list (or location (point)) msg activate))
+      (push-mark location (not msg) activate)
     (push-mark location (not msg) activate)
     (setq conn--ephemeral-mark t)
     nil))
@@ -7131,7 +7123,8 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'dired-line
-   :dispatch-target-finder 'conn--dispatch-dired-lines)
+   :dispatch-target-finder 'conn--dispatch-dired-lines
+   :default-action 'conn-dispatch-jump)
 
   (conn-register-thing-commands
    'dired-line nil
@@ -7139,7 +7132,8 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'dired-subdir
-   :dispatch-target-finder 'conn--dispatch-dired-subdir)
+   :dispatch-target-finder 'conn--dispatch-dired-subdir
+   :default-action 'conn-dispatch-jump)
 
   (conn-register-thing-commands
    'dired-subdir nil
@@ -7148,7 +7142,8 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing
    'dired-dirline
-   :dispatch-target-finder 'conn--dispatch-dired-dirline)
+   :dispatch-target-finder 'conn--dispatch-dired-dirline
+   :default-action 'conn-dispatch-jump)
 
   (conn-register-thing-commands
    'dired-dirline nil
