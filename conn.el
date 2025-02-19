@@ -1139,9 +1139,7 @@ disabled.
             'conn-exit-functions
             (lambda (fn)
               (condition-case err
-                  (progn
-                    (funcall fn state)
-                    (setq success t))
+                  (funcall fn state)
                 (t
                  (remove-hook 'conn-entery-functions fn)
                  (message "Error in conn-entry-functions: %s" (car err))))))))
@@ -1172,12 +1170,10 @@ disabled.
             'conn-entery-functions
             (lambda (fn)
               (condition-case err
-                  (progn
-                    (funcall fn state)
-                    (setq success t))
-                (unless success
-                  (remove-hook 'conn-entery-functions fn)
-                  (message "Error in conn-entry-functions: %s" (car err))))))))
+                  (funcall fn state)
+                (t
+                 (remove-hook 'conn-entery-functions fn)
+                 (message "Error in conn-entry-functions: %s" (car err))))))))
 
        (defun ,name ()
          ,doc
@@ -1223,6 +1219,56 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 Is a function of one arguments, the number of labels required.")
 
+(cl-defgeneric conn-label-delete (label))
+(cl-defgeneric conn-label-narrow (label prefix))
+(cl-defgeneric conn-label-reset (label))
+(cl-defgeneric conn-label-payload (label))
+
+(cl-defmethod conn-label-payload ((label overlay))
+  (overlay-get label 'payload))
+
+(cl-defmethod conn-label-reset ((label overlay))
+  (with-current-buffer (overlay-buffer label)
+    (pcase-let ((`(,beg . ,end) (overlay-get label 'overlay-bounds))
+                (prefix-ov (overlay-get label 'prefix-overlay))
+                (prop (if (overlay-get label 'before-string) 'before-string 'display)))
+      (overlay-put prefix-ov 'after-string (overlay-get prefix-ov 'padding))
+      (overlay-put prefix-ov 'face 'conn-read-string-match-face)
+      (move-overlay label beg end)
+      (when-let ((after-str (buffer-substring (overlay-start label)
+                                              (overlay-end label)))
+                 (pos (string-search "\n" after-str)))
+        (overlay-put label 'after-string (substring after-str pos)))
+      (overlay-put label prop (overlay-get label 'label-string)))))
+
+(cl-defmethod conn-label-delete ((label overlay))
+  (delete-overlay label))
+
+(cl-defmethod conn-label-narrow ((label overlay) prefix-char)
+  (with-current-buffer (overlay-buffer label)
+    (let ((prop (if (overlay-get label 'before-string) 'before-string 'display)))
+      (if (not (eql prefix-char (aref (overlay-get label prop) 0)))
+          (when-let ((prefix (overlay-get label 'prefix-overlay)))
+            (overlay-put label prop "")
+            (overlay-put prefix 'face nil)
+            (overlay-put prefix 'after-string nil))
+        (thread-first
+          (overlay-get label prop)
+          (substring 1)
+          (conn--thread suffix (overlay-put label prop suffix)))
+        (move-overlay label
+                      (overlay-start label)
+                      (+ (overlay-start label)
+                         (min (length (overlay-get label prop))
+                              (- (overlay-end label)
+                                 (overlay-start label)))))
+        (if-let* ((after-str (buffer-substring (overlay-start label)
+                                               (overlay-end label)))
+                  (pos (string-search "\n" after-str)))
+            (overlay-put label 'after-string (substring after-str pos))
+          (overlay-put label 'after-string nil))
+        label))))
+
 (defun conn--make-preview-overlay (pt length &optional thing)
   (let* ((eol (save-excursion
                 (goto-char pt)
@@ -1240,7 +1286,7 @@ Is a function of one arguments, the number of labels required.")
 
 (defun conn--preview-get-windows (all-windows)
   (cond (all-windows
-         (cl-loop for win in (window-list-1 nil nil 'visible)
+         (cl-loop for win in (conn--get-windows nil nil 'visible)
                   when (run-hook-with-args-until-failure
                         'conn-dispatch-window-predicates
                         win)
@@ -1310,33 +1356,45 @@ Is a function of one arguments, the number of labels required.")
           (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
         (nreverse labels)))))
 
-(defun conn--read-labels (things labels label-fn payload)
-  (let ((candidates (funcall label-fn labels things))
+(defun conn--select-label (candidates)
+  (let ((current candidates)
         (prompt "char:"))
-    (unwind-protect
-        (cl-loop
-         (pcase candidates
-           ('nil
-            (setq candidates (funcall label-fn labels things)
-                  prompt "char: (no matches)"))
-           (`(,it . nil)
-            (cl-return (overlay-get it payload)))
-           (_
-            (setq prompt "char:")))
-         (setq candidates (conn--dispatch-narrow-labels prompt candidates)))
-      (mapcar #'delete-overlay candidates))))
+    (cl-loop
+     (pcase current
+       ('nil
+        (setq current candidates
+              prompt "char: (no matches)")
+        (mapc #'conn-label-reset current))
+       (`(,it . nil)
+        (cl-return (conn-label-payload it)))
+       (_
+        (setq prompt "char:")))
+     (setq current (let ((next nil)
+                         (c (read-char prompt)))
+                     (dolist (label current next)
+                       (when-let ((l (conn-label-narrow label c)))
+                         (push l next))))))))
 
 (defun conn--create-window-labels (labels windows)
+  (unless (assq 'conn-mode (default-value 'mode-line-format))
+    (set-default
+     'mode-line-format
+     (cons
+      '(conn-mode (:eval (window-parameter (selected-window) 'conn-label)))
+      (assq-delete-all
+       'conn-mode
+       (default-value 'mode-line-format)))))
   (let* ((labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
-                              (window-list-1 nil 'no-minibuff t)))
+                              (conn--get-windows nil 'no-minibuff t)))
          (labels (thread-first
                    (lambda (win) (window-parameter win 'conn-label))
                    (mapcar labeled)
                    (thread-last (seq-difference labels)))))
     (cl-loop with scroll-margin = 0
-             for win in windows
+             for win in (conn--get-windows nil 'no-minibuff t)
              for label = (or (window-parameter win 'conn-label)
                              (set-window-parameter win 'conn-label (pop labels)))
+             when (memq win windows)
              collect (with-selected-window win
                        (let ((overlay (make-overlay (window-start) (window-end))))
                          (goto-char (window-start))
@@ -1344,6 +1402,7 @@ Is a function of one arguments, the number of labels required.")
                          (overlay-put overlay 'conn-overlay t)
                          (overlay-put overlay 'face 'shadow)
                          (overlay-put overlay 'window win)
+                         (overlay-put overlay 'payload win)
                          (overlay-put overlay 'before-string
                                       (propertize label 'face 'conn-window-prompt-face))
                          overlay)))))
@@ -1351,6 +1410,17 @@ Is a function of one arguments, the number of labels required.")
 (defun conn--destroy-window-labels ()
   (dolist (win (window-list-1 nil 'no-minibuf t))
     (set-window-parameter win 'conn-label nil)))
+
+(defun conn--get-windows (&optional window minibuffer all-frames)
+  (seq-remove (lambda (window)
+                (or
+                 ;; ignore child frames
+                 (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
+                 ;; When `ignore-window-parameters' is nil, ignore windows whose
+                 ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
+                 (unless ignore-window-parameters
+                   (window-parameter window 'no-other-window))))
+              (window-list-1 window minibuffer all-frames)))
 
 (defun conn--prompt-for-window (windows &optional dedicated)
   (when (or (and dedicated windows)
@@ -1361,20 +1431,19 @@ Is a function of one arguments, the number of labels required.")
              (cl-loop for win in windows
                       collect (list (window-point win)
                                     (window-vscroll win)
-                                    (window-hscroll win)))))
+                                    (window-hscroll win))))
+            (labels (conn--create-window-labels
+                     (funcall conn-labeling-function
+                              (length (conn--get-windows nil 'nomini t)))
+                     windows)))
         (unwind-protect
-            (conn--read-labels
-             windows
-             (funcall
-              conn-labeling-function
-              (length (window-list-1 nil 'no-minibuf t)))
-             'conn--create-window-labels
-             'window)
+            (conn--select-label labels)
           (cl-loop for win in windows
                    for (pt vscroll hscroll) in window-state
                    do (set-window-point win pt)
                    (set-window-hscroll win hscroll)
                    (set-window-vscroll win vscroll))
+          (mapc #'conn-label-delete labels)
           (unless conn-wincontrol-mode
             (conn--destroy-window-labels)))))))
 
@@ -1428,13 +1497,15 @@ region.")
   :lighter " MOVER"
   :keymap conn-read-thing-mover-mode-map
   (if conn-read-thing-mover-mode
-      (thread-first
-        (setq conn--thing-overriding-maps
-              (make-composed-keymap
-               (cl-loop for (var . map) in conn-read-thing-mover-maps-alist
-                        when var collect map)
-               conn-read-thing-mover-mode-map))
-        (internal-push-keymap 'overriding-terminal-local-map))
+      (progn
+        (setf (alist-get (recursion-depth) conn-last-bounds-of-command) nil)
+        (thread-first
+          (setq conn--thing-overriding-maps
+                (make-composed-keymap
+                 (cl-loop for (var . map) in conn-read-thing-mover-maps-alist
+                          when var collect map)
+                 conn-read-thing-mover-mode-map))
+          (internal-push-keymap 'overriding-terminal-local-map)))
     (internal-pop-keymap conn--thing-overriding-maps
                          'overriding-terminal-local-map)))
 
@@ -3272,11 +3343,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-goto (window pt thing-cmd)
   :description "Goto"
   :key "g"
-  (with-current-buffer (window-buffer window)
+  (with-selected-window window
     (unless (= pt (point))
       (unless (region-active-p)
         (push-mark nil t))
-      (select-window window)
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd current-prefix-arg))
         (`(,beg . ,end)
@@ -3502,8 +3572,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                     (when-let ((pos (string-search "\n" after-str)))
                       (overlay-put ov 'after-string (substring after-str pos))))
                   (overlay-put ov 'prefix-overlay p)
+                  (overlay-put ov 'payload p)
                   (overlay-put ov 'category 'conn-label-overlay)
                   (overlay-put ov 'window window)
+                  (overlay-put ov 'label-string label)
+                  (overlay-put ov 'overlay-bounds (cons beg end))
                   (overlay-put ov (if (or (= beg next)
                                           (= beg (point-max)))
                                       'before-string
@@ -3885,18 +3958,16 @@ seconds."
                             (< (abs (- (overlay-start a) (point)))
                                (abs (- (overlay-start b) (point)))))
                           (alist-get (selected-window) prefix-ovs))
-                labels (or (funcall
-                            conn-labeling-function
-                            (let ((sum 0))
-                              (dolist (p prefix-ovs sum)
-                                (setq sum (+ sum (length (cdr p)))))))
-                           (user-error "No matching candidates")))
+                labels (conn--dispatch-label-overlays
+                        (or (funcall
+                             conn-labeling-function
+                             (let ((sum 0))
+                               (dolist (p prefix-ovs sum)
+                                 (setq sum (+ sum (length (cdr p)))))))
+                            (user-error "No matching candidates"))
+                        prefix-ovs))
           (cl-loop
-           do (let* ((prefix (conn--read-labels
-                              prefix-ovs
-                              labels
-                              'conn--dispatch-label-overlays
-                              'prefix-overlay))
+           do (let* ((prefix (conn--select-label labels))
                      (window (overlay-get prefix 'window))
                      (pt (overlay-start prefix)))
                 (setq conn-this-command-thing
@@ -3908,9 +3979,12 @@ seconds."
                 (undo-boundary)
                 (apply action window pt thing-cmd action-args))
            ;; TODO: allow undo while repeating
-           while repeat))
+           while repeat
+           do (mapc #'conn-label-reset labels)
+           (setq conn-last-bounds-of-command nil)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs))
+      (mapc #'conn-label-delete labels)
       (setq conn--last-dispatch-command (list thing-cmd thing-arg finder action
                                               action-args predicate repeat)))))
 
@@ -3939,16 +4013,16 @@ seconds."
   "Jump to an isearch match with dispatch labels."
   (interactive)
   (let* ((prefix-ovs `((,(selected-window) . ,(conn--dispatch-isearch-matches))))
-         (count (length (cdar prefix-ovs))))
+         (count (length (cdar prefix-ovs)))
+         (labels (conn--dispatch-label-overlays
+                  (funcall conn-labeling-function count)
+                  prefix-ovs)))
     (unwind-protect
-        (let* ((labels (funcall conn-labeling-function count))
-               (prefix (conn--read-labels prefix-ovs
-                                          labels
-                                          'conn--dispatch-label-overlays
-                                          'prefix-overlay))
+        (let* ((prefix (conn--select-label labels))
                (pt (overlay-start prefix)))
           (isearch-done)
           (goto-char pt))
+      (mapc #'conn-label-delete labels)
       (mapc #'delete-overlay (cadr prefix-ovs)))))
 
 
@@ -5464,7 +5538,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive)
   (display-buffer-override-next-command
    (lambda (_ _)
-     (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse))))
+     (cons (conn--prompt-for-window (conn--get-windows nil 'nomini)) 'reuse))))
 
 (defun conn-this-window-prefix ()
   (interactive)
@@ -5477,7 +5551,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "Prompt for window and swap current window and other window."
   (interactive
    (list (conn--prompt-for-window
-          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+          (remove (selected-window) (conn--get-windows nil 'nomini 'visible)))))
   (if window
       (window-swap-states nil window)
     (user-error "No other visible windows")))
@@ -5487,13 +5561,13 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (display-buffer
    (current-buffer)
    (lambda (_ _)
-     (cons (conn--prompt-for-window (window-list-1 nil 'nomini)) 'reuse)))
+     (cons (conn--prompt-for-window (conn--get-windows nil 'nomini)) 'reuse)))
   (next-buffer))
 
 (defun conn-yank-window (window)
   (interactive
    (list (conn--prompt-for-window
-          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+          (remove (selected-window) (conn--get-windows nil 'nomini 'visible)))))
   (if window
       (save-selected-window (window-swap-states nil window))
     (user-error "No other visible windows")))
@@ -6088,7 +6162,7 @@ When called interactively N is `last-command-event'."
 (defun conn-goto-window (window)
   (interactive
    (list (conn--prompt-for-window
-          (remove (selected-window) (window-list-1 nil 'nomini 'visible)))))
+          (remove (selected-window) (conn--get-windows nil 'nomini 'visible)))))
   (select-window window))
 
 (defun conn-wincontrol-zoom-in (arg)
@@ -6679,6 +6753,11 @@ determine if `conn-local-mode' should be enabled."
         (progn
           (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
+      (set-default
+       'mode-line-format
+       (assq-delete-all
+        'conn-mode
+        (default-value 'mode-line-format)))
       (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "C-M-y"))
