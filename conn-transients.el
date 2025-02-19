@@ -1234,20 +1234,46 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
-  [ "Register Store:"
-    [ ("v" "Point" point-to-register)
-      ("m" "Macro" kmacro-to-register)
-      ("t" "Tab" conn-tab-to-register)
-      ("d" "Command" conn-command-to-register)]
-    [ ("f" "Frameset" frameset-to-register)
-      ("r" "Rectangle" copy-rectangle-to-register)
-      ("w" "Window Configuration" window-configuration-to-register)]]
-  [ "Register Commands:"
-    [ ("e" "Set Seperator" conn-set-register-seperator)
-      ("i" "Increment" increment-register :transient t)
-      ("s" "List" list-registers :transient t)]
-    [ ("l" "Load" conn-register-load)
-      ("u" "Unset" conn-unset-register :transient t)]])
+  [[ :description "Register Commands"
+     ("e" "Set Seperator" conn-set-register-seperator)
+     ("i" "Increment" increment-register :transient t)
+     ("s" "List" list-registers :transient t)
+     ("l" "Load" conn-register-load)
+     ("u" "Unset" conn-unset-register :transient t)]
+   [ :description "Register Store"
+     ("P" "Point" point-to-register)
+     ("m" "Macro" kmacro-to-register)
+     ("t" "Tab" conn-tab-to-register)
+     ("a" "Command" conn-command-to-register)
+     ("f" "Frameset" frameset-to-register)
+     ("r" "Rectangle" copy-rectangle-to-register)
+     ("v" "Window Configuration" window-configuration-to-register)]
+   [ :description "Kill"
+     ("w" "Append"
+      (lambda ()
+        (interactive)
+        (conn-kill-append-region
+         (region-beginning) (region-end)
+         (register-read-with-preview "Prepend to register: "))))
+     ("d" "Prepend"
+      (lambda ()
+        (interactive)
+        (conn-kill-prepend-region
+         (region-beginning) (region-end)
+         (register-read-with-preview "Prepend to register: "))))
+     "Copy"
+     ("c" "Append"
+      (lambda ()
+        (interactive)
+        (conn-append-region
+         (region-beginning) (region-end)
+         (register-read-with-preview "Prepend to register: "))))
+     ("x" "Prepend"
+      (lambda ()
+        (interactive)
+        (conn-prepend-region
+         (region-beginning) (region-end)
+         (register-read-with-preview "Prepend to register: "))))]])
 
 ;;;; Fill Prefix
 
