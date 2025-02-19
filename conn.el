@@ -1523,14 +1523,13 @@ Bounds list is of the form (BEG END . SUBREGIONS).  Commands may return
 multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
-  (or (alist-get (recursion-depth) conn-last-bounds-of-command)
-      (setf (alist-get (recursion-depth) conn-last-bounds-of-command)
-            (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                         (ignore-errors
-                           (alist-get (get cmd :conn-command-thing)
-                                      conn-bounds-of-command-alist))
-                         (apply-partially conn-bounds-of-command-default cmd))
-                     arg))))
+  (setf (alist-get (recursion-depth) conn-last-bounds-of-command)
+        (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                     (ignore-errors
+                       (alist-get (get cmd :conn-command-thing)
+                                  conn-bounds-of-command-alist))
+                     (apply-partially conn-bounds-of-command-default cmd))
+                 arg)))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
   (let ((current-prefix-arg arg)
@@ -3980,8 +3979,7 @@ seconds."
                 (apply action window pt thing-cmd action-args))
            ;; TODO: allow undo while repeating
            while repeat
-           do (mapc #'conn-label-reset labels)
-           (setq conn-last-bounds-of-command nil)))
+           do (mapc #'conn-label-reset labels)))
       (pcase-dolist (`(_ . ,ovs) prefix-ovs)
         (mapc #'delete-overlay ovs))
       (mapc #'conn-label-delete labels)
@@ -4435,7 +4433,8 @@ instances of from-string.")
   (with-undo-amalgamate
     (save-excursion
       (pcase-let ((`((,beg . ,end) . ,regions)
-                   (conn-bounds-of-command thing-mover arg)))
+                   (or conn-last-bounds-of-command
+                       (conn-bounds-of-command thing-mover arg))))
         (if regions
             (let ((region-extract-function
                    (lambda (method)
@@ -4482,7 +4481,8 @@ instances of from-string.")
   (with-undo-amalgamate
     (save-excursion
       (pcase-let ((`((,beg . ,end) . ,regions)
-                   (conn-bounds-of-command thing-mover arg)))
+                   (or conn-last-bounds-of-command
+                       (conn-bounds-of-command thing-mover arg))))
         (if regions
             (let ((region-extract-function
                    (lambda (method)
