@@ -168,31 +168,6 @@
                          (not (if isearch-forward (eobp) (bobp))))
                do (forward-char (if isearch-forward 1 -1))))))
 
-;;;###autoload
-(defun conn-consult-isearch-matches ()
-  (interactive)
-  (let* ((curr-line (line-number-at-pos (point) consult-line-numbers-widen))
-         (candidates (consult--slow-operation "Collecting matches..."
-                       (if (bound-and-true-p multi-isearch-buffer-list)
-                           (mapcan 'conn-consult--isearch-matches multi-isearch-buffer-list)
-                         (conn-consult--isearch-matches)))))
-    (with-isearch-suspended
-     (consult--read
-      candidates
-      :prompt "Go to line: "
-      :annotate (consult--line-prefix curr-line)
-      :category 'consult-location
-      :sort nil
-      :require-match t
-      :add-history (list (thing-at-point 'symbol) isearch-string)
-      :history '(:input consult--line-multi-history)
-      :lookup #'consult--line-match
-      :default (car candidates)
-      :state (consult--location-state candidates)
-      :group #'consult--line-multi-group))))
-
-(keymap-set isearch-mode-map "M-s o" 'conn-consult-isearch-matches)
-
 (provide 'conn-consult)
 
 (with-eval-after-load 'embark
