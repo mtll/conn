@@ -1025,13 +1025,13 @@ mouse-3: Describe current input method")
 
 This function takes care of calling `conn-exit-state' on the current
 state."
-  ( :method ((_state (eql nil))) "Noop" nil)
-  ( :method (state) (error "Attempting to enter unknown state: %s" state)))
+  (:method ((_state (eql nil))) "Noop" nil)
+  (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE."
-  ( :method ((_state (eql nil))) "Noop" nil)
-  ( :method (state) (error "Attempting to exit unknown state: %s" state)))
+  (:method ((_state (eql nil))) "Noop" nil)
+  (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
 (defmacro conn-define-state (name doc &rest rest)
   "Define a conn state NAME.
@@ -1123,43 +1123,61 @@ disabled.
 
        (cl-defmethod conn-exit-state ((state (eql ',name)))
          (when ,name
-           (setq ,name nil
-                 conn-current-state nil
-                 conn-previous-state state
-                 cursor-type t)
-           ,@body
+           (let ((success nil))
+             (unwind-protect
+                 (progn
+                   (setq ,name nil
+                         conn-current-state nil
+                         conn-previous-state state
+                         cursor-type t)
+                   ,@body
+                   (setq success t))
+               (unless success
+                 (conn-local-mode -1)
+                 (message "Error exiting state %s." ',name))))
            (run-hook-wrapped
             'conn-exit-functions
             (lambda (fn)
               (condition-case err
-                  (funcall fn state)
-                (error
-                 (remove-hook 'conn-exit-functions fn)
-                 (message "Error in conn-exit-functions: %s" (car err))))))))
+                  (progn
+                    (funcall fn state)
+                    (setq success t))
+                (t
+                 (remove-hook 'conn-entery-functions fn)
+                 (message "Error in conn-entry-functions: %s" (car err))))))))
 
        (cl-defmethod conn-enter-state ((state (eql ',name)))
          (unless ,name
-           (conn-exit-state conn-current-state)
-           (setq ,name t
-                 conn-current-state state
-                 conn--local-mode-maps (alist-get state conn--mode-maps))
-           (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
-           (when (and conn-lighter conn-lighter-colors)
-             (setq-local conn-lighter
-                         (conn--set-background conn-lighter ,lighter-color-name)))
-           (conn--activate-input-method)
-           (setq cursor-type (or ,cursor-name t))
-           (when (not executing-kbd-macro)
-             (force-mode-line-update))
-           ,@body
+           (let ((success nil))
+             (unwind-protect
+                 (progn
+                   (conn-exit-state conn-current-state)
+                   (setq ,name t
+                         conn-current-state state
+                         conn--local-mode-maps (alist-get state conn--mode-maps))
+                   (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
+                   (when (and conn-lighter conn-lighter-colors)
+                     (setq-local conn-lighter
+                                 (conn--set-background conn-lighter ,lighter-color-name)))
+                   (conn--activate-input-method)
+                   (setq cursor-type (or ,cursor-name t))
+                   (when (not executing-kbd-macro)
+                     (force-mode-line-update))
+                   ,@body
+                   (setq success t))
+               (unless success
+                 (conn-local-mode -1)
+                 (message "Error entering state %s." ',name))))
            (run-hook-wrapped
             'conn-entery-functions
             (lambda (fn)
               (condition-case err
-                  (funcall fn state)
-                (error
-                 (remove-hook 'conn-entery-functions fn)
-                 (message "Error in conn-entry-functions: %s" (car err))))))))
+                  (progn
+                    (funcall fn state)
+                    (setq success t))
+                (unless success
+                  (remove-hook 'conn-entery-functions fn)
+                  (message "Error in conn-entry-functions: %s" (car err))))))))
 
        (defun ,name ()
          ,doc
@@ -5775,12 +5793,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-k" 'conn-wincontrol-windmove-down
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "<tab>" 'conn-wincontrol-other-window-scroll-up
-  "TAB" 'conn-wincontrol-other-window-scroll-up
+  "M-<tab>" 'conn-wincontrol-other-window-scroll-up
+  "M-TAB" 'conn-wincontrol-other-window-scroll-up
   "DEL" 'conn-wincontrol-scroll-down
   "SPC" 'conn-wincontrol-scroll-up
-  "M-TAB" 'conn-wincontrol-other-window-scroll-down
-  "M-<tab>" 'conn-wincontrol-other-window-scroll-down
+  "TAB" 'conn-wincontrol-other-window-scroll-down
+  "<tab>" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   "." 'conn-wincontrol-maximize-horizontally
@@ -5858,7 +5876,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn--wincontrol-post-command ()
   (cond
    ((not (eq conn-wincontrol-map (cadr overriding-terminal-local-map)))
-    ;; Something else is using overriding-terminal-local-map
+    ;; Something else is using overriding-terminal-local-map,
     ;; e.g. isearch or transient, turn wincontrol off.
     (conn-wincontrol-mode -1))
    ((not (zerop (minibuffer-depth)))
@@ -6364,10 +6382,7 @@ When ARG is nil the root window is used."
   "d" 'open-rectangle
   "<backspace>" 'clear-rectangle
   "C-d" 'delete-whitespace-rectangle
-  "#" 'rectangle-number-lines
-  "r m t" 'conn-kapply-replace-rectangle
-  "r m e" 'conn-kapply-emacs-on-rectangle
-  "r m c" 'conn-kapply-conn-on-rectangle)
+  "#" 'rectangle-number-lines)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
@@ -6461,7 +6476,7 @@ When ARG is nil the root window is used."
   "`" 'other-window
   "|" 'conn-shell-command-on-region
   "'" 'repeat
-  "+" 'conn-set-register-seperator
+  ;; "+" 'conn-set-register-seperator
   "." 'conn-other-place-prefix
   "/" (conn-remap-key conn-undo-keys)
   ";" 'conn-wincontrol
@@ -6497,8 +6512,8 @@ When ARG is nil the root window is used."
   "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
   "H" 'conn-mark-thing-map
-  "p" 'conn-register-load
-  "P" 'conn-register-prefix
+  "," 'conn-register-load
+  "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
@@ -6547,7 +6562,7 @@ When ARG is nil the root window is used."
   "n" 'org-backward-element
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
-  "p" 'conn-register-load
+  "," 'conn-register-load
   "s" (conn-remap-keymap (key-parse "M-g"))
   "T" 'org-todo
   "t" 'org-sparse-tree
@@ -6565,13 +6580,6 @@ When ARG is nil the root window is used."
   "C-x 4 ?" 'tab-bar-history-forward
   "C-x 4 -" 'conn-window-resize-map
   "C-x ?" 'tab-bar-history-forward
-  "C-x n n" 'conn-narrow-to-region
-  "C-x n N" 'conn-narrow-indirect-to-region
-  "C-x r \\" 'conn-set-register-seperator
-  "C-x r ." 'conn-last-macro-dispatch-to-register
-  "C-x r !" 'kmacro-to-register
-  "C-x r W" 'conn-unset-register
-  "C-x t j" 'conn-register-load
   "C-x t s" 'tab-switch
   "C-x t a" 'conn-tab-to-register
   "C-`" 'other-window
@@ -6634,7 +6642,11 @@ When ARG is nil the root window is used."
         (setq conn--input-method current-input-method)
         (conn--setup-major-mode-maps)
         (funcall (conn--default-state-for-buffer)))
-    (conn-exit-state conn-current-state)
+    (dolist (state conn-states)
+      (setf (buffer-local-value state (current-buffer)) nil))
+    (setq conn-current-state nil
+          conn-previous-state nil
+          cursor-type t)
     (conn--clear-overlays)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
