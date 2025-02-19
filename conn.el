@@ -3514,36 +3514,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
-(defun conn--dispatch-narrow-labels (prompt overlays)
-  (unwind-protect
-      (let ((c (read-char prompt))
-            (narrowed))
-        (save-current-buffer
-          (dolist (ov overlays)
-            (set-buffer (overlay-buffer ov))
-            (let ((prop (if (overlay-get ov 'before-string) 'before-string 'display)))
-              (if (not (eql c (aref (overlay-get ov prop) 0)))
-                  (when-let ((prefix (overlay-get ov 'prefix-overlay)))
-                    (overlay-put prefix 'face nil)
-                    (overlay-put prefix 'after-string nil))
-                (thread-first
-                  (overlay-get ov prop)
-                  (substring 1)
-                  (conn--thread suffix (overlay-put ov prop suffix)))
-                (move-overlay ov
-                              (overlay-start ov)
-                              (+ (overlay-start ov)
-                                 (min (length (overlay-get ov prop))
-                                      (- (overlay-end ov)
-                                         (overlay-start ov)))))
-                (if-let* ((after-str (buffer-substring (overlay-start ov) (overlay-end ov)))
-                          (pos (string-search "\n" after-str)))
-                    (overlay-put ov 'after-string (substring after-str pos))
-                  (overlay-put ov 'after-string nil))
-                (push ov narrowed)))))
-        (mapcar #'copy-overlay narrowed))
-    (mapc #'delete-overlay overlays)))
-
 (defun conn--dispatch-label-overlays (labels prefix-overlays)
   (let (overlays success)
     (unwind-protect
