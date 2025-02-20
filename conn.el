@@ -1250,6 +1250,7 @@ Is a function of one arguments, the number of labels required.")
       (if (not (eql prefix-char (aref (overlay-get label prop) 0)))
           (when-let ((prefix (overlay-get label 'prefix-overlay)))
             (overlay-put label prop "")
+            (move-overlay label (overlay-start label) (overlay-start label))
             (overlay-put prefix 'face nil)
             (overlay-put prefix 'after-string nil))
         (thread-first
@@ -3261,40 +3262,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (looking-at "\\s)*\n"))
     (join-line)))
 
-;;;;; Actions and Things
-
-(defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key INTERACTIVE DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
-  (declare (debug ( name lambda-expr
-                    [&rest keywordp form]
-                    def-body))
-           (indent 2))
-  (pcase-let* (((map :description :interactive :filter :window-predicate :key :modes)
-                rest)
-               (menu-item `( 'menu-item
-                             ,(or description (symbol-name name))
-                             ',name
-                             ,@(when filter
-                                 `(:filter (lambda (_)
-                                             (pcase (funcall ,filter)
-                                               ('this ',name)
-                                               (res res)))))))
-               (body (cl-loop for sublist on rest by #'cddr
-                              unless (keywordp (car sublist))
-                              do (cl-return sublist))))
-    `(progn
-       (defun ,name ,arglist ,@body)
-       (put ',name :conn-action t)
-       (put ',name :conn-action-interactive (lambda () ,interactive))
-       (put ',name :conn-action-description ,(cadr menu-item))
-       (put ',name :conn-action-window-predicate ,window-predicate)
-       ,(when key
-          (if modes
-              `(dolist (mode ',(ensure-list modes))
-                 (keymap-set (conn-get-mode-dispatch-map mode)
-                             ,key (list ,@menu-item)))
-            `(keymap-set conn-dispatch-read-thing-mode-map
-                         ,key (list ,@menu-item)))))))
+;;;;; Things
 
 (defmacro conn-define-dispatch-thing (thing &rest rest)
   "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
@@ -3332,6 +3300,41 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-thing forward-symbol
   :key "U"
   :target-finder (apply-partially 'conn--dispatch-all-things 'symbol t))
+
+;;;;; Actions
+
+(defmacro conn-define-dispatch-action (name arglist &rest rest)
+  "\(fn NAME ARGLIST &key INTERACTIVE DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
+  (declare (debug ( name lambda-expr
+                    [&rest keywordp form]
+                    def-body))
+           (indent 2))
+  (pcase-let* (((map :description :interactive :filter :window-predicate :key :modes)
+                rest)
+               (menu-item `( 'menu-item
+                             ,(or description (symbol-name name))
+                             ',name
+                             ,@(when filter
+                                 `(:filter (lambda (_)
+                                             (pcase (funcall ,filter)
+                                               ('this ',name)
+                                               (res res)))))))
+               (body (cl-loop for sublist on rest by #'cddr
+                              unless (keywordp (car sublist))
+                              do (cl-return sublist))))
+    `(progn
+       (defun ,name ,arglist ,@body)
+       (put ',name :conn-action t)
+       (put ',name :conn-action-interactive (lambda () ,interactive))
+       (put ',name :conn-action-description ,(cadr menu-item))
+       (put ',name :conn-action-window-predicate ,window-predicate)
+       ,(when key
+          (if modes
+              `(dolist (mode ',(ensure-list modes))
+                 (keymap-set (conn-get-mode-dispatch-map mode)
+                             ,key (list ,@menu-item)))
+            `(keymap-set conn-dispatch-read-thing-mode-map
+                         ,key (list ,@menu-item)))))))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd)
   :description "Dot"
@@ -6562,8 +6565,8 @@ When ARG is nil the root window is used."
   "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
   "H" 'conn-mark-thing-map
-  "," 'conn-register-load
-  "p" 'conn-register-prefix
+  "p" 'conn-register-load
+  "P" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
@@ -6612,7 +6615,7 @@ When ARG is nil the root window is used."
   "n" 'org-backward-element
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
-  "," 'conn-register-load
+  "p" 'conn-register-load
   "s" (conn-remap-keymap (key-parse "M-g"))
   "T" 'org-todo
   "t" 'org-sparse-tree
