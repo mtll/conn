@@ -3919,6 +3919,9 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
+  (setq conn--last-dispatch-command
+        (list thing-cmd thing-arg finder action
+              action-args predicate repeat))
   (let ((current-prefix-arg thing-arg)
         (conn-dispatch-window-predicates
          (if predicate
@@ -3926,39 +3929,36 @@ seconds."
                      (list predicate))
            conn-dispatch-window-predicates))
         prefix-ovs labels prefix window pt)
-    (unwind-protect
-        (while
-            (prog1 repeat
-              (unwind-protect
-                  (setf prefix-ovs (thread-last
-                                     (funcall finder)
-                                     (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                                     (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                        (alist-get (selected-window) prefix-ovs)
-                        (seq-sort (lambda (a b)
-                                    (< (abs (- (overlay-start a) (point)))
-                                       (abs (- (overlay-start b) (point)))))
-                                  (alist-get (selected-window) prefix-ovs))
-                        labels (conn--dispatch-label-overlays
-                                (or (funcall
-                                     conn-labeling-function
-                                     (let ((sum 0))
-                                       (dolist (p prefix-ovs sum)
-                                         (setq sum (+ sum (length (cdr p)))))))
-                                    (user-error "No matching candidates"))
-                                prefix-ovs)
-                        prefix (conn--select-label labels)
-                        window (overlay-get prefix 'window)
-                        pt (overlay-start prefix)
-                        conn-this-command-thing (or (overlay-get prefix 'thing)
-                                                    (get thing-cmd :conn-command-thing)))
-                (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-                  (mapc #'delete-overlay ovs))
-                (mapc #'conn-label-delete labels))
-              (undo-boundary)
-              (apply action window pt thing-cmd action-args)))
-      (setq conn--last-dispatch-command (list thing-cmd thing-arg finder action
-                                              action-args predicate repeat)))))
+    (while
+        (prog1 repeat
+          (unwind-protect
+              (setf prefix-ovs (thread-last
+                                 (funcall finder)
+                                 (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                                 (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                    (alist-get (selected-window) prefix-ovs)
+                    (seq-sort (lambda (a b)
+                                (< (abs (- (overlay-start a) (point)))
+                                   (abs (- (overlay-start b) (point)))))
+                              (alist-get (selected-window) prefix-ovs))
+                    labels (conn--dispatch-label-overlays
+                            (or (funcall
+                                 conn-labeling-function
+                                 (let ((sum 0))
+                                   (dolist (p prefix-ovs sum)
+                                     (setq sum (+ sum (length (cdr p)))))))
+                                (user-error "No matching candidates"))
+                            prefix-ovs)
+                    prefix (conn--select-label labels)
+                    window (overlay-get prefix 'window)
+                    pt (overlay-start prefix)
+                    conn-this-command-thing (or (overlay-get prefix 'thing)
+                                                (get thing-cmd :conn-command-thing)))
+            (pcase-dolist (`(_ . ,ovs) prefix-ovs)
+              (mapc #'delete-overlay ovs))
+            (mapc #'conn-label-delete labels))
+          (undo-boundary)
+          (apply action window pt thing-cmd action-args)))))
 
 (defun conn-repeat-last-dispatch ()
   (interactive)
