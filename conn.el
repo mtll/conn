@@ -1250,6 +1250,7 @@ Is a function of one arguments, the number of labels required.")
       (if (not (eql prefix-char (aref (overlay-get label prop) 0)))
           (when-let ((prefix (overlay-get label 'prefix-overlay)))
             (overlay-put label prop "")
+            (overlay-put label 'after-string nil)
             (move-overlay label (overlay-start label) (overlay-start label))
             (overlay-put prefix 'face nil)
             (overlay-put prefix 'after-string nil))
@@ -3924,44 +3925,38 @@ seconds."
              (append conn-dispatch-window-predicates
                      (list predicate))
            conn-dispatch-window-predicates))
-        (cont t)
         prefix-ovs labels prefix window pt)
     (unwind-protect
-        (while cont
-          (unwind-protect
-              (progn
-                (setf prefix-ovs (thread-last
-                                   (funcall finder)
-                                   (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                                   (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                      (alist-get (selected-window) prefix-ovs)
-                      (seq-sort (lambda (a b)
-                                  (< (abs (- (overlay-start a) (point)))
-                                     (abs (- (overlay-start b) (point)))))
-                                (alist-get (selected-window) prefix-ovs))
-                      labels (conn--dispatch-label-overlays
-                              (or (funcall
-                                   conn-labeling-function
-                                   (let ((sum 0))
-                                     (dolist (p prefix-ovs sum)
-                                       (setq sum (+ sum (length (cdr p)))))))
-                                  (user-error "No matching candidates"))
-                              prefix-ovs)
-                      prefix (conn--select-label labels)
-                      window (overlay-get prefix 'window)
-                      pt (overlay-start prefix)
-                      conn-this-command-thing (or (overlay-get prefix 'thing)
-                                                  (get thing-cmd :conn-command-thing)))
-                ;; FIXME: inserting the undo boundary here causes
-                ;;        aggressive-indent-mode not to indent for
-                ;;        some reason
-                (undo-boundary)
-                (apply action window pt thing-cmd action-args))
-            (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-              (mapc #'delete-overlay ovs))
-            (mapc #'conn-label-delete labels))
-          ;; TODO: allow undo while repeating
-          (setq cont repeat))
+        (while
+            (prog1 repeat
+              (unwind-protect
+                  (setf prefix-ovs (thread-last
+                                     (funcall finder)
+                                     (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                                     (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                        (alist-get (selected-window) prefix-ovs)
+                        (seq-sort (lambda (a b)
+                                    (< (abs (- (overlay-start a) (point)))
+                                       (abs (- (overlay-start b) (point)))))
+                                  (alist-get (selected-window) prefix-ovs))
+                        labels (conn--dispatch-label-overlays
+                                (or (funcall
+                                     conn-labeling-function
+                                     (let ((sum 0))
+                                       (dolist (p prefix-ovs sum)
+                                         (setq sum (+ sum (length (cdr p)))))))
+                                    (user-error "No matching candidates"))
+                                prefix-ovs)
+                        prefix (conn--select-label labels)
+                        window (overlay-get prefix 'window)
+                        pt (overlay-start prefix)
+                        conn-this-command-thing (or (overlay-get prefix 'thing)
+                                                    (get thing-cmd :conn-command-thing)))
+                (pcase-dolist (`(_ . ,ovs) prefix-ovs)
+                  (mapc #'delete-overlay ovs))
+                (mapc #'conn-label-delete labels))
+              (undo-boundary)
+              (apply action window pt thing-cmd action-args)))
       (setq conn--last-dispatch-command (list thing-cmd thing-arg finder action
                                               action-args predicate repeat)))))
 
