@@ -1183,9 +1183,7 @@ apply to each contiguous component of the region."
 (transient-define-prefix conn-narrow-ring-prefix ()
   "Transient menu for narrow ring function."
   [ :description conn--narrow-ring-display
-    [ ("i" "Isearch forward" conn-isearch-narrow-ring-forward)
-      ("I" "Isearch backward" conn-isearch-narrow-ring-backward)
-      ("N" "In Indired Buffer"
+    [ ("N" "In Indired Buffer"
        (lambda ()
          (interactive)
          (let ((beg (point-min))
@@ -1208,7 +1206,7 @@ apply to each contiguous component of the region."
          (widen)
          (conn-recenter-on-region)))
       ("c" "Clear" conn-clear-narrow-ring)
-      ("v" "Add Region" conn-region-to-narrow-ring)]
+      ("j" "Add Region" conn-thing-to-narrow-ring)]
     [ ("n" "Cycle Next" conn-cycle-narrowings :transient t)
       ("p" "Cycle Previous"
        (lambda (arg)
@@ -1235,19 +1233,19 @@ apply to each contiguous component of the region."
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
   [[ :description "Register Commands"
-     ("e" "Set Seperator" conn-set-register-seperator)
-     ("i" "Increment" increment-register :transient t)
-     ("s" "List" list-registers :transient t)
-     ("l" "Load" conn-register-load)
-     ("u" "Unset" conn-unset-register :transient t)]
+     ("f" "Load" conn-register-load)
+     ("u" "Unset" conn-unset-register)
+     ("s" "Set Seperator" conn-set-register-seperator)
+     ("i" "Increment" increment-register)
+     ("l" "List" list-registers)]
    [ :description "Register Store"
-     ("P" "Point" point-to-register)
+     ("p" "Point" point-to-register)
+     ("r" "Rectangle" copy-rectangle-to-register)
+     ("a" "Command" conn-command-to-register)
      ("m" "Macro" kmacro-to-register)
      ("t" "Tab" conn-tab-to-register)
-     ("a" "Command" conn-command-to-register)
-     ("f" "Frameset" frameset-to-register)
-     ("r" "Rectangle" copy-rectangle-to-register)
-     ("v" "Window Configuration" window-configuration-to-register)]
+     ("4" "Window Configuration" window-configuration-to-register)
+     ("5" "Frameset" frameset-to-register)]
    [ :description "Kill"
      ("w" "Append"
       (lambda ()

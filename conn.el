@@ -700,22 +700,23 @@ If BUFFER is nil check `current-buffer'."
            for prop = (get mode property)
            when prop return prop))
 
-(defun conn--merge-regions (regions)
+(defun conn--merge-regions (regions &optional points)
   "Merge all overlapping regions in REGIONS."
   (let (merged)
     (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
       (pcase (catch 'found
                (pcase-dolist ((and r `(,beg2 . ,end2)) merged)
-                 (when (and (eq (marker-buffer beg2) (marker-buffer beg1))
+                 (when (and (or points
+                                (eq (marker-buffer beg2) (marker-buffer beg1)))
                             (not (or (< end2 beg1) (< end1 beg2))))
                    (throw 'found r))))
         ((and cons `(,beg2 . ,end2))
          (setcar cons (if (< beg1 beg2)
-                          (prog1 beg1 (set-marker beg2 nil))
-                        (prog1 beg2 (set-marker beg1 nil))))
+                          (prog1 beg1 (or points (set-marker beg2 nil)))
+                        (prog1 beg2 (or points (set-marker beg1 nil)))))
          (setcdr cons (if (> end1 end2)
-                          (prog1 end1 (set-marker end2 nil))
-                        (prog1 end2 (set-marker end1 nil)))))
+                          (prog1 end1 (or points (set-marker end2 nil)))
+                        (prog1 end2 (or points (set-marker end1 nil))))))
         ('nil (push region merged))))
     merged))
 
@@ -1492,7 +1493,7 @@ region.")
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
   "t" 'conn-mark-thing-map
-  "r" 'recursive-edit)
+  "e" 'recursive-edit)
 
 (define-minor-mode conn-read-thing-mover-mode
   "Mode for reading a thing mover."
@@ -1593,7 +1594,18 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
       'conn--bounds-of-region
 
       (alist-get 'visible conn-bounds-of-command-alist)
-      'conn--bounds-of-window)
+      'conn--bounds-of-window
+
+      (alist-get 'narrowing conn-bounds-of-command-alist)
+      'conn--bounds-of-narrowings)
+
+(defun conn--bounds-of-narrowings (_arg)
+  (cl-loop for (beg . end) in conn-narrow-ring
+           minimize beg into narrow-beg
+           maximize end into narrow-end
+           collect (cons beg end) into narrowings
+           finally return (cons (cons narrow-beg narrow-end)
+                                narrowings)))
 
 (defun conn-bounds-of-things-in-region (thing beg end)
   "Return list of bounds of THING's in region from BEG to END."
@@ -2945,6 +2957,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'expansion nil
  'conn-expand 'conn-contract)
 
+(conn-register-thing-commands
+ 'narrowing nil
+ 'narrow-to-region 'widen
+ 'conn-narrow-to-region
+ 'conn-narrow-ring-prefix)
+
 
 ;;;; Thing Dispatch
 
@@ -4220,30 +4238,14 @@ Expansions and contractions are provided by functions in
     (message "Narrow ring merged into %s region"
              (length conn-narrow-ring))))
 
-(defun conn-thing-to-narrow-ring (thing-mover arg &optional pulse)
-  "Add region defined by THING-MOVER called with ARG to narrow ring.
-With prefix arg REGISTER add to narrow ring register instead."
-  (interactive
-   (progn
-     (deactivate-mark)
-     (append
-      (conn-read-thing-mover "Thing Mover" nil t)
-      (list t))))
-  (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
-    (conn--narrow-ring-record beg end)
-    (when (and pulse (not executing-kbd-macro))
-      (pulse-momentary-highlight-region beg end 'region))))
-
-(defun conn-region-to-narrow-ring (&optional pulse)
-  "Add the region from BEG to END to the narrow ring.
-Interactively defaults to the current region.
-With prefix arg REGISTER add to narrow ring register instead."
-  (interactive (list t))
-  (let ((beg (region-beginning))
-        (end (region-end)))
-    (conn--narrow-ring-record beg end)
-    (when (and pulse (not executing-kbd-macro))
-      (pulse-momentary-highlight-region beg end 'region))))
+(defun conn-thing-to-narrow-ring (thing-cmd thing-arg)
+  (interactive (conn-read-thing-mover "Thing" nil t))
+  (let ((regions (conn-bounds-of-command thing-cmd thing-arg)))
+    (mapc (pcase-lambda (`(,beg . ,end))
+            (conn--narrow-ring-record beg end))
+          (or (conn--merge-regions (cdr regions) t)
+              (list (car regions)))))
+  (message "Added %s to narrow ring" (get thing-cmd :conn-command-thing)))
 
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
@@ -4267,27 +4269,7 @@ With prefix arg REGISTER add to narrow ring register instead."
      (set-marker beg nil)
      (set-marker end nil))))
 
-(defun conn-isearch-in-narrow-p (beg end)
-  (cl-loop for narrowing in conn-narrow-ring
-           thereis (<= (car narrowing) beg end (cdr narrowing))))
-
-(defun conn-isearch-narrow-ring-forward ()
-  "`isearch-forward' restricted to regions in `conn-narrow-ring'."
-  (interactive)
-  (let ((isearch-filter-predicate isearch-filter-predicate))
-    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
-                  '((isearch-message-prefix . "[NARROW] ")))
-    (isearch-forward)))
-
-(defun conn-isearch-narrow-ring-backward ()
-  "`isearch-backward' restricted to regions in `conn-narrow-ring'."
-  (interactive)
-  (let ((isearch-filter-predicate isearch-filter-predicate))
-    (add-function :after-while isearch-filter-predicate 'conn-isearch-in-narrow-p
-                  '((isearch-message-prefix . "[NARROW] ")))
-    (isearch-backward)))
-
-  
+
 ;;;; Commands
 
 ;;;;; Replace
@@ -4410,26 +4392,27 @@ instances of from-string.")
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
     (save-excursion
-      (pcase-let ((`((,beg . ,end) . ,regions)
-                   (or conn-last-bounds-of-command
-                       (conn-bounds-of-command thing-mover arg))))
+      (pcase-let* ((`((,beg . ,end) . ,regions)
+                    (or conn-last-bounds-of-command
+                        (conn-bounds-of-command thing-mover arg))))
         (if regions
-            (let ((region-extract-function
-                   (lambda (method)
-                     (pcase method
-                       ('nil
-                        (cl-loop for (beg . end) in regions
-                                 collect (buffer-substring beg end)))
-                       ('delete-only
-                        (cl-loop for (beg . end) in regions
-                                 do (delete-region beg end)))
-                       ('bounds regions)
-                       (_
-                        (prog1
-                            (cl-loop for (beg . end) in regions
-                                     collect (filter-buffer-substring beg end method))
-                          (cl-loop for (beg . end) in regions
-                                   do (delete-region beg end))))))))
+            (let* ((regions (conn--merge-regions regions t))
+                   (region-extract-function
+                    (lambda (method)
+                      (pcase method
+                        ('nil
+                         (cl-loop for (beg . end) in regions
+                                  collect (buffer-substring beg end)))
+                        ('delete-only
+                         (cl-loop for (beg . end) in regions
+                                  do (delete-region beg end)))
+                        ('bounds regions)
+                        (_
+                         (prog1
+                             (cl-loop for (beg . end) in regions
+                                      collect (filter-buffer-substring beg end method))
+                           (cl-loop for (beg . end) in regions
+                                    do (delete-region beg end))))))))
               (perform-replace from-string to-string query-flag nil
                                delimited nil nil beg end backward t))
           (perform-replace from-string to-string query-flag nil
@@ -4462,26 +4445,27 @@ instances of from-string.")
                    (or conn-last-bounds-of-command
                        (conn-bounds-of-command thing-mover arg))))
         (if regions
-            (let ((region-extract-function
-                   (lambda (method)
-                     (pcase method
-                       ('nil
-                        (cl-loop for (beg . end) in regions
-                                 collect (buffer-substring beg end)))
-                       ('delete-only
-                        (cl-loop for (beg . end) in regions
-                                 do (delete-region beg end)))
-                       ('bounds regions)
-                       (_
-                        (prog1
-                            (cl-loop for (beg . end) in regions
-                                     collect (filter-buffer-substring beg end method))
-                          (cl-loop for (beg . end) in regions
-                                   do (delete-region beg end))))))))
+            (let* ((regions (conn--merge-regions regions t))
+                   (region-extract-function
+                    (lambda (method)
+                      (pcase method
+                        ('nil
+                         (cl-loop for (beg . end) in regions
+                                  collect (buffer-substring beg end)))
+                        ('delete-only
+                         (cl-loop for (beg . end) in regions
+                                  do (delete-region beg end)))
+                        ('bounds regions)
+                        (_
+                         (prog1
+                             (cl-loop for (beg . end) in regions
+                                      collect (filter-buffer-substring beg end method))
+                           (cl-loop for (beg . end) in regions
+                                    do (delete-region beg end))))))))
               (perform-replace from-string to-string query-flag t
                                delimited nil nil beg end backward t))
           (perform-replace from-string to-string query-flag t
-                           delimited nil nil beg end backward t))))))
+                           delimited nil nil beg end backward))))))
 
 ;;;;; Command Registers
 
@@ -4566,6 +4550,32 @@ instances of from-string.")
   (set-register register (conn--make-tab-register)))
 
 ;;;;; Isearch Commands
+
+(defun conn-isearch-forward-in-thing (thing-cmd thing-arg)
+  (interactive (conn-read-thing-mover "Thing" nil t))
+  (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
+         (regions (or (conn--merge-regions (cdr regions) t)
+                      (list regions)))
+         (in-regions-p (lambda (beg end)
+                         (cl-loop for (nbeg . nend) in regions
+                                  thereis (<= nbeg beg end nend))))
+         (isearch-filter-predicate isearch-filter-predicate))
+    (add-function :after-while isearch-filter-predicate in-regions-p
+                  '((isearch-message-prefix . "[THING] ")))
+    (isearch-forward)))
+
+(defun conn-isearch-backward-in-thing (thing-cmd thing-arg)
+  (interactive (conn-read-thing-mover "Thing" nil t))
+  (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
+         (regions (or (conn--merge-regions (cdr regions) t)
+                      (list regions)))
+         (in-regions-p (lambda (beg end)
+                         (cl-loop for (nbeg . nend) in regions
+                                  thereis (<= nbeg beg end nend))))
+         (isearch-filter-predicate isearch-filter-predicate))
+    (add-function :after-while isearch-filter-predicate in-regions-p
+                  '((isearch-message-prefix . "[THING] ")))
+    (isearch-backward)))
 
 (defun conn-multi-isearch-project ()
   (interactive)
@@ -6344,7 +6354,6 @@ When ARG is nil the root window is used."
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "b" 'conn-comment-or-uncomment-region
-  "c" 'conn-region-case-prefix
   "'" 'conn-duplicate-and-comment-thing
   "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
@@ -6356,12 +6365,14 @@ When ARG is nil the root window is used."
   "I" 'indent-rigidly
   "." 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
-  "s" 'conn-sort-prefix
+  "p" 'conn-sort-prefix
   "o" 'conn-occur-region
   "V" 'vc-region-history
+  "s" 'conn-isearch-region-forward
+  "r" 'conn-isearch-region-backward
   "y" 'yank-rectangle
   "q" 'conn-replace-in-thing
-  "r" 'conn-regexp-replace-in-thing
+  "w" 'conn-regexp-replace-in-thing
   "DEL" 'clear-rectangle)
 
 (when (version<= "30" emacs-version)
@@ -6395,8 +6406,8 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-search-map
   "h \\" 'conn-kapply-hightlight-prefix
-  "s" 'conn-isearch-region-forward
-  "r" 'conn-isearch-region-backward
+  "s" 'conn-isearch-forward-in-thing
+  "r" 'conn-isearch-backward-in-thing
   "o" 'occur
   "l" 'locate
   "m B" 'multi-isearch-buffers-regexp
@@ -6519,6 +6530,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap conn-state-map
   :parent conn-movement-map
+  "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
   "e" 'conn-emacs-state
@@ -6564,8 +6576,7 @@ When ARG is nil the root window is used."
   "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
   "H" 'conn-mark-thing-map
-  "p" 'conn-register-load
-  "P" 'conn-register-prefix
+  "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
