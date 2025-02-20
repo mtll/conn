@@ -3947,13 +3947,17 @@ seconds."
                                  (let ((sum 0))
                                    (dolist (p prefix-ovs sum)
                                      (setq sum (+ sum (length (cdr p)))))))
-                                (user-error "No matching candidates"))
+                                (user-error "No matching %s"
+                                            (or (ignore-errors
+                                                  (get thing-cmd :conn-command-thing))
+                                                "candidates")))
                             prefix-ovs)
                     prefix (conn--select-label labels)
                     window (overlay-get prefix 'window)
                     pt (overlay-start prefix)
                     conn-this-command-thing (or (overlay-get prefix 'thing)
-                                                (get thing-cmd :conn-command-thing)))
+                                                (ignore-errors
+                                                  (get thing-cmd :conn-command-thing))))
             (pcase-dolist (`(_ . ,ovs) prefix-ovs)
               (mapc #'delete-overlay ovs))
             (mapc #'conn-label-delete labels))
@@ -6623,6 +6627,8 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-global-map
   "C-S-w" 'delete-region
+  "C-." 'conn-dispatch-on-things
+  "C->" 'conn-dispatch-on-buttons
   "C-x /" 'tab-bar-history-back
   "C-x 4 /" 'tab-bar-history-back
   "C-x 4 ?" 'tab-bar-history-forward
