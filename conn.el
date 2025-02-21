@@ -4606,8 +4606,12 @@ instances of from-string.")
 (defun conn-isearch-open-recursive-edit ()
   (interactive)
   (save-selected-window
-    (with-isearch-suspended
-     (recursive-edit))))
+    ;; preserve isearch-filter-predicate since e.g. isearch+, and
+    ;; presumably anything else that would modify it, resets it when
+    ;; isearch is exited.
+    (let ((isearch-filter-predicate isearch-filter-predicate))
+      (with-isearch-suspended
+       (recursive-edit)))))
 
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg)
   (interactive (conn-read-thing-mover "Thing" nil t))
