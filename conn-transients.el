@@ -290,7 +290,7 @@ before each iteration."
 (transient-define-argument conn--kapply-save-windows-infix ()
   "Save and restore current window configuration during dispatch."
   :class 'conn-transient-lisp-choices
-  :key "w"
+  :key "4"
   :keyword :window-conf
   :description "Window Conf"
   :choices '(nil
@@ -500,7 +500,7 @@ property."
 
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   :transient 'transient--do-exit
-  :key "r"
+  :key "w"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
