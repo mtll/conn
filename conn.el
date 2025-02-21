@@ -30,10 +30,10 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'subr-x)
 (require 'easy-mmode)
 (eval-when-compile
   (require 'cl-lib)
-  (require 'subr-x)
   (require 'map))
 
 (declare-function extract-rectangle-bounds "rect")
@@ -2612,6 +2612,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (when-let ((hide (conn--derived-mode-property :conn-hide-mark)))
           (if (functionp hide) (funcall hide) t)))))
 
+(defun conn--mark-cursor-handle-tabs ()
+  (if-let ((tab (buffer-substring (mark t) (1+ (mark t))))
+           ((string= tab "\t"))
+           (padding `(space :width ,(1- (string-width tab)))))
+      (progn
+        (overlay-put conn--mark-cursor 'display " ")
+        (overlay-put conn--mark-cursor 'after-string
+                     (propertize " " 'display padding)))
+    (overlay-put conn--mark-cursor 'after-string nil)
+    (overlay-put conn--mark-cursor 'display nil)))
+
 (defun conn--mark-cursor-timer-func-1 (win)
   (when-let ((buf (window-buffer win)))
     (with-current-buffer buf
@@ -2623,15 +2634,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (setq conn--mark-cursor (make-overlay (mark t) (1+ (mark t)) nil t nil))
         (overlay-put conn--mark-cursor 'category 'conn--mark-cursor)
         (overlay-put conn--mark-cursor 'before-string
-                     (when (and (= (mark-marker) (point-max))
-                                (/= (point) (mark-marker)))
-                       (propertize " " 'face 'conn-mark-face))))
+                     (when (and (= (mark t) (point-max))
+                                (/= (point) (mark t)))
+                       (propertize " " 'face 'conn-mark-face)))
+        (conn--mark-cursor-handle-tabs))
        (t
         (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
         (overlay-put conn--mark-cursor 'before-string
-                     (when (and (= (mark-marker) (point-max))
-                                (/= (point) (mark-marker)))
-                       (propertize " " 'face 'conn-mark-face))))))))
+                     (when (and (= (mark t) (point-max))
+                                (/= (point) (mark t)))
+                       (propertize " " 'face 'conn-mark-face)))
+        (conn--mark-cursor-handle-tabs))))))
 
 (defun conn--mark-cursor-timer-func ()
   (walk-windows #'conn--mark-cursor-timer-func-1 nil 'visible))
