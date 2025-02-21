@@ -1359,7 +1359,7 @@ Is a function of one arguments, the number of labels required.")
           (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
         (nreverse labels)))))
 
-(defun conn--select-label (candidates)
+(defun conn-label-select (candidates)
   (let ((current candidates)
         (prompt "char:"))
     (cl-loop
@@ -1414,6 +1414,7 @@ Is a function of one arguments, the number of labels required.")
   (dolist (win (window-list-1 nil 'no-minibuf t))
     (set-window-parameter win 'conn-label nil)))
 
+;; From ace-window
 (defun conn--get-windows (&optional window minibuffer all-frames)
   (seq-remove (lambda (window)
                 (or
@@ -1440,7 +1441,7 @@ Is a function of one arguments, the number of labels required.")
                               (length (conn--get-windows nil 'nomini t)))
                      windows)))
         (unwind-protect
-            (conn--select-label labels)
+            (conn-label-select labels)
           (cl-loop for win in windows
                    for (pt vscroll hscroll) in window-state
                    do (set-window-point win pt)
@@ -4021,7 +4022,7 @@ seconds."
                                                   (get thing-cmd :conn-command-thing))
                                                 "candidates")))
                             prefix-ovs)
-                    prefix (conn--select-label labels)
+                    prefix (conn-label-select labels)
                     window (overlay-get prefix 'window)
                     pt (overlay-start prefix)
                     conn-this-command-thing (or (overlay-get prefix 'thing)
@@ -4063,7 +4064,7 @@ seconds."
                   (funcall conn-labeling-function count)
                   prefix-ovs)))
     (unwind-protect
-        (let* ((prefix (conn--select-label labels))
+        (let* ((prefix (conn-label-select labels))
                (pt (overlay-start prefix)))
           (isearch-done)
           (goto-char pt))
@@ -4601,6 +4602,12 @@ instances of from-string.")
   (set-register register (conn--make-tab-register)))
 
 ;;;;; Isearch Commands
+
+(defun conn-isearch-open-recursive-edit ()
+  (interactive)
+  (save-selected-window
+    (with-isearch-suspended
+     (recursive-edit))))
 
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg)
   (interactive (conn-read-thing-mover "Thing" nil t))
@@ -6452,7 +6459,8 @@ When ARG is nil the root window is used."
   :keymap isearch-mode-map
   "M-<return>" 'conn-isearch-exit-and-mark
   "M-\\" 'conn-isearch-kapply-prefix
-  "C-," 'conn-dispatch-isearch)
+  "C-," 'conn-dispatch-isearch
+  "C-'" 'conn-isearch-open-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-state 'compilation-mode)
