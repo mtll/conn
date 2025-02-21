@@ -137,19 +137,6 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :prefix "conn-"
   :group 'conn)
 
-(defcustom conn-mark-update-delay 0.1
-  "Update delay for mark cursor display."
-  :type '(number :tag "seconds")
-  :set (lambda (sym val)
-         (set sym val)
-         (when conn-mode
-           (when conn--mark-cursor-timer
-             (cancel-timer conn--mark-cursor-timer))
-           (setq conn--mark-cursor-timer
-                 (run-with-idle-timer
-                  val t #'conn--mark-cursor-timer-func))))
-  :group 'conn-marks)
-
 (defcustom conn-lighter " Conn"
   "Modeline lighter for conn-mode."
   :type '(choice string (const nil))
@@ -1255,17 +1242,14 @@ Is a function of one arguments, the number of labels required.")
             (move-overlay label (overlay-start label) (overlay-start label))
             (overlay-put prefix 'face nil)
             (overlay-put prefix 'after-string nil))
-        (thread-first
-          (overlay-get label prop)
-          (substring 1)
-          (conn--thread suffix (overlay-put label prop suffix)))
         (move-overlay label
                       (overlay-start label)
                       (+ (overlay-start label)
                          (min (length (overlay-get label prop))
                               (- (overlay-end label)
                                  (overlay-start label)))))
-        (conn--dispatch-pad-label-overlay label)
+        (conn--dispatch-pad-label-overlay
+         label prop (substring (overlay-get label prop) 1))
         label))))
 
 (defun conn--make-preview-overlay (pt length &optional thing)
@@ -2612,42 +2596,46 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (when-let ((hide (conn--derived-mode-property :conn-hide-mark)))
           (if (functionp hide) (funcall hide) t)))))
 
-(defun conn--mark-cursor-handle-tabs ()
-  (if-let ((tab (buffer-substring (mark t) (1+ (mark t))))
-           ((string= tab "\t"))
-           (padding `(space :width ,(1- (string-width tab)))))
-      (progn
-        (overlay-put conn--mark-cursor 'display " ")
-        (overlay-put conn--mark-cursor 'after-string
-                     (propertize " " 'display padding)))
-    (overlay-put conn--mark-cursor 'after-string nil)
-    (overlay-put conn--mark-cursor 'display nil)))
-
-(defun conn--mark-cursor-timer-func-1 (win)
-  (when-let ((buf (window-buffer win)))
-    (with-current-buffer buf
-      (cond
-       ((not conn-local-mode))
-       ((conn--hide-mark-cursor-p) (conn--delete-mark-cursor))
-       ((null (mark t)))
-       ((null conn--mark-cursor)
-        (setq conn--mark-cursor (make-overlay (mark t) (1+ (mark t)) nil t nil))
-        (overlay-put conn--mark-cursor 'category 'conn--mark-cursor)
-        (overlay-put conn--mark-cursor 'before-string
-                     (when (and (= (mark t) (point-max))
-                                (/= (point) (mark t)))
-                       (propertize " " 'face 'conn-mark-face)))
-        (conn--mark-cursor-handle-tabs))
-       (t
-        (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
-        (overlay-put conn--mark-cursor 'before-string
-                     (when (and (= (mark t) (point-max))
-                                (/= (point) (mark t)))
-                       (propertize " " 'face 'conn-mark-face)))
-        (conn--mark-cursor-handle-tabs))))))
-
-(defun conn--mark-cursor-timer-func ()
-  (walk-windows #'conn--mark-cursor-timer-func-1 nil 'visible))
+(defun conn--mark-cursor-redisplay (win)
+  (let ((cursor (window-parameter win 'conn-mark-cursor)))
+    (cond
+     ((or (not conn-local-mode)
+          (null (mark t))
+          (conn--hide-mark-cursor-p))
+      (when cursor (delete-overlay cursor))
+      (set-window-parameter win 'conn-mark-cursor nil))
+     (t
+      (if cursor
+          (move-overlay cursor (mark t) (1+ (mark t))
+                        (window-buffer win))
+        (setq cursor (set-window-parameter
+                      win 'conn-mark-cursor
+                      (make-overlay (mark t) (1+ (mark t)) nil t nil)))
+        (overlay-put cursor 'category 'conn--mark-cursor))
+      (overlay-put cursor 'window win)
+      (overlay-put cursor 'before-string
+                   (when (and (= (mark t) (point-max))
+                              (/= (point) (mark t)))
+                     (propertize " " 'face 'conn-mark-face)))
+      (if-let ((tab (char-after (mark t)))
+               ((and (eql tab ?\t)
+                     (< (mark t) (point-max))))
+               (padding (thread-last
+                          (string-pixel-width " ")
+                          (- (window-text-pixel-size win (mark t) (1+ (mark t))))
+                          (list 'space :width))))
+          (progn
+            (overlay-put cursor 'priority most-negative-fixnum)
+            (overlay-put cursor 'display " ")
+            (overlay-put cursor 'after-string
+                         (propertize " "
+                                     'display padding
+                                     'face (pcase (get-char-property (mark t) 'face)
+                                             ('conn-mark-face nil)
+                                             (face face))))
+            (overlay-put cursor 'priority conn-mark-overlay-priority))
+        (overlay-put cursor 'after-string nil)
+        (overlay-put cursor 'display nil))))))
 
 (defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
   "Hide mark cursor in buffers with in MMODE-OR-STATE.
@@ -2678,28 +2666,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (funcall conn-this-command-handler conn-this-command-start))))
 
 (defun conn--setup-mark ()
-  (when conn--mark-cursor-timer
-    (cancel-timer conn--mark-cursor-timer)
-    (setq conn--mark-cursor-timer nil))
   (if conn-mode
       (progn
-        (setq conn--mark-cursor-timer
-              (run-with-idle-timer conn-mark-update-delay
-                                   t #'conn--mark-cursor-timer-func)
-              conn--prev-mark-even-if-inactive mark-even-if-inactive
+        (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
               mark-even-if-inactive t)
+        (add-hook 'pre-redisplay-functions 'conn--mark-cursor-redisplay 91)
         (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
         (add-hook 'post-command-hook #'conn--mark-post-command-hook))
     (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
+    (remove-hook 'pre-redisplay-functions 'conn--mark-cursor-redisplay)
     (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
-
-(defun conn--delete-mark-cursor ()
-  (without-restriction
-    (thread-last
-      (conn--all-overlays 'conn--mark-cursor-p (point-min) (point-max))
-      (mapc #'delete-overlay)))
-  (setq conn--mark-cursor nil))
 
 (defun conn-bounds-of-inner-thing (thing bounds)
   (when-let ((inner-op (get thing :conn-inner-bounds-op)))
@@ -3223,39 +3200,41 @@ If MMODE-OR-STATE is a mode it must be a major mode."
           (and
            (or (null window-predicate)
                (not (funcall window-predicate)))
-           (or (when-let* ((cmd (key-binding keys t))
-                           ((symbolp cmd)))
-                 (eq thing (get cmd :conn-command-thing)))
-               (where-is-internal binding maps t)
-               (pcase binding
-                 ((and (pred symbolp)
-                       (let (and op (pred identity))
-                         (thread-first
-                           (get binding :conn-command-thing)
-                           (get 'forward-op))))
-                  (where-is-internal op maps t))
-                 ((and `(,thing . ,_)
-                       (guard (symbolp thing))
-                       (let (and op (pred identity))
-                         (get thing 'forward-op)))
-                  (where-is-internal op maps t))))))))))
+           ;; Needs fixing, doesn't work for e.g. forward-line
+           ;; (or (when-let* ((cmd (key-binding keys t))
+           ;;                 ((symbolp cmd)))
+           ;;       (eq thing (get cmd :conn-command-thing)))
+           ;;     (where-is-internal binding maps t)
+           ;;     (pcase binding
+           ;;       ((and (pred symbolp)
+           ;;             (let (and op (pred identity))
+           ;;               (thread-first
+           ;;                 (get binding :conn-command-thing)
+           ;;                 (get 'forward-op))))
+           ;;        (where-is-internal op maps t))
+           ;;       ((and `(,thing . ,_)
+           ;;             (guard (symbolp thing))
+           ;;             (let (and op (pred identity))
+           ;;               (get thing 'forward-op)))
+           ;;        (where-is-internal op maps t))))
+           ))))))
 
-(defun conn--dispatch-pad-label-overlay (overlay)
+(defun conn--dispatch-pad-label-overlay (overlay display-property display-string)
   (let* ((ov-str (buffer-substring (overlay-start overlay)
                                    (overlay-end overlay)))
          (pos (string-search "\n" ov-str))
          (next-line (if pos
                         (substring ov-str pos)
                       ""))
-         (curr-line (substring ov-str 0 pos))
-         (pixels (max (- (string-pixel-width curr-line)
-                         (string-pixel-width
-                          (overlay-get
-                           overlay
-                           (if (overlay-get overlay 'before-string)
-                               'before-string
-                             'display))))
+         (pixels (max (- (car (window-text-pixel-size
+                               (overlay-get overlay 'window)
+                               (overlay-start overlay)
+                               (if pos
+                                   (+ (overlay-start overlay) pos)
+                                 (overlay-end overlay))))
+                         (string-pixel-width display-string))
                       0)))
+    (overlay-put overlay display-property display-string)
     (overlay-put overlay 'after-string
                  (concat
                   (propertize
@@ -3292,12 +3271,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (overlay-put ov 'window window)
                   (overlay-put ov 'label-string label)
                   (overlay-put ov 'overlay-bounds (cons beg end))
-                  (overlay-put ov (if (or (= beg next)
-                                          (= beg (point-max)))
-                                      'before-string
-                                    'display)
-                               label)
-                  (conn--dispatch-pad-label-overlay ov)))))
+                  (conn--dispatch-pad-label-overlay
+                   ov (if (or (= beg next)
+                              (= beg (point-max)))
+                          'before-string
+                        'display)
+                   label)))))
           (setq success t)
           overlays)
       (unless success (mapc #'delete-overlay overlays)))))
@@ -6802,7 +6781,6 @@ When ARG is nil the root window is used."
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-        (add-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor nil t)
         (add-hook 'isearch-mode-end-hook 'conn--activate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
@@ -6817,9 +6795,8 @@ When ARG is nil the root window is used."
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-    (remove-hook 'clone-indirect-buffer-hook #'conn--delete-mark-cursor t)
+    (remove-hook 'isearch-mode-hook 'conn--isearch-input-method  t)
     (remove-hook 'isearch-mode-end-hook 'conn--activate-input-method t)
-    (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
@@ -7153,13 +7130,19 @@ determine if `conn-local-mode' should be enabled."
 
   (defun conn-sp-down-list-handler (beg)
     (cond ((> (point) beg)
-           (save-excursion
-             (sp-end-of-sexp)
-             (conn--push-ephemeral-mark (point))))
+           (let ((pt (point)))
+             (save-excursion
+               (sp-end-of-sexp)
+               (when (= pt (point))
+                 (sp-end-of-sexp))
+               (conn--push-ephemeral-mark (point)))))
           ((< (point) beg)
-           (save-excursion
-             (sp-beginning-of-sexp)
-             (conn--push-ephemeral-mark (point))))))
+           (let ((pt (point)))
+             (save-excursion
+               (sp-beginning-of-sexp)
+               (when (= pt (point))
+                 (sp-end-of-sexp))
+               (conn--push-ephemeral-mark (point)))))))
 
   (conn-register-thing-commands
    'list 'conn-sp-down-list-handler
