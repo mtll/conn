@@ -1265,11 +1265,7 @@ Is a function of one arguments, the number of labels required.")
                          (min (length (overlay-get label prop))
                               (- (overlay-end label)
                                  (overlay-start label)))))
-        (if-let* ((after-str (buffer-substring (overlay-start label)
-                                               (overlay-end label)))
-                  (pos (string-search "\n" after-str)))
-            (overlay-put label 'after-string (substring after-str pos))
-          (overlay-put label 'after-string nil))
+        (conn--dispatch-pad-label-overlay label)
         label))))
 
 (defun conn--make-preview-overlay (pt length &optional thing)
@@ -1281,10 +1277,11 @@ Is a function of one arguments, the number of labels required.")
     (overlay-put ov 'thing thing)
     (overlay-put ov 'category 'conn-read-string-match)
     (overlay-put ov 'window (selected-window))
-    (overlay-put ov 'after-string
-                 (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
-                             'face 'conn-read-string-match-face))
-    (overlay-put ov 'padding (overlay-get ov 'after-string))
+    (when (> length 0)
+      (overlay-put ov 'after-string
+                   (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
+                               'face 'conn-read-string-match-face))
+      (overlay-put ov 'padding (overlay-get ov 'after-string)))
     ov))
 
 (defun conn--preview-get-windows (all-windows)
@@ -3113,7 +3110,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (`(,thing ,finder . ,default-action)
                 (cl-return
                  (list thing
-                       (* (if thing-sign -1 1) (or thing-arg 1))
+                       (when thing-arg
+                         (* (if thing-sign -1 1) (or thing-arg 1)))
                        finder
                        (or action
                            default-action
@@ -3177,7 +3175,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                      (guard thing))
                 (cl-return
                  (list cmd
-                       (* (if thing-sign -1 1) (or thing-arg 1))
+                       (when thing-arg
+                         (* (if thing-sign -1 1) (or thing-arg 1)))
                        (conn--dispatch-finder cmd)
                        (or action (conn--dispatch-default-action cmd))
                        (if action
@@ -3228,6 +3227,29 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          (get thing 'forward-op)))
                   (where-is-internal op maps t))))))))))
 
+(defun conn--dispatch-pad-label-overlay (overlay)
+  (let* ((ov-str (buffer-substring (overlay-start overlay)
+                                   (overlay-end overlay)))
+         (pos (string-search "\n" ov-str))
+         (next-line (if pos
+                        (substring ov-str pos)
+                      ""))
+         (curr-line (substring ov-str 0 pos))
+         (pixels (max (- (string-pixel-width curr-line)
+                         (string-pixel-width
+                          (overlay-get
+                           overlay
+                           (if (overlay-get overlay 'before-string)
+                               'before-string
+                             'display))))
+                      0)))
+    (overlay-put overlay 'after-string
+                 (concat
+                  (propertize
+                   " "
+                   'display `(space :width (,pixels)))
+                  next-line))))
+
 (defun conn--dispatch-label-overlays (labels prefix-overlays)
   (let (overlays success)
     (unwind-protect
@@ -3251,9 +3273,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (push ov overlays)
                   (overlay-put p 'after-string (overlay-get p 'padding))
                   (overlay-put p 'face 'conn-read-string-match-face)
-                  (let ((after-str (buffer-substring (overlay-start ov) (overlay-end ov))))
-                    (when-let ((pos (string-search "\n" after-str)))
-                      (overlay-put ov 'after-string (substring after-str pos))))
                   (overlay-put ov 'prefix-overlay p)
                   (overlay-put ov 'payload p)
                   (overlay-put ov 'category 'conn-label-overlay)
@@ -3264,7 +3283,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                           (= beg (point-max)))
                                       'before-string
                                     'display)
-                               label)))))
+                               label)
+                  (conn--dispatch-pad-label-overlay ov)))))
           (setq success t)
           overlays)
       (unless success (mapc #'delete-overlay overlays)))))
@@ -3620,7 +3640,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
         (`(,beg . ,end)
          (kill-region beg end)
          (conn--dispatch-fixup-whitespace))
-        (_ (user-error "Cannot find %s at point" thing-cmd)))))
+        (_ (user-error "Cannot find %s at point"
+                       (get thing-cmd :conn-command-thing))))))
   (yank))
 
 (conn-define-dispatch-action conn-dispatch-yank (window pt thing-cmd thing-arg)
@@ -3637,7 +3658,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (setq str (filter-buffer-substring beg end))))))
     (if str
         (insert-for-yank str)
-      (user-error "Cannot find %s at point" thing-cmd))))
+      (user-error "Cannot find %s at point"
+                  (get thing-cmd :conn-command-thing)))))
 
 (conn-define-dispatch-action conn-dispatch-goto (window pt thing-cmd thing-arg)
   :description "Goto"
@@ -3654,7 +3676,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
              (conn--push-ephemeral-mark beg)
            (conn--push-ephemeral-mark end)))
        (unless (or (= pt beg) (= pt end))
-         (goto-char beg))))))
+         (goto-char beg)))
+      (_ (user-error "Cannot find %s at point"
+                     (get thing-cmd :conn-command-thing))))))
 
 (conn-define-dispatch-action conn-dispatch-over (window pt thing-cmd _thing-arg)
   :description "Over"
@@ -3902,7 +3926,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                              (<= (+ (point) (window-hscroll)) (line-end-position))
                              (goto-char (+ (point) (window-hscroll)))
                              (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 1) ovs))
+                    (push (conn--make-preview-overlay (point) 0) ovs))
                   (while (/= (point) (point-max))
                     (forward-line)
                     (when (and (bolp)
@@ -3911,7 +3935,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                (goto-char (+ (point) (window-hscroll)))
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 1) ovs)))))))
+                      (push (conn--make-preview-overlay (point) 0) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -3927,14 +3951,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                   (goto-char (point-min))
                   (move-end-of-line nil)
                   (when (and (eolp) (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 1) ovs))
+                    (push (conn--make-preview-overlay (point) 0) ovs))
                   (while (/= (point) (point-max))
                     (forward-line)
                     (move-end-of-line nil)
                     (when (and (eolp)
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 1) ovs)))))))
+                      (push (conn--make-preview-overlay (point) 0) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -3955,7 +3979,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                  (back-to-indentation))
                                (not (eobp)))
                              (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 1) ovs))
+                    (push (conn--make-preview-overlay (point) 0) ovs))
                   (while (/= (point) (point-max))
                     (forward-line)
                     (when (and (bolp)
@@ -3966,7 +3990,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                  (not (eobp)))
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 1) ovs)))))))
+                      (push (conn--make-preview-overlay (point) 0) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc 'delete-overlay ovs)))))
@@ -4605,13 +4629,10 @@ instances of from-string.")
 
 (defun conn-isearch-open-recursive-edit ()
   (interactive)
-  (save-selected-window
-    ;; preserve isearch-filter-predicate since e.g. isearch+, and
-    ;; presumably anything else that would modify it, resets it when
-    ;; isearch is exited.
-    (let ((isearch-filter-predicate isearch-filter-predicate))
-      (with-isearch-suspended
-       (recursive-edit)))))
+  (thread-first
+    (recursive-edit)
+    (with-isearch-suspended)
+    (save-selected-window)))
 
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg)
   (interactive (conn-read-thing-mover "Thing" nil t))
