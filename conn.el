@@ -4609,14 +4609,13 @@ instances of from-string.")
                       (list regions)))
          (in-regions-p (lambda (beg end)
                          (cl-loop for (nbeg . nend) in regions
-                                  thereis (<= nbeg beg end nend))))
-         (cleanup (make-symbol "cleanup")))
-    (fset cleanup (lambda ()
-                    (remove-hook 'isearch-mode-end-hook cleanup)
-                    (remove-function isearch-filter-predicate in-regions-p)))
+                                  thereis (<= nbeg beg end nend)))))
+    (letrec ((cleanup (lambda ()
+                        (remove-hook 'isearch-mode-end-hook cleanup)
+                        (remove-function isearch-filter-predicate in-regions-p))))
+      (add-hook 'isearch-mode-end-hook cleanup))
     (add-function :after-while isearch-filter-predicate in-regions-p
                   '((isearch-message-prefix . "[THING] ")))
-    (add-hook 'isearch-mode-end-hook cleanup)
     (isearch-forward nil t)))
 
 (defun conn-isearch-backward-in-thing (thing-cmd thing-arg)
@@ -4626,14 +4625,13 @@ instances of from-string.")
                       (list regions)))
          (in-regions-p (lambda (beg end)
                          (cl-loop for (nbeg . nend) in regions
-                                  thereis (<= nbeg beg end nend))))
-         (cleanup (make-symbol "cleanup")))
-    (fset cleanup (lambda ()
-                    (remove-hook 'isearch-mode-end-hook cleanup)
-                    (remove-function isearch-filter-predicate in-regions-p)))
+                                  thereis (<= nbeg beg end nend)))))
+    (letrec ((cleanup (lambda ()
+                        (remove-hook 'isearch-mode-end-hook cleanup)
+                        (remove-function isearch-filter-predicate in-regions-p))))
+      (add-hook 'isearch-mode-end-hook cleanup))
     (add-function :after-while isearch-filter-predicate in-regions-p
                   '((isearch-message-prefix . "[THING] ")))
-    (add-hook 'isearch-mode-end-hook cleanup)
     (isearch-backward nil t)))
 
 (defun conn-multi-isearch-project ()
@@ -5660,15 +5658,14 @@ If ARG is non-nil move down ARG lines before opening line."
 `overwrite-mode' will be turned off when when emacs state is exited.
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
-  (let ((hook (make-symbol "emacs-state-overwrite-hook")))
-    (conn-enter-state 'conn-emacs-state)
-    (fset hook (lambda (_state)
-                 (overwrite-mode -1)
-                 (remove-hook 'conn-exit-functions hook)))
-    (add-hook 'conn-exit-functions hook)
-    (if arg
-        (binary-overwrite-mode 1)
-      (overwrite-mode 1))))
+  (conn-enter-state 'conn-emacs-state)
+  (letrec ((hook (lambda (_state)
+                   (overwrite-mode -1)
+                   (remove-hook 'conn-exit-functions hook))))
+    (add-hook 'conn-exit-functions hook))
+  (if arg
+      (binary-overwrite-mode 1)
+    (overwrite-mode 1)))
 
 (defun conn-emacs-state-overwrite-binary ()
   "Enter emacs state in `binary-overwrite-mode'."
@@ -6045,19 +6042,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defun conn-wincontrol-one-command ()
   (interactive)
-  (let ((pre-hook (make-symbol "one-command-pre-hook")))
-    (fset pre-hook (lambda ()
-                     (unless (memq this-command
-                                   '(conn-wincontrol-forward-delete-arg
-                                     conn-wincontrol-backward-delete-arg
-                                     conn-wincontrol-digit-argument-reset
-                                     conn-wincontrol-invert-argument
-                                     conn-wincontrol-digit-argument
-                                     conn-wincontrol-universal-arg))
-                       (remove-hook 'pre-command-hook pre-hook)
-                       (conn-wincontrol-exit))))
-    (conn-wincontrol)
-    (add-hook 'pre-command-hook pre-hook 90)))
+  (letrec ((pre-hook (lambda ()
+                       (unless (memq this-command
+                                     '(conn-wincontrol-forward-delete-arg
+                                       conn-wincontrol-backward-delete-arg
+                                       conn-wincontrol-digit-argument-reset
+                                       conn-wincontrol-invert-argument
+                                       conn-wincontrol-digit-argument
+                                       conn-wincontrol-universal-arg))
+                         (remove-hook 'pre-command-hook pre-hook)
+                         (conn-wincontrol-exit)))))
+    (add-hook 'pre-command-hook pre-hook 90))
+  (conn-wincontrol))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
