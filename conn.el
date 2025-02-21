@@ -2605,37 +2605,34 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (when cursor (delete-overlay cursor))
       (set-window-parameter win 'conn-mark-cursor nil))
      (t
-      (if cursor
-          (move-overlay cursor (mark t) (1+ (mark t))
-                        (window-buffer win))
+      (unless cursor
         (setq cursor (set-window-parameter
                       win 'conn-mark-cursor
                       (make-overlay (mark t) (1+ (mark t)) nil t nil)))
         (overlay-put cursor 'category 'conn--mark-cursor))
       (overlay-put cursor 'window win)
-      (overlay-put cursor 'before-string
-                   (when (and (= (mark t) (point-max))
-                              (/= (point) (mark t)))
-                     (propertize " " 'face 'conn-mark-face)))
-      (if-let ((tab (char-after (mark t)))
-               ((and (eql tab ?\t)
+      (if-let (((and (eql (char-after (mark t)) ?\t)
                      (< (mark t) (point-max))))
                (padding (thread-last
                           (string-pixel-width " ")
                           (- (window-text-pixel-size win (mark t) (1+ (mark t))))
                           (list 'space :width))))
           (progn
+            (move-overlay cursor (mark t) (mark t) (window-buffer win))
             (overlay-put cursor 'priority most-negative-fixnum)
             (overlay-put cursor 'display " ")
             (overlay-put cursor 'after-string
                          (propertize " "
                                      'display padding
-                                     'face (pcase (get-char-property (mark t) 'face)
-                                             ('conn-mark-face nil)
-                                             (face face))))
+                                     'face (get-char-property (mark t) 'face)))
             (overlay-put cursor 'priority conn-mark-overlay-priority))
         (overlay-put cursor 'after-string nil)
-        (overlay-put cursor 'display nil))))))
+        (overlay-put cursor 'display nil))
+      (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
+      (overlay-put cursor 'before-string
+                   (when (and (= (mark t) (point-max))
+                              (/= (point) (mark t)))
+                     (propertize " " 'face 'conn-mark-face)))))))
 
 (defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
   "Hide mark cursor in buffers with in MMODE-OR-STATE.
