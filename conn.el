@@ -1501,6 +1501,9 @@ region.")
   "q" 'abort-recursive-edit
   "<t>" 'ignore)
 
+(defun conn-last-bounds-of-command ()
+  (alist-get (recursion-depth) conn-last-bounds-of-command))
+
 (defun conn-bounds-of-command (cmd arg)
   "Return bounds of CMD with ARGS.
 
@@ -4437,8 +4440,7 @@ instances of from-string.")
 (defun conn-replace-in-thing ( thing-mover arg from-string to-string
                                &optional delimited backward query-flag)
   (interactive
-   (pcase-let* ((default (conn--replace-read-default))
-                (`(,thing-mover ,arg)
+   (pcase-let* ((`(,thing-mover ,arg)
                  (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
@@ -4453,13 +4455,13 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    nil (or (cdr regions) regions) nil default))))
+                    nil (or (cdr regions) regions) nil))))
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
     (save-excursion
-      (pcase-let* ((`((,beg . ,end) . ,regions)
-                    (or conn-last-bounds-of-command
-                        (conn-bounds-of-command thing-mover arg))))
+      (pcase-let ((`((,beg . ,end) . ,regions)
+                   (or (conn-last-bounds-of-command)
+                       (conn-bounds-of-command thing-mover arg))))
         (if regions
             (let* ((regions (conn--merge-regions regions t))
                    (region-extract-function
@@ -4486,8 +4488,7 @@ instances of from-string.")
 (defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
                                       &optional delimited backward query-flag)
   (interactive
-   (pcase-let* ((default (conn--replace-read-default))
-                (`(,thing-mover ,arg)
+   (pcase-let* ((`(,thing-mover ,arg)
                  (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
@@ -4502,12 +4503,12 @@ instances of from-string.")
                             (if current-prefix-arg
                                 (if (eq current-prefix-arg '-) " backward" " word")
                               ""))
-                    t (or (cdr regions) regions) nil default))))
+                    t (or (cdr regions) regions) nil))))
      (append (list thing-mover arg) common)))
   (with-undo-amalgamate
     (save-excursion
       (pcase-let ((`((,beg . ,end) . ,regions)
-                   (or conn-last-bounds-of-command
+                   (or (conn-last-bounds-of-command)
                        (conn-bounds-of-command thing-mover arg))))
         (if regions
             (let* ((regions (conn--merge-regions regions t))
