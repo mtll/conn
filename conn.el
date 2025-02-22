@@ -1189,8 +1189,8 @@ Is a function of one arguments, the number of labels required.")
                 (prefix-ov (overlay-get label 'prefix-overlay))
                 (prop (if (overlay-get label 'before-string) 'before-string 'display)))
       (overlay-put prefix-ov 'display
-                   (propertize (buffer-substring (overlay-start ov)
-                                                 (overlay-end ov))
+                   (propertize (buffer-substring (overlay-start prefix-ov)
+                                                 (overlay-end prefix-ov))
                                'face 'conn-read-string-match-face))
       (move-overlay label beg end)
       (when-let ((after-str (buffer-substring (overlay-start label)
@@ -1508,20 +1508,19 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
              conn-this-command-thing (region-beginning) (region-end))))))
 
 (defun conn--bounds-of-expansion (cmd arg)
-  (save-mark-and-excursion
-    (let ((current-prefix-arg arg))
-      (call-interactively cmd)
-      (let ((exit (set-transient-map
-                   conn-read-expand-region-map (lambda () t) nil
-                   (substitute-command-keys
-                    (concat "\\<conn-read-expand-region-map>"
-                            "Defining region. Press "
-                            "\\[exit-recursive-edit] to finish, "
-                            "\\[abort-recursive-edit] to abort.")))))
-        (unwind-protect
-            (recursive-edit)
-          (funcall exit)))
-      (list (cons (region-beginning) (region-end))))))
+  (let ((current-prefix-arg arg))
+    (call-interactively cmd)
+    (let ((exit (set-transient-map
+                 conn-read-expand-region-map (lambda () t) nil
+                 (substitute-command-keys
+                  (concat "\\<conn-read-expand-region-map>"
+                          "Defining region. Press "
+                          "\\[exit-recursive-edit] to finish, "
+                          "\\[abort-recursive-edit] to abort.")))))
+      (unwind-protect
+          (recursive-edit)
+        (funcall exit)))
+    (list (cons (region-beginning) (region-end)))))
 
 (defun conn--bounds-of-region (_arg)
   (cons (cons (region-beginning) (region-end))
@@ -1568,30 +1567,30 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
 
 (defun conn-bounds-of-things-in-region (thing beg end)
   "Return list of bounds of THING's in region from BEG to END."
-  (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
-               (ignore-errors
-                 (alist-get (get thing :conn-command-thing)
-                            conn-bounds-of-things-in-region-alist))
-               conn-bounds-of-things-in-region-default)
-           thing beg end))
+  (save-mark-and-excursion
+    (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
+                 (ignore-errors
+                   (alist-get (get thing :conn-command-thing)
+                              conn-bounds-of-things-in-region-alist))
+                 conn-bounds-of-things-in-region-default)
+             thing beg end)))
 
 (defun conn--things-in-region-default (thing beg end)
   (let ((thing (or (ignore-errors (get thing :conn-command-thing))
                    thing)))
     (ignore-errors
-      (save-excursion
-        (goto-char beg)
-        (forward-thing thing 1)
-        (cl-loop for bounds = (save-excursion
-                                (forward-thing thing -1)
-                                (bounds-of-thing-at-point thing))
-                 while (and bounds (<= (cdr bounds) end))
-                 collect bounds into regions
-                 while (and (< (point) end)
-                            (ignore-errors
-                              (forward-thing thing 1)
-                              t))
-                 finally return regions)))))
+      (goto-char beg)
+      (forward-thing thing 1)
+      (cl-loop for bounds = (save-excursion
+                              (forward-thing thing -1)
+                              (bounds-of-thing-at-point thing))
+               while (and bounds (<= (cdr bounds) end))
+               collect bounds into regions
+               while (and (< (point) end)
+                          (ignore-errors
+                            (forward-thing thing 1)
+                            t))
+               finally return regions))))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -2265,7 +2264,7 @@ Possibilities: \\<query-replace-map>
            (activate-change-group handle)))))))
 
 (defun conn--kapply-save-excursion (iterator)
-  (let (saved-excursions recording)
+  (let (saved-excursions)
     (lambda (state)
       (pcase state
         (:finalize
@@ -2276,21 +2275,16 @@ Possibilities: \\<query-replace-map>
              (set-marker pt nil)
              (save-mark-and-excursion--restore saved))))
         (:record
-         (setq recording t)
+         (setf (alist-get (current-buffer) saved-excursions)
+               (let ((pt (point-marker)))
+                 (set-marker-insertion-type pt t)
+                 (cons pt (save-mark-and-excursion--save))))
          (funcall iterator state))
         (_
-         (if recording
-             (progn
-               (setf (alist-get (current-buffer) saved-excursions)
-                     (let ((pt (point-marker)))
-                       (set-marker-insertion-type pt t)
-                       (cons pt (save-mark-and-excursion--save)))
-                     recording nil)
-               (funcall iterator state))
-           (prog1 (funcall iterator state)
-             (unless (alist-get (current-buffer) saved-excursions)
-               (setf (alist-get (current-buffer) saved-excursions)
-                     (cons (point-marker) (save-mark-and-excursion--save)))))))))))
+         (prog1 (funcall iterator state)
+           (unless (alist-get (current-buffer) saved-excursions)
+             (setf (alist-get (current-buffer) saved-excursions)
+                   (cons (point-marker) (save-mark-and-excursion--save))))))))))
 
 (defun conn--kapply-ibuffer-overview (iterator &optional force)
   (let (buffers)
