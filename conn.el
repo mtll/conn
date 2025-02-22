@@ -3855,12 +3855,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (save-excursion
       (goto-char (window-end))
       (while (search-backward prefix (window-start) t)
-        (dolist (thing things)
-          (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
-            (when (and (eql (point) beg)
-                       (conn--region-visible-p beg end)
-                       (not (eql (point) (caar ovs))))
-              (push (list (point) (length prefix) thing) ovs))))))
+        (unless (invisible-p (point))
+          (dolist (thing things)
+            (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
+              (when (and (eql (point) beg)
+                         (conn--region-visible-p beg end)
+                         (not (eql (point) (caar ovs))))
+                (push (list (point) (length prefix) thing) ovs)))))))
     (cl-loop for ov in ovs
              collect (apply 'conn--make-preview-overlay ov))))
 
