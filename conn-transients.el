@@ -577,7 +577,11 @@ apply to each contiguous component of the region."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    (alist-get :state args)
-   (alist-get :regions args)
+   (if (eq (alist-get :regions args)
+           'conn--kapply-change-region)
+       'conn--kapply-change-region
+     (when (> (point) (mark t))
+       'conn--kapply-at-end))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
