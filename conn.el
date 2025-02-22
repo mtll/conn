@@ -269,7 +269,6 @@ See also `conn-exit-functions'.")
         'eshell-mode
         'edmacro-mode
         '(not minibuffer-mode
-              dired-mode
               slime-xref-mode
               calc-mode
               calc-trail-mode
@@ -480,12 +479,10 @@ Used to restore previous value when `conn-mode' is disabled.")
 ;;;;;; Read String Overlays
 
 (put 'conn-read-string-match 'conn-overlay t)
-(put 'conn-read-string-match 'face 'conn-read-string-match-face)
 (put 'conn-read-string-match 'priority 2001)
 
 ;;;;;; Label Overlay
 
-(put 'conn-label-overlay 'face 'conn-read-string-match-face)
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
 
@@ -786,7 +783,7 @@ If BUFFER is nil check `current-buffer'."
   (and (not (invisible-p beg))
        (cl-loop for pt = (next-single-char-property-change
                           beg 'invisible nil end)
-                while (and pt (< end pt))
+                while (and pt (< pt end))
                 never (invisible-p pt))))
 
 (defun conn--string-no-upper-case-p (string)
@@ -1220,7 +1217,6 @@ Is a function of one arguments, the number of labels required.")
     (pcase-let ((`(,beg . ,end) (overlay-get label 'overlay-bounds))
                 (prefix-ov (overlay-get label 'prefix-overlay))
                 (prop (if (overlay-get label 'before-string) 'before-string 'display)))
-      (overlay-put prefix-ov 'after-string (overlay-get prefix-ov 'padding))
       (overlay-put prefix-ov 'face 'conn-read-string-match-face)
       (move-overlay label beg end)
       (when-let ((after-str (buffer-substring (overlay-start label)
@@ -1235,22 +1231,43 @@ Is a function of one arguments, the number of labels required.")
 (cl-defmethod conn-label-narrow ((label overlay) prefix-char)
   (with-current-buffer (overlay-buffer label)
     (let ((prop (if (overlay-get label 'before-string) 'before-string 'display)))
-      (if (not (eql prefix-char (aref (overlay-get label prop) 0)))
-          (when-let ((prefix (overlay-get label 'prefix-overlay)))
-            (overlay-put label prop "")
-            (overlay-put label 'after-string nil)
-            (move-overlay label (overlay-start label) (overlay-start label))
-            (overlay-put prefix 'face nil)
-            (overlay-put prefix 'after-string nil))
-        (move-overlay label
-                      (overlay-start label)
-                      (+ (overlay-start label)
-                         (min (length (overlay-get label prop))
-                              (- (overlay-end label)
-                                 (overlay-start label)))))
-        (conn--dispatch-pad-label-overlay
-         label prop (substring (overlay-get label prop) 1))
-        label))))
+      (cond ((length= (overlay-get label prop) 0))
+            ((not (eql prefix-char (aref (overlay-get label prop) 0)))
+             (when-let ((prefix (overlay-get label 'prefix-overlay)))
+               (overlay-put label prop "")
+               (overlay-put label 'after-string nil)
+               (move-overlay label (overlay-start label) (overlay-start label))
+               (overlay-put prefix 'face nil)
+               (overlay-put prefix 'after-string nil)))
+            (t
+             (move-overlay label
+                           (overlay-start label)
+                           (+ (overlay-start label)
+                              (min (1- (length (overlay-get label prop)))
+                                   (- (overlay-end label)
+                                      (overlay-start label)))))
+             (conn--dispatch-pad-label-overlay
+              label prop (substring (overlay-get label prop) 1))
+             label)))))
+
+(defun conn-label-select (candidates)
+  (let ((current candidates)
+        (prompt "char:"))
+    (cl-loop
+     (pcase current
+       ('nil
+        (setq current candidates
+              prompt "char: (no matches)")
+        (mapc #'conn-label-reset current))
+       (`(,it . nil)
+        (cl-return (conn-label-payload it)))
+       (_
+        (setq prompt "char:")))
+     (setq current (let ((next nil)
+                         (c (read-char prompt)))
+                     (dolist (label current next)
+                       (when-let ((l (conn-label-narrow label c)))
+                         (push l next))))))))
 
 (defun conn--make-preview-overlay (pt length &optional thing)
   (let* ((eol (save-excursion
@@ -1260,12 +1277,12 @@ Is a function of one arguments, the number of labels required.")
     (overlay-put ov 'conn-overlay t)
     (overlay-put ov 'thing thing)
     (overlay-put ov 'category 'conn-read-string-match)
+    ;; Prevents overlay extending into invisible text ellipsis
+    (overlay-put ov 'display
+                 (propertize (buffer-substring (overlay-start ov)
+                                               (overlay-end ov))
+                             'face 'conn-read-string-match-face))
     (overlay-put ov 'window (selected-window))
-    (when (> length 0)
-      (overlay-put ov 'after-string
-                   (propertize (make-string (- (+ pt length) (overlay-end ov)) ? )
-                               'face 'conn-read-string-match-face))
-      (overlay-put ov 'padding (overlay-get ov 'after-string)))
     ov))
 
 (defun conn--preview-get-windows (all-windows)
@@ -1293,8 +1310,9 @@ Is a function of one arguments, the number of labels required.")
   (conn--with-input-method
     (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
            (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir all-windows)))
-      (condition-case _err
+           (overlays (conn--string-preview-overlays string dir all-windows))
+           (success nil))
+      (unwind-protect
           (progn
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                               conn-read-string-timeout)))
@@ -1302,9 +1320,10 @@ Is a function of one arguments, the number of labels required.")
               (mapc #'delete-overlay overlays)
               (setq overlays (conn--string-preview-overlays string dir all-windows)))
             (message nil)
+            (setq success t)
             (cons string overlays))
-        ((quit error)
-         (mapc #'delete-overlay overlays))))))
+        (unless success
+          (mapc #'delete-overlay overlays))))))
 
 (defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
@@ -1339,25 +1358,6 @@ Is a function of one arguments, the number of labels required.")
         (dolist (l labels)
           (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
         (nreverse labels)))))
-
-(defun conn-label-select (candidates)
-  (let ((current candidates)
-        (prompt "char:"))
-    (cl-loop
-     (pcase current
-       ('nil
-        (setq current candidates
-              prompt "char: (no matches)")
-        (mapc #'conn-label-reset current))
-       (`(,it . nil)
-        (cl-return (conn-label-payload it)))
-       (_
-        (setq prompt "char:")))
-     (setq current (let ((next nil)
-                         (c (read-char prompt)))
-                     (dolist (label current next)
-                       (when-let ((l (conn-label-narrow label c)))
-                         (push l next))))))))
 
 (defun conn--create-window-labels (labels windows)
   (unless (assq 'conn-mode (default-value 'mode-line-format))
@@ -2487,10 +2487,10 @@ The iterator must be the first argument in ARGLIST.
 (defun conn-register-thing (thing &rest rest)
   "Register a new THING.
 
-\(fn THING &key FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
+\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
-  (when-let ((finder (plist-get rest :dispatch-target-finder)))
-    (setf (alist-get thing conn-dispatch-target-finders-alist) finder))
+  (when-let ((target-finder (plist-get rest :dispatch-target-finder)))
+    (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
   (when-let ((action (plist-get rest :default-action)))
     (setf (alist-get thing conn-dispatch-default-action-alist) action))
   (when-let ((forward (plist-get rest :forward-op)))
@@ -2619,6 +2619,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                (padding (thread-last
                           (string-pixel-width " ")
                           (- (window-text-pixel-size win (mark t) (1+ (mark t))))
+                          (max 0)
                           (list 'space :width))))
           (progn
             (move-overlay cursor (mark t) (mark t) (window-buffer win))
@@ -3188,14 +3189,14 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
 
-(defun conn--dispatch-window-predicate (action thing binding keys)
+(defun conn--dispatch-window-predicate (action _thing _binding _keys)
   (lambda (win)
     (with-selected-window win
       (conn--with-state (lambda ()
                           (when conn-local-mode
                             (conn-enter-state 'conn-state)))
-        (let ((maps (list (conn--create-dispatch-map)
-                          (current-global-map)))
+        (let (;; (maps (list (conn--create-dispatch-map)
+              ;;             (current-global-map)))
               (window-predicate (get action :conn-action-window-predicate)))
           (and
            (or (null window-predicate)
@@ -3220,21 +3221,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            ))))))
 
 (defun conn--dispatch-pad-label-overlay (overlay display-property display-string)
-  (let* ((ov-str (buffer-substring (overlay-start overlay)
-                                   (overlay-end overlay)))
-         (pos (string-search "\n" ov-str))
-         (next-line (if pos
-                        (substring ov-str pos)
-                      ""))
+  (overlay-put overlay display-property display-string)
+  (let* ((pos (save-excursion
+                (goto-char (overlay-start overlay))
+                (skip-chars-forward "^\n" (overlay-end overlay))
+                (point)))
+         (next-line (buffer-substring pos (overlay-end overlay)))
          (pixels (max (- (car (window-text-pixel-size
                                (overlay-get overlay 'window)
                                (overlay-start overlay)
-                               (if pos
-                                   (+ (overlay-start overlay) pos)
-                                 (overlay-end overlay))))
+                               pos))
                          (string-pixel-width display-string))
                       0)))
-    (overlay-put overlay display-property display-string)
     (overlay-put overlay 'after-string
                  (concat
                   (propertize
@@ -3263,7 +3261,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (end (min next (+ beg (length label))))
                        (ov (make-overlay beg end)))
                   (push ov overlays)
-                  (overlay-put p 'after-string (overlay-get p 'padding))
                   (overlay-put p 'face 'conn-read-string-match-face)
                   (overlay-put ov 'prefix-overlay p)
                   (overlay-put ov 'payload p)
@@ -3888,6 +3885,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--dispatch-columns ()
   (let ((col (current-column))
+        (opoint (point))
         ovs success)
     (unwind-protect
         (progn
@@ -3899,7 +3897,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                            (not (invisible-p (point)))
                            (not (ignore-errors (invisible-p (1- (point))))))
                   (move-to-column col)
-                  (push (conn--make-preview-overlay (point) 1) ovs))
+                  (unless (= opoint (point))
+                    (push (conn--make-preview-overlay (point) 0) ovs)))
                 (forward-line))))
           (setq success t)
           ovs)
@@ -5948,6 +5947,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c" (conn-remap-key (key-parse "C-c"))
   "d" 'delete-window
   "e" 'conn-wincontrol-exit
+  "C-g" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
   "g" 'delete-other-windows
@@ -6802,10 +6802,11 @@ When ARG is nil the root window is used."
   "Maybe initialize `conn-local-mode' in current buffer.
 Check `conn-enable-in-buffer-hook' and `conn-disable-in-buffer-hook' to
 determine if `conn-local-mode' should be enabled."
-  (when (ignore-errors
-          (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
-               (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook)))
-    (conn-local-mode 1)))
+  (cond ((ignore-errors
+           (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
+                (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook)))
+         (conn-local-mode 1))
+        (t (conn-local-mode -1))))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
@@ -7132,7 +7133,7 @@ determine if `conn-local-mode' should be enabled."
              (save-excursion
                (sp-end-of-sexp)
                (when (= pt (point))
-                 (sp-end-of-sexp))
+                 (sp-beginning-of-sexp))
                (conn--push-ephemeral-mark (point)))))
           ((< (point) beg)
            (let ((pt (point)))
