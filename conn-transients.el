@@ -569,8 +569,7 @@ apply to each contiguous component of the region."
   (conn--kapply-compose-iterator
    (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover "Thing" nil t)))
      (conn--kapply-thing-iterator
-      (get cmd :conn-command-thing)
-      (region-beginning) (region-end)
+      cmd (region-beginning) (region-end)
       (alist-get :maybe-order args)
       (alist-get :skip-empty args)
       arg))

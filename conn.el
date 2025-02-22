@@ -142,12 +142,6 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :type '(choice string (const nil))
   :group 'conn-states)
 
-(defcustom conn-lighter-colors nil
-  "Whether the lighter background color should be used to indicate the
-current state."
-  :type 'boolean
-  :group 'conn-states)
-
 (defcustom conn-default-state 'conn-emacs-state
   "Default conn state for new buffers."
   :type 'symbol
@@ -645,10 +639,11 @@ This function destructively modifies LIST."
                             min-dist new-dist)))
                finally return (cons min (delq min list))))))
 
-(defun conn--create-marker (pos &optional buffer)
+(defun conn--create-marker (pos &optional buffer insertion-type)
   "Create marker at POS in BUFFER."
   (let ((marker (make-marker)))
     (set-marker marker pos buffer)
+    (set-marker-insertion-type marker insertion-type)
     marker))
 
 (defun conn--overlay-start-marker (ov)
@@ -859,15 +854,6 @@ If BUFFER is nil check `current-buffer'."
 
 ;;;; States
 
-(defun conn--set-background (string color)
-  (alter-text-property
-   0 (length string)
-   'face
-   (lambda (spec)
-     (setf (plist-get spec :background) color)
-     spec)
-   string))
-
 (defun conn--setup-major-mode-maps ()
   (setq conn--major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
@@ -1026,8 +1012,6 @@ the state is active.
 
 :LIGHTER is the mode-line lighter text for NAME.
 
-:LIGHTER-COLOR is the background color for the mode-line lighter.
-
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
 
@@ -1041,7 +1025,7 @@ marks while in state NAME.
 BODY contains code to be executed each time the state is enabled or
 disabled.
 
-\(fn NAME DOC &key LIGHTER LIGHTER-COLOR SUPPRESS-INPUT-METHOD KEYMAP CURSOR EPHEMERAL-MARKS &rest BODY)"
+\(fn NAME DOC &key LIGHTER SUPPRESS-INPUT-METHOD KEYMAP CURSOR EPHEMERAL-MARKS &rest BODY)"
   (declare (debug ( name stringp
                     [&rest keywordp sexp]
                     def-body))
@@ -1049,10 +1033,8 @@ disabled.
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-name (conn--symbolicate name "-lighter"))
-               (lighter-color-name (conn--symbolicate name "-lighter-color"))
                ((map :cursor
                      :lighter
-                     :lighter-color
                      :suppress-input-method
                      (:keymap keymap '(make-sparse-keymap))
                      :ephemeral-marks)
@@ -1073,11 +1055,6 @@ disabled.
                            name
                            " is active.\n\n"
                            "If nil use the default lighter text."))
-
-       (defvar ,lighter-color-name ,lighter-color
-         ,(conn--stringify "Background color for the Conn mode lighter when "
-                           name
-                           " is active."))
 
        (defcustom ,cursor-name
          ,(if cursor `',cursor t)
@@ -1139,9 +1116,6 @@ disabled.
                          conn-current-state state
                          conn--local-mode-maps (alist-get state conn--mode-maps))
                    (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
-                   (when (and conn-lighter conn-lighter-colors)
-                     (setq-local conn-lighter
-                                 (conn--set-background conn-lighter ,lighter-color-name)))
                    (conn--activate-input-method)
                    (setq cursor-type (or ,cursor-name t))
                    (when (not executing-kbd-macro)
@@ -1170,7 +1144,6 @@ disabled.
 A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
 bind anything except transition commands."
   :ligher " emacs"
-  :lighter-color "#cae1ff"
   :ephemeral-marks nil
   :keymap (make-sparse-keymap))
 
@@ -1178,7 +1151,6 @@ bind anything except transition commands."
   "Activate `conn-state' in the current buffer.
 A `conn-mode' state for editing text."
   :ligher " conn"
-  :lighter-color "#f3bdbd"
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :suppress t))
@@ -1187,7 +1159,6 @@ A `conn-mode' state for editing text."
   "Activate `conn-org-edit-state' in the current buffer.
 A `conn-mode' state for structural editing of `org-mode' buffers."
   :ligher " org-edit"
-  :lighter-color "#f5c5ff"
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
   :ephemeral-marks t)
@@ -1602,19 +1573,21 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
            thing beg end))
 
 (defun conn--things-in-region-default (thing beg end)
-  (ignore-errors
-    (save-excursion
-      (goto-char beg)
-      (forward-thing thing 1)
-      (cl-loop for bounds = (save-excursion
-                              (forward-thing thing -1)
-                              (bounds-of-thing-at-point thing))
-               while bounds collect bounds into regions
-               while (and (< (point) end)
-                          (ignore-errors
-                            (forward-thing thing 1)
-                            t))
-               finally return regions))))
+  (let ((thing (or (ignore-errors (get thing :conn-command-thing))
+                   thing)))
+    (ignore-errors
+      (save-excursion
+        (goto-char beg)
+        (forward-thing thing 1)
+        (cl-loop for bounds = (save-excursion
+                                (forward-thing thing -1)
+                                (bounds-of-thing-at-point thing))
+                 while bounds collect bounds into regions
+                 while (and (< (point) end)
+                            (ignore-errors
+                              (forward-thing thing 1)
+                              t))
+                 finally return regions)))))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -2101,7 +2074,7 @@ Possibilities: \\<query-replace-map>
         (pcase-dolist (`(,fn (,subexp . ,_)) patterns)
           (goto-char (point-min))
           (while-let ((match (funcall fn (point-max))))
-            (push (cons (conn--create-marker (match-beginning subexp))
+            (push (cons (conn--create-marker (match-beginning subexp) nil t)
                         (conn--create-marker (match-end subexp)))
                   matches)))))
     (unless matches
@@ -2152,9 +2125,11 @@ Possibilities: \\<query-replace-map>
                          ('forward regions)
                          ('reverse (nreverse regions))
                          (_        (conn--nnearest-first regions)))))
-    (unless (markerp beg)
-      (setcar reg (conn--create-marker beg)))
-    (unless (markerp beg)
+    (if (markerp beg)
+        (set-marker-insertion-type beg t)
+      (setcar reg (conn--create-marker beg nil t)))
+    (if (markerp end)
+        (set-marker-insertion-type end nil)
       (setcdr reg (conn--create-marker end))))
   (let (overlays)
     (lambda (state)
@@ -2201,7 +2176,7 @@ Possibilities: \\<query-replace-map>
          while (replace-search string end regexp-flag
                                delimited-flag case-fold-search)
          for (mb me . _) = (match-data t)
-         do (push (cons (conn--create-marker mb)
+         do (push (cons (conn--create-marker mb nil t)
                         (conn--create-marker me))
                   matches))))
     (unless matches
