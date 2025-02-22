@@ -1188,7 +1188,10 @@ Is a function of one arguments, the number of labels required.")
     (pcase-let ((`(,beg . ,end) (overlay-get label 'overlay-bounds))
                 (prefix-ov (overlay-get label 'prefix-overlay))
                 (prop (if (overlay-get label 'before-string) 'before-string 'display)))
-      (overlay-put prefix-ov 'face 'conn-read-string-match-face)
+      (overlay-put prefix-ov 'display
+                   (propertize (buffer-substring (overlay-start ov)
+                                                 (overlay-end ov))
+                               'face 'conn-read-string-match-face))
       (move-overlay label beg end)
       (when-let ((after-str (buffer-substring (overlay-start label)
                                               (overlay-end label)))
@@ -1204,11 +1207,11 @@ Is a function of one arguments, the number of labels required.")
     (let ((prop (if (overlay-get label 'before-string) 'before-string 'display)))
       (cond ((length= (overlay-get label prop) 0))
             ((not (eql prefix-char (aref (overlay-get label prop) 0)))
+             (overlay-put label prop "")
+             (overlay-put label 'after-string nil)
+             (move-overlay label (overlay-start label) (overlay-start label))
              (when-let ((prefix (overlay-get label 'prefix-overlay)))
-               (overlay-put label prop "")
-               (overlay-put label 'after-string nil)
-               (move-overlay label (overlay-start label) (overlay-start label))
-               (overlay-put prefix 'face nil)
+               (overlay-put prefix 'display nil)
                (overlay-put prefix 'after-string nil)))
             (t
              (move-overlay label
@@ -1582,7 +1585,8 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (cl-loop for bounds = (save-excursion
                                 (forward-thing thing -1)
                                 (bounds-of-thing-at-point thing))
-                 while bounds collect bounds into regions
+                 while (and bounds (<= (cdr bounds) end))
+                 collect bounds into regions
                  while (and (< (point) end)
                             (ignore-errors
                               (forward-thing thing 1)
@@ -2261,7 +2265,7 @@ Possibilities: \\<query-replace-map>
            (activate-change-group handle)))))))
 
 (defun conn--kapply-save-excursion (iterator)
-  (let (saved-excursions)
+  (let (saved-excursions recording)
     (lambda (state)
       (pcase state
         (:finalize
@@ -2271,11 +2275,22 @@ Possibilities: \\<query-replace-map>
              (goto-char pt)
              (set-marker pt nil)
              (save-mark-and-excursion--restore saved))))
+        (:record
+         (setq recording t)
+         (funcall iterator state))
         (_
-         (prog1 (funcall iterator state)
-           (unless (alist-get (current-buffer) saved-excursions)
-             (setf (alist-get (current-buffer) saved-excursions)
-                   (cons (point-marker) (save-mark-and-excursion--save))))))))))
+         (if recording
+             (progn
+               (setf (alist-get (current-buffer) saved-excursions)
+                     (let ((pt (point-marker)))
+                       (set-marker-insertion-type pt t)
+                       (cons pt (save-mark-and-excursion--save)))
+                     recording nil)
+               (funcall iterator state))
+           (prog1 (funcall iterator state)
+             (unless (alist-get (current-buffer) saved-excursions)
+               (setf (alist-get (current-buffer) saved-excursions)
+                     (cons (point-marker) (save-mark-and-excursion--save)))))))))))
 
 (defun conn--kapply-ibuffer-overview (iterator &optional force)
   (let (buffers)
@@ -2534,17 +2549,21 @@ The iterator must be the first argument in ARGLIST.
 
 (defun conn-sequential-thing-handler (beg)
   (ignore-errors
-    (pcase (abs (prefix-numeric-value current-prefix-arg))
-      (0)
-      ((let dir (pcase (- (point) beg)
-                  (0 0)
-                  ((pred (< 0)) 1)
-                  ((pred (> 0)) -1)))
-       (save-excursion
-         (goto-char beg)
-         (forward-thing conn-this-command-thing dir)
-         (forward-thing conn-this-command-thing (- dir))
-         (conn--push-ephemeral-mark))))))
+    (cond ((= 0 (abs (prefix-numeric-value current-prefix-arg))))
+          ((= (point) beg)
+           (pcase (bounds-of-thing-at-point conn-this-command-thing)
+             (`(,beg . ,end)
+              (when (= (point) beg) (conn--push-ephemeral-mark end))
+              (when (= (point) end) (conn--push-ephemeral-mark beg)))))
+          ((let ((dir (pcase (- (point) beg)
+                        (0 0)
+                        ((pred (< 0)) 1)
+                        ((pred (> 0)) -1))))
+             (save-excursion
+               (goto-char beg)
+               (forward-thing conn-this-command-thing dir)
+               (forward-thing conn-this-command-thing (- dir))
+               (conn--push-ephemeral-mark)))))))
 
 (defun conn-individual-thing-handler (_beg)
   (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
@@ -2576,42 +2595,38 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--mark-cursor-redisplay (win)
   (let ((cursor (window-parameter win 'conn-mark-cursor)))
-    (cond
-     ((or (not conn-local-mode)
-          (null (mark t))
-          (conn--hide-mark-cursor-p))
-      (when cursor (delete-overlay cursor))
-      (set-window-parameter win 'conn-mark-cursor nil))
-     (t
+    (if (or (not conn-local-mode)
+            (null (mark t))
+            (conn--hide-mark-cursor-p))
+        (progn
+          (when cursor (delete-overlay cursor))
+          (set-window-parameter win 'conn-mark-cursor nil))
       (unless cursor
         (setq cursor (set-window-parameter
                       win 'conn-mark-cursor
                       (make-overlay (mark t) (1+ (mark t)) nil t nil)))
-        (overlay-put cursor 'category 'conn--mark-cursor))
-      (overlay-put cursor 'window win)
-      (if-let (((and (eql (char-after (mark t)) ?\t)
-                     (< (mark t) (point-max))))
-               (padding (thread-last
-                          (string-pixel-width " ")
-                          (- (window-text-pixel-size win (mark t) (1+ (mark t))))
-                          (max 0)
-                          (list 'space :width))))
-          (progn
-            (move-overlay cursor (mark t) (mark t) (window-buffer win))
-            (overlay-put cursor 'priority most-negative-fixnum)
-            (overlay-put cursor 'display " ")
+        (overlay-put cursor 'category 'conn--mark-cursor)
+        (overlay-put cursor 'window win))
+      (if (and (eql (char-after (mark t)) ?\t)
+               (< (mark t) (point-max)))
+          (when (/= (mark t) (overlay-start cursor))
+            (overlay-put cursor 'before-string nil)
             (overlay-put cursor 'after-string
-                         (propertize " "
-                                     'display padding
-                                     'face (get-char-property (mark t) 'face)))
-            (overlay-put cursor 'priority conn-mark-overlay-priority))
-        (overlay-put cursor 'after-string nil)
-        (overlay-put cursor 'display nil))
-      (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
-      (overlay-put cursor 'before-string
-                   (when (and (= (mark t) (point-max))
-                              (/= (point) (mark t)))
-                     (propertize " " 'face 'conn-mark-face)))))))
+                         (unless (= 1 (save-excursion
+                                        (goto-char (mark t))
+                                        (let ((col (current-column)))
+                                          (- (indent-next-tab-stop col) col))))
+                           (propertize "	"
+                                       'face (get-char-property (mark t) 'face))))
+            (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
+            (overlay-put cursor 'display " "))
+        (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
+        (overlay-put cursor 'display nil)
+        (overlay-put cursor 'before-string
+                     (when (and (= (mark t) (point-max))
+                                (/= (point) (mark t)))
+                       (propertize " " 'face 'conn-mark-face)))
+        (overlay-put cursor 'after-string nil)))))
 
 (defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
   "Hide mark cursor in buffers with in MMODE-OR-STATE.
@@ -3196,7 +3211,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            ))))))
 
 (defun conn--dispatch-pad-label-overlay (overlay display-property display-string)
-  (overlay-put overlay display-property display-string)
+  (overlay-put overlay display-property nil)
   (let* ((pos (save-excursion
                 (goto-char (overlay-start overlay))
                 (skip-chars-forward "^\n" (overlay-end overlay))
@@ -3206,7 +3221,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                (overlay-get overlay 'window)
                                (overlay-start overlay)
                                pos))
-                         (string-pixel-width display-string))
+                         (progn
+                           (overlay-put overlay display-property display-string)
+                           (car (window-text-pixel-size
+                                 (overlay-get overlay 'window)
+                                 (overlay-start overlay)
+                                 (overlay-end overlay)))))
                       0)))
     (overlay-put overlay 'after-string
                  (concat
@@ -3236,7 +3256,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (end (min next (+ beg (length label))))
                        (ov (make-overlay beg end)))
                   (push ov overlays)
-                  (overlay-put p 'face 'conn-read-string-match-face)
                   (overlay-put ov 'prefix-overlay p)
                   (overlay-put ov 'payload p)
                   (overlay-put ov 'category 'conn-label-overlay)
