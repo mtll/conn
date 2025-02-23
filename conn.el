@@ -2224,17 +2224,18 @@ Possibilities: \\<query-replace-map>
            (setq overlays nil))
          (conn--kapply-advance-region (pop matches)))))))
 
-(defun conn--kapply-per-buffer-undo (iterator)
+(defun conn--kapply-per-buffer-undo (iterator &optional undo-on-error)
   (let (undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
-           (if conn-kmacro-apply-error
-               (cancel-change-group handle))
-           (accept-change-group handle)
-           (undo-amalgamate-change-group handle)))
+           (if (and conn-kmacro-apply-error
+                    undo-on-error)
+               (cancel-change-group handle)
+             (accept-change-group handle)
+             (undo-amalgamate-change-group handle))))
         (_
          (prog1
              (funcall iterator state)
@@ -4173,13 +4174,14 @@ potential expansions.  Functions may return invalid expansions
   "Move point to the other end of the current expansion."
   (interactive)
   (if (region-active-p)
-      (cl-loop for (beg . end) in (reverse conn--current-expansions)
-               when (and (= (point) beg)
-                         (/= (mark t) end))
-               return (goto-char end)
-               when (and (= (point) end)
-                         (/= (mark t) beg))
-               return (goto-char beg))
+      (exchange-point-and-mark)
+    ;; (cl-loop for (beg . end) in (reverse conn--current-expansions)
+    ;;          when (and (= (point) beg)
+    ;;                    (/= (mark t) end))
+    ;;          return (goto-char end)
+    ;;          when (and (= (point) end)
+    ;;                    (/= (mark t) beg))
+    ;;          return (goto-char beg))
     (conn-exchange-mark-command)))
 
 (defun conn-expand (arg)

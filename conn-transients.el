@@ -281,9 +281,10 @@ before each iteration."
   :class 'conn-transient-lisp-choices
   :key "u"
   :keyword :undo
-  :description "Merge Undo"
-  :choices '(("per buffer" . conn--kapply-per-buffer-undo)
-             ("per iteration" . conn--kapply-per-iteration-undo)
+  :description "Merge Undo Per"
+  :choices '(("buffer atomic" . (conn--kapply-per-buffer-undo t))
+             ("buffer" . conn--kapply-per-buffer-undo)
+             ("iteration" . conn--kapply-per-iteration-undo)
              nil))
 
 (transient-define-argument conn--kapply-save-windows-infix ()
