@@ -2753,7 +2753,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'word 'conn-symbol-handler
- 'forward-word 'backward-word)
+ 'forward-word 'backward-word
+ 'upcase-word 'downcase-word
+ 'capitalize-word)
 
 (conn-register-thing
  'sexp
