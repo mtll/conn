@@ -2286,16 +2286,14 @@ Possibilities: \\<query-replace-map>
              (setf (alist-get (current-buffer) saved-excursions)
                    (cons (point-marker) (save-mark-and-excursion--save))))))))))
 
-(defun conn--kapply-ibuffer-overview (iterator &optional force)
+(defun conn--kapply-ibuffer-overview (iterator)
   (let (buffers)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
          (when (and (not conn-kmacro-apply-error)
-                    (not (eq force 'never))
-                    (or (eq force 'always)
-                        (length> buffers 1)))
+                    (length> buffers 1))
            (ibuffer t "*Kapply Ibuffer*"
                     `((predicate . (memq (current-buffer) ',buffers))))))
         (_
