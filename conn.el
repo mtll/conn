@@ -458,6 +458,12 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;; Overlay Category Properties
 
+;;;;;; Dots
+
+(put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
+(put 'conn--dot-overlay 'conn-overlay t)
+(put 'conn--dot-overlay 'evaporate t)
+
 ;;;;;; Kapply Preview
 
 (put 'kapply-preview 'priority 1900)
@@ -1710,10 +1716,6 @@ is read."
   "List of faces for dots."
   :group 'conn
   :type '(list symbol))
-
-(put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
-(put 'conn--dot-overlay 'conn-overlay t)
-(put 'conn--dot-overlay 'evaporate t)
 
 (defvar conn--dots nil)
 
@@ -3282,7 +3284,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 ;;;;; Things
 
 (defmacro conn-define-dispatch-thing (thing &rest rest)
-  "\(fn NAME ARGLIST &key DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
+  "\(fn THING &key KEY MODES TARGET-FINDER DEFAULT-ACTION &body BODY)"
   (declare (debug (name [&rest keywordp form]))
            (indent 1))
   (pcase-let* (((map :key :modes :target-finder :default-action)
@@ -3369,6 +3371,44 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
          (conn--create-dot beg end))
+        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+
+(conn-define-dispatch-action conn-dispatch-downcase (window pt thing-cmd thing-arg)
+  :description "Downcase"
+  :keys ("<remap> <downcase-word>"
+         "<remap> <downcase-region>"
+         "<remap> <downcase-dwim>")
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end) (downcase-region beg end))
+        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+
+(conn-define-dispatch-action conn-dispatch-upcase (window pt thing-cmd thing-arg)
+  :description "Upcase"
+  :keys ("<remap> <upcase-word>"
+         "<remap> <upcase-region>"
+         "<remap> <upcase-dwim>")
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end) (upcase-region beg end))
+        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+
+(conn-define-dispatch-action conn-dispatch-capitalize (window pt thing-cmd thing-arg)
+  :description "Capitalize"
+  :keys ("<remap> <capitalize-word>"
+         "<remap> <capitalize-region>")
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end) (capitalize-region beg end))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-narrow-indirect (window pt thing-cmd thing-arg)
