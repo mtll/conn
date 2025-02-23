@@ -2886,6 +2886,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'next-line 'previous-line
  'rectangle-next-line 'rectangle-previous-line)
 
+(conn-register-thing-commands 'line nil 'comment-line)
+
 (conn-register-thing
  'outer-line
  :beg-op (lambda () (move-beginning-of-line nil))
@@ -7174,7 +7176,8 @@ determine if `conn-local-mode' should be enabled."
 
   (conn-register-thing-commands
    'list 'conn-sp-down-list-handler
-   'sp-down-sexp 'sp-backward-down-sexp)
+   'sp-down-sexp 'sp-backward-down-sexp
+   'sp-beginning-of-sexp 'sp-end-of-sexp)
 
   (defun conn-sp-sexp-handler (beg)
     (unless (= (point) beg)
