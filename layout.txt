@@ -1,35 +1,35 @@
 ┏━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━━━━━━━━━━┓
-┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +  set   │ Backspace    ┃
-┃          │          │          │          │          │          │          │          │          │  ←list   │  →list   │  complex │ register │              ┃
-┃          │          │          │          │          │          │          │          │          │          │          │  command │ seperator│  ←delete     ┃
+┃ ~        │ !        │ @        │ #        │ $        │ %        │ ^        │ &        │ *        │ (        │ )        │ _ repeat │ +        │ Backspace    ┃
+┃          │          │          │          │          │          │          │          │          │  ←list   │  →list   │  complex │          │              ┃
+┃          │          │          │          │          │          │          │          │          │          │          │  command │          │  ←delete     ┃
 ┠─┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤              ┃
 ┃ `        │ 1        │ 2        │ 3        │ 4        │ 5        │ 6        │ 7        │ 8        │ 9        │ 0        │ -        │ =        │              ┃
 ┃  other   │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  prefix  │  indent  │              ┃
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │ relative │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E        │ R        │ T        │ Y        │ O        │ I        │ U        │ P        │ {        │ }        │ |        ┃
-┃              │ transpose│  widen   │ dispatch │ rectangle│  throw   │   yank   │  ←symbol │  ↑para   │  →symbol │ register │ ←sentence│ →sentence│ shell cmd┃
+┃              │ transpose│  widen   │ dispatch │ rectangle│  throw   │   yank   │  ←symbol │  ↑para   │  →symbol │   case   │ ←sentence│ →sentence│ shell cmd┃
 ┃              │ windows  │          │  button  │   mark   │  buffer  │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
 ┃              │ transpose│   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑column │  →word   │ register │  ↑list   │  ↓list   │  macro   ┃
-┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │   load   │          │          │ dispatch ┃
+┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │  prefix  │          │          │ dispatch ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
 ┃                │   M-X    │          │          │  repeat  │          │   mark   │  ←inner  │  ↓para   │  →inner  │ one win  │  yank    │                   ┃
 ┃                │          │          │          │ dispatch │          │   map    │   line   │          │   line   │ control  │  window  │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
-┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ ' other  │                   ┃
-┃                │   M-x    │   M-s    │  →delete │  thing   │   M-g    │  expand  │  ←char   │  ↓column │  →char   │   win    │   place  │                   ┃
-┃                │          │          │          │ dispatch │          │  region  │          │          │          │ control  │   prefix │                   ┃
+┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
+┃                │   M-x    │   M-s    │  →delete │  thing   │   M-g    │  expand  │  ←char   │  ↓column │  →char   │   win    │  repeat  │                   ┃
+┃                │          │          │          │ dispatch │          │  region  │          │          │          │ control  │          │                   ┃
 ┠────────────────┴─────┬────┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴──────┬───┴───────────────────┨
 ┃                      │ Z         │ X        │ C        │ V        │ B        │ N        │ M        │ <        │ >        │ ?        │                       ┃
 ┃                      │           │  narrow  │   copy   │  narrow  │          │ ←defun   │ →defun   │   ←line  │   →line  │   redo   │                       ┃
 ┃                      │           │  prefix  │  region  │          │          │          │          │          │          │          │                       ┃
 ┃                      ├┄┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                       ┃
-┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ .        │ /        │                       ┃
-┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │   edit   │  ←sexp   │  →sexp   │          │  repeat  │   undo   │                       ┃
-┃                      │ and mark  │          │          │   mark   │   map    │          │          │          │          │          │                       ┃
+┃                      │ z         │ x        │ c        │ v        │ b        │ n        │ m        │ ,        │ . other  │ /        │                       ┃
+┃                      │ swap pt   │   C-x    │   C-c    │  toggle  │   edit   │  ←sexp   │  →sexp   │          │   place  │   undo   │                       ┃
+┃                      │ and mark  │          │          │   mark   │   map    │          │          │          │   prefix │          │                       ┃
 ┗━━━━━━━━━━━━━━━━━━━━━━┷━━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━╅──────────┴──────────┴──────────┴──────────╆━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━┷━━━━━━━━━━━━━━━━━━━━━━━┛
                                                          ┃ SPC                                       ┃
                                                          ┃                 set mark                  ┃
