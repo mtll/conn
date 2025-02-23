@@ -53,7 +53,7 @@
   (oset obj value newval))
 
 (cl-defmethod transient-format-value ((obj conn-transient-lisp-bool))
-  (propertize (oref obj description)
+  (propertize (downcase (oref obj description))
               'face (if (oref obj value)
                         'transient-argument
                       'transient-inactive-value)))
@@ -161,7 +161,7 @@ the edit in the macro."
   :class 'conn-transient-lisp-bool
   :key "o"
   :keyword :skip-empty
-  :description "Skip Empty")
+  :description "Skip")
 
 (transient-define-argument conn--kapply-macro-infix ()
   "Dispatch `last-kbd-macro'.
@@ -185,9 +185,8 @@ the edit in the macro."
   :description "Ibuffer"
   :key "i"
   :keyword :ibuffer
-  :choices `(("auto")
-             ("always" . always)
-             ("never" . never)))
+  :choices `(("auto" . conn--kapply-ibuffer-overview)
+             nil))
 
 (transient-define-argument conn--kapply-matches-infix ()
   "Restrict dispatch to only some isearch matches.
@@ -239,9 +238,9 @@ before each iteration."
   :key "b"
   :description "Order"
   :keyword :maybe-order
-  :choices '(("Nearest")
-             ("Forward" . forward)
-             ("Reverse" . reverse)))
+  :choices '(("nearest")
+             ("forward" . forward)
+             ("reverse" . reverse)))
 
 (transient-define-argument conn--kapply-read-hl-patterns ()
   "Dispatch on regions from last to first."
@@ -256,8 +255,8 @@ before each iteration."
   :key "o"
   :description "In"
   :keyword :in-thing
-  :choices '(("Buffer" . nil)
-             ("Thing" . t)))
+  :choices '(("buffer" . nil)
+             ("thing" . t)))
 
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
@@ -265,7 +264,7 @@ before each iteration."
   :key "x"
   :keyword :excursions
   :description "Excursions"
-  :choices '(("Save" . conn--kapply-save-excursion)
+  :choices '(("save" . conn--kapply-save-excursion)
              nil))
 
 (transient-define-argument conn--kapply-save-restriction-infix ()
@@ -274,7 +273,7 @@ before each iteration."
   :key "N"
   :keyword :restrictions
   :description "Restrictions"
-  :choices '(("Save" . conn--kapply-save-restriction)
+  :choices '(("save" . conn--kapply-save-restriction)
              nil))
 
 (transient-define-argument conn--kapply-merge-undo-infix ()
@@ -283,8 +282,8 @@ before each iteration."
   :key "u"
   :keyword :undo
   :description "Merge Undo"
-  :choices '(("Per Buffer" . conn--kapply-per-buffer-undo)
-             ("Per Iteration" . conn--kapply-per-iteration-undo)
+  :choices '(("per buffer" . conn--kapply-per-buffer-undo)
+             ("per iteration" . conn--kapply-per-iteration-undo)
              nil))
 
 (transient-define-argument conn--kapply-save-windows-infix ()
@@ -294,7 +293,7 @@ before each iteration."
   :keyword :window-conf
   :description "Window Conf"
   :choices '(nil
-             ("Save" . conn--kapply-save-windows)))
+             ("save" . conn--kapply-save-windows)))
 
 (transient-define-suffix conn--kapply-replace-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
@@ -567,7 +566,7 @@ apply to each contiguous component of the region."
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover "Thing" nil t)))
+   (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover "Thing")))
      (conn--kapply-thing-iterator
       cmd (region-beginning) (region-end)
       (alist-get :maybe-order args)
@@ -598,7 +597,7 @@ apply to each contiguous component of the region."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    (alist-get :state args)
-   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
+   (alist-get :ibuffer args)
    (list (alist-get :kmacro args)
          (read-number "Iterations: " 0))))
 
@@ -618,7 +617,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
-   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
+   (alist-get :ibuffer args)
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
@@ -664,7 +663,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
-   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
+   (alist-get :ibuffer args)
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-highlights (args)
@@ -717,7 +716,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
-   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
+   (alist-get :ibuffer args)
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-compilation (args)
@@ -754,7 +753,7 @@ apply to each contiguous component of the region."
    (alist-get :regions args)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
-   `(conn--kapply-ibuffer-overview ,(alist-get :ibuffer args))
+   (alist-get :ibuffer args)
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
