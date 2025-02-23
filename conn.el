@@ -2756,8 +2756,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing-commands
  'word 'conn-symbol-handler
  'forward-word 'backward-word
- 'upcase-word 'downcase-word
- 'capitalize-word)
+ 'upcase-word 'downcase-word 'capitalize-word
+ 'upcase-dwim 'downcase-dwim 'capitalize-dwim)
 
 (conn-register-thing
  'sexp
@@ -3382,7 +3382,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          "<remap> <downcase-dwim>")
   :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
-    (save-excursion
+    (save-mark-and-excursion
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end) (downcase-region beg end))
@@ -3395,7 +3395,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          "<remap> <upcase-dwim>")
   :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
-    (save-excursion
+    (save-mark-and-excursion
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end) (upcase-region beg end))
@@ -3404,10 +3404,11 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-capitalize (window pt thing-cmd thing-arg)
   :description "Capitalize"
   :keys ("<remap> <capitalize-word>"
-         "<remap> <capitalize-region>")
+         "<remap> <capitalize-region>"
+         "<remap> <capitalize-dwim>")
   :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
-    (save-excursion
+    (save-mark-and-excursion
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end) (capitalize-region beg end))
@@ -3841,7 +3842,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (push beg ovs))))
           (forward-thing thing 1))))
     (cl-loop for pt in ovs
-             collect (conn--make-preview-overlay pt 1 thing))))
+             collect (conn--make-preview-overlay pt 0 thing))))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (cl-loop for win in (conn--preview-get-windows all-windows)
