@@ -40,5 +40,6 @@
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-calc.el ends here

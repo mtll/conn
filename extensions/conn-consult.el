@@ -206,7 +206,7 @@
                              (xref-file-location-column loc)
                            0)))
                        (_ (xref-location-marker loc)))))
-           (set-marker-insertion-type  marker t)
+           (set-marker-insertion-type marker t)
            marker)))
       (apply-partially 'conn--kapply-point-iterator)
       (funcall-interactively 'conn-regions-kapply-prefix)))
@@ -267,5 +267,6 @@
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^    \n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-consult.el ends here

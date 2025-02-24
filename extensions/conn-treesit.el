@@ -78,5 +78,6 @@
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-treesit.el ends here

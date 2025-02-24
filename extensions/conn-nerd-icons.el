@@ -50,5 +50,6 @@
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-nerd-icons.el ends here

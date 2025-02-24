@@ -423,5 +423,6 @@
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^    \n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-posframe.el ends here

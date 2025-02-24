@@ -1357,5 +1357,6 @@ apply to each contiguous component of the region."
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-transients.el ends here

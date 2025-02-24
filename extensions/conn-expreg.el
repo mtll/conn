@@ -40,5 +40,6 @@
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn-expreg.el ends here

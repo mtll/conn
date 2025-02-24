@@ -6747,7 +6747,7 @@ When ARG is nil the root window is used."
   "C" 'org-toggle-comment
   "b" (conn-remap-key (key-parse "C-c C-v"))
   "c" (conn-remap-key (key-parse "C-c"))
-  "h" (conn-remap-key (key-parse "C-c C-x"))
+  "r" (conn-remap-key (key-parse "C-c C-x"))
   "d" 'org-down-element
   "g" (conn-remap-keymap (key-parse "M-g"))
   "i" 'org-backward-heading-same-level
@@ -7505,5 +7505,6 @@ determine if `conn-local-mode' should be enabled."
 
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
+;; indent-tabs-mode: nil
 ;; End:
 ;;; conn.el ends here
