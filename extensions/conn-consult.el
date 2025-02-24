@@ -185,6 +185,33 @@
   (defvar embark-multitarget-actions)
   (defvar embark-keymap-alist)
 
+  (defun conn-kapply-xref-candidates (cands)
+    (thread-last
+      cands
+      (mapcar
+       (lambda (cand)
+         (when-let ((xref (get-text-property 0 'consult-xref cand))
+                    (loc (xref-item-location xref))
+                    (type (type-of loc))
+                    (marker
+                     (pcase type
+                       ((or 'xref-file-location 'xref-etags-location)
+                        (consult--marker-from-line-column
+                         (find-file-noselect
+                          ;; xref-location-group returns the file name
+                          (let ((xref-file-name-display 'abs))
+                            (xref-location-group loc)))
+                         (xref-location-line loc)
+                         (if (eq type 'xref-file-location)
+                             (xref-file-location-column loc)
+                           0)))
+                       (_ (xref-location-marker loc)))))
+           (set-marker-insertion-type  marker t)
+           marker)))
+      (apply-partially 'conn--kapply-point-iterator)
+      (funcall-interactively 'conn-regions-kapply-prefix)))
+  (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
+
   (defun conn-kapply-grep-candidates (cands)
     (thread-last
       (mapcar (lambda (cand)
@@ -217,6 +244,12 @@
                              (goto-char line)
                              (conn--create-marker (line-end-position))))))))))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
+
+  (defvar-keymap conn-embark-consult-xref-map
+    :parent embark-general-map
+    "\\" 'conn-kapply-xref-candidates)
+  (cl-pushnew 'conn-embark-consult-xref-map
+              (alist-get 'consult-xref embark-keymap-alist))
 
   (defvar-keymap conn-embark-consult-location-map
     :parent embark-general-map
