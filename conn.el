@@ -95,9 +95,6 @@ Is an alist of the form ((CMD . MARK-HANDLER) ...).
 
 For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
 
-(defvar conn--mark-cursor-timer nil
-  "The idle timer which updates `mark' cursor.")
-
 (defvar-keymap conn-expand-repeat-map
   :repeat t
   "z" 'conn-expand-exchange
@@ -320,9 +317,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar-local conn--ephemeral-mark nil)
 
 (defvar conn--saved-ephemeral-marks nil)
-
-(defvar-local conn--mark-cursor nil
-  "`mark' cursor overlay.")
 
 ;;;;; Key Remapping
 
@@ -1539,6 +1533,12 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
   (conn--push-ephemeral-mark)
   (conn--bounds-of-expansion 'conn-expand arg))
 
+(defun conn--bounds-of-dot (_arg)
+  (catch 'found
+    (dolist (ov (overlays-at (point)))
+      (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
+        (throw 'found (list (conn--overlay-bounds-markers ov)))))))
+
 (setf (alist-get 'conn-toggle-mark-command conn-bounds-of-command-alist)
       'conn--bounds-of-region
 
@@ -1561,7 +1561,10 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
       'conn--bounds-of-window
 
       (alist-get 'narrowing conn-bounds-of-command-alist)
-      'conn--bounds-of-narrowings)
+      'conn--bounds-of-narrowings
+
+      (alist-get 'dot conn-bounds-of-command-alist)
+      'conn--bounds-of-dot)
 
 (defun conn--bounds-of-narrowings (_arg)
   (cl-loop for (beg . end) in conn-narrow-ring
@@ -2224,15 +2227,14 @@ Possibilities: \\<query-replace-map>
            (setq overlays nil))
          (conn--kapply-advance-region (pop matches)))))))
 
-(defun conn--kapply-per-buffer-undo (iterator &optional undo-on-error)
+(defun conn--kapply-per-buffer-undo (iterator &optional atomic)
   (let (undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
-           (if (and conn-kmacro-apply-error
-                    undo-on-error)
+           (if (and atomic conn-kmacro-apply-error)
                (cancel-change-group handle)
              (accept-change-group handle)
              (undo-amalgamate-change-group handle))))
@@ -3315,6 +3317,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   :key "h"
   :target-finder 'conn--dispatch-chars)
 
+(conn-define-dispatch-thing dot
+  :key "k"
+  :modes (conn-dot-mode)
+  :target-finder (lambda ()
+                   (mapcar (lambda (ov)
+                             (conn--make-preview-overlay
+                              (overlay-start ov)
+                              (- (overlay-end ov)
+                                 (overlay-start ov))))
+                           conn--dots)))
+
 (conn-define-dispatch-thing forward-word
   :key "O"
   :target-finder (apply-partially 'conn--dispatch-all-things 'word t))
@@ -3367,14 +3380,23 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
   :keys "d"
-  :filter (lambda () (when conn-dot-mode 'this))
+  :modes (conn-dot-mode)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
-         (conn--create-dot beg end))
+         (when beg (conn--create-dot beg end)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
+
+(conn-define-dispatch-action conn-dispatch-remove-dot (window pt thing-cmd thing-arg)
+  :description "Remove Dot"
+  :keys "w"
+  :modes (conn-dot-mode)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (conn-delete-dots))))
 
 (conn-define-dispatch-action conn-dispatch-downcase (window pt thing-cmd thing-arg)
   :description "Downcase"
@@ -4047,40 +4069,41 @@ seconds."
                      (list predicate))
            conn-dispatch-window-predicates))
         prefix-ovs labels prefix window pt)
-    (while
-        (prog1 repeat
-          (unwind-protect
-              (setf prefix-ovs (thread-last
-                                 (funcall finder)
-                                 (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                                 (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                    (alist-get (selected-window) prefix-ovs)
-                    (seq-sort (lambda (a b)
-                                (< (abs (- (overlay-start a) (point)))
-                                   (abs (- (overlay-start b) (point)))))
-                              (alist-get (selected-window) prefix-ovs))
-                    labels (conn--dispatch-label-overlays
-                            (or (funcall
-                                 conn-labeling-function
-                                 (let ((sum 0))
-                                   (dolist (p prefix-ovs sum)
-                                     (setq sum (+ sum (length (cdr p)))))))
-                                (user-error "No matching %s"
-                                            (or (ignore-errors
-                                                  (get thing-cmd :conn-command-thing))
-                                                "candidates")))
-                            prefix-ovs)
-                    prefix (conn-label-select labels)
-                    window (overlay-get prefix 'window)
-                    pt (overlay-start prefix)
-                    conn-this-command-thing (or (overlay-get prefix 'thing)
-                                                (ignore-errors
-                                                  (get thing-cmd :conn-command-thing))))
-            (pcase-dolist (`(_ . ,ovs) prefix-ovs)
-              (mapc #'delete-overlay ovs))
-            (mapc #'conn-label-delete labels))
-          (undo-boundary)
-          (apply action window pt thing-cmd thing-arg action-args)))))
+    (ignore-error quit
+      (while
+          (prog1 repeat
+            (unwind-protect
+                (setf prefix-ovs (thread-last
+                                   (funcall finder)
+                                   (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                                   (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                      (alist-get (selected-window) prefix-ovs)
+                      (seq-sort (lambda (a b)
+                                  (< (abs (- (overlay-start a) (point)))
+                                     (abs (- (overlay-start b) (point)))))
+                                (alist-get (selected-window) prefix-ovs))
+                      labels (conn--dispatch-label-overlays
+                              (or (funcall
+                                   conn-labeling-function
+                                   (let ((sum 0))
+                                     (dolist (p prefix-ovs sum)
+                                       (setq sum (+ sum (length (cdr p)))))))
+                                  (user-error "No matching %s"
+                                              (or (ignore-errors
+                                                    (get thing-cmd :conn-command-thing))
+                                                  "candidates")))
+                              prefix-ovs)
+                      prefix (conn-label-select labels)
+                      window (overlay-get prefix 'window)
+                      pt (overlay-start prefix)
+                      conn-this-command-thing (or (overlay-get prefix 'thing)
+                                                  (ignore-errors
+                                                    (get thing-cmd :conn-command-thing))))
+              (pcase-dolist (`(_ . ,ovs) prefix-ovs)
+                (mapc #'delete-overlay ovs))
+              (mapc #'conn-label-delete labels))
+            (undo-boundary)
+            (apply action window pt thing-cmd thing-arg action-args))))))
 
 (defun conn-repeat-last-dispatch ()
   (interactive)
@@ -4175,13 +4198,6 @@ potential expansions.  Functions may return invalid expansions
   (interactive)
   (if (region-active-p)
       (exchange-point-and-mark)
-    ;; (cl-loop for (beg . end) in (reverse conn--current-expansions)
-    ;;          when (and (= (point) beg)
-    ;;                    (/= (mark t) end))
-    ;;          return (goto-char end)
-    ;;          when (and (= (point) end)
-    ;;                    (/= (mark t) beg))
-    ;;          return (goto-char beg))
     (conn-exchange-mark-command)))
 
 (defun conn-expand (arg)
@@ -6470,9 +6486,6 @@ When ARG is nil the root window is used."
   "g" 'conn-rgrep-region
   "k" 'delete-region
   "u" 'conn-join-lines
-  "m t" 'conn-kapply-replace-matches
-  "m e" 'conn-kapply-emacs-on-matches
-  "m c" 'conn-kapply-conn-on-matches
   "I" 'indent-rigidly
   "." 'conn-narrow-indirect-to-region
   "n" 'conn-narrow-to-region
@@ -6652,7 +6665,6 @@ When ARG is nil the root window is used."
   "`" 'other-window
   "|" 'conn-shell-command-on-region
   "'" 'repeat
-  ;; "+" 'conn-set-register-seperator
   "." 'conn-other-place-prefix
   "/" (conn-remap-key conn-undo-keys)
   ";" 'conn-wincontrol
