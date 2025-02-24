@@ -622,7 +622,8 @@ This function destructively modifies LIST."
   (let* ((in-buffer (seq-filter
                      (pcase-lambda ((or `(,beg . ,_end) beg))
                        (or (not (markerp beg))
-                           (eq (marker-buffer beg) (or buffer (current-buffer)))))
+                           (eq (marker-buffer beg)
+                               (or buffer (current-buffer)))))
                      list)))
     (if (null in-buffer)
         list
@@ -1944,6 +1945,8 @@ is read."
   "Hook run during each iteration of macro application.
 If any function returns a nil value then macro application it halted.")
 
+(defvar conn-kapply-preview-max-overlays 200)
+
 (defvar conn--kapply-automatic-flag nil)
 
 (defun conn--kapply-compose-iterator (iterator &rest pipeline)
@@ -2021,8 +2024,6 @@ Possibilities: \\<query-replace-map>
              (with-current-buffer standard-output
                (help-mode))))
           (_ (ding)))))))
-
-(defvar conn-kapply-preview-max-overlays 200)
 
 (defun conn--kapply-preview-overlays (regions &optional face)
   (let* ((nearest (pcase-lambda (`(,b1 . ,e1) `(,b2 . ,e2))
@@ -2163,17 +2164,19 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-point-iterator (points &optional order)
   (unless points
     (user-error "No points for kapply."))
-  (let ((points (cl-loop for pt in (pcase order
-                                     ('forward points)
-                                     ('reverse (nreverse points))
-                                     (_        (conn--nnearest-first points)))
-                         collect (if (markerp pt)
-                                     pt
-                                   (conn--create-marker pt)))))
+  (let ((points
+         (cl-loop for pt in (pcase order
+                              ('forward points)
+                              ('reverse (nreverse points))
+                              (_        (conn--nnearest-first points)))
+                  collect (if (markerp pt)
+                              pt
+                            (conn--create-marker pt)))))
     (lambda (state)
       (pcase state
         (:finalize
-         (dolist (pt points) (set-marker pt nil)))
+         (dolist (pt points)
+           (set-marker pt nil)))
         (_
          (when-let ((pt (pop points)))
            (conn--kapply-advance-region (cons pt pt))))))))
@@ -3393,7 +3396,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
          (when beg (conn--create-dot beg end)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(conn-define-dispatch-action conn-dispatch-remove-dot (window pt thing-cmd thing-arg)
+(conn-define-dispatch-action conn-dispatch-remove-dot (window pt _thing-cmd _thing-arg)
   :description "Remove Dot"
   :keys "w"
   :modes (conn-dot-mode)
@@ -6558,6 +6561,7 @@ When ARG is nil the root window is used."
   "l" 'pop-global-mark
   "k" 'goto-line
   "r" 'xref-find-references
+  "d" 'xref-find-definitions
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward)
