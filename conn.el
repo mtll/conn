@@ -5681,11 +5681,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 
 (defun conn-throw-buffer ()
   (interactive)
-  (display-buffer
-   (current-buffer)
-   (lambda (_ _)
-     (cons (conn--prompt-for-window (conn--get-windows nil 'nomini)) 'reuse)))
-  (next-buffer))
+  (let ((buf (current-buffer)))
+    (switch-to-prev-buffer)
+    (save-selected-window
+      (display-buffer
+       buf
+       (lambda (_ _)
+         (cons (conn--prompt-for-window (conn--get-windows nil 'nomini))
+               'reuse))))))
 
 (defun conn-yank-window (window)
   (interactive
