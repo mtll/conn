@@ -70,6 +70,11 @@
   :type (or 'integer 'nil)
   :group 'conn-posframe)
 
+(defcustom conn-posframe-macro-timeout 2
+  "Timeout for conn macro posframe."
+  :type (or 'integer 'nil)
+  :group 'conn-posframe)
+
 (defcustom conn-posframe-buffer-context-lines 5
   "Number of context lines for buffer cycling posframe."
   :type 'integer
@@ -355,7 +360,7 @@
      :right-fringe 0
      :background-color (face-attribute 'menu :background)
      :poshandler conn-posframe-tab-poshandler
-     :timeout conn-posframe-timeout
+     :timeout conn-posframe-macro-timeout
      :border-width conn-posframe-border-width
      :border-color conn-posframe-border-color)
     (remove-hook 'post-command-hook 'conn-posframe--hide-post)
