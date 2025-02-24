@@ -2906,7 +2906,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (conn-register-thing-commands
  'outer-line 'conn-individual-thing-handler
- 'move-beginning-of-line 'move-end-of-line)
+ 'move-beginning-of-line 'move-end-of-line
+ 'org-beginning-of-line 'org-end-of-line)
 
 (defun conn--bounds-of-inner-line ()
   (cons
@@ -6744,8 +6745,10 @@ When ARG is nil the root window is used."
   "?" (conn-remap-key conn-undo-redo-keys)
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
+  "b" (conn-remap-key (key-parse "C-c C-v"))
   "c" (conn-remap-key (key-parse "C-c"))
-  "b" 'conn-edit-map
+  "h" (conn-remap-key (key-parse "C-c C-x"))
+  "d" 'org-down-element
   "g" (conn-remap-keymap (key-parse "M-g"))
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
@@ -6761,7 +6764,7 @@ When ARG is nil the root window is used."
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
   "p" 'conn-register-load
-  "s" (conn-remap-keymap (key-parse "M-g"))
+  "s" (conn-remap-keymap (key-parse "M-s"))
   "T" 'org-todo
   "t" 'org-sparse-tree
   "U" 'org-previous-block
