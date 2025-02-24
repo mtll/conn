@@ -619,24 +619,28 @@ markers in any buffer or points in the current buffer.
 If BUFFER is non-nil find region nearest to point in BUFFER.
 
 This function destructively modifies LIST."
-  (let ((in-buffer (seq-filter
-                    (pcase-lambda (`(,beg . ,_end))
-                      (or (not (markerp beg))
-                          (eq (marker-buffer beg) (or buffer (current-buffer)))))
-                    list)))
+  (let* ((in-buffer (seq-filter
+                     (pcase-lambda ((or `(,beg . ,_end) beg))
+                       (or (not (markerp beg))
+                           (eq (marker-buffer beg) (or buffer (current-buffer)))))
+                     list)))
     (if (null in-buffer)
         list
       (cl-loop with min = (car in-buffer)
-               with min-dist = (min (abs (- (point) (car min)))
-                                    (abs (- (point) (cdr min))))
+               with min-dist = (pcase min
+                                 (`(,beg . ,end)
+                                  (min (abs (- (point) beg))
+                                       (abs (- (point) end))))
+                                 (pt (abs (- (point) pt))))
                for region in (cdr in-buffer)
-               do (pcase-let*
-                      ((`(,beg . ,end) region)
-                       (new-dist (min (abs (- (point) beg))
-                                      (abs (- (point) end)))))
-                    (when (< new-dist min-dist)
-                      (setq min region
-                            min-dist new-dist)))
+               for new-dist = (pcase region
+                                (`(,beg . ,end)
+                                 (min (abs (- (point) beg))
+                                      (abs (- (point) end))))
+                                (pt (abs (- (point) pt))))
+               when (< new-dist min-dist)
+               do (setq min region
+                        min-dist new-dist)
                finally return (cons min (delq min list))))))
 
 (defun conn--create-marker (pos &optional buffer insertion-type)
