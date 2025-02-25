@@ -613,10 +613,12 @@ the original binding.  Also see `conn-remap-key'."
 (defun conn--nnearest-first (list &optional buffer)
   "Move the region nearest point in LIST to the front.
 
-LIST is of the form ((BEG . END) ...) where BEG and END are either
-markers in any buffer or points in the current buffer.
+LIST is either a list of markers or points, or of the form
+((BEG . END) ...) where BEG and END are either markers or
+points.
 
-If BUFFER is non-nil find region nearest to point in BUFFER.
+If BUFFER is non-nil find region nearest to point in BUFFER, else find
+nearest in the current buffer.
 
 This function destructively modifies LIST."
   (let* ((in-buffer (seq-filter
@@ -756,6 +758,10 @@ If BUFFER is nil check `current-buffer'."
      (conn--activate-input-method)))
 
 (defun conn--isearch-matches (&optional buffer restrict)
+  "Return a list of all isearch matches in buffer.
+
+If RESTRICT either \\='before or \\='after which will then matches will
+be restricted to those before or after the current match inclusive."
   (with-current-buffer (or buffer (current-buffer))
     (save-excursion
       (pcase restrict
@@ -780,6 +786,7 @@ If BUFFER is nil check `current-buffer'."
                do (forward-char (if isearch-forward 1 -1))))))
 
 (defun conn--region-visible-p (beg end)
+  "Return t if the region from BEG to END is visible."
   (and (not (invisible-p beg))
        (cl-loop for pt = (next-single-char-property-change
                           beg 'invisible nil end)
@@ -787,9 +794,14 @@ If BUFFER is nil check `current-buffer'."
                 never (invisible-p pt))))
 
 (defun conn--string-no-upper-case-p (string)
+  "Return t if STRING contains no upper case characters."
   (cl-loop for char across string always (eq char (downcase char))))
 
 (defun conn--visible-matches (string &optional dir)
+  "Return all matches for STRING visible in the selected window.
+
+If dir is \\='forward or \\='backward then restrict to matches before or
+after point."
   (save-excursion
     (with-restriction
         (if (eq dir 'forward)  (point) (window-start))
@@ -838,6 +850,7 @@ If BUFFER is nil check `current-buffer'."
                   from)))))))
 
 (defun conn-overlay-p (overlay)
+  "Return t if OVERLAY is an overlay created by conn."
   (overlay-get overlay 'conn-overlay))
 
 (defun conn--clear-overlays (&optional buffer)
@@ -860,6 +873,7 @@ If BUFFER is nil check `current-buffer'."
 ;;;; States
 
 (defun conn--setup-major-mode-maps ()
+  "Setup the mode specific keymaps for the current major mode."
   (setq conn--major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
@@ -910,6 +924,7 @@ and return it."
       (setf (alist-get state conn--local-maps) (make-sparse-keymap))))
 
 (defmacro conn--without-input-method-hooks (&rest body)
+  "Run body without conn input method hooks active."
   (declare (indent 0))
   `(unwind-protect
        (progn
@@ -1145,24 +1160,22 @@ disabled.
          (conn-enter-state ',name)))))
 
 (conn-define-state conn-emacs-state
-  "Activate `conn-emacs-state' in the current buffer.
-A `conn-mode' state for inserting text.  By default `conn-emacs-state' does not
-bind anything except transition commands."
+  "A `conn-mode' state for inserting text.
+
+By default `conn-emacs-state' does not bind anything."
   :ligher " emacs"
   :ephemeral-marks nil
   :keymap (make-sparse-keymap))
 
 (conn-define-state conn-state
-  "Activate `conn-state' in the current buffer.
-A `conn-mode' state for editing text."
+  "A `conn-mode' state for editing test."
   :ligher " conn"
   :suppress-input-method t
   :ephemeral-marks t
   :keymap (define-keymap :suppress t))
 
 (conn-define-state conn-org-edit-state
-  "Activate `conn-org-edit-state' in the current buffer.
-A `conn-mode' state for structural editing of `org-mode' buffers."
+  "A `conn-mode' state for structural editing of `org-mode' buffers."
   :ligher " org-edit"
   :suppress-input-method t
   :keymap (define-keymap :suppress t)
@@ -1180,10 +1193,32 @@ A `conn-mode' state for structural editing of `org-mode' buffers."
 
 Is a function of one arguments, the number of labels required.")
 
-(cl-defgeneric conn-label-delete (label))
-(cl-defgeneric conn-label-narrow (label prefix))
-(cl-defgeneric conn-label-reset (label))
-(cl-defgeneric conn-label-payload (label))
+;; Each label is a state machine that should define its transition
+;; functions as methods of the `conn-label-narrow' and
+;; `conn-label-reset' generic functions.  `conn-label-narrow' is
+;; called when user input is received for the label to process and
+;; `conn-label-reset' is called when the user has failed to select a
+;; label and the narrowing process must restart from the beginning.
+;; `conn-label-narrow' allows labels to clean up after themselves
+;; after the selection process has concluded.
+
+(cl-defgeneric conn-label-delete (label)
+  "Delete the label LABEL.")
+
+(cl-defgeneric conn-label-narrow (label prefix)
+  "Narrow LABEL by PREFIX.
+
+If LABEL contains PREFIX then the label state should be updated to
+reflect that prefix has been processed and LABEL should be returned.  If
+the label does not contain the prefix then the label state be updated
+to reflect that the label is no longer active and nil should be
+returned.")
+
+(cl-defgeneric conn-label-reset (label)
+  "Reset LABEL to its initial state.")
+
+(cl-defgeneric conn-label-payload (label)
+  "Return LABEL\'s payload.")
 
 (cl-defmethod conn-label-payload ((label overlay))
   (overlay-get label 'payload))
@@ -1230,6 +1265,10 @@ Is a function of one arguments, the number of labels required.")
              label)))))
 
 (defun conn-label-select (candidates)
+  "Select a label from CANDIDATES.
+
+Prompts to user for prefix characters one at a time and narrows the
+labels after each one."
   (let ((current candidates)
         (prompt "char:"))
     (cl-loop
@@ -1249,6 +1288,9 @@ Is a function of one arguments, the number of labels required.")
                          (push l next))))))))
 
 (defun conn--make-preview-overlay (pt length &optional thing)
+  "Make a preview overlay at PT of LENGTH.
+
+Optionally the overlay may have an associated THING."
   (let* ((eol (save-excursion
                 (goto-char pt)
                 (line-end-position)))
@@ -1414,9 +1456,6 @@ Is a function of one arguments, the number of labels required.")
 
 ;;;; Read Things
 
-;; Provides facilities for reading Things, Thing Movers, and regions
-;; defined by them.
-
 (defvar conn-read-thing-state 'conn-state
   "State which should be active in `conn-read-thing-mover-mode'.")
 
@@ -1481,6 +1520,7 @@ region.")
   "<t>" 'ignore)
 
 (defun conn-last-bounds-of-command ()
+  "Value of the most recent `conn-bounds-of-command' at this recursion depth."
   (alist-get (recursion-depth) conn-last-bounds-of-command))
 
 (defun conn-bounds-of-command (cmd arg)
@@ -1501,7 +1541,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
 (defun conn--bounds-of-thing-command-default (cmd arg)
   (let ((current-prefix-arg arg)
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
-                                       'conn-individual-thing-handler))
+                                       'conn-discrete-thing-handler))
         (conn-this-command-thing (get cmd :conn-command-thing))
         (this-command cmd)
         (conn-this-command-start (point-marker)))
@@ -2475,11 +2515,32 @@ The iterator must be the first argument in ARGLIST.
 ;;;; Mark
 
 (defun conn-get-mark-handler (command)
+  "Return the mark handler for COMMAND."
   (or (alist-get command conn-mark-handler-overrides-alist)
       (ignore-errors (get command :conn-mark-handler))))
 
 (defun conn-register-thing (thing &rest rest)
   "Register a new THING.
+
+THINGs may have several optional properties that control how they
+function in various conn features
+
+FORWARD-OP, BEG-OP, END-OP and BOUNDS-OP provide operations for
+`thingatpt', which see.
+
+TARGET-FINDER is a function that produces targets for
+`conn-dispatch-on-things'.
+
+DEFAULT-ACTION is the default action for THING in
+`conn-dispatch-on-things'.
+
+MODES is a list of the modes in which THINGs may be present.
+
+MARK-CMD is either a command which marks a THING at point or t if such a
+command should be automatically created.
+
+MARK-KEY is a key which should be bound to MARK-CMD in
+`conn-mark-thing-map' (only in MODES if MODES is non-nil).
 
 \(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
@@ -2532,26 +2593,28 @@ The iterator must be the first argument in ARGLIST.
     (put cmd :conn-mark-handler handler)))
 
 (defun conn-symbol-handler (beg)
+  "Mark handler for symbols."
   (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
     (cond ((not (derived-mode-p 'prog-mode))
-           (conn-sequential-thing-handler beg))
+           (conn-continuous-thing-handler beg))
           ((and (conn--point-in-comment-or-string-p)
                 (save-excursion
                   (goto-char beg)
                   (conn--point-in-comment-or-string-p)))
-           (conn-sequential-thing-handler beg))
+           (conn-continuous-thing-handler beg))
           ((or (conn--point-in-comment-or-string-p)
                (save-excursion
                  (goto-char beg)
                  (conn--point-in-comment-or-string-p)))
-           (conn-individual-thing-handler beg))
+           (conn-discrete-thing-handler beg))
           ((equal list (save-excursion
                          (goto-char beg)
                          (bounds-of-thing-at-point 'list)))
-           (conn-sequential-thing-handler beg))
-          ((conn-individual-thing-handler beg)))))
+           (conn-continuous-thing-handler beg))
+          ((conn-discrete-thing-handler beg)))))
 
-(defun conn-sequential-thing-handler (beg)
+(defun conn-continuous-thing-handler (beg)
+  "Mark the things which have been moved over."
   (ignore-errors
     (cond ((= 0 (abs (prefix-numeric-value current-prefix-arg))))
           ((= (point) beg)
@@ -2569,12 +2632,14 @@ The iterator must be the first argument in ARGLIST.
                (forward-thing conn-this-command-thing (- dir))
                (conn--push-ephemeral-mark)))))))
 
-(defun conn-individual-thing-handler (_beg)
+(defun conn-discrete-thing-handler (_beg)
+  "Mark the thing at point."
   (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
     (`(,beg . ,end)
      (conn--push-ephemeral-mark (if (= (point) end) beg end)))))
 
 (defun conn-jump-handler (beg)
+  "Place a mark where point used to be."
   (unless (= beg (point))
     (conn--push-ephemeral-mark beg)))
 
@@ -2685,6 +2750,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 ;;;;; Thing Definitions
 
+;; Definitions for various things and thing commands.
+
 (conn-register-thing 'url :mark-key "!")
 (conn-register-thing 'email :mark-key "@")
 (conn-register-thing 'uuid :mark-key "$")
@@ -2738,7 +2805,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
 
 (conn-register-thing-commands
- 'symbol 'conn-sequential-thing-handler
+ 'symbol 'conn-continuous-thing-handler
  'forward-symbol 'conn-backward-symbol)
 
 (conn-register-thing
@@ -2747,7 +2814,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :forward-op 'forward-page)
 
 (conn-register-thing-commands
- 'page 'conn-individual-thing-handler
+ 'page 'conn-discrete-thing-handler
  'forward-page 'backward-page)
 
 (conn-register-thing-commands
@@ -2775,7 +2842,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
 
 (conn-register-thing-commands
- 'sexp 'conn-sequential-thing-handler
+ 'sexp 'conn-continuous-thing-handler
  'forward-sexp 'backward-sexp)
 
 (conn-register-thing
@@ -2793,7 +2860,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                               (point))))))
 
 (conn-register-thing-commands
- 'list 'conn-sequential-thing-handler
+ 'list 'conn-continuous-thing-handler
  'forward-list 'backward-list)
 
 (defun conn--list-mark-handler (beg)
@@ -2832,7 +2899,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
- 'whitespace 'conn-individual-thing-handler
+ 'whitespace 'conn-discrete-thing-handler
  'forward-whitespace 'conn-backward-whitespace)
 
 (conn-register-thing
@@ -2841,7 +2908,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'sentence t))
 
 (conn-register-thing-commands
- 'sentence 'conn-sequential-thing-handler
+ 'sentence 'conn-continuous-thing-handler
  'forward-sentence 'backward-sentence)
 
 (conn-register-thing
@@ -2850,17 +2917,17 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'paragraph t))
 
 (conn-register-thing-commands
- 'paragraph 'conn-sequential-thing-handler
+ 'paragraph 'conn-continuous-thing-handler
  'forward-paragraph 'backward-paragraph)
 
 (conn-register-thing-commands
- 'defun 'conn-sequential-thing-handler
+ 'defun 'conn-continuous-thing-handler
  'end-of-defun 'beginning-of-defun)
 
 (conn-register-thing 'char :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
- 'buffer 'conn-individual-thing-handler
+ 'buffer 'conn-discrete-thing-handler
  'end-of-buffer 'beginning-of-buffer)
 
 (defun conn-line-forward-op (N)
@@ -2881,7 +2948,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
- 'line 'conn-sequential-thing-handler
+ 'line 'conn-continuous-thing-handler
  'forward-line 'conn-backward-line
  'conn-line-forward-op)
 
@@ -2905,7 +2972,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
- 'outer-line 'conn-individual-thing-handler
+ 'outer-line 'conn-discrete-thing-handler
  'move-beginning-of-line 'move-end-of-line
  'org-beginning-of-line 'org-end-of-line)
 
@@ -2924,13 +2991,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  :dispatch-target-finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
- 'inner-line 'conn-individual-thing-handler
+ 'inner-line 'conn-discrete-thing-handler
  'back-to-indentation
  'conn-beginning-of-inner-line
  'conn-end-of-inner-line)
 
 (conn-register-thing-commands
- 'org-link 'conn-individual-thing-handler
+ 'org-link 'conn-discrete-thing-handler
  'org-next-link 'org-previous-link)
 
 (conn-register-thing-commands
@@ -2953,6 +3020,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 
 ;;;; Thing Dispatch
+
+;; Thing dispatch provides a method of jumping to, marking or acting
+;; on visible Things.
 
 (defvar conn--last-dispatch-command nil)
 
@@ -4811,7 +4881,7 @@ Interactively `region-beginning' and `region-end'."
   ;; FIXME: see crux smart open line
   (indent-according-to-mode))
 
-(defun conn-comment-or-uncomment-region (thing-mover arg)
+(defun conn-comment-or-uncomment-thing (thing-mover arg)
   (interactive (conn-read-thing-mover "Thing Mover"))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
     (if (comment-only-p beg end)
@@ -6491,7 +6561,7 @@ When ARG is nil the root window is used."
   "a n" 'align-newline-and-indent
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
-  "b" 'conn-comment-or-uncomment-region
+  "b" 'conn-comment-or-uncomment-thing
   "'" 'conn-duplicate-and-comment-thing
   "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
@@ -6936,7 +7006,7 @@ determine if `conn-local-mode' should be enabled."
    :modes '(org-mode))
 
   (conn-register-thing-commands
-   'org-paragraph 'conn-sequential-thing-handler
+   'org-paragraph 'conn-continuous-thing-handler
    'org-forward-paragraph 'org-backward-paragraph)
 
   (conn-define-dispatch-action conn-open-org-link (window pt _thing-cmd _thing-arg)
@@ -6962,7 +7032,7 @@ determine if `conn-local-mode' should be enabled."
    :modes '(org-mode))
 
   (conn-register-thing-commands
-   'org-sentence 'conn-sequential-thing-handler
+   'org-sentence 'conn-continuous-thing-handler
    'conn-org-sentence-forward
    'org-forward-sentence 'org-backward-sentence)
 
@@ -7010,12 +7080,12 @@ determine if `conn-local-mode' should be enabled."
    :modes '(org-mode))
 
   (conn-register-thing-commands
-   'org-heading 'conn-sequential-thing-handler
+   'org-heading 'conn-continuous-thing-handler
    'org-next-visible-heading
    'org-previous-visible-heading)
 
   (conn-register-thing-commands
-   'org-element 'conn-individual-thing-handler
+   'org-element 'conn-discrete-thing-handler
    'org-forward-element
    'org-backward-element
    'org-next-visible-heading
@@ -7109,7 +7179,7 @@ determine if `conn-local-mode' should be enabled."
              (goto-char beg)
              (ignore-errors (bounds-of-thing-at-point 'list)))
       ((and `(,b1 . ,e1) (guard (< b1 (point) e1)))
-       (conn-sequential-thing-handler beg))
+       (conn-continuous-thing-handler beg))
       ((and `(,b1 . ,_) (guard (/= beg b1)))
        (save-excursion
          (cond ((> (point) beg)
@@ -7117,7 +7187,7 @@ determine if `conn-local-mode' should be enabled."
                ((< (point) beg)
                 (while (< (point) beg) (forward-thing 'sexp 1))))
          (conn--push-ephemeral-mark)))
-      (_ (conn-sequential-thing-handler beg))))
+      (_ (conn-continuous-thing-handler beg))))
 
   (conn-register-thing-commands
    'sexp 'conn-paredit-sexp-handler
@@ -7267,11 +7337,11 @@ determine if `conn-local-mode' should be enabled."
               "H H" 'conn-mark-heading)
 
   (conn-register-thing-commands
-   'heading 'conn-sequential-thing-handler
+   'heading 'conn-continuous-thing-handler
    'conn-forward-heading-op)
 
   (conn-register-thing-commands
-   'heading 'conn-individual-thing-handler
+   'heading 'conn-discrete-thing-handler
    'outline-up-heading
    'outline-next-heading
    'outline-next-visible-heading
@@ -7282,7 +7352,7 @@ determine if `conn-local-mode' should be enabled."
 
 (with-eval-after-load 'treesit
   (conn-register-thing-commands
-   'defun 'conn-sequential-thing-handler
+   'defun 'conn-continuous-thing-handler
    'treesit-end-of-defun
    'treesit-beginning-of-defun))
 
