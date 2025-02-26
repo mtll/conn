@@ -1246,6 +1246,7 @@ apply to each contiguous component of the region."
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
      ("m" "Macro" kmacro-to-register)
+     ("n" "Narrow Ring" conn-narrow-ring-to-register)
      ("t" "Tab" conn-tab-to-register)
      ("4" "Window Configuration" window-configuration-to-register)
      ("5" "Frameset" frameset-to-register)]
