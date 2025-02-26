@@ -4765,6 +4765,10 @@ instances of from-string.")
 
 ;;;;; Isearch Commands
 
+(defun conn-isearch-yank-region ()
+  (interactive)
+  (isearch-yank-internal (lambda () (mark t))))
+
 (defun conn-isearch-open-recursive-edit ()
   (interactive)
   (thread-first
@@ -6621,7 +6625,9 @@ When ARG is nil the root window is used."
 
 (define-keymap
   :keymap isearch-mode-map
+  "M-Y" 'conn-isearch-yank-region
   "M-<return>" 'conn-isearch-exit-and-mark
+  "M-RET" 'conn-isearch-exit-and-mark
   "M-\\" 'conn-isearch-kapply-prefix
   "C-," 'conn-dispatch-isearch
   "C-'" 'conn-isearch-open-recursive-edit)
@@ -6970,16 +6976,16 @@ determine if `conn-local-mode' should be enabled."
     (conn--setup-advice)
     (if conn-mode
         (progn
-          (keymap-set minibuffer-mode-map "C-M-y" 'conn-yank-region-to-minibuffer)
+          (keymap-set minibuffer-mode-map "M-Y" 'conn-yank-region-to-minibuffer)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (set-default
        'mode-line-format
        (assq-delete-all
         'conn-mode
         (default-value 'mode-line-format)))
-      (when (eq (keymap-lookup minibuffer-mode-map "C-M-y")
+      (when (eq (keymap-lookup minibuffer-mode-map "M-Y")
                 'conn-yank-region-to-minibuffer)
-        (keymap-unset minibuffer-mode-map "C-M-y"))
+        (keymap-unset minibuffer-mode-map "M-Y"))
       (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
 
 (provide 'conn)
