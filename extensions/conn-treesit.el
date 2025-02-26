@@ -63,7 +63,7 @@
                      (<= (window-start) beg (window-end)))
            collect beg into dfns
            finally return (mapcar (lambda (pt)
-                                    (conn--make-target-overlay pt 1 'defun))
+                                    (conn--make-target-overlay pt 0 'defun))
                                   (seq-sort '< dfns))))
 
 (dolist (mode conn--ts-modes)
