@@ -554,8 +554,9 @@ meaning of these see `advice-add'."
                       by #'cddr
                       while beg
                       for ov = (make-overlay beg end)
-                      do (overlay-put ov 'face 'shadow)
-                      (push ov ,overlays))
+                      do (progn
+                           (overlay-put ov 'face 'shadow)
+                           (push ov ,overlays)))
              ,@body)
          (mapc #'delete-overlay ,overlays)))))
 
@@ -3035,7 +3036,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (conn-register-thing-commands
  'narrowing nil
  'narrow-to-region 'widen
- 'conn-narrow-to-region
+ 'conn-narrow-to-thing
  'conn-narrow-ring-prefix)
 
 
@@ -5409,7 +5410,7 @@ When KILL-FLAG is non-nil kill the region as well."
   (narrow-to-region beg end)
   (when record (conn--narrow-ring-record beg end)))
 
-(defun conn-narrow-to-region (thing-mover arg &optional record)
+(defun conn-narrow-to-thing (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
    (append (conn-read-thing-mover
@@ -5423,7 +5424,7 @@ When KILL-FLAG is non-nil kill the region as well."
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed"))))
 
-(defun conn-narrow-indirect-to-region (thing-mover arg &optional interactive)
+(defun conn-narrow-indirect-to-thing (thing-mover arg &optional interactive)
   "Narrow to THING at point.
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
@@ -5438,6 +5439,22 @@ associated with that command (see `conn-register-thing')."
     (conn--narrow-indirect beg end interactive)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed indirect"))))
+
+(defun conn-narrow-to-region (beg end &optional record)
+  "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
+  (interactive (list (region-beginning) (region-end) (list t)))
+  (conn--narrow-to-region-1 beg end record)
+  (when (called-interactively-p 'interactive)
+    (message "Buffer narrowed")))
+
+(defun conn-narrow-indirect-to-region (beg end &optional record)
+  "Narrow to THING at point.
+Interactively prompt for the keybinding of a command and use THING
+associated with that command (see `conn-register-thing')."
+  (interactive (list (region-beginning) (region-end) (list t)))
+  (conn--narrow-indirect beg end record)
+  (when (called-interactively-p 'interactive)
+    (message "Buffer narrowed indirect")))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -6617,8 +6634,6 @@ When ARG is nil the root window is used."
   "k" 'delete-region
   "u" 'conn-join-lines
   "I" 'indent-rigidly
-  "." 'conn-narrow-indirect-to-region
-  "n" 'conn-narrow-to-region
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
   "v" 'vc-region-history
@@ -6627,7 +6642,9 @@ When ARG is nil the root window is used."
   "y" 'yank-rectangle
   "q" 'conn-replace-in-thing
   "w" 'conn-regexp-replace-in-thing
-  "DEL" 'clear-rectangle)
+  "DEL" 'clear-rectangle
+  "n" 'conn-narrow-to-region
+  "m" 'conn-narrow-indirect-to-region)
 
 (when (version<= "30" emacs-version)
   (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
@@ -6712,15 +6729,14 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "m" 'conn-narrow-indirect-to-thing
+  "n" 'conn-narrow-to-thing
   "u" 'join-line
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
   "," 'clone-indirect-buffer
   "h" 'conn-change-line
-  "o" 'conn-open-line-and-indent
-  "n" 'conn-open-line-above
-  "m" 'conn-open-line
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
   "l" 'conn-emacs-state-eoil
@@ -6840,7 +6856,7 @@ When ARG is nil the root window is used."
   "s" (conn-remap-keymap (key-parse "M-s"))
   "Q" 'conn-transpose-window
   "T" 'conn-throw-buffer
-  "V" 'conn-narrow-to-region
+  "V" 'conn-narrow-to-thing
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
   "W" 'widen
@@ -6896,6 +6912,9 @@ When ARG is nil the root window is used."
   "z" 'conn-exchange-mark-command)
 
 (defvar-keymap conn-global-map
+  ;; "M-j" 'conn-open-line-and-indent
+  ;; "C-o" 'conn-open-line-above
+  ;; "M-o" 'conn-open-line
   "C-S-w" 'delete-region
   "C-." 'conn-dispatch-on-things
   "C->" 'conn-dispatch-on-buttons
