@@ -60,11 +60,10 @@
            for beg = (treesit-node-start node)
            for end = (treesit-node-end node)
            when (and (conn--region-visible-p beg end)
-                     (>= beg (window-start))
-                     (<= beg (window-end)))
+                     (<= (window-start) beg (window-end)))
            collect beg into dfns
            finally return (mapcar (lambda (pt)
-                                    (conn--make-preview-overlay pt 1 'defun))
+                                    (conn--make-target-overlay pt 1 'defun))
                                   (seq-sort '< dfns))))
 
 (dolist (mode conn--ts-modes)
