@@ -4410,9 +4410,17 @@ Expansions and contractions are provided by functions in
     (format "Narrowings In:  %s")
     (princ)))
 
+(cl-defmethod register-command-info ((_command (eql conn-narrow-ring-to-register)))
+  (make-register-preview-info
+   :types '(all)
+   :msg "Copy narrow ring to register `%s'"
+   :act 'set
+   :noconfirm (memq register-use-preview '(nil never))
+   :smatch t))
+
 (defun conn-narrow-ring-to-register (register)
   "Store narrow ring in REGISTER."
-  (interactive (list (register-read-with-preview "Tab to register: ")))
+  (interactive (list (register-read-with-preview "Narrow ring to register: ")))
   (set-register register (conn--make-narrow-register)))
 
 (defun conn--narrow-ring-record (beg end)
@@ -4696,6 +4704,14 @@ instances of from-string.")
   (princ (format "Command:  %s"
                  (car (conn-command-register-command val)))))
 
+(cl-defmethod register-command-info ((_command (eql conn-command-to-register)))
+  (make-register-preview-info
+   :types '(all)
+   :msg "Command to register `%s'"
+   :act 'set
+   :noconfirm (memq register-use-preview '(nil never))
+   :smatch t))
+
 (defun conn-command-to-register (register arg)
   "Store command in REGISTER."
   (interactive
@@ -4757,6 +4773,14 @@ instances of from-string.")
                                (propertize "*CURRENT TAB*" 'face 'error)
                              (alist-get 'name tab)))))
                    "on another frame"))))
+
+(cl-defmethod register-command-info ((_command (eql conn-tab-to-register)))
+  (make-register-preview-info
+   :types '(all)
+   :msg "Tab to register `%s'"
+   :act 'set
+   :noconfirm (memq register-use-preview '(nil never))
+   :smatch t))
 
 (defun conn-tab-to-register (register)
   "Store tab in REGISTER."
@@ -6606,7 +6630,7 @@ When ARG is nil the root window is used."
   "DEL" 'clear-rectangle)
 
 (when (version<= "30" emacs-version)
-  (keymap-set conn-region-map "U" 'replace-regexp-as-diff)
+  (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
   (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff))
 
 (defvar-keymap conn-window-resize-map
