@@ -1190,7 +1190,7 @@ By default `conn-emacs-state' does not bind anything."
 ;; a set of labels.
 
 (defvar conn-labeling-function 'conn-simple-labels
-  "Function to create a set of labels for a number of elements.
+  "Function to create label strings for a number of elements.
 
 Is a function of one arguments, the number of labels required.")
 
@@ -1243,8 +1243,8 @@ returned.")
                                  'face 'conn-read-string-match-face))
         (move-overlay overlay beg end)
         (when-let* ((after-str (buffer-substring (overlay-start overlay)
-                                                (overlay-end overlay)))
-                   (pos (string-search "\n" after-str)))
+                                                 (overlay-end overlay)))
+                    (pos (string-search "\n" after-str)))
           (overlay-put overlay 'after-string (substring after-str pos)))
         (overlay-put overlay prop string)))))
 
@@ -1252,14 +1252,14 @@ returned.")
   (delete-overlay (conn-dispatch-label-overlay label)))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (with-slots (overlay string prop target-overlay) label
+  (with-slots (overlay prop target-overlay) label
     (with-current-buffer (overlay-buffer overlay)
       (cond ((length= (overlay-get overlay prop) 0)
              nil)
             ((not (eql prefix-char (aref (overlay-get overlay prop) 0)))
+             (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
              (overlay-put overlay prop "")
              (overlay-put overlay 'after-string nil)
-             (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
              (overlay-put target-overlay 'display nil)
              (overlay-put target-overlay 'after-string nil)
              nil)
@@ -2712,11 +2712,21 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (overlay-put cursor 'window win))
       (unless (and (eq (overlay-buffer cursor) (current-buffer))
                    (eq (overlay-start cursor) (mark t)))
-        (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
-        (overlay-put cursor 'before-string
-                     (when (and (= (mark t) (point-max))
-                                (/= (point) (mark t)))
-                       (propertize " " 'face 'conn-mark-face)))))))
+        (if (and (eql (char-after (mark t)) ?\t)
+                 (< (mark t) (point-max))
+                 (< 1 (save-excursion
+                        (goto-char (mark t))
+                        (let ((col (current-column)))
+                          (- (indent-next-tab-stop col) col)))))
+            (progn
+              (move-overlay cursor (mark t) (mark t) (window-buffer win))
+              (overlay-put cursor 'before-string
+                           (propertize " " 'face 'conn-mark-face)))
+          (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
+          (overlay-put cursor 'before-string
+                       (when (and (= (mark t) (point-max))
+                                  (/= (point) (mark t)))
+                         (propertize " " 'face 'conn-mark-face))))))))
 
 (defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
   "Hide mark cursor in buffers with in MMODE-OR-STATE.
@@ -4168,38 +4178,38 @@ seconds."
              (append conn-dispatch-window-predicates
                      (list predicate))
            conn-dispatch-window-predicates))
-        preview-ovs labels prefix window pt)
+        target-ovs labels prefix window pt)
     (ignore-error quit
       (while
           (prog1 repeat
             (unwind-protect
-                (setf preview-ovs (thread-last
-                                    (funcall finder)
-                                    (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                                    (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                      (alist-get (selected-window) preview-ovs)
+                (setf target-ovs (thread-last
+                                   (funcall finder)
+                                   (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                                   (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                      (alist-get (selected-window) target-ovs)
                       (seq-sort (lambda (a b)
                                   (< (abs (- (overlay-start a) (point)))
                                      (abs (- (overlay-start b) (point)))))
-                                (alist-get (selected-window) preview-ovs))
+                                (alist-get (selected-window) target-ovs))
                       labels (conn--dispatch-labels
                               (or (funcall
                                    conn-labeling-function
                                    (let ((sum 0))
-                                     (dolist (p preview-ovs sum)
+                                     (dolist (p target-ovs sum)
                                        (setq sum (+ sum (length (cdr p)))))))
                                   (user-error "No matching %s"
                                               (or (ignore-errors
                                                     (get thing-cmd :conn-command-thing))
                                                   "candidates")))
-                              preview-ovs)
+                              target-ovs)
                       prefix (conn-label-select labels)
                       window (overlay-get prefix 'window)
                       pt (overlay-start prefix)
                       conn-this-command-thing (or (overlay-get prefix 'thing)
                                                   (ignore-errors
                                                     (get thing-cmd :conn-command-thing))))
-              (pcase-dolist (`(_ . ,ovs) preview-ovs)
+              (pcase-dolist (`(_ . ,ovs) target-ovs)
                 (mapc #'delete-overlay ovs))
               (mapc #'conn-label-delete labels))
             (undo-boundary)
@@ -6717,8 +6727,8 @@ When ARG is nil the root window is used."
   "_" 'calc-grab-sum-across
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
-  "d" 'open-rectangle
   "<backspace>" 'clear-rectangle
+  "d" 'open-rectangle
   "C-d" 'delete-whitespace-rectangle
   "#" 'rectangle-number-lines)
 
