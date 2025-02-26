@@ -190,22 +190,22 @@
       cands
       (mapcar
        (lambda (cand)
-         (when-let ((xref (get-text-property 0 'consult-xref cand))
-                    (loc (xref-item-location xref))
-                    (type (type-of loc))
-                    (marker
-                     (pcase type
-                       ((or 'xref-file-location 'xref-etags-location)
-                        (consult--marker-from-line-column
-                         (find-file-noselect
-                          ;; xref-location-group returns the file name
-                          (let ((xref-file-name-display 'abs))
-                            (xref-location-group loc)))
-                         (xref-location-line loc)
-                         (if (eq type 'xref-file-location)
-                             (xref-file-location-column loc)
-                           0)))
-                       (_ (xref-location-marker loc)))))
+         (when-let* ((xref (get-text-property 0 'consult-xref cand))
+                     (loc (xref-item-location xref))
+                     (type (type-of loc))
+                     (marker
+                      (pcase type
+                        ((or 'xref-file-location 'xref-etags-location)
+                         (consult--marker-from-line-column
+                          (find-file-noselect
+                           ;; xref-location-group returns the file name
+                           (let ((xref-file-name-display 'abs))
+                             (xref-location-group loc)))
+                          (xref-location-line loc)
+                          (if (eq type 'xref-file-location)
+                              (xref-file-location-column loc)
+                            0)))
+                        (_ (xref-location-marker loc)))))
            (set-marker-insertion-type marker t)
            marker)))
       (apply-partially 'conn--kapply-point-iterator)
@@ -238,7 +238,7 @@
            (if (eq state :finalize)
                (dolist (line lines)
                  (set-marker line nil))
-             (when-let ((line (pop lines)))
+             (when-let* ((line (pop lines)))
                (conn--kapply-advance-region
                 (cons line (save-excursion
                              (goto-char line)

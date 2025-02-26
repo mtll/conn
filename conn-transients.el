@@ -108,7 +108,7 @@ edit in the macro."
   (save-mark-and-excursion
     (save-window-excursion
       (kmacro-edit-macro (not arg))
-      (when-let ((buffer (get-buffer "*Edit Macro*")))
+      (when-let* ((buffer (get-buffer "*Edit Macro*")))
         (with-current-buffer buffer
           (save-excursion
             (goto-char (point-min))
@@ -132,7 +132,7 @@ the edit in the macro."
   (save-mark-and-excursion
     (save-window-excursion
       (kmacro-edit-lossage)
-      (when-let ((buffer (get-buffer "*Edit Macro*")))
+      (when-let* ((buffer (get-buffer "*Edit Macro*")))
         (with-current-buffer buffer
           (when (re-search-forward "finish; press \\(.*\\) to cancel" (line-end-position) t)
             (goto-char (match-beginning 1))

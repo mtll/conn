@@ -1242,7 +1242,7 @@ returned.")
                                   (overlay-end target-overlay))
                                  'face 'conn-read-string-match-face))
         (move-overlay overlay beg end)
-        (when-let ((after-str (buffer-substring (overlay-start overlay)
+        (when-let* ((after-str (buffer-substring (overlay-start overlay)
                                                 (overlay-end overlay)))
                    (pos (string-search "\n" after-str)))
           (overlay-put overlay 'after-string (substring after-str pos)))
@@ -1317,7 +1317,7 @@ labels after each one."
      (setq current (let ((next nil)
                          (c (read-char prompt)))
                      (dolist (label current next)
-                       (when-let ((l (conn-label-narrow label c)))
+                       (when-let* ((l (conn-label-narrow label c)))
                          (push l next))))))))
 
 (defun conn--make-target-overlay (pt length &optional thing)
@@ -2123,7 +2123,7 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-advance-region (region)
   (pcase region
     (`(,beg . ,end)
-     (when-let ((buffer (ignore-errors (marker-buffer beg))))
+     (when-let* ((buffer (ignore-errors (marker-buffer beg))))
        (when (not (eq buffer (current-buffer)))
          (pop-to-buffer-same-window buffer)
          (deactivate-mark t)
@@ -2252,7 +2252,7 @@ Possibilities: \\<query-replace-map>
          (dolist (pt points)
            (set-marker pt nil)))
         (_
-         (when-let ((pt (pop points)))
+         (when-let* ((pt (pop points)))
            (conn--kapply-advance-region (cons pt pt))))))))
 
 (defun conn--kapply-match-iterator ( string regions &optional
@@ -2417,7 +2417,7 @@ Possibilities: \\<query-replace-map>
 
 (defun conn--kapply-change-region (iterator)
   (lambda (state)
-    (when-let ((ret (funcall iterator state)))
+    (when-let* ((ret (funcall iterator state)))
       (delete-region (region-beginning) (region-end))
       ret)))
 
@@ -2442,13 +2442,13 @@ Possibilities: \\<query-replace-map>
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
-    (when-let ((ret (funcall iterator state)))
+    (when-let* ((ret (funcall iterator state)))
       (conn-exchange-mark-command)
       ret)))
 
 (defun conn--kapply-pulse-region (iterator)
   (lambda (state)
-    (when-let ((ret (funcall iterator state)))
+    (when-let* ((ret (funcall iterator state)))
       (when (eq state :record)
         (pulse-momentary-highlight-region (region-beginning)
                                           (region-end)
@@ -2578,19 +2578,19 @@ MARK-KEY is a key which should be bound to MARK-CMD in
 
 \(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
-  (when-let ((target-finder (plist-get rest :dispatch-target-finder)))
+  (when-let* ((target-finder (plist-get rest :dispatch-target-finder)))
     (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
-  (when-let ((action (plist-get rest :default-action)))
+  (when-let* ((action (plist-get rest :default-action)))
     (setf (alist-get thing conn-dispatch-default-action-alist) action))
-  (when-let ((forward (plist-get rest :forward-op)))
+  (when-let* ((forward (plist-get rest :forward-op)))
     (put thing 'forward-op forward))
-  (when-let ((beg (plist-get rest :beg-op)))
+  (when-let* ((beg (plist-get rest :beg-op)))
     (put thing 'beginning-op beg))
-  (when-let ((end (plist-get rest :end-op)))
+  (when-let* ((end (plist-get rest :end-op)))
     (put thing 'end-op end))
-  (when-let ((bounds (plist-get rest :bounds-op)))
+  (when-let* ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
-  (when-let ((inner-bounds-op (plist-get rest :inner-bounds-op)))
+  (when-let* ((inner-bounds-op (plist-get rest :inner-bounds-op)))
     (put thing :conn-inner-bounds-op inner-bounds-op))
   (cl-flet ((make-mark-command ()
               (let ((mark-command (conn--symbolicate "conn-mark-" thing)))
@@ -2691,9 +2691,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--hide-mark-cursor-p (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
-    (or (when-let ((hide (get conn-current-state :conn-hide-mark)))
+    (or (when-let* ((hide (get conn-current-state :conn-hide-mark)))
           (if (functionp hide) (funcall hide) t))
-        (when-let ((hide (conn--derived-mode-property :conn-hide-mark)))
+        (when-let* ((hide (conn--derived-mode-property :conn-hide-mark)))
           (if (functionp hide) (funcall hide) t)))))
 
 (defun conn--mark-cursor-redisplay (win)
@@ -2760,7 +2760,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
 (defun conn-bounds-of-inner-thing (thing bounds)
-  (when-let ((inner-op (get thing :conn-inner-bounds-op)))
+  (when-let* ((inner-op (get thing :conn-inner-bounds-op)))
     (funcall inner-op (car bounds) (cdr bounds))))
 
 (defun conn-thing-empty-p (thing bounds)
@@ -4754,19 +4754,19 @@ instances of from-string.")
      (selected-frame))))
 
 (cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
-  (when-let ((frame (conn-tab-register-frame val))
-             (index (and (frame-live-p frame)
-                         (with-selected-frame (conn-tab-register-frame val)
-                           (conn--get-tab-index-by-cookie
-                            (conn-tab-register-cookie val))))))
+  (when-let* ((frame (conn-tab-register-frame val))
+              (index (and (frame-live-p frame)
+                          (with-selected-frame (conn-tab-register-frame val)
+                            (conn--get-tab-index-by-cookie
+                             (conn-tab-register-cookie val))))))
     (select-frame-set-input-focus frame)
     (tab-bar-select-tab (1+ index))))
 
 (cl-defmethod register-val-describe ((val conn-tab-register) _arg)
   (princ (format "Tab:  %s"
                  (if (eq (selected-frame) (conn-tab-register-frame val))
-                     (when-let ((index (conn--get-tab-index-by-cookie
-                                        (conn-tab-register-cookie val))))
+                     (when-let* ((index (conn--get-tab-index-by-cookie
+                                         (conn-tab-register-cookie val))))
                        (thread-first
                          (nth index (funcall tab-bar-tabs-function))
                          (conn--thread tab
@@ -5191,13 +5191,13 @@ When called interactively reads STRING with timeout
    (list (conn--read-string-with-timeout 'backward)))
   (let ((case-fold-search (conn--string-no-upper-case-p string)))
     (with-restriction (window-start) (window-end)
-      (when-let ((pos (or (save-excursion
-                            (backward-char)
-                            (cl-loop while (search-backward string nil t)
-                                     when (conn--region-visible-p (match-beginning 0)
-                                                                  (match-end 0))
-                                     return (match-beginning 0)))
-                          (user-error "\"%s\" not found." string))))
+      (when-let* ((pos (or (save-excursion
+                             (backward-char)
+                             (cl-loop while (search-backward string nil t)
+                                      when (conn--region-visible-p (match-beginning 0)
+                                                                   (match-end 0))
+                                      return (match-beginning 0)))
+                           (user-error "\"%s\" not found." string))))
         (goto-char pos)))))
 
 (defun conn-forward-char (string arg)
@@ -5224,13 +5224,13 @@ When called interactively reads STRING with timeout
    (list (conn--read-string-with-timeout 'forward)))
   (with-restriction (window-start) (window-end)
     (let ((case-fold-search (conn--string-no-upper-case-p string)))
-      (when-let ((pos (or (save-excursion
-                            (forward-char)
-                            (cl-loop while (search-forward string nil t)
-                                     when (conn--region-visible-p (match-beginning 0)
-                                                                  (match-end 0))
-                                     return (match-beginning 0)))
-                          (user-error "\"%s\" not found." string))))
+      (when-let* ((pos (or (save-excursion
+                             (forward-char)
+                             (cl-loop while (search-forward string nil t)
+                                      when (conn--region-visible-p (match-beginning 0)
+                                                                   (match-end 0))
+                                      return (match-beginning 0)))
+                           (user-error "\"%s\" not found." string))))
         (goto-char pos)))))
 
 (defun conn--goto-string-handler (beg)
@@ -5543,10 +5543,10 @@ of deleting it."
 
 (defun conn--end-of-inner-line-1 ()
   (goto-char (line-end-position))
-  (when-let ((cs (and (conn--point-in-comment-p)
-                      (save-excursion
-                        (comment-search-backward
-                         (line-beginning-position) t)))))
+  (when-let* ((cs (and (conn--point-in-comment-p)
+                       (save-excursion
+                         (comment-search-backward
+                          (line-beginning-position) t)))))
     (goto-char cs))
   (skip-chars-backward " \t" (line-beginning-position))
   (when (bolp) (skip-chars-forward " \t" (line-end-position))))
@@ -6495,7 +6495,7 @@ When called interactively N is `last-command-event'."
 
 (defun conn-wincontrol-mru-window ()
   (interactive)
-  (when-let ((mru (get-mru-window 0 nil t t)))
+  (when-let* ((mru (get-mru-window 0 nil t t)))
     (select-window mru)))
 
 (defun conn-wincontrol-split-vertically ()
