@@ -1202,6 +1202,14 @@ Is a function of one arguments, the number of labels required.")
 ;; `conn-label-narrow' allows labels to clean up after themselves
 ;; after the selection process has concluded.
 
+(cl-defstruct (conn-dispatch-label)
+  "Store the state for a dispatch label."
+  string overlay bounds prop target-overlay)
+
+(cl-defstruct (conn-window-label)
+  "Store the state for a window label."
+  string overlay window)
+
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.")
 
@@ -1220,49 +1228,73 @@ returned.")
 (cl-defgeneric conn-label-payload (label)
   "Return LABEL\'s payload.")
 
-(cl-defmethod conn-label-payload ((label overlay))
-  (overlay-get label 'payload))
+(cl-defmethod conn-label-payload ((label conn-dispatch-label))
+  (conn-dispatch-label-target-overlay label))
 
-(cl-defmethod conn-label-reset ((label overlay))
-  (with-current-buffer (overlay-buffer label)
-    (pcase-let ((`(,beg . ,end) (overlay-get label 'overlay-bounds))
-                (prefix-ov (overlay-get label 'prefix-overlay))
-                (prop (if (overlay-get label 'before-string) 'before-string 'display)))
-      (overlay-put prefix-ov 'display
-                   (propertize (buffer-substring (overlay-start prefix-ov)
-                                                 (overlay-end prefix-ov))
-                               'face 'conn-read-string-match-face))
-      (move-overlay label beg end)
-      (when-let ((after-str (buffer-substring (overlay-start label)
-                                              (overlay-end label)))
-                 (pos (string-search "\n" after-str)))
-        (overlay-put label 'after-string (substring after-str pos)))
-      (overlay-put label prop (overlay-get label 'label-string)))))
+(cl-defmethod conn-label-reset ((label conn-dispatch-label))
+  (with-slots (string overlay bounds prop target-overlay) label
+    (with-current-buffer (overlay-buffer overlay)
+      (pcase-let ((`(,beg . ,end) bounds))
+        (overlay-put target-overlay 'display
+                     (propertize (buffer-substring
+                                  (overlay-start target-overlay)
+                                  (overlay-end target-overlay))
+                                 'face 'conn-read-string-match-face))
+        (move-overlay overlay beg end)
+        (when-let ((after-str (buffer-substring (overlay-start overlay)
+                                                (overlay-end overlay)))
+                   (pos (string-search "\n" after-str)))
+          (overlay-put overlay 'after-string (substring after-str pos)))
+        (overlay-put overlay prop string)))))
 
-(cl-defmethod conn-label-delete ((label overlay))
-  (delete-overlay label))
+(cl-defmethod conn-label-delete ((label conn-dispatch-label))
+  (delete-overlay (conn-dispatch-label-overlay label)))
 
-(cl-defmethod conn-label-narrow ((label overlay) prefix-char)
-  (with-current-buffer (overlay-buffer label)
-    (let ((prop (if (overlay-get label 'before-string) 'before-string 'display)))
-      (cond ((length= (overlay-get label prop) 0))
-            ((not (eql prefix-char (aref (overlay-get label prop) 0)))
-             (overlay-put label prop "")
-             (overlay-put label 'after-string nil)
-             (move-overlay label (overlay-start label) (overlay-start label))
-             (when-let ((prefix (overlay-get label 'prefix-overlay)))
-               (overlay-put prefix 'display nil)
-               (overlay-put prefix 'after-string nil)))
+(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
+  (with-slots (overlay string prop target-overlay) label
+    (with-current-buffer (overlay-buffer overlay)
+      (cond ((length= (overlay-get overlay prop) 0)
+             nil)
+            ((not (eql prefix-char (aref (overlay-get overlay prop) 0)))
+             (overlay-put overlay prop "")
+             (overlay-put overlay 'after-string nil)
+             (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
+             (overlay-put target-overlay 'display nil)
+             (overlay-put target-overlay 'after-string nil)
+             nil)
             (t
-             (move-overlay label
-                           (overlay-start label)
-                           (+ (overlay-start label)
-                              (min (1- (length (overlay-get label prop)))
-                                   (- (overlay-end label)
-                                      (overlay-start label)))))
+             (move-overlay overlay
+                           (overlay-start overlay)
+                           (+ (overlay-start overlay)
+                              (min (1- (length (overlay-get overlay prop)))
+                                   (- (overlay-end overlay)
+                                      (overlay-start overlay)))))
              (conn--dispatch-pad-label-overlay
-              label prop (substring (overlay-get label prop) 1))
+              overlay prop (substring (overlay-get overlay prop) 1))
              label)))))
+
+(cl-defmethod conn-label-payload ((label conn-window-label))
+  (conn-window-label-window label))
+
+(cl-defmethod conn-label-reset ((label conn-window-label))
+  (with-slots (string overlay) label
+    (overlay-put overlay 'before-string string)))
+
+(cl-defmethod conn-label-delete ((label conn-window-label))
+  (delete-overlay (conn-window-label-overlay label)))
+
+(cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
+  (with-slots (string overlay) label
+    (cond ((length= (overlay-get overlay 'before-string) 0)
+           nil)
+          ((not (eql prefix-char (aref (overlay-get overlay 'before-string) 0)))
+           (overlay-put overlay 'before-string nil)
+           nil)
+          (t
+           (overlay-put
+            overlay 'before-string
+            (substring (overlay-get overlay 'before-string) 1))
+           label))))
 
 (defun conn-label-select (candidates)
   "Select a label from CANDIDATES.
@@ -1287,8 +1319,8 @@ labels after each one."
                        (when-let ((l (conn-label-narrow label c)))
                          (push l next))))))))
 
-(defun conn--make-preview-overlay (pt length &optional thing)
-  "Make a preview overlay at PT of LENGTH.
+(defun conn--make-target-overlay (pt length &optional thing)
+  "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
   (let* ((eol (save-excursion
@@ -1306,7 +1338,7 @@ Optionally the overlay may have an associated THING."
     (overlay-put ov 'window (selected-window))
     ov))
 
-(defun conn--preview-get-windows (all-windows)
+(defun conn--get-dispatch-windows (all-windows)
   (cond (all-windows
          (cl-loop for win in (conn--get-windows nil nil 'visible)
                   when (run-hook-with-args-until-failure
@@ -1321,10 +1353,10 @@ Optionally the overlay may have an associated THING."
 (defun conn--string-preview-overlays-1 (win string &optional dir)
   (with-selected-window win
     (cl-loop for pt in (conn--visible-matches string dir)
-             collect (conn--make-preview-overlay pt (length string)))))
+             collect (conn--make-target-overlay pt (length string)))))
 
 (defun conn--string-preview-overlays (string &optional dir all-windows)
-  (cl-loop for win in (conn--preview-get-windows all-windows)
+  (cl-loop for win in (conn--get-dispatch-windows all-windows)
            nconc (conn--string-preview-overlays-1 win string dir)))
 
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
@@ -1397,8 +1429,8 @@ Optionally the overlay may have an associated THING."
                    (thread-last (seq-difference labels)))))
     (cl-loop with scroll-margin = 0
              for win in (conn--get-windows nil 'no-minibuff t)
-             for label = (or (window-parameter win 'conn-label)
-                             (set-window-parameter win 'conn-label (pop labels)))
+             for string = (or (window-parameter win 'conn-label)
+                              (set-window-parameter win 'conn-label (pop labels)))
              when (memq win windows)
              collect (with-selected-window win
                        (let ((overlay (make-overlay (window-start) (window-end))))
@@ -1407,12 +1439,14 @@ Optionally the overlay may have an associated THING."
                          (overlay-put overlay 'conn-overlay t)
                          (overlay-put overlay 'face 'shadow)
                          (overlay-put overlay 'window win)
-                         (overlay-put overlay 'payload win)
                          (overlay-put overlay 'before-string
-                                      (propertize label 'face 'conn-window-prompt-face))
-                         overlay)))))
+                                      (propertize string 'face 'conn-window-prompt-face))
+                         (make-conn-window-label
+                          :string string
+                          :overlay overlay
+                          :window win))))))
 
-(defun conn--destroy-window-labels ()
+(defun conn--destroy-mode-line-labels ()
   (dolist (win (window-list-1 nil 'no-minibuf t))
     (set-window-parameter win 'conn-label nil)))
 
@@ -1451,7 +1485,7 @@ Optionally the overlay may have an associated THING."
                    (set-window-vscroll win vscroll))
           (mapc #'conn-label-delete labels)
           (unless conn-wincontrol-mode
-            (conn--destroy-window-labels)))))))
+            (conn--destroy-mode-line-labels)))))))
 
 
 ;;;; Read Things
@@ -1740,7 +1774,6 @@ is read."
   (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover prompt arg t)))
     (cons (get cmd :conn-command-thing)
           (conn-bounds-of-command cmd arg))))
-
 
 ;;;;; Dots
 
@@ -2673,29 +2706,16 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (unless cursor
         (setq cursor (set-window-parameter
                       win 'conn-mark-cursor
-                      (make-overlay (mark t) (1+ (mark t)) nil t nil)))
+                      (make-overlay (mark t) (1+ (mark t)) nil t)))
         (overlay-put cursor 'category 'conn--mark-cursor)
         (overlay-put cursor 'window win))
-      (if (and (eql (char-after (mark t)) ?\t)
-               (< (mark t) (point-max)))
-          (when (/= (mark t) (overlay-start cursor))
-            (overlay-put cursor 'before-string nil)
-            (overlay-put cursor 'after-string
-                         (unless (= 1 (save-excursion
-                                        (goto-char (mark t))
-                                        (let ((col (current-column)))
-                                          (- (indent-next-tab-stop col) col))))
-                           (propertize "	"
-                                       'face (get-char-property (mark t) 'face))))
-            (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
-            (overlay-put cursor 'display " "))
+      (unless (and (eq (overlay-buffer cursor) (current-buffer))
+                   (eq (overlay-start cursor) (mark t)))
         (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
-        (overlay-put cursor 'display nil)
         (overlay-put cursor 'before-string
                      (when (and (= (mark t) (point-max))
                                 (/= (point) (mark t)))
-                       (propertize " " 'face 'conn-mark-face)))
-        (overlay-put cursor 'after-string nil)))))
+                       (propertize " " 'face 'conn-mark-face)))))))
 
 (defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
   "Hide mark cursor in buffers with in MMODE-OR-STATE.
@@ -3087,7 +3107,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
     (internal-pop-keymap conn--dispatch-overriding-map
                          'overriding-terminal-local-map)))
 
-(defun conn--dispatch-finder (command)
+(defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
       conn-dispatch-target-finder-default))
@@ -3237,7 +3257,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  (list cmd
                        (when thing-arg
                          (* (if thing-sign -1 1) (or thing-arg 1)))
-                       (conn--dispatch-finder cmd)
+                       (conn--dispatch-target-finder cmd)
                        (or action (conn--dispatch-default-action cmd))
                        (if action
                            action-args
@@ -3314,42 +3334,43 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                    'display `(space :width (,pixels)))
                   next-line))))
 
-(defun conn--dispatch-label-overlays (labels prefix-overlays)
-  (let (overlays success)
+(defun conn--dispatch-labels (label-strings target-overlays)
+  (let (labels success)
     (unwind-protect
         (progn
-          (pcase-dolist (`(,window . ,prefixes) prefix-overlays)
+          (pcase-dolist (`(,window . ,previews) target-overlays)
             (with-current-buffer (window-buffer window)
-              (dolist (p prefixes)
+              (dolist (p previews)
                 (let* ((beg (overlay-end p))
-                       (label (pop labels))
+                       (string (pop label-strings))
                        (next (thread-last
                                (conn--all-overlays
                                 (lambda (ov)
                                   (and (eq 'conn-read-string-match
                                            (overlay-get ov 'category))
                                        (not (eq ov p))))
-                                beg (+ beg (length label)))
+                                beg (+ beg (length string)))
                                (mapcar #'overlay-start)
                                (apply 'min (point-max))))
-                       (end (min next (+ beg (length label))))
-                       (ov (make-overlay beg end)))
-                  (push ov overlays)
-                  (overlay-put ov 'prefix-overlay p)
-                  (overlay-put ov 'payload p)
+                       (end (min next (+ beg (length string))))
+                       (ov (make-overlay beg end))
+                       (prop (if (or (= beg next)
+                                     (= beg (point-max)))
+                                 'before-string
+                               'display)))
                   (overlay-put ov 'category 'conn-label-overlay)
                   (overlay-put ov 'window window)
-                  (overlay-put ov 'label-string label)
-                  (overlay-put ov 'overlay-bounds (cons beg end))
-                  (conn--dispatch-pad-label-overlay
-                   ov (if (or (= beg next)
-                              (= beg (point-max)))
-                          'before-string
-                        'display)
-                   label)))))
+                  (conn--dispatch-pad-label-overlay ov prop string)
+                  (push (make-conn-dispatch-label
+                         :string string
+                         :overlay ov
+                         :bounds (cons beg end)
+                         :prop prop
+                         :target-overlay p)
+                        labels)))))
           (setq success t)
-          overlays)
-      (unless success (mapc #'delete-overlay overlays)))))
+          labels)
+      (unless success (mapc #'conn-label-delete labels)))))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -3377,13 +3398,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
            (keymap-set (conn-get-mode-dispatch-map mode)
                        ,key `(,',thing
                               ,(or ,target-finder
-                                   (conn--dispatch-finder ',thing))
+                                   (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
       `(keymap-set conn-dispatch-read-thing-mode-map
                    ,key `(,',thing
                           ,(or ,target-finder
-                               (conn--dispatch-finder ',thing))
+                               (conn--dispatch-target-finder ',thing))
                           .
                           ,',default-action)))))
 
@@ -3400,7 +3421,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   :modes (conn-dot-mode)
   :target-finder (lambda ()
                    (mapcar (lambda (ov)
-                             (conn--make-preview-overlay
+                             (conn--make-target-overlay
                               (overlay-start ov)
                               (- (overlay-end ov)
                                  (overlay-start ov))))
@@ -3943,10 +3964,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (push beg ovs))))
           (forward-thing thing 1))))
     (cl-loop for pt in ovs
-             collect (conn--make-preview-overlay pt 0 thing))))
+             collect (conn--make-target-overlay pt 0 thing))))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
-  (cl-loop for win in (conn--preview-get-windows all-windows)
+  (cl-loop for win in (conn--get-dispatch-windows all-windows)
            nconc (with-selected-window win
                    (if-let* ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
                        (funcall fn)
@@ -3955,27 +3976,27 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 (defun conn--dispatch-all-buttons (&optional all-windows)
   (let (ovs success)
     (unwind-protect
-        (cl-loop for win in (conn--preview-get-windows all-windows)
+        (cl-loop for win in (conn--get-dispatch-windows all-windows)
                  do (with-selected-window win
                       (with-restriction (window-start) (window-end)
                         (save-excursion
                           (goto-char (point-min))
                           (when (button-at (point))
-                            (push (conn--make-preview-overlay (point) 1 nil) ovs))
+                            (push (conn--make-target-overlay (point) 1 nil) ovs))
                           (while (forward-button 1 nil nil t)
-                            (push (conn--make-preview-overlay (point) 1 nil) ovs)))))
+                            (push (conn--make-target-overlay (point) 1 nil) ovs)))))
                  finally return (progn (setq success t) ovs))
       (unless success (mapc #'delete-overlay ovs)))))
 
 (defun conn--dispatch-re-matches (regexp &optional all-windows)
-  (cl-loop for win in (conn--preview-get-windows all-windows)
+  (cl-loop for win in (conn--get-dispatch-windows all-windows)
            nconc (with-selected-window win
                    (with-restriction (window-start) (window-end)
                      (save-excursion
                        (goto-char (point-min))
                        (save-match-data
                          (cl-loop while (re-search-forward regexp nil t)
-                                  collect (conn--make-preview-overlay
+                                  collect (conn--make-target-overlay
                                            (match-beginning 0)
                                            (- (match-end 0)
                                               (match-beginning 0))))))))))
@@ -3995,7 +4016,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                          (not (eql (point) (caar ovs))))
                 (push (list (point) (length prefix) thing) ovs)))))))
     (cl-loop for ov in ovs
-             collect (apply 'conn--make-preview-overlay ov))))
+             collect (apply 'conn--make-target-overlay ov))))
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix "")
@@ -4008,7 +4029,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                        (concat prefix)))))
     (unwind-protect
         (progn
-          (dolist (win (conn--preview-get-windows all-windows))
+          (dolist (win (conn--get-dispatch-windows all-windows))
             (setq ovs (nconc (with-selected-window win
                                (conn--dispatch-things-with-prefix-1 things prefix))
                              ovs)))
@@ -4031,7 +4052,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                            (not (ignore-errors (invisible-p (1- (point))))))
                   (move-to-column col)
                   (unless (= opoint (point))
-                    (push (conn--make-preview-overlay (point) 0) ovs)))
+                    (push (conn--make-target-overlay (point) 0) ovs)))
                 (forward-line))))
           (setq success t)
           ovs)
@@ -4041,7 +4062,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (let (ovs success)
     (unwind-protect
         (progn
-          (dolist (win (conn--preview-get-windows t))
+          (dolist (win (conn--get-dispatch-windows t))
             (with-selected-window win
               (save-excursion
                 (with-restriction (window-start) (window-end)
@@ -4050,7 +4071,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                              (<= (+ (point) (window-hscroll)) (line-end-position))
                              (goto-char (+ (point) (window-hscroll)))
                              (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 0) ovs))
+                    (push (conn--make-target-overlay (point) 0) ovs))
                   (while (/= (point) (point-max))
                     (forward-line)
                     (when (and (bolp)
@@ -4059,7 +4080,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                (goto-char (+ (point) (window-hscroll)))
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 0) ovs)))))))
+                      (push (conn--make-target-overlay (point) 0) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -4068,21 +4089,21 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (let (ovs success)
     (unwind-protect
         (progn
-          (dolist (win (conn--preview-get-windows t))
+          (dolist (win (conn--get-dispatch-windows t))
             (with-selected-window win
               (save-excursion
                 (with-restriction (window-start) (window-end)
                   (goto-char (point-min))
                   (move-end-of-line nil)
                   (when (and (eolp) (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 0) ovs))
+                    (push (conn--make-target-overlay (point) 0) ovs))
                   (while (/= (point) (point-max))
                     (forward-line)
                     (move-end-of-line nil)
                     (when (and (eolp)
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 0) ovs)))))))
+                      (push (conn--make-target-overlay (point) 0) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -4091,7 +4112,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
   (let (ovs success)
     (unwind-protect
         (progn
-          (dolist (win (conn--preview-get-windows t))
+          (dolist (win (conn--get-dispatch-windows t))
             (with-selected-window win
               (save-excursion
                 (with-restriction (window-start) (window-end)
@@ -4103,7 +4124,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                  (back-to-indentation))
                                (not (eobp)))
                              (not (invisible-p (point))))
-                    (push (conn--make-preview-overlay (point) 0) ovs))
+                    (push (conn--make-target-overlay (point) 0) ovs))
                   (while (/= (point) (point-max))
                     (forward-line)
                     (when (and (bolp)
@@ -4114,7 +4135,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                  (not (eobp)))
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-preview-overlay (point) 0) ovs)))))))
+                      (push (conn--make-target-overlay (point) 0) ovs)))))))
           (setq success t)
           ovs)
       (unless success (mapc 'delete-overlay ovs)))))
@@ -4146,38 +4167,38 @@ seconds."
              (append conn-dispatch-window-predicates
                      (list predicate))
            conn-dispatch-window-predicates))
-        prefix-ovs labels prefix window pt)
+        preview-ovs labels prefix window pt)
     (ignore-error quit
       (while
           (prog1 repeat
             (unwind-protect
-                (setf prefix-ovs (thread-last
-                                   (funcall finder)
-                                   (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                                   (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                      (alist-get (selected-window) prefix-ovs)
+                (setf preview-ovs (thread-last
+                                    (funcall finder)
+                                    (seq-group-by (lambda (ov) (overlay-get ov 'window)))
+                                    (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
+                      (alist-get (selected-window) preview-ovs)
                       (seq-sort (lambda (a b)
                                   (< (abs (- (overlay-start a) (point)))
                                      (abs (- (overlay-start b) (point)))))
-                                (alist-get (selected-window) prefix-ovs))
-                      labels (conn--dispatch-label-overlays
+                                (alist-get (selected-window) preview-ovs))
+                      labels (conn--dispatch-labels
                               (or (funcall
                                    conn-labeling-function
                                    (let ((sum 0))
-                                     (dolist (p prefix-ovs sum)
+                                     (dolist (p preview-ovs sum)
                                        (setq sum (+ sum (length (cdr p)))))))
                                   (user-error "No matching %s"
                                               (or (ignore-errors
                                                     (get thing-cmd :conn-command-thing))
                                                   "candidates")))
-                              prefix-ovs)
+                              preview-ovs)
                       prefix (conn-label-select labels)
                       window (overlay-get prefix 'window)
                       pt (overlay-start prefix)
                       conn-this-command-thing (or (overlay-get prefix 'thing)
                                                   (ignore-errors
                                                     (get thing-cmd :conn-command-thing))))
-              (pcase-dolist (`(_ . ,ovs) prefix-ovs)
+              (pcase-dolist (`(_ . ,ovs) preview-ovs)
                 (mapc #'delete-overlay ovs))
               (mapc #'conn-label-delete labels))
             (undo-boundary)
@@ -4202,14 +4223,14 @@ seconds."
 (defun conn--dispatch-isearch-matches ()
   (with-restriction (window-start) (window-end)
     (cl-loop for (beg . end) in (conn--isearch-matches)
-             collect (conn--make-preview-overlay beg (- end beg)))))
+             collect (conn--make-target-overlay beg (- end beg)))))
 
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
   (let* ((prefix-ovs `((,(selected-window) . ,(conn--dispatch-isearch-matches))))
          (count (length (cdar prefix-ovs)))
-         (labels (conn--dispatch-label-overlays
+         (labels (conn--dispatch-labels
                   (funcall conn-labeling-function count)
                   prefix-ovs)))
     (unwind-protect
@@ -6164,7 +6185,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                      conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
-  (conn--destroy-window-labels)
+  (conn--destroy-mode-line-labels)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -6184,7 +6205,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
-  (conn--destroy-window-labels)
+  (conn--destroy-mode-line-labels)
   (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -7380,7 +7401,7 @@ determine if `conn-local-mode' should be enabled."
                            (progn
                              (dired-next-line 1)
                              (point)))
-                  (push (conn--make-preview-overlay (point) 1) ovs))))
+                  (push (conn--make-target-overlay (point) 1) ovs))))
             (setq success t)
             ovs)
         (unless success (mapc #'delete-overlay ovs)))))
@@ -7396,7 +7417,7 @@ determine if `conn-local-mode' should be enabled."
                            (progn
                              (dired-next-dirline 1)
                              (point)))
-                  (push (conn--make-preview-overlay (point) 1) ovs))))
+                  (push (conn--make-target-overlay (point) 1) ovs))))
             (setq success t)
             ovs)
         (unless success (mapc #'delete-overlay ovs)))))
@@ -7410,7 +7431,7 @@ determine if `conn-local-mode' should be enabled."
             (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
               (when (<= start marker end)
                 (goto-char marker)
-                (push (conn--make-preview-overlay
+                (push (conn--make-target-overlay
                        (+ 2 marker) (- (line-end-position) marker 2))
                       ovs)))
             (setq success t)
@@ -7513,7 +7534,7 @@ determine if `conn-local-mode' should be enabled."
                              (ibuffer-backward-line)
                              (point)))
                   (unless (get-text-property (point) 'ibuffer-filter-group-name)
-                    (push (conn--make-preview-overlay (point) 1) ovs)))))
+                    (push (conn--make-target-overlay (point) 1) ovs)))))
             (setq success t)
             ovs)
         (unless success (mapc #'delete-overlay ovs)))))
@@ -7530,7 +7551,7 @@ determine if `conn-local-mode' should be enabled."
                            (progn
                              (ibuffer-backward-filter-group)
                              (point)))
-                  (push (conn--make-preview-overlay (point) 1) ovs))))
+                  (push (conn--make-target-overlay (point) 1) ovs))))
             (setq success t)
             ovs)
         (unless success (mapc #'delete-overlay ovs)))))
