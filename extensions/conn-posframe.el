@@ -376,6 +376,16 @@
   (next-buffer arg t)
   (conn-posframe--switch-buffer-display))
 
+(defun conn-bury-buffer (&optional arg)
+  (interactive)
+  (bury-buffer)
+  (conn-posframe--switch-buffer-display))
+
+(defun conn-unbury-buffer (&optional arg)
+  (interactive)
+  (unbury-buffer)
+  (conn-posframe--switch-buffer-display))
+
 (defun conn-next-tab (&optional arg)
   (interactive "P")
   (tab-bar-switch-to-next-tab arg)
@@ -407,7 +417,9 @@
             "<remap> <tab-next>" 'conn-next-tab
             "<remap> <tab-previous>" 'conn-prev-tab
             "<remap> <previous-buffer>" 'conn-prev-buffer
-            "<remap> <next-buffer>" 'conn-next-buffer)
+            "<remap> <next-buffer>" 'conn-next-buffer
+            "<remap> <bury-buffer>" 'conn-bury-buffer
+            "<remap> <unbury-buffer>" 'conn-unbury-buffer)
   (if conn-posframe-mode
       (progn
         (advice-add 'kmacro-cycle-ring-next :after
