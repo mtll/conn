@@ -376,12 +376,12 @@
   (next-buffer arg t)
   (conn-posframe--switch-buffer-display))
 
-(defun conn-bury-buffer (&optional arg)
+(defun conn-bury-buffer ()
   (interactive)
   (bury-buffer)
   (conn-posframe--switch-buffer-display))
 
-(defun conn-unbury-buffer (&optional arg)
+(defun conn-unbury-buffer ()
   (interactive)
   (unbury-buffer)
   (conn-posframe--switch-buffer-display))
