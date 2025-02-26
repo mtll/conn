@@ -23,6 +23,7 @@
 
 (require 'conn)
 (require 'consult)
+(require 'xref)
 (eval-when-compile
   (require 'cl-lib)
   (require 'subr-x))
