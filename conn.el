@@ -56,6 +56,8 @@
 (defvar conn-state-map)
 (defvar conn-wincontrol-mode)
 
+(defvar-local conn--hide-mark-cursor nil)
+
 (defvar conn-dispatch-target-finder-default 'conn--dispatch-chars
   "Default target finder for dispatch.
 
@@ -2703,18 +2705,11 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (setq conn--ephemeral-mark t)
     nil))
 
-(defun conn--hide-mark-cursor-p (&optional buffer)
-  (with-current-buffer (or buffer (current-buffer))
-    (or (when-let* ((hide (conn-state-get conn-current-state :conn-hide-mark-cursor)))
-          (if (functionp hide) (funcall hide) hide))
-        (when-let* ((hide (conn--derived-mode-property :conn-hide-mark-cursor)))
-          (if (functionp hide) (funcall hide) hide)))))
-
 (defun conn--mark-cursor-redisplay (win)
   (let ((cursor (window-parameter win 'conn-mark-cursor)))
     (if (or (not conn-local-mode)
             (null (mark t))
-            (conn--hide-mark-cursor-p))
+            conn--hide-mark-cursor)
         (progn
           (when cursor (delete-overlay cursor))
           (set-window-parameter win 'conn-mark-cursor nil))
@@ -5443,6 +5438,7 @@ associated with that command (see `conn-register-thing')."
   (set-register register-separator string))
 
 (defun conn-rectangle-mark ()
+  "Toggle `rectangle-mark-mode'."
   (interactive)
   (if (region-active-p)
       (rectangle-mark-mode 'toggle)
@@ -6943,6 +6939,9 @@ When ARG is nil the root window is used."
         (setq-local conn-lighter (seq-copy conn-lighter))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
+        (setq-local conn--hide-mark-cursor
+                    (when-let* ((hide (conn--derived-mode-property :conn-hide-mark-cursor)))
+                      (if (functionp hide) (funcall hide) hide)))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -6986,6 +6985,7 @@ determine if `conn-local-mode' should be enabled."
     (conn--setup-advice)
     (if conn-mode
         (progn
+          ;; TODO: don't do this unconditionally
           (keymap-set minibuffer-mode-map "M-Y" 'conn-yank-region-to-minibuffer)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
       (set-default
