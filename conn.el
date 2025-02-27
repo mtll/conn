@@ -721,22 +721,27 @@ If BUFFER is nil check `current-buffer'."
            (indent 1))
   (cl-with-gensyms ( saved-state saved-prev-state
                      saved-cursor-type buffer)
-    `(let ((,saved-state conn-current-state)
-           (,saved-prev-state conn-previous-state)
-           (,buffer (current-buffer))
-           (,saved-cursor-type cursor-type)
-           (conn-exit-functions)
-           (conn-entry-functions))
-       (unwind-protect
-           (progn
-             (funcall ,transition-fn)
-             ,@body)
-         (with-current-buffer ,buffer
-           (if ,saved-state
-               (conn-enter-state ,saved-state)
-             (conn-exit-state conn-current-state)
-             (setq cursor-type ,saved-cursor-type))
-           (setq conn-previous-state ,saved-prev-state))))))
+    (cl-once-only (transition-fn)
+      `(let ((,saved-state conn-current-state)
+             (,saved-prev-state conn-previous-state)
+             (,buffer (current-buffer))
+             (,saved-cursor-type cursor-type)
+             (conn-exit-functions)
+             (conn-entry-functions))
+         (unwind-protect
+             (progn
+               (cond (,transition-fn
+                      (funcall ,transition-fn))
+                     (conn-current-state
+                      (conn-exit-state conn-current-state)))
+               ,@body)
+           (with-current-buffer ,buffer
+             (if ,saved-state
+                 (conn-enter-state ,saved-state)
+               (when conn-current-state
+                 (conn-exit-state conn-current-state))
+               (setq cursor-type ,saved-cursor-type))
+             (setq conn-previous-state ,saved-prev-state)))))))
 
 (defmacro conn--with-input-method (&rest body)
   "Run BODY ensuring `conn--input-method' is active."
@@ -3216,27 +3221,28 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                ('negative-argument
                 (setq thing-sign (not thing-sign)))
                ('help
-                (save-window-excursion
-                  (setq keys nil
-                        cmd (intern
-                             (completing-read
-                              "Command: "
-                              (lambda (string pred action)
-                                (if (eq action 'metadata)
-                                    `(metadata
-                                      ,(cons 'affixation-function
-                                             (conn--dispatch-make-command-affixation))
-                                      (category . conn-dispatch-command))
-                                  (complete-with-action action obarray string pred)))
-                              (lambda (sym)
-                                (pcase sym
-                                  ('help)
-                                  ((and (pred functionp)
-                                        (guard (or (get sym :conn-command-thing)
-                                                   (get sym :conn-action))))
-                                   t)
-                                  (`(,_ ,_ . ,_) t)))
-                              t))))
+                (conn--with-state conn-previous-state
+                  (save-window-excursion
+                    (setq keys nil
+                          cmd (intern
+                               (completing-read
+                                "Command: "
+                                (lambda (string pred action)
+                                  (if (eq action 'metadata)
+                                      `(metadata
+                                        ,(cons 'affixation-function
+                                               (conn--dispatch-make-command-affixation))
+                                        (category . conn-dispatch-command))
+                                    (complete-with-action action obarray string pred)))
+                                (lambda (sym)
+                                  (pcase sym
+                                    ('help)
+                                    ((and (pred functionp)
+                                          (guard (or (get sym :conn-command-thing)
+                                                     (get sym :conn-action))))
+                                     t)
+                                    (`(,_ ,_ . ,_) t)))
+                                t)))))
                 (go :loop))
                ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
                      (guard thing))
@@ -3266,34 +3272,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--dispatch-window-predicate (action _thing _binding _keys)
   (lambda (win)
-    (with-selected-window win
-      (conn--with-state (lambda ()
-                          (when conn-local-mode
-                            (conn-enter-state 'conn-state)))
-        (let (;; (maps (list (conn--create-dispatch-map)
-              ;;             (current-global-map)))
-              (window-predicate (get action :conn-action-window-predicate)))
-          (and
-           (or (null window-predicate)
-               (not (funcall window-predicate)))
-           ;; Needs fixing, doesn't work for e.g. forward-line
-           ;; (or (when-let* ((cmd (key-binding keys t))
-           ;;                 ((symbolp cmd)))
-           ;;       (eq thing (get cmd :conn-command-thing)))
-           ;;     (where-is-internal binding maps t)
-           ;;     (pcase binding
-           ;;       ((and (pred symbolp)
-           ;;             (let (and op (pred identity))
-           ;;               (thread-first
-           ;;                 (get binding :conn-command-thing)
-           ;;                 (get 'forward-op))))
-           ;;        (where-is-internal op maps t))
-           ;;       ((and `(,thing . ,_)
-           ;;             (guard (symbolp thing))
-           ;;             (let (and op (pred identity))
-           ;;               (get thing 'forward-op)))
-           ;;        (where-is-internal op maps t))))
-           ))))))
+    (let ((window-predicate (get action :conn-action-window-predicate)))
+      (or (null window-predicate)
+          (with-selected-window win
+            (not (funcall window-predicate)))))))
 
 (defun conn--dispatch-pad-label-overlay (overlay display-property display-string)
   (overlay-put overlay display-property nil)
