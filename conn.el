@@ -2708,8 +2708,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--mark-cursor-redisplay (win)
   (let ((cursor (window-parameter win 'conn-mark-cursor)))
     (if (or (not conn-local-mode)
-            (null (mark t))
-            conn--hide-mark-cursor)
+            conn--hide-mark-cursor
+            (null (mark t)))
         (progn
           (when cursor (delete-overlay cursor))
           (set-window-parameter win 'conn-mark-cursor nil))
@@ -2736,12 +2736,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                   (/= (point) (mark t)))
                          (propertize " " 'face 'conn-mark-face))))))))
 
-(defun conn-hide-mark-cursor (mmode-or-state &optional predicate)
+(defun conn-hide-mark-cursor (major-mode &optional predicate)
   "Hide mark cursor in buffers with in MMODE-OR-STATE.
 If PREDICATE is non-nil it is a function that will be called
 to determine if mark cursor should be hidden in buffer.
 If MMODE-OR-STATE is a mode it must be a major mode."
-  (put mmode-or-state :conn-hide-mark (or predicate t)))
+  (put major-mode :conn-hide-mark (or predicate t)))
 
 (defun conn-show-mark-cursor (mmode-or-state)
   "Show mark cursor in MMODE-OR-STATE.
