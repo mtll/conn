@@ -1235,7 +1235,7 @@ apply to each contiguous component of the region."
 ;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
-  [[ :description "Register Commands"
+  [[ :description "Register"
      ("f" "Load" conn-register-load)
      ("u" "Unset" conn-unset-register)
      ("s" "Set Seperator" conn-set-register-seperator)
@@ -1245,7 +1245,8 @@ apply to each contiguous component of the region."
      ("p" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
-     ("m" "Macro" kmacro-to-register)
+     ("m" "Macro" kmacro-to-register)]
+   [ ""
      ("n" "Narrow Ring" conn-narrow-ring-to-register)
      ("t" "Tab" conn-tab-to-register)
      ("4" "Window Configuration" window-configuration-to-register)
