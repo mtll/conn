@@ -5481,12 +5481,21 @@ With a prefix ARG `push-mark' without activating it."
         (t
          (exchange-point-and-mark (not mark-active)))))
 
-(defun conn-join-lines (start end)
-  "`delete-indentation' in region from START and END."
+(defun conn-join-lines-in-region (beg end)
+  "`delete-indentation' in region from BEG and END."
   (interactive (list (region-beginning)
                      (region-end)))
-  (delete-indentation nil start end)
+  (delete-indentation nil beg end)
   (indent-according-to-mode))
+
+(defun conn-join-lines-in-thing (thing-mover thing-arg)
+  "`delete-indentation' in region from START and END."
+  (interactive (conn-read-thing-mover "Thing Mover"))
+  (save-mark-and-excursion
+    (pcase (conn-bounds-of-command thing-mover thing-arg)
+      (`((,beg . ,end) . ,_)
+       (delete-indentation nil beg end)
+       (indent-according-to-mode)))))
 
 (defun conn-yank-replace (start end &optional arg)
   "`yank' replacing region between START and END.
@@ -6593,7 +6602,7 @@ When ARG is nil the root window is used."
   "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "u" 'conn-join-lines
+  "j" 'conn-join-lines-in-region
   "I" 'indent-rigidly
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
@@ -6692,7 +6701,7 @@ When ARG is nil the root window is used."
   :prefix 'conn-edit-map
   "m" 'conn-narrow-indirect-to-thing
   "n" 'conn-narrow-to-thing
-  "u" 'join-line
+  "j" 'conn-join-lines-in-thing
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
@@ -6700,9 +6709,9 @@ When ARG is nil the root window is used."
   "h" 'conn-change-line
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
-  "l" 'conn-emacs-state-eoil
+  "o" 'conn-emacs-state-eoil
   "e" 'conn-emacs-state-eol
-  "j" 'conn-emacs-state-boil
+  "u" 'conn-emacs-state-boil
   "a" 'conn-emacs-state-bol
   "t" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
