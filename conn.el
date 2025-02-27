@@ -1216,7 +1216,7 @@ By default `conn-emacs-state' does not bind anything."
 ;; (buffer regions, windows, etc.) and prompting the user to select from
 ;; a set of labels.
 
-(defvar conn-labeling-function 'conn-simple-labels
+(defvar conn-label-string-generator 'conn-simple-labels
   "Function to create label strings for a number of elements.
 
 Is a function of one arguments, the number of labels required.")
@@ -1501,7 +1501,7 @@ Optionally the overlay may have an associated THING."
                                     (window-vscroll win)
                                     (window-hscroll win))))
             (labels (conn--create-window-labels
-                     (funcall conn-labeling-function
+                     (funcall conn-label-string-generator
                               (length (conn--get-windows nil 'nomini t)))
                      windows)))
         (unwind-protect
@@ -1521,7 +1521,10 @@ Optionally the overlay may have an associated THING."
 (conn-define-state conn-read-mover
   "A state for reading things."
   :lighter " MOVER"
-  :parent conn-state)
+  :parent conn-state
+  (if conn-read-mover
+      (set-face-inverse-video 'mode-line t)
+    (set-face-inverse-video 'mode-line nil)))
 
 (defvar conn-read-mover-state 'conn-read-mover
   "State which should be active in `conn-read-thing-mover-mode'.")
@@ -3074,7 +3077,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
             "," 'reset-arg
             "'" 'repeat
             "C-d" 'forward-delete-arg
-            "DEL" 'backward-delete-arg))
+            "DEL" 'backward-delete-arg)
+  (if conn-read-dispatch
+      (set-face-inverse-video 'mode-line t)
+    (set-face-inverse-video 'mode-line nil)))
 
 (defvar conn--last-dispatch-command nil)
 
@@ -4146,7 +4152,7 @@ seconds."
                                 (alist-get (selected-window) target-ovs))
                       labels (conn--dispatch-labels
                               (or (funcall
-                                   conn-labeling-function
+                                   conn-label-string-generator
                                    (let ((sum 0))
                                      (dolist (p target-ovs sum)
                                        (setq sum (+ sum (length (cdr p)))))))
@@ -4194,7 +4200,7 @@ seconds."
   (let* ((prefix-ovs `((,(selected-window) . ,(conn--dispatch-isearch-matches))))
          (count (length (cdar prefix-ovs)))
          (labels (conn--dispatch-labels
-                  (funcall conn-labeling-function count)
+                  (funcall conn-label-string-generator count)
                   prefix-ovs)))
     (unwind-protect
         (let* ((prefix (conn-label-select labels))
@@ -4680,6 +4686,7 @@ instances of from-string.")
          (abs (prefix-numeric-value current-prefix-arg))))
   (set-register
    register
+   ;; TODO: use completing-read
    (make-conn-command-register
     :command (let* ((elt (nth arg command-history))
                     (print-level nil)
