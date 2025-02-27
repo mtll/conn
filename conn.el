@@ -4496,10 +4496,10 @@ instances of from-string.")
 (defun conn--replace-read-default ()
   (let* ((beg (region-beginning))
          (end (region-end)))
-    (if (or (< (- end beg) 32)
-            (<= end (save-excursion
-                      (goto-char beg)
-                      (pos-eol))))
+    (if (and (< (- end beg) 60)
+             (<= end (save-excursion
+                       (goto-char beg)
+                       (pos-eol))))
         (buffer-substring-no-properties beg end)
       "")))
 
@@ -4576,33 +4576,32 @@ instances of from-string.")
                               ""))
                     nil (or (cdr regions) regions) nil))))
      (append (list thing-mover arg) common)))
-  (with-undo-amalgamate
-    (save-excursion
-      (pcase-let ((`((,beg . ,end) . ,regions)
-                   (or (conn-last-bounds-of-command)
-                       (conn-bounds-of-command thing-mover arg))))
-        (if regions
-            (let* ((regions (conn--merge-regions regions t))
-                   (region-extract-function
-                    (lambda (method)
-                      (pcase method
-                        ('nil
-                         (cl-loop for (beg . end) in regions
-                                  collect (buffer-substring beg end)))
-                        ('delete-only
-                         (cl-loop for (beg . end) in regions
-                                  do (delete-region beg end)))
-                        ('bounds regions)
-                        (_
-                         (prog1
-                             (cl-loop for (beg . end) in regions
-                                      collect (filter-buffer-substring beg end method))
+  (save-excursion
+    (pcase-let ((`((,beg . ,end) . ,regions)
+                 (or (conn-last-bounds-of-command)
+                     (conn-bounds-of-command thing-mover arg))))
+      (if regions
+          (let* ((regions (conn--merge-regions regions t))
+                 (region-extract-function
+                  (lambda (method)
+                    (pcase method
+                      ('nil
+                       (cl-loop for (beg . end) in regions
+                                collect (buffer-substring beg end)))
+                      ('delete-only
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end)))
+                      ('bounds regions)
+                      (_
+                       (prog1
                            (cl-loop for (beg . end) in regions
-                                    do (delete-region beg end))))))))
-              (perform-replace from-string to-string query-flag nil
-                               delimited nil nil beg end backward t))
-          (perform-replace from-string to-string query-flag nil
-                           delimited nil nil beg end backward))))))
+                                    collect (filter-buffer-substring beg end method))
+                         (cl-loop for (beg . end) in regions
+                                  do (delete-region beg end))))))))
+            (perform-replace from-string to-string query-flag nil
+                             delimited nil nil beg end backward t))
+        (perform-replace from-string to-string query-flag nil
+                         delimited nil nil beg end backward)))))
 
 (defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
                                       &optional delimited backward query-flag)
@@ -4624,33 +4623,32 @@ instances of from-string.")
                               ""))
                     t (or (cdr regions) regions) nil))))
      (append (list thing-mover arg) common)))
-  (with-undo-amalgamate
-    (save-excursion
-      (pcase-let ((`((,beg . ,end) . ,regions)
-                   (or (conn-last-bounds-of-command)
-                       (conn-bounds-of-command thing-mover arg))))
-        (if regions
-            (let* ((regions (conn--merge-regions regions t))
-                   (region-extract-function
-                    (lambda (method)
-                      (pcase method
-                        ('nil
-                         (cl-loop for (beg . end) in regions
-                                  collect (buffer-substring beg end)))
-                        ('delete-only
-                         (cl-loop for (beg . end) in regions
-                                  do (delete-region beg end)))
-                        ('bounds regions)
-                        (_
-                         (prog1
-                             (cl-loop for (beg . end) in regions
-                                      collect (filter-buffer-substring beg end method))
+  (save-excursion
+    (pcase-let ((`((,beg . ,end) . ,regions)
+                 (or (conn-last-bounds-of-command)
+                     (conn-bounds-of-command thing-mover arg))))
+      (if regions
+          (let* ((regions (conn--merge-regions regions t))
+                 (region-extract-function
+                  (lambda (method)
+                    (pcase method
+                      ('nil
+                       (cl-loop for (beg . end) in regions
+                                collect (buffer-substring beg end)))
+                      ('delete-only
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end)))
+                      ('bounds regions)
+                      (_
+                       (prog1
                            (cl-loop for (beg . end) in regions
-                                    do (delete-region beg end))))))))
-              (perform-replace from-string to-string query-flag t
-                               delimited nil nil beg end backward t))
-          (perform-replace from-string to-string query-flag t
-                           delimited nil nil beg end backward))))))
+                                    collect (filter-buffer-substring beg end method))
+                         (cl-loop for (beg . end) in regions
+                                  do (delete-region beg end))))))))
+            (perform-replace from-string to-string query-flag t
+                             delimited nil nil beg end backward t))
+        (perform-replace from-string to-string query-flag t
+                         delimited nil nil beg end backward)))))
 
 ;;;;; Command Registers
 
