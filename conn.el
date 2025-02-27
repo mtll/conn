@@ -179,12 +179,6 @@ For the meaning of CONDITION see `buffer-match-p'."
   :type 'integer
   :group 'conn)
 
-(defcustom conn-ephemeral-mark-states
-  nil
-  "States in which ephemeral marks should be used."
-  :type '(repeat symbol)
-  :group 'conn-marks)
-
 (defcustom conn-read-string-timeout 0.5
   "Timeout for string reading functions."
   :group 'conn
@@ -873,6 +867,13 @@ after point."
 
 ;;;; States
 
+(defun conn--compose-major-mode-map (state mode)
+  (make-composed-keymap
+   (cl-loop for s in (conn--state-all-parents state)
+            while s
+            for map = (alist-get mode (alist-get s conn--mode-maps))
+            when map collect map)))
+
 (defun conn--setup-major-mode-maps ()
   "Setup the mode specific keymaps for the current major mode."
   (setq conn--major-mode-maps nil)
@@ -886,7 +887,7 @@ after point."
                                (list (alist-get state conn--state-maps)
                                      (conn-get-local-map state))))
       (dolist (mode mmodes)
-        (setq mode-map (conn-get-mode-map state mode)
+        (setq mode-map (conn--compose-major-mode-map state mode)
               mode-mark-map (make-sparse-keymap))
         (let ((mark-map (conn-get-mode-things-map mode)))
           (when (cdr mark-map)
@@ -942,7 +943,7 @@ and return it."
   (when conn-local-mode
     (let (input-method-activate-hook
           input-method-deactivate-hook)
-      (pcase (get conn-current-state :conn-suppress-input-method)
+      (pcase (conn-state-get conn-current-state :conn-suppress-input-method)
         ((and 'nil (guard current-input-method))
          (setq conn--input-method current-input-method
                conn--input-method-title current-input-method-title))
@@ -965,7 +966,7 @@ and return it."
 
 (defun conn--toggle-input-method-ad (&rest app)
   (if (or (not conn-local-mode)
-          (get conn-current-state :conn-suppress-input-method))
+          (conn-state-get conn-current-state :conn-suppress-input-method))
       (apply app)
     (let ((current-input-method conn--input-method))
       (apply app))))
@@ -1012,6 +1013,26 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
+(defun conn--state-all-parents (state)
+  (cl-loop for curr = state then (get curr :conn-state-parent)
+           while curr collect curr))
+
+(defun conn-state-get (state property)
+  (cl-loop for curr = state then (get curr :conn-state-parent)
+           while curr
+           when (plist-member (symbol-plist state) property)
+           return (get state property)))
+
+(defun conn--setup-minor-mode-maps (state)
+  (thread-last
+    (cl-loop for state in (conn--state-all-parents state)
+             while state
+             append (seq-remove
+                     (pcase-lambda (`(,mode . ,_keymap))
+                       (plist-member (symbol-plist mode) 'derived-mode-parent))
+                     (alist-get state conn--mode-maps)))
+    (setq-local conn--local-mode-maps)))
+
 (cl-defgeneric conn-enter-state (state)
   "Enter conn state STATE.
 
@@ -1040,9 +1061,6 @@ NAME.
 
 :CURSOR is the `cursor-type' in NAME.
 
-:EPHEMERAL-MARKS if non-nil thing movement commands will push ephemeral
-marks while in state NAME.
-
 BODY contains code to be executed each time the state is enabled or
 disabled.
 
@@ -1057,13 +1075,18 @@ disabled.
                ((map :cursor
                      :lighter
                      :suppress-input-method
-                     (:keymap keymap '(make-sparse-keymap))
-                     :ephemeral-marks)
+                     :parent
+                     (:keymap keymap '(make-sparse-keymap)))
                 rest)
                (body (cl-loop for sublist on rest by #'cddr
                               unless (keywordp (car sublist))
                               do (cl-return sublist))))
     `(progn
+       (put ',name :conn-state-parent ,parent)
+
+       ,(when (memq :suppress-input-method rest)
+          `(put ',name :conn-suppress-input-method ,suppress-input-method))
+
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
 
@@ -1071,7 +1094,12 @@ disabled.
          (setf (alist-get ',name conn--state-maps) ,keymap)
          ,(conn--stringify "Keymap active in `" name "'."))
 
-       (defvar ,lighter-name ,lighter
+       ,(when parent
+          `(set-keymap-parent
+            ,map-name
+            (alist-get ',parent conn--state-maps)))
+
+       (defvar ,lighter-name (or ,lighter )
          ,(conn--stringify "Lighter text when "
                            name
                            " is active.\n\n"
@@ -1096,11 +1124,6 @@ disabled.
                        (const hbar)
                        integer))
          :group 'conn-states)
-
-       ,(when ephemeral-marks
-          `(cl-pushnew ',name conn-ephemeral-mark-states))
-
-       (put ',name :conn-suppress-input-method ,suppress-input-method)
 
        (cl-pushnew ',name conn-states)
 
@@ -1134,9 +1157,9 @@ disabled.
                  (progn
                    (conn-exit-state conn-current-state)
                    (setq ,name t
-                         conn-current-state state
-                         conn--local-mode-maps (alist-get state conn--mode-maps))
+                         conn-current-state state)
                    (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter)))
+                   (conn--setup-minor-mode-maps ',name)
                    (conn--activate-input-method)
                    (setq cursor-type (or ,cursor-name t))
                    (when (not executing-kbd-macro)
@@ -1165,22 +1188,19 @@ disabled.
 
 By default `conn-emacs-state' does not bind anything."
   :ligher " emacs"
-  :ephemeral-marks nil
   :keymap (make-sparse-keymap))
 
 (conn-define-state conn-state
   "A `conn-mode' state for editing test."
   :ligher " conn"
   :suppress-input-method t
-  :ephemeral-marks t
   :keymap (define-keymap :suppress t))
 
 (conn-define-state conn-org-edit-state
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   :ligher " org-edit"
   :suppress-input-method t
-  :keymap (define-keymap :suppress t)
-  :ephemeral-marks t)
+  :keymap (define-keymap :suppress t))
 
 
 ;;;; Labels
@@ -1491,13 +1511,22 @@ Optionally the overlay may have an associated THING."
 
 ;;;; Read Things
 
-(defvar conn-read-thing-state 'conn-state
+(conn-define-state conn-read-mover
+  "A state for reading things."
+  :lighter " MOVER"
+  :parent conn-state)
+
+(defvar conn-read-mover-state 'conn-read-mover
   "State which should be active in `conn-read-thing-mover-mode'.")
 
-(defvar conn-bounds-of-command-alist nil)
+(defvar conn-bounds-of-command-alist nil
+  "Alist of bounds-op functions for things or commands.
+
+Has the form ((THING-OR-CMD . bounds-op) ...).")
 
 (defvar conn-bounds-of-command-default
-  'conn--bounds-of-thing-command-default)
+  'conn--bounds-of-thing-command-default
+  "Default bounds-op for `conn-bounds-of-command'.")
 
 (defvar conn-bounds-of-things-in-region-alist nil
   "Alist of ((CMD . THING-IN-REGION-FN) ...).
@@ -1520,7 +1549,8 @@ region.")
 
 (defvar conn--thing-overriding-maps nil)
 
-(defvar-keymap conn-read-thing-mover-mode-map
+(define-keymap
+  :keymap conn-read-mover-map
   "DEL" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "," 'reset-arg
@@ -1529,23 +1559,6 @@ region.")
   "C-h" 'help
   "t" 'conn-mark-thing-map
   "e" 'recursive-edit)
-
-(define-minor-mode conn-read-thing-mover-mode
-  "Mode for reading a thing mover."
-  :lighter " MOVER"
-  :keymap conn-read-thing-mover-mode-map
-  (if conn-read-thing-mover-mode
-      (progn
-        (setf (alist-get (recursion-depth) conn-last-bounds-of-command) nil)
-        (thread-first
-          (setq conn--thing-overriding-maps
-                (make-composed-keymap
-                 (cl-loop for (var . map) in conn-read-thing-mover-maps-alist
-                          when var collect map)
-                 conn-read-thing-mover-mode-map))
-          (internal-push-keymap 'overriding-terminal-local-map)))
-    (internal-pop-keymap conn--thing-overriding-maps
-                         'overriding-terminal-local-map)))
 
 (defvar-keymap conn-read-expand-region-map
   :parent conn-expand-repeat-map
@@ -1588,19 +1601,20 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
              conn-this-command-thing (region-beginning) (region-end))))))
 
 (defun conn--bounds-of-expansion (cmd arg)
-  (let ((current-prefix-arg arg))
-    (call-interactively cmd)
-    (let ((exit (set-transient-map
-                 conn-read-expand-region-map (lambda () t) nil
-                 (substitute-command-keys
-                  (concat "\\<conn-read-expand-region-map>"
-                          "Defining region. Press "
-                          "\\[exit-recursive-edit] to finish, "
-                          "\\[abort-recursive-edit] to abort.")))))
-      (unwind-protect
-          (recursive-edit)
-        (funcall exit)))
-    (list (cons (region-beginning) (region-end)))))
+  (save-mark-and-excursion
+    (let ((current-prefix-arg arg))
+      (call-interactively cmd)
+      (let ((exit (set-transient-map
+                   conn-read-expand-region-map (lambda () t) nil
+                   (substitute-command-keys
+                    (concat "\\<conn-read-expand-region-map>"
+                            "Defining region. Press "
+                            "\\[exit-recursive-edit] to finish, "
+                            "\\[abort-recursive-edit] to abort.")))))
+        (unwind-protect
+            (recursive-edit)
+          (funcall exit)))
+      (list (cons (region-beginning) (region-end))))))
 
 (defun conn--bounds-of-region (_arg)
   (cons (cons (region-beginning) (region-end))
@@ -1689,12 +1703,11 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (conn--with-state 'conn-state
-    (conn-read-thing-mover-mode 1)
+  (conn--with-state conn-read-mover-state
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-thing-mover-mode-map>"
+                   (concat "\\<conn-read-mover-map>"
                            (propertize prompt 'face 'minibuffer-prompt)
                            " (arg: "
                            (propertize "%s" 'face 'read-multiple-choice-face)
@@ -1722,7 +1735,6 @@ are read."
          (pcase cmd
            ('keyboard-quit (keyboard-quit))
            ('help
-            (conn-read-thing-mover-mode -1)
             (save-window-excursion
               (setq cmd (intern
                          (completing-read
@@ -1731,8 +1743,7 @@ are read."
                             (if (eq action 'metadata)
                                 `(metadata
                                   ,(cons 'affixation-function
-                                         (conn--dispatch-make-command-affixation
-                                          conn-read-thing-mover-mode-map))
+                                         (conn--dispatch-make-command-affixation))
                                   (category . conn-dispatch-command))
                               (complete-with-action action obarray string pred)))
                           (lambda (sym)
@@ -1740,7 +1751,6 @@ are read."
                                  (not (eq sym 'help))
                                  (get sym :conn-command-thing)))
                           t))))
-            (conn-read-thing-mover-mode 1)
             (go :test))
            ('digit-argument
             (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
@@ -1764,8 +1774,7 @@ are read."
                              (thing-sign '-)))))
            (_ (setq invalid t)))
          (go :read-command))
-      (message nil)
-      (conn-read-thing-mover-mode -1))))
+      (message nil))))
 
 (defun conn-read-thing-region (prompt &optional arg)
   "Interactively read a thing region from the user.
@@ -2691,10 +2700,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--hide-mark-cursor-p (&optional buffer)
   (with-current-buffer (or buffer (current-buffer))
-    (or (when-let* ((hide (get conn-current-state :conn-hide-mark)))
-          (if (functionp hide) (funcall hide) t))
-        (when-let* ((hide (conn--derived-mode-property :conn-hide-mark)))
-          (if (functionp hide) (funcall hide) t)))))
+    (or (when-let* ((hide (conn-state-get conn-current-state :conn-hide-mark-cursor)))
+          (if (functionp hide) (funcall hide) hide))
+        (when-let* ((hide (conn--derived-mode-property :conn-hide-mark-cursor)))
+          (if (functionp hide) (funcall hide) hide)))))
 
 (defun conn--mark-cursor-redisplay (win)
   (let ((cursor (window-parameter win 'conn-mark-cursor)))
@@ -2713,7 +2722,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (unless (and (eq (overlay-buffer cursor) (current-buffer))
                    (eq (overlay-start cursor) (mark t)))
         (if (and (eql (char-after (mark t)) ?\t)
-                 (< (mark t) (point-max))
                  (< 1 (save-excursion
                         (goto-char (mark t))
                         (let ((col (current-column)))
@@ -3055,16 +3063,25 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 ;; Thing dispatch provides a method of jumping to, marking or acting
 ;; on visible Things.
 
+(defvar conn-read-for-dispatch-state 'conn-read-dispatch)
+
+(conn-define-state conn-read-dispatch
+  "State for reading a dispatch command."
+  :parent conn-state
+  :ligher " DISPATCH"
+  :keymap (define-keymap
+            "C-h" 'help
+            "," 'reset-arg
+            "'" 'repeat
+            "C-d" 'forward-delete-arg
+            "DEL" 'backward-delete-arg))
+
 (defvar conn--last-dispatch-command nil)
 
 (defvar conn-dispatch-all-things-collector-default
   'conn--dispatch-all-things-1)
 
 (defvar conn-dispatch-all-things-collector-alist nil)
-
-(defvar conn--dispatch-mode-maps nil)
-
-(defvar conn--dispatch-overriding-map nil)
 
 (defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
@@ -3081,43 +3098,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (alist-get 'backward-word conn-dispatch-target-finders-alist)
       (apply-partially 'conn--dispatch-all-things 'word t))
 
-(defun conn-get-mode-dispatch-map (mode)
-  (or (alist-get mode conn--dispatch-mode-maps)
-      (setf (alist-get mode conn--dispatch-mode-maps)
-            (make-sparse-keymap))))
-
-(defvar-keymap conn-dispatch-read-thing-mode-map
-  "C-h" 'help
-  "," 'reset-arg
-  "'" 'repeat
-  "C-d" 'forward-delete-arg
-  "DEL" 'backward-delete-arg)
-
-(defun conn--create-dispatch-map ()
-  (make-composed-keymap
-   (nconc
-    (cl-loop for (var . map) in conn--dispatch-mode-maps
-             when (ignore-errors
-                    (and (not (plist-member (symbol-plist var) 'derived-mode-parent))
-                         (symbol-value var)))
-             collect map)
-    (cl-loop for mmode in (if (get major-mode :conn-inhibit-inherit-maps)
-                              (list major-mode)
-                            (conn--derived-mode-all-parents major-mode))
-             collect (conn-get-mode-dispatch-map mmode))
-    (list conn-dispatch-read-thing-mode-map))))
-
-(define-minor-mode conn-dispatch-read-thing-mode
-  "Read a thing for dispatch."
-  :lighter " DISPATCH"
-  :keymap conn-dispatch-read-thing-mode-map
-  (if conn-dispatch-read-thing-mode
-      (thread-first
-        (setq conn--dispatch-overriding-map (conn--create-dispatch-map))
-        (internal-push-keymap 'overriding-terminal-local-map))
-    (internal-pop-keymap conn--dispatch-overriding-map
-                         'overriding-terminal-local-map)))
-
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
@@ -3128,16 +3108,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
       conn-dispatch-action-default))
 
-(defun conn--dispatch-make-command-affixation (keymap)
+(defun conn--dispatch-make-command-affixation ()
   (lambda (command-names)
     (with-selected-window (or (minibuffer-selected-window) (selected-window))
       (cl-loop
        for command-name in command-names
        collect (let* ((fun (and (stringp command-name) (intern-soft command-name)))
-                      (binding (where-is-internal
-                                fun
-                                (cons keymap (current-active-maps t))
-                                t))
+                      (binding (where-is-internal fun nil t))
                       (binding (if (and binding (not (stringp binding)))
                                    (format " {%s}" (key-description binding))
                                  ""))
@@ -3149,9 +3126,9 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
-(defun conn--dispatch-read-thing (&optional default-action override-maps)
+(defun conn--dispatch-read-thing (&optional default-action)
   (let* ((prompt (substitute-command-keys
-                  (concat "\\<conn-dispatch-read-thing-mode-map>"
+                  (concat "\\<conn-read-dispatch-map>"
                           (propertize "Targets" 'face 'minibuffer-prompt)
                           " (arg: "
                           (propertize "%s" 'face 'read-multiple-choice-face)
@@ -3173,8 +3150,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (when (ignore-errors (get action :conn-action-interactive))
                   (funcall (get action :conn-action-interactive)))))
       (setq action-args (read-action-args action))
-      (conn--with-state conn-read-thing-state
-        (apply #'conn-dispatch-read-thing-mode 1 override-maps)
+      (conn--with-state conn-read-for-dispatch-state
         (unwind-protect
             (cl-prog
              nil
@@ -3240,7 +3216,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                ('negative-argument
                 (setq thing-sign (not thing-sign)))
                ('help
-                (conn-dispatch-read-thing-mode -1)
                 (save-window-excursion
                   (setq keys nil
                         cmd (intern
@@ -3250,17 +3225,18 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                                 (if (eq action 'metadata)
                                     `(metadata
                                       ,(cons 'affixation-function
-                                             (conn--dispatch-make-command-affixation
-                                              conn--dispatch-overriding-map))
+                                             (conn--dispatch-make-command-affixation))
                                       (category . conn-dispatch-command))
                                   (complete-with-action action obarray string pred)))
                               (lambda (sym)
-                                (and (functionp sym)
-                                     (not (eq sym 'help))
-                                     (or (get sym :conn-command-thing)
-                                         (where-is-internal sym (list conn--dispatch-overriding-map) t))))
+                                (pcase sym
+                                  ('help)
+                                  ((and (pred functionp)
+                                        (guard (or (get sym :conn-command-thing)
+                                                   (get sym :conn-action))))
+                                   t)
+                                  (`(,_ ,_ . ,_) t)))
                               t))))
-                (apply #'conn-dispatch-read-thing-mode 1 override-maps)
                 (go :loop))
                ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
                      (guard thing))
@@ -3281,8 +3257,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                (_
                 (setq invalid t)))
              (go :read-command))
-          (message nil)
-          (conn-dispatch-read-thing-mode -1))))))
+          (message nil))))))
 
 (defun conn-dispatch-ignored-mode (win)
   (not (apply #'provided-mode-derived-p
@@ -3406,13 +3381,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 rest))
     (if modes
         `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-dispatch-map mode)
+           (keymap-set (conn-get-mode-map 'conn-read-dispatch mode)
                        ,key `(,',thing
                               ,(or ,target-finder
                                    (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
-      `(keymap-set conn-dispatch-read-thing-mode-map
+      `(keymap-set conn-read-dispatch-map
                    ,key `(,',thing
                           ,(or ,target-finder
                                (conn--dispatch-target-finder ',thing))
@@ -3479,12 +3454,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  (progn
                    ,@(cl-loop for key in (ensure-list keys)
                               collect `(keymap-set
-                                        (conn-get-mode-dispatch-map mode)
+                                        (conn-get-mode-map 'conn-read-dispatch mode)
                                         ,key (list ,@menu-item)))))
             `(progn
                ,@(cl-loop for key in (ensure-list keys)
                           collect `(keymap-set
-                                    conn-dispatch-read-thing-mode-map
+                                    conn-read-dispatch-map
                                     ,key (list ,@menu-item)))))))))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
@@ -7560,7 +7535,7 @@ determine if `conn-local-mode' should be enabled."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-mode-dispatch-map 'dired-mode)
+    :keymap (conn-get-mode-map 'conn-read-dispatch 'dired-mode)
     "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
     "d" 'conn-dispatch-dired-kill-subdir
@@ -7646,7 +7621,7 @@ determine if `conn-local-mode' should be enabled."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-dispatch-map 'ibuffer-mode)
+    :keymap (conn-get-mode-map 'conn-read-dispatch 'ibuffer-mode)
     "f" 'conn-dispatch-ibuffer-mark
     "i" 'ibuffer-backward-line
     "k" 'ibuffer-forward-line
