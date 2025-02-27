@@ -1349,7 +1349,7 @@ apply to each contiguous component of the region."
       ("m" "camelCase" conn-camel-case-region)]
     [ ("n" "Snake_Case" conn-capital-snake-case-region)
       ("s" "snake_case" conn-snake-case-region)
-      ("w" "individual words" conn-case-to-words-region)]
+      ("w" "discrete words" conn-case-to-words-region)]
     [ ("u" "UPCASE" upcase-region)
       ("c" "Capitalize" capitalize-region)
       ("d" "downcase" downcase-region)]])
