@@ -1157,7 +1157,9 @@ the state is active.
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
 
-:KEYMAP is the state keymap for NAME.
+:KEYMAP is the state keymap for NAME.  KEYMAP is copied before being
+assigned to state.  To access the state keymap use either the NAME-map
+variable or `conn-get-state-map'.
 
 :CURSOR is the `cursor-type' in NAME.
 
@@ -1217,12 +1219,16 @@ Additional keys are allowed and are added as slots to NAME.
          (conn-get-state-map ',name)
          ,(conn--stringify "Keymap active in `" name "'."))
 
+       ;; Is there a better way to do this?  We want to make the state
+       ;; map a copy of the keymap we have been passed but we don't
+       ;; want to invalidate all the pointers to this keymap in child
+       ;; state keymaps.
+       (setcdr ,map-name (cdr (copy-keymap ,keymap)))
+
        (set-keymap-parent
         ,map-name (make-composed-keymap
-                   (let ((maps ,(when keymap `(list ,keymap))))
-                     (dolist (parent ',(ensure-list parents))
-                       (push (conn-get-state-map parent) maps))
-                     (nreverse maps))))
+                   (cl-loop for parent in ',(ensure-list parents)
+                            collect (conn-get-state-map parent))))
 
        (defvar ,lighter-name (or ,lighter)
          ,(conn--stringify "Lighter text when "
