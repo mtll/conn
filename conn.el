@@ -1055,27 +1055,28 @@ mouse-3: Describe current input method")
       conn-default-state))
 
 (defun conn--state-all-parents (state)
-  (cl-loop with all-parents = (list state)
-           with queue = (list state)
-           for parents = (conn-state-get (pop queue) 'parents)
-           while parents
-           do (setf queue (append queue parents)
-                    all-parents (append parents all-parents))
-           finally return (nreverse all-parents)))
+  (let* ((state-props (plist-get conn-states state))
+         (all (slot-value state-props 'all-parents)))
+    (if (not (eq all conn--state-slot-unbound))
+        all
+      (setf (slot-value state-props 'all-parents)
+            (cl-loop with all-parents = (list state-props)
+                     with queue = (list state-props)
+                     for parents = (seq-difference
+                                    (mapcar (lambda (state)
+                                              (plist-get conn-states state))
+                                            (slot-value (pop queue) 'parents))
+                                    all-parents)
+                     while parents
+                     do (setf queue (append queue parents)
+                              all-parents (append parents all-parents))
+                     finally return (nreverse all-parents))))))
 
 (defun conn-state-get (state property)
-  (condition-case _
-      (cl-loop with states = (list state)
-               for curr = (pop states)
-               while curr
-               for props = (plist-get conn-states curr)
-               unless (eq (cl-struct-slot-value curr property props)
-                          conn--state-slot-unbound)
-               return (slot-value props property)
-               unless (eq (cl-struct-slot-value curr 'parents props)
-                          conn--state-slot-unbound)
-               do (setf states (append states (slot-value props 'parents))))
-    (cl-struct-unknown-slot nil)))
+  (cl-loop for s in (conn--state-all-parents state)
+           for slot = (ignore-errors (slot-value s property))
+           unless (eq slot conn--state-slot-unbound)
+           return slot))
 
 (defsubst conn-state-set (state property value)
   (setf (aref (plist-get conn-states state)
@@ -1088,14 +1089,13 @@ mouse-3: Describe current input method")
         conn--state-slot-unbound))
 
 (cl-generic-define-generalizer conn--generic-substate-generalizer
-  90 #'identity
+  90 (lambda (state) `(and (plist-member conn-states ,state) ,state))
   (lambda (tag)
     (mapcar (lambda (state) `(substate ,state))
             (conn--state-all-parents tag))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head substate)))
   "Support for (substate STATE) specializers."
-  (message "test")
   (list conn--generic-substate-generalizer))
 
 (cl-defgeneric conn-enter-state (state)
@@ -1156,6 +1156,7 @@ disabled.
              else return (setf body sublist))
     `(progn
        (cl-defstruct ,name
+         (all-parents conn--state-slot-unbound)
          ,@(cl-loop for (slot value) on plist by #'cddr
                     unless (and (symbolp slot)
                                 (eql ?: (aref (symbol-name slot) 0)))
