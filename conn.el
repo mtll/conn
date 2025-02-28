@@ -920,7 +920,9 @@ in STATE and return it."
       (put mode :conn-mode-things (make-sparse-keymap))))
 
 (defun conn-get-state-map (state)
-  (alist-get state conn--state-maps))
+  (or (alist-get state conn--state-maps)
+      (setf (alist-get state conn--state-maps)
+            (make-sparse-keymap))))
 
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
@@ -1179,11 +1181,7 @@ Additional keys are allowed and are added as slots to NAME.
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-name (conn--symbolicate name "-lighter"))
-               ((map :lighter
-                     :cursor
-                     :parents
-                     (:keymap keymap '(make-sparse-keymap)))
-                rest)
+               ((map :lighter :cursor :parents :keymap) rest)
                ;; TODO: This method of handling slots is ugly.
                (plist `( :suppress-input-method 'conn--state-slot-unbound
                          :parents ',(ensure-list parents)))
@@ -1199,7 +1197,7 @@ Additional keys are allowed and are added as slots to NAME.
          ,@(cl-loop for (slot value) on plist by #'cddr
                     unless (and (symbolp slot)
                                 (eql ?: (aref (symbol-name slot) 0)))
-                    do (error "Invalid keyword %s" slot)
+                    do (error "Invalid slot keyword %s" slot)
                     collect (list (intern (substring (symbol-name slot) 1))
                                   value)))
 
@@ -1216,15 +1214,15 @@ Additional keys are allowed and are added as slots to NAME.
          ,(conn--stringify "Non-nil when `" name "' is active."))
 
        (defvar ,map-name
-         (setf (alist-get ',name conn--state-maps) ,keymap)
+         (conn-get-state-map ',name)
          ,(conn--stringify "Keymap active in `" name "'."))
 
-       ,(when parents
-          `(set-keymap-parent
-            ,map-name
-            (make-composed-keymap
-             (cl-loop for parent in ',(ensure-list parents)
-                      collect (alist-get parent conn--state-maps)))))
+       (set-keymap-parent
+        ,map-name (make-composed-keymap
+                   (let ((maps ,(when keymap `(list ,keymap))))
+                     (dolist (parent ',(ensure-list parents))
+                       (push (conn-get-state-map parent) maps))
+                     (nreverse maps))))
 
        (defvar ,lighter-name (or ,lighter)
          ,(conn--stringify "Lighter text when "
@@ -2325,17 +2323,17 @@ Possibilities: \\<query-replace-map>
       (thread-first
         (conn-bounds-of-things-in-region thing beg end)
         (conn--thread regions
-          (if skip-empty
-              (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
-                          regions)
-            regions))
+            (if skip-empty
+                (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
+                            regions)
+              regions))
         (conn--thread regions
-          (if (or (null nth) (= 1 nth))
-              regions
-            (cl-loop with stack = regions
-                     while stack
-                     collect (car stack)
-                     do (cl-loop repeat nth do (pop stack)))))
+            (if (or (null nth) (= 1 nth))
+                regions
+              (cl-loop with stack = regions
+                       while stack
+                       collect (car stack)
+                       do (cl-loop repeat nth do (pop stack)))))
         (conn--kapply-region-iterator order))
     (deactivate-mark)))
 
@@ -4858,9 +4856,9 @@ instances of from-string.")
                        (thread-first
                          (nth index (funcall tab-bar-tabs-function))
                          (conn--thread tab
-                           (if (eq (car tab) 'current-tab)
-                               (propertize "*CURRENT TAB*" 'face 'error)
-                             (alist-get 'name tab)))))
+                             (if (eq (car tab) 'current-tab)
+                                 (propertize "*CURRENT TAB*" 'face 'error)
+                               (alist-get 'name tab)))))
                    "on another frame"))))
 
 (cl-defmethod register-command-info ((_command (eql conn-tab-to-register)))
