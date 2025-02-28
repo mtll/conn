@@ -919,6 +919,9 @@ in STATE and return it."
   (or (get mode :conn-mode-things)
       (put mode :conn-mode-things (make-sparse-keymap))))
 
+(defun conn-get-state-map (state)
+  (alist-get state conn--state-maps))
+
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
 If one does not exists assign a new sparse keymap for MODE
@@ -1067,14 +1070,14 @@ mouse-3: Describe current input method")
   (with-memoization
       (plist-get conn--state-all-parents-cache state)
     (let ((queue (list (conn--get-state-object state)))
-          (generations nil))
+          (ancestory nil))
       (while
-          (conn--thread (slot-value (car (push (pop queue) generations)) 'parents)
+          (conn--thread (slot-value (car (push (pop queue) ancestory)) 'parents)
               ancestors
             (mapcar #'conn--get-state-object ancestors)
-            (seq-difference ancestors generations)
+            (seq-difference ancestors ancestory)
             (setq queue (append queue ancestors))))
-      (nreverse generations))))
+      (nreverse ancestory))))
 
 (defun conn-state-get (state slot)
   "Return the value in STATE of SLOT."
@@ -1102,7 +1105,9 @@ from its parents."
         conn--state-slot-unbound))
 
 (cl-generic-define-generalizer conn--substate-generalizer
-  90 (lambda (state) `(and (memq conn-states ,state) ,state))
+  95 ;; Make sure this is higher than derived-mode.  Why?  I don't know.
+  (lambda (state)
+    `(and (memq conn-states ,state) ,state))
   (lambda (state)
     (mapcar (lambda (state-obj) `(conn-substate ,(cl-type-of state-obj)))
             (conn--state-all-parents state))))
@@ -1179,6 +1184,7 @@ Additional keys are allowed and are added as slots to NAME.
                      :parents
                      (:keymap keymap '(make-sparse-keymap)))
                 rest)
+               ;; TODO: This method of handling slots is ugly.
                (plist `( :suppress-input-method 'conn--state-slot-unbound
                          :parents ',(ensure-list parents)))
                (body nil))
@@ -1197,7 +1203,8 @@ Additional keys are allowed and are added as slots to NAME.
                     collect (list (intern (substring (symbol-name slot) 1))
                                   value)))
 
-       ;; Invalidate parents cache
+       ;; Invalidate parents cache, we could have changed the
+       ;; inheritance hierarchy out from under any child states.
        (setf conn--state-all-parents-cache nil)
 
        (setf (conn--get-state-object ',name)
@@ -1633,6 +1640,9 @@ Optionally the overlay may have an associated THING."
 
 ;;;; Read Things
 
+(defvar conn-state-for-mover-reading 'conn-read-mover
+  "State which should be active in `conn-read-thing-mover-mode'.")
+
 (conn-define-state conn-read-mover
   "A state for reading things."
   :lighter " MOVER"
@@ -1649,9 +1659,6 @@ Optionally the overlay may have an associated THING."
   (if conn-read-mover
       (set-face-inverse-video 'mode-line t)
     (set-face-inverse-video 'mode-line nil)))
-
-(defvar conn-read-mover-state 'conn-read-mover
-  "State which should be active in `conn-read-thing-mover-mode'.")
 
 (defvar conn-bounds-of-command-alist nil
   "Alist of bounds-op functions for things or commands.
@@ -1826,11 +1833,11 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (conn--with-state conn-read-mover-state
+  (conn--with-state conn-state-for-mover-reading
     (unwind-protect
         (cl-prog
          ((prompt (substitute-command-keys
-                   (concat "\\<conn-read-mover-map>"
+                   (concat "\\<" (conn--stringify conn-state-for-mover-reading "-map") ">"
                            (propertize prompt 'face 'minibuffer-prompt)
                            " (arg: "
                            (propertize "%s" 'face 'read-multiple-choice-face)
@@ -3179,7 +3186,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 ;; Thing dispatch provides a method of jumping to, marking or acting
 ;; on visible Things.
 
-(defvar conn-read-for-dispatch-state 'conn-read-dispatch)
+(defvar conn-dispatch-state-for-reading 'conn-read-dispatch)
 
 (conn-define-state conn-read-dispatch
   "State for reading a dispatch command."
@@ -3247,7 +3254,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defun conn--dispatch-read-thing (&optional default-action)
   (let* ((prompt (substitute-command-keys
-                  (concat "\\<conn-read-dispatch-map>"
+                  (concat "\\<" (conn--stringify conn-dispatch-state-for-reading "-map") ">"
                           (propertize "Targets" 'face 'minibuffer-prompt)
                           " (arg: "
                           (propertize "%s" 'face 'read-multiple-choice-face)
@@ -3269,7 +3276,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 (when (ignore-errors (get action :conn-action-interactive))
                   (funcall (get action :conn-action-interactive)))))
       (setq action-args (read-action-args action))
-      (conn--with-state conn-read-for-dispatch-state
+      (conn--with-state conn-dispatch-state-for-reading
         (unwind-protect
             (cl-prog
              nil
@@ -3477,13 +3484,13 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                 rest))
     (if modes
         `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-map 'conn-read-dispatch mode)
+           (keymap-set (conn-get-mode-map conn-dispatch-state-for-reading mode)
                        ,key `(,',thing
                               ,(or ,target-finder
                                    (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
-      `(keymap-set conn-read-dispatch-map
+      `(keymap-set (conn-get-state-map conn-dispatch-state-for-reading)
                    ,key `(,',thing
                           ,(or ,target-finder
                                (conn--dispatch-target-finder ',thing))
@@ -3549,12 +3556,12 @@ If MMODE-OR-STATE is a mode it must be a major mode."
               `(dolist (mode ',(ensure-list modes))
                  ,@(cl-loop for key in (ensure-list keys)
                             collect `(keymap-set
-                                      (conn-get-mode-map 'conn-read-dispatch mode)
+                                      (conn-get-mode-map conn-dispatch-state-for-reading mode)
                                       ,key (list ,@menu-item))))
             (macroexp-progn
              (cl-loop for key in (ensure-list keys)
                       collect `(keymap-set
-                                conn-read-dispatch-map
+                                (conn-get-state-map conn-dispatch-state-for-reading)
                                 ,key (list ,@menu-item)))))))))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
