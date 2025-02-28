@@ -1087,6 +1087,17 @@ mouse-3: Describe current input method")
               (cl-struct-slot-offset state property))
         conn--state-slot-unbound))
 
+(cl-generic-define-generalizer conn--generic-substate-generalizer
+  90 #'identity
+  (lambda (tag)
+    (mapcar (lambda (state) `(substate ,state))
+            (conn--state-all-parents tag))))
+
+(cl-defmethod cl-generic-generalizers ((_specializer (head substate)))
+  "Support for (substate STATE) specializers."
+  (message "test")
+  (list conn--generic-substate-generalizer))
+
 (cl-defgeneric conn-enter-state (state)
   "Enter conn state STATE.
 
