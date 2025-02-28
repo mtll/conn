@@ -1061,26 +1061,20 @@ mouse-3: Describe current input method")
 (gv-define-setter conn--get-state-object (value state)
   `(setf (plist-get conn--state-objects ,state) ,value))
 
-(defun conn--compute-ancestors (state-object)
-  (let ((queue (list state-object))
-        (generations nil))
-    (while
-        (conn--thread (slot-value (car (push (pop queue) generations)) 'parents)
-            ancestors
-          (mapcar #'conn--get-state-object ancestors)
-          (seq-difference ancestors generations)
-          (setq queue (append queue ancestors))))
-    (nreverse generations)))
+(defvar conn--state-all-parents-cache nil)
 
 (defun conn--state-all-parents (state)
-  (let* ((state-object (if (symbolp state)
-                           (conn--get-state-object state)
-                         state))
-         (all (slot-value state-object 'all-parents)))
-    (if (not (eq all conn--state-slot-unbound))
-        all
-      (setf (slot-value state-object 'all-parents)
-            (conn--compute-ancestors state-object)))))
+  (with-memoization
+      (plist-get conn--state-all-parents-cache state)
+    (let ((queue (list (conn--get-state-object state)))
+          (generations nil))
+      (while
+          (conn--thread (slot-value (car (push (pop queue) generations)) 'parents)
+              ancestors
+            (mapcar #'conn--get-state-object ancestors)
+            (seq-difference ancestors generations)
+            (setq queue (append queue ancestors))))
+      (nreverse generations))))
 
 (defun conn-state-get (state slot)
   "Return the value in STATE of SLOT."
@@ -1108,7 +1102,7 @@ from its parents."
         conn--state-slot-unbound))
 
 (cl-generic-define-generalizer conn--substate-generalizer
-  90 (lambda (state) `(and (plist-member conn--state-objects ,state) ,state))
+  90 (lambda (state) `(and (memq conn-states ,state) ,state))
   (lambda (state)
     (mapcar (lambda (state-obj) `(conn-substate ,(cl-type-of state-obj)))
             (conn--state-all-parents state))))
@@ -1183,14 +1177,11 @@ Additional keys are allowed and are added as slots to NAME.
                ((map :lighter
                      :cursor
                      :parents
-                     :all-parents
                      (:keymap keymap '(make-sparse-keymap)))
                 rest)
                (plist `( :suppress-input-method 'conn--state-slot-unbound
                          :parents ',(ensure-list parents)))
                (body nil))
-    (when all-parents
-      (error "State slot all-parents is reserved for internal use"))
     (cl-loop for sublist on rest by #'cddr
              if (keywordp (car sublist))
              do (unless (memq (car sublist)
@@ -1199,13 +1190,15 @@ Additional keys are allowed and are added as slots to NAME.
              else return (setf body sublist))
     `(progn
        (cl-defstruct ,name
-         (all-parents conn--state-slot-unbound)
          ,@(cl-loop for (slot value) on plist by #'cddr
                     unless (and (symbolp slot)
                                 (eql ?: (aref (symbol-name slot) 0)))
                     do (error "Invalid keyword %s" slot)
                     collect (list (intern (substring (symbol-name slot) 1))
                                   value)))
+
+       ;; Invalidate parents cache
+       (setf conn--state-all-parents-cache nil)
 
        (setf (conn--get-state-object ',name)
              (,(conn--symbolicate "make-" name) ,@plist))
