@@ -64,7 +64,11 @@
 
 A target finder function should return a list of overlays.")
 
-(defvar conn-dispatch-target-finders-alist nil
+(defvar conn-dispatch-target-finders-alist
+  '((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
+    (move-end-of-line . conn--dispatch-lines-end)
+    (conn-backward-symbol . (apply-partially 'conn--dispatch-all-things 'symbol t))
+    (backward-word . (apply-partially 'conn--dispatch-all-things 'word t)))
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
@@ -97,6 +101,9 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 Is an alist of the form ((CMD . MARK-HANDLER) ...).
 
 For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
+
+(defvar-local conn-narrow-ring nil
+  "Ring of recent narrowed regions.")
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
@@ -1221,8 +1228,8 @@ Additional keys are allowed and are added as slots to NAME.
 
        ;; Is there a better way to do this?  We want to make the state
        ;; map a copy of the keymap we have been passed but we don't
-       ;; want to invalidate all the pointers to this keymap in child
-       ;; state keymaps.
+       ;; want to invalidate all the pointers to our state keymap in
+       ;; child state keymaps.
        (setcdr ,map-name (cdr (copy-keymap ,keymap)))
 
        (set-keymap-parent
@@ -1647,6 +1654,21 @@ Optionally the overlay may have an associated THING."
 (defvar conn-state-for-mover-reading 'conn-read-mover
   "State which should be active in `conn-read-thing-mover-mode'.")
 
+(defvar conn-bounds-of-command-alist
+  '((recursive-edit . conn--bounds-of-dots)
+    (conn-toggle-mark-command . conn--bounds-of-region)
+    (conn-expand . (apply-partially 'conn--bounds-of-expansion 'conn-expand))
+    (conn-expand-remote . conn--bounds-of-remote-expansion)
+    (conn-contract . (apply-partially 'conn--bounds-of-expansion 'conn-contract))
+    (set-mark-command . conn--bounds-of-region)
+    (conn-set-mark-command . conn--bounds-of-region)
+    (visible . conn--bounds-of-window)
+    (narrowing . conn--bounds-of-narrowings)
+    (dot . conn--bounds-of-dot))
+  "Alist of bounds-op functions for things or commands.
+
+Has the form ((THING-OR-CMD . bounds-op) ...).")
+
 (conn-define-state conn-read-mover
   "A state for reading things."
   :lighter " MOVER"
@@ -1664,11 +1686,6 @@ Optionally the overlay may have an associated THING."
     (if conn-read-mover
         (set-face-inverse-video 'mode-line t)
       (set-face-inverse-video 'mode-line nil))))
-
-(defvar conn-bounds-of-command-alist nil
-  "Alist of bounds-op functions for things or commands.
-
-Has the form ((THING-OR-CMD . bounds-op) ...).")
 
 (defvar conn-bounds-of-command-default
   'conn--bounds-of-thing-command-default
@@ -1767,33 +1784,6 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
     (dolist (ov (overlays-at (point)))
       (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
         (throw 'found (list (conn--overlay-bounds-markers ov)))))))
-
-(setf (alist-get 'conn-toggle-mark-command conn-bounds-of-command-alist)
-      'conn--bounds-of-region
-
-      (alist-get 'conn-expand conn-bounds-of-command-alist)
-      (apply-partially 'conn--bounds-of-expansion 'conn-expand)
-
-      (alist-get 'conn-expand-remote conn-bounds-of-command-alist)
-      'conn--bounds-of-remote-expansion
-
-      (alist-get 'conn-contract conn-bounds-of-command-alist)
-      (apply-partially 'conn--bounds-of-expansion 'conn-contract)
-
-      (alist-get 'set-mark-command conn-bounds-of-command-alist)
-      'conn--bounds-of-region
-
-      (alist-get 'conn-set-mark-command conn-bounds-of-command-alist)
-      'conn--bounds-of-region
-
-      (alist-get 'visible conn-bounds-of-command-alist)
-      'conn--bounds-of-window
-
-      (alist-get 'narrowing conn-bounds-of-command-alist)
-      'conn--bounds-of-narrowings
-
-      (alist-get 'dot conn-bounds-of-command-alist)
-      'conn--bounds-of-dot)
 
 (defun conn--bounds-of-narrowings (_arg)
   (cl-loop for (beg . end) in conn-narrow-ring
@@ -2064,9 +2054,6 @@ is read."
             (list (cons (region-beginning) (region-end)))))
       (conn-dot-mode -1)
       (deactivate-mark t))))
-
-(setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
-      'conn--bounds-of-dots)
 
 
 ;;;; Advice
@@ -3161,7 +3148,8 @@ If MMODE-OR-STATE is a mode it must be a major mode."
  'inner-line 'conn-discrete-thing-handler
  'back-to-indentation
  'conn-beginning-of-inner-line
- 'conn-end-of-inner-line)
+ 'conn-end-of-inner-line
+ 'comment-line)
 
 (conn-register-thing-commands
  'org-link 'conn-discrete-thing-handler
@@ -3217,18 +3205,6 @@ If MMODE-OR-STATE is a mode it must be a major mode."
 
 (defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
-
-(setf (alist-get 'conn-end-of-inner-line conn-dispatch-target-finders-alist)
-      'conn--dispatch-inner-lines-end
-
-      (alist-get 'move-end-of-line conn-dispatch-target-finders-alist)
-      'conn--dispatch-lines-end
-
-      (alist-get 'conn-backward-symbol conn-dispatch-target-finders-alist)
-      (apply-partially 'conn--dispatch-all-things 'symbol t)
-
-      (alist-get 'backward-word conn-dispatch-target-finders-alist)
-      (apply-partially 'conn--dispatch-all-things 'word t))
 
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
@@ -3916,7 +3892,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
       (_ (user-error "Cannot find %s at point"
                      (get thing-cmd :conn-command-thing))))))
 
-(conn-define-dispatch-action conn-dispatch-over (window pt thing-cmd _thing-arg)
+(conn-define-dispatch-action conn-dispatch-over (window pt thing-cmd thing-arg)
   :description "Over"
   :keys "e"
   (when (and (eq (window-buffer window) (current-buffer))
@@ -3951,7 +3927,7 @@ If MMODE-OR-STATE is a mode it must be a major mode."
                  (conn--push-ephemeral-mark end))
                 ((<= beg end point)
                  (goto-char beg))))))
-      ('conn-dispatch-jump (conn-dispatch-jump window pt thing-cmd))
+      ('conn-dispatch-jump (conn-dispatch-jump window pt thing-cmd thing-arg))
       (_ (error "Can't jump to %s" thing-cmd)))))
 
 (conn-define-dispatch-action conn-dispatch-jump (window pt _thing-cmd _thing-arg)
@@ -4299,6 +4275,7 @@ seconds."
             (apply action window pt thing-cmd thing-arg action-args))))))
 
 (defun conn-repeat-last-dispatch ()
+  "Repeat the last dispatch command."
   (interactive)
   (when conn--last-dispatch-command
     (apply #'conn-dispatch-on-things conn--last-dispatch-command)))
@@ -4477,9 +4454,6 @@ Expansions and contractions are provided by functions in
 
 
 ;;;; Narrow Ring
-
-(defvar-local conn-narrow-ring nil
-  "Ring of recent narrowed regions.")
 
 (cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
   (narrow-ring nil))
