@@ -217,6 +217,9 @@ For the meaning of CONDITION see `buffer-match-p'."
 (defvar conn-states nil
   "All defined conn states.")
 
+(defvar conn--state-objects nil
+  "State object plist.")
+
 (defvar conn-exit-functions nil
   "Abnormal hook run when a state is exited.
 
@@ -490,7 +493,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 (eval-and-compile
   (defmacro conn--thread (form needle &rest forms)
     (declare (debug (form symbolp body))
-             (indent 1))
+             (indent 2))
     (if forms
         `(let ((,needle ,form))
            (conn--thread ,(car forms) ,needle ,@(cdr forms)))
@@ -887,22 +890,20 @@ after point."
                      (list major-mode)
                    (reverse (conn--derived-mode-all-parents major-mode))))
          mark-map-keys mode-map mode-mark-map)
-    (cl-loop
-     for (state) on conn-states by #'cddr
-     do
-     (setq mark-map-keys
-           (where-is-internal 'conn-mark-thing-map
-                              (list (alist-get state conn--state-maps)
-                                    (conn-get-local-map state))))
-     (dolist (mode mmodes)
-       (setq mode-map (conn-get-mode-map state mode)
-             mode-mark-map (make-sparse-keymap))
-       (let ((mark-map (conn-get-mode-things-map mode)))
-         (when (cdr mark-map)
-           (dolist (key mark-map-keys)
-             (define-key mode-mark-map key mark-map))))
-       (push (cons state (make-composed-keymap mode-mark-map mode-map))
-             conn--local-major-mode-maps)))))
+    (dolist (state conn-states)
+      (setq mark-map-keys
+            (where-is-internal 'conn-mark-thing-map
+                               (list (alist-get state conn--state-maps)
+                                     (conn-get-local-map state))))
+      (dolist (mode mmodes)
+        (setq mode-map (conn-get-mode-map state mode)
+              mode-mark-map (make-sparse-keymap))
+        (let ((mark-map (conn-get-mode-things-map mode)))
+          (when (cdr mark-map)
+            (dolist (key mark-map-keys)
+              (define-key mode-mark-map key mark-map))))
+        (push (cons state (make-composed-keymap mode-mark-map mode-map))
+              conn--local-major-mode-maps)))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
   "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
@@ -1054,49 +1055,59 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
+(defsubst conn--get-state-object (state)
+  (plist-get conn--state-objects state))
+
+(gv-define-setter conn--get-state-object (value state)
+  `(setf (plist-get conn--state-objects ,state) ,value))
+
+(defun conn--compute-ancestors (state-object)
+  (let ((queue (list state-object))
+        (generations nil))
+    (while
+        (conn--thread (slot-value (car (push (pop queue) generations)) 'parents)
+            ancestors
+          (mapcar #'conn--get-state-object ancestors)
+          (seq-difference ancestors generations)
+          (setq queue (append queue ancestors))))
+    (nreverse generations)))
+
 (defun conn--state-all-parents (state)
-  (let* ((state-props (plist-get conn-states state))
-         (all (slot-value state-props 'all-parents)))
+  (let* ((state-object (if (symbolp state)
+                           (conn--get-state-object state)
+                         state))
+         (all (slot-value state-object 'all-parents)))
     (if (not (eq all conn--state-slot-unbound))
         all
-      (setf (slot-value state-props 'all-parents)
-            (cl-loop with all-parents = (list state-props)
-                     with queue = (list state-props)
-                     for parents = (seq-difference
-                                    (mapcar (lambda (state)
-                                              (plist-get conn-states state))
-                                            (slot-value (pop queue) 'parents))
-                                    all-parents)
-                     while parents
-                     do (setf queue (append queue parents)
-                              all-parents (append parents all-parents))
-                     finally return (nreverse all-parents))))))
+      (setf (slot-value state-object 'all-parents)
+            (conn--compute-ancestors state-object)))))
 
-(defun conn-state-get (state property)
+(defun conn-state-get (state slot)
   (cl-loop for s in (conn--state-all-parents state)
-           for slot = (ignore-errors (slot-value s property))
-           unless (eq slot conn--state-slot-unbound)
-           return slot))
+           for val = (ignore-errors (slot-value s slot))
+           unless (eq val conn--state-slot-unbound)
+           return val))
 
-(defsubst conn-state-set (state property value)
-  (setf (aref (plist-get conn-states state)
-              (cl-struct-slot-offset state property))
+(gv-define-setter conn-state-get (value state slot)
+  `(conn-state-set ,state ,slot ,value))
+
+(defsubst conn-state-set (state slot value)
+  (setf (slot-value (conn--get-state-object state) slot)
         value))
 
-(defsubst conn-state-unset (state property)
-  (setf (aref (plist-get conn-states state)
-              (cl-struct-slot-offset state property))
+(defsubst conn-state-unset (state slot)
+  (setf (slot-value (conn--get-state-object state) slot)
         conn--state-slot-unbound))
 
-(cl-generic-define-generalizer conn--generic-substate-generalizer
-  90 (lambda (state) `(and (plist-member conn-states ,state) ,state))
-  (lambda (tag)
-    (mapcar (lambda (state) `(substate ,state))
-            (conn--state-all-parents tag))))
+(cl-generic-define-generalizer conn--substate-generalizer
+  90 (lambda (state) `(and (plist-member conn--state-objects ,state) ,state))
+  (lambda (state)
+    (mapcar (lambda (state-obj) `(conn-substate ,(cl-type-of state-obj)))
+            (conn--state-all-parents state))))
 
-(cl-defmethod cl-generic-generalizers ((_specializer (head substate)))
-  "Support for (substate STATE) specializers."
-  (list conn--generic-substate-generalizer))
+(cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
+  "Support for (conn-substate STATE) specializers."
+  (list conn--substate-generalizer))
 
 (cl-defgeneric conn-enter-state (state)
   "Enter conn state STATE.
@@ -1164,8 +1175,10 @@ disabled.
                     collect (list (intern (substring (symbol-name slot) 1))
                                   value)))
 
-       (setf (plist-get conn-states ',name)
+       (setf (conn--get-state-object ',name)
              (,(conn--symbolicate "make-" name) ,@plist))
+
+       (cl-pushnew ',name conn-states)
 
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
@@ -7039,8 +7052,8 @@ When ARG is nil the root window is used."
         (setq conn--input-method current-input-method)
         (funcall (conn--default-state-for-buffer))
         (conn--setup-major-mode-maps))
-    (cl-loop for (state) on conn-states by #'cddr
-             do (setf (buffer-local-value state (current-buffer)) nil))
+    (dolist (state conn-states)
+      (setf (buffer-local-value state (current-buffer)) nil))
     (setq conn-current-state nil
           conn-previous-state nil
           cursor-type t)
