@@ -1270,8 +1270,8 @@ Additional keys are allowed and are added as slots to NAME.
               (condition-case err
                   (funcall fn state)
                 (t
-                 (remove-hook 'conn-entery-functions fn)
-                 (message "Error in conn-entry-functions: %s" (car err))))))))
+                 (remove-hook 'conn-exit-functions fn)
+                 (message "Error in conn-exit-functions %s" (car err))))))))
 
        (cl-defmethod conn-enter-state ((state (eql ',name)))
          (unless ,name
@@ -1293,12 +1293,12 @@ Additional keys are allowed and are added as slots to NAME.
                  (conn-local-mode -1)
                  (message "Error entering state %s." ',name))))
            (run-hook-wrapped
-            'conn-entery-functions
+            'conn-entry-functions
             (lambda (fn)
               (condition-case err
                   (funcall fn state)
                 (t
-                 (remove-hook 'conn-entery-functions fn)
+                 (remove-hook 'conn-entry-functions fn)
                  (message "Error in conn-entry-functions: %s" (car err))))))))
 
        ,(when body
