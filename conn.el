@@ -1083,6 +1083,7 @@ mouse-3: Describe current input method")
             (conn--compute-ancestors state-object)))))
 
 (defun conn-state-get (state slot)
+  "Return the value in STATE of SLOT."
   (cl-loop for s in (conn--state-all-parents state)
            for val = (ignore-errors (slot-value s slot))
            unless (eq val conn--state-slot-unbound)
@@ -1092,10 +1093,17 @@ mouse-3: Describe current input method")
   `(conn-state-set ,state ,slot ,value))
 
 (defsubst conn-state-set (state slot value)
+  "Set the value of SLOT in STATE to VALUE.
+
+Returns VALUE."
   (setf (slot-value (conn--get-state-object state) slot)
         value))
 
 (defsubst conn-state-unset (state slot)
+  "Make SLOT unbound in STATE.
+
+If a slot is unbound in a state it will inherit the value of that slot
+from its parents."
   (setf (slot-value (conn--get-state-object state) slot)
         conn--state-slot-unbound))
 
@@ -1123,6 +1131,18 @@ state."
   (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
 (cl-defgeneric conn-state-body (state)
+  "Body function for STATE.
+
+This function is run each time a state is entered or exited.  STATE is
+the symbol naming the state entered or exited and it is bound to t or
+nil respectively.
+
+This function can be specialized on substates so that one can write
+methods for a state that run whenever that state or one of its children
+is entered or exited.  To do this write a method of the form:
+
+(cl-defmethod conn-state-body ((state (conn-substate PARENT-STATE)))
+  ...)"
   (:method (_state) "Noop" nil))
 
 (defmacro conn-define-state (name doc &rest rest)
@@ -1141,7 +1161,14 @@ NAME.
 :CURSOR is the `cursor-type' in NAME.
 
 BODY contains code to be executed each time the state is enabled or
-disabled.
+disabled.  When BODY is present it will become the body of a method of
+`conn-state-body' specialized on NAME.  Conn also provides a
+conn-substate specializer so that one may write methods for
+`conn-state-body' specialized on a state and its substates.  To do this
+write a method of the form:
+
+(cl-defmethod conn-state-body ((state (conn-substate STATE-NAME)))
+  ...)
 
 \(fn NAME DOC &key LIGHTER SUPPRESS-INPUT-METHOD KEYMAP CURSOR EPHEMERAL-MARKS &allow-other-keys &body BODY)"
   (declare (debug ( name stringp
