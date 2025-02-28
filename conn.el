@@ -1630,9 +1630,9 @@ Optionally the overlay may have an associated THING."
             (conn-label-select labels)
           (cl-loop for win in windows
                    for (pt vscroll hscroll) in window-state
-                   do (set-window-point win pt)
-                   (set-window-hscroll win hscroll)
-                   (set-window-vscroll win vscroll))
+                   do (progn (set-window-point win pt)
+                             (set-window-hscroll win hscroll)
+                             (set-window-vscroll win vscroll)))
           (mapc #'conn-label-delete labels)
           (unless conn-wincontrol-mode
             (conn--destroy-mode-line-labels)))))))
@@ -1656,9 +1656,10 @@ Optionally the overlay may have an associated THING."
             "C-h" 'help
             "t" 'conn-mark-thing-map
             "e" 'recursive-edit)
-  (if conn-read-mover
-      (set-face-inverse-video 'mode-line t)
-    (set-face-inverse-video 'mode-line nil)))
+  (unless executing-kbd-macro
+    (if conn-read-mover
+        (set-face-inverse-video 'mode-line t)
+      (set-face-inverse-video 'mode-line nil))))
 
 (defvar conn-bounds-of-command-alist nil
   "Alist of bounds-op functions for things or commands.
@@ -3198,9 +3199,10 @@ If MMODE-OR-STATE is a mode it must be a major mode."
             "'" 'repeat
             "C-d" 'forward-delete-arg
             "DEL" 'backward-delete-arg)
-  (if conn-read-dispatch
-      (set-face-inverse-video 'mode-line t)
-    (set-face-inverse-video 'mode-line nil)))
+  (unless executing-kbd-macro
+    (if conn-read-mover
+        (set-face-inverse-video 'mode-line t)
+      (set-face-inverse-video 'mode-line nil))))
 
 (defvar conn--last-dispatch-command nil)
 
@@ -6343,7 +6345,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           conn--wincontrol-initial-winconf (current-window-configuration)))
   (conn-wincontrol-help)
   ;; TODO: make inverse-video a custom option
-  (set-face-inverse-video 'mode-line t)
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line t))
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
@@ -6354,7 +6357,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
-  (set-face-inverse-video 'mode-line nil))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line nil)))
 
 (defun conn-wincontrol-one-command ()
   (interactive)
