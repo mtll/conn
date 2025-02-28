@@ -1170,6 +1170,8 @@ write a method of the form:
 (cl-defmethod conn-state-body ((state (conn-substate STATE-NAME)))
   ...)
 
+Additional keys are allowed and are added as slots to NAME.
+
 \(fn NAME DOC &key LIGHTER SUPPRESS-INPUT-METHOD KEYMAP CURSOR EPHEMERAL-MARKS &allow-other-keys &body BODY)"
   (declare (debug ( name stringp
                     [&rest keywordp sexp]
@@ -1181,11 +1183,14 @@ write a method of the form:
                ((map :lighter
                      :cursor
                      :parents
+                     :all-parents
                      (:keymap keymap '(make-sparse-keymap)))
                 rest)
                (plist `( :suppress-input-method 'conn--state-slot-unbound
                          :parents ',(ensure-list parents)))
                (body nil))
+    (when all-parents
+      (error "State slot all-parents is reserved for internal use"))
     (cl-loop for sublist on rest by #'cddr
              if (keywordp (car sublist))
              do (unless (memq (car sublist)
