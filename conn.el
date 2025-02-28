@@ -2356,7 +2356,7 @@ Possibilities: \\<query-replace-map>
       (setcar reg (conn--create-marker beg nil t)))
     (if (markerp end)
         (set-marker-insertion-type end nil)
-      (setcdr reg (conn--create-marker end))))
+      (setcdr reg (conn--create-marker end (marker-buffer (car reg))))))
   (let (overlays)
     (lambda (state)
       (pcase state
