@@ -1111,6 +1111,9 @@ state."
   (:method ((_state (eql nil))) "Noop" nil)
   (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
+(cl-defgeneric conn-state-body (state)
+  (:method (_state) "Noop" nil))
+
 (defmacro conn-define-state (name doc &rest rest)
   "Define a conn state NAME.
 
@@ -1212,7 +1215,7 @@ disabled.
                          conn-current-state nil
                          conn-previous-state state
                          cursor-type t)
-                   ,@body
+                   (conn-state-body ',name)
                    (setq success t))
                (unless success
                  (conn-local-mode -1)
@@ -1240,7 +1243,7 @@ disabled.
                    (setq cursor-type (or ,cursor-name t))
                    (when (not executing-kbd-macro)
                      (force-mode-line-update))
-                   ,@body
+                   (conn-state-body ',name)
                    (setq success t))
                (unless success
                  (conn-local-mode -1)
@@ -1253,6 +1256,10 @@ disabled.
                 (t
                  (remove-hook 'conn-entery-functions fn)
                  (message "Error in conn-entry-functions: %s" (car err))))))))
+
+       ,(when body
+          `(cl-defmethod conn-state-body ((_ (eql ',name)))
+             ,@body))
 
        (defun ,name ()
          ,doc
