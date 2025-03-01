@@ -3554,6 +3554,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :description "Yank To"
   :keys "C-y"
   :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (insert-for-yank str))))
+
+(conn-define-dispatch-action conn-dispatch-yank-to (window pt thing-cmd thing-arg str)
+  :description "Yank Replace To"
+  :keys "M-y"
+  :interactive (list (read-from-kill-ring "Yank Replace To from kill-ring: "))
+  :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
