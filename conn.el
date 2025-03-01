@@ -7357,18 +7357,24 @@ When ARG is nil the root window is used."
   (defvar forward-thing-provider-alist)
 
   (defun conn-sp-forward-sexp-op (backward)
-    (pcase-let* (((map :obeg :oend) (sp-get-enclosing-sexp))
-                 ((map :beg :end) (sp-get-thing backward)))
-      (unless (and (eql obeg beg) (eql oend end))
-        (goto-char (if backward beg end)))))
+    (pcase-let* ((next (sp-get-thing))
+                 (prev (sp-get-thing t)))
+      (when (if backward
+                (< (plist-get prev :end) (plist-get next :end))
+              (> (plist-get next :beg) (plist-get prev :beg)))
+        (goto-char (if backward
+                       (plist-get prev :beg)
+                     (plist-get next :end))))))
 
   (defun conn-sp-bounds-of-sexp ()
-    (pcase-let (((map :beg :end) (sp-get-thing)))
-      (if (and beg end (<= beg (point) end))
-          (cons beg end)
-        (pcase-let (((map :beg :end) (sp-get-thing t)))
-          (when (and beg end)
-            (cons beg end))))))
+    (pcase-let* ((next (sp-get-thing))
+                 (prev (sp-get-thing t)))
+      (when (or next prev)
+        (if (eql (point) (plist-get prev :end))
+            (cons (plist-get prev :beg)
+                  (plist-get prev :end))
+          (cons (plist-get next :beg)
+                (plist-get next :end))))))
 
   (defun conn-sp-bounds-providers ()
     (if smartparens-mode
