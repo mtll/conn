@@ -3545,6 +3545,19 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                 (conn-get-state-map conn-dispatch-state-for-reading)
                                 ,key (list ,@menu-item)))))))))
 
+(conn-define-dispatch-action conn-dispatch-yank-to (window pt thing-cmd thing-arg str)
+  :description "Yank To"
+  :keys "C-y"
+  :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end)
+         (delete-region beg end)
+         (insert-for-yank str))
+        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
   :keys "d"
