@@ -3727,22 +3727,28 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :keys "p"
   :interactive (list (register-read-with-preview "Register: "))
   (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (conn-register-load register))))
+    ;; If there is a keyboard macro in the register we would like to
+    ;; amalgamate the undo
+    (with-undo-amalgamate
+      (save-excursion
+        (goto-char pt)
+        (conn-register-load register)))))
 
 (conn-define-dispatch-action conn-dispatch-register-replace (window pt thing-cmd thing-arg register)
   :description "Register Replace <%c>"
   :keys "P"
   :interactive (list (register-read-with-preview "Register: "))
   (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (delete-region beg end)
-         (conn-register-load register))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+    ;; If there is a keyboard macro in the register we would like to
+    ;; amalgamate the undo
+    (with-undo-amalgamate
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (delete-region beg end)
+           (conn-register-load register))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing-cmd thing-arg register)
   :description (lambda (register)
@@ -4337,8 +4343,8 @@ seconds."
               (pcase-dolist (`(_ . ,ovs) target-ovs)
                 (mapc #'delete-overlay ovs))
               (mapc #'conn-label-delete labels))
-            (undo-boundary)
-            (apply action window pt thing-cmd thing-arg action-args))))))
+            (apply action window pt thing-cmd thing-arg action-args))
+        (undo-boundary)))))
 
 (defun conn-repeat-last-dispatch ()
   "Repeat the last dispatch command."
