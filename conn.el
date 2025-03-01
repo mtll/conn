@@ -7142,6 +7142,13 @@ When ARG is nil the root window is used."
 
 ;;; Load Extensions
 
+(with-eval-after-load 'calc
+  (declare-function calc-dispatch "calc")
+
+  (defun conn--calc-dispatch-ad (&rest app)
+    (conn--with-state 'conn-null-state (apply app)))
+  (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
+
 (with-eval-after-load 'corfu
   (defun conn--exit-completion (_state)
     (completion-in-region-mode -1))
