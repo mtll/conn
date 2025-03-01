@@ -31,7 +31,6 @@
 
 (require 'compat)
 (require 'subr-x)
-(require 'easy-mmode)
 (require 'eieio)
 (eval-when-compile
   (require 'cl-lib)
@@ -49,7 +48,6 @@
 
 (defvar conn-mode nil)
 (defvar conn-local-mode)
-(defvar conn-modes)
 (defvar conn-state)
 (defvar conn-emacs-state)
 (defvar conn-org-edit-state)
@@ -65,10 +63,10 @@
 A target finder function should return a list of overlays.")
 
 (defvar conn-dispatch-target-finders-alist
-  '((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
+  `((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
-    (conn-backward-symbol . (apply-partially 'conn--dispatch-all-things 'symbol t))
-    (backward-word . (apply-partially 'conn--dispatch-all-things 'word t)))
+    (conn-backward-symbol . ,(apply-partially 'conn--dispatch-all-things 'symbol t))
+    (backward-word . ,(apply-partially 'conn--dispatch-all-things 'word t)))
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
@@ -154,10 +152,18 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :type 'symbol
   :group 'conn-states)
 
+
 (defcustom conn-buffer-default-state-alist
-  '(((derived-mode . prog-mode) . conn-state)
-    ((derived-mode . text-mode) . conn-state)
-    ((derived-mode . conf-mode) . conn-state))
+  '(((or (derived-mode . prog-mode)
+         (derived-mode . text-mode)
+         (derived-mode . conf-mode))
+     . conn-state)
+    ((or (derived-mode . calc-mode)
+         (derived-mode . calc-trail-mode)
+         (derived-mode . minibuffer-mode)
+         (derived-mode . calc-keypad-mode)
+         (derived-mode . image-mode))
+     . conn-null-state))
   "Alist of the form ((CONDITION . STATE) ...).
 
 Elements specify default STATE for buffers matching CONDITION.
@@ -259,36 +265,6 @@ See also `conn-exit-functions'.")
 
 (defvar-local conn-previous-state nil
   "Previous conn state in buffer.")
-
-(defvar conn-in-modes
-  (list 'occur-mode
-        'grep-mode
-        'occur-edit-mode
-        'eshell-mode
-        'edmacro-mode
-        '(not minibuffer-mode
-              slime-xref-mode
-              calc-mode
-              calc-trail-mode
-              calc-keypad-mode
-              special-mode
-              image-mode)
-        t)
-  "Modes in which `conn-local-mode' should be enabled.
-Must be of a form accepted by `define-globalized-minor-mode'
-:predicate argument.")
-
-(defvar conn-enable-in-buffer-hook
-  (list (lambda ()
-          (easy-mmode--globalized-predicate-p conn-in-modes)))
-  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
-Each function is run without any arguments and if any of them return
-non-nil `conn-local-mode' will be enabled in the buffer.")
-
-(defvar conn-disable-in-buffer-hook nil
-  "Hook to determine if `conn-local-mode' should be enabled in a buffer.
-Each function is run without any arguments and if any of them return
-nil `conn-local-mode' will be not enabled in the buffer.")
 
 ;;;;;; State Keymaps
 
@@ -463,7 +439,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;;; Dots
 
-(put 'conn--dot-overlay 'priority (1- conn-mark-overlay-priority))
+(put 'conn--dot-overlay 'priority (1+ conn-mark-overlay-priority))
 (put 'conn--dot-overlay 'conn-overlay t)
 (put 'conn--dot-overlay 'evaporate t)
 
@@ -482,7 +458,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 ;;;;;; Read String Overlays
 
 (put 'conn-read-string-match 'conn-overlay t)
-(put 'conn-read-string-match 'priority 2001)
+(put 'conn-read-string-match 'priority (+ 2 conn-mark-overlay-priority))
 
 ;;;;;; Label Overlay
 
@@ -1190,7 +1166,8 @@ Additional keys are allowed and are added as slots to NAME.
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-name (conn--symbolicate name "-lighter"))
-               ((map :lighter :cursor :parents :keymap) rest)
+               ((map :lighter :cursor :parents :keymap :hide-mark-cursor)
+                rest)
                ;; TODO: This method of handling slots is ugly.
                (plist `( :suppress-input-method 'conn--state-slot-unbound
                          :parents ',(ensure-list parents)))
@@ -1198,7 +1175,8 @@ Additional keys are allowed and are added as slots to NAME.
     (cl-loop for sublist on rest by #'cddr
              if (keywordp (car sublist))
              do (unless (memq (car sublist)
-                              '(:parents :lighter :keymap :cursor))
+                              '( :parents :lighter :keymap
+                                 :cursor :hide-mark-cursor))
                   (setf (plist-get plist (car sublist)) (cadr sublist)))
              else return (setf body sublist))
     `(progn
@@ -1230,7 +1208,8 @@ Additional keys are allowed and are added as slots to NAME.
        ;; map a copy of the keymap we have been passed but we don't
        ;; want to invalidate all the pointers to our state keymap in
        ;; child state keymaps.
-       (setcdr ,map-name (cdr (copy-keymap ,keymap)))
+       ,(when keymap
+          `(setcdr ,map-name (cdr (copy-keymap ,keymap))))
 
        (set-keymap-parent
         ,map-name (make-composed-keymap
@@ -1295,9 +1274,10 @@ Additional keys are allowed and are added as slots to NAME.
                    (setq ,name t
                          conn-current-state state)
                    (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter))
-                               conn--local-minor-mode-maps (alist-get ',name conn--minor-mode-maps))
+                               conn--local-minor-mode-maps (alist-get ',name conn--minor-mode-maps)
+                               conn--hide-mark-cursor ,hide-mark-cursor
+                               cursor-type ,cursor-name)
                    (conn--activate-input-method)
-                   (setq cursor-type (or ,cursor-name t))
                    (when (not executing-kbd-macro)
                      (force-mode-line-update))
                    (conn-state-body ',name)
@@ -1323,18 +1303,39 @@ Additional keys are allowed and are added as slots to NAME.
          (interactive)
          (conn-enter-state ',name)))))
 
+(conn-define-state conn-null-state
+  "An empty state.
+
+For use in buffers that should not have any other state."
+  :ligher ""
+  :hide-mark-cursor t
+  :cursor (bar . 5))
+
 (conn-define-state conn-emacs-state
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
   :lighter " emacs"
-  :keymap (make-sparse-keymap))
+  :keymap (make-sparse-keymap)
+  :cursor (hbar . 8))
+
+(conn-define-state conn-movement-state
+  "A `conn-mode' state moving in a buffer."
+  :lighter " move"
+  :suppress-input-method t
+  :keymap (define-keymap :suppress t))
+
+(conn-define-state conn-menu-state
+  "A `conn-mode' state for remapping key menus."
+  :lighter " menu")
 
 (conn-define-state conn-state
   "A `conn-mode' state for editing test."
+  :parents (conn-menu-state conn-movement-state)
   :lighter " conn"
   :suppress-input-method t
-  :keymap (define-keymap :suppress t))
+  :keymap (define-keymap :suppress t)
+  :cursor box)
 
 (conn-define-state conn-org-edit-state
   "A `conn-mode' state for structural editing of `org-mode' buffers."
@@ -1655,11 +1656,11 @@ Optionally the overlay may have an associated THING."
   "State which should be active in `conn-read-thing-mover-mode'.")
 
 (defvar conn-bounds-of-command-alist
-  '((recursive-edit . conn--bounds-of-dots)
+  `((recursive-edit . conn--bounds-of-dots)
     (conn-toggle-mark-command . conn--bounds-of-region)
-    (conn-expand . (apply-partially 'conn--bounds-of-expansion 'conn-expand))
+    (conn-expand . ,(apply-partially 'conn--bounds-of-expansion 'conn-expand))
     (conn-expand-remote . conn--bounds-of-remote-expansion)
-    (conn-contract . (apply-partially 'conn--bounds-of-expansion 'conn-contract))
+    (conn-contract . ,(apply-partially 'conn--bounds-of-expansion 'conn-contract))
     (set-mark-command . conn--bounds-of-region)
     (conn-set-mark-command . conn--bounds-of-region)
     (visible . conn--bounds-of-window)
@@ -2820,6 +2821,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (setq conn--ephemeral-mark t)
     nil))
 
+;; TODO: see if this is fixable with vertico's candidate overlay
 (defun conn--mark-cursor-redisplay (win)
   (let ((cursor (window-parameter win 'conn-mark-cursor)))
     (if (or (not conn-local-mode)
@@ -2834,34 +2836,25 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                       (make-overlay (mark t) (1+ (mark t)) nil t)))
         (overlay-put cursor 'category 'conn--mark-cursor)
         (overlay-put cursor 'window win))
-      (unless (and (eq (overlay-buffer cursor) (current-buffer))
-                   (eq (overlay-start cursor) (mark t)))
-        (if (and (eql (char-after (mark t)) ?\t)
-                 (< 1 (save-excursion
-                        (goto-char (mark t))
-                        (let ((col (current-column)))
-                          (- (indent-next-tab-stop col) col)))))
-            (progn
-              (move-overlay cursor (mark t) (mark t) (window-buffer win))
-              (overlay-put cursor 'before-string
-                           (propertize " " 'face 'conn-mark-face)))
-          (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
-          (overlay-put cursor 'before-string
-                       (when (and (= (mark t) (point-max))
-                                  (/= (point) (mark t)))
-                         (propertize " " 'face 'conn-mark-face))))))))
-
-(defun conn-hide-mark-cursor (mmode &optional predicate)
-  "Hide mark cursor in buffers with in MMODE-OR-STATE.
-If PREDICATE is non-nil it is a function that will be called
-to determine if mark cursor should be hidden in buffer.
-If MMODE-OR-STATE is a mode it must be a major mode."
-  (put mmode :conn-hide-mark (or predicate t)))
-
-(defun conn-show-mark-cursor (mmode-or-state)
-  "Show mark cursor in MMODE-OR-STATE.
-If MMODE-OR-STATE is a mode it must be a major mode."
-  (put mmode-or-state :conn-hide-mark nil))
+      (cond ((and (eql (overlay-buffer cursor) (current-buffer))
+                  (eql (overlay-start cursor) (mark t))
+                  (or (eql (overlay-end cursor) (1+ (mark t)))
+                      (eql (overlay-end cursor) (point-max)))))
+            ((and (eql (char-after (mark t)) ?\t)
+                  (< 1 (save-excursion
+                         (goto-char (mark t))
+                         (let ((col (current-column)))
+                           (- (indent-next-tab-stop col) col)))))
+             (move-overlay cursor (mark t) (mark t) (window-buffer win))
+             (overlay-put cursor 'after-string
+                          (propertize " " 'face 'conn-mark-face)))
+            ((= (mark t) (point-max))
+             (move-overlay cursor (mark t) (mark t) (window-buffer win))
+             (overlay-put cursor 'after-string
+                          (propertize " " 'face 'conn-mark-face)))
+            (t
+             (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
+             (overlay-put cursor 'after-string nil))))))
 
 (defun conn--mark-pre-command-hook ()
   (set-marker conn-this-command-start (point))
@@ -6753,7 +6746,7 @@ When ARG is nil the root window is used."
   "C-'" 'conn-isearch-open-recursive-edit)
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-state 'compilation-mode)
+  :keymap (conn-get-mode-map 'conn-movement-state 'compilation-mode)
   "<" 'previous-error-no-select
   ">" 'next-error-no-select)
 
@@ -6836,7 +6829,9 @@ When ARG is nil the root window is used."
   "c i" 'copy-from-above-command
   "y" 'yank-in-context)
 
-(defvar-keymap conn-movement-map
+(define-keymap
+  :keymap conn-movement-state-map
+  "e" 'conn-emacs-state
   ">" 'forward-line
   "<" 'conn-backward-line
   "o" (conn-remap-key conn-forward-word-keys)
@@ -6876,13 +6871,21 @@ When ARG is nil the root window is used."
   "N" (conn-remap-key conn-beginning-of-defun-keys)
   "n" (conn-remap-key conn-backward-sexp-keys))
 
+(define-keymap
+  :keymap conn-menu-state-map
+  "s" (conn-remap-keymap (key-parse "M-s"))
+  "g" (conn-remap-keymap (key-parse "M-g"))
+  "c" (conn-remap-key (key-parse "C-c"))
+  "x" (conn-remap-key (key-parse "C-x"))
+  "C-4" (conn-remap-key (key-parse "C-x 4"))
+  "C-5" (conn-remap-key (key-parse "C-x 5")))
+
 (defvar-keymap conn-other-buffer-repeat-map
   :repeat t
   "&" 'conn-other-buffer)
 
 (define-keymap
   :keymap conn-state-map
-  :parent conn-movement-map
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
@@ -6908,8 +6911,6 @@ When ARG is nil the root window is used."
   "C-1" 'delete-other-windows
   "C-2" 'split-window-below
   "C-3" 'split-window-right
-  "C-4" (conn-remap-key (key-parse "C-x 4"))
-  "C-5" (conn-remap-key (key-parse "C-x 5"))
   "C-8" 'conn-tab-to-register
   "C-9" 'quit-window
   "C-=" 'balance-windows
@@ -6920,19 +6921,16 @@ When ARG is nil the root window is used."
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "b" 'conn-edit-map
-  "c" (conn-remap-key (key-parse "C-c"))
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
-  "g" (conn-remap-keymap (key-parse "M-g"))
   "h" 'conn-expand
   "H" 'conn-mark-thing-map
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
   "R" 'conn-rectangle-mark
-  "s" (conn-remap-keymap (key-parse "M-s"))
   "Q" 'conn-transpose-window
   "T" 'conn-throw-buffer
   "V" 'conn-narrow-to-thing
@@ -6940,7 +6938,6 @@ When ARG is nil the root window is used."
   "w" 'conn-kill-region
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
-  "x" (conn-remap-key (key-parse "C-x"))
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key conn-yank-keys)
   "z" 'conn-exchange-mark-command)
@@ -7055,9 +7052,6 @@ When ARG is nil the root window is used."
         (setq-local conn-lighter (seq-copy conn-lighter))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
-        (setq-local conn--hide-mark-cursor
-                    (when-let* ((hide (conn--derived-mode-property :conn-hide-mark-cursor)))
-                      (if (functionp hide) (funcall hide) hide)))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
@@ -7080,19 +7074,12 @@ When ARG is nil the root window is used."
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
-(defun conn-initialize-buffer ()
-  "Maybe initialize `conn-local-mode' in current buffer.
-Check `conn-enable-in-buffer-hook' and `conn-disable-in-buffer-hook' to
-determine if `conn-local-mode' should be enabled."
-  (cond ((ignore-errors
-           (and (run-hook-with-args-until-success 'conn-enable-in-buffer-hook)
-                (run-hook-with-args-until-failure 'conn-disable-in-buffer-hook)))
-         (conn-local-mode 1))
-        (t (conn-local-mode -1))))
+(defun conn--initialize-buffer ()
+  (conn-local-mode 1))
 
 ;;;###autoload
 (define-globalized-minor-mode conn-mode
-  conn-local-mode conn-initialize-buffer
+  conn-local-mode conn--initialize-buffer
   :group 'conn
   :keymap conn-global-map
   (progn
@@ -7249,7 +7236,7 @@ determine if `conn-local-mode' should be enabled."
    'org-up-heading)
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-state 'org-mode)
+    :keymap (conn-get-mode-map 'conn-movement-state 'org-mode)
     "=" 'conn-org-edit-state
     "^" 'org-up-element
     ")" 'org-next-visible-heading
@@ -7289,7 +7276,7 @@ determine if `conn-local-mode' should be enabled."
                        'paredit-backward-up))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-state 'paredit-mode)
+    :keymap (conn-get-mode-map 'conn-movement-state 'paredit-mode)
     "]" 'paredit-forward-down
     "[" 'paredit-backward-down
     "(" 'paredit-backward-up
@@ -7384,7 +7371,7 @@ determine if `conn-local-mode' should be enabled."
                        'sp-forward-sexp))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-state 'smartparens-mode)
+    :keymap (conn-get-mode-map 'conn-movement-state 'smartparens-mode)
     "]" 'sp-down-sexp
     "[" 'sp-backward-down-sexp
     ")" 'sp-up-sexp
@@ -7636,7 +7623,10 @@ determine if `conn-local-mode' should be enabled."
     :keymap (conn-get-mode-map 'conn-read-dispatch 'dired-mode)
     "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
-    "d" 'conn-dispatch-dired-kill-subdir
+    "d" 'conn-dispatch-dired-kill-subdir)
+
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-movement-state  'dired-mode)
     "m" 'dired-next-subdir
     "n" 'dired-prev-subdir
     "u" 'dired-next-dirline
