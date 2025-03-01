@@ -3550,7 +3550,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                 (conn-get-state-map conn-dispatch-state-for-reading)
                                 ,key (list ,@menu-item)))))))))
 
-(conn-define-dispatch-action conn-dispatch-yank-to (window pt thing-cmd thing-arg str)
+(conn-define-dispatch-action conn-dispatch-yank-to (window pt _thing-cmd _thing-arg str)
   :description "Yank To"
   :keys "C-y"
   :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
@@ -3560,7 +3560,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (goto-char pt)
       (insert-for-yank str))))
 
-(conn-define-dispatch-action conn-dispatch-yank-to (window pt thing-cmd thing-arg str)
+(conn-define-dispatch-action conn-dispatch-yank-replace-to (window pt thing-cmd thing-arg str)
   :description "Yank Replace To"
   :keys "M-y"
   :interactive (list (read-from-kill-ring "Yank Replace To from kill-ring: "))
@@ -3852,8 +3852,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (delete-region (region-beginning) (region-end))
   (yank))
 
-(conn-define-dispatch-action conn-dispatch-grab-replace (window pt thing-cmd thing-arg)
-  :description "Grab Replace"
+(conn-define-dispatch-action conn-dispatch-take-replace (window pt thing-cmd thing-arg)
+  :description "Take Replace"
   :keys "d"
   :filter (lambda () (unless buffer-read-only 'this))
   :window-predicate (lambda () buffer-read-only)
@@ -3868,8 +3868,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (delete-region (region-beginning) (region-end))
   (yank))
 
-(conn-define-dispatch-action conn-dispatch-grab (window pt thing-cmd thing-arg)
-  :description "Grab"
+(conn-define-dispatch-action conn-dispatch-take (window pt thing-cmd thing-arg)
+  :description "Take"
   :keys "s"
   :filter (lambda () (unless buffer-read-only 'this))
   :window-predicate (lambda () buffer-read-only)
@@ -3885,7 +3885,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (yank))
 
 (conn-define-dispatch-action conn-dispatch-yank (window pt thing-cmd thing-arg)
-  :description "Yank"
+  :description "Yank From"
   :keys "y"
   :filter (lambda () (unless buffer-read-only 'this))
   (let (str)
