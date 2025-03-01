@@ -7350,8 +7350,17 @@ When ARG is nil the root window is used."
   (declare-function sp-beginning-of-sexp "smartparens")
   (declare-function sp-point-in-comment "smartparens")
   (declare-function sp-get-thing "smartparens")
+  (declare-function sp-get-enclosing-sexp "smartparens")
   (defvar smartparens-global-mode)
-  (defvar bounds-of-thing-at-point-provider-alist nil)
+  (defvar bounds-of-thing-at-point-provider-alist)
+  (defvar smartparens-mode)
+  (defvar forward-thing-provider-alist)
+
+  (defun conn-sp-forward-sexp-op (backward)
+    (pcase-let* (((map :obeg :oend) (sp-get-enclosing-sexp))
+                 ((map :beg :end) (sp-get-thing backward)))
+      (unless (and (eql obeg beg) (eql oend end))
+        (goto-char (if backward beg end)))))
 
   (defun conn-sp-bounds-of-sexp ()
     (pcase-let (((map :beg :end) (sp-get-thing)))
@@ -7361,15 +7370,21 @@ When ARG is nil the root window is used."
           (when (and beg end)
             (cons beg end))))))
 
-  (defun conn-sp-bounds-provider ()
+  (defun conn-sp-bounds-providers ()
     (if smartparens-mode
         (setq-local bounds-of-thing-at-point-provider-alist
                     (cons (cons 'sexp 'conn-sp-bounds-of-sexp)
-                          bounds-of-thing-at-point-provider-alist))
+                          bounds-of-thing-at-point-provider-alist)
+                    forward-thing-provider-alist
+                    (cons (cons 'sexp 'conn-sp-forward-sexp-op)
+                          forward-thing-provider-alist))
       (setq-local bounds-of-thing-at-point-provider-alist
                   (remove '(sexp . conn-sp-bounds-of-sexp)
+                          bounds-of-thing-at-point-provider-alist)
+                  forward-thing-provider-alist
+                  (remove '(sexp . conn-sp-forward-sexp-op)
                           bounds-of-thing-at-point-provider-alist))))
-  (add-hook 'smartparens-mode-hook 'conn-sp-bounds-provider)
+  (add-hook 'smartparens-mode-hook 'conn-sp-bounds-providers)
 
   (with-eval-after-load 'eldoc
     (eldoc-add-command 'sp-down-sexp
