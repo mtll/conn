@@ -1740,18 +1740,22 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                  arg)))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
-  (let ((current-prefix-arg arg)
+  (let ((current-prefix-arg nil)
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
                                        'conn-discrete-thing-handler))
         (conn-this-command-thing (get cmd :conn-command-thing))
         (this-command cmd)
-        (conn-this-command-start (point-marker)))
+        (conn-this-command-start (point-marker))
+        (regions))
     (save-mark-and-excursion
-      (call-interactively cmd)
-      (funcall conn-this-command-handler conn-this-command-start)
-      (cons (cons (region-beginning) (region-end))
-            (conn-bounds-of-things-in-region
-             conn-this-command-thing (region-beginning) (region-end))))))
+      (dotimes (_ (prefix-numeric-value arg))
+        (call-interactively cmd)
+        (funcall conn-this-command-handler conn-this-command-start)
+        (move-marker conn-this-command-start (point))
+        (push (cons (region-beginning) (region-end)) regions))
+      (cons (cons (seq-min (mapcar #'car regions))
+                  (seq-max (mapcar #'cdr regions)))
+            regions))))
 
 (defun conn--bounds-of-expansion (cmd arg)
   (save-mark-and-excursion
@@ -2857,20 +2861,22 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
              (overlay-put cursor 'after-string nil))))))
 
 (defun conn--mark-pre-command-hook ()
-  (set-marker conn-this-command-start (point))
-  (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
-                                      (conn--command-property :conn-mark-handler))
-        conn-this-command-thing (conn--command-property :conn-command-thing)))
+  (unless conn--hide-mark-cursor
+    (set-marker conn-this-command-start (point))
+    (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
+                                        (conn--command-property :conn-mark-handler))
+          conn-this-command-thing (conn--command-property :conn-command-thing))))
 
 (defun conn--mark-post-command-hook ()
-  (setf (alist-get (recursion-depth) conn-last-bounds-of-command) nil)
-  (when (and conn-local-mode
-             (eq (current-buffer) (marker-buffer conn-this-command-start))
-             conn-this-command-thing
-             conn-this-command-handler
-             (not (region-active-p)))
-    (with-demoted-errors "Error in mark hook: %S"
-      (funcall conn-this-command-handler conn-this-command-start))))
+  (unless conn--hide-mark-cursor
+    (setf (alist-get (recursion-depth) conn-last-bounds-of-command) nil)
+    (when (and conn-local-mode
+               (eq (current-buffer) (marker-buffer conn-this-command-start))
+               conn-this-command-thing
+               conn-this-command-handler
+               (not (region-active-p)))
+      (with-demoted-errors "Error in mark hook: %S"
+        (funcall conn-this-command-handler conn-this-command-start)))))
 
 (defun conn--setup-mark ()
   (if conn-mode
@@ -7353,14 +7359,14 @@ When ARG is nil the root window is used."
             (cons beg end))))))
 
   (defun conn-sp-bounds-provider ()
-    (if smartparens-global-mode
-        (push '(sexp . conn-sp-bounds-of-sexp)
-              bounds-of-thing-at-point-provider-alist)
-      (setq bounds-of-thing-at-point-provider-alist
-            (delete '(sexp . conn-sp-bounds-of-sexp)
-                    bounds-of-thing-at-point-provider-alist))))
-
-  (add-hook 'smartparens-global-mode-hook 'conn-sp-bounds-provider)
+    (if smartparens-mode
+        (setq-local bounds-of-thing-at-point-provider-alist
+                    (cons (cons 'sexp 'conn-sp-bounds-of-sexp)
+                          bounds-of-thing-at-point-provider-alist))
+      (setq-local bounds-of-thing-at-point-provider-alist
+                  (remove '(sexp . conn-sp-bounds-of-sexp)
+                          bounds-of-thing-at-point-provider-alist))))
+  (add-hook 'smartparens-mode-hook 'conn-sp-bounds-provider)
 
   (with-eval-after-load 'eldoc
     (eldoc-add-command 'sp-down-sexp
