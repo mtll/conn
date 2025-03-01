@@ -710,7 +710,7 @@ If BUFFER is nil check `current-buffer'."
     (deactivate-mark)))
 
 (defmacro conn--with-state (transition-fn &rest body)
-  "Call TRANSITION-FN and run BODY preserving state."
+  "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
   (cl-with-gensyms ( saved-state saved-prev-state
@@ -719,9 +719,7 @@ If BUFFER is nil check `current-buffer'."
       `(let ((,saved-state conn-current-state)
              (,saved-prev-state conn-previous-state)
              (,buffer (current-buffer))
-             (,saved-cursor-type cursor-type)
-             (conn-exit-functions)
-             (conn-entry-functions))
+             (,saved-cursor-type cursor-type))
          (unwind-protect
              (progn
                (cond (,transition-fn
@@ -1169,7 +1167,7 @@ Additional keys are allowed and are added as slots to NAME.
   (pcase-let* ((map-name (conn--symbolicate name "-map"))
                (cursor-name (conn--symbolicate name "-cursor-type"))
                (lighter-name (conn--symbolicate name "-lighter"))
-               ((map :lighter :cursor :parents :keymap :hide-mark-cursor)
+               ((map :lighter :cursor :parents :keymap)
                 rest)
                ;; TODO: This method of handling slots is ugly.
                (plist `( :suppress-input-method 'conn--state-slot-unbound
@@ -1178,8 +1176,7 @@ Additional keys are allowed and are added as slots to NAME.
     (cl-loop for sublist on rest by #'cddr
              if (keywordp (car sublist))
              do (unless (memq (car sublist)
-                              '( :parents :lighter :keymap
-                                 :cursor :hide-mark-cursor))
+                              '(:parents :lighter :keymap :cursor))
                   (setf (plist-get plist (car sublist)) (cadr sublist)))
              else return (setf body sublist))
     `(progn
@@ -1278,7 +1275,7 @@ Additional keys are allowed and are added as slots to NAME.
                          conn-current-state state)
                    (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter))
                                conn--local-minor-mode-maps (alist-get ',name conn--minor-mode-maps)
-                               conn--hide-mark-cursor ,hide-mark-cursor
+                               conn--hide-mark-cursor (conn-state-get ',name 'hide-mark-cursor)
                                cursor-type ,cursor-name)
                    (conn--activate-input-method)
                    (when (not executing-kbd-macro)
@@ -6619,6 +6616,7 @@ Uses `split-window-right'."
         (push elem params)))
     (cons (reverse params) (reverse windows))))
 
+;; window-x can't come soon enough
 (defun conn--wincontrol-reflect-window (state)
   (pcase-let* ((`(,params . ,windows)
                 (conn--wincontrol-split-window-state state))
