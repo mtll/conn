@@ -3262,115 +3262,116 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 (when (ignore-errors (get action :conn-action-interactive))
                   (funcall (get action :conn-action-interactive)))))
       (setq action-args (read-action-args action))
-      (conn--with-state conn-dispatch-state-for-reading
-        (unwind-protect
-            (cl-prog
-             nil
-             :read-command
-             (setq keys (read-key-sequence
-                         (format prompt
-                                 (format (if thing-arg "%s%s" "[%s1]")
-                                         (if thing-sign "-" "")
-                                         thing-arg)
-                                 repeat-indicator
-                                 (cond
-                                  (invalid
-                                   (concat
-                                    (action-description action)
-                                    " "
-                                    (propertize "Not a valid thing command"
-                                                'face 'error)))
-                                  (action (action-description action))
-                                  (t ""))))
-                   cmd (key-binding keys t)
-                   invalid nil)
-             :loop
-             (pcase cmd
-               (`(,thing ,finder . ,default-action)
-                (cl-return
-                 (list thing
-                       (when thing-arg
-                         (* (if thing-sign -1 1) (or thing-arg 1)))
-                       finder
-                       (or action
-                           default-action
-                           (conn--dispatch-default-action thing))
-                       (if action
-                           action-args
-                         (read-action-args
-                          (or default-action
-                              (conn--dispatch-default-action thing))))
-                       (conn--dispatch-window-predicate
-                        action (get thing :conn-command-thing) cmd keys)
-                       repeat)))
-               ('keyboard-quit
-                (keyboard-quit))
-               ('repeat
-                (setq repeat (not repeat)
-                      repeat-indicator
-                      (propertize repeat-indicator
-                                  'face (when repeat
-                                          'eldoc-highlight-function-argument))))
-               ('digit-argument
-                (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                  (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-               ('backward-delete-arg
-                (setq thing-arg (floor thing-arg 10)))
-               ('forward-delete-arg
-                (setq thing-arg (when thing-arg
-                                  (thread-last
-                                    (log thing-arg 10)
-                                    floor
-                                    (expt 10)
-                                    (mod thing-arg)))))
-               ('reset-arg
-                (setq thing-arg nil))
-               ('negative-argument
-                (setq thing-sign (not thing-sign)))
-               ('help
-                (conn--with-state conn-previous-state
-                  (save-window-excursion
-                    (setq keys nil
-                          cmd (intern
-                               (completing-read
-                                "Command: "
-                                (lambda (string pred action)
-                                  (if (eq action 'metadata)
-                                      `(metadata
-                                        ,(cons 'affixation-function
-                                               (conn--dispatch-make-command-affixation))
-                                        (category . conn-dispatch-command))
-                                    (complete-with-action action obarray string pred)))
-                                (lambda (sym)
-                                  (pcase sym
-                                    ('help)
-                                    ((and (pred functionp)
-                                          (guard (or (get sym :conn-command-thing)
-                                                     (get sym :conn-action))))
-                                     t)
-                                    (`(,_ ,_ . ,_) t)))
-                                t)))))
-                (go :loop))
-               ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
-                     (guard thing))
-                (cl-return
-                 (list cmd
-                       (when thing-arg
-                         (* (if thing-sign -1 1) (or thing-arg 1)))
-                       (conn--dispatch-target-finder cmd)
-                       (or action (conn--dispatch-default-action cmd))
-                       (if action
-                           action-args
-                         (read-action-args (conn--dispatch-default-action cmd)))
-                       (conn--dispatch-window-predicate action thing cmd keys)
-                       repeat)))
-               ((guard (ignore-errors (get cmd :conn-action)))
-                (setq action (unless (eq cmd action) cmd)
-                      action-args (read-action-args action)))
-               (_
-                (setq invalid t)))
-             (go :read-command))
-          (message nil))))))
+      (atomic-change-group
+        (conn--with-state conn-dispatch-state-for-reading
+          (unwind-protect
+              (cl-prog
+               nil
+               :read-command
+               (setq keys (read-key-sequence
+                           (format prompt
+                                   (format (if thing-arg "%s%s" "[%s1]")
+                                           (if thing-sign "-" "")
+                                           thing-arg)
+                                   repeat-indicator
+                                   (cond
+                                    (invalid
+                                     (concat
+                                      (action-description action)
+                                      " "
+                                      (propertize "Not a valid thing command"
+                                                  'face 'error)))
+                                    (action (action-description action))
+                                    (t ""))))
+                     cmd (key-binding keys t)
+                     invalid nil)
+               :loop
+               (pcase cmd
+                 (`(,thing ,finder . ,default-action)
+                  (cl-return
+                   (list thing
+                         (when thing-arg
+                           (* (if thing-sign -1 1) (or thing-arg 1)))
+                         finder
+                         (or action
+                             default-action
+                             (conn--dispatch-default-action thing))
+                         (if action
+                             action-args
+                           (read-action-args
+                            (or default-action
+                                (conn--dispatch-default-action thing))))
+                         (conn--dispatch-window-predicate
+                          action (get thing :conn-command-thing) cmd keys)
+                         repeat)))
+                 ('keyboard-quit
+                  (keyboard-quit))
+                 ('repeat
+                  (setq repeat (not repeat)
+                        repeat-indicator
+                        (propertize repeat-indicator
+                                    'face (when repeat
+                                            'eldoc-highlight-function-argument))))
+                 ('digit-argument
+                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                 ('backward-delete-arg
+                  (setq thing-arg (floor thing-arg 10)))
+                 ('forward-delete-arg
+                  (setq thing-arg (when thing-arg
+                                    (thread-last
+                                      (log thing-arg 10)
+                                      floor
+                                      (expt 10)
+                                      (mod thing-arg)))))
+                 ('reset-arg
+                  (setq thing-arg nil))
+                 ('negative-argument
+                  (setq thing-sign (not thing-sign)))
+                 ('help
+                  (conn--with-state conn-previous-state
+                    (save-window-excursion
+                      (setq keys nil
+                            cmd (intern
+                                 (completing-read
+                                  "Command: "
+                                  (lambda (string pred action)
+                                    (if (eq action 'metadata)
+                                        `(metadata
+                                          ,(cons 'affixation-function
+                                                 (conn--dispatch-make-command-affixation))
+                                          (category . conn-dispatch-command))
+                                      (complete-with-action action obarray string pred)))
+                                  (lambda (sym)
+                                    (pcase sym
+                                      ('help)
+                                      ((and (pred functionp)
+                                            (guard (or (get sym :conn-command-thing)
+                                                       (get sym :conn-action))))
+                                       t)
+                                      (`(,_ ,_ . ,_) t)))
+                                  t)))))
+                  (go :loop))
+                 ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
+                       (guard thing))
+                  (cl-return
+                   (list cmd
+                         (when thing-arg
+                           (* (if thing-sign -1 1) (or thing-arg 1)))
+                         (conn--dispatch-target-finder cmd)
+                         (or action (conn--dispatch-default-action cmd))
+                         (if action
+                             action-args
+                           (read-action-args (conn--dispatch-default-action cmd)))
+                         (conn--dispatch-window-predicate action thing cmd keys)
+                         repeat)))
+                 ((guard (ignore-errors (get cmd :conn-action)))
+                  (setq action (unless (eq cmd action) cmd)
+                        action-args (read-action-args action)))
+                 (_
+                  (setq invalid t)))
+               (go :read-command))
+            (message nil)))))))
 
 (defun conn-dispatch-ignored-mode (win)
   (not (apply #'provided-mode-derived-p
@@ -3550,17 +3551,19 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                 (conn-get-state-map conn-dispatch-state-for-reading)
                                 ,key (list ,@menu-item)))))))))
 
-(conn-define-dispatch-action conn-dispatch-yank-to (window pt _thing-cmd _thing-arg str)
-  :description "Yank To"
+(conn-define-dispatch-action conn-dispatch-yank-replace-to
+    (window pt _thing-cmd _thing-arg str)
+  :description "Yank Replace To"
   :keys "C-y"
-  :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
+  :interactive (list (funcall region-extract-function nil))
   :window-predicate (lambda () buffer-read-only)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (insert-for-yank str))))
 
-(conn-define-dispatch-action conn-dispatch-yank-replace-to (window pt thing-cmd thing-arg str)
+(conn-define-dispatch-action conn-dispatch-yank-read-replace-to
+    (window pt thing-cmd thing-arg str)
   :description "Yank Replace To"
   :keys "M-y"
   :interactive (list (read-from-kill-ring "Yank Replace To from kill-ring: "))
@@ -3574,6 +3577,39 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
          (insert-for-yank str))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
+(conn-define-dispatch-action conn-dispatch-yank-to
+    (window pt _thing-cmd _thing-arg str)
+  :description "Yank To"
+  :keys "y"
+  :interactive (list (funcall region-extract-function nil))
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (insert-for-yank str))))
+
+(conn-define-dispatch-action conn-dispatch-yank-read-to
+    (window pt _thing-cmd _thing-arg str)
+  :description "Yank To"
+  :keys "Y"
+  :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (insert-for-yank str))))
+
+(conn-define-dispatch-action conn-dispatch-throw
+    (window pt _thing-cmd _thing-arg str)
+  :description "Throw"
+  :keys "t"
+  :interactive (list (funcall region-extract-function t))
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (insert-for-yank str))))
+
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
   :keys "d"
@@ -3586,7 +3622,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
          (when beg (conn--create-dot beg end)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(conn-define-dispatch-action conn-dispatch-remove-dot (window pt _thing-cmd _thing-arg)
+(conn-define-dispatch-action conn-dispatch-remove-dot
+    (window pt _thing-cmd _thing-arg)
   :description "Remove Dot"
   :keys "w"
   :modes (conn-dot-mode)
@@ -3775,12 +3812,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
            (message "Prepended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(conn-define-dispatch-action conn-dispatch-copy (window pt thing-cmd thing-arg register)
+(conn-define-dispatch-action conn-dispatch-copy-as-kill
+    (window pt thing-cmd thing-arg register)
   :description (lambda (register)
                  (if register
                      (format "Copy to Register <%c>" register)
-                   "Copy"))
-  :keys "c"
+                   "Copy As Kill"))
+  :keys "a"
   :interactive (list (when current-prefix-arg
                        (register-read-with-preview "Register: ")))
   (with-selected-window window
@@ -3835,8 +3873,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
            (message "Copy Prepended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(conn-define-dispatch-action conn-dispatch-yank-replace (window pt thing-cmd thing-arg)
-  :description "Yank Replace"
+(conn-define-dispatch-action conn-dispatch-copy-replace (window pt thing-cmd thing-arg)
+  :description "Copy Replace"
   :keys "f"
   :filter (lambda () (unless buffer-read-only 'this))
   (with-selected-window window
@@ -3852,8 +3890,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (delete-region (region-beginning) (region-end))
   (yank))
 
-(conn-define-dispatch-action conn-dispatch-take-replace (window pt thing-cmd thing-arg)
-  :description "Take Replace"
+(conn-define-dispatch-action conn-dispatch-cut-replace (window pt thing-cmd thing-arg)
+  :description "Cut Replace"
   :keys "d"
   :filter (lambda () (unless buffer-read-only 'this))
   :window-predicate (lambda () buffer-read-only)
@@ -3868,25 +3906,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (delete-region (region-beginning) (region-end))
   (yank))
 
-(conn-define-dispatch-action conn-dispatch-take (window pt thing-cmd thing-arg)
-  :description "Take"
-  :keys "s"
-  :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda () buffer-read-only)
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (kill-region beg end)
-         (conn--dispatch-fixup-whitespace))
-        (_ (user-error "Cannot find %s at point"
-                       (get thing-cmd :conn-command-thing))))))
-  (yank))
-
-(conn-define-dispatch-action conn-dispatch-yank (window pt thing-cmd thing-arg)
-  :description "Yank From"
-  :keys "y"
+(conn-define-dispatch-action conn-dispatch-copy (window pt thing-cmd thing-arg)
+  :description "Copy"
+  :keys ("c" "s")
   :filter (lambda () (unless buffer-read-only 'this))
   (let (str)
     (with-selected-window window
@@ -3900,6 +3922,22 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (insert-for-yank str)
       (user-error "Cannot find %s at point"
                   (get thing-cmd :conn-command-thing)))))
+
+(conn-define-dispatch-action conn-dispatch-cut (window pt thing-cmd thing-arg)
+  :description "Cut"
+  :keys "x"
+  :filter (lambda () (unless buffer-read-only 'this))
+  :window-predicate (lambda () buffer-read-only)
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end)
+         (kill-region beg end)
+         (conn--dispatch-fixup-whitespace))
+        (_ (user-error "Cannot find %s at point"
+                       (get thing-cmd :conn-command-thing))))))
+  (yank))
 
 (conn-define-dispatch-action conn-dispatch-goto (window pt thing-cmd thing-arg)
   :description "Goto"
