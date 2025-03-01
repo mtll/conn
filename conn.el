@@ -153,7 +153,8 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :group 'conn-states)
 
 (defcustom conn-buffer-default-state-alist
-  '(((or (derived-mode . prog-mode)
+  '(("COMMIT_EDITMSG" . conn-emacs-state)
+    ((or (derived-mode . prog-mode)
          (derived-mode . text-mode)
          (derived-mode . conf-mode))
      . conn-state)
@@ -163,7 +164,8 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
          (derived-mode . calc-keypad-mode)
          (derived-mode . image-mode)
          (derived-mode . doc-view-mode)
-         (derived-mode . pdf-view-mode))
+         (derived-mode . pdf-view-mode)
+         (derived-mode . magit-status-mode))
      . conn-null-state))
   "Alist of the form ((CONDITION . STATE) ...).
 
