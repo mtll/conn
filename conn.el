@@ -152,7 +152,6 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :type 'symbol
   :group 'conn-states)
 
-
 (defcustom conn-buffer-default-state-alist
   '(((or (derived-mode . prog-mode)
          (derived-mode . text-mode)
@@ -162,7 +161,9 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
          (derived-mode . calc-trail-mode)
          (derived-mode . minibuffer-mode)
          (derived-mode . calc-keypad-mode)
-         (derived-mode . image-mode))
+         (derived-mode . image-mode)
+         (derived-mode . doc-view-mode)
+         (derived-mode . pdf-view-mode))
      . conn-null-state))
   "Alist of the form ((CONDITION . STATE) ...).
 
