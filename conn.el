@@ -442,7 +442,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;;; Dots
 
-(put 'conn--dot-overlay 'priority (1+ conn-mark-overlay-priority))
+(put 'conn--dot-overlay 'priority (cons nil conn-mark-overlay-priority))
 (put 'conn--dot-overlay 'conn-overlay t)
 (put 'conn--dot-overlay 'evaporate t)
 
@@ -1818,6 +1818,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                               (forward-thing thing -1)
                               (bounds-of-thing-at-point thing))
                while (and bounds (<= (cdr bounds) end))
+               when (<= beg (car bounds))
                collect bounds into regions
                while (and (< (point) end)
                           (ignore-errors
@@ -2840,10 +2841,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                       (make-overlay (mark t) (1+ (mark t)) nil t)))
         (overlay-put cursor 'category 'conn--mark-cursor)
         (overlay-put cursor 'window win))
-      (cond ((and (eql (overlay-buffer cursor) (current-buffer))
+      (cond ((= (point-max) (mark t) (point))
+             (when (overlay-get cursor 'after-string)
+               (overlay-put cursor 'after-string nil))
+             (unless (eql (overlay-start cursor) (overlay-end cursor))
+               (move-overlay cursor (point-max) (point-max) (window-buffer win))))
+            ((and (eql (overlay-buffer cursor) (current-buffer))
                   (eql (overlay-start cursor) (mark t))
-                  (or (eql (overlay-end cursor) (1+ (mark t)))
-                      (eql (overlay-end cursor) (point-max)))))
+                  (eql (overlay-end cursor) (1+ (mark t)))))
             ((and (eql (char-after (mark t)) ?\t)
                   (< 1 (save-excursion
                          (goto-char (mark t))
@@ -2853,7 +2858,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
              (overlay-put cursor 'after-string
                           (propertize " " 'face 'conn-mark-face)))
             ((= (mark t) (point-max))
-             (move-overlay cursor (mark t) (mark t) (window-buffer win))
+             (move-overlay cursor (point-max) (point-max) (window-buffer win))
              (overlay-put cursor 'after-string
                           (propertize " " 'face 'conn-mark-face)))
             (t
