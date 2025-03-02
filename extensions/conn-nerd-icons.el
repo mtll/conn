@@ -24,19 +24,19 @@
 (require 'conn)
 (require 'nerd-icons)
 
-(setf conn-state-lighter
+(setf (conn-state-get 'conn-state :lighter)
       (concat (nerd-icons-codicon "nf-cod-blank")
               (nerd-icons-mdicon "nf-md-ship_wheel"))
-      conn-emacs-state-lighter
+      (conn-state-get 'conn-emacs-state :lighter)
       (concat (nerd-icons-codicon "nf-cod-blank")
               (nerd-icons-devicon "nf-dev-emacs"))
-      conn-org-edit-state-lighter
+      (conn-state-get 'conn-org-edit-state :lighter)
       (concat (nerd-icons-codicon "nf-cod-blank")
               (nerd-icons-sucicon "nf-custom-orgmode"))
-      conn-read-mover-lighter
+      (conn-state-get 'conn-read-mover :lighter)
       (list (concat (nerd-icons-codicon "nf-cod-blank")
                     (nerd-icons-mdicon "nf-md-truck_cargo_container")))
-      conn-read-dispatch-lighter
+      (conn-state-get 'conn-read-dispatch :lighter)
       (list (concat (nerd-icons-codicon "nf-cod-blank")
                     (nerd-icons-octicon "nf-oct-container")))
       (alist-get 'conn-wincontrol-mode minor-mode-alist)

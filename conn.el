@@ -922,7 +922,7 @@ in STATE and return it."
             (setf (alist-get mode (alist-get state conn--minor-mode-maps))
                   (define-keymap
                     :parent (make-composed-keymap
-                             (cl-loop for parent in (conn-state-get state 'parents)
+                             (cl-loop for parent in (conn--state-parents state)
                                       collect (conn-get-mode-map parent mode)))))
           (with-eval-after-load (cadr (symbol-function mode))
             (when (get mode 'derived-mode-parent)
@@ -936,13 +936,13 @@ in STATE and return it."
         (setf (alist-get mode (alist-get state conn--major-mode-maps))
               (define-keymap
                 :parent (make-composed-keymap
-                         (cl-loop for parent in (conn-state-get state 'parents)
+                         (cl-loop for parent in (conn--state-parents state)
                                   collect (conn-get-mode-map parent mode))))))
        (t
         (setf (alist-get mode (alist-get state conn--minor-mode-maps))
               (define-keymap
                 :parent (make-composed-keymap
-                         (cl-loop for parent in (conn-state-get state 'parents)
+                         (cl-loop for parent in (conn--state-parents state)
                                   collect (conn-get-mode-map parent mode)))))))))
 
 (defun conn-get-local-map (state)
@@ -953,7 +953,7 @@ and return it."
       (setf (alist-get state conn--local-maps)
             (define-keymap
               :parent (make-composed-keymap
-                       (cl-loop for parent in (conn-state-get state 'parents)
+                       (cl-loop for parent in (conn--state-parents state)
                                 collect (conn-get-local-map parent)))))))
 
 (defmacro conn--without-input-method-hooks (&rest body)
@@ -1044,64 +1044,52 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
-(defsubst conn--get-state-object (state)
-  (plist-get conn--state-objects state))
+(defun conn--state-parents (state)
+  (cdr (get state :conn-state-properties)))
 
-(gv-define-setter conn--get-state-object (value state)
-  `(setf (plist-get conn--state-objects ,state) ,value))
-
-(defvar conn--state-all-parents-cache nil)
-
-(defun conn--state-all-parents (state)
-  (with-memoization
-      (plist-get conn--state-all-parents-cache state)
-    (let ((queue (list (conn--get-state-object state)))
-          (ancestory nil))
-      (while
-          (conn--thread
-              (car (push (pop queue) ancestory))
-              ancestors
-            (cl-struct-slot-value (cl-type-of ancestors) 'parents ancestors)
-            (mapcar #'conn--get-state-object ancestors)
-            (seq-difference ancestors ancestory)
-            (setq queue (append queue ancestors))))
-      (nreverse ancestory))))
-
-(defun conn-state-get (state slot)
-  "Return the value in STATE of SLOT."
-  (cl-loop for s in (conn--state-all-parents state)
-           for val = (condition-case _
-                         (cl-struct-slot-value (cl-type-of s) slot s)
-                       (cl-struct-unknown-slot 'conn--slot-undefined))
-           unless (or (eq val conn--state-slot-unbound)
-                      (eq val 'conn--slot-undefined))
-           return val))
+(defun conn-state-get (state property)
+  "Return the value in STATE of PROPERTY."
+  (or (cadr (thread-first
+              (car (get state :conn-state-properties))
+              (plist-member property)))
+      (cl-loop for parent in (conn--state-all-parents state)
+               for props = (car (get parent :conn-state-properties))
+               for tail = (plist-member props property)
+               when tail return (cadr tail))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
 
-(defsubst conn-state-set (state slot value)
-  "Set the value of SLOT in STATE to VALUE.
+(defsubst conn-state-set (state property value)
+  "Set the value of PROPERTY in STATE to VALUE.
 
 Returns VALUE."
-  (setf (cl-struct-slot-value state (conn--get-state-object state) slot)
+  (setf (plist-get (car (get state :conn-state-properties)) property)
         value))
 
-(defsubst conn-state-unset (state slot)
-  "Make SLOT unbound in STATE.
+(defun conn-state-unset (state property)
+  "Make PROPERTY unbound in STATE.
 
 If a slot is unbound in a state it will inherit the value of that slot
 from its parents."
-  (setf (cl-struct-slot-value state (conn--get-state-object state) slot)
-        conn--state-slot-unbound))
+  (setf (car (get state :conn-state-properties))
+        (let ((props (car (get state :conn-state-properties))))
+          (cl-loop for (p v) on props by #'cddr
+                   unless (eq p property)
+                   append (list p v)))))
+
+(defun conn--state-all-parents (state)
+  (cons state
+        (merge-ordered-lists (mapcar 'conn--state-all-parents
+                                     (conn--state-parents state)))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   95 ;; Make sure this is higher than derived-mode.  Why?  I don't know.
   (lambda (state)
-    `(and (memq conn-states ,state) ,state))
+    `(and (memq ,state conn-states) ,state))
   (lambda (state)
-    (mapcar (lambda (state-obj) `(conn-substate ,(cl-type-of state-obj)))
-            (conn--state-all-parents state))))
+    (mapcar (lambda (state) `(conn-substate ,state))
+            (cons state (cdr (get state :conn-state-properties))))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers."
@@ -1178,37 +1166,24 @@ write a method of the form:
                     def-body))
            (indent defun))
   (unless (stringp doc)
-    (setq doc (format "Enter %S" (or (car-safe name) name))
-          rest (cons doc rest)))
+    (setq rest (cons doc rest)
+          doc (format "Enter %S" (or (car-safe name) name))))
   (pcase-let* (((or (and name (pred symbolp))
                     `(,name . ,props))
                 name)
                ((map :keymap :inherit) props)
                (keymap (car keymap))
                (keymap-name (conn--symbolicate name "-map"))
-               (ctor (conn--symbolicate name "--make-state-object"))
                (`(,slots . ,body)
                 (cl-loop for sublist on rest by #'cddr
                          if (not (keywordp (car sublist)))
                          return (cons slots sublist)
-                         else
-                         collect (list (intern (substring (symbol-name (car sublist)) 1))
-                                       (cadr sublist))
-                         into slots
+                         else append (take 2 sublist) into slots
                          finally return (cons slots nil))))
     `(progn
-       (cl-defstruct (,name
-                      (:constructor nil)
-                      (:copier nil)
-                      (:constructor ,ctor))
-         (parents ',inherit :read-only t :type (list symbol))
-         ,@slots)
-
-       ;; Invalidate parents cache, we could have changed the
-       ;; inheritance hierarchy out from under any child states.
-       (setf conn--state-all-parents-cache nil)
-
-       (setf (conn--get-state-object ',name) (,ctor))
+       (put ',name :conn-state-properties
+            (list (list ,@slots)
+                  ,@(mapcar (lambda (v) (list 'quote v)) inherit)))
 
        (cl-pushnew ',name conn-states)
 
@@ -1262,10 +1237,10 @@ write a method of the form:
                    (conn-exit-state conn-current-state)
                    (setq ,name t
                          conn-current-state state)
-                   (setq-local conn-lighter (conn-state-get ',name 'lighter)
+                   (setq-local conn-lighter (conn-state-get ',name :lighter)
                                conn--local-minor-mode-maps (alist-get ',name conn--minor-mode-maps)
-                               conn--hide-mark-cursor (conn-state-get ',name 'hide-mark-cursor)
-                               cursor-type (or (conn-state-get ',name 'cursor) t))
+                               conn--hide-mark-cursor (conn-state-get ',name :hide-mark-cursor)
+                               cursor-type (or (conn-state-get ',name :cursor) t))
                    (conn--activate-input-method)
                    (when (not executing-kbd-macro)
                      (force-mode-line-update))
