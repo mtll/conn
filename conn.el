@@ -31,8 +31,8 @@
 
 (require 'compat)
 (require 'subr-x)
-(require 'eieio)
 (eval-when-compile
+  (require 'eieio)
   (require 'cl-lib)
   (require 'map))
 
@@ -1058,8 +1058,10 @@ mouse-3: Describe current input method")
     (let ((queue (list (conn--get-state-object state)))
           (ancestory nil))
       (while
-          (conn--thread (slot-value (car (push (pop queue) ancestory)) 'parents)
+          (conn--thread
+              (car (push (pop queue) ancestory))
               ancestors
+            (cl-struct-slot-value (cl-type-of ancestors) 'parents ancestors)
             (mapcar #'conn--get-state-object ancestors)
             (seq-difference ancestors ancestory)
             (setq queue (append queue ancestors))))
@@ -1068,8 +1070,11 @@ mouse-3: Describe current input method")
 (defun conn-state-get (state slot)
   "Return the value in STATE of SLOT."
   (cl-loop for s in (conn--state-all-parents state)
-           for val = (ignore-errors (slot-value s slot))
-           unless (eq val conn--state-slot-unbound)
+           for val = (condition-case _
+                         (cl-struct-slot-value (cl-type-of s) slot s)
+                       (cl-struct-unknown-slot 'conn--slot-undefined))
+           unless (or (eq val conn--state-slot-unbound)
+                      (eq val 'conn--slot-undefined))
            return val))
 
 (gv-define-setter conn-state-get (value state slot)
@@ -1079,7 +1084,7 @@ mouse-3: Describe current input method")
   "Set the value of SLOT in STATE to VALUE.
 
 Returns VALUE."
-  (setf (slot-value (conn--get-state-object state) slot)
+  (setf (cl-struct-slot-value state (conn--get-state-object state) slot)
         value))
 
 (defsubst conn-state-unset (state slot)
@@ -1087,7 +1092,7 @@ Returns VALUE."
 
 If a slot is unbound in a state it will inherit the value of that slot
 from its parents."
-  (setf (slot-value (conn--get-state-object state) slot)
+  (setf (cl-struct-slot-value state (conn--get-state-object state) slot)
         conn--state-slot-unbound))
 
 (cl-generic-define-generalizer conn--substate-generalizer
@@ -1136,14 +1141,24 @@ is entered or exited.  To do this write a method of the form:
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
+NAME may be either a symbol or of the form (NAME OPTIONS...), where
+options is (KEYWORD VALUE) and where KEYWORD is one of :keymap or
+:inherit.
+
+:KEYMAP is the state keymap for NAME.  KEYMAP is copied before being
+assigned to the state.  To access the state keymap use either the NAME-map
+variable or `conn-get-state-map'.
+
+:INHERIT is a list of states from which NAME should inherit slots and
+keymaps.
+
+Keyword arguments define state slots.  The following slots have a
+special meaning:
+
 :LIGHTER is the mode-line lighter text for NAME.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
-
-:KEYMAP is the state keymap for NAME.  KEYMAP is copied before being
-assigned to state.  To access the state keymap use either the NAME-map
-variable or `conn-get-state-map'.
 
 :CURSOR is the `cursor-type' in NAME.
 
@@ -1157,50 +1172,50 @@ write a method of the form:
 (cl-defmethod conn-state-body ((state (conn-substate STATE-NAME)))
   ...)
 
-Additional keys are allowed and are added as slots to NAME.
-
-\(fn NAME DOC &key LIGHTER SUPPRESS-INPUT-METHOD KEYMAP CURSOR EPHEMERAL-MARKS &allow-other-keys &body BODY)"
-  (declare (debug ( name stringp
+\(fn NAME DOC [KEYWORD VAL ... &rest BODY])"
+  (declare (debug ( name string-or-null-p
                     [&rest keywordp sexp]
                     def-body))
            (indent defun))
-  (pcase-let* ((map-name (conn--symbolicate name "-map"))
-               (cursor-name (conn--symbolicate name "-cursor-type"))
-               (lighter-name (conn--symbolicate name "-lighter"))
-               ((map :lighter :cursor :parents :keymap)
-                rest)
-               ;; TODO: This method of handling slots is ugly.
-               (plist `( :suppress-input-method 'conn--state-slot-unbound
-                         :parents ',(ensure-list parents)))
-               (body nil))
-    (cl-loop for sublist on rest by #'cddr
-             if (keywordp (car sublist))
-             do (unless (memq (car sublist)
-                              '(:parents :lighter :keymap :cursor))
-                  (setf (plist-get plist (car sublist)) (cadr sublist)))
-             else return (setf body sublist))
+  (unless (stringp doc)
+    (setq doc (format "Enter %S" (or (car-safe name) name))
+          rest (cons doc rest)))
+  (pcase-let* (((or (and name (pred symbolp))
+                    `(,name . ,props))
+                name)
+               ((map :keymap :inherit) props)
+               (keymap (car keymap))
+               (keymap-name (conn--symbolicate name "-map"))
+               (ctor (conn--symbolicate name "--make-state-object"))
+               (`(,slots . ,body)
+                (cl-loop for sublist on rest by #'cddr
+                         if (not (keywordp (car sublist)))
+                         return (cons slots sublist)
+                         else
+                         collect (list (intern (substring (symbol-name (car sublist)) 1))
+                                       (cadr sublist))
+                         into slots
+                         finally return (cons slots nil))))
     `(progn
-       (cl-defstruct ,name
-         ,@(cl-loop for (slot value) on plist by #'cddr
-                    unless (and (symbolp slot)
-                                (eql ?: (aref (symbol-name slot) 0)))
-                    do (error "Invalid slot keyword %s" slot)
-                    collect (list (intern (substring (symbol-name slot) 1))
-                                  value)))
+       (cl-defstruct (,name
+                      (:constructor nil)
+                      (:copier nil)
+                      (:constructor ,ctor))
+         (parents ',inherit :read-only t :type (list symbol))
+         ,@slots)
 
        ;; Invalidate parents cache, we could have changed the
        ;; inheritance hierarchy out from under any child states.
        (setf conn--state-all-parents-cache nil)
 
-       (setf (conn--get-state-object ',name)
-             (,(conn--symbolicate "make-" name) ,@plist))
+       (setf (conn--get-state-object ',name) (,ctor))
 
        (cl-pushnew ',name conn-states)
 
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
 
-       (defvar ,map-name
+       (defvar ,keymap-name
          (conn-get-state-map ',name)
          ,(conn--stringify "Keymap active in `" name "'."))
 
@@ -1209,38 +1224,12 @@ Additional keys are allowed and are added as slots to NAME.
        ;; want to invalidate all the pointers to our state keymap in
        ;; child state keymaps.
        ,(when keymap
-          `(setcdr ,map-name (cdr (copy-keymap ,keymap))))
+          `(setcdr ,keymap-name (cdr (copy-keymap ,keymap))))
 
        (set-keymap-parent
-        ,map-name (make-composed-keymap
-                   (cl-loop for parent in ',(ensure-list parents)
-                            collect (conn-get-state-map parent))))
-
-       (defvar ,lighter-name (or ,lighter)
-         ,(conn--stringify "Lighter text when "
-                           name
-                           " is active.\n\n"
-                           "If nil use the default lighter text."))
-
-       (defcustom ,cursor-name
-         ,(if cursor `',cursor t)
-         ,(conn--stringify "`cursor-type' for " name ".")
-         :type '(choice
-                 (const :tag "Frame default" t)
-                 (const :tag "Filled box" box)
-                 (cons :tag "Box with specified size"
-                       (const box)
-                       integer)
-                 (const :tag "Hollow cursor" hollow)
-                 (const :tag "Vertical bar" bar)
-                 (cons :tag "Vertical bar with specified height"
-                       (const bar)
-                       integer)
-                 (const :tag "Horizontal bar" hbar)
-                 (cons :tag "Horizontal bar with specified width"
-                       (const hbar)
-                       integer))
-         :group 'conn-states)
+        ,keymap-name (make-composed-keymap
+                      (cl-loop for parent in ',inherit
+                               collect (conn-get-state-map parent))))
 
        (cl-defmethod conn-exit-state ((state (eql ',name)))
          (when ,name
@@ -1273,10 +1262,10 @@ Additional keys are allowed and are added as slots to NAME.
                    (conn-exit-state conn-current-state)
                    (setq ,name t
                          conn-current-state state)
-                   (setq-local conn-lighter (or ,lighter-name (default-value 'conn-lighter))
+                   (setq-local conn-lighter (conn-state-get ',name 'lighter)
                                conn--local-minor-mode-maps (alist-get ',name conn--minor-mode-maps)
                                conn--hide-mark-cursor (conn-state-get ',name 'hide-mark-cursor)
-                               cursor-type ,cursor-name)
+                               cursor-type (or (conn-state-get ',name 'cursor) t))
                    (conn--activate-input-method)
                    (when (not executing-kbd-macro)
                      (force-mode-line-update))
@@ -1307,41 +1296,40 @@ Additional keys are allowed and are added as slots to NAME.
   "An empty state.
 
 For use in buffers that should not have any other state."
-  :ligher ""
+  :lighter ""
   :hide-mark-cursor t
-  :cursor (bar . 5))
+  :cursor '(bar . 5))
 
 (conn-define-state conn-emacs-state
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
   :lighter " emacs"
-  :keymap (make-sparse-keymap)
-  :cursor (hbar . 8))
+  :cursor '(hbar . 8))
 
-(conn-define-state conn-movement-state
+(conn-define-state (conn-movement-state
+                    (:keymap (define-keymap :suppress t)))
   "A `conn-mode' state moving in a buffer."
   :lighter " move"
-  :suppress-input-method t
-  :keymap (define-keymap :suppress t))
+  :suppress-input-method t)
 
 (conn-define-state conn-menu-state
   "A `conn-mode' state for remapping key menus."
   :lighter " menu")
 
-(conn-define-state conn-state
+(conn-define-state (conn-state
+                    (:keymap (define-keymap :suppress t))
+                    (:inherit conn-menu-state conn-movement-state))
   "A `conn-mode' state for editing test."
-  :parents (conn-menu-state conn-movement-state)
   :lighter " conn"
   :suppress-input-method t
-  :keymap (define-keymap :suppress t)
-  :cursor box)
+  :cursor 'box)
 
-(conn-define-state conn-org-edit-state
+(conn-define-state (conn-org-edit-state
+                    (:keymap (define-keymap :suppress t)))
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   :lighter " org-edit"
-  :suppress-input-method t
-  :keymap (define-keymap :suppress t))
+  :suppress-input-method t)
 
 
 ;;;; Labels
@@ -1670,19 +1658,19 @@ Optionally the overlay may have an associated THING."
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
 
-(conn-define-state conn-read-mover
+(conn-define-state (conn-read-mover
+                    (:keymap (define-keymap
+                               "DEL" 'backward-delete-arg
+                               "C-d" 'forward-delete-arg
+                               "," 'reset-arg
+                               "<remap> <conn-forward-char>" 'forward-char
+                               "<remap> <conn-backward-char>" 'backward-char
+                               "C-h" 'help
+                               "t" 'conn-mark-thing-map
+                               "e" 'recursive-edit))
+                    (:inherit conn-state))
   "A state for reading things."
   :lighter " MOVER"
-  :parents conn-state
-  :keymap (define-keymap
-            "DEL" 'backward-delete-arg
-            "C-d" 'forward-delete-arg
-            "," 'reset-arg
-            "<remap> <conn-forward-char>" 'forward-char
-            "<remap> <conn-backward-char>" 'backward-char
-            "C-h" 'help
-            "t" 'conn-mark-thing-map
-            "e" 'recursive-edit)
   (unless executing-kbd-macro
     (if conn-read-mover
         (set-face-inverse-video 'mode-line t)
@@ -3185,18 +3173,18 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn-dispatch-state-for-reading 'conn-read-dispatch)
 
-(conn-define-state conn-read-dispatch
+(conn-define-state (conn-read-dispatch
+                    (:keymap (define-keymap
+                               "C-h" 'help
+                               "," 'reset-arg
+                               "TAB" 'repeat-dispatch
+                               "'" 'repeat-dispatch
+                               "C-d" 'forward-delete-arg
+                               "DEL" 'backward-delete-arg
+                               "\\" 'kapply))
+                    (:inherit conn-state))
   "State for reading a dispatch command."
-  :parents conn-state
   :ligher " DISPATCH"
-  :keymap (define-keymap
-            "C-h" 'help
-            "," 'reset-arg
-            "TAB" 'repeat-dispatch
-            "'" 'repeat-dispatch
-            "C-d" 'forward-delete-arg
-            "DEL" 'backward-delete-arg
-            "\\" 'kapply)
   (unless executing-kbd-macro
     (if conn-read-dispatch
         (set-face-inverse-video 'mode-line t)
