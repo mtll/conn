@@ -625,7 +625,7 @@ apply to each contiguous component of the region."
   "Apply keyboard macro on dispatch targets."
   :transient 'transient--do-exit
   :key "f"
-  :description "Dispatch"
+  :description "Resume"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (let* ((macro nil)
@@ -1110,16 +1110,16 @@ apply to each contiguous component of the region."
          (conn-recursive-edit-lossage)
          (transient-resume))
        :transient transient--do-suspend)]]
-  [ :description "Options:"
-    [ (conn--kapply-macro-infix)
+  [ [ :description "Options:"
+      (conn--kapply-macro-infix)
       (conn--kapply-state-infix)
-      (conn--kapply-region-infix)]]
-  [ [ :description "Apply Kmacro On:"
-      (conn--kapply-dispatch-suffix)]
+      (conn--kapply-region-infix)]
     [ :description "Save State:"
       (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
       (conn--kapply-save-excursion-infix)]]
+  [ [ :description "Dispatch:"
+      (conn--kapply-dispatch-suffix)]]
   (interactive (list nil))
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-dispatch-kapply-prefix nil nil :scope continuation))
