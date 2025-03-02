@@ -628,50 +628,49 @@ apply to each contiguous component of the region."
   :description "Dispatch"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (pcase-let*
-      ((macro nil)
-       (action-sym (make-symbol "action"))
-       (pipeline (list 'conn--kapply-per-buffer-undo
-                       (alist-get :restrictions args)
-                       (alist-get :state args)
-                       (alist-get :regions args)
-                       'conn--kapply-pulse-region
-                       (alist-get :window-conf args)
-                       ;; Is there a way to make this option make sense?
-                       ;; (alist-get :ibuffer args)
-                       (pcase (alist-get :kmacro args)
-                         ('conn--kmacro-apply
-                          (lambda (iterator)
-                            (conn--kmacro-apply iterator nil macro)))
-                         (kmacro kmacro))))
-       (action-fn (if (alist-get :excursions args)
-                      ;; Surely there is a better way than having two
-                      ;; definitions of this function.
-                      (lambda (window pt thing-cmd thing-arg)
-                        (with-selected-window window
-                          (save-mark-and-excursion
-                            (goto-char pt)
-                            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                              ((and reg (pred identity))
-                               (apply #'conn--kapply-compose-iterator
-                                      (conn--kapply-region-iterator (list reg))
-                                      pipeline)
-                               (unless macro (setq macro (kmacro-ring-head))))
-                              (_ (user-error "Cannot find %s at point"
-                                             (get thing-cmd :conn-command-thing)))))))
-                    (lambda (window pt thing-cmd thing-arg)
-                      (with-selected-window window
-                        (goto-char pt)
-                        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                          ((and reg (pred identity))
-                           (apply #'conn--kapply-compose-iterator
-                                  (conn--kapply-region-iterator (list reg))
-                                  pipeline)
-                           (unless macro (setq macro (kmacro-ring-head))))
-                          (_ (user-error "Cannot find %s at point"
-                                         (get thing-cmd :conn-command-thing)))))))))
+  (let* ((macro nil)
+         (action-sym (make-symbol "action"))
+         (pipeline (list 'conn--kapply-per-iteration-undo
+                         (alist-get :restrictions args)
+                         (alist-get :state args)
+                         (alist-get :regions args)
+                         'conn--kapply-pulse-region
+                         (alist-get :window-conf args)
+                         ;; Is there a way to make this option make sense?
+                         ;; (alist-get :ibuffer args)
+                         (pcase (alist-get :kmacro args)
+                           ('conn--kmacro-apply
+                            (lambda (iterator)
+                              (conn--kmacro-apply iterator nil macro)))
+                           (kmacro kmacro)))))
+    (fset action-sym
+          (if (alist-get :excursions args)
+              ;; Surely there is a better way than having two
+              ;; definitions of this function.
+              (lambda (window pt thing-cmd thing-arg)
+                (with-selected-window window
+                  (save-mark-and-excursion
+                    (goto-char pt)
+                    (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+                      ((and reg (pred identity))
+                       (apply #'conn--kapply-compose-iterator
+                              (conn--kapply-region-iterator (list reg))
+                              pipeline)
+                       (unless macro (setq macro (kmacro-ring-head))))
+                      (_ (user-error "Cannot find %s at point"
+                                     (get thing-cmd :conn-command-thing)))))))
+            (lambda (window pt thing-cmd thing-arg)
+              (with-selected-window window
+                (goto-char pt)
+                (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+                  ((and reg (pred identity))
+                   (apply #'conn--kapply-compose-iterator
+                          (conn--kapply-region-iterator (list reg))
+                          pipeline)
+                   (unless macro (setq macro (kmacro-ring-head))))
+                  (_ (user-error "Cannot find %s at point"
+                                 (get thing-cmd :conn-command-thing))))))))
     (put action-sym :conn-action-description "Kapply")
-    (fset action-sym action-fn)
     (apply #'conn-dispatch-on-things
            (conn--dispatch-read-thing action-sym continuation))))
 
