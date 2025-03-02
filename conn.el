@@ -3192,7 +3192,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :keymap (define-keymap
             "C-h" 'help
             "," 'reset-arg
-            "'" 'repeat
+            "TAB" 'repeat-dispatch
+            "'" 'repeat-dispatch
             "C-d" 'forward-delete-arg
             "DEL" 'backward-delete-arg
             "\\" 'kapply)
@@ -3200,6 +3201,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (if conn-read-dispatch
         (set-face-inverse-video 'mode-line t)
       (set-face-inverse-video 'mode-line nil))))
+
+(put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
 (defvar conn--last-dispatch-command nil)
 
@@ -3247,7 +3250,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                         " (arg: "
                         (propertize "%s" 'face 'read-multiple-choice-face)
                         ", \\[reset-arg] reset arg; "
-                        "\\[repeat] %s; "
+                        "\\[repeat-dispatch] %s; "
                         "\\[help] commands): %s")))
        (action default-action)
        (action-args nil)
@@ -3322,7 +3325,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   ;; special case in conn-dispatch-on-things instead
                   ;; of relying on quit to exit early.
                   (signal 'quit nil))
-                 ('repeat
+                 ('repeat-dispatch
                   (setq repeat (not repeat)
                         repeat-indicator
                         (propertize repeat-indicator
