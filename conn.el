@@ -3194,9 +3194,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
             "," 'reset-arg
             "'" 'repeat
             "C-d" 'forward-delete-arg
-            "DEL" 'backward-delete-arg)
+            "DEL" 'backward-delete-arg
+            "\\" 'kapply)
   (unless executing-kbd-macro
-    (if conn-read-mover
+    (if conn-read-dispatch
         (set-face-inverse-video 'mode-line t)
       (set-face-inverse-video 'mode-line nil))))
 
@@ -3238,18 +3239,26 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
-(defun conn--dispatch-read-thing (&optional default-action)
-  (let* ((prompt (substitute-command-keys
-                  (concat "\\<" (conn--stringify conn-dispatch-state-for-reading "-map") ">"
-                          (propertize "Targets" 'face 'minibuffer-prompt)
-                          " (arg: "
-                          (propertize "%s" 'face 'read-multiple-choice-face)
-                          ", \\[reset-arg] reset arg; "
-                          "\\[repeat] %s; "
-                          "\\[help] commands): %s")))
-         (repeat-indicator "repeatedly")
-         (action default-action)
-         action-args keys cmd invalid thing-arg thing-sign repeat)
+(defun conn--dispatch-read-thing (&optional default-action continuation)
+  (pcase-let*
+      ((prompt (substitute-command-keys
+                (concat "\\<" (conn--stringify conn-dispatch-state-for-reading "-map") ">"
+                        (propertize "Targets" 'face 'minibuffer-prompt)
+                        " (arg: "
+                        (propertize "%s" 'face 'read-multiple-choice-face)
+                        ", \\[reset-arg] reset arg; "
+                        "\\[repeat] %s; "
+                        "\\[help] commands): %s")))
+       (action default-action)
+       (action-args nil)
+       (keys nil)
+       (cmd nil)
+       (invalid nil)
+       (`(,thing-arg ,thing-sign ,repeat) continuation)
+       (repeat-indicator
+        (propertize "repeatedly"
+                    'face (when repeat
+                            'eldoc-highlight-function-argument))))
     (cl-flet ((action-description (action)
                 (if-let* ((desc (get action :conn-action-description)))
                     (propertize
@@ -3306,6 +3315,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                          repeat)))
                  ('keyboard-quit
                   (keyboard-quit))
+                 ('kapply
+                  (run-with-timer 0 nil 'conn-dispatch-kapply-prefix
+                                  (list thing-arg thing-sign repeat))
+                  ;; It would probably be better to handle this as a
+                  ;; special case in conn-dispatch-on-things instead
+                  ;; of relying on quit to exit early.
+                  (signal 'quit nil))
                  ('repeat
                   (setq repeat (not repeat)
                         repeat-indicator
@@ -3552,7 +3568,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                 ,key (list ,@menu-item)))))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-replace-to
-    (window pt _thing-cmd _thing-arg str)
+    (window pt thing-cmd thing-arg str)
   :description "Yank Replace To"
   :keys "C-y"
   :interactive (list (funcall region-extract-function nil))
@@ -3560,7 +3576,11 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (insert-for-yank str))))
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end)
+         (delete-region beg end)
+         (insert-for-yank str))
+        (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-replace-to
     (window pt thing-cmd thing-arg str)
@@ -4285,6 +4305,32 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
 
+;;;;; Dispatch Registers
+
+(cl-defstruct (conn-dispatch-register
+               (:constructor conn--make-dispatch-register (dispatch-command)))
+  (dispatch-command nil))
+
+(cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
+  (let ((conn--last-dispatch-command
+         (conn-dispatch-register-dispatch-command val)))
+    (conn-repeat-last-dispatch arg)))
+
+(cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
+  (princ "Dispatch Register"))
+
+(cl-defmethod register-command-info ((_command (eql conn-last-dispatch-to-register)))
+  (make-register-preview-info
+   :types '(all)
+   :msg "Copy dispatch to register `%s'"
+   :act 'set
+   :noconfirm (memq register-use-preview '(nil never))
+   :smatch t))
+
+(defun conn-last-dispatch-to-register (register)
+  (interactive (list (register-read-with-preview "Dispatch to register: ")))
+  (set-register register (conn--make-dispatch-register conn--last-dispatch-command)))
+
 ;;;;; Dispatch Commands
 
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-args
@@ -4346,11 +4392,23 @@ seconds."
             (apply action window pt thing-cmd thing-arg action-args))
         (undo-boundary)))))
 
-(defun conn-repeat-last-dispatch ()
-  "Repeat the last dispatch command."
-  (interactive)
-  (when conn--last-dispatch-command
-    (apply #'conn-dispatch-on-things conn--last-dispatch-command)))
+(defun conn-repeat-last-dispatch (repeat)
+  "Repeat the last dispatch command.
+
+Prefix arg REPEAT inverts the value of repeat in the last dispatch."
+  (interactive "P")
+  (pcase conn--last-dispatch-command
+    (`(,thing-cmd ,thing-arg ,finder ,action ,action-args ,predicate ,rep)
+     ;; If we invert repeat we don't want that reflected in
+     ;; conn--last-dispatch-command so we let bind it around this
+     ;; call.
+     (let (conn--last-dispatch-command)
+       (conn-dispatch-on-things thing-cmd thing-arg
+                                finder
+                                action action-args
+                                predicate
+                                (xor rep repeat))))
+    (_ (user-error "No last dispatch command"))))
 
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."

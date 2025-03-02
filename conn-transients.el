@@ -621,6 +621,58 @@ apply to each contiguous component of the region."
    (alist-get :ibuffer args)
    (alist-get :kmacro args)))
 
+(transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
+  "Apply keyboard macro on dispatch targets."
+  :transient 'transient--do-exit
+  :key "f"
+  :description "Dispatch"
+  (interactive (list (oref transient-current-prefix scope)
+                     (transient-args transient-current-command)))
+  (pcase-let*
+      ((macro nil)
+       (action-sym (make-symbol "action"))
+       (pipeline (list 'conn--kapply-per-buffer-undo
+                       (alist-get :restrictions args)
+                       (alist-get :state args)
+                       (alist-get :regions args)
+                       'conn--kapply-pulse-region
+                       (alist-get :window-conf args)
+                       ;; Is there a way to make this option make sense?
+                       ;; (alist-get :ibuffer args)
+                       (pcase (alist-get :kmacro args)
+                         ('conn--kmacro-apply
+                          (lambda (iterator)
+                            (conn--kmacro-apply iterator nil macro)))
+                         (kmacro kmacro))))
+       (action-fn (if (alist-get :excursions args)
+                      (lambda (window pt thing-cmd thing-arg)
+                        (with-selected-window window
+                          (save-excursion
+                            (goto-char pt)
+                            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+                              ((and reg (pred identity))
+                               (apply #'conn--kapply-compose-iterator
+                                      (conn--kapply-region-iterator (list reg))
+                                      pipeline)
+                               (unless macro (setq macro (kmacro-ring-head))))
+                              (_ (user-error "Cannot find %s at point"
+                                             (get thing-cmd :conn-command-thing)))))))
+                    (lambda (window pt thing-cmd thing-arg)
+                      (with-selected-window window
+                        (goto-char pt)
+                        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+                          ((and reg (pred identity))
+                           (apply #'conn--kapply-compose-iterator
+                                  (conn--kapply-region-iterator (list reg))
+                                  pipeline)
+                           (unless macro (setq macro (kmacro-ring-head))))
+                          (_ (user-error "Cannot find %s at point"
+                                         (get thing-cmd :conn-command-thing)))))))))
+    (put action-sym :conn-action-description "Kapply")
+    (fset action-sym action-fn)
+    (apply #'conn-dispatch-on-things
+           (conn--dispatch-read-thing action-sym continuation))))
+
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
   :transient 'transient--do-exit
@@ -1031,6 +1083,46 @@ apply to each contiguous component of the region."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-regions-kapply-prefix nil nil :scope iterator))
 
+;;;###autoload (autoload 'conn-dispatch-kapply-prefix "conn-transients" nil t)
+(transient-define-prefix conn-dispatch-kapply-prefix (continuation)
+  "Transient menu for keyboard macro application on regions."
+  [ :description conn--kmacro-ring-display
+    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("M" "Display"
+       (lambda ()
+         (interactive)
+         (kmacro-display last-kbd-macro t))
+       :transient t)]
+    [ ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("f" "Set Format" conn--set-counter-format-infix)
+      ("g" "Push Register" conn--push-macro-ring :transient t)]
+    [ ("e" "Edit Macro"
+       (lambda (arg)
+         (interactive "P")
+         (conn-recursive-edit-kmacro arg)
+         (transient-resume))
+       :transient transient--do-suspend)
+      ("E" "Edit Lossage"
+       (lambda ()
+         (interactive)
+         (conn-recursive-edit-lossage)
+         (transient-resume))
+       :transient transient--do-suspend)]]
+  [ :description "Options:"
+    [ (conn--kapply-macro-infix)
+      (conn--kapply-state-infix)
+      (conn--kapply-region-infix)]]
+  [ [ :description "Apply Kmacro On:"
+      (conn--kapply-dispatch-suffix)]
+    [ :description "Save State:"
+      (conn--kapply-save-windows-infix)
+      (conn--kapply-save-restriction-infix)
+      (conn--kapply-save-excursion-infix)]]
+  (interactive (list nil))
+  (kmacro-display last-kbd-macro t)
+  (transient-setup 'conn-dispatch-kapply-prefix nil nil :scope continuation))
+
 ;;;; Kmacro Prefix
 
 (defun conn--kmacro-display (macro &optional trunc)
@@ -1236,7 +1328,7 @@ apply to each contiguous component of the region."
 (transient-define-prefix conn-register-prefix ()
   "Transient menu for register functions."
   [[ :description "Register"
-     ("f" "Load" conn-register-load)
+     ("e" "Load" conn-register-load)
      ("u" "Unset" conn-unset-register)
      ("s" "Set Seperator" conn-set-register-seperator)
      ("i" "Increment" increment-register)
@@ -1245,7 +1337,8 @@ apply to each contiguous component of the region."
      ("p" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
-     ("m" "Macro" kmacro-to-register)]
+     ("m" "Macro" kmacro-to-register)
+     ("f" "Dispatch" conn-last-dispatch-to-register)]
    [ ""
      ("n" "Narrow Ring" conn-narrow-ring-to-register)
      ("t" "Tab" conn-tab-to-register)
