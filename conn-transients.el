@@ -645,9 +645,11 @@ apply to each contiguous component of the region."
                             (conn--kmacro-apply iterator nil macro)))
                          (kmacro kmacro))))
        (action-fn (if (alist-get :excursions args)
+                      ;; Surely there is a better way than having two
+                      ;; definitions of this function.
                       (lambda (window pt thing-cmd thing-arg)
                         (with-selected-window window
-                          (save-excursion
+                          (save-mark-and-excursion
                             (goto-char pt)
                             (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
                               ((and reg (pred identity))
