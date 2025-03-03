@@ -1088,10 +1088,10 @@ If a slot is unbound in a state it will inherit the value of that slot
 from its parents."
   (cl-check-type state conn-state)
   (setf (car (get state :conn-state-properties))
-        (let ((props (car (get state :conn-state-properties))))
-          (cl-loop for (p v) on props by #'cddr
-                   unless (eq p property)
-                   append (list p v)))))
+        (cl-loop with props = (car (get state :conn-state-properties))
+                 for (p v) on props by #'cddr
+                 unless (eq p property)
+                 append (list p v))))
 
 (defvar conn--state-all-parents-cache nil)
 
@@ -1187,7 +1187,7 @@ and specializes the method on all conn states."
             (set state t)
             (setq conn-current-state state)
             (setq-local conn-lighter (or (conn-state-get state :lighter)
-                                         (default-value conn-lighter))
+                                         (default-value 'conn-lighter))
                         conn--local-minor-mode-maps (alist-get state conn--minor-mode-maps)
                         conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
                         cursor-type (or (conn-state-get state :cursor) t))
