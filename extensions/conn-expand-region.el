@@ -27,6 +27,8 @@
 
 (require 'conn)
 (require 'expand-region)
+(eval-when-compile
+  (require 'cl-lib))
 
 ;;;###autoload
 (defun conn-er-expansions ()
