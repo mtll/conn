@@ -878,8 +878,7 @@ after point."
 ;;;; States
 
 (defun conn-state-p (state)
-  (or (eq state t)
-      (not (not (get state :conn-state-properties)))))
+  (not (not (get state :conn-state-properties))))
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
 
@@ -921,66 +920,63 @@ in STATE and return it."
 
 (defun conn-get-state-map (state)
   (cl-check-type state conn-state)
-  (unless (eq state t)
-    (or (alist-get state conn--state-maps)
-        (setf (alist-get state conn--state-maps)
-              (make-sparse-keymap)))))
+  (or (alist-get state conn--state-maps)
+      (setf (alist-get state conn--state-maps)
+            (make-sparse-keymap))))
 
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
 If one does not exists assign a new sparse keymap for MODE
 in STATE and return it."
   (cl-check-type state conn-state)
-  (unless (eq state t)
-    (or (alist-get mode (alist-get state conn--minor-mode-maps))
-        (cond
-         ((autoloadp (symbol-function mode))
-          ;; We can't tell what sort of mode this is, add it to
-          ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
-          ;; handle the case where it was actually a major-mode.
-          (prog1
-              (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-                    (define-keymap
-                      :parent (make-composed-keymap
-                               (cl-loop for parent in (conn--state-parents state)
-                                        for map = (conn-get-mode-map parent mode)
-                                        when map collect map))))
-            (with-eval-after-load (cadr (symbol-function mode))
-              (when (get mode 'derived-mode-parent)
-                (setf (alist-get mode (alist-get state conn--major-mode-maps))
-                      (alist-get mode (alist-get state conn--minor-mode-maps)))
-                (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
-                (setf (alist-get state conn--minor-mode-maps)
-                      (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
-                                  (alist-get state conn--minor-mode-maps)))))))
-         ((get mode 'derived-mode-parent)
-          (setf (alist-get mode (alist-get state conn--major-mode-maps))
-                (define-keymap
-                  :parent (make-composed-keymap
-                           (cl-loop for parent in (conn--state-parents state)
-                                    for map = (conn-get-mode-map parent mode)
-                                    when map collect map)))))
-         (t
-          (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-                (define-keymap
-                  :parent (make-composed-keymap
-                           (cl-loop for parent in (conn--state-parents state)
-                                    for map = (conn-get-mode-map parent mode)
-                                    when map collect map)))))))))
+  (or (alist-get mode (alist-get state conn--minor-mode-maps))
+      (cond
+       ((autoloadp (symbol-function mode))
+        ;; We can't tell what sort of mode this is, add it to
+        ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
+        ;; handle the case where it was actually a major-mode.
+        (prog1
+            (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                  (define-keymap
+                    :parent (make-composed-keymap
+                             (cl-loop for parent in (conn--state-parents state)
+                                      for map = (conn-get-mode-map parent mode)
+                                      when map collect map))))
+          (with-eval-after-load (cadr (symbol-function mode))
+            (when (get mode 'derived-mode-parent)
+              (setf (alist-get mode (alist-get state conn--major-mode-maps))
+                    (alist-get mode (alist-get state conn--minor-mode-maps)))
+              (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
+              (setf (alist-get state conn--minor-mode-maps)
+                    (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
+                                (alist-get state conn--minor-mode-maps)))))))
+       ((get mode 'derived-mode-parent)
+        (setf (alist-get mode (alist-get state conn--major-mode-maps))
+              (define-keymap
+                :parent (make-composed-keymap
+                         (cl-loop for parent in (conn--state-parents state)
+                                  for map = (conn-get-mode-map parent mode)
+                                  when map collect map)))))
+       (t
+        (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+              (define-keymap
+                :parent (make-composed-keymap
+                         (cl-loop for parent in (conn--state-parents state)
+                                  for map = (conn-get-mode-map parent mode)
+                                  when map collect map))))))))
 
 (defun conn-get-local-map (state)
   "Get local keymap for STATE in current buffer.
 If one does not exists assign a new sparse keymap for STATE
 and return it."
   (cl-check-type state conn-state)
-  (unless (eq state t)
-    (or (alist-get state conn--local-maps)
-        (setf (alist-get state conn--local-maps)
-              (define-keymap
-                :parent (make-composed-keymap
-                         (cl-loop for parent in (conn--state-parents state)
-                                  for map = (conn-get-local-map parent)
-                                  when map collect map)))))))
+  (or (alist-get state conn--local-maps)
+      (setf (alist-get state conn--local-maps)
+            (define-keymap
+              :parent (make-composed-keymap
+                       (cl-loop for parent in (conn--state-parents state)
+                                for map = (conn-get-local-map parent)
+                                when map collect map))))))
 
 (defmacro conn--without-input-method-hooks (&rest body)
   "Run body without conn input method hooks active."
@@ -1099,20 +1095,33 @@ from its parents."
                    unless (eq p property)
                    append (list p v)))))
 
+(defvar conn--state-all-parents-cache nil)
+
 (defun conn--state-all-parents (state)
-  (cons state
-        (merge-ordered-lists (mapcar 'conn--state-all-parents
-                                     (conn--state-parents state)))))
+  (when state
+    (with-memoization
+        (plist-get conn--state-all-parents-cache state)
+      (cons state
+            (merge-ordered-lists (mapcar 'conn--state-all-parents
+                                         (conn--state-parents state)))))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
-  95 (lambda (state) `(and (conn-state-p ,state) ,state))
+  90 (lambda (state) `(and (conn-state-p ,state) ,state))
   (lambda (state &rest _)
-    (mapcar (lambda (state) `(conn-substate ,state))
+    (mapcar (lambda (parent) `(conn-substate ,parent))
             (conn--state-all-parents state))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers."
   (list conn--substate-generalizer))
+
+(cl-generic-define-generalizer conn--state-generalizer
+  15 (lambda (state) `(and (conn-state-p ,state) 'conn-state))
+  (lambda (tag &rest _) (list tag)))
+
+(cl-defmethod cl-generic-generalizers ((_specializer (eql 'conn-state)))
+  "Support for (conn-substate STATE) specializers."
+  (list conn--state-generalizer))
 
 (cl-defgeneric conn-enter-state (state)
   "Enter conn state STATE.
@@ -1120,16 +1129,16 @@ from its parents."
 This function takes care of calling `conn-exit-state' on the current
 state."
   (:method ((_state (eql nil))) "Noop" nil)
-  (:method ((_state (conn-substate t))) "Noop" nil)
+  (:method ((_state conn-state)) "Noop" nil)
   (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE."
   (:method ((_state (eql nil))) "Noop" nil)
-  (:method ((_state (conn-substate t))) "Noop" nil)
+  (:method ((_state conn-state)) "Noop" nil)
   (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
-(cl-defmethod conn-exit-state :around ((state (conn-substate t)))
+(cl-defmethod conn-exit-state :around ((state conn-state))
   (when (symbol-value state)
     (let ((success nil))
       (unwind-protect
@@ -1152,7 +1161,7 @@ state."
           (remove-hook 'conn-exit-functions fn)
           (message "Error in conn-exit-functions %s" (car err))))))))
 
-(cl-defmethod conn-enter-state :around ((state (conn-substate t)))
+(cl-defmethod conn-enter-state :around ((state conn-state))
   (unless (symbol-value state)
     (let ((success nil))
       (unwind-protect
@@ -1223,10 +1232,10 @@ NAME.
                (keymap (car keymap))
                (keymap-name (conn--symbolicate name "-map")))
     `(progn
+       (setq conn--state-all-parents-cache nil)
+
        (put ',name :conn-state-properties
-            (list (list ,@properties)
-                  ,@(or (mapcar 'macroexp-quote inherit)
-                        (list t))))
+             (cons (list ,@properties) ',inherit))
 
        (cl-pushnew ',name conn-states)
 
