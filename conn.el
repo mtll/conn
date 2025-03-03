@@ -36,7 +36,6 @@
   (require 'cl-lib)
   (require 'map))
 
-(declare-function extract-rectangle-bounds "rect")
 (declare-function kmacro-p "kmacro")
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function project-files "project")
@@ -1450,10 +1449,11 @@ Optionally the overlay may have an associated THING."
     (overlay-put ov 'thing thing)
     (overlay-put ov 'category 'conn-read-string-match)
     ;; Prevents overlay extending into invisible text ellipsis
-    (overlay-put ov 'display
-                 (propertize (buffer-substring (overlay-start ov)
-                                               (overlay-end ov))
-                             'face 'conn-read-string-match-face))
+    (when (> length 0)
+      (overlay-put ov 'display
+                   (propertize (buffer-substring (overlay-start ov)
+                                                 (overlay-end ov))
+                               'face 'conn-read-string-match-face)))
     (overlay-put ov 'window (selected-window))
     ov))
 
@@ -4217,7 +4217,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                (goto-char (+ (point) (window-hscroll)))
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-target-overlay (point) 0) ovs)))))))
+                      (if (= (point) (point-max))
+                          (let ((ov (conn--make-target-overlay (point) 0)))
+                            ;; hack to get the label displayed on its own line
+                            (overlay-put ov 'after-string
+                                         (propertize " " 'display '(space :width 0)))
+                            (push ov ovs))
+                        (push (conn--make-target-overlay (point) 0) ovs))))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -4240,7 +4246,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     (when (and (eolp)
                                (not (invisible-p (point)))
                                (not (invisible-p (1- (point)))))
-                      (push (conn--make-target-overlay (point) 0) ovs)))))))
+                      (if (= (point-max) (point))
+                          (let ((ov (conn--make-target-overlay (point) 0)))
+                            ;; hack to get the label displayed on its own line
+                            (overlay-put ov 'after-string
+                                         (propertize " " 'display '(space :width 0)))
+                            (push ov ovs))
+                        (push (conn--make-target-overlay (point) 0) ovs))))))))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
