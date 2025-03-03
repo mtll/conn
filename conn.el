@@ -1099,6 +1099,7 @@ from its parents."
   (when state
     (with-memoization
         (plist-get conn--state-all-parents-cache state)
+      (cl-check-type state conn-state)
       (cons state
             (merge-ordered-lists (mapcar 'conn--state-all-parents
                                          (conn--state-parents state)))))))
@@ -1259,6 +1260,11 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                (keymap (car keymap))
                (keymap-name (conn--symbolicate name "-map")))
     `(progn
+       (cl-assert
+        (cl-loop for parent in ',inherit
+                 never (memq ',name (conn--state-all-parents parent)))
+        nil "Cycle detected in %s inheritance hierarchy" ',name)
+
        (setq conn--state-all-parents-cache nil)
 
        (put ',name :conn-state-properties
