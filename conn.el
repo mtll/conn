@@ -6869,8 +6869,6 @@ When ARG is nil the root window is used."
   "`" 'other-window)
 
 (defvar-keymap conn-goto-map
-  "o" 'conn-mark-ring-backward
-  "u" 'conn-mark-ring-forward
   "l" 'pop-global-mark
   "k" 'goto-line
   "r" 'xref-find-references
@@ -7090,6 +7088,8 @@ When ARG is nil the root window is used."
   ;; "M-j" 'conn-open-line-and-indent
   ;; "C-o" 'conn-open-line-above
   ;; "M-o" 'conn-open-line
+  "M-g o" 'conn-mark-ring-backward
+  "M-g u" 'conn-mark-ring-forward
   "C-S-w" 'delete-region
   "C-." 'conn-dispatch-on-things
   "C->" 'conn-dispatch-on-buttons
