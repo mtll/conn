@@ -1251,6 +1251,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
   (unless (stringp doc)
     (setq properties (cons doc properties)
           doc (format "Enter %S" (or (car-safe name) name))))
+  (cl-check-type properties plist)
   (pcase-let* (((or (and name (pred symbolp))
                     `(,name . ,props))
                 name)
@@ -1261,7 +1262,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
        (setq conn--state-all-parents-cache nil)
 
        (put ',name :conn-state-properties
-             (cons (list ,@properties) ',inherit))
+            (cons (list ,@properties) ',inherit))
 
        (cl-pushnew ',name conn-states)
 
@@ -2453,7 +2454,8 @@ Possibilities: \\<query-replace-map>
         (_
          (prog1
              (funcall iterator state)
-           (unless (alist-get (current-buffer) undo-handles)
+           (unless (or (alist-get (current-buffer) undo-handles)
+                       (eq buffer-undo-list t))
              (activate-change-group
               (setf (alist-get (current-buffer) undo-handles)
                     (prepare-change-group))))))))))
@@ -2465,20 +2467,25 @@ Possibilities: \\<query-replace-map>
         (:record
          (prog1
              (funcall iterator state)
-           (setq handle (prepare-change-group))
-           (activate-change-group handle)))
+           (unless (eq buffer-undo-list t)
+             (setq handle (prepare-change-group))
+             (activate-change-group handle))))
         (:finalize
-         (accept-change-group handle)
-         (undo-amalgamate-change-group handle)
+         (when handle
+           (accept-change-group handle)
+           (undo-amalgamate-change-group handle))
          (funcall iterator state))
         (_
-         (accept-change-group handle)
-         (undo-amalgamate-change-group handle)
+         (when handle
+           (accept-change-group handle)
+           (undo-amalgamate-change-group handle))
          (prog1
              (funcall iterator state)
-           (undo-boundary)
-           (setq handle (prepare-change-group))
-           (activate-change-group handle)))))))
+           (if (eq buffer-undo-list t)
+               (setq handle nil)
+             (undo-boundary)
+             (setq handle (prepare-change-group))
+             (activate-change-group handle))))))))
 
 (defun conn--kapply-save-excursion (iterator)
   (let (saved-excursions)
