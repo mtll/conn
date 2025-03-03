@@ -4,7 +4,7 @@
 ;; Description: A modal keybinding mode and keyboard macro enhancement
 ;; Author: David Feller
 ;; Keywords: convenience, editing
-;; Version: 0.1
+;; Version: 0.0.1
 ;; Package-Requires: ((emacs "29.1") (compat "30.0.2.0") (transient "0.6.0") (seq "2.24"))
 ;; Homepage: https://github.com/mtll/conn
 ;;
@@ -228,6 +228,16 @@ For the meaning of CONDITION see `buffer-match-p'."
   :group 'conn
   :type '(list symbol))
 
+(defcustom conn-bind-isearch-mode-keys nil
+  "Whether conn should add binding too isearch-mode.
+
+See `conn-bind-isearch-mode-keys' for bindings that would be added."
+  :group 'conn
+  :type '(list symbol)
+  :set (lambda (var val)
+         (set var val)
+         (when val (conn-bind-isearch-mode-keys))))
+
 ;;;;; State Variables
 
 (defvar conn-states nil
@@ -275,9 +285,9 @@ See also `conn-exit-functions'.")
 
 (defvar-local conn--local-maps nil)
 
-(defvar-local conn--local-major-mode-maps nil)
-
 (defvar conn--major-mode-maps nil)
+
+(defvar-local conn--local-major-mode-maps nil)
 
 (defvar conn--minor-mode-maps nil)
 
@@ -867,6 +877,17 @@ after point."
                                               (point-max))))
              when (funcall predicate ov) collect ov)))
 
+(defun conn--push-keymap-parent (keymap new-parent)
+  (if-let ((parent (keymap-parent keymap)))
+      (push new-parent (cdr parent))
+    (set-keymap-parent keymap (make-composed-keymap new-parent))))
+
+(defun conn--pop-keymap-parent (keymap parent-to-remove)
+  (when-let ((parent (keymap-parent keymap)))
+    (setf (cdr parent) (delq parent-to-remove (cdr parent)))
+    (unless (cdr parent)
+      (set-keymap-parent keymap nil))))
+
 
 ;;;; States
 
@@ -1076,7 +1097,7 @@ mouse-3: Describe current input method")
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
 
-(defsubst conn-state-set (state property value)
+(defun conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
 
 Returns VALUE."
@@ -1658,11 +1679,7 @@ Is function of three arguments (THING BEG END).
 BEG and END define the region and THING is the things to find within the
 region.")
 
-(defvar conn-read-thing-mover-maps-alist nil)
-
 (defvar conn-last-bounds-of-command nil)
-
-(defvar conn--thing-overriding-maps nil)
 
 (defvar-keymap conn-read-expand-region-map
   :parent conn-expand-repeat-map
@@ -5035,13 +5052,11 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-transpose-regions (mover arg)
   (interactive
-   (let ((conn--thing-overriding-maps
-          (list (define-keymap "k" 'forward-line))))
-     (conn-read-thing-mover
-      "Mover"
-      (when current-prefix-arg
-        (prefix-numeric-value current-prefix-arg))
-      t)))
+   (conn-read-thing-mover
+    "Mover"
+    (when current-prefix-arg
+      (prefix-numeric-value current-prefix-arg))
+    t))
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
@@ -6765,11 +6780,6 @@ When ARG is nil the root window is used."
 
 ;;;; Keymaps
 
-(defvar-keymap conn-list-movement-repeat-map
-  :repeat t
-  ")" 'forward-list
-  "(" 'backward-list)
-
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
   "C-s" 'reb-next-match
@@ -6820,28 +6830,24 @@ When ARG is nil the root window is used."
   (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
   (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff))
 
-(defvar-keymap conn-window-resize-map
-  :repeat t
-  :prefix 'conn-window-resize-map
-  "f" 'enlarge-window
-  "d" 'shrink-window
-  "j" 'shrink-window-horizontally
-  "k" 'enlarge-window-horizontally)
-
 (defvar-keymap conn-indent-rigidly-map
   "l" 'indent-rigidly-right
   "j" 'indent-rigidly-left
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
 
-(define-keymap
-  :keymap isearch-mode-map
-  "M-Y" 'conn-isearch-yank-region
-  "M-<return>" 'conn-isearch-exit-and-mark
-  "M-RET" 'conn-isearch-exit-and-mark
-  "M-\\" 'conn-isearch-kapply-prefix
-  "C-," 'conn-dispatch-isearch
-  "C-'" 'conn-isearch-open-recursive-edit)
+(defun conn-bind-isearch-mode-keys ()
+  (define-keymap
+    :keymap isearch-mode-map
+    "M-Y" 'conn-isearch-yank-region
+    "M-<return>" 'conn-isearch-exit-and-mark
+    "M-RET" 'conn-isearch-exit-and-mark
+    "M-\\" 'conn-isearch-kapply-prefix
+    "C-," 'conn-dispatch-isearch
+    "C-'" 'conn-isearch-open-recursive-edit))
+
+(when conn-bind-isearch-mode-keys
+  (conn-bind-isearch-mode-keys))
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-movement-state 'compilation-mode)
@@ -7118,15 +7124,12 @@ When ARG is nil the root window is used."
         (cl-pushnew 'conn--local-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
-        (set-keymap-parent search-map conn-search-map)
-        (set-keymap-parent goto-map conn-goto-map)
-        (set-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
-    (when (eq (keymap-parent search-map) conn-search-map)
-      (set-keymap-parent search-map nil))
-    (when (eq (keymap-parent search-map) conn-search-map)
-      (set-keymap-parent indent-rigidly-map nil))
-    (when (eq (keymap-parent goto-map) conn-goto-map)
-      (set-keymap-parent goto-map nil))
+        (conn--push-keymap-parent search-map conn-search-map)
+        (conn--push-keymap-parent goto-map conn-goto-map)
+        (conn--push-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
+    (conn--pop-keymap-parent search-map conn-search-map)
+    (conn--pop-keymap-parent goto-map conn-goto-map)
+    (conn--pop-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
           (seq-difference '(conn--state-maps
                             conn--local-maps
