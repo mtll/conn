@@ -1251,7 +1251,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
   (unless (stringp doc)
     (setq properties (cons doc properties)
           doc (format "Enter %S" (or (car-safe name) name))))
-  (cl-check-type properties plist)
+  (cl-assert (plistp properties))
   (pcase-let* (((or (and name (pred symbolp))
                     `(,name . ,props))
                 name)
