@@ -64,8 +64,8 @@ A target finder function should return a list of overlays.")
 (defvar conn-dispatch-target-finders-alist
   `((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
-    (conn-backward-symbol . ,(apply-partially 'conn--dispatch-all-things 'symbol t))
-    (backward-word . ,(apply-partially 'conn--dispatch-all-things 'word t)))
+    (conn-backward-symbol . ,(lambda () (conn--dispatch-all-things 'symbol t)))
+    (backward-word . ,(lambda () (conn--dispatch-all-things 'word t))))
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
@@ -1650,9 +1650,9 @@ Optionally the overlay may have an associated THING."
 (defvar conn-bounds-of-command-alist
   `((recursive-edit . conn--bounds-of-dots)
     (conn-toggle-mark-command . conn--bounds-of-region)
-    (conn-expand . ,(apply-partially 'conn--bounds-of-expansion 'conn-expand))
+    (conn-expand . ,(lambda (arg) (conn--bounds-of-expansion 'conn-expand arg)))
     (conn-expand-remote . conn--bounds-of-remote-expansion)
-    (conn-contract . ,(apply-partially 'conn--bounds-of-expansion 'conn-contract))
+    (conn-contract . ,(lambda (arg) (conn--bounds-of-expansion 'conn-contract arg)))
     (set-mark-command . conn--bounds-of-region)
     (conn-set-mark-command . conn--bounds-of-region)
     (visible . conn--bounds-of-window)
@@ -1730,7 +1730,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                      (ignore-errors
                        (alist-get (get cmd :conn-command-thing)
                                   conn-bounds-of-command-alist))
-                     (apply-partially conn-bounds-of-command-default cmd))
+                     (lambda (arg) (funcall conn-bounds-of-command-default cmd arg)))
                  arg)))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
@@ -2926,7 +2926,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'defun
  :forward-op 'conn-forward-defun
- :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'defun t))
+ :dispatch-target-finder (lambda () (conn--dispatch-all-things 'defun t)))
 
 (conn-register-thing
  'region
@@ -2967,7 +2967,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'symbol
  :forward-op 'forward-symbol
- :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'symbol 1 t))
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'symbol 1 t)))
 
 (conn-register-thing-commands
  'symbol 'conn-continuous-thing-handler
@@ -2993,7 +2993,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'word
  :forward-op 'forward-word
- :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'word 1 t))
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'word 1 t)))
 
 (conn-register-thing-commands
  'word 'conn-symbol-handler
@@ -3004,7 +3004,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'sexp
  :forward-op 'forward-sexp
- :dispatch-target-finder (apply-partially 'conn--dispatch-things-with-prefix 'sexp 1 t))
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'sexp 1 t)))
 
 (conn-register-thing-commands
  'sexp 'conn-continuous-thing-handler
@@ -3070,7 +3070,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'sentence
  :forward-op 'forward-sentence
- :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'sentence t))
+ :dispatch-target-finder (lambda () (conn--dispatch-all-things 'sentence t)))
 
 (conn-register-thing-commands
  'sentence 'conn-continuous-thing-handler
@@ -3079,7 +3079,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'paragraph
  :forward-op 'forward-paragraph
- :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'paragraph t))
+ :dispatch-target-finder (lambda () (conn--dispatch-all-things 'paragraph t)))
 
 (conn-register-thing-commands
  'paragraph 'conn-continuous-thing-handler
@@ -3537,11 +3537,11 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (conn-define-dispatch-thing forward-word
   :key "O"
-  :target-finder (apply-partially 'conn--dispatch-all-things 'word t))
+  :target-finder (lambda () (conn--dispatch-all-things 'word t)))
 
 (conn-define-dispatch-thing forward-symbol
   :key "U"
-  :target-finder (apply-partially 'conn--dispatch-all-things 'symbol t))
+  :target-finder (lambda () (conn--dispatch-all-things 'symbol t)))
 
 ;;;;; Actions
 
@@ -4443,7 +4443,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-dispatch-on-things
    nil nil
-   (apply-partially 'conn--dispatch-all-buttons t)
+   (lambda () (conn--dispatch-all-buttons t))
    (lambda (win pt _thing)
      (select-window win)
      (push-button pt))
@@ -5132,8 +5132,8 @@ Interactively `region-beginning' and `region-end'."
                                       (goto-char (mark t))
                                       (bounds-of-thing-at-point thing))))
        (transpose-regions beg1 end1 beg2 end2)))
-    (_
-     (transpose-subr (apply-partially 'forward-thing (get mover :conn-command-thing))
+    ((let thing (get mover :conn-command-thing))
+     (transpose-subr (lambda (N) (forward-thing thing N))
                      (prefix-numeric-value arg)))))
 
 (defun conn-open-line (arg)
@@ -7300,7 +7300,7 @@ When ARG is nil the root window is used."
 
   (conn-register-thing
    'org-paragraph
-   :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'org-paragraph t)
+   :dispatch-target-finder (lambda () (conn--dispatch-all-things 'org-paragraph t))
    :forward-op 'org-forward-paragraph
    :mark-key "I"
    :modes '(org-mode))
@@ -7375,7 +7375,7 @@ When ARG is nil the root window is used."
   (conn-register-thing
    'org-heading
    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
-   :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'org-heading t)
+   :dispatch-target-finder (lambda () (conn--dispatch-all-things 'org-heading t))
    :forward-op 'org-next-visible-heading
    :modes '(org-mode))
 
@@ -7452,7 +7452,7 @@ When ARG is nil the root window is used."
   (conn-register-thing
    'heading
    :mark-cmd t
-   :dispatch-target-finder (apply-partially 'conn--dispatch-all-things 'heading t)
+   :dispatch-target-finder (lambda () (conn--dispatch-all-things 'heading t))
    :bounds-op (lambda ()
                 (save-mark-and-excursion
                   (outline-mark-subtree)
