@@ -228,16 +228,6 @@ For the meaning of CONDITION see `buffer-match-p'."
   :group 'conn
   :type '(list symbol))
 
-(defcustom conn-bind-isearch-mode-keys nil
-  "Whether conn should add binding too isearch-mode.
-
-See `conn-bind-isearch-mode-keys' for bindings that would be added."
-  :group 'conn
-  :type '(list symbol)
-  :set (lambda (var val)
-         (set var val)
-         (when val (conn-bind-isearch-mode-keys))))
-
 ;;;;; State Variables
 
 (defvar conn-states nil
@@ -877,12 +867,12 @@ after point."
                                               (point-max))))
              when (funcall predicate ov) collect ov)))
 
-(defun conn--push-keymap-parent (keymap new-parent)
+(defun conn--append-keymap-parent (keymap new-parent)
   (if-let ((parent (keymap-parent keymap)))
-      (push new-parent (cdr parent))
+      (set-keymap-parent keymap (append parrent (list new-parent)))
     (set-keymap-parent keymap (make-composed-keymap new-parent))))
 
-(defun conn--pop-keymap-parent (keymap parent-to-remove)
+(defun conn--remove-keymap-parent (keymap parent-to-remove)
   (when-let ((parent (keymap-parent keymap)))
     (setf (cdr parent) (delq parent-to-remove (cdr parent)))
     (unless (cdr parent)
@@ -6836,18 +6826,13 @@ When ARG is nil the root window is used."
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
 
-(defun conn-bind-isearch-mode-keys ()
-  (define-keymap
-    :keymap isearch-mode-map
-    "M-Y" 'conn-isearch-yank-region
-    "M-<return>" 'conn-isearch-exit-and-mark
-    "M-RET" 'conn-isearch-exit-and-mark
-    "M-\\" 'conn-isearch-kapply-prefix
-    "C-," 'conn-dispatch-isearch
-    "C-'" 'conn-isearch-open-recursive-edit))
-
-(when conn-bind-isearch-mode-keys
-  (conn-bind-isearch-mode-keys))
+(defvar-keymap conn-isearch-map
+  "M-Y" 'conn-isearch-yank-region
+  "M-<return>" 'conn-isearch-exit-and-mark
+  "M-RET" 'conn-isearch-exit-and-mark
+  "M-\\" 'conn-isearch-kapply-prefix
+  "C-," 'conn-dispatch-isearch
+  "C-'" 'conn-isearch-open-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-movement-state 'compilation-mode)
@@ -7124,12 +7109,14 @@ When ARG is nil the root window is used."
         (cl-pushnew 'conn--local-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
-        (conn--push-keymap-parent search-map conn-search-map)
-        (conn--push-keymap-parent goto-map conn-goto-map)
-        (conn--push-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
-    (conn--pop-keymap-parent search-map conn-search-map)
-    (conn--pop-keymap-parent goto-map conn-goto-map)
-    (conn--pop-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
+        (conn--append-keymap-parent isearch-mode-map conn-isearch-map)
+        (conn--append-keymap-parent search-map conn-search-map)
+        (conn--append-keymap-parent goto-map conn-goto-map)
+        (conn--append-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
+    (conn--remove-keymap-parent isearch-mode-map conn-isearch-map)
+    (conn--remove-keymap-parent search-map conn-search-map)
+    (conn--remove-keymap-parent goto-map conn-goto-map)
+    (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
           (seq-difference '(conn--state-maps
                             conn--local-maps
