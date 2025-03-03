@@ -115,6 +115,8 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   ")" 'forward-list
   "(" 'backward-list)
 
+(defvar-keymap conn-mode-map)
+
 ;;;;; Custom Variables
 
 (defgroup conn nil
@@ -495,13 +497,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (intern (apply #'conn--stringify symbols-or-strings)))
-
-  (defun conn-state-p (state)
-    (or (eq state t)
-        (not (not (get state :conn-state-properties)))))
-
-  (cl-deftype conn-state () '(satisfies conn-state-p)))
+    (intern (apply #'conn--stringify symbols-or-strings))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   "Run BODY with ADVICE-FORMS temporarily applied.
@@ -522,7 +518,7 @@ meaning of these see `advice-add'."
 (defmacro conn--without-conn-maps (&rest body)
   "Run BODY without any state, mode, or local maps active.
 
-`conn-local-mode-map' and `conn-global-map' will still be active."
+`conn-mode-map' will still be active."
   (declare (debug (body))
            (indent 0))
   `(let ((emulation-mode-map-alists
@@ -881,8 +877,11 @@ after point."
 
 ;;;; States
 
-(defvar conn--state-slot-unbound (make-symbol "slot-unbound")
-  "Uninterned symbol to mark an unbound state slot.")
+(defun conn-state-p (state)
+  (or (eq state t)
+      (not (not (get state :conn-state-properties)))))
+
+(cl-deftype conn-state () '(satisfies conn-state-p))
 
 (defun conn--setup-major-mode-maps ()
   "Setup the mode specific keymaps for the current major mode."
@@ -1021,13 +1020,6 @@ and return it."
   (setq conn--input-method nil
         conn--input-method-title nil))
 (put 'conn--deactivate-input-method 'permanent-local-hook t)
-
-(defun conn--toggle-input-method-ad (&rest app)
-  (if (or (not conn-local-mode)
-          (conn-state-get conn-current-state 'suppress-input-method))
-      (apply app)
-    (let ((current-input-method conn--input-method))
-      (apply app))))
 
 (defun conn--isearch-input-method ()
   "Ensure input method is enabled in isearch-mode."
@@ -1233,7 +1225,8 @@ NAME.
     `(progn
        (put ',name :conn-state-properties
             (list (list ,@properties)
-                  ,@(mapcar 'macroexp-quote (or inherit (list 't)))))
+                  ,@(or (mapcar 'macroexp-quote inherit)
+                        (list t))))
 
        (cl-pushnew ',name conn-states)
 
@@ -2021,6 +2014,13 @@ is read."
 
 
 ;;;; Advice
+
+(defun conn--toggle-input-method-ad (&rest app)
+  (if (or (not conn-local-mode)
+          (conn-state-get conn-current-state 'suppress-input-method))
+      (apply app)
+    (let ((current-input-method conn--input-method))
+      (apply app))))
 
 (defun conn--read-from-suggestions-ad (&rest app)
   (if (and (mark t)
@@ -7100,12 +7100,12 @@ When ARG is nil the root window is used."
   "M-V" 'conn-wincontrol-maximize-vertically)
 
 (defun conn-enable-global-bindings ()
-  "Add `conn--global-binding-map' to `conn-local-mode-map'."
-  (conn--append-keymap-parent conn-local-mode-map conn--global-binding-map))
+  "Add `conn--global-binding-map' to `conn-mode-map'."
+  (conn--append-keymap-parent conn-mode-map conn--global-binding-map))
 
 (defun conn-disable-global-bindings ()
-  "Remove `conn--global-binding-map' from `conn-local-mode-map'."
-  (conn--remove-keymap-parent conn-local-mode-map conn--global-binding-map))
+  "Remove `conn--global-binding-map' from `conn-mode-map'."
+  (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
 
 (defvar-keymap conn-mode-map
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
@@ -7139,6 +7139,7 @@ When ARG is nil the root window is used."
   "Minor mode for setting up conn in a buffer."
   :init-value nil
   :lighter (:eval conn-lighter)
+  :keymap conn-mode-map
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
