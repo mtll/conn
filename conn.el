@@ -869,7 +869,7 @@ after point."
 
 (defun conn--append-keymap-parent (keymap new-parent)
   (if-let ((parent (keymap-parent keymap)))
-      (set-keymap-parent keymap (append parrent (list new-parent)))
+      (set-keymap-parent keymap (append parent (list new-parent)))
     (set-keymap-parent keymap (make-composed-keymap new-parent))))
 
 (defun conn--remove-keymap-parent (keymap parent-to-remove)
@@ -5709,7 +5709,9 @@ of deleting it."
   (conn--without-conn-maps
     (if arg
         (funcall (key-binding conn-kill-region-keys t) start end)
-      (funcall (key-binding conn-delete-region-keys t) start end))
+      (funcall (or (key-binding conn-delete-region-keys t)
+                   'delete-region)
+               start end))
     (funcall (key-binding conn-yank-keys t))))
 
 (defun conn--end-of-inner-line-1 ()
@@ -6861,6 +6863,8 @@ When ARG is nil the root window is used."
   "`" 'other-window)
 
 (defvar-keymap conn-goto-map
+  "o" 'conn-mark-ring-backward
+  "u" 'conn-mark-ring-forward
   "l" 'pop-global-mark
   "k" 'goto-line
   "r" 'xref-find-references
@@ -7076,7 +7080,7 @@ When ARG is nil the root window is used."
   "x" (conn-remap-key (key-parse "C-x"))
   "z" 'conn-exchange-mark-command)
 
-(defvar-keymap conn-global-map
+(defvar-keymap conn--global-binding-map
   ;; "M-j" 'conn-open-line-and-indent
   ;; "C-o" 'conn-open-line-above
   ;; "M-o" 'conn-open-line
@@ -7095,12 +7099,16 @@ When ARG is nil the root window is used."
   "M-H" 'conn-wincontrol-maximize-horizontally
   "M-V" 'conn-wincontrol-maximize-vertically)
 
+(defun conn-enable-global-bindings ()
+  "Add `conn--global-binding-map' to `conn-local-mode-map'."
+  (conn--append-keymap-parent conn-local-mode-map conn--global-binding-map))
+
+(defun conn-disable-global-bindings ()
+  "Remove `conn--global-binding-map' from `conn-local-mode-map'."
+  (conn--remove-keymap-parent conn-local-mode-map conn--global-binding-map))
+
 (defvar-keymap conn-mode-map
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
-
-(defvar-keymap conn-local-mode-map
-  "M-g o" 'conn-mark-ring-backward
-  "M-g u" 'conn-mark-ring-forward)
 
 (defun conn--setup-keymaps ()
   (if conn-mode
@@ -7130,7 +7138,6 @@ When ARG is nil the root window is used."
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :keymap conn-local-mode-map
   :lighter (:eval conn-lighter)
   (conn--input-method-mode-line)
   (if conn-local-mode
@@ -7169,7 +7176,6 @@ When ARG is nil the root window is used."
 (define-globalized-minor-mode conn-mode
   conn-local-mode conn--initialize-buffer
   :group 'conn
-  :keymap conn-global-map
   (progn
     (conn--setup-keymaps)
     (conn--setup-mark)
