@@ -4875,25 +4875,22 @@ instances of from-string.")
    :noconfirm (memq register-use-preview '(nil never))
    :smatch t))
 
-(defun conn-command-to-register (register arg)
+(defun conn-command-to-register (register)
   "Store command in REGISTER."
   (interactive
-   (list (register-read-with-preview "Command to register: ")
-         (abs (prefix-numeric-value current-prefix-arg))))
+   (list (register-read-with-preview "Command to register: ")))
   (set-register
    register
-   ;; TODO: use completing-read
    (make-conn-command-register
-    :command (let* ((elt (nth arg command-history))
-                    (print-level nil)
-                    (minibuffer-history-position arg)
-                    (minibuffer-history-sexp-flag (1+ (minibuffer-depth))))
-               (unwind-protect
-                   (read-from-minibuffer
-                    "Command: " (prin1-to-string elt) read-expression-map t
-                    (cons 'command-history arg))
-                 (when (stringp (car command-history))
-                   (pop command-history)))))))
+    :command (let* ((print-level nil)
+                    (cmds (cdr (mapcar #'prin1-to-string command-history))))
+               (completing-read
+                "Command: "
+                (lambda (string pred action)
+                  (if (eq action 'metadata)
+                      `(metadata (display-sort-function . ,#'identity))
+                    (complete-with-action action cmds string pred)))
+                nil t)))))
 
 ;;;;; Tab Registers
 
