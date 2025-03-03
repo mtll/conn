@@ -1064,13 +1064,10 @@ mouse-3: Describe current input method")
 
 (defun conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
-  (or (cadr (thread-first
-              (car (get state :conn-state-properties))
-              (plist-member property)))
-      (cl-loop for parent in (conn--state-all-parents state)
-               for props = (car (get parent :conn-state-properties))
-               for tail = (plist-member props property)
-               when tail return (cadr tail))))
+  (cl-loop for parent in (conn--state-all-parents state)
+           for props = (car (get parent :conn-state-properties))
+           for tail = (plist-member props property)
+           when tail return (cadr tail)))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1123,15 +1120,6 @@ from its parents."
   "Support for (conn-substate STATE) specializers."
   (list conn--state-generalizer))
 
-(cl-defgeneric conn-enter-state (state)
-  "Enter conn state STATE.
-
-This function takes care of calling `conn-exit-state' on the current
-state."
-  (:method ((_state (eql nil))) "Noop" nil)
-  (:method ((_state conn-state)) "Noop" nil)
-  (:method (state) (error "Attempting to enter unknown state: %s" state)))
-
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE."
   (:method ((_state (eql nil))) "Noop" nil)
@@ -1160,6 +1148,15 @@ state."
          (t
           (remove-hook 'conn-exit-functions fn)
           (message "Error in conn-exit-functions %s" (car err))))))))
+
+(cl-defgeneric conn-enter-state (state)
+  "Enter conn state STATE.
+
+This function takes care of calling `conn-exit-state' on the current
+state."
+  (:method ((_state (eql nil))) "Noop" nil)
+  (:method ((_state conn-state)) "Noop" nil)
+  (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
 (cl-defmethod conn-enter-state :around ((state conn-state))
   (unless (symbol-value state)
