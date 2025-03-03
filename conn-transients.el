@@ -361,7 +361,7 @@ The region is read by prompting for a command with a `:conn-command-thing'
 property."
   :transient 'transient--do-exit
   :key "c"
-  :description "Conn"
+  :description "Command"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--kapply-compose-iterator
@@ -440,7 +440,7 @@ property."
 (transient-define-suffix conn--kapply-conn-rectangle-string (args)
   :transient 'transient--do-exit
   :key "c"
-  :description "Conn"
+  :description "Command"
   (interactive (list (transient-args transient-current-command)))
   (let ((regions (region-bounds)))
     (unless (or (length= regions 1)
