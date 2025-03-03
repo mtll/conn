@@ -1060,10 +1060,12 @@ mouse-3: Describe current input method")
       conn-default-state))
 
 (defun conn--state-parents (state)
+  (cl-check-type state conn-state)
   (cdr (get state :conn-state-properties)))
 
 (defun conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
+  (cl-check-type state conn-state)
   (cl-loop for parent in (conn--state-all-parents state)
            for props = (car (get parent :conn-state-properties))
            for tail = (plist-member props property)
