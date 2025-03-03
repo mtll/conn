@@ -1091,24 +1091,24 @@ from its parents."
         (cl-loop with props = (car (get state :conn-state-properties))
                  for (p v) on props by #'cddr
                  unless (eq p property)
-                 append (list p v))))
+                 nconc (list p v))))
 
 (defvar conn--state-all-parents-cache nil)
 
 (defun conn--state-all-parents (state)
-  (when state
-    (with-memoization
-        (plist-get conn--state-all-parents-cache state)
-      (cl-check-type state conn-state)
-      (cons state
-            (merge-ordered-lists (mapcar 'conn--state-all-parents
-                                         (conn--state-parents state)))))))
+  (with-memoization
+      (plist-get conn--state-all-parents-cache state)
+    (cl-check-type state conn-state)
+    (cons state
+          (merge-ordered-lists (mapcar 'conn--state-all-parents
+                                       (conn--state-parents state))))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
   (lambda (state &rest _)
-    (mapcar (lambda (parent) `(conn-substate ,parent))
-            (conn--state-all-parents state))))
+    (when state
+      (mapcar (lambda (parent) `(conn-substate ,parent))
+              (conn--state-all-parents state)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers."
