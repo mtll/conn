@@ -1118,11 +1118,22 @@ from its parents."
   (lambda (tag &rest _) (list tag)))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (eql 'conn-state)))
-  "Support for (conn-substate STATE) specializers."
+  "Support for conn-state specializers."
   (list conn--state-generalizer))
 
 (cl-defgeneric conn-exit-state (state)
-  "Exit conn state STATE."
+  "Exit conn state STATE.
+
+Methods can be added to this generic function in order to run code every
+time a state is exited.  Conn provides two additional specializers for
+methods to facilitate this:
+
+CONN-SUBSTATE: this takes the form (STATE (conn-substate PARENT-STATE))
+in an argument list and specializes the method on states that inherit
+from PARENT-STATE.
+
+CONN-STATE: this takes the form (STATE conn-state) in a argument list
+and specializes the method on all conn states."
   (:method ((_state (eql nil))) "Noop" nil)
   (:method ((_state conn-state)) "Noop" nil)
   (:method (state) (error "Attempting to exit unknown state: %s" state)))
@@ -1153,8 +1164,16 @@ from its parents."
 (cl-defgeneric conn-enter-state (state)
   "Enter conn state STATE.
 
-This function takes care of calling `conn-exit-state' on the current
-state."
+Methods can be added to this generic function in order to run code every
+time a state is entered.  Conn provides two additional specializers for
+methods to facilitate this:
+
+CONN-SUBSTATE: this takes the form (STATE (conn-substate PARENT-STATE))
+in an argument list and specializes the method on states that inherit
+from PARENT-STATE.
+
+CONN-STATE: this takes the form (STATE conn-state) in a argument list
+and specializes the method on all conn states."
   (:method ((_state (eql nil))) "Noop" nil)
   (:method ((_state conn-state)) "Noop" nil)
   (:method (state) (error "Attempting to enter unknown state: %s" state)))
@@ -1206,17 +1225,26 @@ variable or `conn-get-state-map'.
 :INHERIT is a list of states from which NAME should inherit slots and
 keymaps.
 
-Keyword arguments define state slots.  The following slots have a
-special meaning:
+PROPERTIES is a property list defining the state properties for NAME.  A
+state may have any number of properties and a state will inherit the
+value for a property from its parents if it does not set the value
+explicitly.
+
+The following properties have a special meaning:
 
 :LIGHTER is the mode-line lighter text for NAME.
+
+:HIDE-MARK-CURSOR if non-nil will hide the mark cursor in NAME.
 
 :SUPPRESS-INPUT-METHOD if non-nil suppresses current input method in
 NAME.
 
 :CURSOR is the `cursor-type' in NAME.
 
-\(fn NAME DOC [KEYWORD VAL ...])"
+Code that should be run whenever a state is entered or exited can be
+added as methods to `conn-enter-state' and `conn-exit-state', which see.
+
+\(fn NAME &optional DOC [KEYWORD VAL ...])"
   (declare (debug ( name string-or-null-p
                     [&rest keywordp sexp]))
            (indent defun))
