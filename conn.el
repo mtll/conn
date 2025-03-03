@@ -30,8 +30,8 @@
 ;;;; Requires
 
 (require 'compat)
-(require 'subr-x)
 (eval-when-compile
+  (require 'subr-x)
   (require 'eieio)
   (require 'cl-lib)
   (require 'map))
