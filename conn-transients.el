@@ -209,7 +209,7 @@ BEFORE means only those matches before, and including, the current match."
   :description "In State"
   :key "g"
   :keyword :state
-  :choices '(("conn" . conn-state)
+  :choices '(("command" . conn-command-state)
              ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
                 (with-slots (choices value) obj
@@ -379,7 +379,7 @@ property."
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
-   '(conn--kapply-with-state conn-state)
+   '(conn--kapply-with-state conn-command-state)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -454,7 +454,7 @@ property."
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
-     '(conn--kapply-with-state conn-state)
+     '(conn--kapply-with-state conn-command-state)
      (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region

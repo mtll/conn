@@ -48,7 +48,7 @@
 
 (defvar conn-mode nil)
 (defvar conn-local-mode)
-(defvar conn-state)
+(defvar conn-command-state)
 (defvar conn-emacs-state)
 (defvar conn-org-edit-state)
 (defvar conn-emacs-state)
@@ -143,7 +143,7 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :group 'conn)
 
 (defcustom conn-lighter " Conn"
-  "Modeline lighter for conn-mode."
+  "Default modeline lighter for conn-mode."
   :type '(choice string (const nil))
   :group 'conn-states)
 
@@ -157,7 +157,7 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
     ((or (derived-mode . prog-mode)
          (derived-mode . text-mode)
          (derived-mode . conf-mode))
-     . conn-state)
+     . conn-command-state)
     ((or (derived-mode . calc-mode)
          (derived-mode . calc-trail-mode)
          (derived-mode . minibuffer-mode)
@@ -240,7 +240,7 @@ For the meaning of CONDITION see `buffer-match-p'."
   "Abnormal hook run when a state is exited.
 
 Each function is passed the state being exited
-(eg '`conn-state' or '`conn-emacs-state').
+(eg '`conn-command-state' or '`conn-emacs-state').
 
 See also `conn-entry-functions'.")
 
@@ -248,7 +248,7 @@ See also `conn-entry-functions'.")
   "Abnormal hook run when a state is entered.
 
 Each function is passed the state being entered
-(eg '`conn-state' or '`conn-emacs-state').
+(eg '`conn-command-state' or '`conn-emacs-state').
 
 See also `conn-exit-functions'.")
 
@@ -495,7 +495,13 @@ Used to restore previous value when `conn-mode' is disabled.")
 
   (defun conn--symbolicate (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (intern (apply #'conn--stringify symbols-or-strings))))
+    (intern (apply #'conn--stringify symbols-or-strings)))
+
+  (defun conn-state-p (state)
+    (or (eq state t)
+        (not (not (get state :conn-state-properties)))))
+
+  (cl-deftype conn-state () '(satisfies conn-state-p)))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   "Run BODY with ADVICE-FORMS temporarily applied.
@@ -904,57 +910,67 @@ in STATE and return it."
       (put mode :conn-mode-things (make-sparse-keymap))))
 
 (defun conn-get-state-map (state)
-  (or (alist-get state conn--state-maps)
-      (setf (alist-get state conn--state-maps)
-            (make-sparse-keymap))))
+  (cl-check-type state conn-state)
+  (unless (eq state t)
+    (or (alist-get state conn--state-maps)
+        (setf (alist-get state conn--state-maps)
+              (make-sparse-keymap)))))
 
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
 If one does not exists assign a new sparse keymap for MODE
 in STATE and return it."
-  (or (alist-get mode (alist-get state conn--minor-mode-maps))
-      (cond
-       ((autoloadp (symbol-function mode))
-        ;; We can't tell what sort of mode this is, add it to
-        ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
-        ;; handle the case where it was actually a major-mode.
-        (prog1
-            (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-                  (define-keymap
-                    :parent (make-composed-keymap
-                             (cl-loop for parent in (conn--state-parents state)
-                                      collect (conn-get-mode-map parent mode)))))
-          (with-eval-after-load (cadr (symbol-function mode))
-            (when (get mode 'derived-mode-parent)
-              (setf (alist-get mode (alist-get state conn--major-mode-maps))
-                    (alist-get mode (alist-get state conn--minor-mode-maps)))
-              (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
-              (setf (alist-get state conn--minor-mode-maps)
-                    (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
-                                (alist-get state conn--minor-mode-maps)))))))
-       ((get mode 'derived-mode-parent)
-        (setf (alist-get mode (alist-get state conn--major-mode-maps))
-              (define-keymap
-                :parent (make-composed-keymap
-                         (cl-loop for parent in (conn--state-parents state)
-                                  collect (conn-get-mode-map parent mode))))))
-       (t
-        (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-              (define-keymap
-                :parent (make-composed-keymap
-                         (cl-loop for parent in (conn--state-parents state)
-                                  collect (conn-get-mode-map parent mode)))))))))
+  (cl-check-type state conn-state)
+  (unless (eq state t)
+    (or (alist-get mode (alist-get state conn--minor-mode-maps))
+        (cond
+         ((autoloadp (symbol-function mode))
+          ;; We can't tell what sort of mode this is, add it to
+          ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
+          ;; handle the case where it was actually a major-mode.
+          (prog1
+              (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                    (define-keymap
+                      :parent (make-composed-keymap
+                               (cl-loop for parent in (conn--state-parents state)
+                                        for map = (conn-get-mode-map parent mode)
+                                        when map collect map))))
+            (with-eval-after-load (cadr (symbol-function mode))
+              (when (get mode 'derived-mode-parent)
+                (setf (alist-get mode (alist-get state conn--major-mode-maps))
+                      (alist-get mode (alist-get state conn--minor-mode-maps)))
+                (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
+                (setf (alist-get state conn--minor-mode-maps)
+                      (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
+                                  (alist-get state conn--minor-mode-maps)))))))
+         ((get mode 'derived-mode-parent)
+          (setf (alist-get mode (alist-get state conn--major-mode-maps))
+                (define-keymap
+                  :parent (make-composed-keymap
+                           (cl-loop for parent in (conn--state-parents state)
+                                    for map = (conn-get-mode-map parent mode)
+                                    when map collect map)))))
+         (t
+          (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                (define-keymap
+                  :parent (make-composed-keymap
+                           (cl-loop for parent in (conn--state-parents state)
+                                    for map = (conn-get-mode-map parent mode)
+                                    when map collect map)))))))))
 
 (defun conn-get-local-map (state)
   "Get local keymap for STATE in current buffer.
 If one does not exists assign a new sparse keymap for STATE
 and return it."
-  (or (alist-get state conn--local-maps)
-      (setf (alist-get state conn--local-maps)
-            (define-keymap
-              :parent (make-composed-keymap
-                       (cl-loop for parent in (conn--state-parents state)
-                                collect (conn-get-local-map parent)))))))
+  (cl-check-type state conn-state)
+  (unless (eq state t)
+    (or (alist-get state conn--local-maps)
+        (setf (alist-get state conn--local-maps)
+              (define-keymap
+                :parent (make-composed-keymap
+                         (cl-loop for parent in (conn--state-parents state)
+                                  for map = (conn-get-local-map parent)
+                                  when map collect map)))))))
 
 (defmacro conn--without-input-method-hooks (&rest body)
   "Run body without conn input method hooks active."
@@ -1064,6 +1080,7 @@ mouse-3: Describe current input method")
   "Set the value of PROPERTY in STATE to VALUE.
 
 Returns VALUE."
+  (cl-check-type state conn-state)
   (setf (plist-get (car (get state :conn-state-properties)) property)
         value))
 
@@ -1072,6 +1089,7 @@ Returns VALUE."
 
 If a slot is unbound in a state it will inherit the value of that slot
 from its parents."
+  (cl-check-type state conn-state)
   (setf (car (get state :conn-state-properties))
         (let ((props (car (get state :conn-state-properties))))
           (cl-loop for (p v) on props by #'cddr
@@ -1084,12 +1102,10 @@ from its parents."
                                      (conn--state-parents state)))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
-  95 ;; Make sure this is higher than derived-mode.  Why?  I don't know.
-  (lambda (state)
-    `(and (memq ,state conn-states) ,state))
-  (lambda (state)
+  95 (lambda (state) `(and (conn-state-p ,state) ,state))
+  (lambda (state &rest _)
     (mapcar (lambda (state) `(conn-substate ,state))
-            (cons state (cdr (get state :conn-state-properties))))))
+            (conn--state-all-parents state))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers."
@@ -1101,29 +1117,69 @@ from its parents."
 This function takes care of calling `conn-exit-state' on the current
 state."
   (:method ((_state (eql nil))) "Noop" nil)
+  (:method ((_state (conn-substate t))) "Noop" nil)
   (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE."
   (:method ((_state (eql nil))) "Noop" nil)
+  (:method ((_state (conn-substate t))) "Noop" nil)
   (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
-(cl-defgeneric conn-state-body (state)
-  "Body function for STATE.
+(cl-defmethod conn-exit-state :around ((state (conn-substate t)))
+  (when (symbol-value state)
+    (let ((success nil))
+      (unwind-protect
+          (progn
+            (set state nil)
+            (setq conn-current-state nil
+                  conn-previous-state state
+                  cursor-type t)
+            (cl-call-next-method)
+            (setq success t))
+        (unless success
+          (conn-local-mode -1)
+          (message "Error exiting state %s." (symbol-value state)))))
+    (run-hook-wrapped
+     'conn-exit-functions
+     (lambda (fn)
+       (condition-case err
+           (funcall fn state)
+         (t
+          (remove-hook 'conn-exit-functions fn)
+          (message "Error in conn-exit-functions %s" (car err))))))))
 
-This function is run each time a state is entered or exited.  STATE is
-the symbol naming the state entered or exited and it is bound to t or
-nil respectively.
+(cl-defmethod conn-enter-state :around ((state (conn-substate t)))
+  (unless (symbol-value state)
+    (let ((success nil))
+      (unwind-protect
+          (progn
+            (conn-exit-state conn-current-state)
+            (set state t)
+            (setq conn-current-state state)
+            (setq-local conn-lighter (or (conn-state-get state :lighter)
+                                         (default-value conn-lighter))
+                        conn--local-minor-mode-maps (alist-get state conn--minor-mode-maps)
+                        conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
+                        cursor-type (or (conn-state-get state :cursor) t))
+            (conn--activate-input-method)
+            (cl-call-next-method)
+            (unless executing-kbd-macro
+              (force-mode-line-update))
+            (setq success t))
+        (unless success
+          (conn-local-mode -1)
+          (message "Error entering state %s." ',name))))
+    (run-hook-wrapped
+     'conn-entry-functions
+     (lambda (fn)
+       (condition-case err
+           (funcall fn state)
+         (t
+          (remove-hook 'conn-entry-functions fn)
+          (message "Error in conn-entry-functions: %s" (car err))))))))
 
-This function can be specialized on substates so that one can write
-methods for a state that run whenever that state or one of its children
-is entered or exited.  To do this write a method of the form:
-
-(cl-defmethod conn-state-body ((state (conn-substate PARENT-STATE)))
-  ...)"
-  (:method (_state) "Noop" nil))
-
-(defmacro conn-define-state (name doc &rest rest)
+(defmacro conn-define-state (name doc &rest properties)
   "Define a conn state NAME.
 
 Defines a transition function and variable NAME.  NAME is non-nil when
@@ -1150,40 +1206,23 @@ NAME.
 
 :CURSOR is the `cursor-type' in NAME.
 
-BODY contains code to be executed each time the state is enabled or
-disabled.  When BODY is present it will become the body of a method of
-`conn-state-body' specialized on NAME.  Conn also provides a
-conn-substate specializer so that one may write methods for
-`conn-state-body' specialized on a state and its substates.  To do this
-write a method of the form:
-
-(cl-defmethod conn-state-body ((state (conn-substate STATE-NAME)))
-  ...)
-
-\(fn NAME DOC [KEYWORD VAL ... &rest BODY])"
+\(fn NAME DOC [KEYWORD VAL ...])"
   (declare (debug ( name string-or-null-p
-                    [&rest keywordp sexp]
-                    def-body))
+                    [&rest keywordp sexp]))
            (indent defun))
   (unless (stringp doc)
-    (setq rest (cons doc rest)
+    (setq properties (cons doc properties)
           doc (format "Enter %S" (or (car-safe name) name))))
   (pcase-let* (((or (and name (pred symbolp))
                     `(,name . ,props))
                 name)
                ((map :keymap :inherit) props)
                (keymap (car keymap))
-               (keymap-name (conn--symbolicate name "-map"))
-               (`(,slots . ,body)
-                (cl-loop for sublist on rest by #'cddr
-                         if (not (keywordp (car sublist)))
-                         return (cons slots sublist)
-                         else append (take 2 sublist) into slots
-                         finally return (cons slots nil))))
+               (keymap-name (conn--symbolicate name "-map")))
     `(progn
        (put ',name :conn-state-properties
-            (list (list ,@slots)
-                  ,@(mapcar (lambda (v) (list 'quote v)) inherit)))
+            (list (list ,@properties)
+                  ,@(mapcar 'macroexp-quote (or inherit (list 't)))))
 
        (cl-pushnew ',name conn-states)
 
@@ -1206,62 +1245,6 @@ write a method of the form:
                       (cl-loop for parent in ',inherit
                                collect (conn-get-state-map parent))))
 
-       (cl-defmethod conn-exit-state ((state (eql ',name)))
-         (when ,name
-           (let ((success nil))
-             (unwind-protect
-                 (progn
-                   (setq ,name nil
-                         conn-current-state nil
-                         conn-previous-state state
-                         cursor-type t)
-                   (conn-state-body ',name)
-                   (setq success t))
-               (unless success
-                 (conn-local-mode -1)
-                 (message "Error exiting state %s." ',name))))
-           (run-hook-wrapped
-            'conn-exit-functions
-            (lambda (fn)
-              (condition-case err
-                  (funcall fn state)
-                (t
-                 (remove-hook 'conn-exit-functions fn)
-                 (message "Error in conn-exit-functions %s" (car err))))))))
-
-       (cl-defmethod conn-enter-state ((state (eql ',name)))
-         (unless ,name
-           (let ((success nil))
-             (unwind-protect
-                 (progn
-                   (conn-exit-state conn-current-state)
-                   (setq ,name t
-                         conn-current-state state)
-                   (setq-local conn-lighter (conn-state-get ',name :lighter)
-                               conn--local-minor-mode-maps (alist-get ',name conn--minor-mode-maps)
-                               conn--hide-mark-cursor (conn-state-get ',name :hide-mark-cursor)
-                               cursor-type (or (conn-state-get ',name :cursor) t))
-                   (conn--activate-input-method)
-                   (when (not executing-kbd-macro)
-                     (force-mode-line-update))
-                   (conn-state-body ',name)
-                   (setq success t))
-               (unless success
-                 (conn-local-mode -1)
-                 (message "Error entering state %s." ',name))))
-           (run-hook-wrapped
-            'conn-entry-functions
-            (lambda (fn)
-              (condition-case err
-                  (funcall fn state)
-                (t
-                 (remove-hook 'conn-entry-functions fn)
-                 (message "Error in conn-entry-functions: %s" (car err))))))))
-
-       ,(when body
-          `(cl-defmethod conn-state-body ((_ (eql ',name)))
-             ,@body))
-
        (defun ,name ()
          ,doc
          (interactive)
@@ -1279,31 +1262,30 @@ For use in buffers that should not have any other state."
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
-  :lighter " emacs"
+  :lighter " Emacs"
   :cursor '(hbar . 8))
 
 (conn-define-state (conn-movement-state
                     (:keymap (define-keymap :suppress t)))
   "A `conn-mode' state moving in a buffer."
-  :lighter " move"
+  :lighter " Move"
   :suppress-input-method t)
 
 (conn-define-state conn-menu-state
-  "A `conn-mode' state for remapping key menus."
-  :lighter " menu")
+  "A `conn-mode' state for remapping key menus.")
 
-(conn-define-state (conn-state
+(conn-define-state (conn-command-state
                     (:keymap (define-keymap :suppress t))
                     (:inherit conn-menu-state conn-movement-state))
   "A `conn-mode' state for editing test."
-  :lighter " conn"
+  :lighter " Cmd"
   :suppress-input-method t
   :cursor 'box)
 
 (conn-define-state (conn-org-edit-state
                     (:keymap (define-keymap :suppress t)))
   "A `conn-mode' state for structural editing of `org-mode' buffers."
-  :lighter " org-edit"
+  :lighter " OEdit"
   :suppress-input-method t)
 
 
@@ -1643,13 +1625,19 @@ Has the form ((THING-OR-CMD . bounds-op) ...).")
                                "C-h" 'help
                                "t" 'conn-mark-thing-map
                                "e" 'recursive-edit))
-                    (:inherit conn-state))
+                    (:inherit conn-command-state))
   "A state for reading things."
-  :lighter " MOVER"
+  :lighter " MOVER")
+
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover)))
   (unless executing-kbd-macro
-    (if conn-read-mover
-        (set-face-inverse-video 'mode-line t)
-      (set-face-inverse-video 'mode-line nil))))
+    (set-face-inverse-video 'mode-line t))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover)))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line nil))
+  (cl-call-next-method))
 
 (defvar conn-bounds-of-command-default
   'conn--bounds-of-thing-command-default
@@ -3157,13 +3145,19 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                "C-d" 'forward-delete-arg
                                "DEL" 'backward-delete-arg
                                "\\" 'kapply))
-                    (:inherit conn-state))
+                    (:inherit conn-command-state))
   "State for reading a dispatch command."
-  :ligher " DISPATCH"
+  :lighter " DISPATCH")
+
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch)))
   (unless executing-kbd-macro
-    (if conn-read-dispatch
-        (set-face-inverse-video 'mode-line t)
-      (set-face-inverse-video 'mode-line nil))))
+    (set-face-inverse-video 'mode-line t))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-dispatch)))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line nil))
+  (cl-call-next-method))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
@@ -6781,10 +6775,10 @@ When ARG is nil the root window is used."
   "C-s" 'reb-next-match
   "C-r" 'reb-prev-match)
 
-(dolist (state '(conn-state conn-emacs-state))
+(dolist (state '(conn-command-state conn-emacs-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
-(dolist (state '(conn-state conn-emacs-state))
+(dolist (state '(conn-command-state conn-emacs-state))
   (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
 (defvar-keymap conn-region-map
@@ -6885,7 +6879,7 @@ When ARG is nil the root window is used."
   "." 'xref-go-forward)
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-state 'rectangle-mark-mode)
+  :keymap (conn-get-mode-map 'conn-command-state 'rectangle-mark-mode)
   "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle
@@ -6989,7 +6983,7 @@ When ARG is nil the root window is used."
   "&" 'conn-other-buffer)
 
 (define-keymap
-  :keymap conn-state-map
+  :keymap conn-command-state-map
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
@@ -7165,7 +7159,7 @@ When ARG is nil the root window is used."
         (funcall (conn--default-state-for-buffer))
         (conn--setup-major-mode-maps))
     (dolist (state conn-states)
-      (setf (buffer-local-value state (current-buffer)) nil))
+      (kill-local-variable state))
     (setq conn-current-state nil
           conn-previous-state nil
           cursor-type t)
@@ -7357,13 +7351,14 @@ When ARG is nil the root window is used."
     "I" 'org-backward-paragraph
     "K" 'org-forward-paragraph))
 
-(with-eval-after-load 'polymode
-  (defvar polymode-move-these-vars-from-old-buffer)
-  (dolist (v '(conn--mark-cursor
-               conn-current-state
-               conn-state
-               conn-emacs-state))
-    (cl-pushnew v polymode-move-these-vars-from-old-buffer)))
+;; FIXME: figure this out
+;; (with-eval-after-load 'polymode
+;;   (defvar polymode-move-these-vars-from-old-buffer)
+;;   (dolist (v '(conn--mark-cursor
+;;                conn-current-state
+;;                conn-command-state
+;;                conn-emacs-state))
+;;     (cl-pushnew v polymode-move-these-vars-from-old-buffer)))
 
 (with-eval-after-load 'eldoc
   (eldoc-add-command 'conn-end-of-inner-line
@@ -7409,7 +7404,7 @@ When ARG is nil the root window is used."
                   (cons (region-beginning) (region-end))))
    :forward-op 'conn-forward-heading-op)
 
-  (keymap-set (conn-get-mode-map 'conn-state 'outline-minor-mode)
+  (keymap-set (conn-get-mode-map 'conn-command-state 'outline-minor-mode)
               "H H" 'conn-mark-heading)
 
   (conn-register-thing-commands

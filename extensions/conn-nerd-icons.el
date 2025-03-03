@@ -24,7 +24,7 @@
 (require 'conn)
 (require 'nerd-icons)
 
-(setf (conn-state-get 'conn-state :lighter)
+(setf (conn-state-get 'conn-command-state :lighter)
       (concat (nerd-icons-codicon "nf-cod-blank")
               (nerd-icons-mdicon "nf-md-ship_wheel"))
       (conn-state-get 'conn-emacs-state :lighter)
