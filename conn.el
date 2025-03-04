@@ -929,7 +929,8 @@ in STATE and return it."
 If one does not exists assign a new sparse keymap for MODE
 in STATE and return it."
   (cl-check-type state conn-state)
-  (or (alist-get mode (alist-get state conn--minor-mode-maps))
+  (or (alist-get mode (alist-get state conn--major-mode-maps))
+      (alist-get mode (alist-get state conn--minor-mode-maps))
       (cond
        ((autoloadp (symbol-function mode))
         ;; We can't tell what sort of mode this is, add it to
@@ -1117,7 +1118,7 @@ from its parents."
 
 (cl-generic-define-generalizer conn--state-generalizer
   15 (lambda (state) `(and (conn-state-p ,state) 'conn-state))
-  (lambda (tag &rest _) (list tag)))
+  (lambda (tag &rest _) (when tag (list tag))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (eql 'conn-state)))
   "Support for conn-state specializers."
