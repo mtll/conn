@@ -505,13 +505,13 @@ ADVICE-FORMS are of the form (SYMBOL HOW FUNCTION . PROPS), for the
 meaning of these see `advice-add'."
   (declare (debug (form body))
            (indent 1))
-  (pcase-dolist (`(,symbol ,how ,function . ,props) (reverse advice-forms))
-    (setq body (cl-with-gensyms (fn)
-                 `(let ((,fn ,function))
-                    (advice-add ,symbol ,how ,fn ,(car props))
+  (pcase-dolist (`(,symbol ,how ,func . ,props) (reverse advice-forms))
+    (setq body (cl-once-only (func symbol)
+                 `(progn
+                    (advice-add ,symbol ,how ,func ,(car props))
                     (unwind-protect
                         ,(macroexp-progn body)
-                      (advice-remove ,symbol ,fn))))))
+                      (advice-remove ,symbol ,func))))))
   body)
 
 (defmacro conn--without-conn-maps (&rest body)
