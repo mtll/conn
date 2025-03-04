@@ -39,6 +39,7 @@
 (declare-function kmacro-p "kmacro")
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function project-files "project")
+(declare-function conn-dispatch-kapply-prefix "conn-transients")
 
 
 ;;;; Variables
@@ -3255,6 +3256,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
+(defvar conn--dispatch-request-quit (make-symbol "req-cont"))
+
 (defun conn--dispatch-read-thing (&optional default-action continuation)
   (pcase-let*
       ((prompt (substitute-command-keys
@@ -3332,12 +3335,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  ('keyboard-quit
                   (keyboard-quit))
                  ('kapply
+                  ;; Run with a timer, otherwise we pick up a nil
+                  ;; conn-state value for some reason.
                   (run-with-timer 0 nil 'conn-dispatch-kapply-prefix
                                   (list thing-arg thing-sign repeat))
-                  ;; It would probably be better to handle this as a
-                  ;; special case in conn-dispatch-on-things instead
-                  ;; of relying on quit to exit early.
-                  (signal 'quit nil))
+                  (cl-return (list conn--dispatch-request-quit
+                                   nil nil nil nil nil nil)))
                  ('repeat-dispatch
                   (setq repeat (not repeat)
                         repeat-indicator
@@ -4198,19 +4201,25 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
   (let ((prefix "")
+        (prompt "char: ")
+        (windows (conn--get-dispatch-windows all-windows))
         ovs success)
-    (conn--with-input-method
-      (while (length< prefix prefix-length)
-        (setq prefix (thread-last
-                       (read-char (concat "char: " prefix) t)
-                       (char-to-string)
-                       (concat prefix)))))
     (unwind-protect
         (progn
-          (dolist (win (conn--get-dispatch-windows all-windows))
-            (setq ovs (nconc (with-selected-window win
-                               (conn--dispatch-things-with-prefix-1 things prefix))
-                             ovs)))
+          (while (not ovs)
+            (conn--with-input-method
+              (while (length< prefix prefix-length)
+                (setq prefix (thread-last
+                               (read-char prompt t)
+                               (char-to-string)
+                               (concat prefix))
+                      prompt (concat "char: " prefix))))
+            (dolist (win windows)
+              (setq ovs (nconc (with-selected-window win
+                                 (conn--dispatch-things-with-prefix-1 things prefix))
+                               ovs)))
+            (setq prefix ""
+                  prompt "char: (no matches)"))
           (setq success t)
           ovs)
       (unless success (mapc #'delete-overlay ovs)))))
@@ -4361,8 +4370,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 ;;;;; Dispatch Commands
 
-(defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-args
-                                 &optional predicate repeat)
+(cl-defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-args
+                                    &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -4375,6 +4384,8 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
+  (when (eq thing-cmd conn--dispatch-request-quit)
+    (cl-return-from conn-dispatch-on-things))
   (setq conn--last-dispatch-command
         (list thing-cmd thing-arg finder action
               action-args predicate repeat))
