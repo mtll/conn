@@ -31,6 +31,7 @@
 
 (require 'compat)
 (eval-when-compile
+  (require 'inline)
   (require 'subr-x)
   (require 'eieio)
   (require 'cl-lib)
@@ -884,8 +885,8 @@ after point."
 
 ;;;; States
 
-(defun conn-state-p (state)
-  (not (not (get state :conn-state-properties))))
+(define-inline conn-state-p (state)
+  (inline-quote (not (not (get ,state :conn-state-properties)))))
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
 
@@ -1067,12 +1068,12 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
-(defun conn--state-parents (state)
-  (cl-check-type state conn-state)
-  (cdr (get state :conn-state-properties)))
-
-(defconst conn--hash-key-missing (make-symbol "unbound")
-  "Uninterned symbol representing a missing hash key.")
+(define-inline conn--state-parents (state)
+  (inline-letevals (state)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (cdr (get ,state :conn-state-properties))))))
 
 (define-inline conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
@@ -1080,10 +1081,11 @@ mouse-3: Describe current input method")
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (cl-loop for parent in (conn--state-all-parents ,state)
+       (cl-loop with missing = (make-symbol "key-missing")
+                for parent in (conn--state-all-parents ,state)
                 for table = (car (get parent :conn-state-properties))
-                for prop = (gethash ,property table conn--hash-key-missing)
-                unless (eq prop conn--hash-key-missing) return prop)))))
+                for prop = (gethash ,property table missing)
+                unless (eq prop missing) return prop)))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1111,13 +1113,15 @@ from its parents."
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
-(defun conn--state-all-parents (state)
-  (with-memoization
-      (gethash state conn--state-all-parents-cache)
-    (cl-check-type state conn-state)
-    (cons state
-          (merge-ordered-lists (mapcar 'conn--state-all-parents
-                                       (conn--state-parents state))))))
+(define-inline conn--state-all-parents (state)
+  (inline-letevals (state)
+    (inline-quote
+     (with-memoization
+         (gethash ,state conn--state-all-parents-cache)
+       (cl-check-type ,state conn-state)
+       (cons ,state
+             (merge-ordered-lists (mapcar 'conn--state-all-parents
+                                          (conn--state-parents ,state))))))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
