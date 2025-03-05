@@ -1,7 +1,7 @@
-;;; conn.el --- Region oriented modal keybinding mode -*- lexical-binding: t -*-
+;;; conn.el --- A modal keybinding mode -*- lexical-binding: t -*-
 ;;
 ;; Filename: conn.el
-;; Description: A modal keybinding mode and keyboard macro enhancement
+;; Description: A modal keybinding mode
 ;; Author: David Feller
 ;; Keywords: convenience, editing
 ;; Version: 0.0.1
@@ -23,7 +23,7 @@
 
 ;;; Commentary:
 
-;; A region oriented modal keybinding mode.
+;; A modal keybinding mode.
 
 ;;; Code:
 
@@ -121,7 +121,7 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
 ;;;;; Custom Variables
 
 (defgroup conn nil
-  "A region oriented modal keybinding mode."
+  "A modal keybinding mode."
   :prefix "conn-"
   :group 'editing)
 
@@ -886,7 +886,7 @@ after point."
 ;;;; States
 
 (define-inline conn-state-p (state)
-  (inline-quote (not (not (get ,state :conn-state-properties)))))
+  (inline-quote (not (not (get ,state :conn--state)))))
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
 
@@ -1005,7 +1005,7 @@ and return it."
   (when conn-local-mode
     (let (input-method-activate-hook
           input-method-deactivate-hook)
-      (pcase (conn-state-get conn-current-state 'suppress-input-method)
+      (pcase (conn-state-get conn-current-state :suppress-input-method)
         ((and 'nil (guard current-input-method))
          (setq conn--input-method current-input-method
                conn--input-method-title current-input-method-title))
@@ -1073,7 +1073,7 @@ mouse-3: Describe current input method")
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (cdr (get ,state :conn-state-properties))))))
+       (cdr (get ,state :conn--state))))))
 
 (define-inline conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
@@ -1083,7 +1083,7 @@ mouse-3: Describe current input method")
        (cl-check-type ,state conn-state)
        (cl-loop with missing = (make-symbol "key-missing")
                 for parent in (conn--state-all-parents ,state)
-                for table = (car (get parent :conn-state-properties))
+                for table = (car (get parent :conn--state))
                 for prop = (gethash ,property table missing)
                 unless (eq prop missing) return prop)))))
 
@@ -1098,7 +1098,7 @@ Returns VALUE."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (puthash ,property ,value (car (get ,state :conn-state-properties)))))))
+       (puthash ,property ,value (car (get ,state :conn--state)))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unbound in STATE.
@@ -1109,7 +1109,7 @@ from its parents."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (remhash (car (get ,state :conn-state-properties)) ,property)))))
+       (remhash (car (get ,state :conn--state)) ,property)))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
@@ -1288,7 +1288,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
 
        (clrhash conn--state-all-parents-cache)
 
-       (put ',name :conn-state-properties
+       (put ',name :conn--state
             (cons (cl-loop with kvs = (list ,@properties)
                            with table = (make-hash-table :test 'eq)
                            for (k v) on kvs by #'cddr
@@ -2085,7 +2085,7 @@ is read."
 
 (defun conn--toggle-input-method-ad (&rest app)
   (if (or (not conn-local-mode)
-          (conn-state-get conn-current-state 'suppress-input-method))
+          (conn-state-get conn-current-state :suppress-input-method))
       (apply app)
     (let ((current-input-method conn--input-method))
       (apply app))))
@@ -6897,7 +6897,7 @@ When ARG is nil the root window is used."
   "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "j" 'conn-join-lines-in-region
+  "u" 'conn-join-lines-in-region
   "I" 'indent-rigidly
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
@@ -6987,7 +6987,7 @@ When ARG is nil the root window is used."
   :prefix 'conn-edit-map
   "m" 'conn-narrow-indirect-to-thing
   "n" 'conn-narrow-to-thing
-  "j" 'conn-join-lines-in-thing
+  "u" 'conn-join-lines-in-thing
   "F" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
@@ -6995,9 +6995,9 @@ When ARG is nil the root window is used."
   "h" 'conn-change-line
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
-  "o" 'conn-emacs-state-eoil
+  "l" 'conn-emacs-state-eoil
   "e" 'conn-emacs-state-eol
-  "u" 'conn-emacs-state-boil
+  "j" 'conn-emacs-state-boil
   "a" 'conn-emacs-state-bol
   "t" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
