@@ -23,20 +23,24 @@
 (require 'smartparens)
 (require 'thingatpt)
 
-(defun conn-sp-forward-sexp-op (backward)
-  (pcase-let* ((next (sp-get-thing))
-               (prev (sp-get-thing t)))
-    (cond ((if backward
-               (< (sp-get prev :end) (sp-get next :end))
-             (> (sp-get next :beg) (sp-get prev :beg)))
-           (goto-char (if backward
-                          (sp-get prev :beg)
-                        (sp-get next :end))))
-          ((and (eql (sp-get prev :end) (sp-get next :end))
-                (eql (sp-get next :beg) (sp-get prev :beg)))
-           (if backward
-               (goto-char (sp-get prev :beg))
-             (goto-char (sp-get prev :end)))))))
+(defun conn-sp-forward-sexp-op (arg)
+  (let ((backward (< arg 0))
+        (N (abs arg)))
+    (dotimes (_ N)
+      (pcase-let* ((next (sp-get-thing))
+                   (prev (sp-get-thing t)))
+        (cond ((if backward
+                   (< (sp-get prev :end) (sp-get next :end))
+                 (> (sp-get next :beg) (sp-get prev :beg)))
+               (goto-char (if backward
+                              (sp-get prev :beg)
+                            (sp-get next :end))))
+              ((and (eql (sp-get prev :end) (sp-get next :end))
+                    (eql (sp-get next :beg) (sp-get prev :beg)))
+               (if backward
+                   (goto-char (sp-get prev :beg))
+                 (goto-char (sp-get prev :end))))
+              (t (signal 'scan-error "No more sexp")))))))
 
 (defun conn-sp-bounds-of-sexp ()
   (pcase-let* ((next (sp-get-thing))
@@ -47,22 +51,6 @@
                 (plist-get prev :end))
         (cons (plist-get next :beg)
               (plist-get next :end))))))
-
-(defun conn-sp-bounds-providers ()
-  (if smartparens-mode
-      (setq-local bounds-of-thing-at-point-provider-alist
-                  (cons (cons 'sexp 'conn-sp-bounds-of-sexp)
-                        bounds-of-thing-at-point-provider-alist)
-                  forward-thing-provider-alist
-                  (cons (cons 'sexp 'conn-sp-forward-sexp-op)
-                        forward-thing-provider-alist))
-    (setq-local bounds-of-thing-at-point-provider-alist
-                (remove '(sexp . conn-sp-bounds-of-sexp)
-                        bounds-of-thing-at-point-provider-alist)
-                forward-thing-provider-alist
-                (remove '(sexp . conn-sp-forward-sexp-op)
-                        bounds-of-thing-at-point-provider-alist))))
-(add-hook 'smartparens-mode-hook 'conn-sp-bounds-providers)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-movement-state 'smartparens-mode)
@@ -132,8 +120,15 @@
                (while (and (> (point) beg-sexp) (sp-backward-sexp))))))
       (conn--push-ephemeral-mark))))
 
+(conn-register-thing
+ 'sp-sexp
+ :forward-op 'conn-sp-forward-sexp-op
+ :bounds-op 'conn-sp-bounds-of-sexp
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'sp-sexp 1 t))
+ :default-action 'conn-dispatch-goto)
+
 (conn-register-thing-commands
- 'sexp 'conn-sp-sexp-handler
+ 'sp-sexp 'conn-sp-sexp-handler
  'sp-forward-sexp 'sp-backward-sexp
  'sp-forward-parallel-sexp 'sp-backward-parallel-sexp)
 
