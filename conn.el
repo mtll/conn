@@ -1071,13 +1071,15 @@ mouse-3: Describe current input method")
   (cl-check-type state conn-state)
   (cdr (get state :conn-state-properties)))
 
+(defvar conn--state-slot-unbound (make-symbol "unbound"))
+
 (defun conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
   (cl-check-type state conn-state)
   (cl-loop for parent in (conn--state-all-parents state)
-           for props = (car (get parent :conn-state-properties))
-           for tail = (plist-member props property)
-           when tail return (cadr tail)))
+           for table = (car (get parent :conn-state-properties))
+           for prop = (gethash property table conn--state-slot-unbound)
+           unless (eq prop conn--state-slot-unbound) return prop))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1087,8 +1089,7 @@ mouse-3: Describe current input method")
 
 Returns VALUE."
   (cl-check-type state conn-state)
-  (setf (plist-get (car (get state :conn-state-properties)) property)
-        value))
+  (puthash property value (car (get state :conn-state-properties))))
 
 (defun conn-state-unset (state property)
   "Make PROPERTY unbound in STATE.
@@ -1096,13 +1097,9 @@ Returns VALUE."
 If a slot is unbound in a state it will inherit the value of that slot
 from its parents."
   (cl-check-type state conn-state)
-  (setf (car (get state :conn-state-properties))
-        (cl-loop with props = (car (get state :conn-state-properties))
-                 for (p v) on props by #'cddr
-                 unless (eq p property)
-                 nconc (list p v))))
+  (remhash (car (get state :conn-state-properties)) property))
 
-(defvar conn--state-all-parents-cache (make-hash-table))
+(defvar conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (defun conn--state-all-parents (state)
   (with-memoization
@@ -1278,7 +1275,12 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
        (clrhash conn--state-all-parents-cache)
 
        (put ',name :conn-state-properties
-            (cons (list ,@properties) ',inherit))
+            (cons (cl-loop with kvs = (list ,@properties)
+                           with table = (make-hash-table :test 'eq)
+                           for (k v) on kvs by #'cddr
+                           do (puthash k v table)
+                           finally return table)
+                  ',inherit))
 
        (cl-pushnew ',name conn-states)
 
