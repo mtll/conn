@@ -271,6 +271,13 @@ See also `conn-exit-functions'.")
 (defvar-local conn-previous-state nil
   "Previous conn state in buffer.")
 
+(defvar conn-next-state nil
+  "Next conn state in buffer.
+
+Bound to the state that will be entered during `conn-enter-state'.  In
+particular this will be bound when `conn-enter-state' calls
+`conn-exit-state' and `conn-exit-functions'.")
+
 ;;;;;; State Keymaps
 
 (defvar conn--state-maps nil)
@@ -1095,11 +1102,11 @@ from its parents."
                  unless (eq p property)
                  nconc (list p v))))
 
-(defvar conn--state-all-parents-cache nil)
+(defvar conn--state-all-parents-cache (make-hash-table))
 
 (defun conn--state-all-parents (state)
   (with-memoization
-      (plist-get conn--state-all-parents-cache state)
+      (gethash state conn--state-all-parents-cache)
     (cl-check-type state conn-state)
     (cons state
           (merge-ordered-lists (mapcar 'conn--state-all-parents
@@ -1183,7 +1190,8 @@ and specializes the method on all conn states."
 
 (cl-defmethod conn-enter-state :around ((state conn-state))
   (unless (symbol-value state)
-    (let ((success nil))
+    (let ((success nil)
+          (conn-next-state state))
       (unwind-protect
           (progn
             (conn-exit-state conn-current-state)
@@ -1267,7 +1275,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                  never (memq ',name (conn--state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
 
-       (setq conn--state-all-parents-cache nil)
+       (clrhash conn--state-all-parents-cache)
 
        (put ',name :conn-state-properties
             (cons (list ,@properties) ',inherit))
@@ -4395,7 +4403,7 @@ seconds."
              (append conn-dispatch-window-predicates
                      (list predicate))
            conn-dispatch-window-predicates))
-        target-ovs labels prefix window pt)
+        target-ovs labels target window pt)
     (ignore-error quit
       (while
           (prog1 repeat
@@ -4420,10 +4428,10 @@ seconds."
                                                     (get thing-cmd :conn-command-thing))
                                                   "candidates")))
                               target-ovs)
-                      prefix (conn-label-select labels)
-                      window (overlay-get prefix 'window)
-                      pt (overlay-start prefix)
-                      conn-this-command-thing (or (overlay-get prefix 'thing)
+                      target (conn-label-select labels)
+                      pt (overlay-start target)
+                      window (overlay-get target 'window)
+                      conn-this-command-thing (or (overlay-get target 'thing)
                                                   (ignore-errors
                                                     (get thing-cmd :conn-command-thing))))
               (pcase-dolist (`(_ . ,ovs) target-ovs)
