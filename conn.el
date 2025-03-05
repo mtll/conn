@@ -1071,15 +1071,16 @@ mouse-3: Describe current input method")
   (cl-check-type state conn-state)
   (cdr (get state :conn-state-properties)))
 
-(defvar conn--state-slot-unbound (make-symbol "unbound"))
+(defconst conn--hash-key-missing (make-symbol "unbound")
+  "Uninterned symbol representing a missing hash key.")
 
 (defun conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
   (cl-check-type state conn-state)
   (cl-loop for parent in (conn--state-all-parents state)
            for table = (car (get parent :conn-state-properties))
-           for prop = (gethash property table conn--state-slot-unbound)
-           unless (eq prop conn--state-slot-unbound) return prop))
+           for prop = (gethash property table conn--hash-key-missing)
+           unless (eq prop conn--hash-key-missing) return prop))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1099,15 +1100,21 @@ from its parents."
   (cl-check-type state conn-state)
   (remhash (car (get state :conn-state-properties)) property))
 
-(defvar conn--state-all-parents-cache (make-hash-table :test 'eq))
+(defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (defun conn--state-all-parents (state)
-  (with-memoization
-      (gethash state conn--state-all-parents-cache)
-    (cl-check-type state conn-state)
-    (cons state
-          (merge-ordered-lists (mapcar 'conn--state-all-parents
-                                       (conn--state-parents state))))))
+  ;; Unfortunately nil values are expected so we can't use
+  ;; with-memoization.
+  (let ((parents (gethash state conn--state-all-parents-cache
+                          conn--hash-key-missing)))
+    (if (not (eq parents conn--hash-key-missing))
+        parents
+      (cl-check-type state conn-state)
+      (puthash state
+               (cons state
+                     (merge-ordered-lists (mapcar 'conn--state-all-parents
+                                                  (conn--state-parents state))))
+               conn--state-all-parents-cache))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
