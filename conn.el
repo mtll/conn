@@ -1074,47 +1074,50 @@ mouse-3: Describe current input method")
 (defconst conn--hash-key-missing (make-symbol "unbound")
   "Uninterned symbol representing a missing hash key.")
 
-(defun conn-state-get (state property)
+(define-inline conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
-  (cl-check-type state conn-state)
-  (cl-loop for parent in (conn--state-all-parents state)
-           for table = (car (get parent :conn-state-properties))
-           for prop = (gethash property table conn--hash-key-missing)
-           unless (eq prop conn--hash-key-missing) return prop))
+  (inline-letevals (state property)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (cl-loop for parent in (conn--state-all-parents ,state)
+                for table = (car (get parent :conn-state-properties))
+                for prop = (gethash ,property table conn--hash-key-missing)
+                unless (eq prop conn--hash-key-missing) return prop)))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
 
-(defun conn-state-set (state property value)
+(define-inline conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
 
 Returns VALUE."
-  (cl-check-type state conn-state)
-  (puthash property value (car (get state :conn-state-properties))))
+  (inline-letevals (state)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (puthash ,property ,value (car (get ,state :conn-state-properties)))))))
 
-(defun conn-state-unset (state property)
+(define-inline conn-state-unset (state property)
   "Make PROPERTY unbound in STATE.
 
 If a slot is unbound in a state it will inherit the value of that slot
 from its parents."
-  (cl-check-type state conn-state)
-  (remhash (car (get state :conn-state-properties)) property))
+  (inline-letevals (state)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (remhash (car (get ,state :conn-state-properties)) ,property)))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (defun conn--state-all-parents (state)
-  ;; Unfortunately nil values are expected so we can't use
-  ;; with-memoization.
-  (let ((parents (gethash state conn--state-all-parents-cache
-                          conn--hash-key-missing)))
-    (if (not (eq parents conn--hash-key-missing))
-        parents
-      (cl-check-type state conn-state)
-      (puthash state
-               (cons state
-                     (merge-ordered-lists (mapcar 'conn--state-all-parents
-                                                  (conn--state-parents state))))
-               conn--state-all-parents-cache))))
+  (with-memoization
+      (gethash state conn--state-all-parents-cache)
+    (cl-check-type state conn-state)
+    (cons state
+          (merge-ordered-lists (mapcar 'conn--state-all-parents
+                                       (conn--state-parents state))))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
