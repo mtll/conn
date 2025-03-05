@@ -1821,8 +1821,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
       (cl-loop for bounds = (save-excursion
                               (forward-thing thing -1)
                               (bounds-of-thing-at-point thing))
-               while (and bounds (<= (cdr bounds) end))
-               when (<= beg (car bounds))
+               while (and bounds (< (car bounds) end))
                collect bounds into regions
                while (and (< (point) end)
                           (ignore-errors
