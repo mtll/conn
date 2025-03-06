@@ -1291,13 +1291,12 @@ and specializes the method on all conn states."
           (remove-hook 'conn-entry-functions fn)
           (message "Error in conn-entry-functions: %s" (car err))))))))
 
-(defmacro conn-define-state (name &rest properties)
+(defmacro conn-define-state (name parents &rest properties)
   "Define a conn state NAME.
 
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
-NAME may be either a symbol or of the form (NAME :inherit PARENTS...).
 PARENTS is a list of states from which NAME should inherit properties
 and keymaps.
 
@@ -1320,16 +1319,13 @@ NAME.
 Code that should be run whenever a state is entered or exited can be
 added as methods to `conn-enter-state' and `conn-exit-state', which see.
 
-\(fn NAME &optional DOC [KEYWORD VAL ...])"
-  (declare (debug ( name string-or-null-p
+\(fn NAME PARENTS &optional DOC [KEYWORD VAL ...])"
+  (declare (debug ( name form string-or-null-p
                     [&rest keywordp sexp]))
-           (indent defun))
-  (pcase-let* ((doc (or (and (stringp (car properties))
-                             (pop properties))
-                        (format "Enter %S" (or (car-safe name) name))))
-               ((or (and name (pred symbolp))
-                    `(,name :inherit . ,parents))
-                name))
+           (indent 2))
+  (let ((doc (or (and (stringp (car properties))
+                      (pop properties))
+                 (format "Enter %S" (or (car-safe name) name)))))
     (cl-assert (plistp properties))
     `(progn
        (cl-assert
@@ -1369,7 +1365,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
          (interactive)
          (conn-enter-state ',name)))))
 
-(conn-define-state conn-null-state
+(conn-define-state conn-null-state ()
   "An empty state.
 
 For use in buffers that should not have any other state."
@@ -1377,29 +1373,29 @@ For use in buffers that should not have any other state."
   :hide-mark-cursor t
   :cursor '(bar . 5))
 
-(conn-define-state conn-emacs-state
+(conn-define-state conn-emacs-state ()
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
   :lighter " Emacs"
   :cursor '(hbar . 8))
 
-(conn-define-state (conn-movement-state)
+(conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
   :lighter " Move"
   :suppress-input-method t)
 
-(conn-define-state conn-menu-state
+(conn-define-state conn-menu-state ()
   "A `conn-mode' state for remapping key menus.")
 
-(conn-define-state (conn-command-state
-                    :inherit conn-menu-state conn-movement-state)
+(conn-define-state conn-command-state
+    (conn-menu-state conn-movement-state)
   "A `conn-mode' state for editing test."
   :lighter " Cmd"
   :suppress-input-method t
   :cursor 'box)
 
-(conn-define-state (conn-org-edit-state)
+(conn-define-state conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   :lighter " OEdit"
   :suppress-input-method t)
@@ -1732,7 +1728,7 @@ Optionally the overlay may have an associated THING."
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
 
-(conn-define-state (conn-read-mover :inherit conn-command-state)
+(conn-define-state conn-read-mover (conn-command-state)
   "A state for reading things."
   :lighter " MOVER")
 
@@ -3272,7 +3268,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn-dispatch-state-for-reading 'conn-read-dispatch)
 
-(conn-define-state (conn-read-dispatch :inherit conn-command-state)
+(conn-define-state conn-read-dispatch (conn-command-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
