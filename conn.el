@@ -1896,80 +1896,79 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (conn--with-state conn-state-for-mover-reading
-    (unwind-protect
-        (cl-prog*
-         ((conn--current-read-mover-map
-           (conn-get-state-map conn-state-for-mover-reading))
-          (prompt (substitute-command-keys
-                   (concat "\\<conn--current-read-mover-map>"
-                           (propertize prompt 'face 'minibuffer-prompt)
-                           " (arg: "
-                           (propertize "%s" 'face 'read-multiple-choice-face)
-                           ", \\[reset-arg] reset arg; \\[help] commands"
-                           (if recursive-edit
-                               (concat "; \\[recursive-edit] "
-                                       "recursive edit)")
-                             ")")
-                           ": %s")))
-          (thing-arg (when arg (abs (prefix-numeric-value arg))))
-          (thing-sign (when arg (> 0 arg)))
-          invalid keys cmd)
-         :read-command
-         (setq keys (read-key-sequence
-                     (format prompt
-                             (format (if thing-arg "%s%s" "[%s1]")
-                                     (if thing-sign "-" "")
-                                     thing-arg)
-                             (if invalid
-                                 (propertize "Not a valid thing command"
-                                             'face 'error)
-                               "")))
-               cmd (key-binding keys t))
-         :test
-         (pcase cmd
-           ('keyboard-quit (keyboard-quit))
-           ('help
-            (save-window-excursion
-              (setq cmd (intern
-                         (completing-read
-                          "Command: "
-                          (lambda (string pred action)
-                            (if (eq action 'metadata)
-                                `(metadata
-                                  ,(cons 'affixation-function
-                                         (conn--dispatch-make-command-affixation))
-                                  (category . conn-dispatch-command))
-                              (complete-with-action action obarray string pred)))
-                          (lambda (sym)
-                            (and (functionp sym)
-                                 (not (eq sym 'help))
-                                 (get sym :conn-command-thing)))
-                          t))))
-            (go :test))
-           ('digit-argument
-            (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-              (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-           ('reset-arg
-            (setq thing-arg nil))
-           ('backward-delete-arg
-            (setq thing-arg (floor thing-arg 10)))
-           ('forward-delete-arg
-            (setq thing-arg (thread-last
-                              (log thing-arg 10)
-                              (floor)
-                              (expt 10)
-                              (mod thing-arg))))
-           ('negative-argument
-            (setq thing-sign (not thing-sign)))
-           ((guard (or (ignore-errors (get cmd :conn-command-thing))
-                       (alist-get cmd conn-bounds-of-command-alist)))
-            (cl-return
-             (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                             (thing-sign '-)))))
-           (_ (setq invalid t)))
-         (go :read-command))
-      (message nil))))
+  (let* ((conn--current-read-mover-map
+          (conn-get-state-map conn-state-for-mover-reading))
+         (prompt (substitute-command-keys
+                  (concat "\\<conn--current-read-mover-map>"
+                          (propertize prompt 'face 'minibuffer-prompt)
+                          " (arg: "
+                          (propertize "%s" 'face 'read-multiple-choice-face)
+                          ", \\[reset-arg] reset arg; \\[help] commands"
+                          (if recursive-edit
+                              (concat "; \\[recursive-edit] "
+                                      "recursive edit)")
+                            ")")
+                          ": %s")))
+         (thing-arg (when arg (abs (prefix-numeric-value arg))))
+         (thing-sign (when arg (> 0 arg)))
+         invalid keys cmd)
+    (cl-flet ((read-command ()
+                (setq keys (read-key-sequence
+                            (format prompt
+                                    (format (if thing-arg "%s%s" "[%s1]")
+                                            (if thing-sign "-" "")
+                                            thing-arg)
+                                    (if invalid
+                                        (propertize "Not a valid thing command"
+                                                    'face 'error)
+                                      "")))
+                      cmd (key-binding keys t))))
+      (conn--with-state conn-state-for-mover-reading
+        (read-command)
+        (unwind-protect
+            (cl-loop
+             (pcase cmd
+               ('keyboard-quit (keyboard-quit))
+               ('help
+                (save-window-excursion
+                  (setq cmd (intern
+                             (completing-read
+                              "Command: "
+                              (lambda (string pred action)
+                                (if (eq action 'metadata)
+                                    `(metadata
+                                      ,(cons 'affixation-function
+                                             (conn--dispatch-make-command-affixation))
+                                      (category . conn-dispatch-command))
+                                  (complete-with-action action obarray string pred)))
+                              (lambda (sym)
+                                (and (functionp sym)
+                                     (not (eq sym 'help))
+                                     (get sym :conn-command-thing)))
+                              t)))))
+               ('digit-argument
+                (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                  (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+               ('reset-arg
+                (setq thing-arg nil))
+               ('backward-delete-arg
+                (setq thing-arg (floor thing-arg 10)))
+               ('forward-delete-arg
+                (setq thing-arg (thread-last
+                                  (log thing-arg 10)
+                                  (floor)
+                                  (expt 10)
+                                  (mod thing-arg))))
+               ('negative-argument
+                (setq thing-sign (not thing-sign)))
+               ((guard (or (ignore-errors (get cmd :conn-command-thing))
+                           (alist-get cmd conn-bounds-of-command-alist)))
+                (cl-return
+                 (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                                 (thing-sign '-)))))
+               (_ (setq invalid t)))
+             (read-command))
+          (message nil))))))
 
 (defun conn-read-thing-region (prompt &optional arg)
   "Interactively read a thing region from the user.
@@ -3357,42 +3356,42 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (propertize "repeatedly"
                     'face (when repeat
                             'eldoc-highlight-function-argument))))
-    (cl-flet ((action-description (action)
-                (if-let* ((desc (get action :conn-action-description)))
-                    (propertize
-                     (if (stringp desc)
-                         (apply #'format desc action-args)
-                       (apply desc action-args))
-                     'face 'eldoc-highlight-function-argument)
-                  ""))
-              (read-action-args (action)
-                (when (ignore-errors (get action :conn-action-interactive))
-                  (funcall (get action :conn-action-interactive)))))
+    (cl-labels
+        ((action-description (action)
+           (if-let* ((desc (get action :conn-action-description)))
+               (propertize
+                (if (stringp desc)
+                    (apply #'format desc action-args)
+                  (apply desc action-args))
+                'face 'eldoc-highlight-function-argument)
+             ""))
+         (read-action-args (action)
+           (when (ignore-errors (get action :conn-action-interactive))
+             (funcall (get action :conn-action-interactive))))
+         (read-command ()
+           (setq keys (read-key-sequence
+                       (format prompt
+                               (format (if thing-arg "%s%s" "[%s1]")
+                                       (if thing-sign "-" "")
+                                       thing-arg)
+                               repeat-indicator
+                               (cond
+                                (invalid
+                                 (concat
+                                  (action-description action)
+                                  " "
+                                  (propertize "Not a valid thing command"
+                                              'face 'error)))
+                                (action (action-description action))
+                                (t ""))))
+                 cmd (key-binding keys t)
+                 invalid nil)))
       (setq action-args (read-action-args action))
       (atomic-change-group
         (conn--with-state conn-dispatch-state-for-reading
+          (read-command)
           (unwind-protect
-              (cl-prog
-               nil
-               :read-command
-               (setq keys (read-key-sequence
-                           (format prompt
-                                   (format (if thing-arg "%s%s" "[%s1]")
-                                           (if thing-sign "-" "")
-                                           thing-arg)
-                                   repeat-indicator
-                                   (cond
-                                    (invalid
-                                     (concat
-                                      (action-description action)
-                                      " "
-                                      (propertize "Not a valid thing command"
-                                                  'face 'error)))
-                                    (action (action-description action))
-                                    (t ""))))
-                     cmd (key-binding keys t)
-                     invalid nil)
-               :loop
+              (cl-loop
                (pcase cmd
                  (`(,thing ,finder . ,default-action)
                   (cl-return
@@ -3464,8 +3463,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                                        (get sym :conn-action))))
                                        t)
                                       (`(,_ ,_ . ,_) t)))
-                                  t)))))
-                  (go :loop))
+                                  t))))))
                  ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
                        (guard thing))
                   (cl-return
@@ -3484,7 +3482,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                         action-args (read-action-args action)))
                  (_
                   (setq invalid t)))
-               (go :read-command))
+               (read-command))
             (message nil)))))))
 
 (defun conn-dispatch-ignored-mode (win)
