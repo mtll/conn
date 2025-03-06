@@ -71,9 +71,9 @@ A target finder function should return a list of overlays.")
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
-determining the target finder for a command in
-`conn-dispatch-read-thing-mode', which see, actions associated with a
-command have higher precedence than actions associated with a thing.
+determining the target finder for a command in `conn-read-dispatch'
+actions associated with a command have higher precedence than actions
+associated with a thing.
 
 For the meaning of TARGET-FINDER see
 `conn-dispatch-target-finder-default'.")
@@ -87,10 +87,9 @@ For the meaning of action function see `conn-define-dispatch-action'.")
   "Default action functions for things or commands.
 
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
-determining the default action for a command in
-`conn-dispatch-read-thing-mode', which see, actions associated with a
-command have higher precedence than actions associated with a command's
-thing.
+determining the default action for a command in `conn-read-dispatch'
+actions associated with a command have higher precedence than actions
+associated with a command's thing.
 
 For the meaning of ACTION see `conn-define-dispatch-action'.")
 
@@ -1136,17 +1135,18 @@ mouse-3: Describe current input method")
        (cl-check-type ,state conn-state)
        (cdr (get ,state :conn--state))))))
 
+(defconst conn--hash-key-missing (make-symbol "key-missing"))
+
 (define-inline conn-state-get (state property)
   "Return the value in STATE of PROPERTY."
   (inline-letevals (state property)
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (cl-loop with missing = (make-symbol "key-missing")
-                for parent in (conn--state-all-parents ,state)
+       (cl-loop for parent in (conn--state-all-parents ,state)
                 for table = (car (get parent :conn--state))
-                for prop = (gethash ,property table missing)
-                unless (eq prop missing) return prop)))))
+                for prop = (gethash ,property table conn--hash-key-missing)
+                unless (eq prop conn--hash-key-missing) return prop)))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1890,6 +1890,8 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                             t))
                finally return regions))))
 
+(defvar conn--current-read-mover-map nil)
+
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
 
@@ -1900,9 +1902,11 @@ command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
   (conn--with-state conn-state-for-mover-reading
     (unwind-protect
-        (cl-prog
-         ((prompt (substitute-command-keys
-                   (concat "\\<" (conn--stringify conn-state-for-mover-reading "-map") ">"
+        (cl-prog*
+         ((conn--current-read-mover-map
+           (conn-get-state-map conn-state-for-mover-reading))
+          (prompt (substitute-command-keys
+                   (concat "\\<conn--current-read-mover-map>"
                            (propertize prompt 'face 'minibuffer-prompt)
                            " (arg: "
                            (propertize "%s" 'face 'read-multiple-choice-face)
@@ -3332,12 +3336,15 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
-(defvar conn--dispatch-request-quit (make-symbol "req-cont"))
+(defconst conn--dispatch-request-quit (make-symbol "req-cont"))
+(defvar conn--current-dispatch-map nil)
 
 (defun conn--dispatch-read-thing (&optional default-action continuation)
   (pcase-let*
-      ((prompt (substitute-command-keys
-                (concat "\\<" (conn--stringify conn-dispatch-state-for-reading "-map") ">"
+      ((conn--current-dispatch-map
+        (conn-get-state-map conn-dispatch-state-for-reading))
+       (prompt (substitute-command-keys
+                (concat "\\<conn--current-dispatch-map>"
                         (propertize "Targets" 'face 'minibuffer-prompt)
                         " (arg: "
                         (propertize "%s" 'face 'read-multiple-choice-face)
