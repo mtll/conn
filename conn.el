@@ -751,12 +751,13 @@ If BUFFER is nil check `current-buffer'."
            (indent 0))
   `(unwind-protect
        (progn
+         (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+         (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
          (when conn--input-method
-           (let ((input-method-activate-hook
-                  (remove 'conn--activate-input-method
-                          input-method-activate-hook)))
-             (activate-input-method conn--input-method)))
+           (activate-input-method conn--input-method))
          ,@body)
+     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
      (conn--activate-input-method)))
 
 (defun conn--isearch-matches (&optional buffer restrict)
@@ -987,17 +988,6 @@ and return it."
                                 for map = (conn-get-local-map parent)
                                 when map collect map))))))
 
-(defmacro conn--without-input-method-hooks (&rest body)
-  "Run body without conn input method hooks active."
-  (declare (indent 0))
-  `(unwind-protect
-       (progn
-         (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
-         (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-         ,@body)
-     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
-     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)))
-
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
   ;; Ensure conn-local-mode is t since this can be run by conn--with-state
@@ -1029,12 +1019,19 @@ and return it."
 (defun conn--isearch-input-method ()
   "Ensure input method is enabled in isearch-mode."
   (when (and conn--input-method isearch-mode)
-    (conn--without-input-method-hooks
+    (letrec ((hook (lambda ()
+                     (conn--activate-input-method)
+                     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+                     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
+                     (remove-hook 'isearch-mode-end-hook hook))))
+      (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+      (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
       (let ((overriding-terminal-local-map nil))
         (activate-input-method conn--input-method))
       (setq isearch-input-method-function input-method-function)
       (setq-local input-method-function nil)
-      (isearch-update))))
+      (isearch-update)
+      (add-hook 'isearch-mode-end-hook hook))))
 (put 'conn--isearch-input-method 'permanent-local-hook t)
 
 (defun conn--input-method-mode-line ()
@@ -2084,11 +2081,17 @@ is read."
 ;;;; Advice
 
 (defun conn--toggle-input-method-ad (&rest app)
-  (if (or (not conn-local-mode)
-          (conn-state-get conn-current-state :suppress-input-method))
-      (apply app)
-    (let ((current-input-method conn--input-method))
-      (apply app))))
+  (if (and conn-local-mode
+           (not isearch-mode)
+           (conn-state-get conn-current-state :suppress-input-method)
+           conn--input-method)
+      (unwind-protect
+          (progn
+            (remove-hook 'input-method-activate-hook 'conn--activate-input-method t)
+            (activate-input-method conn--input-method)
+            (deactivate-input-method))
+        (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t))
+    (apply app)))
 
 (defun conn--read-from-suggestions-ad (&rest app)
   (if (and (mark t)
@@ -7244,7 +7247,6 @@ When ARG is nil the root window is used."
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-        (add-hook 'isearch-mode-end-hook 'conn--activate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
         (funcall (conn--default-state-for-buffer))
@@ -7258,8 +7260,7 @@ When ARG is nil the root window is used."
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-    (remove-hook 'isearch-mode-hook 'conn--isearch-input-method  t)
-    (remove-hook 'isearch-mode-end-hook 'conn--activate-input-method t)
+    (remove-hook 'isearch-mode-hook 'conn--isearch-input-method t)
     (when (and conn--input-method (not current-input-method))
       (activate-input-method conn--input-method))))
 
