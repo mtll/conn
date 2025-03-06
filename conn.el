@@ -1033,6 +1033,25 @@ and return it."
                 ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                            collect (conn-get-local-map parent))))))))
 
+;; FIXME: Putting the code to regenerate the keymaps in the keymap
+;; getter functions seems ugly.
+(defun conn--regenerate-maps ()
+  (dolist (state conn-states)
+    (setf (alist-get state conn--state-maps)
+          (caddr (alist-get state conn--state-maps)))
+    (pcase-dolist (`(,mode . ,map) (alist-get state conn--major-mode-maps))
+      (setf (alist-get mode (alist-get state conn--major-mode-maps))
+            (caddr map)))
+    (pcase-dolist (`(,mode . ,map) (alist-get state conn--minor-mode-maps))
+      (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+            (caddr map))))
+  (dolist (state conn-states)
+    (conn-get-state-map state)
+    (pcase-dolist (`(,mode . ,_map) (alist-get state conn--major-mode-maps))
+      (conn-get-mode-map state mode))
+    (pcase-dolist (`(,mode . ,_map) (alist-get state conn--minor-mode-maps))
+      (conn-get-mode-map state mode))))
+
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
   ;; Ensure conn-local-mode is t since this can be run by conn--with-state
@@ -1272,7 +1291,7 @@ and specializes the method on all conn states."
           (remove-hook 'conn-entry-functions fn)
           (message "Error in conn-entry-functions: %s" (car err))))))))
 
-(defmacro conn-define-state (name doc &rest properties)
+(defmacro conn-define-state (name &rest properties)
   "Define a conn state NAME.
 
 Defines a transition function and variable NAME.  NAME is non-nil when
@@ -1305,13 +1324,13 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
   (declare (debug ( name string-or-null-p
                     [&rest keywordp sexp]))
            (indent defun))
-  (unless (stringp doc)
-    (setq properties (cons doc properties)
-          doc (format "Enter %S" (or (car-safe name) name))))
-  (cl-assert (plistp properties))
-  (pcase-let* (((or (and name (pred symbolp))
+  (pcase-let* ((doc (or (and (stringp (car properties))
+                             (pop properties))
+                        (format "Enter %S" (or (car-safe name) name))))
+               ((or (and name (pred symbolp))
                     `(,name :inherit . ,parents))
                 name))
+    (cl-assert (plistp properties))
     `(progn
        (cl-assert
         (cl-loop for parent in ',parents
@@ -1320,29 +1339,12 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
 
        ;; Regenerate all state keymaps if the inheritance hierarchy
        ;; has changed.
-       ;;
-       ;; FIXME: Putting the code to regenerate the
-       ;; keymaps in the keymap getter functions seems ugly.
        (when (and (conn-state-p ',name)
                   (not (equal (conn--state-all-parents ',name)
                               (cons ',name
                                     (merge-ordered-lists
                                      (mapcar #'conn--state-all-parents ',parents))))))
-         (dolist (state conn-states)
-           (setf (alist-get state conn--state-maps)
-                 (caddr (alist-get state conn--state-maps)))
-           (pcase-dolist (`(,mode . ,map) (alist-get state conn--major-mode-maps))
-             (setf (alist-get mode (alist-get state conn--major-mode-maps))
-                   (caddr map)))
-           (pcase-dolist (`(,mode . ,map) (alist-get state conn--minor-mode-maps))
-             (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-                   (caddr map))))
-         (dolist (state conn-states)
-           (conn-get-state-map state)
-           (pcase-dolist (`(,mode . ,_map) (alist-get state conn--major-mode-maps))
-             (conn-get-mode-map state mode))
-           (pcase-dolist (`(,mode . ,_map) (alist-get state conn--minor-mode-maps))
-             (conn-get-mode-map state mode))))
+         (conn--regenerate-maps))
 
        (clrhash conn--state-all-parents-cache)
 
