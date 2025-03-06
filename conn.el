@@ -927,66 +927,111 @@ in STATE and return it."
   (or (get mode :conn-mode-things)
       (put mode :conn-mode-things (make-sparse-keymap))))
 
+(defconst conn--keymap-sentinel (make-symbol "sentinel")
+  "Sentinel marking a composed state keymap.
+
+If a state keymap is not of the form (keymap sentinel ...) then it is
+the naked state keymap and will need to be regenerated.")
+
 (defun conn-get-state-map (state)
   (cl-check-type state conn-state)
-  (or (alist-get state conn--state-maps)
-      (setf (alist-get state conn--state-maps)
-            (make-sparse-keymap))))
+  (caddr
+   (or (when-let* ((map (alist-get state conn--state-maps)))
+         (if (eq (cadr map) conn--keymap-sentinel)
+             map
+           (setf (alist-get state conn--state-maps)
+                 (make-composed-keymap
+                  `(,conn--keymap-sentinel
+                    ,map
+                    ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                               collect (conn-get-state-map parent)))))))
+       (setf (alist-get state conn--state-maps)
+             (make-composed-keymap
+              `(,conn--keymap-sentinel
+                ,(make-sparse-keymap)
+                ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                           collect (conn-get-state-map parent))))))))
 
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
 If one does not exists assign a new sparse keymap for MODE
 in STATE and return it."
   (cl-check-type state conn-state)
-  (or (alist-get mode (alist-get state conn--major-mode-maps))
-      (alist-get mode (alist-get state conn--minor-mode-maps))
-      (cond
-       ((autoloadp (symbol-function mode))
-        ;; We can't tell what sort of mode this is, add it to
-        ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
-        ;; handle the case where it was actually a major-mode.
-        (prog1
-            (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-                  (define-keymap
-                    :parent (make-composed-keymap
-                             (cl-loop for parent in (conn--state-parents state)
-                                      for map = (conn-get-mode-map parent mode)
-                                      when map collect map))))
-          (with-eval-after-load (cadr (symbol-function mode))
-            (when (get mode 'derived-mode-parent)
-              (setf (alist-get mode (alist-get state conn--major-mode-maps))
-                    (alist-get mode (alist-get state conn--minor-mode-maps)))
-              (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
-              (setf (alist-get state conn--minor-mode-maps)
-                    (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
-                                (alist-get state conn--minor-mode-maps)))))))
-       ((get mode 'derived-mode-parent)
-        (setf (alist-get mode (alist-get state conn--major-mode-maps))
-              (define-keymap
-                :parent (make-composed-keymap
-                         (cl-loop for parent in (conn--state-parents state)
-                                  for map = (conn-get-mode-map parent mode)
-                                  when map collect map)))))
-       (t
-        (setf (alist-get mode (alist-get state conn--minor-mode-maps))
-              (define-keymap
-                :parent (make-composed-keymap
-                         (cl-loop for parent in (conn--state-parents state)
-                                  for map = (conn-get-mode-map parent mode)
-                                  when map collect map))))))))
+  (caddr
+   (or (when-let* ((map (alist-get mode (alist-get state conn--major-mode-maps))))
+         (if (eq (cadr map) conn--keymap-sentinel)
+             map
+           (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                 (make-composed-keymap
+                  `(,conn--keymap-sentinel
+                    ,map
+                    ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                               collect (conn-get-mode-map parent mode)))))))
+       (when-let* ((map (alist-get mode (alist-get state conn--minor-mode-maps))))
+         (if (eq (cadr map) conn--keymap-sentinel)
+             map
+           (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                 (make-composed-keymap
+                  `(,conn--keymap-sentinel
+                    ,map
+                    ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                               collect (conn-get-mode-map parent mode)))))))
+       (cond
+        ((autoloadp (symbol-function mode))
+         ;; We can't tell what sort of mode this is, add it to
+         ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
+         ;; handle the case where it was actually a major-mode.
+         (prog1
+             (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                   (make-composed-keymap
+                    `(,conn--keymap-sentinel
+                      ,(make-sparse-keymap)
+                      ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                                 collect (conn-get-mode-map parent mode)))))
+           (with-eval-after-load (cadr (symbol-function mode))
+             (when (get mode 'derived-mode-parent)
+               (setf (alist-get mode (alist-get state conn--major-mode-maps))
+                     (alist-get mode (alist-get state conn--minor-mode-maps)))
+               (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
+               (setf (alist-get state conn--minor-mode-maps)
+                     (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
+                                 (alist-get state conn--minor-mode-maps)))))))
+        ((get mode 'derived-mode-parent)
+         (setf (alist-get mode (alist-get state conn--major-mode-maps))
+               (make-composed-keymap
+                `(,conn--keymap-sentinel
+                  ,(make-sparse-keymap)
+                  ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                             collect (conn-get-mode-map parent mode))))))
+        (t
+         (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+               (make-composed-keymap
+                `(,conn--keymap-sentinel
+                  ,(make-sparse-keymap)
+                  ,(cl-loop for parent in (cdr (conn--state-all-parents state))
+                            collect (conn-get-mode-map parent mode))))))))))
 
 (defun conn-get-local-map (state)
   "Get local keymap for STATE in current buffer.
 If one does not exists assign a new sparse keymap for STATE
 and return it."
   (cl-check-type state conn-state)
-  (or (alist-get state conn--local-maps)
-      (setf (alist-get state conn--local-maps)
-            (define-keymap
-              :parent (make-composed-keymap
-                       (cl-loop for parent in (conn--state-parents state)
-                                for map = (conn-get-local-map parent)
-                                when map collect map))))))
+  (caddr
+   (or (when-let* ((map (alist-get state conn--local-maps)))
+         (if (eq (cadr map) conn--keymap-sentinel)
+             map
+           (setf (alist-get state conn--local-maps)
+                 (make-composed-keymap
+                  `(,conn--keymap-sentinel
+                    ,map
+                    ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                               collect (conn-get-local-map parent)))))))
+       (setf (alist-get state conn--local-maps)
+             (make-composed-keymap
+              `(,conn--keymap-sentinel
+                ,(make-sparse-keymap)
+                ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                           collect (conn-get-local-map parent))))))))
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
@@ -1233,16 +1278,9 @@ and specializes the method on all conn states."
 Defines a transition function and variable NAME.  NAME is non-nil when
 the state is active.
 
-NAME may be either a symbol or of the form (NAME OPTIONS...), where
-options is (KEYWORD VALUE) and where KEYWORD is one of :keymap or
-:inherit.
-
-:KEYMAP is the state keymap for NAME.  KEYMAP is copied before being
-assigned to the state.  To access the state keymap use either the NAME-map
-variable or `conn-get-state-map'.
-
-:INHERIT is a list of states from which NAME should inherit slots and
-keymaps.
+NAME may be either a symbol or of the form (NAME :inherit PARENTS...).
+PARENTS is a list of states from which NAME should inherit properties
+and keymaps.
 
 PROPERTIES is a property list defining the state properties for NAME.  A
 state may have any number of properties and a state will inherit the
@@ -1272,16 +1310,39 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
           doc (format "Enter %S" (or (car-safe name) name))))
   (cl-assert (plistp properties))
   (pcase-let* (((or (and name (pred symbolp))
-                    `(,name . ,props))
-                name)
-               ((map :keymap :inherit) props)
-               (keymap (car keymap))
-               (keymap-name (conn--symbolicate name "-map")))
+                    `(,name :inherit . ,parents))
+                name))
     `(progn
        (cl-assert
-        (cl-loop for parent in ',inherit
+        (cl-loop for parent in ',parents
                  never (memq ',name (conn--state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
+
+       ;; Regenerate all state keymaps if the inheritance hierarchy
+       ;; has changed.
+       ;;
+       ;; FIXME: Putting the code to regenerate the
+       ;; keymaps in the keymap getter functions seems ugly.
+       (when (and (conn-state-p ',name)
+                  (not (equal (conn--state-all-parents ',name)
+                              (cons ',name
+                                    (merge-ordered-lists
+                                     (mapcar #'conn--state-all-parents ',parents))))))
+         (dolist (state conn-states)
+           (setf (alist-get state conn--state-maps)
+                 (caddr (alist-get state conn--state-maps)))
+           (pcase-dolist (`(,mode . ,map) (alist-get state conn--major-mode-maps))
+             (setf (alist-get mode (alist-get state conn--major-mode-maps))
+                   (caddr map)))
+           (pcase-dolist (`(,mode . ,map) (alist-get state conn--minor-mode-maps))
+             (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+                   (caddr map))))
+         (dolist (state conn-states)
+           (conn-get-state-map state)
+           (pcase-dolist (`(,mode . ,_map) (alist-get state conn--major-mode-maps))
+             (conn-get-mode-map state mode))
+           (pcase-dolist (`(,mode . ,_map) (alist-get state conn--minor-mode-maps))
+             (conn-get-mode-map state mode))))
 
        (clrhash conn--state-all-parents-cache)
 
@@ -1291,28 +1352,15 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                            for (k v) on kvs by #'cddr
                            do (puthash k v table)
                            finally return table)
-                  ',inherit))
+                  ',parents))
 
        (cl-pushnew ',name conn-states)
 
        (defvar-local ,name nil
          ,(conn--stringify "Non-nil when `" name "' is active."))
 
-       (defvar ,keymap-name
-         (conn-get-state-map ',name)
-         ,(conn--stringify "Keymap active in `" name "'."))
-
-       ;; Is there a better way to do this?  We want to make the state
-       ;; map a copy of the keymap we have been passed but we don't
-       ;; want to invalidate all the pointers to our state keymap in
-       ;; child state keymaps.
-       ,(when keymap
-          `(setcdr ,keymap-name (cdr (copy-keymap ,keymap))))
-
-       (set-keymap-parent
-        ,keymap-name (make-composed-keymap
-                      (cl-loop for parent in ',inherit
-                               collect (conn-get-state-map parent))))
+       ;; Initialize the state map
+       (conn-get-state-map ',name)
 
        (defun ,name ()
          ,doc
@@ -1334,8 +1382,7 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Emacs"
   :cursor '(hbar . 8))
 
-(conn-define-state (conn-movement-state
-                    (:keymap (define-keymap :suppress t)))
+(conn-define-state (conn-movement-state)
   "A `conn-mode' state moving in a buffer."
   :lighter " Move"
   :suppress-input-method t)
@@ -1344,15 +1391,13 @@ By default `conn-emacs-state' does not bind anything."
   "A `conn-mode' state for remapping key menus.")
 
 (conn-define-state (conn-command-state
-                    (:keymap (define-keymap :suppress t))
-                    (:inherit conn-menu-state conn-movement-state))
+                    :inherit conn-menu-state conn-movement-state)
   "A `conn-mode' state for editing test."
   :lighter " Cmd"
   :suppress-input-method t
   :cursor 'box)
 
-(conn-define-state (conn-org-edit-state
-                    (:keymap (define-keymap :suppress t)))
+(conn-define-state (conn-org-edit-state)
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   :lighter " OEdit"
   :suppress-input-method t)
@@ -1685,19 +1730,20 @@ Optionally the overlay may have an associated THING."
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
 
-(conn-define-state (conn-read-mover
-                    (:keymap (define-keymap
-                               "DEL" 'backward-delete-arg
-                               "C-d" 'forward-delete-arg
-                               "," 'reset-arg
-                               "<remap> <conn-forward-char>" 'forward-char
-                               "<remap> <conn-backward-char>" 'backward-char
-                               "C-h" 'help
-                               "t" 'conn-mark-thing-map
-                               "e" 'recursive-edit))
-                    (:inherit conn-command-state))
+(conn-define-state (conn-read-mover :inherit conn-command-state)
   "A state for reading things."
   :lighter " MOVER")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-mover)
+  "DEL" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "," 'reset-arg
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
+  "C-h" 'help
+  "t" 'conn-mark-thing-map
+  "e" 'recursive-edit)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover)))
   (unless executing-kbd-macro
@@ -3220,18 +3266,19 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn-dispatch-state-for-reading 'conn-read-dispatch)
 
-(conn-define-state (conn-read-dispatch
-                    (:keymap (define-keymap
-                               "C-h" 'help
-                               "," 'reset-arg
-                               "TAB" 'repeat-dispatch
-                               "'" 'repeat-dispatch
-                               "C-d" 'forward-delete-arg
-                               "DEL" 'backward-delete-arg
-                               "\\" 'kapply))
-                    (:inherit conn-command-state))
+(conn-define-state (conn-read-dispatch :inherit conn-command-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-dispatch)
+  "C-h" 'help
+  "," 'reset-arg
+  "TAB" 'repeat-dispatch
+  "'" 'repeat-dispatch
+  "C-d" 'forward-delete-arg
+  "DEL" 'backward-delete-arg
+  "\\" 'kapply)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch)))
   (unless executing-kbd-macro
@@ -7017,7 +7064,8 @@ When ARG is nil the root window is used."
   "y" 'yank-in-context)
 
 (define-keymap
-  :keymap conn-movement-state-map
+  :keymap (conn-get-state-map 'conn-movement-state)
+  :suppress t
   "e" 'conn-emacs-state
   ">" 'forward-line
   "<" 'conn-backward-line
@@ -7059,7 +7107,8 @@ When ARG is nil the root window is used."
   "n" (conn-remap-key conn-backward-sexp-keys))
 
 (define-keymap
-  :keymap conn-menu-state-map
+  :keymap (conn-get-state-map 'conn-menu-state)
+  :suppress t
   "s" (conn-remap-keymap (key-parse "M-s"))
   "g" (conn-remap-keymap (key-parse "M-g"))
   "c" (conn-remap-key (key-parse "C-c"))
@@ -7072,7 +7121,8 @@ When ARG is nil the root window is used."
   "&" 'conn-other-buffer)
 
 (define-keymap
-  :keymap conn-command-state-map
+  :keymap (conn-get-state-map 'conn-command-state)
+  :suppress t
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
@@ -7130,7 +7180,8 @@ When ARG is nil the root window is used."
   "z" 'conn-exchange-mark-command)
 
 (define-keymap
-  :keymap conn-org-edit-state-map
+  :keymap (conn-get-state-map 'conn-org-edit-state)
+  :suppress t
   "e" 'conn-emacs-state
   "SPC" 'conn-scroll-up
   "<backspace>" 'conn-scroll-down
