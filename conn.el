@@ -1486,14 +1486,14 @@ returned.")
              (overlay-put target-overlay 'after-string nil)
              nil)
             (t
-             (move-overlay overlay
-                           (overlay-start overlay)
-                           (+ (overlay-start overlay)
-                              (min (1- (length (overlay-get overlay prop)))
-                                   (- (overlay-end overlay)
-                                      (overlay-start overlay)))))
-             (conn--dispatch-pad-label-overlay
-              overlay prop (substring (overlay-get overlay prop) 1))
+             (let ((new-label (substring (overlay-get overlay prop) 1)))
+               (overlay-put overlay prop nil)
+               (move-overlay overlay
+                             (overlay-start overlay)
+                             (conn--find-label-end
+                              (conn-dispatch-label-target-overlay label)
+                              new-label))
+               (conn--dispatch-pad-label-overlay overlay prop new-label))
              label)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
