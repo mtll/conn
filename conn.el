@@ -220,7 +220,7 @@ For the meaning of CONDITION see `buffer-match-p'."
   :type '(list integer))
 
 (defface conn-dispatch-label-face
-  '((t (:background "#ff8bd1" :foreground "black" :bold t)))
+  '((t (:inherit fixed-pitch :background "#ff8bd1" :foreground "black" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
@@ -860,7 +860,9 @@ after point."
 (defun conn--clear-overlays (&optional buffer)
   "Delete all conn overlays in BUFFER."
   (without-restriction
-    (mapc #'delete-overlay (conn--all-overlays #'conn-overlay-p nil nil buffer))))
+    (cl-loop for ov being the overlays of buffer
+             when (conn-overlay-p ov)
+             do (delete-overlay ov))))
 
 (defun conn--all-overlays (predicate &optional start end buffer)
   "Get all overlays between START and END satisfying PREDICATE."
@@ -3518,37 +3520,46 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                    'display `(space :width (,pixels)))
                   next-line))))
 
+(defun conn--find-label-end (target-overlay label)
+  (catch 'end
+    (let* ((beg (overlay-end target-overlay))
+           (pt beg)
+           (width (string-pixel-width label)))
+      (while t
+        (if (or (= pt (point-max))
+                (>= (car (window-text-pixel-size
+                          (overlay-get target-overlay 'window)
+                          beg pt))
+                    width))
+            (throw 'end pt)
+          (dolist (ov (overlays-in pt (1+ pt)))
+            (when (and (eq 'conn-read-string-match
+                            (overlay-get ov 'category))
+                       (not (eq target-overlay ov)))
+              (throw 'end (overlay-start ov)))))
+        (cl-incf pt)))))
+
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels (mapc #'conn-label-delete labels)))
     (pcase-dolist (`(,window . ,previews) target-overlays)
       (with-current-buffer (window-buffer window)
         (dolist (p previews)
-          (let* ((beg (overlay-end p))
-                 (string (pop label-strings))
-                 (next (thread-last
-                         (conn--all-overlays
-                          (lambda (ov)
-                            (and (eq 'conn-read-string-match
-                                     (overlay-get ov 'category))
-                                 (not (eq ov p))))
-                          beg (+ beg (length string)))
-                         (mapcar #'overlay-start)
-                         (apply 'min (point-max))))
-                 (end (min next (+ beg (length string))))
+          (let* ((string (pop label-strings))
+                 (beg (overlay-end p))
+                 (end (conn--find-label-end p string))
                  (ov (make-overlay beg end))
-                 (prop (if (or (= beg next)
+                 (prop (if (or (= beg end)
                                (= beg (point-max)))
                            'before-string
                          'display)))
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
             (conn--dispatch-pad-label-overlay ov prop string)
-            (push (make-conn-dispatch-label
-                   :string string
-                   :overlay ov
-                   :bounds (cons beg end)
-                   :prop prop
-                   :target-overlay p)
+            (push (make-conn-dispatch-label :string string
+                                            :overlay ov
+                                            :bounds (cons beg end)
+                                            :prop prop
+                                            :target-overlay p)
                   labels)))))
     labels))
 
