@@ -631,30 +631,20 @@ If BUFFER is non-nil find region nearest to point in BUFFER, else find
 nearest in the current buffer.
 
 This function destructively modifies LIST."
-  (let* ((in-buffer (seq-filter
-                     (pcase-lambda ((or `(,beg . ,_end) beg))
-                       (or (not (markerp beg))
-                           (eq (marker-buffer beg)
-                               (or buffer (current-buffer)))))
-                     list)))
-    (if (null in-buffer)
-        list
-      (cl-loop with min = (car in-buffer)
-               with min-dist = (pcase min
-                                 (`(,beg . ,end)
-                                  (min (abs (- (point) beg))
-                                       (abs (- (point) end))))
-                                 (pt (abs (- (point) pt))))
-               for region in (cdr in-buffer)
-               for new-dist = (pcase region
-                                (`(,beg . ,end)
-                                 (min (abs (- (point) beg))
-                                      (abs (- (point) end))))
-                                (pt (abs (- (point) pt))))
-               when (< new-dist min-dist)
-               do (setq min region
-                        min-dist new-dist)
-               finally return (cons min (delq min list))))))
+  (let ((min-dist most-positive-fixnum)
+        min)
+    (dolist (region list)
+      (let ((beg (or (car-safe region) region))
+            (end (or (cdr-safe region) region)))
+        (when-let* (((or (not (markerp beg))
+                         (eq (marker-buffer beg)
+                             (or buffer (current-buffer)))))
+                    (new-dist (min (abs (- (point) beg))
+                                   (abs (- (point) end))))
+                    ((< new-dist min-dist)))
+          (setq min region
+                min-dist new-dist))))
+    (if min (cons min (delq min list)) list)))
 
 (defun conn--create-marker (pos &optional buffer insertion-type)
   "Create marker at POS in BUFFER."
