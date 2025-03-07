@@ -4221,8 +4221,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           (forward-thing thing -1))))
     (ignore-error scan-error
       (save-excursion
-        (setq last-point (point))
         (forward-thing thing 1)
+        (forward-thing thing -1)
         (while (/= (point) last-point)
           (setq last-point (point))
           (unless (invisible-p (point))
