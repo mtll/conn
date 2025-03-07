@@ -3682,7 +3682,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
          (delete-region beg end)
-         (insert-for-yank str))
+         (insert-for-yank str)
+         (unless executing-kbd-macro
+           (pulse-momentary-highlight-region (- (point) (length str)) (point))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-replace-to
@@ -3697,7 +3699,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
          (delete-region beg end)
-         (insert-for-yank str))
+         (insert-for-yank str)
+         (unless executing-kbd-macro
+           (pulse-momentary-highlight-region (- (point) (length str)) (point))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-to
@@ -3709,7 +3713,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (insert-for-yank str))))
+      (insert-for-yank str)
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-to
     (window pt _thing-cmd _thing-arg str)
@@ -3720,7 +3726,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (insert-for-yank str))))
+      (insert-for-yank str)
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (conn-define-dispatch-action conn-dispatch-throw
     (window pt _thing-cmd _thing-arg str)
@@ -3731,7 +3739,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (with-selected-window window
     (save-excursion
       (goto-char pt)
-      (insert-for-yank str))))
+      (insert-for-yank str)
+      (unless executing-kbd-macro
+        (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
@@ -3818,16 +3828,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
          (message "Commented %s" thing-cmd))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(conn-define-dispatch-action conn-dispatch-duplicate (window pt thing-cmd thing-arg)
+(conn-define-dispatch-action conn-dispatch-duplicate (window pt thing-cmd thing-arg arg)
   :description "Duplicate"
   :keys ("r e")
   :window-predicate (lambda () buffer-read-only)
+  :interactive (list (prefix-numeric-value current-prefix-arg))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
-         (conn-duplicate-region beg end current-prefix-arg)
+         (conn-duplicate-region beg end arg)
          (message "Duplicated %s" thing-cmd))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
@@ -3835,7 +3846,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :description "Duplicate and Comment"
   :keys ("r d")
   :window-predicate (lambda () buffer-read-only)
-  :interactive (list current-prefix-arg)
+  :interactive (list (prefix-numeric-value current-prefix-arg))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4211,7 +4222,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     (>= (point) (window-start)))
           (setq last-point (point))
           (unless (invisible-p (point))
-            (push (point) ovs))
+            (cl-pushnew (point) ovs))
           (forward-thing thing -1))))
     (ignore-error scan-error
       (save-excursion
@@ -4226,7 +4237,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
               ((and `(,beg . ,_)
                     (guard (or (null (car ovs))
                                (/= beg (car ovs)))))
-               (push beg ovs))))
+               (cl-pushnew beg ovs))))
           (forward-thing thing 1))))
     (cl-loop for pt in ovs
              collect (conn--make-target-overlay pt 0 thing))))
@@ -4372,7 +4383,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (push (conn--make-target-overlay (point) 0) ovs))))))))))
 
 (defun conn--dispatch-inner-lines (&optional end)
-  (conn--protected-let ((ovs (mapc 'delete-overlay ovs)))
+  (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
     (dolist (win (conn--get-dispatch-windows t) ovs)
       (with-selected-window win
         (save-excursion
