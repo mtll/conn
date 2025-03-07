@@ -52,14 +52,12 @@
                          typescript-ts-mode))
 
 (defun conn--dispatch-all-ts-defuns ()
-  (cl-loop for node in (with-restriction (window-start) (window-end)
-                         (thread-first
-                           (treesit-buffer-root-node)
-                           (treesit-induce-sparse-tree treesit-defun-type-regexp)
-                           (flatten-tree)))
+  (cl-loop for node in (thread-first
+                         (treesit-buffer-root-node)
+                         (treesit-induce-sparse-tree treesit-defun-type-regexp)
+                         (flatten-tree))
            for beg = (treesit-node-start node)
-           for end = (treesit-node-end node)
-           when (and (conn--region-visible-p beg end)
+           when (and (not (invisible-p beg))
                      (<= (window-start) beg (window-end)))
            collect beg into dfns
            finally return (mapcar (lambda (pt)
@@ -69,9 +67,10 @@
 (dolist (mode conn--ts-modes)
   (add-hook (conn--symbolicate mode "-hook")
             (lambda ()
-              (setq-local conn-dispatch-all-things-collector-alist
-                          (cons (cons 'defun 'conn--dispatch-all-ts-defuns)
-                                conn-dispatch-all-things-collector-alist)))))
+              (setq-local
+               conn-dispatch-target-finders-alist
+               (cons (cons 'defun 'conn--dispatch-all-ts-defuns)
+                     conn-dispatch-target-finders-alist)))))
 
 (provide 'conn-treesit)
 
