@@ -797,7 +797,7 @@ be restricted to those before or after the current match inclusive."
 
 (defun conn--string-no-upper-case-p (string)
   "Return t if STRING contains no upper case characters."
-  (cl-loop for char across string always (eq char (downcase char))))
+  (cl-loop for char across string always (eql char (downcase char))))
 
 (defun conn--visible-matches (string &optional dir)
   "Return all matches for STRING visible in the selected window.
@@ -4549,18 +4549,19 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (let* ((prefix-ovs `((,(selected-window) . ,(conn--dispatch-isearch-matches))))
-         (count (length (cdar prefix-ovs)))
-         (labels (conn--dispatch-labels
-                  (funcall conn-label-string-generator count)
-                  prefix-ovs)))
+  (let* (matches count labels matches)
     (unwind-protect
-        (let* ((prefix (conn-label-select labels))
-               (pt (overlay-start prefix)))
-          (isearch-done)
-          (goto-char pt))
+        (progn
+          (setf matches (conn--dispatch-isearch-matches)
+                count (length matches)
+                labels (conn--dispatch-labels
+                        (funcall conn-label-string-generator count)
+                        `((,(selected-window) . ,matches))))
+          (let* ((target (conn-label-select labels)))
+            (isearch-done)
+            (goto-char (overlay-start target))))
       (mapc #'conn-label-delete labels)
-      (mapc #'delete-overlay (cadr prefix-ovs)))))
+      (mapc #'delete-overlay matches))))
 
 
 ;;;; Expand Region
