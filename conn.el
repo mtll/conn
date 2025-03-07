@@ -71,7 +71,7 @@ A target finder function should return a list of overlays.")
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
-determining the target finder for a command in `conn-read-dispatch'
+determining the target finder for a command in `conn-read-dispatch-state'
 actions associated with a command have higher precedence than actions
 associated with a thing.
 
@@ -87,7 +87,7 @@ For the meaning of action function see `conn-define-dispatch-action'.")
   "Default action functions for things or commands.
 
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
-determining the default action for a command in `conn-read-dispatch'
+determining the default action for a command in `conn-read-dispatch-state'
 actions associated with a command have higher precedence than actions
 associated with a command's thing.
 
@@ -1710,8 +1710,30 @@ Optionally the overlay may have an associated THING."
 
 ;;;; Read Things
 
-(defvar conn-state-for-mover-reading 'conn-read-mover
-  "State which should be active in `conn-read-thing-mover-mode'.")
+(conn-define-state conn-read-mover-state (conn-command-state)
+  "A state for reading things."
+  :lighter " MOVER")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-mover-state)
+  "DEL" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "," 'reset-arg
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
+  "C-h" 'help
+  "t" 'conn-mark-thing-map
+  "e" 'recursive-edit)
+
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover-state)))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line t))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover-state)))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line nil))
+  (cl-call-next-method))
 
 (defvar conn-bounds-of-command-alist
   `((recursive-edit . conn--bounds-of-dots)
@@ -1727,31 +1749,6 @@ Optionally the overlay may have an associated THING."
   "Alist of bounds-op functions for things or commands.
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
-
-(conn-define-state conn-read-mover (conn-command-state)
-  "A state for reading things."
-  :lighter " MOVER")
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-read-mover)
-  "DEL" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
-  "," 'reset-arg
-  "<remap> <conn-forward-char>" 'forward-char
-  "<remap> <conn-backward-char>" 'backward-char
-  "C-h" 'help
-  "t" 'conn-mark-thing-map
-  "e" 'recursive-edit)
-
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover)))
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line t))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover)))
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line nil))
-  (cl-call-next-method))
 
 (defvar conn-bounds-of-command-default
   'conn--bounds-of-thing-command-default
@@ -1897,7 +1894,7 @@ RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
   (let* ((conn--current-read-mover-map
-          (conn-get-state-map conn-state-for-mover-reading))
+          (conn-get-state-map 'conn-read-mover-state))
          (prompt (substitute-command-keys
                   (concat "\\<conn--current-read-mover-map>"
                           (propertize prompt 'face 'minibuffer-prompt)
@@ -1923,7 +1920,7 @@ are read."
                                                     'face 'error)
                                       "")))
                       cmd (key-binding keys t))))
-      (conn--with-state conn-state-for-mover-reading
+      (conn--with-state 'conn-read-mover-state
         (read-command)
         (unwind-protect
             (cl-loop
@@ -2324,9 +2321,12 @@ Possibilities: \\<query-replace-map>
                     (seq-group-by (pcase-lambda (`(,beg . ,_end))
                                     (marker-buffer beg))
                                   regions)
-                    (sort :lessp this-bufferp))))
+                    (sort :lessp this-bufferp
+                          :in-place t))))
     (cl-loop repeat conn-kapply-preview-max-overlays
-             for (b . e) in (nconc (sort (cdar regions) :lessp nearest)
+             for (b . e) in (nconc (sort (cdar regions)
+                                         :lessp nearest
+                                         :in-place t)
                                    (mapcan #'cdr (cdr regions)))
              collect (let ((ov (make-overlay b e (marker-buffer b) t)))
                        (overlay-put ov 'category 'kapply-preview)
@@ -3265,14 +3265,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;; Thing dispatch provides a method of jumping to, marking or acting
 ;; on visible Things.
 
-(defvar conn-dispatch-state-for-reading 'conn-read-dispatch)
-
-(conn-define-state conn-read-dispatch (conn-command-state)
+(conn-define-state conn-read-dispatch-state (conn-command-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-dispatch)
+  :keymap (conn-get-state-map 'conn-read-dispatch-state)
   "C-h" 'help
   "," 'reset-arg
   "TAB" 'repeat-dispatch
@@ -3281,12 +3279,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   "DEL" 'backward-delete-arg
   "\\" 'kapply)
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch)))
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch-state)))
   (unless executing-kbd-macro
     (set-face-inverse-video 'mode-line t))
   (cl-call-next-method))
 
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-dispatch)))
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-dispatch-state)))
   (unless executing-kbd-macro
     (set-face-inverse-video 'mode-line nil))
   (cl-call-next-method))
@@ -3337,7 +3335,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--dispatch-read-thing (&optional default-action continuation)
   (pcase-let*
       ((conn--current-dispatch-map
-        (conn-get-state-map conn-dispatch-state-for-reading))
+        (conn-get-state-map 'conn-read-dispatch-state))
        (prompt (substitute-command-keys
                 (concat "\\<conn--current-dispatch-map>"
                         (propertize "Targets" 'face 'minibuffer-prompt)
@@ -3386,9 +3384,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                 (t ""))))
                  cmd (key-binding keys t)
                  invalid nil)))
-      (setq action-args (read-action-args action))
+      (when action
+        (setq action-args (read-action-args action)))
       (atomic-change-group
-        (conn--with-state conn-dispatch-state-for-reading
+        (conn--with-state 'conn-read-dispatch-state
           (read-command)
           (unwind-protect
               (cl-loop
@@ -3583,13 +3582,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 rest))
     (if modes
         `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-map conn-dispatch-state-for-reading mode)
+           (keymap-set (conn-get-mode-map 'conn-read-dispatch-state mode)
                        ,key `(,',thing
                               ,(or ,target-finder
                                    (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
-      `(keymap-set (conn-get-state-map conn-dispatch-state-for-reading)
+      `(keymap-set (conn-get-state-map 'conn-read-dispatch-state)
                    ,key `(,',thing
                           ,(or ,target-finder
                                (conn--dispatch-target-finder ',thing))
@@ -3655,12 +3654,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
               `(dolist (mode ',(ensure-list modes))
                  ,@(cl-loop for key in (ensure-list keys)
                             collect `(keymap-set
-                                      (conn-get-mode-map conn-dispatch-state-for-reading mode)
+                                      (conn-get-mode-map 'conn-read-dispatch-state mode)
                                       ,key (list ,@menu-item))))
             (macroexp-progn
              (cl-loop for key in (ensure-list keys)
                       collect `(keymap-set
-                                (conn-get-state-map conn-dispatch-state-for-reading)
+                                (conn-get-state-map 'conn-read-dispatch-state)
                                 ,key (list ,@menu-item)))))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-replace-to
@@ -4476,32 +4475,37 @@ seconds."
       (while
           (prog1 repeat
             (unwind-protect
-                (setf target-ovs (thread-last
-                                   (funcall finder)
-                                   (seq-group-by (lambda (ov) (overlay-get ov 'window)))
-                                   (seq-sort (lambda (a _) (eq (selected-window) (car a)))))
-                      (alist-get (selected-window) target-ovs)
-                      (seq-sort (lambda (a b)
-                                  (< (abs (- (overlay-start a) (point)))
-                                     (abs (- (overlay-start b) (point)))))
-                                (alist-get (selected-window) target-ovs))
-                      labels (conn--dispatch-labels
-                              (or (funcall
-                                   conn-label-string-generator
-                                   (let ((sum 0))
-                                     (dolist (p target-ovs sum)
-                                       (setq sum (+ sum (length (cdr p)))))))
-                                  (user-error "No matching %s"
-                                              (or (ignore-errors
-                                                    (get thing-cmd :conn-command-thing))
-                                                  "candidates")))
-                              target-ovs)
-                      target (conn-label-select labels)
-                      pt (overlay-start target)
-                      window (overlay-get target 'window)
-                      conn-this-command-thing (or (overlay-get target 'thing)
-                                                  (ignore-errors
-                                                    (get thing-cmd :conn-command-thing))))
+                (setf
+                 target-ovs (thread-first
+                              (seq-group-by (lambda (ov) (overlay-get ov 'window))
+                                            (funcall finder))
+                              (sort
+                               :in-place t
+                               :lessp (lambda (a _) (eq (selected-window) (car a)))))
+                 (alist-get (selected-window) target-ovs)
+                 (sort
+                  (alist-get (selected-window) target-ovs)
+                  :in-place t
+                  :lessp (lambda (a b)
+                           (< (abs (- (overlay-start a) (point)))
+                              (abs (- (overlay-start b) (point))))))
+                 labels (conn--dispatch-labels
+                         (or (funcall
+                              conn-label-string-generator
+                              (let ((sum 0))
+                                (dolist (p target-ovs sum)
+                                  (setq sum (+ sum (length (cdr p)))))))
+                             (user-error "No matching %s"
+                                         (or (ignore-errors
+                                               (get thing-cmd :conn-command-thing))
+                                             "candidates")))
+                         target-ovs)
+                 target (conn-label-select labels)
+                 pt (overlay-start target)
+                 window (overlay-get target 'window)
+                 conn-this-command-thing (or (overlay-get target 'thing)
+                                             (ignore-errors
+                                               (get thing-cmd :conn-command-thing))))
               (pcase-dolist (`(_ . ,ovs) target-ovs)
                 (mapc #'delete-overlay ovs))
               (mapc #'conn-label-delete labels))
@@ -7696,7 +7700,7 @@ When ARG is nil the root window is used."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-read-dispatch 'dired-mode)
+    :keymap (conn-get-mode-map 'conn-read-dispatch-state 'dired-mode)
     "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
     "d" 'conn-dispatch-dired-kill-subdir)
@@ -7785,7 +7789,7 @@ When ARG is nil the root window is used."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-read-dispatch 'ibuffer-mode)
+    :keymap (conn-get-mode-map 'conn-read-dispatch-state 'ibuffer-mode)
     "f" 'conn-dispatch-ibuffer-mark
     "i" 'ibuffer-backward-line
     "k" 'ibuffer-forward-line
