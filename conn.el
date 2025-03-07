@@ -3305,11 +3305,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn--last-dispatch-command nil)
 
-(defvar conn-dispatch-all-things-collector-default
-  'conn--dispatch-all-things-1)
-
-(defvar conn-dispatch-all-things-collector-alist nil)
-
 (defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
 
@@ -4245,9 +4240,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (cl-loop for win in (conn--get-dispatch-windows all-windows)
            nconc (with-selected-window win
-                   (if-let* ((fn (alist-get thing conn-dispatch-all-things-collector-alist)))
-                       (funcall fn)
-                     (funcall conn-dispatch-all-things-collector-default thing)))))
+                   (conn--dispatch-all-things-1 thing))))
 
 (defun conn--dispatch-all-buttons (&optional all-windows)
   (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
