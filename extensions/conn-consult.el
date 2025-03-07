@@ -215,15 +215,17 @@
 
   (defun conn-kapply-grep-candidates (cands)
     (thread-last
-      (mapcar (lambda (cand)
-                (pcase-let ((`(,line-marker (,beg . ,end) . _)
-                             (consult--grep-position cand 'find-file-noselect)))
-                  (cons (move-marker line-marker
-                                     (+ line-marker beg)
-                                     (marker-buffer line-marker))
-                        (+ line-marker end))))
-              cands)
-      (apply-partially 'conn--kapply-region-iterator)
+      (lambda (reverse)
+        (conn--kapply-region-iterator
+         (mapcar (lambda (cand)
+                   (pcase-let ((`(,line-marker (,beg . ,end) . _)
+                                (consult--grep-position cand 'find-file-noselect)))
+                     (cons (move-marker line-marker
+                                        (+ line-marker beg)
+                                        (marker-buffer line-marker))
+                           (+ line-marker end))))
+                 cands)
+         reverse))
       (funcall-interactively 'conn-regions-kapply-prefix)))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
