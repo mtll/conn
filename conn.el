@@ -3351,6 +3351,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
        (keys nil)
        (cmd nil)
        (invalid nil)
+       (handle nil)
+       (saved-marker (save-mark-and-excursion--save))
+       (success nil)
        (`(,thing-arg ,thing-sign ,repeat) continuation)
        (repeat-indicator
         (propertize "repeatedly"
@@ -3366,6 +3369,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 'face 'eldoc-highlight-function-argument)
              ""))
          (read-action-args (action)
+           (when handle
+             (cancel-change-group handle)
+             (save-mark-and-excursion--restore saved-marker)
+             (setq saved-marker (save-mark-and-excursion--save)))
+           (setq handle (prepare-change-group))
+           (activate-change-group handle)
            (when (ignore-errors (get action :conn-action-interactive))
              (funcall (get action :conn-action-interactive))))
          (read-command ()
@@ -3388,10 +3397,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  invalid nil)))
       (when action
         (setq action-args (read-action-args action)))
-      (atomic-change-group
-        (conn--with-state 'conn-read-dispatch-state
-          (read-command)
-          (unwind-protect
+      (conn--with-state 'conn-read-dispatch-state
+        (read-command)
+        (unwind-protect
+            (progn
               (cl-loop
                (pcase cmd
                  (`(,thing ,finder . ,default-action)
@@ -3484,7 +3493,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  (_
                   (setq invalid t)))
                (read-command))
-            (message nil)))))))
+              (setq success t))
+          (message nil)
+          (when handle
+            (if success
+                (accept-change-group handle)
+              (cancel-change-group handle)))
+          (save-mark-and-excursion--restore saved-marker))))))
 
 (defun conn-dispatch-ignored-mode (win)
   (not (apply #'provided-mode-derived-p
@@ -3579,8 +3594,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (when (or (looking-at " ") (looking-back " " 1))
     (fixup-whitespace)
     (if (progn (beginning-of-line)
-               (looking-at "
-"))
+               (looking-at "\n"))
         (join-line)
       (indent-for-tab-command)))
   (when (save-excursion
