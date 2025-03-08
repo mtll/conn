@@ -955,6 +955,14 @@ the naked state keymap and will need to be regenerated.")
                 ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                            collect (conn-get-state-map parent))))))))
 
+(defun conn-set-state-map (state keymap)
+  (cl-check-type state conn-state)
+  (cl-assert (keymapp keymap))
+  (setf (cdr (conn-get-state-map state)) keymap))
+
+(gv-define-setter conn-get-state-map (keymap state)
+  `(conn-set-state-map ,state ,keymap))
+
 (defun conn-get-mode-map (state mode)
   "Get MODE keymap for STATE.
 If one does not exists assign a new sparse keymap for MODE
@@ -1013,6 +1021,14 @@ in STATE and return it."
                   ,(make-sparse-keymap)
                   ,(cl-loop for parent in (cdr (conn--state-all-parents state))
                             collect (conn-get-mode-map parent mode))))))))))
+
+(defun conn-set-mode-map (state mode keymap)
+  (cl-check-type state conn-state)
+  (cl-assert (keymapp keymap))
+  (setf (cdr (conn-get-mode-map state mode)) keymap))
+
+(gv-define-setter conn-get-mode-map (keymap state made)
+  `(conn-set-mode-map ,state ,mode ,keymap))
 
 (defun conn-get-local-map (state)
   "Get local keymap for STATE in current buffer.
@@ -1152,6 +1168,9 @@ mouse-3: Describe current input method")
                 for prop = (gethash ,property table conn--hash-key-missing)
                 unless (eq prop conn--hash-key-missing) return prop)))))
 
+(gv-define-setter conn-state-get (value state slot)
+  `(conn-state-set ,state ,slot ,value))
+
 (define-inline conn-state-has-property-p (state property)
   "Return the value in STATE of PROPERTY."
   (inline-letevals (state property)
@@ -1161,9 +1180,6 @@ mouse-3: Describe current input method")
        (not (eq (gethash ,property (car (get ,state :conn--state))
                          conn--hash-key-missing)
                 conn--hash-key-missing))))))
-
-(gv-define-setter conn-state-get (value state slot)
-  `(conn-state-set ,state ,slot ,value))
 
 (define-inline conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
