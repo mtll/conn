@@ -4797,6 +4797,58 @@ Expansions and contractions are provided by functions in
   (interactive (list (register-read-with-preview "Narrow ring to register: ")))
   (set-register register (conn--make-narrow-register)))
 
+(cl-defmethod register-command-info ((_command (eql conn-push-region-to-narrow-register)))
+  (make-register-preview-info
+   :types '(all)
+   :msg "Push region to narrow register `%s'"
+   :act 'set
+   :noconfirm (memq register-use-preview '(nil never))
+   :smatch t))
+
+(defun conn-push-region-to-narrow-register (beg end register)
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (register-read-with-preview "Push region to register: ")))
+  (pcase (get-register register)
+    ((and (cl-struct conn-narrow-register narrow-ring)
+          struct)
+     (setf (conn-narrow-register-narrow-ring struct)
+           (cons (cons (conn--create-marker beg)
+                       (conn--create-marker end))
+                 narrow-ring)))
+    (_
+     (thread-last
+       (list (cons (conn--create-marker beg)
+                   (conn--create-marker end)))
+       (%conn--make-narrow-register :narrow-ring)
+       (set-register register)))))
+
+(defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register outer)
+  (interactive
+   (append (conn-read-thing-mover "Mover")
+           (list
+            (register-read-with-preview "Push region to register: ")
+            current-prefix-arg)))
+  (pcase-let* ((`((,beg . ,end) . ,regions)
+                (conn-bounds-of-command thing-cmd thing-arg))
+               (narrowings
+                (if outer
+                    (list (cons (conn--create-marker beg)
+                                (conn--create-marker end)))
+                  (cl-loop for (b . e) in regions
+                           collect (cons (conn--create-marker b)
+                                         (conn--create-marker e))))))
+    (pcase (get-register register)
+      ((and (cl-struct conn-narrow-register narrow-ring)
+            struct)
+       (setf (conn-narrow-register-narrow-ring struct)
+             (nconc narrowings narrow-ring)))
+      (_
+       (thread-last
+         (%conn--make-narrow-register :narrow-ring narrowings)
+         (set-register register))))))
+
 (defun conn--narrow-ring-record (beg end)
   (let ((narrowing (cons (conn--create-marker beg)
                          (conn--create-marker end))))
@@ -4835,15 +4887,6 @@ Expansions and contractions are provided by functions in
   (when (and interactive (not executing-kbd-macro))
     (message "Narrow ring merged into %s region"
              (length conn-narrow-ring))))
-
-(defun conn-thing-to-narrow-ring (thing-cmd thing-arg)
-  (interactive (conn-read-thing-mover "Thing" nil t))
-  (let ((regions (conn-bounds-of-command thing-cmd thing-arg)))
-    (mapc (pcase-lambda (`(,beg . ,end))
-            (conn--narrow-ring-record beg end))
-          (or (conn--merge-regions (cdr regions) t)
-              (list (car regions)))))
-  (message "Added %s to narrow ring" (get thing-cmd :conn-command-thing)))
 
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
@@ -4890,6 +4933,7 @@ instances of from-string.")
   (exit-minibuffer))
 
 (defun conn-replace-insert-separator ()
+  "Insert `query-replace-from-to-separator'."
   (interactive)
   (when query-replace-from-to-separator
     (let ((separator-string
@@ -4950,7 +4994,13 @@ instances of from-string.")
                                            (setq isearch-case-fold-search
                                                  (isearch-no-upper-case-p from-string regexp-flag)))
                                          from-string)))
-                       (query-replace-read-from prompt regexp-flag)))
+                       (minibuffer-with-setup-hook
+                           (lambda ()
+                             (thread-last
+                               (current-local-map)
+                               (make-composed-keymap conn-replace-map)
+                               (use-local-map)))
+                         (query-replace-read-from prompt regexp-flag))))
                (to (if (consp from)
                        (prog1 (cdr from) (setq from (car from)))
                      (minibuffer-with-setup-hook
@@ -4969,23 +5019,18 @@ instances of from-string.")
 
 (defun conn-replace-in-thing ( thing-mover arg from-string to-string
                                &optional delimited backward query-flag)
+  "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-map)
-                         (use-local-map)))
-                   (conn--replace-read-args
-                    (concat "Replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    nil (or (cdr regions) regions) nil))))
+                 (conn--replace-read-args
+                  (concat "Replace"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  nil (or (cdr regions) regions) nil)))
      (append (list thing-mover arg) common)))
   (save-excursion
     (pcase-let ((`((,beg . ,end) . ,regions)
@@ -5016,23 +5061,18 @@ instances of from-string.")
 
 (defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
                                       &optional delimited backward query-flag)
+  "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
                  (conn-read-thing-mover "Thing Mover" nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
-                 (minibuffer-with-setup-hook
-                     (lambda ()
-                       (thread-last
-                         (current-local-map)
-                         (make-composed-keymap conn-replace-map)
-                         (use-local-map)))
-                   (conn--replace-read-args
-                    (concat "Replace"
-                            (if current-prefix-arg
-                                (if (eq current-prefix-arg '-) " backward" " word")
-                              ""))
-                    t (or (cdr regions) regions) nil))))
+                 (conn--replace-read-args
+                  (concat "Replace"
+                          (if current-prefix-arg
+                              (if (eq current-prefix-arg '-) " backward" " word")
+                            ""))
+                  t (or (cdr regions) regions) nil)))
      (append (list thing-mover arg) common)))
   (save-excursion
     (pcase-let ((`((,beg . ,end) . ,regions)
@@ -5160,10 +5200,14 @@ instances of from-string.")
 ;;;;; Isearch Commands
 
 (defun conn-isearch-yank-region ()
+  "Yank the current region to isearch."
   (interactive)
   (isearch-yank-internal (lambda () (mark t))))
 
 (defun conn-isearch-open-recursive-edit ()
+  "Open a recursive edit from within an isearch.
+
+Exiting the recursive edit will resume the isearch."
   (interactive)
   (thread-first
     (recursive-edit)
@@ -5171,6 +5215,7 @@ instances of from-string.")
     (save-selected-window)))
 
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg)
+  "Isearch forward within the bounds of a thing."
   (interactive (conn-read-thing-mover "Thing" nil t))
   (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
          (regions (or (conn--merge-regions (cdr regions) t)
@@ -5187,6 +5232,7 @@ instances of from-string.")
     (isearch-forward nil t)))
 
 (defun conn-isearch-backward-in-thing (thing-cmd thing-arg)
+  "Isearch backward within the bounds of a thing."
   (interactive (conn-read-thing-mover "Thing" nil t))
   (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
          (regions (or (conn--merge-regions (cdr regions) t)
@@ -5203,6 +5249,7 @@ instances of from-string.")
     (isearch-backward nil t)))
 
 (defun conn-multi-isearch-project ()
+  "Perform a `multi-isearch' within the files of a project."
   (interactive)
   (require 'project)
   (multi-isearch-files
@@ -7115,7 +7162,6 @@ When ARG is nil the root window is used."
   "t" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
   "v" 'conn-region-to-narrow-ring
-  "f" 'conn-thing-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
   "d" 'duplicate-dwim
   "w j" 'conn-kill-prepend-region

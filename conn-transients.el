@@ -1338,34 +1338,37 @@ apply to each contiguous component of the region."
      ("p" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
-     ("m" "Macro" kmacro-to-register)
-     ("f" "Dispatch" conn-last-dispatch-to-register)]
+     ("m" "Macro" kmacro-to-register)]
    [ ""
-     ("n" "Narrow Ring" conn-narrow-ring-to-register)
+     ("f" "Dispatch" conn-last-dispatch-to-register)
      ("t" "Tab" conn-tab-to-register)
      ("4" "Window Configuration" window-configuration-to-register)
-     ("5" "Frameset" frameset-to-register)]
+     ("5" "Frameset" frameset-to-register)]]
+  [[ :description "Narrow Ring"
+     ("n" "To Register" conn-narrow-ring-to-register)
+     ("v" "Push Region" conn-push-region-to-narrow-register)
+     ("t" "Push Thing" conn-push-thing-to-narrow-register)]
    [ :description "Kill"
-     ("w" "Append"
+     ("w" "Append to Register"
       (lambda ()
         (interactive)
         (conn-kill-append-region
          (region-beginning) (region-end)
          (register-read-with-preview "Prepend to register: "))))
-     ("d" "Prepend"
+     ("d" "Prepend to Register"
       (lambda ()
         (interactive)
         (conn-kill-prepend-region
          (region-beginning) (region-end)
-         (register-read-with-preview "Prepend to register: "))))
-     "Copy"
-     ("c" "Append"
+         (register-read-with-preview "Prepend to register: "))))]
+   [ :description "Copy"
+     ("c" "Append to Register"
       (lambda ()
         (interactive)
         (conn-append-region
          (region-beginning) (region-end)
          (register-read-with-preview "Prepend to register: "))))
-     ("x" "Prepend"
+     ("x" "Prepend to Register"
       (lambda ()
         (interactive)
         (conn-prepend-region
