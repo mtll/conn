@@ -3387,6 +3387,29 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
            (activate-change-group handle)
            (when (ignore-errors (get action :conn-action-interactive))
              (funcall (get action :conn-action-interactive))))
+         (completing-read-command ()
+           (conn--with-state conn-previous-state
+             (save-window-excursion
+               (setq keys nil
+                     cmd (intern
+                          (completing-read
+                           "Command: "
+                           (lambda (string pred action)
+                             (if (eq action 'metadata)
+                                 `(metadata
+                                   ,(cons 'affixation-function
+                                          (conn--dispatch-make-command-affixation))
+                                   (category . conn-dispatch-command))
+                               (complete-with-action action obarray string pred)))
+                           (lambda (sym)
+                             (pcase sym
+                               ('help)
+                               ((and (pred functionp)
+                                     (guard (or (get sym :conn-command-thing)
+                                                (get sym :conn-action))))
+                                t)
+                               (`(,_ ,_ . ,_) t)))
+                           t))))))
          (read-command ()
            (setq keys (read-key-sequence
                        (format prompt
@@ -3462,28 +3485,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                    ('negative-argument
                     (setq thing-sign (not thing-sign)))
                    ('help
-                    (conn--with-state conn-previous-state
-                      (save-window-excursion
-                        (setq keys nil
-                              cmd (intern
-                                   (completing-read
-                                    "Command: "
-                                    (lambda (string pred action)
-                                      (if (eq action 'metadata)
-                                          `(metadata
-                                            ,(cons 'affixation-function
-                                                   (conn--dispatch-make-command-affixation))
-                                            (category . conn-dispatch-command))
-                                        (complete-with-action action obarray string pred)))
-                                    (lambda (sym)
-                                      (pcase sym
-                                        ('help)
-                                        ((and (pred functionp)
-                                              (guard (or (get sym :conn-command-thing)
-                                                         (get sym :conn-action))))
-                                         t)
-                                        (`(,_ ,_ . ,_) t)))
-                                    t))))))
+                    (completing-read-command))
                    ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
                          (guard thing))
                     (cl-return
