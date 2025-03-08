@@ -1480,14 +1480,17 @@ returned.")
              nil)
             ((not (eql prefix-char (aref (overlay-get overlay prop) 0)))
              (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-             (overlay-put overlay prop "")
+             (overlay-put overlay 'display nil)
              (overlay-put overlay 'after-string nil)
+             (overlay-put overlay 'before-string nil)
              (overlay-put target-overlay 'display nil)
              (overlay-put target-overlay 'after-string nil)
              nil)
             (t
              (let ((new-label (substring (overlay-get overlay prop) 1)))
-               (overlay-put overlay prop nil)
+               (overlay-put overlay 'display nil)
+               (overlay-put overlay 'before-string nil)
+               (overlay-put overlay 'after-string nil)
                (move-overlay overlay
                              (overlay-start overlay)
                              (conn--find-label-end
@@ -3513,30 +3516,44 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                  (overlay-start overlay)
                                  (overlay-end overlay)))))
                       0)))
-    (overlay-put overlay 'after-string
-                 (concat
-                  (propertize
-                   " "
-                   'display `(space :width (,pixels)))
-                  next-line))))
+    (when (eq display-property 'display)
+      (overlay-put overlay 'after-string
+                   (concat
+                    (propertize
+                     " "
+                     'display `(space :width (,(floor pixels 2)))
+                     'face 'conn-dispatch-label-face)
+                    next-line))
+      (overlay-put overlay 'after-string
+                   (concat
+                    (propertize
+                     " "
+                     'display `(space :width (,pixels)))
+                    next-line)))))
 
 (defun conn--find-label-end (target-overlay label)
   (catch 'end
     (let* ((beg (overlay-end target-overlay))
+           (line-end (save-excursion
+                       (goto-char beg)
+                       (line-end-position)))
            (pt beg)
            (width (string-pixel-width label)))
       (while t
-        (if (or (= pt (point-max))
-                (>= (car (window-text-pixel-size
-                          (overlay-get target-overlay 'window)
-                          beg pt))
-                    width))
-            (throw 'end pt)
-          (dolist (ov (overlays-in pt (1+ pt)))
-            (when (and (eq 'conn-read-string-match
-                            (overlay-get ov 'category))
-                       (not (eq target-overlay ov)))
-              (throw 'end (overlay-start ov)))))
+        (cond ((= line-end pt)
+               (throw 'end pt))
+              ((or (= pt (point-max))
+                   (>= (car (window-text-pixel-size
+                             (overlay-get target-overlay 'window)
+                             beg pt))
+                       width))
+               (throw 'end pt))
+              (t
+               (dolist (ov (overlays-in pt (1+ pt)))
+                 (when (and (eq 'conn-read-string-match
+                                (overlay-get ov 'category))
+                            (not (eq target-overlay ov)))
+                   (throw 'end (overlay-start ov))))))
         (cl-incf pt)))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
