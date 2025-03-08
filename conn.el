@@ -959,7 +959,7 @@ the naked state keymap and will need to be regenerated.")
   (cl-check-type state conn-state)
   (cl-assert (keymapp keymap))
   (setf (cdr (conn-get-state-map state))
-        (cdr (copy-keymap keymap))))
+        (copy-alist (cdr keymap))))
 
 (gv-define-setter conn-get-state-map (keymap state)
   `(conn-set-state-map ,state ,keymap))
@@ -1027,7 +1027,7 @@ in STATE and return it."
   (cl-check-type state conn-state)
   (cl-assert (keymapp keymap))
   (setf (cdr (conn-get-mode-map state mode))
-        (cdr (copy-keymap keymap))))
+        (copy-alist (cdr keymap))))
 
 (gv-define-setter conn-get-mode-map (keymap state made)
   `(conn-set-mode-map ,state ,mode ,keymap))
