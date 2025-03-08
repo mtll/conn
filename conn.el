@@ -30,10 +30,10 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'eieio)
 (eval-when-compile
   (require 'inline)
   (require 'subr-x)
-  (require 'eieio)
   (require 'cl-lib)
   (require 'map))
 
@@ -1029,7 +1029,7 @@ in STATE and return it."
   (setf (cdr (conn-get-mode-map state mode))
         (copy-alist (cdr keymap))))
 
-(gv-define-setter conn-get-mode-map (keymap state made)
+(gv-define-setter conn-get-mode-map (keymap state mode)
   `(conn-set-mode-map ,state ,mode ,keymap))
 
 (defun conn-get-local-map (state)
@@ -1455,7 +1455,7 @@ Is a function of one arguments, the number of labels required.")
 
 (cl-defstruct (conn-dispatch-label)
   "Store the state for a dispatch label."
-  string overlay bounds prop target-overlay)
+  string overlay prop target-overlay)
 
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
@@ -1483,20 +1483,17 @@ returned.")
   (conn-dispatch-label-target-overlay label))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (with-slots (string overlay bounds prop target-overlay) label
+  (with-slots (string overlay prop target-overlay) label
     (with-current-buffer (overlay-buffer overlay)
-      (pcase-let ((`(,beg . ,end) bounds))
-        (overlay-put target-overlay 'display
-                     (propertize (buffer-substring
-                                  (overlay-start target-overlay)
-                                  (overlay-end target-overlay))
-                                 'face 'conn-read-string-match-face))
-        (move-overlay overlay beg end)
-        (when-let* ((after-str (buffer-substring (overlay-start overlay)
-                                                 (overlay-end overlay)))
-                    (pos (string-search "\n" after-str)))
-          (overlay-put overlay 'after-string (substring after-str pos)))
-        (overlay-put overlay prop string)))))
+      (move-overlay overlay
+                    (overlay-start overlay)
+                    (conn--find-label-end target-overlay string))
+      (overlay-put target-overlay 'display
+                   (propertize (buffer-substring
+                                (overlay-start target-overlay)
+                                (overlay-end target-overlay))
+                               'face 'conn-read-string-match-face))
+      (conn--dispatch-setup-label-string overlay prop string))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
@@ -1524,7 +1521,7 @@ returned.")
                              (conn--find-label-end
                               (conn-dispatch-label-target-overlay label)
                               new-label))
-               (conn--dispatch-pad-label-overlay overlay prop new-label))
+               (conn--dispatch-setup-label-string overlay prop new-label))
              label)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
@@ -1745,6 +1742,8 @@ Optionally the overlay may have an associated THING."
 
 ;;;; Read Things
 
+(defvar conn-state-for-read-mover 'conn-read-mover-state)
+
 (conn-define-state conn-read-mover-state (conn-command-state)
   "A state for reading things."
   :lighter " MOVER")
@@ -1929,7 +1928,7 @@ RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
   (let* ((conn--current-read-mover-map
-          (conn-get-state-map 'conn-read-mover-state))
+          (conn-get-state-map conn-state-for-read-mover))
          (prompt (substitute-command-keys
                   (concat "\\<conn--current-read-mover-map>"
                           (propertize prompt 'face 'minibuffer-prompt)
@@ -1955,7 +1954,7 @@ are read."
                                                     'face 'error)
                                       "")))
                       cmd (key-binding keys t))))
-      (conn--with-state 'conn-read-mover-state
+      (conn--with-state conn-state-for-read-mover
         (read-command)
         (unwind-protect
             (cl-loop
@@ -3300,6 +3299,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;; Thing dispatch provides a method of jumping to, marking or acting
 ;; on visible Things.
 
+(defvar conn--last-dispatch-command nil)
+
+(defvar conn-dispatch-window-predicates
+  '(conn-dispatch-ignored-mode))
+
+(defvar conn-state-for-read-dispatch 'conn-read-dispatch-state)
+
 (conn-define-state conn-read-dispatch-state (conn-command-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
@@ -3325,11 +3331,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (cl-call-next-method))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
-
-(defvar conn--last-dispatch-command nil)
-
-(defvar conn-dispatch-window-predicates
-  '(conn-dispatch-ignored-mode))
 
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
@@ -3359,13 +3360,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
-(defconst conn--dispatch-request-quit (make-symbol "req-cont"))
+(defconst conn--dispatch-request-quit (make-symbol "req-quit"))
 (defvar conn--current-dispatch-map nil)
 
 (defun conn--dispatch-read-thing (&optional default-action continuation)
   (pcase-let*
       ((conn--current-dispatch-map
-        (conn-get-state-map 'conn-read-dispatch-state))
+        (conn-get-state-map conn-state-for-read-dispatch))
        (prompt (substitute-command-keys
                 (concat "\\<conn--current-dispatch-map>"
                         (propertize "Targets" 'face 'minibuffer-prompt)
@@ -3448,7 +3449,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  invalid nil)))
       (when action
         (setq action-args (read-action-args action)))
-      (conn--with-state 'conn-read-dispatch-state
+      (conn--with-state conn-state-for-read-dispatch
         (read-command)
         (unwind-protect
             (prog1
@@ -3543,24 +3544,26 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           (with-selected-window win
             (not (funcall window-predicate)))))))
 
-(defun conn--dispatch-pad-label-overlay (overlay display-property display-string)
-  (overlay-put overlay display-property nil)
-  (let* ((pixels (max (- (car (window-text-pixel-size
-                               (overlay-get overlay 'window)
-                               (overlay-start overlay)
-                               (overlay-end overlay)))
-                         (progn
-                           (overlay-put overlay display-property display-string)
-                           (car (window-text-pixel-size
+(defun conn--dispatch-setup-label-string (overlay display-property display-string)
+  (if (not (eq display-property 'display))
+      (overlay-put overlay display-property display-string)
+    (overlay-put overlay display-property nil)
+    (let* ((pixels (max (- (car (window-text-pixel-size
                                  (overlay-get overlay 'window)
                                  (overlay-start overlay)
-                                 (overlay-end overlay)))))
-                      0)))
-    (when (eq display-property 'display)
-      (overlay-put overlay 'after-string
-                   (propertize
-                    " "
-                    'display `(space :width (,pixels)))))))
+                                 (overlay-end overlay)))
+                           (progn
+                             (overlay-put overlay display-property display-string)
+                             (car (window-text-pixel-size
+                                   (overlay-get overlay 'window)
+                                   (overlay-start overlay)
+                                   (overlay-end overlay)))))
+                        0)))
+      (when (eq display-property 'display)
+        (overlay-put overlay 'after-string
+                     (propertize
+                      " "
+                      'display `(space :width (,pixels))))))))
 
 (defun conn--find-label-end (target-overlay label)
   (catch 'end
@@ -3611,10 +3614,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                          'display)))
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
-            (conn--dispatch-pad-label-overlay ov prop string)
+            (conn--dispatch-setup-label-string ov prop string)
             (push (make-conn-dispatch-label :string string
                                             :overlay ov
-                                            :bounds (cons beg end)
                                             :prop prop
                                             :target-overlay p)
                   labels)))))
@@ -3642,13 +3644,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 rest))
     (if modes
         `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-map 'conn-read-dispatch-state mode)
+           (keymap-set (conn-get-mode-map conn-state-for-read-dispatch mode)
                        ,key `(,',thing
                               ,(or ,target-finder
                                    (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
-      `(keymap-set (conn-get-state-map 'conn-read-dispatch-state)
+      `(keymap-set (conn-get-state-map conn-state-for-read-dispatch)
                    ,key `(,',thing
                           ,(or ,target-finder
                                (conn--dispatch-target-finder ',thing))
@@ -3714,12 +3716,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
               `(dolist (mode ',(ensure-list modes))
                  ,@(cl-loop for key in (ensure-list keys)
                             collect `(keymap-set
-                                      (conn-get-mode-map 'conn-read-dispatch-state mode)
+                                      (conn-get-mode-map conn-state-for-read-dispatch mode)
                                       ,key (list ,@menu-item))))
             (macroexp-progn
              (cl-loop for key in (ensure-list keys)
                       collect `(keymap-set
-                                (conn-get-state-map 'conn-read-dispatch-state)
+                                (conn-get-state-map conn-state-for-read-dispatch)
                                 ,key (list ,@menu-item)))))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-replace-to
@@ -7735,7 +7737,7 @@ When ARG is nil the root window is used."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-read-dispatch-state 'dired-mode)
+    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'dired-mode)
     "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
     "d" 'conn-dispatch-dired-kill-subdir)
@@ -7816,7 +7818,7 @@ When ARG is nil the root window is used."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-read-dispatch-state 'ibuffer-mode)
+    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'ibuffer-mode)
     "f" 'conn-dispatch-ibuffer-mark
     "i" 'ibuffer-backward-line
     "k" 'ibuffer-forward-line
