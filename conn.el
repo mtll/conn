@@ -30,7 +30,6 @@
 ;;;; Requires
 
 (require 'compat)
-(require 'eieio)
 (eval-when-compile
   (require 'inline)
   (require 'subr-x)
@@ -1483,7 +1482,9 @@ returned.")
   (conn-dispatch-label-target-overlay label))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (with-slots (string overlay prop target-overlay) label
+  (pcase-let (((cl-struct conn-dispatch-label
+                          string overlay prop target-overlay)
+               label))
     (with-current-buffer (overlay-buffer overlay)
       (move-overlay overlay
                     (overlay-start overlay)
@@ -1499,7 +1500,9 @@ returned.")
   (delete-overlay (conn-dispatch-label-overlay label)))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (with-slots (overlay prop target-overlay) label
+  (pcase-let (((cl-struct conn-dispatch-label
+                          overlay prop target-overlay)
+               label))
     (with-current-buffer (overlay-buffer overlay)
       (cond ((length= (overlay-get overlay prop) 0)
              nil)
@@ -1528,14 +1531,15 @@ returned.")
   (conn-window-label-window label))
 
 (cl-defmethod conn-label-reset ((label conn-window-label))
-  (with-slots (string overlay) label
+  (pcase-let (((cl-struct conn-window-label string overlay)
+               label))
     (overlay-put overlay 'before-string string)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
   (delete-overlay (conn-window-label-overlay label)))
 
 (cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
-  (with-slots (string overlay) label
+  (pcase-let (((cl-struct conn-window-label overlay) label))
     (cond ((length= (overlay-get overlay 'before-string) 0)
            nil)
           ((not (eql prefix-char (aref (overlay-get overlay 'before-string) 0)))
