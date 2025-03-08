@@ -3515,13 +3515,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (overlay-put overlay 'after-string
                    (propertize
                     " "
-                    'display `(space :width (,(floor pixels 2)))
-                    'face 'conn-dispatch-label-face))
-      (overlay-put overlay 'before-string
-                   (propertize
-                    " "
-                    'display `(space :width (,(ceiling pixels 2)))
-                    'face 'conn-dispatch-label-face)))))
+                    'display `(space :width (,pixels)))))))
 
 (defun conn--find-label-end (target-overlay label)
   (catch 'end
@@ -3530,23 +3524,32 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                        (goto-char beg)
                        (line-end-position)))
            (pt beg)
-           (width (string-pixel-width label)))
-      (while t
-        (cond ((= line-end pt)
-               (throw 'end pt))
-              ((or (= pt (point-max))
-                   (>= (car (window-text-pixel-size
-                             (overlay-get target-overlay 'window)
-                             beg pt))
-                       width))
-               (throw 'end pt))
-              (t
-               (dolist (ov (overlays-in pt (1+ pt)))
-                 (when (and (eq 'conn-read-string-match
-                                (overlay-get ov 'category))
-                            (not (eq target-overlay ov)))
-                   (throw 'end (overlay-start ov))))))
-        (cl-incf pt)))))
+           (width (string-pixel-width label))
+           ;; display-line-numbers, line-prefix and wrap-prefix break
+           ;; width calculations, temporarily disable them.
+           (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
+           (line-pfx (prog1 line-prefix (setq-local line-prefix nil)))
+           (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
+      (unwind-protect
+          (while t
+            (cond ((= line-end pt)
+                   (throw 'end pt))
+                  ((or (= pt (point-max))
+                       (>= (car (window-text-pixel-size
+                                 (overlay-get target-overlay 'window)
+                                 beg pt))
+                           width))
+                   (throw 'end pt))
+                  (t
+                   (dolist (ov (overlays-in pt (1+ pt)))
+                     (when (and (eq 'conn-read-string-match
+                                    (overlay-get ov 'category))
+                                (not (eq target-overlay ov)))
+                       (throw 'end (overlay-start ov))))))
+            (cl-incf pt))
+        (setq-local display-line-numbers linum
+                    line-prefix line-pfx
+                    wrap-prefix wrap-pfx)))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels (mapc #'conn-label-delete labels)))
