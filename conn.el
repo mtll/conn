@@ -1943,17 +1943,35 @@ are read."
          (thing-arg (when arg (abs (prefix-numeric-value arg))))
          (thing-sign (when arg (> 0 arg)))
          invalid keys cmd)
-    (cl-flet ((read-command ()
-                (setq keys (read-key-sequence
-                            (format prompt
-                                    (format (if thing-arg "%s%s" "[%s1]")
-                                            (if thing-sign "-" "")
-                                            thing-arg)
-                                    (if invalid
-                                        (propertize "Not a valid thing command"
-                                                    'face 'error)
-                                      "")))
-                      cmd (key-binding keys t))))
+    (cl-flet
+        ((read-command ()
+           (setq keys (read-key-sequence
+                       (format prompt
+                               (format (if thing-arg "%s%s" "[%s1]")
+                                       (if thing-sign "-" "")
+                                       thing-arg)
+                               (if invalid
+                                   (propertize "Not a valid thing command"
+                                               'face 'error)
+                                 "")))
+                 cmd (key-binding keys t)))
+         (completing-read-command ()
+           (save-window-excursion
+             (setq cmd (intern
+                        (completing-read
+                         "Command: "
+                         (lambda (string pred action)
+                           (if (eq action 'metadata)
+                               `(metadata
+                                 ,(cons 'affixation-function
+                                        (conn--dispatch-make-command-affixation))
+                                 (category . conn-dispatch-command))
+                             (complete-with-action action obarray string pred)))
+                         (lambda (sym)
+                           (and (functionp sym)
+                                (not (eq sym 'help))
+                                (get sym :conn-command-thing)))
+                         t))))))
       (conn--with-state conn-state-for-read-mover
         (read-command)
         (unwind-protect
@@ -1961,22 +1979,7 @@ are read."
              (pcase cmd
                ('keyboard-quit (keyboard-quit))
                ('help
-                (save-window-excursion
-                  (setq cmd (intern
-                             (completing-read
-                              "Command: "
-                              (lambda (string pred action)
-                                (if (eq action 'metadata)
-                                    `(metadata
-                                      ,(cons 'affixation-function
-                                             (conn--dispatch-make-command-affixation))
-                                      (category . conn-dispatch-command))
-                                  (complete-with-action action obarray string pred)))
-                              (lambda (sym)
-                                (and (functionp sym)
-                                     (not (eq sym 'help))
-                                     (get sym :conn-command-thing)))
-                              t)))))
+                (completing-read-command))
                ('digit-argument
                 (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
                   (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
@@ -3361,6 +3364,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  (list command-name "" (concat thing binding)))))))
 
 (defconst conn--dispatch-request-quit (make-symbol "req-quit"))
+
 (defvar conn--current-dispatch-map nil)
 
 (defun conn--dispatch-read-thing (&optional default-action continuation)
@@ -3544,27 +3548,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           (with-selected-window win
             (not (funcall window-predicate)))))))
 
-(defun conn--dispatch-setup-label-string (overlay display-property display-string)
-  (if (not (eq display-property 'display))
-      (overlay-put overlay display-property display-string)
-    (overlay-put overlay display-property nil)
-    (let* ((pixels (max (- (car (window-text-pixel-size
-                                 (overlay-get overlay 'window)
-                                 (overlay-start overlay)
-                                 (overlay-end overlay)))
-                           (progn
-                             (overlay-put overlay display-property display-string)
-                             (car (window-text-pixel-size
-                                   (overlay-get overlay 'window)
-                                   (overlay-start overlay)
-                                   (overlay-end overlay)))))
-                        0)))
-      (when (eq display-property 'display)
-        (overlay-put overlay 'after-string
-                     (propertize
-                      " "
-                      'display `(space :width (,pixels))))))))
-
 (defun conn--find-label-end (target-overlay label)
   (catch 'end
     (let* ((beg (overlay-end target-overlay))
@@ -3598,6 +3581,27 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (setq-local display-line-numbers linum
                     line-prefix line-pfx
                     wrap-prefix wrap-pfx)))))
+
+(defun conn--dispatch-setup-label-string (overlay display-property display-string)
+  (if (not (eq display-property 'display))
+      (overlay-put overlay display-property display-string)
+    (overlay-put overlay display-property nil)
+    (let* ((pixels (max (- (car (window-text-pixel-size
+                                 (overlay-get overlay 'window)
+                                 (overlay-start overlay)
+                                 (overlay-end overlay)))
+                           (progn
+                             (overlay-put overlay display-property display-string)
+                             (car (window-text-pixel-size
+                                   (overlay-get overlay 'window)
+                                   (overlay-start overlay)
+                                   (overlay-end overlay)))))
+                        0)))
+      (when (eq display-property 'display)
+        (overlay-put overlay 'after-string
+                     (propertize
+                      " "
+                      'display `(space :width (,pixels))))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels (mapc #'conn-label-delete labels)))
