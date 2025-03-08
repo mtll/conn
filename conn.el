@@ -1152,6 +1152,16 @@ mouse-3: Describe current input method")
                 for prop = (gethash ,property table conn--hash-key-missing)
                 unless (eq prop conn--hash-key-missing) return prop)))))
 
+(define-inline conn-state-has-property-p (state property)
+  "Return the value in STATE of PROPERTY."
+  (inline-letevals (state property)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (not (eq (gethash ,property (car (get ,state :conn--state))
+                         conn--hash-key-missing)
+                conn--hash-key-missing))))))
+
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
 
@@ -3400,106 +3410,106 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (conn--with-state 'conn-read-dispatch-state
         (read-command)
         (unwind-protect
-            (progn
-              (cl-loop
-               (pcase cmd
-                 (`(,thing ,finder . ,default-action)
-                  (cl-return
-                   (list thing
-                         (when thing-arg
-                           (* (if thing-sign -1 1) (or thing-arg 1)))
-                         finder
-                         (or action
-                             default-action
-                             (conn--dispatch-default-action thing))
-                         (if action
-                             action-args
-                           (read-action-args
-                            (or default-action
-                                (conn--dispatch-default-action thing))))
-                         (conn--dispatch-window-predicate
-                          action (get thing :conn-command-thing) cmd keys)
-                         repeat)))
-                 ('keyboard-quit
-                  (keyboard-quit))
-                 ('kapply
-                  ;; Run with a timer, otherwise we pick up a nil
-                  ;; conn-state value for some reason.
-                  (run-with-timer 0 nil 'conn-dispatch-kapply-prefix
-                                  (list thing-arg thing-sign repeat))
-                  (cl-return (list conn--dispatch-request-quit
-                                   nil nil nil nil nil nil)))
-                 ('repeat-dispatch
-                  (setq repeat (not repeat)
-                        repeat-indicator
-                        (propertize repeat-indicator
-                                    'face (when repeat
-                                            'eldoc-highlight-function-argument))))
-                 ('digit-argument
-                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-                 ('backward-delete-arg
-                  (setq thing-arg (floor thing-arg 10)))
-                 ('forward-delete-arg
-                  (setq thing-arg (when thing-arg
-                                    (thread-last
-                                      (log thing-arg 10)
-                                      floor
-                                      (expt 10)
-                                      (mod thing-arg)))))
-                 ('reset-arg
-                  (setq thing-arg nil))
-                 ('negative-argument
-                  (setq thing-sign (not thing-sign)))
-                 ('help
-                  (conn--with-state conn-previous-state
-                    (save-window-excursion
-                      (setq keys nil
-                            cmd (intern
-                                 (completing-read
-                                  "Command: "
-                                  (lambda (string pred action)
-                                    (if (eq action 'metadata)
-                                        `(metadata
-                                          ,(cons 'affixation-function
-                                                 (conn--dispatch-make-command-affixation))
-                                          (category . conn-dispatch-command))
-                                      (complete-with-action action obarray string pred)))
-                                  (lambda (sym)
-                                    (pcase sym
-                                      ('help)
-                                      ((and (pred functionp)
-                                            (guard (or (get sym :conn-command-thing)
-                                                       (get sym :conn-action))))
-                                       t)
-                                      (`(,_ ,_ . ,_) t)))
-                                  t))))))
-                 ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
-                       (guard thing))
-                  (cl-return
-                   (list cmd
-                         (when thing-arg
-                           (* (if thing-sign -1 1) (or thing-arg 1)))
-                         (conn--dispatch-target-finder cmd)
-                         (or action (conn--dispatch-default-action cmd))
-                         (if action
-                             action-args
-                           (read-action-args (conn--dispatch-default-action cmd)))
-                         (conn--dispatch-window-predicate action thing cmd keys)
-                         repeat)))
-                 ((guard (ignore-errors (get cmd :conn-action)))
-                  (setq action (unless (eq cmd action) cmd)
-                        action-args (read-action-args action)))
-                 (_
-                  (setq invalid t)))
-               (read-command))
+            (prog1
+                (cl-loop
+                 (pcase cmd
+                   (`(,thing ,finder . ,default-action)
+                    (cl-return
+                     (list thing
+                           (when thing-arg
+                             (* (if thing-sign -1 1) (or thing-arg 1)))
+                           finder
+                           (or action
+                               default-action
+                               (conn--dispatch-default-action thing))
+                           (if action
+                               action-args
+                             (read-action-args
+                              (or default-action
+                                  (conn--dispatch-default-action thing))))
+                           (conn--dispatch-window-predicate
+                            action (get thing :conn-command-thing) cmd keys)
+                           repeat)))
+                   ('keyboard-quit
+                    (keyboard-quit))
+                   ('kapply
+                    ;; Run with a timer, otherwise we pick up a nil
+                    ;; conn-state value for some reason.
+                    (run-with-timer 0 nil 'conn-dispatch-kapply-prefix
+                                    (list thing-arg thing-sign repeat))
+                    (cl-return (list conn--dispatch-request-quit
+                                     nil nil nil nil nil nil)))
+                   ('repeat-dispatch
+                    (setq repeat (not repeat)
+                          repeat-indicator
+                          (propertize repeat-indicator
+                                      'face (when repeat
+                                              'eldoc-highlight-function-argument))))
+                   ('digit-argument
+                    (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                      (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                   ('backward-delete-arg
+                    (setq thing-arg (floor thing-arg 10)))
+                   ('forward-delete-arg
+                    (setq thing-arg (when thing-arg
+                                      (thread-last
+                                        (log thing-arg 10)
+                                        floor
+                                        (expt 10)
+                                        (mod thing-arg)))))
+                   ('reset-arg
+                    (setq thing-arg nil))
+                   ('negative-argument
+                    (setq thing-sign (not thing-sign)))
+                   ('help
+                    (conn--with-state conn-previous-state
+                      (save-window-excursion
+                        (setq keys nil
+                              cmd (intern
+                                   (completing-read
+                                    "Command: "
+                                    (lambda (string pred action)
+                                      (if (eq action 'metadata)
+                                          `(metadata
+                                            ,(cons 'affixation-function
+                                                   (conn--dispatch-make-command-affixation))
+                                            (category . conn-dispatch-command))
+                                        (complete-with-action action obarray string pred)))
+                                    (lambda (sym)
+                                      (pcase sym
+                                        ('help)
+                                        ((and (pred functionp)
+                                              (guard (or (get sym :conn-command-thing)
+                                                         (get sym :conn-action))))
+                                         t)
+                                        (`(,_ ,_ . ,_) t)))
+                                    t))))))
+                   ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
+                         (guard thing))
+                    (cl-return
+                     (list cmd
+                           (when thing-arg
+                             (* (if thing-sign -1 1) (or thing-arg 1)))
+                           (conn--dispatch-target-finder cmd)
+                           (or action (conn--dispatch-default-action cmd))
+                           (if action
+                               action-args
+                             (read-action-args (conn--dispatch-default-action cmd)))
+                           (conn--dispatch-window-predicate action thing cmd keys)
+                           repeat)))
+                   ((guard (ignore-errors (get cmd :conn-action)))
+                    (setq action (unless (eq cmd action) cmd)
+                          action-args (read-action-args action)))
+                   (_
+                    (setq invalid t)))
+                 (read-command))
               (setq success t))
-          (message nil)
           (when handle
             (if success
                 (accept-change-group handle)
               (cancel-change-group handle)))
-          (save-mark-and-excursion--restore saved-marker))))))
+          (save-mark-and-excursion--restore saved-marker)
+          (message nil))))))
 
 (defun conn-dispatch-ignored-mode (win)
   (not (apply #'provided-mode-derived-p
