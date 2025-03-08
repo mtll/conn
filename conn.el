@@ -3500,15 +3500,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--dispatch-pad-label-overlay (overlay display-property display-string)
   (overlay-put overlay display-property nil)
-  (let* ((pos (save-excursion
-                (goto-char (overlay-start overlay))
-                (skip-chars-forward "^\n" (overlay-end overlay))
-                (point)))
-         (next-line (buffer-substring pos (overlay-end overlay)))
-         (pixels (max (- (car (window-text-pixel-size
+  (let* ((pixels (max (- (car (window-text-pixel-size
                                (overlay-get overlay 'window)
                                (overlay-start overlay)
-                               pos))
+                               (overlay-end overlay)))
                          (progn
                            (overlay-put overlay display-property display-string)
                            (car (window-text-pixel-size
@@ -3518,18 +3513,15 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                       0)))
     (when (eq display-property 'display)
       (overlay-put overlay 'after-string
-                   (concat
-                    (propertize
-                     " "
-                     'display `(space :width (,(floor pixels 2)))
-                     'face 'conn-dispatch-label-face)
-                    next-line))
-      (overlay-put overlay 'after-string
-                   (concat
-                    (propertize
-                     " "
-                     'display `(space :width (,pixels)))
-                    next-line)))))
+                   (propertize
+                    " "
+                    'display `(space :width (,(floor pixels 2)))
+                    'face 'conn-dispatch-label-face))
+      (overlay-put overlay 'before-string
+                   (propertize
+                    " "
+                    'display `(space :width (,(ceiling pixels 2)))
+                    'face 'conn-dispatch-label-face)))))
 
 (defun conn--find-label-end (target-overlay label)
   (catch 'end
