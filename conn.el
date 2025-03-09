@@ -1449,9 +1449,7 @@ By default `conn-emacs-state' does not bind anything."
 ;; a set of labels.
 
 (defvar conn-label-string-generator 'conn-simple-labels
-  "Function to create label strings for a number of elements.
-
-Is a function of one arguments, the number of labels required.")
+  "Function to create label strings for a number of elements.")
 
 ;; Each label is a DFA that should define its transition
 ;; functions as methods of the `conn-label-narrow' and
@@ -1468,7 +1466,7 @@ Is a function of one arguments, the number of labels required.")
 
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
-  string overlay window)
+  string window)
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.")
@@ -1545,25 +1543,26 @@ returned.")
   (conn-window-label-window label))
 
 (cl-defmethod conn-label-reset ((label conn-window-label))
-  (pcase-let (((cl-struct conn-window-label string overlay)
+  (pcase-let (((cl-struct conn-window-label string window)
                label))
-    (overlay-put overlay 'before-string string)))
+    (set-window-parameter window 'conn-label string)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
-  (delete-overlay (conn-window-label-overlay label)))
+  (pcase-let (((cl-struct conn-window-label window string)
+               label))
+    (with-current-buffer (window-buffer window)
+      (when (eq (car-safe (car-safe header-line-format))
+                'conn-mode)
+        (setq-local header-line-format (cadadr header-line-format))))
+    (set-window-parameter window 'conn-label string)))
 
 (cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
-  (pcase-let (((cl-struct conn-window-label overlay) label))
-    (cond ((length= (overlay-get overlay 'before-string) 0)
-           nil)
-          ((not (eql prefix-char (aref (overlay-get overlay 'before-string) 0)))
-           (overlay-put overlay 'before-string nil)
-           nil)
-          (t
-           (overlay-put
-            overlay 'before-string
-            (substring (overlay-get overlay 'before-string) 1))
-           label))))
+  (pcase-let* (((cl-struct conn-window-label window) label)
+               (string (window-parameter window 'conn-label)))
+    (unless (or (length= string 0)
+                (not (eql prefix-char (aref string 0))))
+      (set-window-parameter window 'conn-label (substring string 1))
+      label)))
 
 (defun conn-label-select (candidates)
   "Select a label from CANDIDATES.
@@ -1655,10 +1654,9 @@ Optionally the overlay may have an associated THING."
     (mapc #'delete-overlay overlays)
     string))
 
-(defun conn-simple-labels (count &optional labels)
+(defun conn-simple-labels (count &optional face)
   (named-let rec ((count count)
-                  (labels (or labels
-                              (take count conn-simple-label-characters))))
+                  (labels (take count conn-simple-label-characters)))
     (let* ((prefixes nil))
       (while (and labels
                   (> count (+ (length labels)
@@ -1679,47 +1677,31 @@ Optionally the overlay may have an associated THING."
                 (push (concat prefix c) labels)
                 (when (= (cl-incf n) count)
                   (throw 'done nil))))))
-        (dolist (l labels)
-          (put-text-property 0 (length l) 'face 'conn-dispatch-label-face l))
+        (dolist (label labels)
+          (put-text-property 0 (length label)
+                             'face (or face 'conn-dispatch-label-face)
+                             label))
         (nreverse labels)))))
 
 (defun conn--create-window-labels (labels windows)
-  (unless (assq 'conn-mode (default-value 'mode-line-format))
-    (set-default
-     'mode-line-format
-     (cons
-      '(conn-mode (:eval (window-parameter (selected-window) 'conn-label)))
-      (assq-delete-all
-       'conn-mode
-       (default-value 'mode-line-format)))))
   (let* ((labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
                               (conn--get-windows nil 'no-minibuff t)))
          (labels (thread-first
                    (lambda (win) (window-parameter win 'conn-label))
                    (mapcar labeled)
-                   (thread-last (seq-difference labels)))))
-    (cl-loop with scroll-margin = 0
-             for win in (conn--get-windows nil 'no-minibuff t)
+                   (thread-last (seq-difference labels))))
+         (header-line-label
+          '(conn-mode (:eval (window-parameter (selected-window) 'conn-label)))))
+    (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
              for string = (or (window-parameter win 'conn-label)
                               (set-window-parameter win 'conn-label (pop labels)))
              when (memq win windows)
-             collect (with-selected-window win
-                       (let ((overlay (make-overlay (window-start) (window-end))))
-                         (goto-char (window-start))
-                         (forward-line)
-                         (overlay-put overlay 'conn-overlay t)
-                         (overlay-put overlay 'face 'shadow)
-                         (overlay-put overlay 'window win)
-                         (overlay-put overlay 'before-string
-                                      (propertize string 'face 'conn-window-prompt-face))
-                         (make-conn-window-label
-                          :string string
-                          :overlay overlay
-                          :window win))))))
-
-(defun conn--destroy-mode-line-labels ()
-  (dolist (win (window-list-1 nil 'no-minibuf t))
-    (set-window-parameter win 'conn-label nil)))
+             collect
+             (with-selected-window win
+               (unless (equal header-line-label (car header-line-format))
+                 (setq-local header-line-format
+                             `(,header-line-label (nil ,header-line-format))))
+               (make-conn-window-label :string string :window win)))))
 
 ;; From ace-window
 (defun conn--get-windows (&optional window minibuffer all-frames)
@@ -1745,7 +1727,8 @@ Optionally the overlay may have an associated THING."
                                     (window-hscroll win))))
             (labels (conn--create-window-labels
                      (funcall conn-label-string-generator
-                              (length (conn--get-windows nil 'nomini t)))
+                              (length (conn--get-windows nil 'nomini t))
+                              'conn-window-prompt-face)
                      windows)))
         (unwind-protect
             (conn-label-select labels)
@@ -1754,9 +1737,7 @@ Optionally the overlay may have an associated THING."
                    do (progn (set-window-point win pt)
                              (set-window-hscroll win hscroll)
                              (set-window-vscroll win vscroll)))
-          (mapc #'conn-label-delete labels)
-          (unless conn-wincontrol-mode
-            (conn--destroy-mode-line-labels)))))))
+          (mapc #'conn-label-delete labels))))))
 
 
 ;;;; Read Things
@@ -3584,20 +3565,18 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
            (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
       (unwind-protect
           (while t
-            (cond ((= line-end pt)
-                   (throw 'end pt))
-                  ((or (= pt (point-max))
-                       (>= (car (window-text-pixel-size
-                                 (overlay-get target-overlay 'window)
-                                 beg pt))
-                           width))
-                   (throw 'end pt))
-                  (t
-                   (dolist (ov (overlays-in pt (1+ pt)))
-                     (when (and (eq 'conn-read-string-match
-                                    (overlay-get ov 'category))
-                                (not (eq target-overlay ov)))
-                       (throw 'end (overlay-start ov))))))
+            (when (or (= line-end pt)
+                      (= pt (point-max))
+                      (>= (car (window-text-pixel-size
+                                (overlay-get target-overlay 'window)
+                                beg pt))
+                          width))
+              (throw 'end pt))
+            (dolist (ov (overlays-in pt (1+ pt)))
+              (when (and (eq 'conn-read-string-match
+                             (overlay-get ov 'category))
+                         (not (eq target-overlay ov)))
+                (throw 'end pt)))
             (cl-incf pt))
         (setq-local display-line-numbers linum
                     line-prefix line-pfx
@@ -4308,7 +4287,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;;;;; Target Finders
 
 (defun conn--dispatch-chars ()
-  (cdr (conn--read-string-with-timeout-1 nil t)))
+  (cl-loop for (_ . ovs) = (conn--read-string-with-timeout-1 nil t)
+           when ovs return ovs
+           do (message "(no matches)")))
 
 (defun conn--dispatch-all-things-1 (thing)
   (let ((last-point (point))
@@ -6686,7 +6667,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                      conn--wincontrol-arg))))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
-  (conn--destroy-mode-line-labels)
   (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (add-hook 'post-command-hook 'conn--wincontrol-post-command)
   (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -6708,7 +6688,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
-  (conn--destroy-mode-line-labels)
   (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
   (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
   (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
@@ -7470,11 +7449,6 @@ When ARG is nil the root window is used."
           ;; TODO: don't do this unconditionally
           (keymap-set minibuffer-mode-map "M-Y" 'conn-yank-region-to-minibuffer)
           (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
-      (set-default
-       'mode-line-format
-       (assq-delete-all
-        'conn-mode
-        (default-value 'mode-line-format)))
       (when (eq (keymap-lookup minibuffer-mode-map "M-Y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "M-Y"))
