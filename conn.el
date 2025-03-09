@@ -41,7 +41,6 @@
 (declare-function project-files "project")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 
-
 ;;;; Variables
 
 ;;;;; Declerations
@@ -491,7 +490,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defvar conn--seperator-history nil
   "History var for `conn-set-register-seperator'.")
 
-
 ;;;; Utilities
 
 (eval-and-compile
@@ -577,6 +575,47 @@ meaning of these see `advice-add'."
                            (push ov ,overlays)))
              ,@body)
          (mapc #'delete-overlay ,overlays)))))
+
+(defmacro conn--with-state (transition-fn &rest body)
+  "Call TRANSITION-FN and run BODY preserving state variables."
+  (declare (debug (form body))
+           (indent 1))
+  (cl-with-gensyms ( saved-state saved-prev-state
+                     saved-cursor-type buffer)
+    (cl-once-only (transition-fn)
+      `(let ((,saved-state conn-current-state)
+             (,saved-prev-state conn-previous-state)
+             (,buffer (current-buffer))
+             (,saved-cursor-type cursor-type))
+         (unwind-protect
+             (progn
+               (cond (,transition-fn
+                      (funcall ,transition-fn))
+                     (conn-current-state
+                      (conn-exit-state conn-current-state)))
+               ,@body)
+           (with-current-buffer ,buffer
+             (if ,saved-state
+                 (conn-enter-state ,saved-state)
+               (when conn-current-state
+                 (conn-exit-state conn-current-state))
+               (setq cursor-type ,saved-cursor-type))
+             (setq conn-previous-state ,saved-prev-state)))))))
+
+(defmacro conn--with-input-method (&rest body)
+  "Run BODY ensuring `conn--input-method' is active."
+  (declare (debug (body))
+           (indent 0))
+  `(unwind-protect
+       (progn
+         (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+         (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
+         (when conn--input-method
+           (activate-input-method conn--input-method))
+         ,@body)
+     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
+     (conn--activate-input-method)))
 
 (defun conn-remap-key (from-keys)
   "Map to whatever is bound at FROM-KEYS.
@@ -729,47 +768,6 @@ If BUFFER is nil check `current-buffer'."
     (conn--narrow-to-region-1 beg end record)
     (deactivate-mark)))
 
-(defmacro conn--with-state (transition-fn &rest body)
-  "Call TRANSITION-FN and run BODY preserving state variables."
-  (declare (debug (form body))
-           (indent 1))
-  (cl-with-gensyms ( saved-state saved-prev-state
-                     saved-cursor-type buffer)
-    (cl-once-only (transition-fn)
-      `(let ((,saved-state conn-current-state)
-             (,saved-prev-state conn-previous-state)
-             (,buffer (current-buffer))
-             (,saved-cursor-type cursor-type))
-         (unwind-protect
-             (progn
-               (cond (,transition-fn
-                      (funcall ,transition-fn))
-                     (conn-current-state
-                      (conn-exit-state conn-current-state)))
-               ,@body)
-           (with-current-buffer ,buffer
-             (if ,saved-state
-                 (conn-enter-state ,saved-state)
-               (when conn-current-state
-                 (conn-exit-state conn-current-state))
-               (setq cursor-type ,saved-cursor-type))
-             (setq conn-previous-state ,saved-prev-state)))))))
-
-(defmacro conn--with-input-method (&rest body)
-  "Run BODY ensuring `conn--input-method' is active."
-  (declare (debug (body))
-           (indent 0))
-  `(unwind-protect
-       (progn
-         (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
-         (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-         (when conn--input-method
-           (activate-input-method conn--input-method))
-         ,@body)
-     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
-     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-     (conn--activate-input-method)))
-
 (defun conn--isearch-matches (&optional buffer restrict)
   "Return a list of all isearch matches in buffer.
 
@@ -895,7 +893,6 @@ after point."
     (unless (cdr parent)
       (set-keymap-parent keymap nil))))
 
-
 ;;;; States
 
 (define-inline conn-state-p (state)
@@ -1453,7 +1450,6 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " OEdit"
   :suppress-input-method t)
 
-
 ;;;; Labels
 
 ;; Functions to provide the basic machinery for labeling a set of things
@@ -1751,35 +1747,7 @@ Optionally the overlay may have an associated THING."
                              (set-window-vscroll win vscroll)))
           (mapc #'conn-label-delete labels))))))
 
-
 ;;;; Read Things
-
-(defvar conn-state-for-read-mover 'conn-read-mover-state)
-
-(conn-define-state conn-read-mover-state (conn-command-state)
-  "A state for reading things."
-  :lighter " MOVER")
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-read-mover-state)
-  "DEL" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
-  "," 'reset-arg
-  "<remap> <conn-forward-char>" 'forward-char
-  "<remap> <conn-backward-char>" 'backward-char
-  "C-h" 'help
-  "t" 'conn-mark-thing-map
-  "e" 'recursive-edit)
-
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover-state)))
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line t))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover-state)))
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line nil))
-  (cl-call-next-method))
 
 (defvar conn-bounds-of-command-alist
   `((recursive-edit . conn--bounds-of-dots)
@@ -1823,6 +1791,33 @@ region.")
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit
   "<t>" 'ignore)
+
+(defvar conn-state-for-read-mover 'conn-read-mover-state)
+
+(conn-define-state conn-read-mover-state (conn-command-state)
+  "A state for reading things."
+  :lighter " MOVER")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-mover-state)
+  "DEL" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "," 'reset-arg
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
+  "C-h" 'help
+  "t" 'conn-mark-thing-map
+  "e" 'recursive-edit)
+
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover-state)))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line t))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover-state)))
+  (unless executing-kbd-macro
+    (set-face-inverse-video 'mode-line nil))
+  (cl-call-next-method))
 
 (defun conn-last-bounds-of-command ()
   "Value of the most recent `conn-bounds-of-command' at this recursion depth."
@@ -2170,7 +2165,6 @@ is read."
       (conn-dot-mode -1)
       (deactivate-mark t))))
 
-
 ;;;; Advice
 
 (defun conn--toggle-input-method-ad (&rest app)
@@ -2257,7 +2251,6 @@ is read."
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
     (advice-remove 'save-mark-and-excursion--restore #'conn--restore-ephemeral-mark-ad)))
 
-
 ;;;; Kapply
 
 (defvar kmacro-step-edit-replace)
@@ -2813,7 +2806,6 @@ The iterator must be the first argument in ARGLIST.
         (user-error "Keyboard macro edit aborted")))
     (kmacro-call-macro (or count 0))))
 
-
 ;;;; Mark
 
 (defun conn-get-mark-handler (command)
@@ -2957,7 +2949,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (setq conn--ephemeral-mark t)
     nil))
 
-;; TODO: see if this is fixable with vertico's candidate overlay
 (defun conn--mark-cursor-redisplay (win)
   (let ((cursor (window-parameter win 'conn-mark-cursor)))
     (if (or (not conn-local-mode)
@@ -3308,7 +3299,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
  'conn-narrow-to-thing
  'conn-narrow-ring-prefix)
 
-
 ;;;; Thing Dispatch
 
 ;; Thing dispatch provides a method of jumping to, marking or acting
@@ -4651,7 +4641,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
       (mapc #'conn-label-delete labels)
       (mapc #'delete-overlay matches))))
 
-
 ;;;; Expand Region
 
 (defcustom conn-expand-pulse-region t
@@ -4791,7 +4780,6 @@ Expansions and contractions are provided by functions in
               executing-kbd-macro)
     (pulse-momentary-highlight-region (region-beginning) (region-end) 'region)))
 
-
 ;;;; Narrow Ring
 
 (cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
@@ -4945,8 +4933,9 @@ Expansions and contractions are provided by functions in
      (set-marker beg nil)
      (set-marker end nil))))
 
-
 ;;;; Commands
+
+;;;;; Replace
 
 ;;;;; Replace
 
@@ -5320,6 +5309,220 @@ Interactively `region-beginning' and `region-end'."
   (isearch-done)
   (conn--push-ephemeral-mark isearch-other-end))
 
+;;;;; Mark Commands
+
+(defvar-local conn-mark-ring-right nil)
+(defvar-local conn-mark-ring-left nil)
+
+(defun conn--push-mark-ring-right (location)
+  (unless (or (seq-contains-p conn-mark-ring-right location #'=)
+              (seq-contains-p conn-mark-ring-left location #'=))
+    (let ((old (nth mark-ring-max conn-mark-ring-right)))
+      (setq conn-mark-ring-right
+            (cons (pcase location
+                    ((pred markerp) (copy-marker location))
+                    ((pred numberp) (conn--create-marker location)))
+                  (take (1- mark-ring-max) conn-mark-ring-right)))
+      (when (and old (not (memq old conn-mark-ring-right)))
+        (set-marker old nil)))))
+
+(defun conn--push-mark-ring-left (location)
+  (unless (or (seq-contains-p conn-mark-ring-left location #'=)
+              (seq-contains-p conn-mark-ring-right location #'=))
+    (let ((old (nth mark-ring-max conn-mark-ring-left)))
+      (setq conn-mark-ring-left
+            (cons (pcase location
+                    ((pred markerp) (copy-marker location))
+                    ((pred numberp) (conn--create-marker location)))
+                  (take (1- mark-ring-max) conn-mark-ring-left)))
+      (when (and old (not (memq old conn-mark-ring-left)))
+        (set-marker old nil)))))
+
+(defun conn-mark-ring-backward ()
+  "Like `pop-to-mark-command' but uses `conn-mark-ring-right'.
+Unfortunately conn adds many uninteresting marks to the `mark-ring',
+so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
+`conn-mark-ring-forward' are provided which attempt to filter out
+uninstersting marks."
+  (interactive)
+  (cond ((null (mark t))
+         (user-error "No mark set in this buffer"))
+        ((null conn-mark-ring-right)
+         (user-error "No marks to unpop"))
+        ((or conn--ephemeral-mark
+             (= (point) (mark t)))
+         (conn--push-mark-ring-left (point))
+         (let ((conn-mark-ring-right conn-mark-ring-right))
+           (push-mark (car conn-mark-ring-right)))
+         (pop conn-mark-ring-right)
+         (goto-char (mark t)))
+        (t
+         (conn--push-mark-ring-left (point))
+         (goto-char (mark t))))
+  (deactivate-mark))
+
+(defun conn-mark-ring-forward ()
+  "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring-right'.
+Unfortunately conn adds many uninteresting marks to the `mark-ring',
+so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
+`conn-mark-ring-forward' are provided which attempt to filter out
+uninstersting marks."
+  (interactive)
+  (cond ((null (mark t))
+         (user-error "No mark set in this buffer"))
+        ((null conn-mark-ring-left)
+         (user-error "No marks to unpop"))
+        ((= (point) (mark t))
+         (push-mark (pop conn-mark-ring-left))
+         (goto-char (mark t)))
+        (t
+         (conn--push-mark-ring-right (point))
+         (goto-char (mark t))))
+  (deactivate-mark))
+
+(defun conn-rectangle-mark ()
+  "Toggle `rectangle-mark-mode'."
+  (interactive)
+  (if (region-active-p)
+      (rectangle-mark-mode 'toggle)
+    (activate-mark)
+    (rectangle-mark-mode)))
+
+(defun conn-toggle-mark-command (&optional arg)
+  "Toggle `mark-active'.
+With a prefix ARG activate `rectangle-mark-mode'."
+  (interactive "P")
+  (cond (arg (conn-rectangle-mark))
+        (mark-active (deactivate-mark))
+        (t (activate-mark))))
+
+(defun conn-set-mark-command (&optional arg)
+  "Toggle `mark-active' and push ephemeral mark at point.
+With a prefix ARG activate `rectangle-mark-mode'.
+Immediately repeating this command pushes a mark."
+  (interactive "P")
+  (cond (arg
+         (rectangle-mark-mode 'toggle))
+        ((eq last-command 'conn-set-mark-command)
+         (if (region-active-p)
+             (progn
+               (push-mark nil t)
+               (deactivate-mark)
+               (message "Mark pushed and deactivated"))
+           (activate-mark)
+           (message "Mark activated")))
+        (t
+         (conn--push-ephemeral-mark)
+         (activate-mark))))
+
+(defun conn-exchange-mark-command (&optional arg)
+  "`exchange-mark-and-point' avoiding activating the mark.
+
+With a prefix ARG `push-mark' without activating it."
+  (interactive "P")
+  (cond (arg
+         (push-mark (point) t nil)
+         (message "Marker pushed"))
+        (t
+         (exchange-point-and-mark (not mark-active)))))
+
+;;;;; Case Commands
+
+(defun conn--apply-region-transform (transform-func)
+  "Apply TRANSFORM-FUNC to region contents.
+Handles rectangular regions."
+  (save-mark-and-excursion
+    (let ((case-fold-search nil))
+      (if (and (fboundp 'apply-on-rectangle)
+               (bound-and-true-p rectangle-mark-mode))
+          (apply-on-rectangle
+           (lambda (start-col end-col)
+             (with-restriction
+                 (+ (point) start-col) (+ (point) end-col)
+               (goto-char (point-min))
+               (funcall transform-func)))
+           (region-beginning) (region-end))
+        (with-restriction
+            (region-beginning) (region-end)
+          (goto-char (point-min))
+          (funcall transform-func))))))
+
+(defun conn--buffer-to-words ()
+  (let ((subword-p (and (boundp 'subword-mode) subword-mode)))
+    (subword-mode 1)
+    (unwind-protect
+        (save-excursion
+          (goto-char (point-min))
+          (while (re-search-forward "\\W+" nil t)
+            (replace-match " "))
+          (goto-char (point-min))
+          (forward-word 1)
+          (while (/= (point) (point-max))
+            (unless (looking-at " ")
+              (insert " "))
+            (forward-word 1))
+          (goto-char (point-min))
+          (delete-horizontal-space)
+          (goto-char (point-max))
+          (delete-horizontal-space))
+      (unless subword-p (subword-mode -1)))))
+
+(defun conn-kebab-case-region ()
+  (interactive)
+  (conn--apply-region-transform
+   (lambda ()
+     (conn--buffer-to-words)
+     (downcase-region (point-min) (point-max))
+     (while (re-search-forward " " nil t)
+       (replace-match "-")))))
+
+(defun conn-capital-snake-case-region ()
+  "Transform region text to Capital_Snake_Case."
+  (interactive)
+  (conn--apply-region-transform
+   (lambda ()
+     (conn--buffer-to-words)
+     (capitalize-region (point-min) (point-max))
+     (while (re-search-forward " " nil t)
+       (replace-match "_")))))
+
+(defun conn-snake-case-region ()
+  "Transform region text to snake_case."
+  (interactive)
+  (conn--apply-region-transform
+   (lambda ()
+     (conn--buffer-to-words)
+     (downcase-region (point-min) (point-max))
+     (while (re-search-forward " " nil t)
+       (replace-match "_")))))
+
+(defun conn-capital-case-region ()
+  "Transform region text to CapitalCase."
+  (interactive)
+  (conn--apply-region-transform
+   (lambda ()
+     (conn--buffer-to-words)
+     (capitalize-region (point-min) (point-max))
+     (while (re-search-forward " " nil t)
+       (replace-match "")))))
+
+(defun conn-camel-case-region ()
+  "Transform region text to camelCase."
+  (interactive)
+  (conn--apply-region-transform
+   (lambda ()
+     (conn--buffer-to-words)
+     (capitalize-region (point-min) (point-max))
+     (downcase-region (point-min) (1+ (point-min)))
+     (goto-char (point-min))
+     (while (re-search-forward " " nil t)
+       (replace-match "")))))
+
+(defun conn-case-to-words-region ()
+  "Transform region text to individual words."
+  (interactive)
+  (conn--apply-region-transform 'conn--buffer-to-words))
+
 ;;;;; Editing Commands
 
 (defun conn-forward-defun (N)
@@ -5451,75 +5654,6 @@ of `conn-recenter-positions'."
   (interactive)
   (with-selected-window (other-window-for-scrolling)
     (conn-recenter-on-region)))
-
-(defvar-local conn-mark-ring-right nil)
-(defvar-local conn-mark-ring-left nil)
-
-(defun conn--push-mark-ring-right (location)
-  (unless (or (seq-contains-p conn-mark-ring-right location #'=)
-              (seq-contains-p conn-mark-ring-left location #'=))
-    (let ((old (nth mark-ring-max conn-mark-ring-right)))
-      (setq conn-mark-ring-right
-            (cons (pcase location
-                    ((pred markerp) (copy-marker location))
-                    ((pred numberp) (conn--create-marker location)))
-                  (take (1- mark-ring-max) conn-mark-ring-right)))
-      (when (and old (not (memq old conn-mark-ring-right)))
-        (set-marker old nil)))))
-
-(defun conn--push-mark-ring-left (location)
-  (unless (or (seq-contains-p conn-mark-ring-left location #'=)
-              (seq-contains-p conn-mark-ring-right location #'=))
-    (let ((old (nth mark-ring-max conn-mark-ring-left)))
-      (setq conn-mark-ring-left
-            (cons (pcase location
-                    ((pred markerp) (copy-marker location))
-                    ((pred numberp) (conn--create-marker location)))
-                  (take (1- mark-ring-max) conn-mark-ring-left)))
-      (when (and old (not (memq old conn-mark-ring-left)))
-        (set-marker old nil)))))
-
-(defun conn-mark-ring-backward ()
-  "Like `pop-to-mark-command' but uses `conn-mark-ring-right'.
-Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
-`conn-mark-ring-forward' are provided which attempt to filter out
-uninstersting marks."
-  (interactive)
-  (cond ((null (mark t))
-         (user-error "No mark set in this buffer"))
-        ((null conn-mark-ring-right)
-         (user-error "No marks to unpop"))
-        ((or conn--ephemeral-mark
-             (= (point) (mark t)))
-         (conn--push-mark-ring-left (point))
-         (let ((conn-mark-ring-right conn-mark-ring-right))
-           (push-mark (car conn-mark-ring-right)))
-         (pop conn-mark-ring-right)
-         (goto-char (mark t)))
-        (t
-         (conn--push-mark-ring-left (point))
-         (goto-char (mark t))))
-  (deactivate-mark))
-
-(defun conn-mark-ring-forward ()
-  "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring-right'.
-Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
-`conn-mark-ring-forward' are provided which attempt to filter out
-uninstersting marks."
-  (interactive)
-  (cond ((null (mark t))
-         (user-error "No mark set in this buffer"))
-        ((null conn-mark-ring-left)
-         (user-error "No marks to unpop"))
-        ((= (point) (mark t))
-         (push-mark (pop conn-mark-ring-left))
-         (goto-char (mark t)))
-        (t
-         (conn--push-mark-ring-right (point))
-         (goto-char (mark t))))
-  (deactivate-mark))
 
 (defvar-local conn--minibuffer-initial-region nil)
 
@@ -5679,101 +5813,6 @@ When called interactively reads STRING with timeout
              (not (eq this-command last-command)))
     (push-mark beg t)))
 
-(defun conn--apply-region-transform (transform-func)
-  "Apply TRANSFORM-FUNC to region contents.
-Handles rectangular regions."
-  (save-mark-and-excursion
-    (let ((case-fold-search nil))
-      (if (and (fboundp 'apply-on-rectangle)
-               (bound-and-true-p rectangle-mark-mode))
-          (apply-on-rectangle
-           (lambda (start-col end-col)
-             (with-restriction
-                 (+ (point) start-col) (+ (point) end-col)
-               (goto-char (point-min))
-               (funcall transform-func)))
-           (region-beginning) (region-end))
-        (with-restriction
-            (region-beginning) (region-end)
-          (goto-char (point-min))
-          (funcall transform-func))))))
-
-(defun conn--buffer-to-words ()
-  (let ((subword-p (and (boundp 'subword-mode) subword-mode)))
-    (subword-mode 1)
-    (unwind-protect
-        (save-excursion
-          (goto-char (point-min))
-          (while (re-search-forward "\\W+" nil t)
-            (replace-match " "))
-          (goto-char (point-min))
-          (forward-word 1)
-          (while (/= (point) (point-max))
-            (unless (looking-at " ")
-              (insert " "))
-            (forward-word 1))
-          (goto-char (point-min))
-          (delete-horizontal-space)
-          (goto-char (point-max))
-          (delete-horizontal-space))
-      (unless subword-p (subword-mode -1)))))
-
-(defun conn-kebab-case-region ()
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (downcase-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "-")))))
-
-(defun conn-capital-snake-case-region ()
-  "Transform region text to Capital_Snake_Case."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (capitalize-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "_")))))
-
-(defun conn-snake-case-region ()
-  "Transform region text to snake_case."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (downcase-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "_")))))
-
-(defun conn-capital-case-region ()
-  "Transform region text to CapitalCase."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (capitalize-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "")))))
-
-(defun conn-camel-case-region ()
-  "Transform region text to camelCase."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (capitalize-region (point-min) (point-max))
-     (downcase-region (point-min) (1+ (point-min)))
-     (goto-char (point-min))
-     (while (re-search-forward " " nil t)
-       (replace-match "")))))
-
-(defun conn-case-to-words-region ()
-  "Transform region text to individual words."
-  (interactive)
-  (conn--apply-region-transform 'conn--buffer-to-words))
-
 (defun conn-append-region (beg end &optional register kill-flag)
   "Appne region from BEG to END to most recent kill.
 Optionally if REGISTER is specified append to REGISTER instead.
@@ -5914,51 +5953,31 @@ associated with that command (see `conn-register-thing')."
                       conn--seperator-history nil t)))
   (set-register register-separator string))
 
-(defun conn-rectangle-mark ()
-  "Toggle `rectangle-mark-mode'."
-  (interactive)
-  (if (region-active-p)
-      (rectangle-mark-mode 'toggle)
-    (activate-mark)
-    (rectangle-mark-mode)))
+;; register-load from consult
+(defun conn-register-load (reg &optional arg)
+  "Do what I mean with a REG.
 
-(defun conn-toggle-mark-command (&optional arg)
-  "Toggle `mark-active'.
-With a prefix ARG activate `rectangle-mark-mode'."
-  (interactive "P")
-  (cond (arg (conn-rectangle-mark))
-        (mark-active (deactivate-mark))
-        (t (activate-mark))))
+For a window configuration, restore it.  For a number or text, insert it.
+For a location, jump to it.  See `jump-to-register' and `insert-register'
+for the meaning of prefix ARG."
+  (interactive
+   (list
+    (register-read-with-preview "Load register: ")
+    current-prefix-arg))
+  (when (use-region-p)
+    (if (bound-and-true-p rectangle-mark-mode)
+        (delete-rectangle (region-beginning) (region-end))
+      (delete-region (region-beginning) (region-end))))
+  (condition-case err
+      (jump-to-register reg arg)
+    (user-error
+     (unless (string-search "access aborted" (error-message-string err))
+       (insert-register reg (not arg))))))
 
-(defun conn-set-mark-command (&optional arg)
-  "Toggle `mark-active' and push ephemeral mark at point.
-With a prefix ARG activate `rectangle-mark-mode'.
-Immediately repeating this command pushes a mark."
-  (interactive "P")
-  (cond (arg
-         (rectangle-mark-mode 'toggle))
-        ((eq last-command 'conn-set-mark-command)
-         (if (region-active-p)
-             (progn
-               (push-mark nil t)
-               (deactivate-mark)
-               (message "Mark pushed and deactivated"))
-           (activate-mark)
-           (message "Mark activated")))
-        (t
-         (conn--push-ephemeral-mark)
-         (activate-mark))))
-
-(defun conn-exchange-mark-command (&optional arg)
-  "`exchange-mark-and-point' avoiding activating the mark.
-
-With a prefix ARG `push-mark' without activating it."
-  (interactive "P")
-  (cond (arg
-         (push-mark (point) t nil)
-         (message "Marker pushed"))
-        (t
-         (exchange-point-and-mark (not mark-active)))))
+(defun conn-unset-register (register)
+  "Unset REGISTER."
+  (interactive (list (register-read-with-preview "Clear register: ")))
+  (set-register register nil))
 
 (defun conn-join-lines-in-region (beg end)
   "`delete-indentation' in region from BEG and END."
@@ -6045,32 +6064,6 @@ With a non-nil prefix arg go `forward-line' by -N instead."
                      (region-active-p)))
         (goto-char (line-beginning-position))
         (setq conn-this-command-thing 'outer-line)))))
-
-;; register-load from consult
-(defun conn-register-load (reg &optional arg)
-  "Do what I mean with a REG.
-
-For a window configuration, restore it.  For a number or text, insert it.
-For a location, jump to it.  See `jump-to-register' and `insert-register'
-for the meaning of prefix ARG."
-  (interactive
-   (list
-    (register-read-with-preview "Load register: ")
-    current-prefix-arg))
-  (when (use-region-p)
-    (if (bound-and-true-p rectangle-mark-mode)
-        (delete-rectangle (region-beginning) (region-end))
-      (delete-region (region-beginning) (region-end))))
-  (condition-case err
-      (jump-to-register reg arg)
-    (user-error
-     (unless (string-search "access aborted" (error-message-string err))
-       (insert-register reg (not arg))))))
-
-(defun conn-unset-register (register)
-  "Unset REGISTER."
-  (interactive (list (register-read-with-preview "Clear register: ")))
-  (set-register register nil))
 
 (defun conn-copy-region (start end &optional register)
   "Copy region between START and END as kill.
@@ -6388,7 +6381,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn-beginning-of-inner-line N)
   (conn-enter-state 'conn-emacs-state))
 
-
 ;;;; WinControl
 
 ;; A simple version of hyperbole's hycontrol-windows
@@ -7043,7 +7035,6 @@ When ARG is nil the root window is used."
       (conn--wincontrol-reflect-window)
       (window-state-put window))))
 
-
 ;;;; Keymaps
 
 (defvar-keymap conn-reb-navigation-repeat-map
@@ -7409,7 +7400,6 @@ When ARG is nil the root window is used."
                             conn--local-minor-mode-maps)
                           emulation-mode-map-alists #'eq))))
 
-
 ;;;; Mode Definition
 
 (define-minor-mode conn-local-mode
@@ -7468,7 +7458,6 @@ When ARG is nil the root window is used."
 
 (provide 'conn)
 
-
 ;;; Load Extensions
 
 (with-eval-after-load 'calc
