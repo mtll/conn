@@ -175,6 +175,11 @@ For the meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
+(defcustom conn-recenter-pulse t
+  "Momentarily highlight region after `conn-recenter-on-region'."
+  :group 'conn
+  :type 'boolean)
+
 (defface conn-mark-face
   '((default (:inherit cursor :background "#b8a2f0"))
     (((background light)) (:inherit cursor :background "#b8a2f0"))
@@ -228,6 +233,11 @@ For the meaning of CONDITION see `buffer-match-p'."
   "List of modes to ignore when searching for dispatch candidates."
   :group 'conn
   :type '(list symbol))
+
+(defcustom conn-completion-region-quote-function 'regexp-quote
+  "Function used to quote region strings for consult search functions."
+  :group 'conn
+  :type 'symbol)
 
 ;;;;; State Variables
 
@@ -1494,7 +1504,9 @@ returned.")
                                 (overlay-start target-overlay)
                                 (overlay-end target-overlay))
                                'face 'conn-read-string-match-face))
-      (conn--dispatch-setup-label-string overlay prop string))))
+      (conn--dispatch-setup-label-string
+       overlay prop string (/= (overlay-start target-overlay)
+                               (overlay-end target-overlay))))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
@@ -1524,7 +1536,9 @@ returned.")
                              (conn--find-label-end
                               (conn-dispatch-label-target-overlay label)
                               new-label))
-               (conn--dispatch-setup-label-string overlay prop new-label))
+               (conn--dispatch-setup-label-string
+                overlay prop new-label (/= (overlay-start target-overlay)
+                                           (overlay-end target-overlay))))
              label)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
@@ -3586,7 +3600,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     line-prefix line-pfx
                     wrap-prefix wrap-pfx)))))
 
-(defun conn--dispatch-setup-label-string (overlay display-property display-string)
+(defun conn--dispatch-setup-label-string (overlay display-property display-string
+                                                  &optional pad-both-ends)
   (if (not (eq display-property 'display))
       (overlay-put overlay display-property display-string)
     (overlay-put overlay display-property nil)
@@ -3602,10 +3617,26 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                    (overlay-end overlay)))))
                         0)))
       (when (eq display-property 'display)
-        (overlay-put overlay 'after-string
-                     (propertize
-                      " "
-                      'display `(space :width (,pixels))))))))
+        (if (not pad-both-ends)
+            (overlay-put overlay 'after-string
+                         (propertize
+                          " "
+                          'display `(space :width (,pixels))
+                          ;; Should the padding have any special face?
+                          ;; 'face 'conn-dispatch-label-face
+                          ))
+          (overlay-put overlay 'before-string
+                       (propertize
+                        " "
+                        'display `(space :width (,(floor pixels 2)))
+                        ;; Should the padding have any special face?
+                        'face 'conn-dispatch-label-face))
+          (overlay-put overlay 'after-string
+                       (propertize
+                        " "
+                        'display `(space :width (,(ceiling pixels 2)))
+                        ;; Should the padding have any special face?
+                        'face 'conn-dispatch-label-face)))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels (mapc #'conn-label-delete labels)))
@@ -3622,7 +3653,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                          'display)))
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
-            (conn--dispatch-setup-label-string ov prop string)
+            (conn--dispatch-setup-label-string
+             ov prop string (/= (overlay-start p)
+                                (overlay-end p)))
             (push (make-conn-dispatch-label :string string
                                             :overlay ov
                                             :prop prop
@@ -4806,6 +4839,7 @@ Expansions and contractions are provided by functions in
    :smatch t))
 
 (defun conn-push-region-to-narrow-register (beg end register)
+  "Prepend region to narrow register."
   (interactive
    (list (region-beginning)
          (region-end)
@@ -4825,6 +4859,7 @@ Expansions and contractions are provided by functions in
        (set-register register)))))
 
 (defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register outer)
+  "Prepend thing regions to narrow register."
   (interactive
    (append (conn-read-thing-mover "Mover")
            (list
@@ -5372,11 +5407,6 @@ Interactively `region-beginning' and `region-end'."
     (delete-rectangle (region-beginning) (region-end))
     (yank-rectangle)))
 
-(defcustom conn-recenter-pulse t
-  "Momentarily highlight region after `conn-recenter-on-region'."
-  :group 'conn
-  :type 'boolean)
-
 (defvar conn-recenter-positions
   (list 'center 'top 'bottom)
   "Cycle order for `conn-recenter-on-region'.")
@@ -5497,11 +5527,6 @@ uninstersting marks."
   (setq conn--minibuffer-initial-region
         (with-minibuffer-selected-window
           (ignore-errors (cons (region-beginning) (region-end))))))
-
-(defcustom conn-completion-region-quote-function 'regexp-quote
-  "Function used to quote region strings for consult search functions."
-  :group 'conn
-  :type 'symbol)
 
 (defun conn-yank-region-to-minibuffer (&optional quote-function)
   "Yank region from `minibuffer-selected-window' into minibuffer."
@@ -6184,20 +6209,20 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
-    (`((,beg . ,end) . ,_)
-     (pcase-let* ((offset (- (point) end))
-                  (mark-offset (- (point) (mark t)))
-                  (region (buffer-substring-no-properties beg end)))
+    ((and `((,beg . ,end) . ,_)
+          (let offset (- (point) end))
+          (let mark-offset (- (point) (mark t)))
+          (let region (buffer-substring-no-properties beg end)))
+     (goto-char end)
+     (comment-or-uncomment-region beg end)
+     (setq end (if (bolp) (point) (line-end-position)))
+     (dotimes (_ N)
        (goto-char end)
-       (comment-or-uncomment-region beg end)
-       (setq end (if (bolp) (point) (line-end-position)))
-       (dotimes (_ N)
-         (goto-char end)
-         (newline)
-         (insert region)
-         (setq end (point)))
-       (goto-char (+ (point) offset))
-       (conn--push-ephemeral-mark (- (point) mark-offset))))))
+       (newline)
+       (insert region)
+       (setq end (point)))
+     (goto-char (+ (point) offset))
+     (conn--push-ephemeral-mark (- (point) mark-offset)))))
 
 ;;;;; Window Commands
 
@@ -6495,8 +6520,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[conn-wincontrol-scroll-down]: "
    "scroll"))
 
-;; TODO: what should be done with the arg stuff?
-;;       only persist on certain commands maybe?
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
