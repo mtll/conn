@@ -3323,6 +3323,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn--last-dispatch-command nil)
 
+(defvar conn-default-label-padding-func 'conn--equal-padding)
+
 (defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
 
@@ -3607,6 +3609,18 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 " "
                 'display `(space :width (,pixels)))))
 
+(defun conn--equal-padding (overlay pixels)
+  (overlay-put overlay 'before-string
+               (propertize
+                " "
+                'display `(space :width (,(floor pixels 2)))
+                'face 'conn-dispatch-label-face))
+  (overlay-put overlay 'after-string
+               (propertize
+                " "
+                'display `(space :width (,(ceiling pixels 2)))
+                'face 'conn-dispatch-label-face)))
+
 (defun conn--dispatch-setup-label-string (overlay display-property display-string
                                                   &optional padding-function)
   (if (not (eq display-property 'display))
@@ -3626,16 +3640,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (when (eq display-property 'display)
         (if padding-function
             (funcall padding-function overlay pixels)
-          (overlay-put overlay 'before-string
-                       (propertize
-                        " "
-                        'display `(space :width (,(floor pixels 2)))
-                        'face 'conn-dispatch-label-face))
-          (overlay-put overlay 'after-string
-                       (propertize
-                        " "
-                        'display `(space :width (,(ceiling pixels 2)))
-                        'face 'conn-dispatch-label-face)))))))
+          (funcall conn-default-label-padding-func overlay pixels))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels (mapc #'conn-label-delete labels)))
