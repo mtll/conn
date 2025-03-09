@@ -518,8 +518,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 (defmacro conn--protected-let (var-forms &rest body)
   (declare (indent 1))
   (cl-with-gensyms (success)
-    `(let ((,success nil)
-           ,@(mapcar (lambda (form) (car form)) var-forms))
+    `(let* ((,success nil)
+            ,@(mapcar (lambda (form) (car form)) var-forms))
        (unwind-protect
            (prog1
                ,(macroexp-progn body)
@@ -1063,8 +1063,6 @@ and return it."
                 ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                            collect (conn-get-local-map parent))))))))
 
-;; FIXME: Putting the code to regenerate the keymaps in the keymap
-;; getter functions seems ugly.
 (defun conn--regenerate-maps ()
   (dolist (state conn-states)
     (setf (alist-get state conn--state-maps)
