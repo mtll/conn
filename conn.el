@@ -56,7 +56,7 @@
 
 (defvar-local conn--hide-mark-cursor nil)
 
-(defvar conn-dispatch-target-finder-default 'conn--dispatch-chars
+(defvar conn-dispatch-target-finder-default 'conn--dispatch-2-chars
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -1648,6 +1648,29 @@ Optionally the overlay may have an associated THING."
             (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                               conn-read-string-timeout)))
               (setq string (concat string (char-to-string next-char)))
+              (mapc #'delete-overlay overlays)
+              (setq overlays (conn--string-preview-overlays string dir all-windows)))
+            (message nil)
+            (setq success t)
+            (cons string overlays))
+        (unless success
+          (mapc #'delete-overlay overlays))))))
+
+(defun conn--read-n-chars (N &optional dir all-windows)
+  (cl-assert (> N 0))
+  (conn--with-input-method
+    (let* ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
+           (string (char-to-string (read-char prompt t)))
+           (overlays (conn--string-preview-overlays string dir all-windows))
+           (success nil))
+      (unwind-protect
+          (progn
+            (dotimes (_ (1- N))
+              (thread-last
+                (read-char (format (concat prompt "%s") string) t)
+                (char-to-string)
+                (concat string)
+                (setq string))
               (mapc #'delete-overlay overlays)
               (setq overlays (conn--string-preview-overlays string dir all-windows)))
             (message nil)
@@ -4293,6 +4316,11 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
            when ovs return ovs
            do (message "(no matches)")))
 
+(defun conn--dispatch-2-chars ()
+  (cl-loop for (_ . ovs) = (conn--read-n-chars 2 nil t)
+           when ovs return ovs
+           do (message "(no matches)")))
+
 (defun conn--dispatch-all-things-1 (thing)
   (let ((last-point (point))
         ovs)
@@ -4640,6 +4668,12 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
             (goto-char (overlay-start target))))
       (mapc #'conn-label-delete labels)
       (mapc #'delete-overlay matches))))
+
+(defun conn-goto-char-2 ()
+  (interactive)
+  (conn-dispatch-on-things nil nil
+                           'conn--dispatch-2-chars
+                           'conn-dispatch-jump nil))
 
 ;;;; Expand Region
 
@@ -7244,6 +7278,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "," 'conn-goto-char-2
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
