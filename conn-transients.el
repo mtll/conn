@@ -21,7 +21,10 @@
 
 (require 'conn)
 (require 'transient)
-(require 'sort)
+
+;;;; Declarations
+
+(defvar sort-fold-case)
 
 ;;;; Transient Classes
 
@@ -1434,7 +1437,10 @@ apply to each contiguous component of the region."
     [ ("f" "case fold" conn--case-fold-infix)
       ("n" "sort numeric fields" sort-numeric-fields)
       ("p" "sort paragraphs" sort-paragraphs)
-      ("r" "sort regexp fields" sort-regexp-fields)]])
+      ("r" "sort regexp fields" sort-regexp-fields)]]
+  (interactive)
+  (require 'sort)
+  (transient-setup 'conn-sort-prefix))
 
 ;;;; Case Prefix
 
