@@ -939,6 +939,20 @@ in STATE and return it."
   (or (get mode :conn-mode-things)
       (put mode :conn-mode-things (make-sparse-keymap))))
 
+(defun conn--shallow-copy-keymap (keymap)
+  (let (new-keymap)
+    (while keymap
+      (pcase (pop keymap)
+        ((and `(keymap . ,_) map)
+         (push map new-keymap))
+        ((and `(remap . ,_) map)
+         (push (conn--shallow-copy-keymap map)
+               new-keymap))
+        (`(,car . ,cdr)
+         (push (cons car cdr) new-keymap))
+        (item (push item new-keymap))))
+    (nreverse new-keymap)))
+
 (defconst conn--keymap-sentinel (make-symbol "sentinel")
   "Sentinel marking a composed state keymap.
 
@@ -968,7 +982,7 @@ the naked state keymap and will need to be regenerated.")
   (cl-check-type state conn-state)
   (cl-assert (keymapp keymap))
   (setf (cdr (conn-get-state-map state))
-        (copy-alist (cdr keymap))))
+        (conn--shallow-copy-keymap (cdr keymap))))
 
 (gv-define-setter conn-get-state-map (keymap state)
   `(conn-set-state-map ,state ,keymap))
@@ -1036,7 +1050,7 @@ in STATE and return it."
   (cl-check-type state conn-state)
   (cl-assert (keymapp keymap))
   (setf (cdr (conn-get-mode-map state mode))
-        (copy-alist (cdr keymap))))
+        (conn--shallow-copy-keymap (cdr keymap))))
 
 (gv-define-setter conn-get-mode-map (keymap state mode)
   `(conn-set-mode-map ,state ,mode ,keymap))
