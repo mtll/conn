@@ -1505,8 +1505,8 @@ returned.")
                                 (overlay-end target-overlay))
                                'face 'conn-read-string-match-face))
       (conn--dispatch-setup-label-string
-       overlay prop string (/= (overlay-start target-overlay)
-                               (overlay-end target-overlay))))))
+       overlay prop string
+       (overlay-get target-overlay 'padding-function)))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
@@ -1537,8 +1537,8 @@ returned.")
                               (conn-dispatch-label-target-overlay label)
                               new-label))
                (conn--dispatch-setup-label-string
-                overlay prop new-label (/= (overlay-start target-overlay)
-                                           (overlay-end target-overlay))))
+                overlay prop new-label
+                (overlay-get target-overlay 'padding-function)))
              label)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
@@ -1588,7 +1588,7 @@ labels after each one."
                        (when-let* ((l (conn-label-narrow label c)))
                          (push l next))))))))
 
-(defun conn--make-target-overlay (pt length &optional thing)
+(defun conn--make-target-overlay (pt length &optional thing padding-function)
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
@@ -1606,6 +1606,7 @@ Optionally the overlay may have an associated THING."
                                                  (overlay-end ov))
                                'face 'conn-read-string-match-face)))
     (overlay-put ov 'window (selected-window))
+    (overlay-put ov 'padding-function padding-function)
     ov))
 
 (defun conn--get-dispatch-windows (all-windows)
@@ -3600,8 +3601,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     line-prefix line-pfx
                     wrap-prefix wrap-pfx)))))
 
+(defun conn--alignment-padding (overlay pixels)
+  (overlay-put overlay 'after-string
+               (propertize
+                " "
+                'display `(space :width (,pixels)))))
+
 (defun conn--dispatch-setup-label-string (overlay display-property display-string
-                                                  &optional pad-both-ends)
+                                                  &optional padding-function)
   (if (not (eq display-property 'display))
       (overlay-put overlay display-property display-string)
     (overlay-put overlay display-property nil)
@@ -3617,25 +3624,17 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                    (overlay-end overlay)))))
                         0)))
       (when (eq display-property 'display)
-        (if (not pad-both-ends)
-            (overlay-put overlay 'after-string
-                         (propertize
-                          " "
-                          'display `(space :width (,pixels))
-                          ;; Should the padding have any special face?
-                          ;; 'face 'conn-dispatch-label-face
-                          ))
+        (if padding-function
+            (funcall padding-function overlay pixels)
           (overlay-put overlay 'before-string
                        (propertize
                         " "
                         'display `(space :width (,(floor pixels 2)))
-                        ;; Should the padding have any special face?
                         'face 'conn-dispatch-label-face))
           (overlay-put overlay 'after-string
                        (propertize
                         " "
                         'display `(space :width (,(ceiling pixels 2)))
-                        ;; Should the padding have any special face?
                         'face 'conn-dispatch-label-face)))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
@@ -3654,8 +3653,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
             (conn--dispatch-setup-label-string
-             ov prop string (/= (overlay-start p)
-                                (overlay-end p)))
+             ov prop string (overlay-get p 'padding-function))
             (push (make-conn-dispatch-label :string string
                                             :overlay ov
                                             :prop prop
@@ -4434,7 +4432,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                        (<= (+ (point) (window-hscroll)) (line-end-position))
                        (goto-char (+ (point) (window-hscroll)))
                        (not (invisible-p (point))))
-              (push (conn--make-target-overlay (point) 0) ovs))
+              (push (conn--make-target-overlay
+                     (point) 0 nil 'conn--alignment-padding)
+                    ovs))
             (while (/= (point) (point-max))
               (forward-line)
               (when (and (bolp)
@@ -4449,7 +4449,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                       (overlay-put ov 'after-string
                                    (propertize " " 'display '(space :width 0)))
                       (push ov ovs))
-                  (push (conn--make-target-overlay (point) 0) ovs))))))))))
+                  (push (conn--make-target-overlay
+                         (point) 0 nil 'conn--alignment-padding)
+                        ovs))))))))))
 
 (defun conn--dispatch-lines-end ()
   (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
