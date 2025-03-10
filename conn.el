@@ -1970,8 +1970,6 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                             t))
                finally return regions))))
 
-(defvar conn--current-read-mover-map nil)
-
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
 
@@ -3431,8 +3429,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  (list command-name "" (concat thing binding)))))))
 
 (defconst conn--dispatch-request-quit (make-symbol "req-quit"))
-
-(defvar conn--current-dispatch-map nil)
 
 (defun conn--dispatch-read-thing (&optional default-action continuation)
   (pcase-let*
