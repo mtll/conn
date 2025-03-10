@@ -2344,7 +2344,7 @@ Your options are: \\<query-replace-map>
       (user-error "Not defining or executing kbd macro"))
   (let ((msg (substitute-command-keys
 	      "Proceed with macro?\\<query-replace-map>\
- (\\[act], \\[skip], \\[exit], \\[recenter], \\[edit], \\[automatic])")))
+ (\\[act] act, \\[skip] skip, \\[exit] exit, \\[recenter] recenter, \\[edit] edit, \\[automatic] auto)")))
     (cond
      (flag
       (let (executing-kbd-macro defining-kbd-macro)
