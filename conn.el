@@ -6296,10 +6296,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "Prompt for window and swap current window and other window."
   (interactive
    (list (conn--prompt-for-window
-          (remove (selected-window) (conn--get-windows nil 'nomini 'visible)))))
-  (if window
-      (window-swap-states nil window)
-    (user-error "No other visible windows")))
+          (conn--get-windows nil 'nomini 'visible))))
+  (unless (eq window (selected-window))
+    (if window
+        (window-swap-states nil window)
+      (user-error "No other visible windows"))))
 
 (defun conn-throw-buffer ()
   (interactive)
@@ -6315,10 +6316,11 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-yank-window (window)
   (interactive
    (list (conn--prompt-for-window
-          (remove (selected-window) (conn--get-windows nil 'nomini 'visible)))))
-  (if window
-      (save-selected-window (window-swap-states nil window))
-    (user-error "No other visible windows")))
+          (conn--get-windows nil 'nomini 'visible))))
+  (unless (eq window (selected-window))
+    (if window
+        (save-selected-window (window-swap-states nil window))
+      (user-error "No other visible windows"))))
 
 ;;;;; Transition Functions
 
@@ -6907,7 +6909,7 @@ When called interactively N is `last-command-event'."
 (defun conn-goto-window (window)
   (interactive
    (list (conn--prompt-for-window
-          (remove (selected-window) (conn--get-windows nil 'nomini 'visible)))))
+          (conn--get-windows nil 'nomini 'visible))))
   (select-window window))
 
 (defun conn-wincontrol-zoom-in (arg)
