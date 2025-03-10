@@ -1225,7 +1225,7 @@ A zero means repeat until error."
       ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
   [ :if conn--in-kbd-macro-p
     [ "Commands"
-      ("q" "Query" kbd-macro-query)
+      ("q" "Query" conn-kapply-kbd-macro-query)
       ("d" "Redisplay" kmacro-redisplay)]
     [ :description conn--kmacro-counter-display
       ("i" "Insert Counter" kmacro-insert-counter)

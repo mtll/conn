@@ -2243,14 +2243,12 @@ is read."
 
 (defun conn--push-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
-              (null conn-local-mode)
               (null (marker-position (mark-marker))))
     (conn--push-mark-ring-right (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--pop-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
-              (null conn-local-mode)
               (null (marker-position (mark-marker))))
     (conn--push-mark-ring-left (mark-marker)))
   (setq conn--ephemeral-mark t))
@@ -2344,43 +2342,44 @@ Your options are: \\<query-replace-map>
   (or executing-kbd-macro
       defining-kbd-macro
       (user-error "Not defining or executing kbd macro"))
-  (cond
-   (flag
-    (let (executing-kbd-macro defining-kbd-macro)
-      (recursive-edit)))
-   ((not executing-kbd-macro))
-   ((not conn--kapply-automatic-flag)
-    (cl-loop
-     with msg = (substitute-command-keys
-                 "Proceed with macro?\\<query-replace-map>\
- (\\[act], \\[skip], \\[exit], \\[recenter], \\[edit], \\[automatic]) ")
-     do (pcase (let ((executing-kbd-macro nil)
-                     (defining-kbd-macro nil))
-                 (message "%s" msg)
-                 (lookup-key query-replace-map (vector (read-event))))
-          ('act (cl-return))
-          ('skip
-           (setq executing-kbd-macro "")
-           (cl-return))
-          ('exit
-           (setq executing-kbd-macro t)
-           (cl-return))
-          ('recenter
-           (recenter nil))
-          ('edit
-           (let (executing-kbd-macro defining-kbd-macro)
-             (recursive-edit)))
-          ('quit
-           (setq quit-flag t)
-           (cl-return))
-          ('automatic
-           (setq conn--kapply-automatic-flag t)
-           (cl-return))
-          ('help
-           (with-output-to-temp-buffer "*Help*"
-             (princ
-              (substitute-command-keys
-               "Specify how to proceed with keyboard macro execution.
+  (let ((msg (substitute-command-keys
+	      "Proceed with macro?\\<query-replace-map>\
+ (\\[act], \\[skip], \\[exit], \\[recenter], \\[edit], \\[automatic])")))
+    (cond
+     (flag
+      (let (executing-kbd-macro defining-kbd-macro)
+        (recursive-edit)))
+     ((not executing-kbd-macro))
+     ((not conn--kapply-automatic-flag)
+      (catch 'end
+        (while t
+          (pcase (let ((executing-kbd-macro nil)
+                       (defining-kbd-macro nil))
+                   (message "%s" msg)
+                   (lookup-key query-replace-map (vector (read-event))))
+            ('act (throw 'end nil))
+            ('skip
+              (setq executing-kbd-macro "")
+              (throw 'end nil))
+            ('exit
+              (setq executing-kbd-macro t)
+              (throw 'end nil))
+            ('recenter
+              (recenter nil))
+            ('edit
+              (let (executing-kbd-macro defining-kbd-macro)
+                (recursive-edit)))
+            ('quit
+              (setq quit-flag t)
+              (throw 'end nil))
+            ('automatic
+              (setq conn--kapply-automatic-flag t)
+              (throw 'end nil))
+            ('help
+              (with-output-to-temp-buffer "*Help*"
+                (princ
+                 (substitute-command-keys
+                  "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Finish this iteration normally and continue with the next.
 \\[skip]	Skip the rest of this iteration, and start the next.
@@ -2388,9 +2387,9 @@ Possibilities: \\<query-replace-map>
 \\[recenter]	Redisplay the screen, then ask again.
 \\[edit]	Enter recursive edit; ask again when you exit from that.
 \\[automatic]   Apply keyboard macro to rest."))
-             (with-current-buffer standard-output
-               (help-mode))))
-          (_ (ding)))))))
+                (with-current-buffer standard-output
+                  (help-mode))))
+            (_ (ding)))))))))
 
 (defun conn--kapply-preview-overlays (regions &optional face)
   (let* ((nearest (pcase-lambda (`(,b1 . ,e1) `(,b2 . ,e2))
@@ -6111,7 +6110,8 @@ associated with that command (see `conn-register-thing')."
               (prefix-numeric-value current-prefix-arg))
             t)
            (list t)))
-  (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
+  (pcase-let ((`((,beg . ,end) . ,_)
+               (conn-bounds-of-command thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed indirect"))))
