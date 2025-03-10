@@ -1765,8 +1765,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn--prompt-for-window (windows &optional dedicated)
   (when (or (and dedicated windows)
             (setq windows (seq-remove 'window-dedicated-p windows)))
-    (if (length= windows 1)
-        (car windows)
+    (cond
+     ((length= windows 1)
+      nil)
+     ((length= windows 2)
+      (if (eq (selected-window) (car windows))
+          (cadr windows)
+        (car windows)))
+     (t
       (let ((window-state
              (cl-loop for win in windows
                       collect (list (window-point win)
@@ -1784,7 +1790,7 @@ Returns a cons of (STRING . OVERLAYS)."
                    do (progn (set-window-point win pt)
                              (set-window-hscroll win hscroll)
                              (set-window-vscroll win vscroll)))
-          (mapc #'conn-label-delete labels))))))
+          (mapc #'conn-label-delete labels)))))))
 
 ;;;; Read Things
 
