@@ -3164,7 +3164,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
  'list 'conn-continuous-thing-handler
  'forward-list 'backward-list)
 
-(defun conn--list-mark-handler (beg)
+(defun conn--up-list-mark-handler (beg)
   (condition-case _err
       (cond ((> (point) beg)
              (save-excursion
@@ -3177,17 +3177,27 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (scan-error nil)))
 
 (conn-register-thing-commands
- 'list 'conn--list-mark-handler
+ 'list 'conn--up-list-mark-handler
  'up-list 'backward-up-list)
 
 (defun conn--down-list-mark-handler (_beg)
   (condition-case _err
-      (pcase (bounds-of-thing-at-point 'list)
-        (`(,_ . ,end)
-         (save-excursion
-           (goto-char end)
-           (down-list -1)
-           (conn--push-ephemeral-mark (point)))))
+      (cond ((= (point) (save-excursion
+                          (up-list 1 t t)
+                          (down-list -1 t)
+                          (point)))
+             (conn--push-ephemeral-mark (save-excursion
+                                          (up-list -1 t t)
+                                          (down-list 1 t)
+                                          (point))))
+            ((= (point) (save-excursion
+                          (up-list -1 t t)
+                          (down-list 1 t)
+                          (point)))
+             (conn--push-ephemeral-mark (save-excursion
+                                          (up-list 1 t t)
+                                          (down-list -1 t)
+                                          (point)))))
     (scan-error nil)))
 
 (conn-register-thing-commands
@@ -4966,7 +4976,25 @@ Expansions and contractions are provided by functions in
 
 ;;;; Commands
 
-;;;;; Replace
+(defun conn-end-of-list ()
+  (interactive)
+  (up-list 1 t t)
+  (down-list -1 t))
+
+(defun conn-beginning-of-list ()
+  (interactive)
+  (backward-up-list nil t t)
+  (down-list 1 t))
+
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-command-state 'prog-mode)
+  "{" 'conn-beginning-of-list
+  "}" 'conn-end-of-list)
+
+(conn-register-thing-commands
+ 'list 'conn--down-list-mark-handler
+ 'conn-beginning-of-list
+ 'conn-end-of-list)
 
 ;;;;; Replace
 
