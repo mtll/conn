@@ -1763,34 +1763,34 @@ Returns a cons of (STRING . OVERLAYS)."
               (window-list-1 window minibuffer all-frames)))
 
 (defun conn--prompt-for-window (windows &optional dedicated)
-  (when (or (and dedicated windows)
-            (setq windows (seq-remove 'window-dedicated-p windows)))
-    (cond
-     ((length= windows 1)
-      nil)
-     ((length= windows 2)
-      (if (eq (selected-window) (car windows))
-          (cadr windows)
-        (car windows)))
-     (t
-      (let ((window-state
-             (cl-loop for win in windows
-                      collect (list (window-point win)
-                                    (window-vscroll win)
-                                    (window-hscroll win))))
-            (labels (conn--create-window-labels
-                     (funcall conn-label-string-generator
-                              (length (conn--get-windows nil 'nomini t))
-                              'conn-window-prompt-face)
-                     windows)))
-        (unwind-protect
-            (conn-label-select labels)
-          (cl-loop for win in windows
-                   for (pt vscroll hscroll) in window-state
-                   do (progn (set-window-point win pt)
-                             (set-window-hscroll win hscroll)
-                             (set-window-vscroll win vscroll)))
-          (mapc #'conn-label-delete labels)))))))
+  (unless dedicated
+    (setq windows (seq-remove 'window-dedicated-p windows)))
+  (cond
+   ((length< windows 2)
+    nil)
+   ((length= windows 2)
+    (if (eq (selected-window) (car windows))
+        (cadr windows)
+      (car windows)))
+   (t
+    (let ((window-state
+           (cl-loop for win in windows
+                    collect (list (window-point win)
+                                  (window-vscroll win)
+                                  (window-hscroll win))))
+          (labels (conn--create-window-labels
+                   (funcall conn-label-string-generator
+                            (length (conn--get-windows nil 'nomini t))
+                            'conn-window-prompt-face)
+                   windows)))
+      (unwind-protect
+          (conn-label-select labels)
+        (cl-loop for win in windows
+                 for (pt vscroll hscroll) in window-state
+                 do (progn (set-window-point win pt)
+                           (set-window-hscroll win hscroll)
+                           (set-window-vscroll win vscroll)))
+        (mapc #'conn-label-delete labels))))))
 
 ;;;; Read Things
 
@@ -2474,7 +2474,7 @@ Possibilities: \\<query-replace-map>
          (pcase-dolist (`(,beg . ,end) matches)
            (set-marker beg nil)
            (set-marker end nil)))
-        (_
+        ((or :record :loop)
          (conn--kapply-advance-region (pop matches)))))))
 
 (defun conn--kapply-thing-iterator (thing beg end &optional order skip-empty nth)
@@ -2526,7 +2526,7 @@ Possibilities: \\<query-replace-map>
         (:record
          (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region))
          (conn--kapply-advance-region (pop regions)))
-        (_
+        (:loop
          (when overlays
            (mapc #'delete-overlay overlays)
            (setq overlays nil))
@@ -2548,7 +2548,7 @@ Possibilities: \\<query-replace-map>
         (:finalize
          (dolist (pt points)
            (set-marker pt nil)))
-        (_
+        ((or :record :loop)
          (when-let* ((pt (pop points)))
            (conn--kapply-advance-region (cons pt pt))))))))
 
@@ -2599,7 +2599,7 @@ Possibilities: \\<query-replace-map>
                     finally return cont)
                  (delete-overlay hl)))
            (conn--kapply-advance-region (pop matches))))
-        (_
+        (:loop
          (when overlays
            (mapc #'delete-overlay overlays)
            (setq overlays nil))
@@ -2616,7 +2616,7 @@ Possibilities: \\<query-replace-map>
                (cancel-change-group handle)
              (accept-change-group handle)
              (undo-amalgamate-change-group handle))))
-        (_
+        ((or :record :loop)
          (prog1
              (funcall iterator state)
            (unless (or (alist-get (current-buffer) undo-handles)
@@ -2640,7 +2640,7 @@ Possibilities: \\<query-replace-map>
            (accept-change-group handle)
            (undo-amalgamate-change-group handle))
          (funcall iterator state))
-        (_
+        (:loop
          (when handle
            (accept-change-group handle)
            (undo-amalgamate-change-group handle))
@@ -2669,7 +2669,7 @@ Possibilities: \\<query-replace-map>
                  (set-marker-insertion-type pt t)
                  (cons pt (save-mark-and-excursion--save))))
          (funcall iterator state))
-        (_
+        (:loop
          (prog1 (funcall iterator state)
            (unless (alist-get (current-buffer) saved-excursions)
              (setf (alist-get (current-buffer) saved-excursions)
@@ -2685,7 +2685,7 @@ Possibilities: \\<query-replace-map>
                     (length> buffers 1))
            (ibuffer t "*Kapply Ibuffer*"
                     `((predicate . (memq (current-buffer) ',buffers))))))
-        (_
+        ((or :record :loop)
          (prog1 (funcall iterator state)
            (unless (memq (current-buffer) buffers)
              (push (current-buffer) buffers))))))))
@@ -2701,7 +2701,7 @@ Possibilities: \\<query-replace-map>
              (widen)
              (narrow-to-region (or beg (point-min))
                                (or end (point-max))))))
-        (_
+        ((or :record :loop)
          (prog1
              (funcall iterator state)
            (pcase (alist-get (current-buffer) kapply-saved-restrictions)
@@ -2736,7 +2736,7 @@ Possibilities: \\<query-replace-map>
                (with-current-buffer buf
                  (funcall state)
                  (setq conn-previous-state prev-state)))))
-          (_
+          ((or :record :loop)
            (when conn-local-mode
              (unless (alist-get (current-buffer) buffer-states)
                (setf (alist-get (current-buffer) buffer-states)
@@ -2765,7 +2765,7 @@ Possibilities: \\<query-replace-map>
         (:finalize
          (funcall iterator state)
          (set-window-configuration wconf))
-        (_
+        ((or :record :loop)
          (unless wconf (setq wconf (current-window-configuration)))
          (funcall iterator state))))))
 
