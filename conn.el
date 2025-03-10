@@ -3648,24 +3648,28 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (overlay-put overlay 'after-string
                (propertize
                 " "
-                'display `(space :width (,width) :height (,height)))))
+                'display `(space :width (,width)
+                                 :height (,height)))))
 
 (defun conn--left-justify-padding (overlay width height)
   (overlay-put overlay 'before-string
                (propertize
                 " "
-                'display `(space :width (,width) :height (,height)))))
+                'display `(space :width (,width)
+                                 :height (,height)))))
 
 (defun conn--centered-padding (overlay width height)
   (overlay-put overlay 'before-string
                (propertize
                 " "
-                'display `(space :width (,(floor width 2)) :height (,height))
+                'display `(space :width (,(floor width 2))
+                                 :height (,height))
                 'face 'conn-dispatch-label-face))
   (overlay-put overlay 'after-string
                (propertize
                 " "
-                'display `(space :width (,(ceiling width 2)) :height (,height))
+                'display `(space :width (,(ceiling width 2))
+                                 :height (,height))
                 'face 'conn-dispatch-label-face)))
 
 (defun conn--dispatch-setup-label-string (overlay display-property display-string
@@ -3688,9 +3692,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  (padding-width (max (- width display-width) 0)))
       (if padding-function
           (funcall padding-function overlay padding-width
-                   (when (/= height display-height) height))
+                   (when (/= height display-height) (1- height)))
         (funcall conn-default-label-padding-func overlay padding-width
-                 (when (/= height display-height) height))))))
+                 (when (/= height display-height) (1- height)))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
