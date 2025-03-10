@@ -5577,7 +5577,8 @@ Handles rectangular regions."
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-transpose-state)
   "i" 'conn-backward-line
-  "k" 'forward-line)
+  "k" 'forward-line
+  "u" 'forward-symbol)
 
 (defun conn-transpose-regions (mover arg)
   (interactive
