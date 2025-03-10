@@ -1641,45 +1641,39 @@ Optionally the overlay may have an associated THING."
 
 (defun conn--read-string-with-timeout-1 (&optional dir all-windows)
   (conn--with-input-method
-    (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-           (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir all-windows))
-           (success nil))
-      (unwind-protect
-          (progn
-            (while-let ((next-char (read-char (format (concat prompt "%s") string) t
-                                              conn-read-string-timeout)))
-              (setq string (concat string (char-to-string next-char)))
-              (mapc #'delete-overlay overlays)
-              (setq overlays (conn--string-preview-overlays string dir all-windows)))
-            (message nil)
-            (setq success t)
-            (cons string overlays))
-        (unless success
-          (mapc #'delete-overlay overlays))))))
+    (conn--protected-let
+        (((prompt (propertize "string: " 'face 'minibuffer-prompt)))
+         ((string (char-to-string (read-char prompt t))))
+         ((overlays (conn--string-preview-overlays string dir all-windows))
+          (mapc #'delete-overlay overlays))
+         ((success nil)))
+      (while-let ((next-char (read-char (format (concat prompt "%s") string) t
+                                        conn-read-string-timeout)))
+        (setq string (concat string (char-to-string next-char)))
+        (mapc #'delete-overlay overlays)
+        (setq overlays (conn--string-preview-overlays string dir all-windows)))
+      (message nil)
+      (cons string overlays))))
 
 (defun conn--read-n-chars (N &optional dir all-windows)
   (cl-assert (> N 0))
   (conn--with-input-method
-    (let* ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
-           (string (char-to-string (read-char prompt t)))
-           (overlays (conn--string-preview-overlays string dir all-windows))
-           (success nil))
-      (unwind-protect
-          (progn
-            (dotimes (_ (1- N))
-              (thread-last
-                (read-char (format (concat prompt "%s") string) t)
-                (char-to-string)
-                (concat string)
-                (setq string))
-              (mapc #'delete-overlay overlays)
-              (setq overlays (conn--string-preview-overlays string dir all-windows)))
-            (message nil)
-            (setq success t)
-            (cons string overlays))
-        (unless success
-          (mapc #'delete-overlay overlays))))))
+    (conn--protected-let
+        (((prompt (propertize "chars: " 'face 'minibuffer-prompt)))
+         ((string (char-to-string (read-char prompt t))))
+         ((overlays (conn--string-preview-overlays string dir all-windows))
+          (mapc #'delete-overlays overlays))
+         ((success nil)))
+      (dotimes (_ (1- N))
+        (thread-last
+          (read-char (format (concat prompt "%s") string) t)
+          (char-to-string)
+          (concat string)
+          (setq string))
+        (mapc #'delete-overlay overlays)
+        (setq overlays (conn--string-preview-overlays string dir all-windows)))
+      (message nil)
+      (cons string overlays))))
 
 (defun conn--read-string-with-timeout (&optional dir all-windows)
   (pcase-let ((`(,string . ,overlays)
