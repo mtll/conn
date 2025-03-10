@@ -895,6 +895,12 @@ after point."
     (unless (cdr parent)
       (set-keymap-parent keymap nil))))
 
+(defun conn-thing-command-p (cmd)
+  (and (symbolp cmd)
+       (not (not (get cmd :conn-command-thing)))))
+
+(cl-deftype conn-thing-command () '(satisfies conn-thing-command-p))
+
 ;;;; States
 
 (define-inline conn-state-p (state)
@@ -2033,7 +2039,7 @@ are read."
                                   (mod thing-arg))))
                ('negative-argument
                 (setq thing-sign (not thing-sign)))
-               ((guard (or (ignore-errors (get cmd :conn-command-thing))
+               ((guard (or (conn-thing-command-p cmd)
                            (alist-get cmd conn-bounds-of-command-alist)))
                 (cl-return
                  (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
@@ -3345,6 +3351,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;; Thing dispatch provides a method of jumping to, marking or acting
 ;; on visible Things.
 
+(cl-defstruct (conn--action)
+  interactive description window-predicate)
+
+(defun conn-action-p (command)
+  (not (not (get command :conn--action))))
+
+(cl-deftype conn-action () '(satisfies conn-action-p))
+
 (defvar conn--last-dispatch-command nil)
 
 (defvar conn-default-label-padding-func 'conn--centered-padding)
@@ -3418,6 +3432,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (pcase-let*
       ((prompt nil)
        (action default-action)
+       (action-struct (get default-action :conn--action))
        (action-args nil)
        (keys nil)
        (cmd nil)
@@ -3431,23 +3446,24 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     'face (when repeat
                             'eldoc-highlight-function-argument))))
     (cl-labels
-        ((action-description (action)
-           (if-let* ((desc (get action :conn-action-description)))
+        ((action-description ()
+           (if-let* ((desc (and action-struct
+                                (conn--action-description action-struct))))
                (propertize
                 (if (stringp desc)
                     (apply #'format desc action-args)
                   (apply desc action-args))
                 'face 'eldoc-highlight-function-argument)
              ""))
-         (read-action-args (action)
+         (read-action-args ()
            (when handle
              (cancel-change-group handle)
              (save-mark-and-excursion--restore saved-marker)
              (setq saved-marker (save-mark-and-excursion--save)))
            (setq handle (prepare-change-group))
            (activate-change-group handle)
-           (when (ignore-errors (get action :conn-action-interactive))
-             (funcall (get action :conn-action-interactive))))
+           (when-let ((int (conn--action-interactive action-struct)))
+             (funcall int)))
          (completing-read-command ()
            (conn--with-state conn-previous-state
              (save-window-excursion
@@ -3467,7 +3483,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                ('help)
                                ((and (pred functionp)
                                      (guard (or (get sym :conn-command-thing)
-                                                (get sym :conn-action))))
+                                                (conn-action-p sym))))
                                 t)
                                (`(,_ ,_ . ,_) t)))
                            t))))))
@@ -3481,16 +3497,23 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                (cond
                                 (invalid
                                  (concat
-                                  (action-description action)
+                                  (action-description)
                                   " "
                                   (propertize "Not a valid thing command"
                                               'face 'error)))
-                                (action (action-description action))
+                                (action (action-description))
                                 (t ""))))
                  cmd (key-binding keys t)
-                 invalid nil)))
-      (when action
-        (setq action-args (read-action-args action)))
+                 invalid nil))
+         (set-action (cmd)
+           (if cmd
+               (setq action cmd
+                     action-struct (get cmd :conn--action)
+                     action-args (read-action-args))
+             (setq action nil
+                   action-struct nil
+                   action-args nil))))
+      (set-action action)
       (conn--with-state conn-state-for-read-dispatch
         (setq prompt (substitute-command-keys
                       (concat (propertize "Targets" 'face 'minibuffer-prompt)
@@ -3505,19 +3528,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 (cl-loop
                  (pcase cmd
                    (`(,thing ,finder . ,default-action)
+                    (unless action
+                      (set-action (or default-action
+                                      (conn--dispatch-default-action thing))))
                     (cl-return
                      (list thing
                            (when thing-arg
                              (* (if thing-sign -1 1) (or thing-arg 1)))
-                           finder
-                           (or action
-                               default-action
-                               (conn--dispatch-default-action thing))
-                           (if action
-                               action-args
-                             (read-action-args
-                              (or default-action
-                                  (conn--dispatch-default-action thing))))
+                           finder action action-args
                            (conn--dispatch-window-predicate
                             action (get thing :conn-command-thing) cmd keys)
                            repeat)))
@@ -3556,20 +3574,18 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     (completing-read-command))
                    ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
                          (guard thing))
+                    (unless action
+                      (set-action (conn--dispatch-default-action cmd)))
                     (cl-return
                      (list cmd
                            (when thing-arg
                              (* (if thing-sign -1 1) (or thing-arg 1)))
                            (conn--dispatch-target-finder cmd)
-                           (or action (conn--dispatch-default-action cmd))
-                           (if action
-                               action-args
-                             (read-action-args (conn--dispatch-default-action cmd)))
+                           action action-args
                            (conn--dispatch-window-predicate action thing cmd keys)
                            repeat)))
-                   ((guard (ignore-errors (get cmd :conn-action)))
-                    (setq action (unless (eq cmd action) cmd)
-                          action-args (read-action-args action)))
+                   ((and (cl-type conn-action) cmd)
+                    (set-action (unless (eq cmd action) cmd)))
                    (_
                     (setq invalid t)))
                  (read-command))
@@ -3779,10 +3795,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                               do (cl-return sublist))))
     `(progn
        (defun ,name ,arglist ,@body)
-       (put ',name :conn-action t)
-       (put ',name :conn-action-interactive (lambda () ,interactive))
-       (put ',name :conn-action-description ,(cadr menu-item))
-       (put ',name :conn-action-window-predicate ,window-predicate)
+       (put ',name :conn--action (make-conn--action
+                                  :interactive (lambda () ,interactive)
+                                  :description ,(cadr menu-item)
+                                  :window-predicate ,window-predicate))
        ,(when keys
           (if modes
               `(dolist (mode ',(ensure-list modes))
