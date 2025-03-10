@@ -4976,6 +4976,178 @@ Expansions and contractions are provided by functions in
 
 ;;;; Commands
 
+;;;;; Movement
+
+(defun conn-forward-defun (N)
+  (interactive "p")
+  (if (< N 0)
+      (beginning-of-defun (abs N))
+    (end-of-defun N)))
+
+(defun conn-backward-symbol (arg)
+  "`forward-symbol' in reverse."
+  (interactive "p")
+  (forward-symbol (- arg)))
+
+(defun conn-scroll-down (&optional arg)
+  "`scroll-down-command' leaving point at the same relative window position.
+Pulses line that was the first visible line before scrolling."
+  (interactive "P")
+  (if (pos-visible-in-window-p (point-min))
+      (progn (beep) (message "Beginning of buffer"))
+    (let ((start (window-start)))
+      (scroll-down arg)
+      (pulse-momentary-highlight-one-line start))))
+(put 'conn-scroll-down 'scroll-command t)
+
+(defun conn-scroll-up (&optional arg)
+  "`scroll-up-command' leaving point at the same relative window position.
+Pulses line that was the last visible line before scrolling."
+  (interactive "P")
+  (if (pos-visible-in-window-p (point-max))
+      (progn (beep) (message "End of buffer"))
+    (let ((end (window-end)))
+      (scroll-up arg)
+      (pulse-momentary-highlight-one-line (1- end)))))
+(put 'conn-scroll-up 'scroll-command t)
+
+(defun conn-backward-char (string arg)
+  "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
+If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
+occurrence of STRING.  STRING will finish reading after
+`conn-read-string-timeout' seconds.
+This command should only be called interactively."
+  (declare (interactive-only t))
+  (interactive (list (pcase current-prefix-arg
+                       ((or '1 '(4))
+                        (conn--read-string-with-timeout 'backward)))
+                     (prefix-numeric-value current-prefix-arg)))
+  (if (null string)
+      (backward-char arg)
+    (setq this-command 'conn-goto-string-backward)
+    (conn-goto-string-backward string)))
+
+(defun conn-goto-string-backward (string)
+  "Go to the first visible occurrence backward of STRING in buffer.
+When called interactively reads STRING with timeout
+`conn-read-string-timeout'."
+  (interactive
+   (list (conn--read-string-with-timeout 'backward)))
+  (let ((case-fold-search (conn--string-no-upper-case-p string)))
+    (with-restriction (window-start) (window-end)
+      (when-let* ((pos (or (save-excursion
+                             (backward-char)
+                             (cl-loop while (search-backward string nil t)
+                                      when (conn--region-visible-p (match-beginning 0)
+                                                                   (match-end 0))
+                                      return (match-beginning 0)))
+                           (user-error "\"%s\" not found." string))))
+        (goto-char pos)))))
+
+(defun conn-forward-char (string arg)
+  "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
+If `current-prefix-arg' is 1 prompt for STRING and search forward for nearest
+occurrence of STRING.  STRING will finish reading after
+`conn-read-string-timeout' seconds.
+This command should only be called interactively."
+  (declare (interactive-only t))
+  (interactive (list (pcase current-prefix-arg
+                       ((or '1 '(4))
+                        (conn--read-string-with-timeout 'forward)))
+                     (prefix-numeric-value current-prefix-arg)))
+  (if (null string)
+      (forward-char arg)
+    (setq this-command 'conn-goto-string-forward)
+    (conn-goto-string-forward string)))
+
+(defun conn-goto-string-forward (string)
+  "Go to the first visible occurrence forward of STRING in buffer.
+When called interactively reads STRING with timeout
+`conn-read-string-timeout'."
+  (interactive
+   (list (conn--read-string-with-timeout 'forward)))
+  (with-restriction (window-start) (window-end)
+    (let ((case-fold-search (conn--string-no-upper-case-p string)))
+      (when-let* ((pos (or (save-excursion
+                             (forward-char)
+                             (cl-loop while (search-forward string nil t)
+                                      when (conn--region-visible-p (match-beginning 0)
+                                                                   (match-end 0))
+                                      return (match-beginning 0)))
+                           (user-error "\"%s\" not found." string))))
+        (goto-char pos)))))
+
+(defun conn--goto-string-handler (beg)
+  (when (and (not (region-active-p))
+             (memq this-command '(conn-goto-string-forward
+                                  conn-goto-string-backward))
+             (not (eq this-command last-command)))
+    (push-mark beg t)))
+
+(defun conn-backward-line (N)
+  "`forward-line' by N but backward."
+  (interactive "p")
+  (forward-line (- N)))
+
+(defun conn-backward-whitespace (N)
+  "`forward-whitespace' by N but backward."
+  (interactive "p")
+  (forward-whitespace (- N)))
+
+(defun conn--end-of-inner-line-1 ()
+  (goto-char (line-end-position))
+  (when-let* ((cs (and (conn--point-in-comment-p)
+                       (save-excursion
+                         (comment-search-backward
+                          (line-beginning-position) t)))))
+    (goto-char cs))
+  (skip-chars-backward " \t" (line-beginning-position))
+  (when (bolp) (skip-chars-forward " \t" (line-end-position))))
+
+(defun conn-end-of-inner-line (&optional N)
+  "Go to point after the last non-whitespace or comment character in line.
+Immediately repeating this command goes to the point at end
+of line proper.
+With a non-nil prefix arg go `forward-line' by N instead."
+  (interactive "P")
+  (if N
+      (progn
+        (forward-line N)
+        (setq conn-this-command-handler (conn-get-mark-handler 'forward-line)
+              conn-this-command-thing 'line))
+    (let ((point (point))
+          (mark (mark t)))
+      (conn--end-of-inner-line-1)
+      (when (and (= point (point))
+                 (or (= mark (save-excursion
+                               (back-to-indentation)
+                               (point)))
+                     (region-active-p)))
+        (goto-char (line-end-position))
+        (setq conn-this-command-thing 'outer-line)))))
+
+(defun conn-beginning-of-inner-line (&optional N)
+  "Go to first non-whitespace character in line.
+Immediately repeating this command goes to the point at beginning
+of line proper.
+With a non-nil prefix arg go `forward-line' by -N instead."
+  (interactive "P")
+  (if N
+      (progn
+        (forward-line (- N))
+        (setq conn-this-command-thing 'line
+              conn-this-command-handler (conn-get-mark-handler 'forward-line)))
+    (let ((point (point))
+          (mark (mark t)))
+      (back-to-indentation)
+      (when (and (= point (point))
+                 (or (= mark (save-excursion
+                               (conn--end-of-inner-line-1)
+                               (point)))
+                     (region-active-p)))
+        (goto-char (line-beginning-position))
+        (setq conn-this-command-thing 'outer-line)))))
+
 (defun conn-end-of-list ()
   (interactive)
   (up-list 1 t t)
@@ -5584,12 +5756,6 @@ Handles rectangular regions."
 
 ;;;;; Editing Commands
 
-(defun conn-forward-defun (N)
-  (interactive "p")
-  (if (< N 0)
-      (beginning-of-defun (abs N))
-    (end-of-defun N)))
-
 (conn-define-state conn-read-transpose-state (conn-read-mover-state))
 
 (define-keymap
@@ -5658,11 +5824,6 @@ Handles rectangular regions."
         (uncomment-region beg end)
       (let ((comment-empty-lines t))
         (comment-region beg end)))))
-
-(defun conn-backward-symbol (arg)
-  "`forward-symbol' in reverse."
-  (interactive "p")
-  (forward-symbol (- arg)))
 
 (defun conn-shell-command-on-region (&optional arg)
   "Like `shell-command-on-region' but inverts the meaning of ARG."
@@ -5750,28 +5911,6 @@ of `conn-recenter-positions'."
                         (buffer-substring-no-properties beg end))))
             (_ (user-error "No region in buffer")))))
 
-(defun conn-scroll-down (&optional arg)
-  "`scroll-down-command' leaving point at the same relative window position.
-Pulses line that was the first visible line before scrolling."
-  (interactive "P")
-  (if (pos-visible-in-window-p (point-min))
-      (progn (beep) (message "Beginning of buffer"))
-    (let ((start (window-start)))
-      (scroll-down arg)
-      (pulse-momentary-highlight-one-line start))))
-(put 'conn-scroll-down 'scroll-command t)
-
-(defun conn-scroll-up (&optional arg)
-  "`scroll-up-command' leaving point at the same relative window position.
-Pulses line that was the last visible line before scrolling."
-  (interactive "P")
-  (if (pos-visible-in-window-p (point-max))
-      (progn (beep) (message "End of buffer"))
-    (let ((end (window-end)))
-      (scroll-up arg)
-      (pulse-momentary-highlight-one-line (1- end)))))
-(put 'conn-scroll-up 'scroll-command t)
-
 (defun conn-open-line-and-indent (N)
   "Insert a newline, leave point before it and indent the new line.
 With arg N, insert N newlines."
@@ -5807,79 +5946,6 @@ Interactively `region-beginning' and `region-end'."
   (interactive)
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content))
-
-(defun conn-backward-char (string arg)
-  "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
-occurrence of STRING.  STRING will finish reading after
-`conn-read-string-timeout' seconds.
-This command should only be called interactively."
-  (declare (interactive-only t))
-  (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4))
-                        (conn--read-string-with-timeout 'backward)))
-                     (prefix-numeric-value current-prefix-arg)))
-  (if (null string)
-      (backward-char arg)
-    (setq this-command 'conn-goto-string-backward)
-    (conn-goto-string-backward string)))
-
-(defun conn-goto-string-backward (string)
-  "Go to the first visible occurrence backward of STRING in buffer.
-When called interactively reads STRING with timeout
-`conn-read-string-timeout'."
-  (interactive
-   (list (conn--read-string-with-timeout 'backward)))
-  (let ((case-fold-search (conn--string-no-upper-case-p string)))
-    (with-restriction (window-start) (window-end)
-      (when-let* ((pos (or (save-excursion
-                             (backward-char)
-                             (cl-loop while (search-backward string nil t)
-                                      when (conn--region-visible-p (match-beginning 0)
-                                                                   (match-end 0))
-                                      return (match-beginning 0)))
-                           (user-error "\"%s\" not found." string))))
-        (goto-char pos)))))
-
-(defun conn-forward-char (string arg)
-  "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-If `current-prefix-arg' is 1 prompt for STRING and search forward for nearest
-occurrence of STRING.  STRING will finish reading after
-`conn-read-string-timeout' seconds.
-This command should only be called interactively."
-  (declare (interactive-only t))
-  (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4))
-                        (conn--read-string-with-timeout 'forward)))
-                     (prefix-numeric-value current-prefix-arg)))
-  (if (null string)
-      (forward-char arg)
-    (setq this-command 'conn-goto-string-forward)
-    (conn-goto-string-forward string)))
-
-(defun conn-goto-string-forward (string)
-  "Go to the first visible occurrence forward of STRING in buffer.
-When called interactively reads STRING with timeout
-`conn-read-string-timeout'."
-  (interactive
-   (list (conn--read-string-with-timeout 'forward)))
-  (with-restriction (window-start) (window-end)
-    (let ((case-fold-search (conn--string-no-upper-case-p string)))
-      (when-let* ((pos (or (save-excursion
-                             (forward-char)
-                             (cl-loop while (search-forward string nil t)
-                                      when (conn--region-visible-p (match-beginning 0)
-                                                                   (match-end 0))
-                                      return (match-beginning 0)))
-                           (user-error "\"%s\" not found." string))))
-        (goto-char pos)))))
-
-(defun conn--goto-string-handler (beg)
-  (when (and (not (region-active-p))
-             (memq this-command '(conn-goto-string-forward
-                                  conn-goto-string-backward))
-             (not (eq this-command last-command)))
-    (push-mark beg t)))
 
 (defun conn-append-region (beg end &optional register kill-flag)
   "Appne region from BEG to END to most recent kill.
@@ -5930,7 +5996,7 @@ When KILL-FLAG is non-nil kill the region as well."
    (list (region-beginning)
          (region-end)
          (when current-prefix-arg
-           (register-read-with-preview "Prepend to register: "))))
+           (register-read-with-preview "Append to register: "))))
   (conn-append-region beg end register t))
 
 (defun conn-kill-prepend-region (beg end &optional register)
@@ -6002,16 +6068,6 @@ associated with that command (see `conn-register-thing')."
   (when (called-interactively-p 'interactive)
     (message "Buffer narrowed indirect")))
 
-(defun conn-backward-line (N)
-  "`forward-line' by N but backward."
-  (interactive "p")
-  (forward-line (- N)))
-
-(defun conn-backward-whitespace (N)
-  "`forward-whitespace' by N but backward."
-  (interactive "p")
-  (forward-whitespace (- N)))
-
 (defun conn-set-register-seperator (string)
   "Set `register-seperator' register to string STRING."
   (interactive
@@ -6078,60 +6134,6 @@ of deleting it."
                    'delete-region)
                start end))
     (funcall (key-binding conn-yank-keys t))))
-
-(defun conn--end-of-inner-line-1 ()
-  (goto-char (line-end-position))
-  (when-let* ((cs (and (conn--point-in-comment-p)
-                       (save-excursion
-                         (comment-search-backward
-                          (line-beginning-position) t)))))
-    (goto-char cs))
-  (skip-chars-backward " \t" (line-beginning-position))
-  (when (bolp) (skip-chars-forward " \t" (line-end-position))))
-
-(defun conn-end-of-inner-line (&optional N)
-  "Go to point after the last non-whitespace or comment character in line.
-Immediately repeating this command goes to the point at end
-of line proper.
-With a non-nil prefix arg go `forward-line' by N instead."
-  (interactive "P")
-  (if N
-      (progn
-        (forward-line N)
-        (setq conn-this-command-handler (conn-get-mark-handler 'forward-line)
-              conn-this-command-thing 'line))
-    (let ((point (point))
-          (mark (mark t)))
-      (conn--end-of-inner-line-1)
-      (when (and (= point (point))
-                 (or (= mark (save-excursion
-                               (back-to-indentation)
-                               (point)))
-                     (region-active-p)))
-        (goto-char (line-end-position))
-        (setq conn-this-command-thing 'outer-line)))))
-
-(defun conn-beginning-of-inner-line (&optional N)
-  "Go to first non-whitespace character in line.
-Immediately repeating this command goes to the point at beginning
-of line proper.
-With a non-nil prefix arg go `forward-line' by -N instead."
-  (interactive "P")
-  (if N
-      (progn
-        (forward-line (- N))
-        (setq conn-this-command-thing 'line
-              conn-this-command-handler (conn-get-mark-handler 'forward-line)))
-    (let ((point (point))
-          (mark (mark t)))
-      (back-to-indentation)
-      (when (and (= point (point))
-                 (or (= mark (save-excursion
-                               (conn--end-of-inner-line-1)
-                               (point)))
-                     (region-active-p)))
-        (goto-char (line-beginning-position))
-        (setq conn-this-command-thing 'outer-line)))))
 
 (defun conn-copy-region (start end &optional register)
   "Copy region between START and END as kill.
