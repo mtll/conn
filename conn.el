@@ -1523,8 +1523,7 @@ returned.")
   (delete-overlay (conn-dispatch-label-overlay label)))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (pcase-let (((cl-struct conn-dispatch-label
-                          overlay prop target-overlay)
+  (pcase-let (((cl-struct conn-dispatch-label overlay prop target-overlay)
                label))
     (with-current-buffer (overlay-buffer overlay)
       (cond ((length= (overlay-get overlay prop) 0)
@@ -1556,13 +1555,11 @@ returned.")
   (conn-window-label-window label))
 
 (cl-defmethod conn-label-reset ((label conn-window-label))
-  (pcase-let (((cl-struct conn-window-label string window)
-               label))
+  (pcase-let (((cl-struct conn-window-label string window) label))
     (set-window-parameter window 'conn-label string)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
-  (pcase-let (((cl-struct conn-window-label window string)
-               label))
+  (pcase-let (((cl-struct conn-window-label window string) label))
     (with-current-buffer (window-buffer window)
       (when (eq (car-safe (car-safe header-line-format))
                 'conn-mode)
@@ -1963,20 +1960,7 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (let* ((conn--current-read-mover-map
-          (conn-get-state-map conn-state-for-read-mover))
-         (prompt (substitute-command-keys
-                  (concat "\\<conn--current-read-mover-map>"
-                          (propertize prompt 'face 'minibuffer-prompt)
-                          " (arg: "
-                          (propertize "%s" 'face 'read-multiple-choice-face)
-                          ", \\[reset-arg] reset arg; \\[help] commands"
-                          (if recursive-edit
-                              (concat "; \\[recursive-edit] "
-                                      "recursive edit)")
-                            ")")
-                          ": %s")))
-         (thing-arg (when arg (abs (prefix-numeric-value arg))))
+  (let* ((thing-arg (when arg (abs (prefix-numeric-value arg))))
          (thing-sign (when arg (> 0 arg)))
          invalid keys cmd)
     (cl-flet
@@ -2009,6 +1993,16 @@ are read."
                                 (get sym :conn-command-thing)))
                          t))))))
       (conn--with-state conn-state-for-read-mover
+        (setq prompt (substitute-command-keys
+                      (concat (propertize prompt 'face 'minibuffer-prompt)
+                              " (arg: "
+                              (propertize "%s" 'face 'read-multiple-choice-face)
+                              ", \\[reset-arg] reset arg; \\[help] commands"
+                              (if recursive-edit
+                                  (concat "; \\[recursive-edit] "
+                                          "recursive edit)")
+                                ")")
+                              ": %s")))
         (read-command)
         (unwind-protect
             (cl-loop
@@ -3403,16 +3397,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--dispatch-read-thing (&optional default-action continuation)
   (pcase-let*
-      ((conn--current-dispatch-map
-        (conn-get-state-map conn-state-for-read-dispatch))
-       (prompt (substitute-command-keys
-                (concat "\\<conn--current-dispatch-map>"
-                        (propertize "Targets" 'face 'minibuffer-prompt)
-                        " (arg: "
-                        (propertize "%s" 'face 'read-multiple-choice-face)
-                        ", \\[reset-arg] reset arg; "
-                        "\\[repeat-dispatch] %s; "
-                        "\\[help] commands): %s")))
+      ((prompt nil)
        (action default-action)
        (action-args nil)
        (keys nil)
@@ -3488,6 +3473,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
       (when action
         (setq action-args (read-action-args action)))
       (conn--with-state conn-state-for-read-dispatch
+        (setq prompt (substitute-command-keys
+                      (concat (propertize "Targets" 'face 'minibuffer-prompt)
+                              " (arg: "
+                              (propertize "%s" 'face 'read-multiple-choice-face)
+                              ", \\[reset-arg] reset arg; "
+                              "\\[repeat-dispatch] %s; "
+                              "\\[help] commands): %s")))
         (read-command)
         (unwind-protect
             (prog1
