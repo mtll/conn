@@ -14,9 +14,9 @@
 ;; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ;;
 ;;; Commentary:
-;;
+
 ;; Transient commands for Conn.
-;;
+
 ;;; Code:
 
 (require 'conn)
@@ -105,6 +105,7 @@
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
+
 Press \\[exit-recursive-edit] to exit the recursive edit and abort the
 edit in the macro."
   (interactive "P")
@@ -129,6 +130,7 @@ edit in the macro."
 
 (defun conn-recursive-edit-lossage ()
   "Edit lossage macro inside a recursive edit.
+
 Press \\[exit-recursive-edit] to exit the recursive edit and abort
 the edit in the macro."
   (interactive)
@@ -168,6 +170,7 @@ the edit in the macro."
 
 (transient-define-argument conn--kapply-macro-infix ()
   "Dispatch `last-kbd-macro'.
+
   APPLY simply executes the macro at each region.  APPEND executes
   the macro and records additional keys on the first iteration.
   STEP-EDIT uses `kmacro-step-edit-macro' to edit the macro before
@@ -193,6 +196,7 @@ the edit in the macro."
 
 (transient-define-argument conn--kapply-matches-infix ()
   "Restrict dispatch to only some isearch matches.
+
 AFTER means only those matchs after, and including, the current match.
 BEFORE means only those matches before, and including, the current match."
   :class 'conn-transient-lisp-choices
@@ -223,6 +227,7 @@ BEFORE means only those matches before, and including, the current match."
 
 (transient-define-argument conn--kapply-region-infix ()
   "How to dispatch on each region.
+
 START means place the point at the start of the region before
 each iteration.  END means place the point at the end of the
 region before each iteration.  CHANGE means delete the region
@@ -299,10 +304,12 @@ before each iteration."
   :choices '(nil
              ("save" . conn--kapply-save-windows)))
 
+;; TODO: make this delete match groups instead of the entire match if
+;; there are any.
 (transient-define-suffix conn--kapply-replace-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
+
+Begins the keyboard macro by deleting the string at each match."
   :transient 'transient--do-exit
   :key "t"
   :description "Replace"
@@ -331,8 +338,8 @@ property."
 
 (transient-define-suffix conn--kapply-emacs-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
+
+Begins the keyboard macro in `conn-emacs-state'."
   :transient 'transient--do-exit
   :key "e"
   :description "Emacs"
@@ -358,10 +365,10 @@ property."
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
 
-(transient-define-suffix conn--kapply-conn-region-string (args)
+(transient-define-suffix conn--kapply-command-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
+
+Begins the keyboard macro in `conn-command-state'."
   :transient 'transient--do-exit
   :key "c"
   :description "Command"
@@ -388,9 +395,7 @@ property."
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-replace-rectangle-string (args)
-  "Apply keyboard macro to every occurrence of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
+  "Apply keyboard macro to a rectangle replacing each line."
   :transient 'transient--do-exit
   :key "t"
   :description "Replace"
@@ -414,9 +419,7 @@ property."
      (alist-get :kmacro args))))
 
 (transient-define-suffix conn--kapply-emacs-rectangle-string (args)
-  "Apply keyboard macro to every occurrence of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
+  "Apply keyboard macro in `conn-emacs-state' to a rectangle."
   :transient 'transient--do-exit
   :key "e"
   :description "Emacs"
@@ -440,7 +443,8 @@ property."
      (alist-get :window-conf args)
      (alist-get :kmacro args))))
 
-(transient-define-suffix conn--kapply-conn-rectangle-string (args)
+(transient-define-suffix conn--kapply-command-rectangle-string (args)
+  "Apply keyboard macro in `conn-command-state' to a rectangle."
   :transient 'transient--do-exit
   :key "c"
   :description "Command"
@@ -465,9 +469,7 @@ property."
      (alist-get :kmacro args))))
 
 (transient-define-suffix conn--kapply-string-suffix (args)
-  "Apply keyboard macro to every occurrence of a string within a region.
-The region is read by prompting for a command with a `:conn-command-thing'
-property."
+  "Apply keyboard macro to every occurrence of a string within a region."
   :transient 'transient--do-exit
   :key "q"
   :description "String"
@@ -502,6 +504,7 @@ property."
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-regexp-suffix (args)
+  "Apply keyboard macro to occurrence of a regex within a region."
   :transient 'transient--do-exit
   :key "w"
   :description "Regexp"
@@ -535,6 +538,7 @@ property."
 
 (transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
+
 If the region is discontinuous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :if (lambda () conn-local-mode)
@@ -562,7 +566,8 @@ apply to each contiguous component of the region."
 
 (transient-define-suffix conn--kapply-things-in-region-suffix (args)
   "Apply keyboard macro on the current region.
-If the region is discontiguous (e.g. a rectangular region) then
+
+If the region is discontinuous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :if (lambda () conn-local-mode)
   :transient 'transient--do-exit
@@ -590,7 +595,9 @@ apply to each contiguous component of the region."
    (alist-get :kmacro args)))
 
 (transient-define-suffix conn--kapply-iterate-suffix (args)
-  "Apply keyboard macro a specified number of times."
+  "Apply keyboard macro a specified number of times.
+
+A zero means repeat until error."
   :transient 'transient--do-exit
   :key "I"
   :description "Iterate"
@@ -891,7 +898,7 @@ apply to each contiguous component of the region."
       :description "With State:"
       (conn--kapply-replace-rectangle-string)
       (conn--kapply-emacs-rectangle-string)
-      (conn--kapply-conn-rectangle-string)]
+      (conn--kapply-command-rectangle-string)]
     [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "Apply Kmacro On:"
       (conn--kapply-occur)
@@ -945,7 +952,7 @@ apply to each contiguous component of the region."
   [ [ :description "With State:"
       (conn--kapply-replace-region-string)
       (conn--kapply-emacs-region-string)
-      (conn--kapply-conn-region-string)]
+      (conn--kapply-command-region-string)]
     [ :description "Save State:"
       (conn--kapply-merge-undo-infix)
       (conn--kapply-save-windows-infix)
