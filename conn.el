@@ -2262,7 +2262,7 @@ is read."
   (push conn--ephemeral-mark conn--saved-ephemeral-marks))
 
 (defun conn--restore-ephemeral-mark-ad (&rest _)
-  (setq-local conn--ephemeral-mark (pop conn--saved-ephemeral-marks)))
+  (setq conn--ephemeral-mark (pop conn--saved-ephemeral-marks)))
 
 (defun conn--setup-advice ()
   (if conn-mode
@@ -2275,7 +2275,7 @@ is read."
         (advice-add 'repeat :around #'conn--repeat-ad)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'pop-mark :before #'conn--pop-mark-ad)
-        (advice-add 'set-mark :before #'conn--set-mark-ad)
+        (advice-add 'set-mark :after #'conn--set-mark-ad)
         (advice-add 'save-mark-and-excursion--save :before
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
@@ -3644,28 +3644,28 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     line-prefix line-pfx
                     wrap-prefix wrap-pfx)))))
 
-(defun conn--right-justify-padding (overlay pixels)
+(defun conn--right-justify-padding (overlay width height)
   (overlay-put overlay 'after-string
                (propertize
                 " "
-                'display `(space :width (,pixels)))))
+                'display `(space :width (,width) :height (,height)))))
 
-(defun conn--left-justify-padding (overlay pixels)
+(defun conn--left-justify-padding (overlay width height)
   (overlay-put overlay 'before-string
                (propertize
                 " "
-                'display `(space :width (,pixels)))))
+                'display `(space :width (,width) :height (,height)))))
 
-(defun conn--centered-padding (overlay pixels)
+(defun conn--centered-padding (overlay width height)
   (overlay-put overlay 'before-string
                (propertize
                 " "
-                'display `(space :width (,(floor pixels 2)))
+                'display `(space :width (,(floor width 2)) :height (,height))
                 'face 'conn-dispatch-label-face))
   (overlay-put overlay 'after-string
                (propertize
                 " "
-                'display `(space :width (,(ceiling pixels 2)))
+                'display `(space :width (,(ceiling width 2)) :height (,height))
                 'face 'conn-dispatch-label-face)))
 
 (defun conn--dispatch-setup-label-string (overlay display-property display-string
@@ -3673,21 +3673,24 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (if (not (eq display-property 'display))
       (overlay-put overlay display-property display-string)
     (overlay-put overlay display-property nil)
-    (let* ((pixels (max (- (car (window-text-pixel-size
-                                 (overlay-get overlay 'window)
-                                 (overlay-start overlay)
-                                 (overlay-end overlay)))
-                           (progn
-                             (overlay-put overlay display-property display-string)
-                             (car (window-text-pixel-size
-                                   (overlay-get overlay 'window)
-                                   (overlay-start overlay)
-                                   (overlay-end overlay)))))
-                        0)))
-      (when (eq display-property 'display)
-        (if padding-function
-            (funcall padding-function overlay pixels)
-          (funcall conn-default-label-padding-func overlay pixels))))))
+    (pcase-let* ((`(,width . ,height)
+                  (window-text-pixel-size
+                   (overlay-get overlay 'window)
+                   (overlay-start overlay)
+                   (overlay-end overlay)))
+                 (`(,display-width . ,display-height)
+                  (progn
+                    (overlay-put overlay display-property display-string)
+                    (window-text-pixel-size
+                     (overlay-get overlay 'window)
+                     (overlay-start overlay)
+                     (overlay-end overlay))))
+                 (padding-width (max (- width display-width) 0)))
+      (if padding-function
+          (funcall padding-function overlay padding-width
+                   (when (/= height display-height) height))
+        (funcall conn-default-label-padding-func overlay padding-width
+                 (when (/= height display-height) height))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
