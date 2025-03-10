@@ -2159,7 +2159,6 @@ is read."
   "S-<drag-mouse-1>" 'conn-mouse-click-dot
   "S-<mouse-3>" 'conn-delete-dot-at-click
   "S-<down-mouse-3>" 'conn-delete-dot-at-click
-  "<escape>" 'exit-recursive-edit
   "DEL" 'conn-delete-dots
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit)
@@ -5797,6 +5796,23 @@ Handles rectangular regions."
   "k" 'forward-line
   "u" 'forward-symbol)
 
+(define-minor-mode conn-transpose-recursive-edit-mode
+  "Find a region to transpose in a recursive edit."
+  :global t
+  (when conn-transpose-recursive-edit-mode
+    (message
+     (substitute-command-keys
+      (concat
+       "Define region. "
+       "Press \\[exit-recursive-edit] to end and use current region. "
+       "Press \\[abort-recursive-edit] to abort.")))))
+
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-command-state
+                             'conn-transpose-recursive-edit-mode)
+  "e" 'exit-recursive-edit
+  "q" 'abort-recursive-edit)
+
 (defun conn-transpose-regions (mover arg)
   (interactive
    (let ((conn-state-for-read-mover 'conn-read-transpose-state))
@@ -5811,10 +5827,10 @@ Handles rectangular regions."
      (let ((beg (region-beginning))
            (end (region-end))
            (buf (current-buffer)))
-       (setq buffer-read-only t)
+       (conn-transpose-recursive-edit-mode 1)
        (unwind-protect
            (recursive-edit)
-         (setq buffer-read-only nil))
+         (conn-transpose-recursive-edit-mode -1))
        (if (eq buf (current-buffer))
            (transpose-regions beg end (region-beginning) (region-end))
          (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
