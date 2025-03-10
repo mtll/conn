@@ -1837,7 +1837,7 @@ region.")
   "q" 'abort-recursive-edit
   "<t>" 'ignore)
 
-(defvar conn-state-for-read-mover 'conn-read-mover-state)
+(defvar conn-default-state-for-read-mover 'conn-read-mover-state)
 
 (conn-define-state conn-read-mover-state (conn-command-state)
   "A state for reading things."
@@ -2012,7 +2012,8 @@ are read."
                                 (not (eq sym 'help))
                                 (get sym :conn-command-thing)))
                          t))))))
-      (conn--with-state conn-state-for-read-mover
+      (conn--with-state (or (conn--command-property :conn-read-state)
+                            conn-default-state-for-read-mover)
         (setq prompt (substitute-command-keys
                       (concat (propertize prompt 'face 'minibuffer-prompt)
                               " (arg: "
@@ -3371,7 +3372,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
 
-(defvar conn-state-for-read-dispatch 'conn-read-dispatch-state)
+(defvar conn-default-state-for-read-dispatch 'conn-read-dispatch-state)
 
 (conn-define-state conn-read-dispatch-state (conn-command-state)
   "State for reading a dispatch command."
@@ -3519,7 +3520,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                    action-struct nil
                    action-args nil))))
       (set-action action)
-      (conn--with-state conn-state-for-read-dispatch
+      (conn--with-state (or (conn--command-property :conn-read-dispatch-state)
+                            conn-default-state-for-read-dispatch)
         (setq prompt (substitute-command-keys
                       (concat (propertize "Targets" 'face 'minibuffer-prompt)
                               " (arg: "
@@ -3730,20 +3732,20 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;;;;; Things
 
 (defmacro conn-define-dispatch-thing (thing &rest rest)
-  "\(fn THING &key KEY MODES TARGET-FINDER DEFAULT-ACTION &body BODY)"
+  "\(fn THING &key KEY MODES TARGET-FINDER DEFAULT-ACTION STATE &body BODY)"
   (declare (debug (name [&rest keywordp form]))
            (indent 1))
-  (pcase-let* (((map :key :modes :target-finder :default-action)
+  (pcase-let* (((map :key :modes :target-finder :default-action :state)
                 rest))
     (if modes
         `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-map conn-state-for-read-dispatch mode)
+           (keymap-set (conn-get-mode-map ,(or state 'conn-default-state-for-read-dispatch) mode)
                        ,key `(,',thing
                               ,(or ,target-finder
                                    (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
-      `(keymap-set (conn-get-state-map conn-state-for-read-dispatch)
+      `(keymap-set (conn-get-state-map ,(or state 'conn-default-state-for-read-dispatch))
                    ,key `(,',thing
                           ,(or ,target-finder
                                (conn--dispatch-target-finder ',thing))
@@ -3780,12 +3782,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;;;;; Actions
 
 (defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key INTERACTIVE DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES &body BODY)"
+  "\(fn NAME ARGLIST &key INTERACTIVE DESCRIPTION FILTER WINDOW-PREDICATE KEY MODES STATE &body BODY)"
   (declare (debug ( name lambda-expr
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :description :interactive :filter :window-predicate :keys :modes)
+  (pcase-let* (((map :description :interactive :filter
+                     :window-predicate :keys :modes :state)
                 rest)
                (menu-item `( 'menu-item
                              ,(or description (symbol-name name))
@@ -3809,12 +3812,15 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
               `(dolist (mode ',(ensure-list modes))
                  ,@(cl-loop for key in (ensure-list keys)
                             collect `(keymap-set
-                                      (conn-get-mode-map conn-state-for-read-dispatch mode)
+                                      (conn-get-mode-map
+                                       ,(or state 'conn-default-state-for-read-dispatch)
+                                       mode)
                                       ,key (list ,@menu-item))))
             (macroexp-progn
              (cl-loop for key in (ensure-list keys)
                       collect `(keymap-set
-                                (conn-get-state-map conn-state-for-read-dispatch)
+                                (conn-get-state-map
+                                 ,(or state 'conn-default-state-for-read-dispatch))
                                 ,key (list ,@menu-item)))))))))
 
 (conn-define-dispatch-action conn-dispatch-yank-replace-to
@@ -5795,6 +5801,7 @@ Handles rectangular regions."
 ;;;;; Editing Commands
 
 (conn-define-state conn-read-transpose-state (conn-read-mover-state))
+(put 'conn-transpose-regions :conn-read-state 'conn-read-transpose-state)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-transpose-state)
@@ -5821,12 +5828,11 @@ Handles rectangular regions."
 
 (defun conn-transpose-regions (mover arg)
   (interactive
-   (let ((conn-state-for-read-mover 'conn-read-transpose-state))
-     (conn-read-thing-mover
-      "Mover"
-      (when current-prefix-arg
-        (prefix-numeric-value current-prefix-arg))
-      t)))
+   (conn-read-thing-mover
+    "Mover"
+    (when current-prefix-arg
+      (prefix-numeric-value current-prefix-arg))
+    t))
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
@@ -7924,7 +7930,7 @@ When ARG is nil the root window is used."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'dired-mode)
+    :keymap (conn-get-mode-map conn-default-state-for-read-dispatch 'dired-mode)
     "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
     "d" 'conn-dispatch-dired-kill-subdir)
@@ -8005,7 +8011,7 @@ When ARG is nil the root window is used."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'ibuffer-mode)
+    :keymap (conn-get-mode-map conn-default-state-for-read-dispatch 'ibuffer-mode)
     "f" 'conn-dispatch-ibuffer-mark
     "i" 'ibuffer-backward-line
     "k" 'ibuffer-forward-line
