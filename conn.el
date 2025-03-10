@@ -1470,8 +1470,8 @@ By default `conn-emacs-state' does not bind anything."
 ;; called when user input is received for the label to process and
 ;; `conn-label-reset' is called when the user has failed to select a
 ;; label and the narrowing process must restart from the beginning.
-;; `conn-label-narrow' allows labels to clean up after themselves
-;; after the selection process has concluded.
+;; `conn-label-delete' allows labels to clean up after themselves
+;; once the selection process has concluded.
 
 (cl-defstruct (conn-dispatch-label)
   "Store the state for a dispatch label."
@@ -1723,12 +1723,14 @@ Returns a cons of (STRING . OVERLAYS)."
     (concat padding label)))
 
 (defun conn--create-window-labels (labels windows)
-  (let* ((labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
-                              (conn--get-windows nil 'no-minibuff t)))
-         (labels (thread-first
-                   (lambda (win) (window-parameter win 'conn-label))
-                   (mapcar labeled)
-                   (thread-last (seq-difference labels))))
+  (let* ((labeled
+          (seq-filter (lambda (win) (window-parameter win 'conn-label))
+                      (conn--get-windows nil 'no-minibuff t)))
+         (labels
+          (thread-first
+            (lambda (win) (window-parameter win 'conn-label))
+            (mapcar labeled)
+            (thread-last (seq-difference labels))))
          (header-line-label
           '(conn-mode (:eval (conn--centered-header-label)))))
     (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
@@ -3345,7 +3347,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn--last-dispatch-command nil)
 
-(defvar conn-default-label-padding-func 'conn--equal-padding)
+(defvar conn-default-label-padding-func 'conn--centered-padding)
 
 (defvar conn-dispatch-window-predicates
   '(conn-dispatch-ignored-mode))
@@ -3622,13 +3624,19 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     line-prefix line-pfx
                     wrap-prefix wrap-pfx)))))
 
-(defun conn--alignment-padding (overlay pixels)
+(defun conn--right-justify-padding (overlay pixels)
   (overlay-put overlay 'after-string
                (propertize
                 " "
                 'display `(space :width (,pixels)))))
 
-(defun conn--equal-padding (overlay pixels)
+(defun conn--left-justify-padding (overlay pixels)
+  (overlay-put overlay 'before-string
+               (propertize
+                " "
+                'display `(space :width (,pixels)))))
+
+(defun conn--centered-padding (overlay pixels)
   (overlay-put overlay 'before-string
                (propertize
                 " "
@@ -4464,7 +4472,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                        (goto-char (+ (point) (window-hscroll)))
                        (not (invisible-p (point))))
               (push (conn--make-target-overlay
-                     (point) 0 nil 'conn--alignment-padding)
+                     (point) 0 nil 'conn--right-justify-padding)
                     ovs))
             (while (/= (point) (point-max))
               (forward-line)
@@ -4481,7 +4489,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                    (propertize " " 'display '(space :width 0)))
                       (push ov ovs))
                   (push (conn--make-target-overlay
-                         (point) 0 nil 'conn--alignment-padding)
+                         (point) 0 nil 'conn--right-justify-padding)
                         ovs))))))))))
 
 (defun conn--dispatch-lines-end ()
