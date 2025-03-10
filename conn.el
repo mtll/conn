@@ -3658,18 +3658,18 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                                  :height (,height)))))
 
 (defun conn--centered-padding (overlay width height)
-  (overlay-put overlay 'before-string
-               (propertize
-                " "
-                'display `(space :width (,(floor width 2))
-                                 :height (,height))
-                'face 'conn-dispatch-label-face))
-  (overlay-put overlay 'after-string
-               (propertize
-                " "
-                'display `(space :width (,(ceiling width 2))
-                                 :height (,height))
-                'face 'conn-dispatch-label-face)))
+  (let* ((left (min 15 (floor width 2)))
+         (right (max (- width 15) (ceiling width 2))))
+    (overlay-put overlay 'before-string
+                 (propertize
+                  " "
+                  'display `(space :width (,left) :height (,height))
+                  'face 'conn-dispatch-label-face))
+    (overlay-put overlay 'after-string
+                 (propertize
+                  " "
+                  'display `(space :width (,right) :height (,height))
+                  'face 'conn-dispatch-label-face))))
 
 (defun conn--dispatch-setup-label-string (overlay display-property display-string
                                                   &optional padding-function)
