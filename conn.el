@@ -56,7 +56,7 @@
 
 (defvar-local conn--hide-mark-cursor nil)
 
-(defvar conn-dispatch-target-finder-default 'conn--dispatch-2-chars
+(defvar conn-dispatch-target-finder-default 'conn--dispatch-chars
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -154,10 +154,6 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
 
 (defcustom conn-buffer-default-state-alist
   '(("COMMIT_EDITMSG" . conn-emacs-state)
-    ((or (derived-mode . prog-mode)
-         (derived-mode . text-mode)
-         (derived-mode . conf-mode))
-     . conn-command-state)
     ((or (derived-mode . calc-mode)
          (derived-mode . calc-trail-mode)
          (derived-mode . minibuffer-mode)
@@ -166,7 +162,11 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
          (derived-mode . doc-view-mode)
          (derived-mode . pdf-view-mode)
          (derived-mode . magit-status-mode))
-     . conn-null-state))
+     . conn-null-state)
+    ((or (derived-mode . prog-mode)
+         (derived-mode . text-mode)
+         (derived-mode . conf-mode))
+     . conn-command-state))
   "Alist of the form ((CONDITION . STATE) ...).
 
 Elements specify default STATE for buffers matching CONDITION.
@@ -288,15 +288,17 @@ particular this will be bound when `conn-enter-state' calls
 
 ;;;;;; State Keymaps
 
-(defvar conn--state-maps nil)
+(defvar conn--state-maps (make-hash-table :test 'eq))
+
+(defvar-local conn--current-state-map nil)
 
 (defvar-local conn--local-maps nil)
 
-(defvar conn--major-mode-maps nil)
+(defvar conn--major-mode-maps (make-hash-table :test 'eq))
 
 (defvar-local conn--local-major-mode-maps nil)
 
-(defvar conn--minor-mode-maps nil)
+(defvar conn--minor-mode-maps (make-hash-table :test 'eq))
 
 (defvar-local conn--local-minor-mode-maps nil)
 
@@ -552,7 +554,7 @@ meaning of these see `advice-add'."
                           '(conn--local-minor-mode-maps
                             conn--local-major-mode-maps
                             conn--local-maps
-                            conn--state-maps)
+                            conn--current-state-map)
                           #'eq)))
      ,(macroexp-progn body)))
 
@@ -910,7 +912,7 @@ after point."
     (dolist (state conn-states)
       (setq mark-map-keys
             (where-is-internal 'conn-mark-thing-map
-                               (list (alist-get state conn--state-maps)
+                               (list (gethash state conn--state-maps)
                                      (conn-get-local-map state))))
       (dolist (mode mmodes)
         (setq mode-map (conn-get-mode-map state mode)
@@ -959,16 +961,16 @@ the naked state keymap and will need to be regenerated.")
 (defun conn-get-state-map (state)
   (cl-check-type state conn-state)
   (caddr
-   (or (when-let* ((map (alist-get state conn--state-maps)))
+   (or (when-let* ((map (gethash state conn--state-maps)))
          (if (eq (cadr map) conn--keymap-sentinel)
              map
-           (setf (alist-get state conn--state-maps)
+           (setf (gethash state conn--state-maps)
                  (make-composed-keymap
                   `(,conn--keymap-sentinel
                     ,map
                     ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                                collect (conn-get-state-map parent)))))))
-       (setf (alist-get state conn--state-maps)
+       (setf (gethash state conn--state-maps)
              (make-composed-keymap
               `(,conn--keymap-sentinel
                 ,(make-sparse-keymap)
@@ -990,19 +992,19 @@ If one does not exists assign a new sparse keymap for MODE
 in STATE and return it."
   (cl-check-type state conn-state)
   (caddr
-   (or (when-let* ((map (alist-get mode (alist-get state conn--major-mode-maps))))
+   (or (when-let* ((map (alist-get mode (gethash state conn--major-mode-maps))))
          (if (eq (cadr map) conn--keymap-sentinel)
              map
-           (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+           (setf (alist-get mode (gethash state conn--minor-mode-maps))
                  (make-composed-keymap
                   `(,conn--keymap-sentinel
                     ,map
                     ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                                collect (conn-get-mode-map parent mode)))))))
-       (when-let* ((map (alist-get mode (alist-get state conn--minor-mode-maps))))
+       (when-let* ((map (alist-get mode (gethash state conn--minor-mode-maps))))
          (if (eq (cadr map) conn--keymap-sentinel)
              map
-           (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+           (setf (alist-get mode (gethash state conn--minor-mode-maps))
                  (make-composed-keymap
                   `(,conn--keymap-sentinel
                     ,map
@@ -1014,7 +1016,7 @@ in STATE and return it."
          ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
          ;; handle the case where it was actually a major-mode.
          (prog1
-             (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+             (setf (alist-get mode (gethash state conn--minor-mode-maps))
                    (make-composed-keymap
                     `(,conn--keymap-sentinel
                       ,(make-sparse-keymap)
@@ -1022,21 +1024,21 @@ in STATE and return it."
                                  collect (conn-get-mode-map parent mode)))))
            (with-eval-after-load (cadr (symbol-function mode))
              (when (get mode 'derived-mode-parent)
-               (setf (alist-get mode (alist-get state conn--major-mode-maps))
-                     (alist-get mode (alist-get state conn--minor-mode-maps)))
-               (setf (alist-get mode (alist-get state conn--minor-mode-maps)) nil)
-               (setf (alist-get state conn--minor-mode-maps)
+               (setf (alist-get mode (gethash state conn--major-mode-maps))
+                     (alist-get mode (gethash state conn--minor-mode-maps)))
+               (setf (alist-get mode (gethash state conn--minor-mode-maps)) nil)
+               (setf (gethash state conn--minor-mode-maps)
                      (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
-                                 (alist-get state conn--minor-mode-maps)))))))
+                                 (gethash state conn--minor-mode-maps)))))))
         ((get mode 'derived-mode-parent)
-         (setf (alist-get mode (alist-get state conn--major-mode-maps))
+         (setf (alist-get mode (gethash state conn--major-mode-maps))
                (make-composed-keymap
                 `(,conn--keymap-sentinel
                   ,(make-sparse-keymap)
                   ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                              collect (conn-get-mode-map parent mode))))))
         (t
-         (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+         (setf (alist-get mode (gethash state conn--minor-mode-maps))
                (make-composed-keymap
                 `(,conn--keymap-sentinel
                   ,(make-sparse-keymap)
@@ -1076,19 +1078,19 @@ and return it."
 
 (defun conn--regenerate-maps ()
   (dolist (state conn-states)
-    (setf (alist-get state conn--state-maps)
-          (caddr (alist-get state conn--state-maps)))
-    (pcase-dolist (`(,mode . ,map) (alist-get state conn--major-mode-maps))
-      (setf (alist-get mode (alist-get state conn--major-mode-maps))
+    (setf (gethash state conn--state-maps)
+          (caddr (gethash state conn--state-maps)))
+    (pcase-dolist (`(,mode . ,map) (gethash state conn--major-mode-maps))
+      (setf (alist-get mode (gethash state conn--major-mode-maps))
             (caddr map)))
-    (pcase-dolist (`(,mode . ,map) (alist-get state conn--minor-mode-maps))
-      (setf (alist-get mode (alist-get state conn--minor-mode-maps))
+    (pcase-dolist (`(,mode . ,map) (gethash state conn--minor-mode-maps))
+      (setf (alist-get mode (gethash state conn--minor-mode-maps))
             (caddr map))))
   (dolist (state conn-states)
     (conn-get-state-map state)
-    (pcase-dolist (`(,mode . ,_map) (alist-get state conn--major-mode-maps))
+    (pcase-dolist (`(,mode . ,_map) (gethash state conn--major-mode-maps))
       (conn-get-mode-map state mode))
-    (pcase-dolist (`(,mode . ,_map) (alist-get state conn--minor-mode-maps))
+    (pcase-dolist (`(,mode . ,_map) (gethash state conn--minor-mode-maps))
       (conn-get-mode-map state mode))))
 
 (defun conn--activate-input-method ()
@@ -1253,7 +1255,7 @@ from its parents."
   "Support for conn-state specializers."
   (list conn--state-generalizer))
 
-(cl-defgeneric conn-exit-state (state)
+(cl-defgeneric conn-exit-state (state &key &allow-other-keys)
   "Exit conn state STATE.
 
 Methods can be added to this generic function in order to run code every
@@ -1293,7 +1295,7 @@ and specializes the method on all conn states."
           (remove-hook 'conn-exit-functions fn)
           (message "Error in conn-exit-functions %s" (car err))))))))
 
-(cl-defgeneric conn-enter-state (state)
+(cl-defgeneric conn-enter-state (state &key &allow-other-keys)
   "Enter conn state STATE.
 
 Methods can be added to this generic function in order to run code every
@@ -1306,11 +1308,12 @@ from PARENT-STATE.
 
 CONN-STATE: this takes the form (STATE conn-state) in a argument list
 and specializes the method on all conn states."
-  (:method ((_state (eql nil))) "Noop" nil)
-  (:method ((_state conn-state)) "Noop" nil)
-  (:method (state) (error "Attempting to enter unknown state: %s" state)))
+  (:method ((_state (eql nil)) &key &allow-other-keys) "Noop" nil)
+  (:method ((_state conn-state) &key &allow-other-keys) "Noop" nil)
+  ( :method (state &key &allow-other-keys)
+    (error "Attempting to enter unknown state: %s" state)))
 
-(cl-defmethod conn-enter-state :around ((state conn-state))
+(cl-defmethod conn-enter-state :around ((state conn-state) &key &allow-other-keys)
   (unless (symbol-value state)
     (let ((success nil)
           (conn-next-state state))
@@ -1319,11 +1322,13 @@ and specializes the method on all conn states."
             (conn-exit-state conn-current-state)
             (set state t)
             (setq conn-current-state state)
-            (setq-local conn-lighter (or (conn-state-get state :lighter)
-                                         (default-value 'conn-lighter))
-                        conn--local-minor-mode-maps (alist-get state conn--minor-mode-maps)
-                        conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
-                        cursor-type (or (conn-state-get state :cursor) t))
+            (setq-local
+             conn-lighter (or (conn-state-get state :lighter)
+                              (default-value 'conn-lighter))
+             conn--current-state-map (list (cons state (gethash state conn--state-maps)))
+             conn--local-minor-mode-maps (cons state (gethash state conn--minor-mode-maps))
+             conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
+             cursor-type (or (conn-state-get state :cursor) t))
             (conn--activate-input-method)
             (cl-call-next-method)
             (unless executing-kbd-macro
@@ -1832,7 +1837,8 @@ region.")
   "t" 'conn-mark-thing-map
   "e" 'recursive-edit)
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover-state)))
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-mover-state))
+                                &key &allow-other-keys)
   (unless executing-kbd-macro
     (set-face-inverse-video 'mode-line t))
   (cl-call-next-method))
@@ -3350,7 +3356,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   "DEL" 'backward-delete-arg
   "\\" 'kapply)
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch-state)))
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch-state))
+                                &key &allow-other-keys)
   (unless executing-kbd-macro
     (set-face-inverse-video 'mode-line t))
   (cl-call-next-method))
@@ -7416,7 +7423,7 @@ When ARG is nil the root window is used."
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn
-        (cl-pushnew 'conn--state-maps emulation-mode-map-alists)
+        (cl-pushnew 'conn--current-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
@@ -7429,7 +7436,7 @@ When ARG is nil the root window is used."
     (conn--remove-keymap-parent goto-map conn-goto-map)
     (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
-          (seq-difference '(conn--state-maps
+          (seq-difference '(conn--current-state-map
                             conn--local-maps
                             conn--local-major-mode-maps
                             conn--local-minor-mode-maps)
