@@ -5572,13 +5572,21 @@ Handles rectangular regions."
       (beginning-of-defun (abs N))
     (end-of-defun N)))
 
+(conn-define-state conn-read-transpose-state (conn-read-mover-state))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-transpose-state)
+  "i" 'conn-backward-line
+  "k" 'forward-line)
+
 (defun conn-transpose-regions (mover arg)
   (interactive
-   (conn-read-thing-mover
-    "Mover"
-    (when current-prefix-arg
-      (prefix-numeric-value current-prefix-arg))
-    t))
+   (let ((conn-state-for-read-mover 'conn-read-transpose-state))
+     (conn-read-thing-mover
+      "Mover"
+      (when current-prefix-arg
+        (prefix-numeric-value current-prefix-arg))
+      t)))
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
