@@ -3362,6 +3362,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
   "C-h" 'help
   "," 'reset-arg
+  "i" 'forward-line
   "TAB" 'repeat-dispatch
   "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
