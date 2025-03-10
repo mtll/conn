@@ -519,13 +519,13 @@ Used to restore previous value when `conn-mode' is disabled.")
   (declare (indent 1))
   (cl-with-gensyms (success)
     `(let* ((,success nil)
-            ,@(mapcar (lambda (form) (car form)) var-forms))
+            ,@(mapcar (lambda (form) (take 2 form)) var-forms))
        (unwind-protect
            (prog1
                ,(macroexp-progn body)
              (setq ,success t))
          (unless ,success
-           ,@(mapcan #'cdr var-forms))))))
+           ,@(mapcan (lambda (form) (nthcdr 2 form)) var-forms))))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   "Run BODY with ADVICE-FORMS temporarily applied.
@@ -1651,10 +1651,10 @@ Optionally the overlay may have an associated THING."
 Returns a cons of (STRING . OVERLAYS)."
   (conn--with-input-method
     (conn--protected-let
-        (((prompt (propertize "string: " 'face 'minibuffer-prompt)))
-         ((string (char-to-string (read-char prompt t))))
-         ((overlays (conn--string-preview-overlays string dir all-windows))
-          (mapc #'delete-overlay overlays)))
+        ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+         (string (char-to-string (read-char prompt t)))
+         (overlays (conn--string-preview-overlays string dir all-windows)
+                   (mapc #'delete-overlay overlays)))
       (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                         conn-read-string-timeout)))
         (setq string (concat string (char-to-string next-char)))
@@ -1670,10 +1670,10 @@ Returns a cons of (STRING . OVERLAYS)."
   (cl-assert (> N 0))
   (conn--with-input-method
     (conn--protected-let
-        (((prompt (propertize "chars: " 'face 'minibuffer-prompt)))
-         ((string (char-to-string (read-char prompt t))))
-         ((overlays (conn--string-preview-overlays string dir all-windows))
-          (mapc #'delete-overlay overlays)))
+        ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
+         (string (char-to-string (read-char prompt t)))
+         (overlays (conn--string-preview-overlays string dir all-windows)
+                   (mapc #'delete-overlay overlays)))
       (dotimes (_ (1- N))
         (thread-last
           (read-char (format (concat prompt "%s") string) t)
@@ -3690,7 +3690,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           (funcall conn-default-label-padding-func overlay pixels))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
-  (conn--protected-let ((labels (mapc #'conn-label-delete labels)))
+  (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
     (pcase-dolist (`(,window . ,previews) target-overlays)
       (with-current-buffer (window-buffer window)
         (dolist (p previews)
@@ -4404,7 +4404,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                    (conn--dispatch-all-things-1 thing))))
 
 (defun conn--dispatch-all-buttons (&optional all-windows)
-  (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
+  (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
     (cl-loop for win in (conn--get-dispatch-windows all-windows)
              do (with-selected-window win
                   (with-restriction (window-start) (window-end)
@@ -4447,10 +4447,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
              collect (apply 'conn--make-target-overlay ov))))
 
 (defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
-  (conn--protected-let (((prefix ""))
-                        ((prompt "char: "))
-                        ((windows (conn--get-dispatch-windows all-windows)))
-                        (ovs (mapc #'delete-overlay ovs)))
+  (conn--protected-let ((prefix "")
+                        (prompt "char: ")
+                        (windows (conn--get-dispatch-windows all-windows))
+                        (ovs nil (mapc #'delete-overlay ovs)))
     (while (not ovs)
       (conn--with-input-method
         (while (length< prefix prefix-length)
@@ -4468,9 +4468,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     ovs))
 
 (defun conn--dispatch-columns ()
-  (conn--protected-let (((col (current-column)))
-                        ((opoint (point)))
-                        (ovs (mapc #'delete-overlay ovs)))
+  (conn--protected-let ((col (current-column))
+                        (opoint (point))
+                        (ovs nil (mapc #'delete-overlay ovs)))
     (save-excursion
       (with-restriction (window-start) (window-end)
         (goto-char (point-min))
@@ -4485,7 +4485,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     ovs))
 
 (defun conn--dispatch-lines ()
-  (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
+  (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
     (dolist (win (conn--get-dispatch-windows t) ovs)
       (with-selected-window win
         (save-excursion
@@ -4517,7 +4517,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                         ovs))))))))))
 
 (defun conn--dispatch-lines-end ()
-  (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
+  (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
     (dolist (win (conn--get-dispatch-windows t) ovs)
       (with-selected-window win
         (save-excursion
@@ -4541,7 +4541,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (push (conn--make-target-overlay (point) 0) ovs))))))))))
 
 (defun conn--dispatch-inner-lines (&optional end)
-  (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
+  (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
     (dolist (win (conn--get-dispatch-windows t) ovs)
       (with-selected-window win
         (save-excursion
@@ -7826,8 +7826,8 @@ When ARG is nil the root window is used."
   (defvar dired-movement-style)
 
   (defun conn--dispatch-dired-lines ()
-    (conn--protected-let (((dired-movement-style 'bounded))
-                          (ovs (mapc #'delete-overlay ovs)))
+    (conn--protected-let ((dired-movement-style 'bounded)
+                          (ovs nil (mapc #'delete-overlay ovs)))
       (save-excursion
         (with-restriction (window-start) (window-end)
           (goto-char (point-min))
@@ -7839,7 +7839,7 @@ When ARG is nil the root window is used."
       ovs))
 
   (defun conn--dispatch-dired-dirline ()
-    (conn--protected-let ((ovs (mapc #'delete-overlay ovs)))
+    (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
       (save-excursion
         (with-restriction (window-start) (window-end)
           (goto-char (point-min))
@@ -7851,9 +7851,9 @@ When ARG is nil the root window is used."
       ovs))
 
   (defun conn--dispatch-dired-subdir ()
-    (conn--protected-let (((start (window-start)))
-                          ((end (window-end)))
-                          (ovs (mapc #'delete-overlay ovs)))
+    (conn--protected-let ((start (window-start))
+                          (end (window-end))
+                          (ovs nil (mapc #'delete-overlay ovs)))
       (save-excursion
         (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
           (when (<= start marker end)
@@ -7951,7 +7951,7 @@ When ARG is nil the root window is used."
 
   (defun conn--dispatch-ibuffer-lines ()
     (conn--protected-let ((ibuffer-movement-cycle nil)
-                          (ovs (mapc #'delete-overlay ovs)))
+                          (ovs nil (mapc #'delete-overlay ovs)))
       (save-excursion
         (with-restriction (window-start) (window-end)
           (goto-char (point-max))
@@ -7965,7 +7965,7 @@ When ARG is nil the root window is used."
 
   (defun conn--dispatch-ibuffer-filter-group ()
     (conn--protected-let ((ibuffer-movement-cycle nil)
-                          (ovs (mapc #'delete-overlay ovs)))
+                          (ovs nil (mapc #'delete-overlay ovs)))
       (save-excursion
         (with-restriction (window-start) (window-end)
           (goto-char (point-max))
