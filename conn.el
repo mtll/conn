@@ -282,9 +282,9 @@ See also `conn-exit-functions'.")
 (defvar conn-next-state nil
   "Next conn state in buffer.
 
-Bound to the state that will be entered during `conn-enter-state'.  In
-particular this will be bound when `conn-enter-state' calls
-`conn-exit-state' and `conn-exit-functions'.")
+This variable will be bound to the state t be entered during
+`conn-enter-state'.  In particular this will be bound when
+`conn-enter-state' calls `conn-exit-state' and `conn-exit-functions'.")
 
 ;;;;;; State Keymaps
 
@@ -1714,6 +1714,14 @@ Returns a cons of (STRING . OVERLAYS)."
                              label))
         (nreverse labels)))))
 
+(defun conn--centered-header-label ()
+  (let* ((window-width (window-width nil t))
+         (label (window-parameter nil 'conn-label))
+         (label-width (string-pixel-width label))
+         (padding-width (floor (- window-width label-width) 2))
+         (padding (propertize " " 'display `(space :width (,padding-width)))))
+    (concat padding label)))
+
 (defun conn--create-window-labels (labels windows)
   (let* ((labeled (seq-filter (lambda (win) (window-parameter win 'conn-label))
                               (conn--get-windows nil 'no-minibuff t)))
@@ -1722,7 +1730,7 @@ Returns a cons of (STRING . OVERLAYS)."
                    (mapcar labeled)
                    (thread-last (seq-difference labels))))
          (header-line-label
-          '(conn-mode (:eval (window-parameter (selected-window) 'conn-label)))))
+          '(conn-mode (:eval (conn--centered-header-label)))))
     (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
              for string = (or (window-parameter win 'conn-label)
                               (set-window-parameter win 'conn-label (pop labels)))
