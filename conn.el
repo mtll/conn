@@ -52,6 +52,7 @@
 (defvar conn-emacs-state)
 (defvar conn-state-map)
 (defvar conn-wincontrol-mode)
+(defvar conn--wincontrol-prev-eldoc-msg-fn)
 
 (defvar-local conn--hide-mark-cursor nil)
 
@@ -1716,20 +1717,32 @@ Returns a cons of (STRING . OVERLAYS)."
          (padding (propertize " " 'display `(space :width (,padding-width)))))
     (concat padding label)))
 
-(defun conn--create-window-labels (labels windows)
-  (let* ((labeled
-          (seq-filter (lambda (win) (window-parameter win 'conn-label))
-                      (conn--get-windows nil 'no-minibuff t)))
-         (labels
-          (thread-first
-            (lambda (win) (window-parameter win 'conn-label))
-            (mapcar labeled)
-            (thread-last (seq-difference labels))))
-         (header-line-label
-          '(conn-mode (:eval (conn--centered-header-label)))))
+(defvar conn--window-label-pool
+  (conn-simple-labels 30 'conn-window-prompt-face))
+
+(defun conn--ensure-window-labels ()
+  (let* ((windows (conn--get-windows nil 'nomini t))
+         (window-size (length windows))
+         (pool-size (length conn--window-label-pool)))
+    (when (> window-size pool-size)
+      (setq conn--window-label-pool
+            (conn-simple-labels (* 2 window-size) 'conn-window-prompt-face)))
+    (cl-loop with available = (copy-sequence conn--window-label-pool)
+             for win in windows
+             for label = (window-parameter win 'conn-label)
+             unless (and label
+                         (member label available)
+                         (or (setq available (delete label available)) t))
+             collect win into need
+             finally (dolist (win need)
+                       (set-window-parameter win 'conn-label (pop available))))))
+
+(defun conn--create-window-labels (windows)
+  (conn--ensure-window-labels)
+  (let ((header-line-label
+         '(conn-mode (:eval (conn--centered-header-label)))))
     (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
-             for string = (or (window-parameter win 'conn-label)
-                              (set-window-parameter win 'conn-label (pop labels)))
+             for string = (window-parameter win 'conn-label)
              when (memq win windows)
              collect
              (with-selected-window win
@@ -1766,11 +1779,7 @@ Returns a cons of (STRING . OVERLAYS)."
                     collect (list (window-point win)
                                   (window-vscroll win)
                                   (window-hscroll win))))
-          (labels (conn--create-window-labels
-                   (funcall conn-label-string-generator
-                            (length (conn--get-windows nil 'nomini t))
-                            'conn-window-prompt-face)
-                   windows)))
+          (labels (conn--create-window-labels windows)))
       (unwind-protect
           (conn-label-select labels)
         (cl-loop for win in windows
@@ -6538,7 +6547,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar conn--previous-scroll-conservatively)
 (defvar conn--wincontrol-help)
 (defvar conn--wincontrol-help-format)
-(defvar conn--wincontrol-prev-eldoc-msg-fn)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
 
