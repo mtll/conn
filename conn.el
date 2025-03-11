@@ -5,7 +5,7 @@
 ;; Author: David Feller
 ;; Keywords: convenience, editing
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "29.1") (compat "30.0.2.0") (transient "0.6.0") (seq "2.24"))
+;; Package-Requires: ((emacs "30.1") (transient "0.6.0") (seq "2.24"))
 ;; Homepage: https://github.com/mtll/conn
 ;;
 ;; This program is free software; you can redistribute it and/or modify
@@ -29,7 +29,6 @@
 
 ;;;; Requires
 
-(require 'compat)
 (eval-when-compile
   (require 'inline)
   (require 'subr-x)
@@ -56,7 +55,7 @@
 
 (defvar-local conn--hide-mark-cursor nil)
 
-(defvar conn-dispatch-target-finder-default 'conn--dispatch-chars
+(defvar conn-dispatch-default-target-finder 'conn--dispatch-chars
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -74,7 +73,7 @@ actions associated with a command have higher precedence than actions
 associated with a thing.
 
 For the meaning of TARGET-FINDER see
-`conn-dispatch-target-finder-default'.")
+`conn-dispatch-default-target-finder'.")
 
 (defvar conn-dispatch-action-default 'conn-dispatch-goto
   "Default action function for `conn-dispatch-on-things'.
@@ -716,23 +715,13 @@ This function destructively modifies LIST."
   (cons (conn--overlay-start-marker ov)
         (conn--overlay-end-marker ov)))
 
-(declare-function conn--derived-mode-all-parents "conn.el")
-(if (version< "30" emacs-version)
-    (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents)
-  (defun conn--derived-mode-all-parents (mode)
-    (let ((modes (list mode)))
-      (while-let ((parent (get mode 'derived-mode-parent)))
-        (push parent modes)
-        (setq mode parent))
-      (nreverse modes))))
-
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
   (cl-loop for mode in (thread-first
                          'major-mode
                          (buffer-local-value (or buffer (current-buffer)))
-                         (conn--derived-mode-all-parents))
+                         (derived-mode-all-parents))
            for prop = (get mode property)
            when prop return prop))
 
@@ -913,7 +902,7 @@ after point."
   (setq-local conn--local-major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
-                   (reverse (conn--derived-mode-all-parents major-mode))))
+                   (reverse (derived-mode-all-parents major-mode))))
          mark-map-keys mode-map mode-mark-map)
     (dolist (state conn-states)
       (setq mark-map-keys
@@ -1430,7 +1419,6 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
   "An empty state.
 
 For use in buffers that should not have any other state."
-  :lighter ""
   :hide-mark-cursor t
   :cursor '(bar . 5))
 
@@ -1828,7 +1816,7 @@ Is function of three arguments (THING BEG END).
 BEG and END define the region and THING is the things to find within the
 region.")
 
-(defvar conn-last-bounds-of-command nil)
+(defvar conn--last-bounds-of-command nil)
 
 (defvar-keymap conn-read-expand-region-map
   :parent conn-expand-repeat-map
@@ -1865,18 +1853,18 @@ region.")
     (set-face-inverse-video 'mode-line nil))
   (cl-call-next-method))
 
-(defun conn-last-bounds-of-command ()
+(defun conn--last-bounds-of-command ()
   "Value of the most recent `conn-bounds-of-command' at this recursion depth."
-  (alist-get (recursion-depth) conn-last-bounds-of-command))
+  (alist-get (recursion-depth) conn--last-bounds-of-command))
 
 (defun conn-bounds-of-command (cmd arg)
   "Return bounds of CMD with ARGS.
 
-Bounds list is of the form (BEG END . SUBREGIONS).  Commands may return
+Bounds list is of the form ((BEG . END) . SUBREGIONS).  Commands may return
 multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
-  (setf (alist-get (recursion-depth) conn-last-bounds-of-command)
+  (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
         (funcall (or (alist-get cmd conn-bounds-of-command-alist)
                      (ignore-errors
                        (alist-get (get cmd :conn-command-thing)
@@ -3036,7 +3024,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
-    (setf (alist-get (recursion-depth) conn-last-bounds-of-command) nil)
+    (setf (alist-get (recursion-depth) conn--last-bounds-of-command) nil)
     (when (and conn-local-mode
                (eq (current-buffer) (marker-buffer conn-this-command-start))
                conn-this-command-thing
@@ -3402,7 +3390,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
-      conn-dispatch-target-finder-default))
+      conn-dispatch-default-target-finder))
 
 (defun conn--dispatch-default-action (command)
   (or (alist-get command conn-dispatch-default-action-alist)
@@ -3647,15 +3635,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (overlay-put overlay 'after-string
                (propertize
                 " "
-                'display `(space :width (,width)
-                                 :height (,height)))))
+                'display `(space :width (,width) :height (,height)))))
 
 (defun conn--left-justify-padding (overlay width height)
   (overlay-put overlay 'before-string
                (propertize
                 " "
-                'display `(space :width (,width)
-                                 :height (,height)))))
+                'display `(space :width (,width) :height (,height)))))
 
 (defun conn--centered-padding (overlay width height)
   (let* ((left (min 15 (floor width 2)))
@@ -3741,13 +3727,15 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                 rest))
     (if modes
         `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-map ,(or state 'conn-default-state-for-read-dispatch) mode)
+           (keymap-set (conn-get-mode-map
+                        ,(or state 'conn-default-state-for-read-dispatch) mode)
                        ,key `(,',thing
                               ,(or ,target-finder
                                    (conn--dispatch-target-finder ',thing))
                               .
                               ,',default-action)))
-      `(keymap-set (conn-get-state-map ,(or state 'conn-default-state-for-read-dispatch))
+      `(keymap-set (conn-get-state-map
+                    ,(or state 'conn-default-state-for-read-dispatch))
                    ,key `(,',thing
                           ,(or ,target-finder
                                (conn--dispatch-target-finder ',thing))
@@ -5335,7 +5323,7 @@ instances of from-string.")
      (append (list thing-mover arg) common)))
   (save-excursion
     (pcase-let ((`((,beg . ,end) . ,regions)
-                 (or (conn-last-bounds-of-command)
+                 (or (conn--last-bounds-of-command)
                      (conn-bounds-of-command thing-mover arg))))
       (if regions
           (let* ((regions (conn--merge-regions regions t))
@@ -5343,11 +5331,11 @@ instances of from-string.")
                   (lambda (method)
                     (pcase method
                       ('nil
-                       (cl-loop for (beg . end) in regions
-                                collect (buffer-substring beg end)))
+                        (cl-loop for (beg . end) in regions
+                                 collect (buffer-substring beg end)))
                       ('delete-only
-                       (cl-loop for (beg . end) in regions
-                                do (delete-region beg end)))
+                        (cl-loop for (beg . end) in regions
+                                 do (delete-region beg end)))
                       ('bounds regions)
                       (_
                        (prog1
@@ -5377,7 +5365,7 @@ instances of from-string.")
      (append (list thing-mover arg) common)))
   (save-excursion
     (pcase-let ((`((,beg . ,end) . ,regions)
-                 (or (conn-last-bounds-of-command)
+                 (or (conn--last-bounds-of-command)
                      (conn-bounds-of-command thing-mover arg))))
       (if regions
           (let* ((regions (conn--merge-regions regions t))
@@ -5385,11 +5373,11 @@ instances of from-string.")
                   (lambda (method)
                     (pcase method
                       ('nil
-                       (cl-loop for (beg . end) in regions
-                                collect (buffer-substring beg end)))
+                        (cl-loop for (beg . end) in regions
+                                 collect (buffer-substring beg end)))
                       ('delete-only
-                       (cl-loop for (beg . end) in regions
-                                do (delete-region beg end)))
+                        (cl-loop for (beg . end) in regions
+                                 do (delete-region beg end)))
                       ('bounds regions)
                       (_
                        (prog1
