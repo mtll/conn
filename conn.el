@@ -5844,6 +5844,8 @@ Handles rectangular regions."
     (when current-prefix-arg
       (prefix-numeric-value current-prefix-arg))
     t))
+  (when conn-transpose-recursive-edit-mode
+    (user-error "Recursive call to conn-transpose-regions"))
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
