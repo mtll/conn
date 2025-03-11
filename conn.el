@@ -5811,16 +5811,25 @@ Handles rectangular regions."
   "k" 'forward-line
   "u" 'forward-symbol)
 
+(defun conn--transpose-message ()
+  (message
+   (substitute-command-keys
+    (concat
+     "Define region. "
+     "Press \\[exit-recursive-edit] to end and use current region. "
+     "Press \\[abort-recursive-edit] to abort."))))
+
 (define-minor-mode conn-transpose-recursive-edit-mode
   "Find a region to transpose in a recursive edit."
   :global t
-  (when conn-transpose-recursive-edit-mode
-    (message
-     (substitute-command-keys
-      (concat
-       "Define region. "
-       "Press \\[exit-recursive-edit] to end and use current region. "
-       "Press \\[abort-recursive-edit] to abort.")))))
+  (if conn-transpose-recursive-edit-mode
+      (progn
+        (setq conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
+              eldoc-message-function #'ignore)
+        (add-hook 'post-command-hook 'conn--transpose-message))
+    (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
+          conn--wincontrol-prev-eldoc-msg-fn nil)
+    (remove-hook 'post-command-hook 'conn--transpose-message)))
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-command-state
@@ -5838,21 +5847,21 @@ Handles rectangular regions."
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
-     (let ((beg (region-beginning))
-           (end (region-end))
-           (buf (current-buffer)))
-       (conn-transpose-recursive-edit-mode 1)
-       (unwind-protect
-           (recursive-edit)
-         (conn-transpose-recursive-edit-mode -1))
-       (if (eq buf (current-buffer))
-           (transpose-regions beg end (region-beginning) (region-end))
-         (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
-               str2)
-           (with-current-buffer buf
-             (setq str2 (filter-buffer-substring beg end t))
-             (insert str1))
-           (insert str2)))))
+      (let ((beg (region-beginning))
+            (end (region-end))
+            (buf (current-buffer)))
+        (conn-transpose-recursive-edit-mode 1)
+        (unwind-protect
+            (recursive-edit)
+          (conn-transpose-recursive-edit-mode -1))
+        (if (eq buf (current-buffer))
+            (transpose-regions beg end (region-beginning) (region-end))
+          (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
+                str2)
+            (with-current-buffer buf
+              (setq str2 (filter-buffer-substring beg end t))
+              (insert str1))
+            (insert str2)))))
     ((let 0 arg)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
