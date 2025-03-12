@@ -5402,17 +5402,18 @@ instances of from-string.")
     (pcase-let ((`((,beg . ,end) . ,regions)
                  (or (conn--last-bounds-of-command)
                      (conn-bounds-of-command thing-mover arg))))
+      (deactivate-mark t)
       (if regions
           (let* ((regions (conn--merge-regions regions t))
                  (region-extract-function
                   (lambda (method)
                     (pcase method
                       ('nil
-                        (cl-loop for (beg . end) in regions
-                                 collect (buffer-substring beg end)))
+                       (cl-loop for (beg . end) in regions
+                                collect (buffer-substring beg end)))
                       ('delete-only
-                        (cl-loop for (beg . end) in regions
-                                 do (delete-region beg end)))
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end)))
                       ('bounds regions)
                       (_
                        (prog1
@@ -5444,17 +5445,18 @@ instances of from-string.")
     (pcase-let ((`((,beg . ,end) . ,regions)
                  (or (conn--last-bounds-of-command)
                      (conn-bounds-of-command thing-mover arg))))
+      (deactivate-mark t)
       (if regions
           (let* ((regions (conn--merge-regions regions t))
                  (region-extract-function
                   (lambda (method)
                     (pcase method
                       ('nil
-                        (cl-loop for (beg . end) in regions
-                                 collect (buffer-substring beg end)))
+                       (cl-loop for (beg . end) in regions
+                                collect (buffer-substring beg end)))
                       ('delete-only
-                        (cl-loop for (beg . end) in regions
-                                 do (delete-region beg end)))
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end)))
                       ('bounds regions)
                       (_
                        (prog1
