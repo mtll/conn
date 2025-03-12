@@ -4648,13 +4648,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
   (princ "Dispatch Register"))
 
-(cl-defmethod register-command-info ((_command (eql conn-last-dispatch-to-register)))
-  (make-register-preview-info
-   :types '(all)
-   :msg "Copy dispatch to register `%s'"
-   :act 'set
-   :noconfirm (memq register-use-preview '(nil never))
-   :smatch t))
+(static-if (version<= "30.1" emacs-version)
+    (cl-defmethod register-command-info ((_command (eql conn-last-dispatch-to-register)))
+      (make-register-preview-info
+       :types '(all)
+       :msg "Copy dispatch to register `%s'"
+       :act 'set
+       :noconfirm (memq register-use-preview '(nil never))
+       :smatch t)))
 
 (defun conn-last-dispatch-to-register (register)
   (interactive (list (register-read-with-preview "Dispatch to register: ")))
@@ -4950,26 +4951,28 @@ Expansions and contractions are provided by functions in
     (format "Narrowings In:  %s")
     (princ)))
 
-(cl-defmethod register-command-info ((_command (eql conn-narrow-ring-to-register)))
-  (make-register-preview-info
-   :types '(all)
-   :msg "Copy narrow ring to register `%s'"
-   :act 'set
-   :noconfirm (memq register-use-preview '(nil never))
-   :smatch t))
+(static-if (version<= "30.1" emacs-version)
+    (cl-defmethod register-command-info ((_command (eql conn-narrow-ring-to-register)))
+      (make-register-preview-info
+       :types '(all)
+       :msg "Copy narrow ring to register `%s'"
+       :act 'set
+       :noconfirm (memq register-use-preview '(nil never))
+       :smatch t)))
 
 (defun conn-narrow-ring-to-register (register)
   "Store narrow ring in REGISTER."
   (interactive (list (register-read-with-preview "Narrow ring to register: ")))
   (set-register register (conn--make-narrow-register)))
 
-(cl-defmethod register-command-info ((_command (eql conn-push-region-to-narrow-register)))
-  (make-register-preview-info
-   :types '(all)
-   :msg "Push region to narrow register `%s'"
-   :act 'set
-   :noconfirm (memq register-use-preview '(nil never))
-   :smatch t))
+(static-if (version<= "30.1" emacs-version)
+    (cl-defmethod register-command-info ((_command (eql conn-push-region-to-narrow-register)))
+      (make-register-preview-info
+       :types '(all)
+       :msg "Push region to narrow register `%s'"
+       :act 'set
+       :noconfirm (memq register-use-preview '(nil never))
+       :smatch t)))
 
 (defun conn-push-region-to-narrow-register (beg end register)
   "Prepend region to narrow register."
@@ -5495,13 +5498,14 @@ instances of from-string.")
   (princ (format "Command:  %s"
                  (car (conn-command-register-command val)))))
 
-(cl-defmethod register-command-info ((_command (eql conn-command-to-register)))
-  (make-register-preview-info
-   :types '(all)
-   :msg "Command to register `%s'"
-   :act 'set
-   :noconfirm (memq register-use-preview '(nil never))
-   :smatch t))
+(static-if (version<= "30.1" emacs-version)
+    (cl-defmethod register-command-info ((_command (eql conn-command-to-register)))
+      (make-register-preview-info
+       :types '(all)
+       :msg "Command to register `%s'"
+       :act 'set
+       :noconfirm (memq register-use-preview '(nil never))
+       :smatch t)))
 
 (defun conn-command-to-register (register)
   "Store command in REGISTER."
@@ -5563,13 +5567,14 @@ instances of from-string.")
                                (alist-get 'name tab)))))
                    "on another frame"))))
 
-(cl-defmethod register-command-info ((_command (eql conn-tab-to-register)))
-  (make-register-preview-info
-   :types '(all)
-   :msg "Tab to register `%s'"
-   :act 'set
-   :noconfirm (memq register-use-preview '(nil never))
-   :smatch t))
+(static-if (version<= "30.1" emacs-version)
+    (cl-defmethod register-command-info ((_command (eql conn-tab-to-register)))
+      (make-register-preview-info
+       :types '(all)
+       :msg "Tab to register `%s'"
+       :act 'set
+       :noconfirm (memq register-use-preview '(nil never))
+       :smatch t)))
 
 (defun conn-tab-to-register (register)
   "Store tab in REGISTER."
