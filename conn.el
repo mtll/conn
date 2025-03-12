@@ -3363,11 +3363,14 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'inner-line
  :bounds-op 'conn--bounds-of-inner-line
+ :forward-op 'conn-forward-inner-line
  :dispatch-target-finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
  'inner-line 'conn-discrete-thing-handler
  'back-to-indentation
+ 'conn-forward-inner-line
+ 'conn-backward-inner-line
  'conn-beginning-of-inner-line
  'conn-end-of-inner-line
  'comment-line)
@@ -5194,6 +5197,24 @@ When called interactively reads STRING with timeout
     (goto-char cs))
   (skip-chars-backward " \t" (line-beginning-position))
   (when (bolp) (skip-chars-forward " \t" (line-end-position))))
+
+(defun conn-forward-inner-line (N)
+  (interactive "p")
+  (if (> N 0)
+      (let ((pt (point)))
+        (conn--end-of-inner-line-1)
+        (unless (= pt (point)) (cl-decf N))
+        (forward-line N)
+        (conn--end-of-inner-line-1))
+    (let ((pt (point)))
+      (back-to-indentation)
+      (unless (= pt (point)) (cl-incf N))
+      (forward-line N)
+      (back-to-indentation))))
+
+(defun conn-backward-inner-line (N)
+  (interactive "p")
+  (conn-forward-inner-line (- N)))
 
 (defun conn-end-of-inner-line (&optional N)
   "Go to point after the last non-whitespace or comment character in line.
@@ -7393,7 +7414,7 @@ When ARG is nil the root window is used."
   "}" (conn-remap-key conn-forward-sentence-keys)
   "I" (conn-remap-key conn-backward-paragraph-keys)
   "i" (conn-remap-key conn-previous-line-keys)
-  "J" 'conn-beginning-of-inner-line
+  "J" 'conn-backward-inner-line
   "j" `(menu-item
         ""
         nil
@@ -7404,7 +7425,7 @@ When ARG is nil the root window is used."
                        binding))))
   "K" (conn-remap-key conn-forward-paragraph-keys)
   "k" (conn-remap-key conn-next-line-keys)
-  "L" 'conn-end-of-inner-line
+  "L" 'conn-forward-inner-line
   "l" `(menu-item
         ""
         nil
