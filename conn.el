@@ -1779,16 +1779,18 @@ Returns a cons of (STRING . OVERLAYS)."
            (cl-loop for win in windows
                     collect (list (window-point win)
                                   (window-vscroll win)
-                                  (window-hscroll win))))
+                                  (window-hscroll win))
+                    do (with-selected-window win
+                         (goto-char (window-start)))))
           (labels (conn--create-window-labels windows)))
       (unwind-protect
           (conn-label-select labels)
+        (mapc #'conn-label-delete labels)
         (cl-loop for win in windows
                  for (pt vscroll hscroll) in window-state
                  do (progn (set-window-point win pt)
                            (set-window-hscroll win hscroll)
-                           (set-window-vscroll win vscroll)))
-        (mapc #'conn-label-delete labels))))))
+                           (set-window-vscroll win vscroll))))))))
 
 ;;;; Read Things
 
