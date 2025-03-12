@@ -2414,12 +2414,12 @@ Possibilities: \\<query-replace-map>
                     (seq-group-by (pcase-lambda (`(,beg . ,_end))
                                     (marker-buffer beg))
                                   regions)
-                    (sort :lessp this-bufferp
-                          :in-place t))))
+                    (compat-call sort :lessp this-bufferp
+                                 :in-place t))))
     (cl-loop repeat conn-kapply-preview-max-overlays
-             for (b . e) in (nconc (sort (cdar regions)
-                                         :lessp nearest
-                                         :in-place t)
+             for (b . e) in (nconc (compat-call sort (cdar regions)
+                                                :lessp nearest
+                                                :in-place t)
                                    (mapcan #'cdr (cdr regions)))
              collect (let ((ov (make-overlay b e (marker-buffer b) t)))
                        (overlay-put ov 'category 'kapply-preview)
@@ -4696,16 +4696,17 @@ seconds."
                  target-ovs (thread-first
                               (seq-group-by (lambda (ov) (overlay-get ov 'window))
                                             (funcall finder))
-                              (sort
+                              (compat-call
+                               sort
                                :in-place t
                                :lessp (lambda (a _) (eq (selected-window) (car a)))))
                  (alist-get (selected-window) target-ovs)
-                 (sort
-                  (alist-get (selected-window) target-ovs)
-                  :in-place t
-                  :lessp (lambda (a b)
-                           (< (abs (- (overlay-start a) (point)))
-                              (abs (- (overlay-start b) (point))))))
+                 (compat-call sort
+                              (alist-get (selected-window) target-ovs)
+                              :in-place t
+                              :lessp (lambda (a b)
+                                       (< (abs (- (overlay-start a) (point)))
+                                          (abs (- (overlay-start b) (point))))))
                  labels (conn--dispatch-labels
                          (or (funcall
                               conn-label-string-generator
