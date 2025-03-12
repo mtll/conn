@@ -100,12 +100,14 @@
   "Padding for posframe.")
 
 (defun conn-posframe--hide-pre ()
-  (add-hook 'post-command-hook 'conn-posframe--hide-post)
-  (remove-hook 'pre-command-hook 'conn-posframe--hide-pre))
-
-(defun conn-posframe--hide-post ()
-  (posframe-hide " *conn-list-posframe*")
-  (remove-hook 'post-command-hook 'conn-posframe--hide-post))
+  (unless (or (advice-member-p 'conn-posframe--switch-kmacro-display
+                               this-command)
+              (advice-member-p 'conn-posframe--switch-tab-display
+                               this-command)
+              (advice-member-p 'conn-posframe--switch-buffer-display
+                               this-command))
+    (posframe-hide " *conn-list-posframe*")
+    (remove-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 ;; Implementation from window.el
 (defun conn-posframe--next-buffers (&optional window)
@@ -265,7 +267,7 @@
      (nreverse found-buffers)
      "\n")))
 
-(defun conn-posframe--switch-buffer-display ()
+(defun conn-posframe--switch-buffer-display (&rest _)
   (unless executing-kbd-macro
     (let* ((header (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-faicon)
@@ -300,7 +302,6 @@
        :border-width conn-posframe-border-width
        :border-color conn-posframe-border-color
        :lines-truncate t))
-    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--switch-tab-display (&rest _)
@@ -333,7 +334,6 @@
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
      :border-color conn-posframe-border-color)
-    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--switch-kmacro-display (&rest _)
@@ -363,73 +363,45 @@
      :timeout conn-posframe-macro-timeout
      :border-width conn-posframe-border-width
      :border-color conn-posframe-border-color)
-    (remove-hook 'post-command-hook 'conn-posframe--hide-post)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
-
-(defun conn-prev-buffer (&optional arg)
-  (interactive "P")
-  (previous-buffer arg t)
-  (conn-posframe--switch-buffer-display))
-
-(defun conn-next-buffer (&optional arg)
-  (interactive "P")
-  (next-buffer arg t)
-  (conn-posframe--switch-buffer-display))
-
-(defun conn-bury-buffer ()
-  (interactive)
-  (bury-buffer)
-  (conn-posframe--switch-buffer-display))
-
-(defun conn-unbury-buffer ()
-  (interactive)
-  (unbury-buffer)
-  (conn-posframe--switch-buffer-display))
-
-(defun conn-next-tab (&optional arg)
-  (interactive "P")
-  (tab-bar-switch-to-next-tab arg)
-  (conn-posframe--switch-tab-display))
-
-(defun conn-prev-tab (&optional arg)
-  (interactive "P")
-  (tab-bar-switch-to-prev-tab arg)
-  (conn-posframe--switch-tab-display))
-
-(defun conn-tab-new (&optional arg)
-  (interactive "P")
-  (tab-bar-new-tab arg)
-  (conn-posframe--switch-tab-display))
-
-(defun conn-tab-close (&optional arg)
-  (interactive "P")
-  (tab-bar-close-tab arg)
-  (conn-posframe--switch-tab-display))
 
 ;;;###autoload
 (define-minor-mode conn-posframe-mode
   "Posframes for Conn."
   :global t
   :lighter ""
-  :keymap (define-keymap
-            "<remap> <tab-new>" 'conn-tab-new
-            "<remap> <tab-close>" 'conn-tab-close
-            "<remap> <tab-next>" 'conn-next-tab
-            "<remap> <tab-previous>" 'conn-prev-tab
-            "<remap> <previous-buffer>" 'conn-prev-buffer
-            "<remap> <next-buffer>" 'conn-next-buffer
-            "<remap> <bury-buffer>" 'conn-bury-buffer
-            "<remap> <unbury-buffer>" 'conn-unbury-buffer)
   (if conn-posframe-mode
       (progn
         (advice-add 'kmacro-cycle-ring-next :after
                     'conn-posframe--switch-kmacro-display)
         (advice-add 'kmacro-cycle-ring-previous :after
-                    'conn-posframe--switch-kmacro-display))
-    (advice-remove 'kmacro-cycle-ring-next
-                   'conn-posframe--switch-kmacro-display)
-    (advice-remove 'kmacro-cycle-ring-previous
-                   'conn-posframe--switch-kmacro-display)))
+                    'conn-posframe--switch-kmacro-display)
+        (advice-add 'previous-buffer :after
+                    'conn-posframe--switch-buffer-display)
+        (advice-add 'next-buffer :after
+                    'conn-posframe--switch-buffer-display)
+        (advice-add 'bury-buffer :after
+                    'conn-posframe--switch-buffer-display)
+        (advice-add 'unbury-buffer :after
+                    'conn-posframe--switch-buffer-display)
+        (advice-add 'tab-bar-new-tab :after
+                    'conn-posframe--switch-tab-display)
+        (advice-add 'tab-bar-switch-to-next-tab :after
+                    'conn-posframe--switch-tab-display)
+        (advice-add 'tab-bar-switch-to-prev-tab :after
+                    'conn-posframe--switch-tab-display)
+        (advice-add 'tab-bar-close-tab :after
+                    'conn-posframe--switch-tab-display))
+    (advice-remove 'kmacro-cycle-ring-next 'conn-posframe--switch-kmacro-display)
+    (advice-remove 'kmacro-cycle-ring-previous 'conn-posframe--switch-kmacro-display)
+    (advice-remove 'previous-buffer 'conn-posframe--switch-buffer-display)
+    (advice-remove 'next-buffer 'conn-posframe--switch-buffer-display)
+    (advice-remove 'bury-buffer 'conn-posframe--switch-buffer-display)
+    (advice-remove 'unbury-buffer 'conn-posframe--switch-buffer-display)
+    (advice-remove 'tab-bar-new-tab 'conn-posframe--switch-tab-display)
+    (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe--switch-tab-display)
+    (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
+    (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)))
 
 (provide 'conn-posframe)
 
