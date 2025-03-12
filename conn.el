@@ -2410,12 +2410,12 @@ Possibilities: \\<query-replace-map>
                             (abs (- e2 (point)))))))
          (this-bufferp (lambda (a _)
                          (eq (current-buffer) (car a))))
-         (regions (thread-first
-                    (seq-group-by (pcase-lambda (`(,beg . ,_end))
-                                    (marker-buffer beg))
-                                  regions)
-                    (compat-call sort :lessp this-bufferp
-                                 :in-place t))))
+         (regions (compat-call sort
+                               (seq-group-by (pcase-lambda (`(,beg . ,_end))
+                                               (marker-buffer beg))
+                                             regions)
+                               :lessp this-bufferp
+                               :in-place t)))
     (cl-loop repeat conn-kapply-preview-max-overlays
              for (b . e) in (nconc (compat-call sort (cdar regions)
                                                 :lessp nearest
@@ -4693,13 +4693,12 @@ seconds."
           (prog1 repeat
             (unwind-protect
                 (setf
-                 target-ovs (thread-first
-                              (seq-group-by (lambda (ov) (overlay-get ov 'window))
-                                            (funcall finder))
-                              (compat-call
-                               sort
-                               :in-place t
-                               :lessp (lambda (a _) (eq (selected-window) (car a)))))
+                 target-ovs (compat-call
+                             sort
+                             (seq-group-by (lambda (ov) (overlay-get ov 'window))
+                                           (funcall finder))
+                             :in-place t
+                             :lessp (lambda (a _) (eq (selected-window) (car a))))
                  (alist-get (selected-window) target-ovs)
                  (compat-call sort
                               (alist-get (selected-window) target-ovs)
