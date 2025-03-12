@@ -1458,6 +1458,8 @@ By default `conn-emacs-state' does not bind anything."
 (defvar conn-label-string-generator 'conn-simple-labels
   "Function to create label strings for a number of elements.")
 
+(defvar conn-window-labeling-function 'conn-header-line-labels)
+
 ;; Each label is a DFA that should define its transition
 ;; functions as methods of the `conn-label-narrow' and
 ;; `conn-label-reset' generic functions.  `conn-label-narrow' is
@@ -1737,8 +1739,7 @@ Returns a cons of (STRING . OVERLAYS)."
              finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label (pop available))))))
 
-(defun conn--create-window-labels (windows)
-  (conn--ensure-window-labels)
+(defun conn-header-line-labels (windows)
   (let ((header-line-label
          '(conn-mode (:eval (conn--centered-header-label)))))
     (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
@@ -1773,6 +1774,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (cadr windows)
       (car windows)))
    (t
+    (conn--ensure-window-labels)
     (let ((window-state
            (cl-loop for win in windows
                     collect (list (window-point win)
@@ -1780,7 +1782,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                   (window-hscroll win))
                     do (with-selected-window win
                          (goto-char (window-start)))))
-          (labels (conn--create-window-labels windows)))
+          (labels (funcall conn-window-labeling-function windows)))
       (unwind-protect
           (conn-label-select labels)
         (mapc #'conn-label-delete labels)
