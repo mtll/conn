@@ -45,14 +45,8 @@
 
 ;;;;; Declerations
 
-(defvar conn-mode nil)
+(defvar conn-mode)
 (defvar conn-local-mode)
-(defvar conn-command-state)
-(defvar conn-emacs-state)
-(defvar conn-org-edit-state)
-(defvar conn-emacs-state)
-(defvar conn-state-map)
-(defvar conn-wincontrol-mode)
 
 (defvar-local conn--hide-mark-cursor nil)
 
@@ -242,9 +236,6 @@ For the meaning of CONDITION see `buffer-match-p'."
 
 (defvar conn-states nil
   "All defined conn states.")
-
-(defvar conn--state-objects nil
-  "State object plist.")
 
 (defvar conn-exit-functions nil
   "Abnormal hook run when a state is exited.
@@ -2311,13 +2302,13 @@ is read."
 (defvar conn-kmacro-apply-error nil
   "If non-nil contains the error encountered during macro application.")
 
-(defvar conn-kmacro-apply-end-hook nil
-  "Hook run after macro application has completed.")
-
 (defvar conn-kmacro-apply-start-hook nil
   "Hook run before macro application begins.")
 
-(defvar conn-kmacro-apply-iterator-hook nil
+(defvar conn-kmacro-apply-end-hook nil
+  "Hook run after macro application has completed.")
+
+(defvar conn-kmacro-apply-loop-hook nil
   "Hook run during each iteration of macro application.
 If any function returns a nil value then macro application it halted.")
 
@@ -2846,7 +2837,7 @@ The iterator must be the first argument in ARGLIST.
               (,iterator (lambda (&optional state)
                            (when (funcall ,iterator (or state :loop))
                              (run-hook-with-args-until-failure
-                              'conn-kmacro-apply-iterator-hook)))))
+                              'conn-kmacro-apply-loop-hook)))))
          (run-hook-wrapped 'conn-kmacro-apply-start-hook
                            (lambda (hook)
                              (ignore-errors (funcall hook))))
@@ -7608,7 +7599,8 @@ When ARG is nil the root window is used."
   "Remove `conn--global-binding-map' from `conn-mode-map'."
   (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
 
-(defvar-keymap conn-mode-map
+(define-keymap
+  :keymap conn-mode-map
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
 (defun conn--setup-keymaps ()
