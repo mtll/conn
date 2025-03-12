@@ -394,7 +394,7 @@ Begins the keyboard macro in `conn-command-state'."
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
 
-(transient-define-suffix conn--kapply-replace-rectangle-string (args)
+(transient-define-suffix conn--kapply-replace-rectangle-suffix (args)
   "Apply keyboard macro to a rectangle replacing each line."
   :transient 'transient--do-exit
   :key "t"
@@ -418,7 +418,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :window-conf args)
      (alist-get :kmacro args))))
 
-(transient-define-suffix conn--kapply-emacs-rectangle-string (args)
+(transient-define-suffix conn--kapply-emacs-rectangle-suffix (args)
   "Apply keyboard macro in `conn-emacs-state' to a rectangle."
   :transient 'transient--do-exit
   :key "e"
@@ -443,7 +443,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :window-conf args)
      (alist-get :kmacro args))))
 
-(transient-define-suffix conn--kapply-command-rectangle-string (args)
+(transient-define-suffix conn--kapply-command-rectangle-suffix (args)
   "Apply keyboard macro in `conn-command-state' to a rectangle."
   :transient 'transient--do-exit
   :key "c"
@@ -577,7 +577,7 @@ apply to each contiguous component of the region."
   (conn--kapply-compose-iterator
    (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover "Thing")))
      (conn--kapply-thing-iterator
-      cmd (region-beginning) (region-end)
+      cmd (region-bounds)
       (alist-get :maybe-order args)
       (alist-get :skip-empty args)
       arg))
@@ -884,7 +884,8 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
-    [ (conn--kapply-empty-infix)
+    [ (conn--kapply-state-infix)
+      (conn--kapply-empty-infix)
       (conn--kapply-macro-infix)]]
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
@@ -896,9 +897,10 @@ A zero means repeat until error."
       (conn--kapply-ibuffer-infix)]]
   [ [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "With State:"
-      (conn--kapply-replace-rectangle-string)
-      (conn--kapply-emacs-rectangle-string)
-      (conn--kapply-command-rectangle-string)]
+      (conn--kapply-things-in-region-suffix)
+      (conn--kapply-replace-rectangle-suffix)
+      (conn--kapply-emacs-rectangle-suffix)
+      (conn--kapply-command-rectangle-suffix)]
     [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "Apply Kmacro On:"
       (conn--kapply-occur)

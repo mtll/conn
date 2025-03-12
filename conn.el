@@ -1942,15 +1942,16 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
            finally return (cons (cons narrow-beg narrow-end)
                                 narrowings)))
 
-(defun conn-bounds-of-things-in-region (thing beg end)
-  "Return list of bounds of THING's in region from BEG to END."
+(defun conn-bounds-of-things-in-region (thing bounds)
   (save-mark-and-excursion
-    (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
-                 (ignore-errors
-                   (alist-get (get thing :conn-command-thing)
-                              conn-bounds-of-things-in-region-alist))
-                 conn-bounds-of-things-in-region-default)
-             thing beg end)))
+    (mapcan (pcase-lambda (`(,beg . ,end))
+              (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
+                           (ignore-errors
+                             (alist-get (get thing :conn-command-thing)
+                                        conn-bounds-of-things-in-region-alist))
+                           conn-bounds-of-things-in-region-default)
+                       thing beg end))
+            bounds)))
 
 (defun conn--things-in-region-default (thing beg end)
   (let ((thing (or (ignore-errors (get thing :conn-command-thing))
@@ -2474,24 +2475,23 @@ Possibilities: \\<query-replace-map>
         ((or :record :loop)
          (conn--kapply-advance-region (pop matches)))))))
 
-(defun conn--kapply-thing-iterator (thing beg end &optional order skip-empty nth)
-  (prog1
-      (thread-first
-        (conn-bounds-of-things-in-region thing beg end)
-        (conn--thread regions
-            (if skip-empty
-                (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
-                            regions)
-              regions))
-        (conn--thread regions
-            (if (or (null nth) (= 1 nth))
-                regions
-              (cl-loop with stack = regions
-                       while stack
-                       collect (car stack)
-                       do (cl-loop repeat nth do (pop stack)))))
-        (conn--kapply-region-iterator order))
-    (deactivate-mark)))
+(defun conn--kapply-thing-iterator (thing bounds &optional order skip-empty nth)
+  (deactivate-mark t)
+  (thread-first
+    (conn-bounds-of-things-in-region thing bounds)
+    (conn--thread regions
+        (if skip-empty
+            (seq-remove (lambda (reg) (conn-thing-empty-p thing reg))
+                        regions)
+          regions))
+    (conn--thread regions
+        (if (or (null nth) (= 1 nth))
+            regions
+          (cl-loop with stack = regions
+                   while stack
+                   collect (car stack)
+                   do (cl-loop repeat nth do (pop stack)))))
+    (conn--kapply-region-iterator order)))
 
 (defun conn--kapply-region-iterator (regions &optional order skip-empty)
   (when skip-empty
