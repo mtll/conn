@@ -52,7 +52,6 @@
 (defvar conn-emacs-state)
 (defvar conn-state-map)
 (defvar conn-wincontrol-mode)
-(defvar conn--wincontrol-prev-eldoc-msg-fn)
 
 (defvar-local conn--hide-mark-cursor nil)
 
@@ -5886,16 +5885,18 @@ Handles rectangular regions."
      "Press \\[exit-recursive-edit] to end and use current region. "
      "Press \\[abort-recursive-edit] to abort."))))
 
+(defvar conn--transpose-eldoc-prev-msg-fn)
+
 (define-minor-mode conn-transpose-recursive-edit-mode
   "Find a region to transpose in a recursive edit."
   :global t
   (if conn-transpose-recursive-edit-mode
       (progn
-        (setq conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
+        (setq conn--transpose-eldoc-prev-msg-fn eldoc-message-function
               eldoc-message-function #'ignore)
         (add-hook 'post-command-hook 'conn--transpose-message))
-    (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
-          conn--wincontrol-prev-eldoc-msg-fn nil)
+    (setq eldoc-message-function conn--transpose-eldoc-prev-msg-fn
+          conn--transpose-eldoc-prev-msg-fn nil)
     (remove-hook 'post-command-hook 'conn--transpose-message)))
 
 (define-keymap
@@ -6619,6 +6620,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar conn--wincontrol-help-format)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
+(defvar conn--wincontrol-prev-eldoc-msg-fn)
 
 (defconst conn--wincontrol-window-format-1
   (concat
