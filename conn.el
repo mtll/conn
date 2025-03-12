@@ -1682,7 +1682,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn-simple-labels (count &optional face)
   (named-let rec ((count count)
-                  (labels (take count conn-simple-label-characters)))
+                  (labels (mapcar #'copy-sequence
+                                  (take count conn-simple-label-characters))))
     (let* ((prefixes nil))
       (while (and labels
                   (> count (+ (length labels)
@@ -1722,11 +1723,10 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn--ensure-window-labels ()
   (let* ((windows (conn--get-windows nil 'nomini t))
-         (window-size (length windows))
-         (pool-size (length conn--window-label-pool)))
-    (when (> window-size pool-size)
+         (window-count (length windows)))
+    (when (length< conn--window-label-pool window-count)
       (setq conn--window-label-pool
-            (conn-simple-labels (* 2 window-size) 'conn-window-prompt-face)))
+            (conn-simple-labels (* 2 window-count) 'conn-window-prompt-face)))
     (cl-loop with available = (copy-sequence conn--window-label-pool)
              for win in windows
              for label = (window-parameter win 'conn-label)
@@ -1734,8 +1734,8 @@ Returns a cons of (STRING . OVERLAYS)."
                          (when (member label available)
                            (setq available (delete label available))
                            t))
-             collect win into need
-             finally (dolist (win need)
+             collect win into unlabeled
+             finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label (pop available))))))
 
 (defun conn--create-window-labels (windows)
@@ -1754,15 +1754,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;; From ace-window
 (defun conn--get-windows (&optional window minibuffer all-frames)
-  (seq-remove (lambda (window)
-                (or
-                 ;; ignore child frames
-                 (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
-                 ;; When `ignore-window-parameters' is nil, ignore windows whose
-                 ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
-                 (unless ignore-window-parameters
-                   (window-parameter window 'no-other-window))))
-              (window-list-1 window minibuffer all-frames)))
+  (cl-loop for win in (window-list-1 window minibuffer all-frames)
+           unless (or ;; ignore child frames
+                   (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
+                   ;; When `ignore-window-parameters' is nil, ignore windows whose
+                   ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
+                   (unless ignore-window-parameters
+                     (window-parameter window 'no-other-window)))
+           collect win))
 
 (defun conn--prompt-for-window (windows &optional dedicated)
   (unless dedicated
