@@ -521,7 +521,7 @@ Used to restore previous value when `conn-mode' is disabled.")
         (while (and (setq mode (get mode 'derived-mode-parent))
                     (not (memq mode parents)))
           (push mode parents))
-        parents))
+        (nreverse parents)))
   (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents))
 
 (defmacro conn--protected-let (var-forms &rest body)
