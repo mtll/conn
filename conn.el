@@ -1731,8 +1731,9 @@ Returns a cons of (STRING . OVERLAYS)."
              for win in windows
              for label = (window-parameter win 'conn-label)
              unless (and label
-                         (member label available)
-                         (or (setq available (delete label available)) t))
+                         (when (member label available)
+                           (setq available (delete label available))
+                           t))
              collect win into need
              finally (dolist (win need)
                        (set-window-parameter win 'conn-label (pop available))))))
@@ -2670,8 +2671,19 @@ Possibilities: \\<query-replace-map>
              (setf (alist-get (current-buffer) saved-excursions)
                    (cons (point-marker) (save-mark-and-excursion--save))))))))))
 
+(defvar-keymap conn-ibuffer-query-map
+  "s" 'save
+  "d" 'continue
+  "q" 'abort
+  "a" 'automatic
+  "e" 'edit
+  "C-h" 'help)
+
 (defun conn--kapply-ibuffer-overview (iterator)
-  (let (buffers)
+  (let ((msg (substitute-command-keys
+	      "\\<conn-ibuffer-query-map>Buffer is modified, continue how? (\\[help] for help)
+\\[save] save; \\[continue] don't save; \\[abort] abort; \\[edit] enter recursive edit; \\[automatic] don't save and don't ask again"))
+        buffers automatic)
     (lambda (state)
       (pcase state
         (:finalize
@@ -2682,8 +2694,42 @@ Possibilities: \\<query-replace-map>
                     `((predicate . (memq (current-buffer) ',buffers))))))
         ((or :record :loop)
          (prog1 (funcall iterator state)
-           (unless (memq (current-buffer) buffers)
-             (push (current-buffer) buffers))))))))
+           (unless (or automatic
+                       (memq (current-buffer) buffers))
+             (push (current-buffer) buffers)
+             (when (and (buffer-modified-p)
+                        buffer-file-name)
+               (redisplay)
+               (catch 'end
+                 (while t
+                   (pcase (let ((executing-kbd-macro nil)
+                                (defining-kbd-macro nil))
+                            (message "%s" msg)
+                            (lookup-key conn-ibuffer-query-map (vector (read-event))))
+                     ('save (throw 'end (save-buffer '(16))))
+                     ('continue (throw 'end nil))
+                     ('abort (setq quit-flag t))
+                     ('edit
+                      (let (executing-kbd-macro defining-kbd-macro)
+                        (recursive-edit))
+                      (throw 'end nil))
+                     ('automatic
+                      (setq automatic t)
+                      (throw 'end nil))
+                     ('help
+                      (with-output-to-temp-buffer "*Help*"
+                        (princ
+                         (substitute-command-keys
+                          "Specify how to proceed with keyboard macro execution.
+Possibilities: \\<conn-ibuffer-query-map>
+\\[save]	Save file and continue iteration.
+\\[continue]	Don't save file and continue iteration.
+\\[abort]	Stop the macro entirely right now.
+\\[edit]	Enter recursive edit; resume executing the keyboard macro afterwards.
+\\[automatic] 	Continue iteration and don't ask to save again."))
+                        (with-current-buffer standard-output
+                          (help-mode))))
+                     (_ (ding t)))))))))))))
 
 (defun conn--kapply-save-restriction (iterator)
   (let (kapply-saved-restrictions)
