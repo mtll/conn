@@ -5,7 +5,7 @@
 ;; Author: David Feller
 ;; Keywords: convenience, editing
 ;; Version: 0.0.1
-;; Package-Requires: ((emacs "30.1") (transient "0.6.0") (seq "2.24"))
+;; Package-Requires: ((emacs "29.1") (compat "30.0.2.0") (transient "0.6.0") (seq "2.24"))
 ;; Homepage: https://github.com/mtll/conn
 ;;
 ;; This program is free software; you can redistribute it and/or modify
@@ -29,6 +29,7 @@
 
 ;;;; Requires
 
+(require 'compat)
 (eval-when-compile
   (require 'inline)
   (require 'subr-x)
@@ -514,6 +515,15 @@ Used to restore previous value when `conn-mode' is disabled.")
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (intern (apply #'conn--stringify symbols-or-strings))))
 
+(static-if (version< emacs-version "30")
+    (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents)
+  (defun conn--derived-mode-all-parents (mode)
+    (let ((parents (list mode)))
+      (while (and (setq mode (get mode 'derived-mode-parent))
+                  (not (memq mode parents)))
+        (push mode parents))
+      parents)))
+
 (defmacro conn--protected-let (var-forms &rest body)
   (declare (indent 1))
   (cl-with-gensyms (success)
@@ -721,7 +731,7 @@ If BUFFER is nil check `current-buffer'."
   (cl-loop for mode in (thread-first
                          'major-mode
                          (buffer-local-value (or buffer (current-buffer)))
-                         (derived-mode-all-parents))
+                         (conn--derived-mode-all-parents))
            for prop = (get mode property)
            when prop return prop))
 
@@ -902,7 +912,7 @@ after point."
   (setq-local conn--local-major-mode-maps nil)
   (let* ((mmodes (if (get major-mode :conn-inhibit-inherit-maps)
                      (list major-mode)
-                   (reverse (derived-mode-all-parents major-mode))))
+                   (reverse (conn--derived-mode-all-parents major-mode))))
          mark-map-keys mode-map mode-mark-map)
     (dolist (state conn-states)
       (setq mark-map-keys
