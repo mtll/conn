@@ -5,7 +5,7 @@
 ;; Author: David Feller
 ;; Keywords: convenience, editing
 ;; Version: 0.1
-;; Package-Requires: ((emacs "30.1") (seq "2.24") conn)
+;; Package-Requires: ((emacs "30.1") (seq "2.23") conn)
 ;; Homepage: https://github.com/mtll/conn
 ;;
 ;; This program is free software; you can redistribute it and/or modify
