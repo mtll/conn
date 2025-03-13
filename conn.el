@@ -1240,7 +1240,8 @@ from its parents."
               (conn--state-all-parents state)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
-  "Support for (conn-substate STATE) specializers."
+  "Support for (conn-substate STATE) specializers.
+These match if the argument is a substate of STATE."
   (list conn--substate-generalizer))
 
 (cl-generic-define-generalizer conn--state-generalizer
@@ -2674,18 +2675,10 @@ Possibilities: \\<query-replace-map>
              (setf (alist-get (current-buffer) saved-excursions)
                    (cons (point-marker) (save-mark-and-excursion--save))))))))))
 
-(defvar-keymap conn-ibuffer-query-map
-  "s" 'save
-  "d" 'continue
-  "q" 'abort
-  "a" 'automatic
-  "e" 'edit
-  "C-h" 'help)
-
 (defun conn--kapply-ibuffer-overview (iterator)
   (let ((msg (substitute-command-keys
-	      "\\<conn-ibuffer-query-map>Buffer is modified, continue how? (\\[help] for help)
-\\[save] save; \\[continue] don't save; \\[abort] abort; \\[edit] enter recursive edit; \\[automatic] don't save and don't ask again"))
+	      "\\<query-replace-map>Buffer is modified, save before continuing?\
+ \\[act], \\[skip], \\[quit], \\[edit], \\[automatic], \\[help]"))
         buffers automatic)
     (lambda (state)
       (pcase state
@@ -2708,10 +2701,10 @@ Possibilities: \\<query-replace-map>
                    (pcase (let ((executing-kbd-macro nil)
                                 (defining-kbd-macro nil))
                             (message "%s" msg)
-                            (lookup-key conn-ibuffer-query-map (vector (read-event))))
-                     ('save (throw 'end (save-buffer '(16))))
-                     ('continue (throw 'end nil))
-                     ('abort (setq quit-flag t))
+                            (lookup-key query-replace-map (vector (read-event))))
+                     ('act (throw 'end (save-buffer '(16))))
+                     ('skip (throw 'end nil))
+                     ('quit (setq quit-flag t))
                      ('edit
                       (let (executing-kbd-macro defining-kbd-macro)
                         (recursive-edit))
@@ -2724,12 +2717,12 @@ Possibilities: \\<query-replace-map>
                         (princ
                          (substitute-command-keys
                           "Specify how to proceed with keyboard macro execution.
-Possibilities: \\<conn-ibuffer-query-map>
-\\[save]	Save file and continue iteration.
-\\[continue]	Don't save file and continue iteration.
-\\[abort]	Stop the macro entirely right now.
+Possibilities: \\<query-replace-map>
+\\[act]	Save file and continue iteration.
+\\[skip]	Don't save file and continue iteration.
+\\[quit]	Stop the macro entirely right now.
 \\[edit]	Enter recursive edit; resume executing the keyboard macro afterwards.
-\\[automatic] 	Continue iteration and don't ask to save again."))
+\\[automatic]	Continue iteration and don't ask to save again."))
                         (with-current-buffer standard-output
                           (help-mode))))
                      (_ (ding t)))))))))))))
@@ -7302,8 +7295,6 @@ When ARG is nil the root window is used."
   "s" 'conn-isearch-region-forward
   "r" 'conn-isearch-region-backward
   "y" 'yank-rectangle
-  "q" 'conn-replace-in-thing
-  "w" 'conn-regexp-replace-in-thing
   "DEL" 'clear-rectangle
   "n" 'conn-narrow-to-region
   "m" 'conn-narrow-indirect-to-region)
@@ -7382,6 +7373,8 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "q" 'conn-replace-in-thing
+  "r" 'conn-regexp-replace-in-thing
   "m" 'conn-narrow-indirect-to-thing
   "n" 'conn-narrow-to-thing
   "u" 'conn-join-lines-in-thing
