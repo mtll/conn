@@ -506,7 +506,7 @@ Begins the keyboard macro in `conn-command-state'."
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   "Apply keyboard macro to occurrence of a regex within a region."
   :transient 'transient--do-exit
-  :key "w"
+  :key "r"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
