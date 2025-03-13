@@ -268,7 +268,9 @@
      "\n")))
 
 (defun conn-posframe--switch-buffer-display (&rest _)
-  (unless executing-kbd-macro
+  (unless (or executing-kbd-macro
+              (not (advice-member-p 'conn-posframe--switch-buffer-display
+                                    this-command)))
     (let* ((header (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-faicon)
                                (concat conn-posframe--padding
@@ -305,7 +307,9 @@
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 (defun conn-posframe--switch-tab-display (&rest _)
-  (unless executing-kbd-macro
+  (unless (or executing-kbd-macro
+              (not (advice-member-p 'conn-posframe--switch-tab-display
+                                    this-command)))
     (posframe-show
      " *conn-list-posframe*"
      :string (concat
@@ -338,7 +342,9 @@
 
 (defun conn-posframe--switch-kmacro-display (&rest _)
   (require 'kmacro)
-  (unless executing-kbd-macro
+  (unless (or executing-kbd-macro
+              (not (advice-member-p 'conn-posframe--switch-kmacro-display
+                                    this-command)))
     (posframe-show
      " *conn-list-posframe*"
      :string (concat
