@@ -3429,6 +3429,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   "C-h" 'help
   "," 'reset-arg
   "i" 'forward-line
+  "L" 'move-end-of-line
   "TAB" 'repeat-dispatch
   "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
@@ -4683,37 +4684,37 @@ seconds."
       (while
           (prog1 repeat
             (unwind-protect
-                (setf
-                 target-ovs (compat-call
-                             sort
-                             (seq-group-by (lambda (ov) (overlay-get ov 'window))
-                                           (funcall finder))
-                             :in-place t
-                             :lessp (lambda (a _) (eq (selected-window) (car a))))
-                 (alist-get (selected-window) target-ovs)
-                 (compat-call sort
-                              (alist-get (selected-window) target-ovs)
-                              :in-place t
-                              :lessp (lambda (a b)
-                                       (< (abs (- (overlay-start a) (point)))
-                                          (abs (- (overlay-start b) (point))))))
-                 labels (conn--dispatch-labels
-                         (or (funcall
-                              conn-label-string-generator
-                              (let ((sum 0))
-                                (dolist (p target-ovs sum)
-                                  (setq sum (+ sum (length (cdr p)))))))
-                             (user-error "No matching %s"
-                                         (or (ignore-errors
-                                               (get thing-cmd :conn-command-thing))
-                                             "candidates")))
-                         target-ovs)
-                 target (conn-label-select labels)
-                 pt (overlay-start target)
-                 window (overlay-get target 'window)
-                 conn-this-command-thing (or (overlay-get target 'thing)
-                                             (ignore-errors
-                                               (get thing-cmd :conn-command-thing))))
+                (setf target-ovs
+                      (compat-call
+                       sort
+                       (seq-group-by (lambda (ov) (overlay-get ov 'window))
+                                     (funcall finder))
+                       :in-place t
+                       :lessp (lambda (a _) (eq (selected-window) (car a))))
+                      (alist-get (selected-window) target-ovs)
+                      (compat-call sort
+                                   (alist-get (selected-window) target-ovs)
+                                   :in-place t
+                                   :lessp (lambda (a b)
+                                            (< (abs (- (overlay-start a) (point)))
+                                               (abs (- (overlay-start b) (point))))))
+                      labels (conn--dispatch-labels
+                              (or (funcall
+                                   conn-label-string-generator
+                                   (let ((sum 0))
+                                     (dolist (p target-ovs sum)
+                                       (setq sum (+ sum (length (cdr p)))))))
+                                  (user-error "No matching %s"
+                                              (or (ignore-errors
+                                                    (get thing-cmd :conn-command-thing))
+                                                  "candidates")))
+                              target-ovs)
+                      target (conn-label-select labels)
+                      pt (overlay-start target)
+                      window (overlay-get target 'window)
+                      conn-this-command-thing (or (overlay-get target 'thing)
+                                                  (ignore-errors
+                                                    (get thing-cmd :conn-command-thing))))
               (pcase-dolist (`(_ . ,ovs) target-ovs)
                 (mapc #'delete-overlay ovs))
               (mapc #'conn-label-delete labels))
@@ -5193,14 +5194,15 @@ When called interactively reads STRING with timeout
   (forward-whitespace (- N)))
 
 (defun conn--end-of-inner-line-1 ()
-  (goto-char (line-end-position))
-  (when-let* ((cs (and (conn--point-in-comment-p)
-                       (save-excursion
-                         (comment-search-backward
-                          (line-beginning-position) t)))))
-    (goto-char cs))
-  (skip-chars-backward " \t" (line-beginning-position))
-  (when (bolp) (skip-chars-forward " \t" (line-end-position))))
+  (let ((end (goto-char (line-end-position))))
+    (when-let* ((cs (and (conn--point-in-comment-p)
+                         (save-excursion
+                           (comment-search-backward
+                            (line-beginning-position) t)))))
+      (goto-char cs))
+    (skip-chars-backward " \t" (line-beginning-position))
+    (when (bolp) (skip-chars-forward " \t" (line-end-position)))
+    (when (bolp) (goto-char end))))
 
 (defun conn-forward-inner-line (N)
   (interactive "p")
