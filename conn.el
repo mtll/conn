@@ -1020,12 +1020,15 @@ in STATE and return it."
                                  collect (conn-get-mode-map parent mode)))))
            (with-eval-after-load (cadr (symbol-function mode))
              (when (get mode 'derived-mode-parent)
-               (setf (alist-get mode (gethash state conn--major-mode-maps))
-                     (alist-get mode (gethash state conn--minor-mode-maps)))
-               (setf (alist-get mode (gethash state conn--minor-mode-maps)) nil)
-               (setf (gethash state conn--minor-mode-maps)
-                     (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
-                                 (gethash state conn--minor-mode-maps)))))))
+               (cl-loop for parent in (conn--state-all-parents state)
+                        do (setf (alist-get mode (gethash parent conn--major-mode-maps))
+                                 (alist-get mode (gethash parent conn--minor-mode-maps))
+
+                                 (alist-get mode (gethash state conn--minor-mode-maps)) nil
+
+                                 (gethash parent conn--minor-mode-maps)
+                                 (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
+                                             (gethash parent conn--minor-mode-maps))))))))
         ((get mode 'derived-mode-parent)
          (setf (alist-get mode (gethash state conn--major-mode-maps))
                (make-composed-keymap
