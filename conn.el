@@ -999,39 +999,28 @@ return it."
   (cl-assert (symbolp mode))
   (cl-labels
       ((compose-major-state-maps (state)
-         (let ((parent-maps nil))
-           (dolist (parent (reverse (conn--state-all-parents state)))
-             (push (make-sparse-keymap) parent-maps)
-             (setf (alist-get mode (gethash parent conn--major-mode-maps))
-                   (make-composed-keymap parent-maps)))
-           (alist-get mode (gethash state conn--major-mode-maps))))
+         (setf (alist-get mode (gethash state conn--major-mode-maps))
+               (make-composed-keymap
+                (cons
+                 (make-sparse-keymap)
+                 (cl-loop for parent in (cdr (conn--state-all-parents state))
+                          collect (cadr (compose-major-state-maps parent)))))))
        (compose-major-mode-maps (mmode)
-         (let ((mode-alist (gethash state conn--major-mode-maps))
-               (parent-maps nil))
-           (dolist (parent (reverse (cdr (conn--maybe-mmode-all-parents mmode))))
-             (push (conn-get-mode-map state parent) parent-maps)
-             (setf (alist-get parent mode-alist)
-                   (make-composed-keymap
-                    (cons conn--keymap-sentinel parent-maps))))
-           (setf (alist-get mmode mode-alist)
-                 (make-composed-keymap
-                  `(,conn--keymap-sentinel
-                    ,(or (alist-get mmode mode-alist)
-                         (make-composed-keymap (list (make-sparse-keymap))))
-                    ,@parent-maps)))))
+         (setf (alist-get mmode (gethash state conn--major-mode-maps))
+               (make-composed-keymap
+                `(,conn--keymap-sentinel
+                  ,(or (alist-get mmode (gethash state conn--major-mode-maps))
+                       (make-composed-keymap (list (make-sparse-keymap))))
+                  ,@(cl-loop for parent in (cdr (conn--maybe-mmode-all-parents mmode))
+                             collect (conn-get-mode-map state parent))))))
        (compose-minor-state-maps (state)
-         (let ((parent-maps nil))
-           (dolist (parent (reverse (cdr (conn--state-all-parents state))))
-             (push (conn-get-mode-map parent mode) parent-maps)
-             (setf (alist-get mode (gethash parent conn--minor-mode-maps))
-                   (make-composed-keymap
-                    (cons conn--keymap-sentinel parent-maps))))
-           (setf (alist-get mode (gethash state conn--minor-mode-maps))
-                 (make-composed-keymap
-                  `(,conn--keymap-sentinel
-                    ,(or (alist-get mode (gethash state conn--minor-mode-maps))
-                         (make-sparse-keymap))
-                    ,@parent-maps))))))
+         (setf (alist-get mode (gethash state conn--minor-mode-maps))
+               (make-composed-keymap
+                `(,conn--keymap-sentinel
+                  ,(or (alist-get mode (gethash state conn--minor-mode-maps))
+                       (make-sparse-keymap))
+                  ,@(cl-loop for parent in (conn--state-parents state)
+                             collect (conn-get-mode-map parent mode)))))))
     (or (thread-last
           (when-let* ((map (alist-get mode (gethash state conn--major-mode-maps))))
             (if (eq (cadr map) conn--keymap-sentinel)
