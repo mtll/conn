@@ -1883,7 +1883,7 @@ multiple SUBREGIONS when it makes sense to do so.  For example
 of 3 sexps moved over as well as the bounds of each individual sexp."
   (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
         (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                     (ignore-errors
+                     (when (symbolp cmd)
                        (alist-get (get cmd :conn-command-thing)
                                   conn-bounds-of-command-alist))
                      (lambda (arg) (funcall conn-bounds-of-command-default cmd arg)))
@@ -1949,10 +1949,13 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                                 narrowings)))
 
 (defun conn-bounds-of-things-in-region (thing bounds)
+  "Bounds of the THINGs contained within the region BOUNDS.
+
+BOUNDS is of the form returned by `region-bounds', which see."
   (save-mark-and-excursion
     (mapcan (pcase-lambda (`(,beg . ,end))
               (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
-                           (ignore-errors
+                           (when (symbolp thing)
                              (alist-get (get thing :conn-command-thing)
                                         conn-bounds-of-things-in-region-alist))
                            conn-bounds-of-things-in-region-default)
@@ -1960,7 +1963,8 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
             bounds)))
 
 (defun conn--things-in-region-default (thing beg end)
-  (let ((thing (or (ignore-errors (get thing :conn-command-thing))
+  (let ((thing (or (when (symbolp thing)
+                     (get thing :conn-command-thing))
                    thing)))
     (ignore-errors
       (goto-char beg)
@@ -2893,7 +2897,8 @@ The iterator must be the first argument in ARGLIST.
 (defun conn-get-mark-handler (command)
   "Return the mark handler for COMMAND."
   (or (alist-get command conn-mark-handler-overrides-alist)
-      (ignore-errors (get command :conn-mark-handler))))
+      (when (symbolp command)
+        (get command :conn-mark-handler))))
 
 (defun conn-register-thing (thing &rest rest)
   "Register a new THING.
@@ -3084,7 +3089,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                conn-this-command-thing
                conn-this-command-handler
                (not (region-active-p)))
-      (with-demoted-errors "Error in mark hook: %S"
+      (ignore-errors
         (funcall conn-this-command-handler conn-this-command-start)))))
 
 (defun conn--setup-mark ()
@@ -3364,7 +3369,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
  :dispatch-target-finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
- 'inner-line 'conn-discrete-thing-handler
+ 'inner-line 'conn-continuous-thing-handler
  'back-to-indentation
  'conn-forward-inner-line
  'conn-backward-inner-line
@@ -3620,7 +3625,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                     (setq thing-sign (not thing-sign)))
                    ('help
                     (completing-read-command))
-                   ((and (let thing (ignore-errors (get cmd :conn-command-thing)))
+                   ((and (let thing (when (symbolp cmd)
+                                      (get cmd :conn-command-thing)))
                          (guard thing))
                     (unless action
                       (set-action (conn--dispatch-default-action cmd)))
@@ -4701,7 +4707,7 @@ seconds."
                                      (dolist (p target-ovs sum)
                                        (setq sum (+ sum (length (cdr p)))))))
                                   (user-error "No matching %s"
-                                              (or (ignore-errors
+                                              (or (when (symbolp thing-cmd)
                                                     (get thing-cmd :conn-command-thing))
                                                   "candidates")))
                               target-ovs)
@@ -5197,7 +5203,6 @@ When called interactively reads STRING with timeout
                             (line-beginning-position) t)))))
       (goto-char cs))
     (skip-chars-backward " \t" (line-beginning-position))
-    (when (bolp) (skip-chars-forward " \t" (line-end-position)))
     (when (bolp) (goto-char end))))
 
 (defun conn-forward-inner-line (N)
@@ -5219,9 +5224,11 @@ When called interactively reads STRING with timeout
   (conn-forward-inner-line (- N)))
 
 (defun conn-end-of-inner-line (&optional N)
-  "Go to point after the last non-whitespace or comment character in line.
+  "Move point to after the last non-whitespace or comment character in line.
+
 Immediately repeating this command goes to the point at end
 of line proper.
+
 With a non-nil prefix arg go `forward-line' by N instead."
   (interactive "P")
   (if N
@@ -5241,9 +5248,11 @@ With a non-nil prefix arg go `forward-line' by N instead."
         (setq conn-this-command-thing 'outer-line)))))
 
 (defun conn-beginning-of-inner-line (&optional N)
-  "Go to first non-whitespace character in line.
+  "Move point to the first non-whitespace character in line.
+
 Immediately repeating this command goes to the point at beginning
 of line proper.
+
 With a non-nil prefix arg go `forward-line' by -N instead."
   (interactive "P")
   (if N
@@ -5263,11 +5272,13 @@ With a non-nil prefix arg go `forward-line' by -N instead."
         (setq conn-this-command-thing 'outer-line)))))
 
 (defun conn-end-of-list ()
+  "Move point to the end of the enclosing list."
   (interactive)
   (up-list 1 t t)
   (down-list -1 t))
 
 (defun conn-beginning-of-list ()
+  "Move point to the beginning of the enclosing list."
   (interactive)
   (backward-up-list nil t t)
   (down-list 1 t))
@@ -5286,6 +5297,7 @@ With a non-nil prefix arg go `forward-line' by -N instead."
 
 (defvar conn-query-flag nil
   "Default value for conn-query-flag.
+
 If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
 will query before replacing from-string, otherwise just replace all
 instances of from-string.")
