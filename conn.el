@@ -486,14 +486,6 @@ Used to restore previous value when `conn-mode' is disabled.")
 ;;;; Utilities
 
 (eval-and-compile
-  (defmacro conn--thread (form needle &rest forms)
-    (declare (debug (form symbolp body))
-             (indent 2))
-    (if forms
-        `(let ((,needle ,form))
-           (conn--thread ,(car forms) ,needle ,@(cdr forms)))
-      form))
-
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (cl-loop for s in symbols-or-strings
@@ -506,14 +498,13 @@ Used to restore previous value when `conn-mode' is disabled.")
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (intern (apply #'conn--stringify symbols-or-strings))))
 
-(static-if (version< emacs-version "30")
-    (defun conn--derived-mode-all-parents (mode)
-      (let ((parents (list mode)))
-        (while (and (setq mode (get mode 'derived-mode-parent))
-                    (not (memq mode parents)))
-          (push mode parents))
-        (nreverse parents)))
-  (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents))
+(defmacro conn--thread (form needle &rest forms)
+  (declare (debug (form symbolp body))
+           (indent 2))
+  (if forms
+      `(let ((,needle ,form))
+         (conn--thread ,(car forms) ,needle ,@(cdr forms)))
+    form))
 
 (defmacro conn--protected-let (var-forms &rest body)
   (declare (indent 1))
@@ -525,23 +516,23 @@ Used to restore previous value when `conn-mode' is disabled.")
                ,(macroexp-progn body)
              (setq ,success t))
          (unless ,success
-           ,@(mapcan (lambda (form) (nthcdr 2 form)) var-forms))))))
+           ,@(mapcan (lambda (form) (drop 2 form)) var-forms))))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   "Run BODY with ADVICE-FORMS temporarily applied.
 
-ADVICE-FORMS are of the form (SYMBOL HOW FUNCTION . PROPS), for the
+ADVICE-FORMS are of the form (SYMBOL HOW FUNCTION PROPS), for the
 meaning of these see `advice-add'."
   (declare (debug (form body))
            (indent 1))
-  (pcase-dolist (`(,symbol ,how ,func . ,props) (reverse advice-forms))
-    (setq body (cl-once-only (func symbol)
-                 `(progn
-                    (advice-add ,symbol ,how ,func ,(car props))
-                    (unwind-protect
-                        ,(macroexp-progn body)
-                      (advice-remove ,symbol ,func))))))
-  body)
+  (cl-loop for (symbol how func props) in advice-forms
+           collect `(advice-add ,symbol ,how ,func ,props) into adders
+           collect `(advice-remove ,symbol ,func) into removers
+           finally return `(progn
+                             ,@adders
+                             (unwind-protect
+                                 ,(macroexp-progn body)
+                               ,@removers))))
 
 (defmacro conn--without-conn-maps (&rest body)
   "Run BODY without any state, mode, or local maps active.
@@ -608,16 +599,30 @@ meaning of these see `advice-add'."
   "Run BODY ensuring `conn--input-method' is active."
   (declare (debug (body))
            (indent 0))
-  `(unwind-protect
-       (progn
-         (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
-         (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-         (when conn--input-method
-           (activate-input-method conn--input-method))
-         ,@body)
-     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
-     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-     (conn--activate-input-method)))
+  `(if conn--input-method
+       (unwind-protect
+           (progn
+             (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+             (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
+             (activate-input-method conn--input-method)
+             ,@body)
+         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
+         (conn--activate-input-method))
+     ,@body))
+
+(static-if (version< emacs-version "30")
+    (defun conn--derived-mode-all-parents (mode)
+      "Return all the parents of MODE, starting with MODE.
+
+Although this returns a fresh list it will not beginning in Emacs 30.1,
+so don't modify it."
+      (let ((parents (list mode)))
+        (while (and (setq mode (get mode 'derived-mode-parent))
+                    (not (memq mode parents)))
+          (push mode parents))
+        (nreverse parents)))
+  (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents))
 
 (defun conn-remap-key (from-keys)
   "Map to whatever is bound at FROM-KEYS.
@@ -818,6 +823,15 @@ after point."
         (nreverse matches)))))
 
 (defun conn--read-from-with-preview (prompt bounds &optional regexp-flag)
+  "Read a from string with `minibuffer-lazy-highlight-setup' previews.
+
+PROMPT is used as the minibuffer prompt when reading.
+
+BOUNDS is a list of the form returned by `region-bounds' and defines the
+limits of the highlighting.
+
+REGEXP-FLAG means to treat the from string as a regexp for the purpose
+of highlighting."
   (let ((default (conn--replace-read-default)))
     (conn--with-region-emphasis bounds
         (minibuffer-with-setup-hook
@@ -863,17 +877,6 @@ after point."
              when (conn-overlay-p ov)
              do (delete-overlay ov))))
 
-(defun conn--all-overlays (predicate &optional start end buffer)
-  "Get all overlays between START and END satisfying PREDICATE."
-  (with-current-buffer (or buffer (current-buffer))
-    (cl-loop for ov in (overlays-in (or start (if (use-region-p)
-                                                  (region-beginning)
-                                                (point-min)))
-                                    (or end (if (use-region-p)
-                                                (region-end)
-                                              (point-max))))
-             when (funcall predicate ov) collect ov)))
-
 (defun conn--append-keymap-parent (keymap new-parent)
   (if-let ((parent (keymap-parent keymap)))
       (set-keymap-parent keymap (append parent (list new-parent)))
@@ -886,6 +889,7 @@ after point."
       (set-keymap-parent keymap nil))))
 
 (defun conn-thing-command-p (cmd)
+  "Return non-nil if CMD is a dispatch action."
   (and (symbolp cmd)
        (not (not (get cmd :conn-command-thing)))))
 
@@ -894,6 +898,7 @@ after point."
 ;;;; States
 
 (define-inline conn-state-p (state)
+  "Return non-nil if STATE is a conn-state."
   (inline-quote (not (not (get ,state :conn--state)))))
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
@@ -935,6 +940,7 @@ in STATE and return it."
       (put mode :conn-mode-things (make-sparse-keymap))))
 
 (defun conn--shallow-copy-keymap (keymap)
+  "Make a copy of KEYMAP only copying the top level structure."
   (let (new-keymap)
     (while keymap
       (pcase (pop keymap)
@@ -955,6 +961,7 @@ If a state keymap is not of the form (keymap sentinel ...) then it is
 the naked state keymap and will need to be regenerated.")
 
 (defun conn-get-state-map (state)
+  "Return the state keymap for STATE."
   (cl-check-type state conn-state)
   (caddr
    (or (when-let* ((map (gethash state conn--state-maps)))
@@ -974,6 +981,9 @@ the naked state keymap and will need to be regenerated.")
                            collect (conn-get-state-map parent))))))))
 
 (defun conn-set-state-map (state keymap)
+  "Set the state keymap for STATE to KEYMAP.
+
+KEYMAP is copied using `conn--shallow-copy-keymap'."
   (cl-check-type state conn-state)
   (cl-assert (keymapp keymap))
   (setf (cdr (conn-get-state-map state))
@@ -983,9 +993,10 @@ the naked state keymap and will need to be regenerated.")
   `(conn-set-state-map ,state ,keymap))
 
 (defun conn-get-mode-map (state mode)
-  "Get MODE keymap for STATE.
-If one does not exists assign a new sparse keymap for MODE
-in STATE and return it."
+  "Return keymap for MODE in STATE.
+
+If one does not exists create a new sparse keymap for MODE in STATE and
+return it."
   (cl-check-type state conn-state)
   (caddr
    (or (when-let* ((map (alist-get mode (gethash state conn--major-mode-maps))))
@@ -1007,6 +1018,13 @@ in STATE and return it."
                     ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                                collect (conn-get-mode-map parent mode)))))))
        (cond
+        ((get mode 'derived-mode-parent)
+         (setf (alist-get mode (gethash state conn--major-mode-maps))
+               (make-composed-keymap
+                `(,conn--keymap-sentinel
+                  ,(make-sparse-keymap)
+                  ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                             collect (conn-get-mode-map parent mode))))))
         ((autoloadp (symbol-function mode))
          ;; We can't tell what sort of mode this is, add it to
          ;; `conn--minor-mode-maps' and setup a `with-eval-after-load' to
@@ -1029,13 +1047,6 @@ in STATE and return it."
                                  (gethash parent conn--minor-mode-maps)
                                  (seq-remove (pcase-lambda (`(,m . ,_)) (eq m mode))
                                              (gethash parent conn--minor-mode-maps))))))))
-        ((get mode 'derived-mode-parent)
-         (setf (alist-get mode (gethash state conn--major-mode-maps))
-               (make-composed-keymap
-                `(,conn--keymap-sentinel
-                  ,(make-sparse-keymap)
-                  ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
-                             collect (conn-get-mode-map parent mode))))))
         (t
          (setf (alist-get mode (gethash state conn--minor-mode-maps))
                (make-composed-keymap
@@ -1045,6 +1056,9 @@ in STATE and return it."
                             collect (conn-get-mode-map parent mode))))))))))
 
 (defun conn-set-mode-map (state mode keymap)
+  "Set keymap for MODE in STATE to KEYMAP.
+
+KEYMAP is copied using `conn--shallow-copy-keymap'."
   (cl-check-type state conn-state)
   (cl-assert (keymapp keymap))
   (setf (cdr (conn-get-mode-map state mode))
@@ -1055,6 +1069,7 @@ in STATE and return it."
 
 (defun conn-get-local-map (state)
   "Get local keymap for STATE in current buffer.
+
 If one does not exists assign a new sparse keymap for STATE
 and return it."
   (cl-check-type state conn-state)
@@ -1076,6 +1091,10 @@ and return it."
                            collect (conn-get-local-map parent))))))))
 
 (defun conn--regenerate-maps ()
+  "Regenerate all composed keymaps for all states.
+
+This is done when an already defined state is redefined with different
+parent states."
   (dolist (state conn-states)
     (setf (gethash state conn--state-maps)
           (caddr (gethash state conn--state-maps)))
@@ -1139,6 +1158,11 @@ and return it."
 (put 'conn--isearch-input-method 'permanent-local-hook t)
 
 (defun conn--input-method-mode-line ()
+  "Display the mode line information for conn--input-method.
+
+This ensures that the mode line information for the current input method
+is shown even if the input method is deactivated because a state is
+suppressing it."
   (cond
    (conn-local-mode
     (setq conn--prev-mode-line-mule-info mode-line-mule-info
@@ -1170,6 +1194,7 @@ mouse-3: Describe current input method")
       conn-default-state))
 
 (define-inline conn--state-parents (state)
+  "Return only the immediate parents for STATE."
   (inline-letevals (state)
     (inline-quote
      (progn
@@ -1179,7 +1204,10 @@ mouse-3: Describe current input method")
 (defconst conn--hash-key-missing (make-symbol "key-missing"))
 
 (define-inline conn-state-get (state property)
-  "Return the value in STATE of PROPERTY."
+  "Return the value of PROPERTY for STATE.
+
+If PROPERTY is not set for STATE then check all of STATE's parents for
+PROPERTY."
   (inline-letevals (state property)
     (inline-quote
      (progn
@@ -1193,7 +1221,7 @@ mouse-3: Describe current input method")
   `(conn-state-set ,state ,slot ,value))
 
 (define-inline conn-state-has-property-p (state property)
-  "Return the value in STATE of PROPERTY."
+  "Return t if PROPERTY is set for STATE."
   (inline-letevals (state property)
     (inline-quote
      (progn
@@ -1213,10 +1241,10 @@ Returns VALUE."
        (puthash ,property ,value (car (get ,state :conn--state)))))))
 
 (define-inline conn-state-unset (state property)
-  "Make PROPERTY unbound in STATE.
+  "Make PROPERTY unset in STATE.
 
-If a slot is unbound in a state it will inherit the value of that slot
-from its parents."
+If a property is unset in a state it will inherit the value of that
+property from its parents."
   (inline-letevals (state)
     (inline-quote
      (progn
@@ -1226,6 +1254,9 @@ from its parents."
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (define-inline conn--state-all-parents (state)
+  "Return all parents of state.
+
+The returned list is not fresh, don't modify it."
   (inline-letevals (state)
     (inline-quote
      (with-memoization
@@ -1252,7 +1283,8 @@ These match if the argument is a substate of STATE."
   (lambda (tag &rest _) (when tag (list tag))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (eql 'conn-state)))
-  "Support for conn-state specializers."
+  "Support for conn-state specializers.
+These match if the argument is a conn-state."
   (list conn--state-generalizer))
 
 (cl-defgeneric conn-exit-state (state &key &allow-other-keys)
@@ -1463,16 +1495,12 @@ By default `conn-emacs-state' does not bind anything."
 (defvar conn-label-string-generator 'conn-simple-labels
   "Function to create label strings for a number of elements.")
 
-(defvar conn-window-labeling-function 'conn-header-line-labels)
+(defvar conn-window-labeling-function 'conn-header-line-labels
+  "Function to label windows for `conn-prompt-for-window'.
 
-;; Each label is a DFA that should define its transition
-;; functions as methods of the `conn-label-narrow' and
-;; `conn-label-reset' generic functions.  `conn-label-narrow' is
-;; called when user input is received for the label to process and
-;; `conn-label-reset' is called when the user has failed to select a
-;; label and the narrowing process must restart from the beginning.
-;; `conn-label-delete' allows labels to clean up after themselves
-;; once the selection process has concluded.
+The function should accept a single argument, the list of windows to be
+labeled and it should return a list of structs for `conn-label-select',
+which see.")
 
 (cl-defstruct (conn-dispatch-label)
   "Store the state for a dispatch label."
@@ -1483,7 +1511,10 @@ By default `conn-emacs-state' does not bind anything."
   string window)
 
 (cl-defgeneric conn-label-delete (label)
-  "Delete the label LABEL.")
+  "Delete the label LABEL.
+
+This function is called on each label after a label has been selected
+and allow labels to clean up after themselves.")
 
 (cl-defgeneric conn-label-narrow (label prefix)
   "Narrow LABEL by PREFIX.
@@ -1579,7 +1610,15 @@ returned.")
   "Select a label from CANDIDATES.
 
 Prompts to user for prefix characters one at a time and narrows the
-labels after each one."
+labels after each one.
+
+Each of CANDIDATES should be a DFA that defines its transition functions
+as methods of the `conn-label-narrow' and `conn-label-reset' generic
+functions.  `conn-label-narrow' is called when user input is received
+for the label to process and `conn-label-reset' is called when the user
+has failed to select a label and the narrowing process must restart from
+the beginning.  `conn-label-delete' allows labels to clean up after
+themselves once the selection process has concluded."
   (let ((current candidates)
         (prompt "char:"))
     (cl-loop
@@ -1687,6 +1726,10 @@ Returns a cons of (STRING . OVERLAYS)."
     string))
 
 (defun conn-simple-labels (count &optional face)
+  "Return a list of label strings of length COUNT.
+
+If FACE is non-nil set label string face to FACE.  Otherwise label
+strings have `conn-dispatch-label-face'."
   (named-let rec ((count count)
                   (labels (mapcar #'copy-sequence
                                   (take count conn-simple-label-characters))))
@@ -1745,6 +1788,7 @@ Returns a cons of (STRING . OVERLAYS)."
                        (set-window-parameter win 'conn-label (pop available))))))
 
 (defun conn-header-line-labels (windows)
+  "Label WINDOWS using `head-line-format'."
   (let ((header-line-label
          '(conn-mode (:eval (conn--centered-header-label)))))
     (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
@@ -1758,19 +1802,19 @@ Returns a cons of (STRING . OVERLAYS)."
                (make-conn-window-label :string string :window win)))))
 
 ;; From ace-window
-(defun conn--get-windows (&optional window minibuffer all-frames)
+(defun conn--get-windows (&optional window minibuffer all-frames dedicated)
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
            unless (or ;; ignore child frames
                    (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
                    ;; When `ignore-window-parameters' is nil, ignore windows whose
                    ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
                    (unless ignore-window-parameters
-                     (window-parameter window 'no-other-window)))
+                     (window-parameter window 'no-other-window))
+                   (and (null dedicated) (window-dedicated-p win)))
            collect win))
 
-(defun conn--prompt-for-window (windows &optional dedicated)
-  (unless dedicated
-    (setq windows (seq-remove 'window-dedicated-p windows)))
+(defun conn-prompt-for-window (windows)
+  "Label and prompt for a window among WINDOWS."
   (cond
    ((length< windows 2)
     nil)
@@ -2937,8 +2981,8 @@ MARK-KEY is a key which should be bound to MARK-CMD in
     (put thing 'end-op end))
   (when-let* ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
-  (when-let* ((inner-bounds-op (plist-get rest :inner-bounds-op)))
-    (put thing :conn-inner-bounds-op inner-bounds-op))
+  (when-let* ((interior-op (plist-get rest :interior-op)))
+    (put thing :conn-interior-op interior-op))
   (cl-flet ((make-mark-command ()
               (let ((mark-command (conn--symbolicate "conn-mark-" thing)))
                 (fset mark-command
@@ -3105,15 +3149,16 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
-(defun conn-bounds-of-inner-thing (thing bounds)
-  (when-let* ((inner-op (get thing :conn-inner-bounds-op)))
-    (funcall inner-op (car bounds) (cdr bounds))))
+(defun conn-bounds-of-interior (thing bounds)
+  "Bounds of the interior of THING at BOUNDS."
+  (if-let* ((inner-op (get thing :conn-interior-op)))
+      (funcall inner-op (car bounds) (cdr bounds))
+    bounds))
 
 (defun conn-thing-empty-p (thing bounds)
-  (or (pcase (conn-bounds-of-inner-thing thing bounds)
-        ('nil nil)
-        ((and `(,beg . ,end) (guard (= beg end))) t))
-      (= (car bounds) (cdr bounds))))
+  "Return non-nil if the interior of THING at BOUNDS has length > 0."
+  (pcase-let ((`(,beg . ,end) (conn-bounds-of-interior thing bounds)))
+    (= beg end)))
 
 ;;;;; Thing Definitions
 
@@ -3215,16 +3260,16 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'list
  :forward-op 'forward-list
- :inner-bounds-op (lambda (beg end)
-                    (ignore-errors
-                      (cons (save-excursion
-                              (goto-char beg)
-                              (down-list 1)
-                              (point))
-                            (save-excursion
-                              (goto-char end)
-                              (down-list -1)
-                              (point))))))
+ :interior-op (lambda (beg end)
+                (ignore-errors
+                  (cons (save-excursion
+                          (goto-char beg)
+                          (down-list 1)
+                          (point))
+                        (save-excursion
+                          (goto-char end)
+                          (down-list -1)
+                          (point))))))
 
 (conn-register-thing-commands
  'list 'conn-continuous-thing-handler
@@ -3321,7 +3366,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (conn-register-thing
  'line
  :forward-op 'conn-line-forward-op
- :inner-bounds-op (lambda (beg end) (cons beg (1- end)))
+ :interior-op (lambda (beg end) (cons beg (1- end)))
  :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
@@ -3408,18 +3453,32 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   interactive description window-predicate)
 
 (defun conn-action-p (command)
+  "Return non-nil if COMMAND is a dispatch action."
   (not (not (get command :conn--action))))
 
 (cl-deftype conn-action () '(satisfies conn-action-p))
 
 (defvar conn--last-dispatch-command nil)
 
-(defvar conn-default-label-padding-func 'conn--centered-padding)
+(defvar conn-default-label-padding-func 'conn--centered-padding
+  "Default function for padding dispatch labels.
+
+Target overlays may override this default by setting the
+\\='padding-function overlay property.")
 
 (defvar conn-dispatch-window-predicates
-  '(conn-dispatch-ignored-mode))
+  '(conn-dispatch-ignored-mode)
+  "Predicates which windows must satisfy in order to be considered during
+dispatch.
 
-(defvar conn-default-state-for-read-dispatch 'conn-read-dispatch-state)
+Each function should take a window and return nil if the window should
+be ignored by during dispatch.")
+
+(defvar conn-default-state-for-read-dispatch 'conn-read-dispatch-state
+  "Default state for performing `conn--dispatch-read-thing'.
+
+The default may be overridden by setting the :conn-read-dispatch-state
+of a command.")
 
 (conn-define-state conn-read-dispatch-state (conn-command-state)
   "State for reading a dispatch command."
@@ -3437,6 +3496,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   "DEL" 'backward-delete-arg
   "\\" 'kapply)
 
+(put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
+
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-read-dispatch-state))
                                 &key &allow-other-keys)
   (unless executing-kbd-macro
@@ -3447,8 +3508,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   (unless executing-kbd-macro
     (set-face-inverse-video 'mode-line nil))
   (cl-call-next-method))
-
-(put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
@@ -3652,6 +3711,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           (message nil))))))
 
 (defun conn-dispatch-ignored-mode (win)
+  "Return non-nil if the major mode of WIN's buffer is ignored by dispatch.
+
+Ignored modes are those satisfying `provided-mode-derived-p' when called
+with `conn-dispatch-thing-ignored-modes'."
   (not (apply #'provided-mode-derived-p
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
@@ -6473,7 +6536,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (interactive)
   (display-buffer-override-next-command
    (lambda (_ _)
-     (cons (conn--prompt-for-window (conn--get-windows nil 'nomini)) 'reuse))))
+     (cons (conn-prompt-for-window (conn--get-windows nil 'nomini)) 'reuse))))
 
 (defun conn-this-window-prefix ()
   (interactive)
@@ -6485,7 +6548,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 (defun conn-transpose-window (window)
   "Prompt for window and swap current window and other window."
   (interactive
-   (list (conn--prompt-for-window
+   (list (conn-prompt-for-window
           (conn--get-windows nil 'nomini 'visible))))
   (unless (eq window (selected-window))
     (if window
@@ -6500,12 +6563,12 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (display-buffer
        buf
        (lambda (_ _)
-         (cons (conn--prompt-for-window (conn--get-windows nil 'nomini))
+         (cons (conn-prompt-for-window (conn--get-windows nil 'nomini))
                'reuse))))))
 
 (defun conn-yank-window (window)
   (interactive
-   (list (conn--prompt-for-window
+   (list (conn-prompt-for-window
           (conn--get-windows nil 'nomini 'visible))))
   (unless (eq window (selected-window))
     (if window
@@ -7098,7 +7161,7 @@ When called interactively N is `last-command-event'."
 
 (defun conn-goto-window (window)
   (interactive
-   (list (conn--prompt-for-window
+   (list (conn-prompt-for-window
           (conn--get-windows nil 'nomini 'visible))))
   (select-window window))
 
