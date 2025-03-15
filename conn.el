@@ -2180,22 +2180,28 @@ is read."
       (push dot conn--dots))))
 
 (defun conn-mouse-click-dot (event)
+  "Create dot at mouse click event."
   (interactive "e")
   (let* ((posn (event-start event))
          (point (posn-point posn)))
     (conn--create-dot point (1+ point) (window-buffer (posn-window posn)) t)))
 
 (defun conn-point-to-dot (point)
+  "Create dot at point."
   (interactive (list (point)))
   (conn--create-dot point (1+ point) nil t))
 
 (defun conn-region-to-dot (bounds)
+  "Create dot coverting region BOUNDS.
+
+BOUNDS is of the form returned by `region-bounds'."
   (interactive (list (region-bounds)))
   (pcase-dolist (`(,beg . ,end) bounds)
     (conn--create-dot beg end))
   (deactivate-mark t))
 
 (defun conn-delete-dot-at-click (event)
+  "Delete dot at mouse click event."
   (interactive "e")
   (let* ((posn (event-start event))
          (point (posn-point posn)))
@@ -2205,6 +2211,7 @@ is read."
           (delete-overlay ov))))))
 
 (defun conn-delete-dots ()
+  "Delete dots at point or if the region is active then within region."
   (interactive)
   (cl-flet ((get-dots (ovs)
               (cl-loop for ov in ovs
@@ -2217,7 +2224,7 @@ is read."
       (delete-overlay ov))
     (deactivate-mark t)))
 
-(defun conn-dot-mode-command-hook ()
+(defun conn--dot-mode-command-hook ()
   (when (overlay-buffer mouse-secondary-overlay)
     (with-current-buffer (overlay-buffer mouse-secondary-overlay)
       (let* ((beg (overlay-start mouse-secondary-overlay))
@@ -2240,7 +2247,7 @@ is read."
   "q" 'abort-recursive-edit)
 
 (define-minor-mode conn-dot-mode
-  "Minor mode for multiple dots."
+  "Minor mode for creating dots when finding the bounds of a recursive-edit."
   :global t
   :lighter " DOT"
   :interactive nil
@@ -2250,9 +2257,9 @@ is read."
         (delete-overlay mouse-secondary-overlay)
         (setq conn--dots nil
               buffer-read-only t)
-        (add-hook 'post-command-hook 'conn-dot-mode-command-hook))
+        (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
     (internal-pop-keymap conn-dot-mode-map 'overriding-terminal-local-map)
-    (remove-hook 'post-command-hook 'conn-dot-mode-command-hook)
+    (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
     (mapc #'delete-overlay conn--dots)
     (setq conn--dots nil
           buffer-read-only nil)))
@@ -2984,7 +2991,12 @@ command should be automatically created.
 MARK-KEY is a key which should be bound to MARK-CMD in
 `conn-mark-thing-map' (only in MODES if MODES is non-nil).
 
-\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
+INTERIOR-OP is a function which returns the bounds of the interior of a
+THING.  The INTERIOR-OP function should take two argument, the beginning
+and end of the THING, and return a cons of the beginning and end of the
+interior of THING.
+
+\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP INTERIOR-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
   (when-let* ((target-finder (plist-get rest :dispatch-target-finder)))
     (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
@@ -3029,7 +3041,12 @@ MARK-KEY is a key which should be bound to MARK-CMD in
           (keymap-set conn-mark-thing-map mark-key mark-command))))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
-  "Associate COMMANDS with a THING and a HANDLER."
+  "Associate COMMANDS with a THING and a HANDLER.
+
+HANDLER will be run from the `post-command-hook' and should be a
+function of one argument, the location of `point' before the command
+ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
+order to mark the region that should be defined by any of COMMANDS."
   (dolist (cmd commands)
     (put cmd :conn-command-thing thing)
     (put cmd :conn-mark-handler handler)))
@@ -3090,6 +3107,7 @@ MARK-KEY is a key which should be bound to MARK-CMD in
 
 (defun conn--push-ephemeral-mark (&optional location msg activate)
   "Push a mark at LOCATION that will not be added to `mark-ring'.
+
 For the meaning of MSG and ACTIVATE see `push-mark'."
   (if (not conn-local-mode)
       (push-mark location (not msg) activate)
@@ -3370,6 +3388,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
  'end-of-buffer 'beginning-of-buffer)
 
 (defun conn-line-forward-op (N)
+  "Move forward across one line.
+
+With arg N do it that many times.  Negative arg -N means move backward N
+lines.
+
+Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (cond ((> N 0)
          (forward-line N))
