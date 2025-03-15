@@ -217,7 +217,7 @@ For the meaning of CONDITION see `buffer-match-p'."
   :type '(list integer))
 
 (defface conn-dispatch-label-face
-  '((t (:inherit fixed-pitch :background "#ff8bd1" :foreground "black" :bold t)))
+  '((t (:inherit default :background "#ff8bd1" :foreground "black" :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
@@ -1552,21 +1552,16 @@ returned.")
   (conn-dispatch-label-target-overlay label))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label
-                          string overlay prop target-overlay)
+  (pcase-let (((cl-struct conn-dispatch-label string overlay target-overlay)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (move-overlay overlay
-                    (overlay-start overlay)
-                    (conn--find-label-end target-overlay string))
       (overlay-put target-overlay 'display
                    (propertize (buffer-substring
                                 (overlay-start target-overlay)
                                 (overlay-end target-overlay))
                                'face 'conn-read-string-match-face))
-      (conn--dispatch-setup-label-string
-       overlay prop string
-       (overlay-get target-overlay 'padding-function)))))
+      (conn--dispatch-setup-label
+       overlay string (overlay-get target-overlay 'padding-function)))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
@@ -1586,18 +1581,12 @@ returned.")
              (overlay-put target-overlay 'after-string nil)
              nil)
             (t
-             (let ((new-label (substring (overlay-get overlay prop) 1)))
+             (let ((new-string (substring (overlay-get overlay prop) 1)))
                (overlay-put overlay 'display nil)
                (overlay-put overlay 'before-string nil)
                (overlay-put overlay 'after-string nil)
-               (move-overlay overlay
-                             (overlay-start overlay)
-                             (conn--find-label-end
-                              (conn-dispatch-label-target-overlay label)
-                              new-label))
-               (conn--dispatch-setup-label-string
-                overlay prop new-label
-                (overlay-get target-overlay 'padding-function)))
+               (conn--dispatch-setup-label
+                overlay new-string (overlay-get target-overlay 'padding-function)))
              label)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
@@ -3770,38 +3759,6 @@ with `conn-dispatch-thing-ignored-modes'."
           (with-selected-window win
             (not (funcall window-predicate)))))))
 
-(defun conn--find-label-end (target-overlay label)
-  (catch 'end
-    (let* ((beg (overlay-end target-overlay))
-           (line-end (save-excursion
-                       (goto-char beg)
-                       (line-end-position)))
-           (pt beg)
-           (width (string-pixel-width label))
-           ;; display-line-numbers, line-prefix and wrap-prefix break
-           ;; width calculations, temporarily disable them.
-           (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
-           (line-pfx (prog1 line-prefix (setq-local line-prefix nil)))
-           (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
-      (unwind-protect
-          (while t
-            (when (or (= line-end pt)
-                      (= pt (point-max))
-                      (>= (car (window-text-pixel-size
-                                (overlay-get target-overlay 'window)
-                                beg pt))
-                          width))
-              (throw 'end pt))
-            (dolist (ov (overlays-in pt (1+ pt)))
-              (when (and (eq 'conn-read-string-match
-                             (overlay-get ov 'category))
-                         (not (eq target-overlay ov)))
-                (throw 'end pt)))
-            (cl-incf pt))
-        (setq-local display-line-numbers linum
-                    line-prefix line-pfx
-                    wrap-prefix wrap-pfx)))))
-
 (defun conn--right-justify-padding (overlay width height)
   (overlay-put overlay 'after-string
                (propertize
@@ -3828,11 +3785,52 @@ with `conn-dispatch-thing-ignored-modes'."
                   'display `(space :width (,right) :height (,height))
                   'face 'conn-dispatch-label-face))))
 
-(defun conn--dispatch-setup-label-string (overlay display-property display-string
-                                                  &optional padding-function)
-  (if (not (eq display-property 'display))
-      (overlay-put overlay display-property display-string)
-    (overlay-put overlay display-property nil)
+(defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
+  (unless (= (overlay-start overlay) (point-max))
+    (move-overlay overlay
+                  (overlay-start overlay)
+                  (1+ (overlay-start overlay)))
+    (let* ((target (overlay-get overlay 'target-overlay))
+           (beg (overlay-start overlay))
+           (end nil)
+           (line-end (save-excursion
+                       (goto-char beg)
+                       (line-end-position)))
+           (pt beg)
+           (width (car (unwind-protect
+                           (progn
+                             (overlay-put overlay 'display label-string)
+                             (window-text-pixel-size
+                              (overlay-get overlay 'window)
+                              (overlay-start overlay)
+                              (overlay-end overlay)))
+                         (overlay-put overlay 'display nil))))
+           ;; display-line-numbers, line-prefix and wrap-prefix break
+           ;; width calculations, temporarily disable them.
+           (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
+           (line-pfx (prog1 line-prefix (setq-local line-prefix nil)))
+           (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
+      (unwind-protect
+          (while (not end)
+            (when (or (= line-end pt)
+                      (= pt (point-max))
+                      (>= (car (window-text-pixel-size
+                                (overlay-get overlay 'window)
+                                beg pt))
+                          width))
+              (setq end pt))
+            (dolist (ov (overlays-in pt (1+ pt)))
+              (when (and (eq 'conn-read-string-match
+                             (overlay-get ov 'category))
+                         (not (eq target ov)))
+                (setq end pt)))
+            (cl-incf pt))
+        (setq-local display-line-numbers linum
+                    line-prefix line-pfx
+                    wrap-prefix wrap-pfx))
+      (move-overlay overlay (overlay-start overlay) end)))
+  (if (= (overlay-start overlay) (overlay-end overlay))
+      (overlay-put overlay 'before-string label-string)
     (pcase-let* ((`(,width . ,height)
                   (window-text-pixel-size
                    (overlay-get overlay 'window)
@@ -3840,7 +3838,7 @@ with `conn-dispatch-thing-ignored-modes'."
                    (overlay-end overlay)))
                  (`(,display-width . ,display-height)
                   (progn
-                    (overlay-put overlay display-property display-string)
+                    (overlay-put overlay 'display label-string)
                     (window-text-pixel-size
                      (overlay-get overlay 'window)
                      (overlay-start overlay)
@@ -3859,19 +3857,17 @@ with `conn-dispatch-thing-ignored-modes'."
         (dolist (p previews)
           (let* ((string (pop label-strings))
                  (beg (overlay-end p))
-                 (end (conn--find-label-end p string))
-                 (ov (make-overlay beg end))
-                 (prop (if (or (= beg end)
-                               (= beg (point-max)))
-                           'before-string
-                         'display)))
+                 (ov (make-overlay beg beg)))
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
-            (conn--dispatch-setup-label-string
-             ov prop string (overlay-get p 'padding-function))
+            (overlay-put ov 'target-overlay p)
+            (conn--dispatch-setup-label
+             ov string (overlay-get p 'padding-function))
             (push (make-conn-dispatch-label :string string
                                             :overlay ov
-                                            :prop prop
+                                            :prop (if (overlay-get ov 'display)
+                                                      'display
+                                                    'before-string)
                                             :target-overlay p)
                   labels)))))
     labels))
@@ -5934,6 +5930,7 @@ Handles rectangular regions."
       (unless subword-p (subword-mode -1)))))
 
 (defun conn-kebab-case-region ()
+  "Transform region text to kebab-case."
   (interactive)
   (conn--apply-region-transform
    (lambda ()
@@ -6040,21 +6037,21 @@ Handles rectangular regions."
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
-      (let ((beg (region-beginning))
-            (end (region-end))
-            (buf (current-buffer)))
-        (conn-transpose-recursive-edit-mode 1)
-        (unwind-protect
-            (recursive-edit)
-          (conn-transpose-recursive-edit-mode -1))
-        (if (eq buf (current-buffer))
-            (transpose-regions beg end (region-beginning) (region-end))
-          (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
-                str2)
-            (with-current-buffer buf
-              (setq str2 (filter-buffer-substring beg end t))
-              (insert str1))
-            (insert str2)))))
+     (let ((beg (region-beginning))
+           (end (region-end))
+           (buf (current-buffer)))
+       (conn-transpose-recursive-edit-mode 1)
+       (unwind-protect
+           (recursive-edit)
+         (conn-transpose-recursive-edit-mode -1))
+       (if (eq buf (current-buffer))
+           (transpose-regions beg end (region-beginning) (region-end))
+         (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
+               str2)
+           (with-current-buffer buf
+             (setq str2 (filter-buffer-substring beg end t))
+             (insert str1))
+           (insert str2)))))
     ((let 0 arg)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
@@ -6962,8 +6959,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "q" 'conn-transpose-window
   "Q" 'quit-window
   "y" 'conn-yank-window
-  "z" 'conn-wincontrol-zoom-out
-  "Z" 'conn-wincontrol-zoom-in)
+  "z" 'text-scale-decrease
+  "Z" 'text-scale-increase)
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
@@ -7231,10 +7228,12 @@ When called interactively N is `last-command-event'."
   (windmove-right))
 
 (defun conn-wincontrol-windmove-left ()
+  "`windmove-left'."
   (interactive)
   (windmove-left))
 
 (defun conn-wincontrol-quit-other-window-for-scrolling ()
+  "`quit-window' in `other-window-for-scrolling'."
   (interactive)
   (with-selected-window (other-window-for-scrolling)
     (quit-window)))
@@ -7274,6 +7273,7 @@ When called interactively N is `last-command-event'."
     (conn-scroll-up)))
 
 (defun conn-wincontrol-mru-window ()
+  "Select most recently used window."
   (interactive)
   (when-let* ((mru (get-mru-window 0 nil t t)))
     (select-window mru)))
