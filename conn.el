@@ -7364,7 +7364,6 @@ When ARG is nil the root window is used."
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
   "\\" 'conn-kapply-on-region-prefix
-  "RET" 'whitespace-cleanup
   "TAB" 'indent-rigidly
   "$" 'ispell-region
   "*" 'calc-grab-region
@@ -7386,7 +7385,7 @@ When ARG is nil the root window is used."
   "I" 'indent-rigidly
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
-  "v" 'vc-region-history
+  "h" 'vc-region-history
   "s" 'conn-isearch-region-forward
   "r" 'conn-isearch-region-backward
   "y" 'yank-rectangle
@@ -7394,9 +7393,10 @@ When ARG is nil the root window is used."
   "n" 'conn-narrow-to-region
   "m" 'conn-narrow-indirect-to-region)
 
-(when (version<= "30" emacs-version)
-  (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
-  (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff))
+(static-if (version<= "30" emacs-version)
+    (progn
+      (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
+      (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff)))
 
 (defvar-keymap conn-indent-rigidly-map
   "l" 'indent-rigidly-right
@@ -7468,6 +7468,7 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "RET" 'whitespace-cleanup
   "q" 'conn-replace-in-thing
   "r" 'conn-regexp-replace-in-thing
   "m" 'conn-narrow-indirect-to-thing
@@ -8001,6 +8002,9 @@ When ARG is nil the root window is used."
    'treesit-beginning-of-defun))
 
 (with-eval-after-load 'dired
+  (defvar dired-subdir-alist)
+  (defvar dired-movement-style)
+
   (declare-function dired-mark "dired")
   (declare-function dired-unmark "dired")
   (declare-function dired-next-line "dired")
@@ -8008,9 +8012,6 @@ When ARG is nil the root window is used."
   (declare-function dired-marker-regexp "dired")
   (declare-function dired-kill-subdir "dired-aux")
   (declare-function dired-kill-line "dired-aux")
-
-  (defvar dired-subdir-alist)
-  (defvar dired-movement-style)
 
   (defun conn--dispatch-dired-lines ()
     (conn--protected-let ((dired-movement-style 'bounded)
@@ -8127,14 +8128,14 @@ When ARG is nil the root window is used."
     "i" 'dired-previous-line))
 
 (with-eval-after-load 'ibuffer
+  (defvar ibuffer-movement-cycle)
+  (defvar ibuffer-marked-char)
+
   (declare-function ibuffer-backward-line "ibuffer")
   (declare-function ibuffer-unmark-forward "ibuffer")
   (declare-function ibuffer-mark-forward "ibuffer")
   (declare-function ibuffer-current-mark "ibuffer")
   (declare-function ibuffer-backward-filter-group "ibuffer")
-
-  (defvar ibuffer-movement-cycle)
-  (defvar ibuffer-marked-char)
 
   (defun conn--dispatch-ibuffer-lines ()
     (conn--protected-let ((ibuffer-movement-cycle nil)
