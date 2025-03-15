@@ -680,9 +680,17 @@ A zero means repeat until error."
                    (unless macro (setq macro (kmacro-ring-head))))
                   (_ (user-error "Cannot find %s at point"
                                  (get thing-cmd :conn-command-thing))))))))
-    (put action-sym :conn-action-description "Kapply")
-    (apply #'conn-dispatch-on-things
-           (conn--dispatch-read-thing action-sym continuation))))
+    (put action-sym :conn--action (make-conn--action :description "Kapply"))
+    (let* ((arg-form (funcall continuation action-sym))
+           (hist-form (mapcar (lambda (v)
+                                (if (eq v action-sym)
+                                    (symbol-function v)
+                                  (macroexp-quote v)))
+                              arg-form)))
+      (add-to-history 'command-history
+                      (cons 'conn-dispatch-on-things hist-form)
+                      nil t)
+      (apply 'conn-dispatch-on-things arg-form))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
