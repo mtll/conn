@@ -920,8 +920,9 @@ of highlighting."
                       (conn--maybe-mmode-all-parents major-mode)
                       (mapcar #'conn-get-mode-mark-map)
                       (make-composed-keymap))))
-      (dolist (key (where-is-internal 'conn-mark-thing-map
-                                      (list (cdar conn--current-state-map))))
+      (dolist (key (ignore-errors
+                     (where-is-internal 'conn-mark-thing-map
+                                        (list (cdar conn--current-state-map)))))
         (define-key mark-map-bindings key mark-map)))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
@@ -964,7 +965,7 @@ the naked state keymap and will need to be regenerated.")
   (cl-check-type state conn-state)
   (caddr
    (or (when-let* ((map (gethash state conn--state-maps)))
-         (if (eq (cadr map) conn--keymap-sentinel)
+         (if (eq (nth 1 map) conn--keymap-sentinel)
              map
            (setf (gethash state conn--state-maps)
                  (make-composed-keymap
@@ -1002,10 +1003,19 @@ return it."
          (setf (alist-get mode (gethash state conn--major-mode-maps))
                (make-composed-keymap
                 (cons
-                 (make-sparse-keymap)
+                 (or (alist-get mode (gethash state conn--major-mode-maps))
+                     (make-sparse-keymap))
                  (cl-loop for parent in (cdr (conn--state-all-parents state))
-                          collect (cadr (compose-major-state-maps parent)))))))
+                          collect (nth 1 (compose-major-state-maps parent)))))))
        (compose-major-mode-maps (mmode)
+         (dolist (parent-state (reverse (cdr (conn--state-all-parents state))))
+           (setf (alist-get mmode (gethash parent-state conn--major-mode-maps))
+                 (make-composed-keymap
+                  `(,conn--keymap-sentinel
+                    ,(or (alist-get mmode (gethash parent-state conn--major-mode-maps))
+                         (make-composed-keymap (list (make-sparse-keymap))))
+                    ,@(cl-loop for parent in (cdr (conn--maybe-mmode-all-parents mmode))
+                               collect (conn-get-mode-map parent-state parent))))))
          (setf (alist-get mmode (gethash state conn--major-mode-maps))
                (make-composed-keymap
                 `(,conn--keymap-sentinel
@@ -1019,18 +1029,19 @@ return it."
                 `(,conn--keymap-sentinel
                   ,(or (alist-get mode (gethash state conn--minor-mode-maps))
                        (make-sparse-keymap))
-                  ,@(cl-loop for parent in (conn--state-parents state)
+                  ,@(cl-loop for parent in (cdr (conn--state-parents state))
                              collect (conn-get-mode-map parent mode)))))))
     (or (thread-last
           (when-let* ((map (alist-get mode (gethash state conn--major-mode-maps))))
-            (if (eq (cadr map) conn--keymap-sentinel)
+            (if (eq (nth 1 map) conn--keymap-sentinel)
                 map
+              (compose-major-state-maps state)
               (compose-major-mode-maps mode)))
           (nth 2)
           (nth 1))
         (thread-last
           (when-let* ((map (alist-get mode (gethash state conn--minor-mode-maps))))
-            (if (eq (cadr map) conn--keymap-sentinel)
+            (if (eq (nth 1 map) conn--keymap-sentinel)
                 map
               (compose-minor-state-maps state)))
           (nth 2))
@@ -1038,24 +1049,22 @@ return it."
          ((autoloadp (symbol-function mode))
           (prog1
               (nth 2 (compose-minor-state-maps state))
-            (with-eval-after-load (cadr (symbol-function mode))
+            (with-eval-after-load (nth 1 (symbol-function mode))
               (when (get mode 'derived-mode-parent)
                 (cl-loop for parent in (conn--state-all-parents state)
-                         for cons = (assq parent (gethash parent conn--minor-mode-maps))
-                         do (setf (alist-get mode (gethash parent conn--major-mode-maps))
-                                  (make-composed-keymap (drop 3 cons))
+                         for cons = (assq mode (gethash parent conn--minor-mode-maps))
+                         do
+                         (setf (alist-get mode (gethash parent conn--major-mode-maps))
+                               (or (nth 3 cons) (make-sparse-keymap))
 
-                                  (cdr cons) nil
-
-                                  (gethash parent conn--minor-mode-maps)
-                                  (delq cons (gethash parent conn--minor-mode-maps))))
+                               (gethash parent conn--minor-mode-maps)
+                               (delq cons (gethash parent conn--minor-mode-maps)))
+                         (when cons (setf (cdr cons) nil)))
+                (compose-major-state-maps state)
                 (compose-major-mode-maps mode)))))
          ((get mode 'derived-mode-parent)
           (compose-major-state-maps state)
-          (thread-last
-            (compose-major-mode-maps mode)
-            (nth 2)
-            (nth 1)))
+          (nth 1 (nth 2 (compose-major-mode-maps mode))))
          (t
           (nth 2 (compose-minor-state-maps state)))))))
 
@@ -1092,27 +1101,6 @@ and return it."
                 ,(make-sparse-keymap)
                 ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                            collect (conn-get-local-map parent))))))))
-
-(defun conn--regenerate-maps ()
-  "Regenerate all composed keymaps for all states.
-
-This is done when an already defined state is redefined with different
-parent states."
-  (dolist (state conn-states)
-    (setf (gethash state conn--state-maps)
-          (caddr (gethash state conn--state-maps)))
-    (pcase-dolist (`(,mode . ,map) (gethash state conn--major-mode-maps))
-      (setf (alist-get mode (gethash state conn--major-mode-maps))
-            (caddr map)))
-    (pcase-dolist (`(,mode . ,map) (gethash state conn--minor-mode-maps))
-      (setf (alist-get mode (gethash state conn--minor-mode-maps))
-            (caddr map))))
-  (dolist (state conn-states)
-    (conn-get-state-map state)
-    (pcase-dolist (`(,mode . ,_map) (gethash state conn--major-mode-maps))
-      (conn-get-mode-map state mode))
-    (pcase-dolist (`(,mode . ,_map) (gethash state conn--minor-mode-maps))
-      (conn-get-mode-map state mode))))
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
@@ -1426,43 +1414,60 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                       (pop properties))
                  (format "Enter %S" (or (car-safe name) name)))))
     (cl-assert (plistp properties))
-    `(progn
-       (cl-assert
-        (cl-loop for parent in ',parents
-                 never (memq ',name (conn--state-all-parents parent)))
-        nil "Cycle detected in %s inheritance hierarchy" ',name)
+    (cl-with-gensyms (new-parents to-update)
+      `(progn
+         (cl-assert
+          (cl-loop for parent in ',parents
+                   never (memq ',name (conn--state-all-parents parent)))
+          nil "Cycle detected in %s inheritance hierarchy" ',name)
 
-       ;; Regenerate all state keymaps if the inheritance hierarchy
-       ;; has changed.
-       (when (and (conn-state-p ',name)
-                  (not (equal (conn--state-all-parents ',name)
-                              (cons ',name
-                                    (merge-ordered-lists
-                                     (mapcar #'conn--state-all-parents ',parents))))))
-         (conn--regenerate-maps))
+         (defvar-local ,name nil
+           ,(conn--stringify "Non-nil when `" name "' is active."))
 
-       (clrhash conn--state-all-parents-cache)
+         ;; Regenerate all state keymaps if the inheritance hierarchy
+         ;; has changed.
+         (let* ((,new-parents
+                 (cons ',name
+                       (merge-ordered-lists
+                        (mapcar #'conn--state-all-parents ',parents))))
+                (,to-update (when (and (conn-state-p ',name)
+                                       (not (equal (conn--state-all-parents ',name)
+                                                   ,new-parents)))
+                              (seq-union (conn--state-all-parents ',name)
+                                         ,new-parents))))
+           (dolist (state ,to-update)
+             (setf (gethash state conn--state-maps)
+                   (nth 2 (gethash state conn--state-maps)))
+             (pcase-dolist (`(,mode . ,map) (gethash state conn--major-mode-maps))
+               (setf (alist-get mode (gethash state conn--major-mode-maps))
+                     (nth 1 (nth 2 map))))
+             (pcase-dolist (`(,mode . ,map) (gethash state conn--minor-mode-maps))
+               (setf (alist-get mode (gethash state conn--minor-mode-maps))
+                     (nth 2 map))))
 
-       (put ',name :conn--state
-            (cons (cl-loop with kvs = (list ,@properties)
-                           with table = (make-hash-table :test 'eq)
-                           for (k v) on kvs by #'cddr
-                           do (puthash k v table)
-                           finally return table)
-                  ',parents))
+           (clrhash conn--state-all-parents-cache)
 
-       (cl-pushnew ',name conn-states)
+           (put ',name :conn--state
+                (cons (cl-loop with kvs = (list ,@properties)
+                               with table = (make-hash-table :test 'eq)
+                               for (k v) on kvs by #'cddr
+                               do (puthash k v table)
+                               finally return table)
+                      ',parents))
 
-       (defvar-local ,name nil
-         ,(conn--stringify "Non-nil when `" name "' is active."))
+           (dolist (state ,to-update)
+             (conn-get-state-map state)
+             (pcase-dolist (`(,mode . ,_map) (gethash state conn--major-mode-maps))
+               (conn-get-mode-map state mode))
+             (pcase-dolist (`(,mode . ,_map) (gethash state conn--minor-mode-maps))
+               (conn-get-mode-map state mode))))
 
-       ;; Initialize the state map
-       (conn-get-state-map ',name)
+         (cl-pushnew ',name conn-states)
 
-       (defun ,name ()
-         ,doc
-         (interactive)
-         (conn-enter-state ',name)))))
+         (defun ,name ()
+           ,doc
+           (interactive)
+           (conn-enter-state ',name))))))
 
 (conn-define-state conn-null-state ()
   "An empty state.
