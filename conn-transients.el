@@ -660,6 +660,7 @@ A zero means repeat until error."
               (lambda (window pt thing-cmd thing-arg)
                 (with-selected-window window
                   (save-mark-and-excursion
+                    (push-mark)
                     (goto-char pt)
                     (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
                       ((and reg (pred identity))
@@ -671,6 +672,7 @@ A zero means repeat until error."
                                      (get thing-cmd :conn-command-thing)))))))
             (lambda (window pt thing-cmd thing-arg)
               (with-selected-window window
+                (push-mark)
                 (goto-char pt)
                 (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
                   ((and reg (pred identity))
