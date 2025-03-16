@@ -3568,7 +3568,8 @@ of a command.")
                  (list command-name "" (concat thing binding)))))))
 
 (defun conn--dispatch-read-thing (&optional default-action)
-  (let* ((prompt nil)
+  (let* ((window-conf (current-window-configuration))
+         (prompt nil)
          (action default-action)
          (action-struct (get default-action :conn--action))
          (action-args nil)
@@ -3602,31 +3603,34 @@ of a command.")
              (setq saved-marker (save-mark-and-excursion--save)))
            (setq handle (prepare-change-group))
            (activate-change-group handle)
-           (when-let ((int (conn--action-interactive action-struct)))
-             (funcall int)))
+           (unwind-protect
+               (when-let ((int (conn--action-interactive action-struct)))
+                 (funcall int))
+             (set-window-configuration window-conf)))
          (completing-read-command ()
            (conn--with-state conn-previous-state
-             (save-window-excursion
-               (setq keys nil
-                     cmd (intern
-                          (completing-read
-                           "Command: "
-                           (lambda (string pred action)
-                             (if (eq action 'metadata)
-                                 `(metadata
-                                   ,(cons 'affixation-function
-                                          (conn--dispatch-make-command-affixation))
-                                   (category . conn-dispatch-command))
-                               (complete-with-action action obarray string pred)))
-                           (lambda (sym)
-                             (pcase sym
-                               ('help)
-                               ((and (pred functionp)
-                                     (guard (or (get sym :conn-command-thing)
-                                                (conn-action-p sym))))
-                                t)
-                               (`(,_ ,_ . ,_) t)))
-                           t))))))
+             (unwind-protect
+                 (setq keys nil
+                       cmd (intern
+                            (completing-read
+                             "Command: "
+                             (lambda (string pred action)
+                               (if (eq action 'metadata)
+                                   `(metadata
+                                     ,(cons 'affixation-function
+                                            (conn--dispatch-make-command-affixation))
+                                     (category . conn-dispatch-command))
+                                 (complete-with-action action obarray string pred)))
+                             (lambda (sym)
+                               (pcase sym
+                                 ('help)
+                                 ((and (pred functionp)
+                                       (guard (or (get sym :conn-command-thing)
+                                                  (conn-action-p sym))))
+                                  t)
+                                 (`(,_ ,_ . ,_) t)))
+                             t)))
+               (set-window-configuration window-conf))))
          (read-command ()
            (setq keys (read-key-sequence
                        (format prompt
@@ -3687,6 +3691,7 @@ of a command.")
                          ;; conn-state value for some reason.
                          (run-with-timer 0 nil 'conn-dispatch-kapply-prefix
                                          (lambda (action)
+                                           (set-window-configuration window-conf)
                                            (set-action action)
                                            (read-dispatch)))
                          (setq quit-flag t))
