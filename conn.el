@@ -3800,30 +3800,39 @@ with `conn-dispatch-thing-ignored-modes'."
             (not (funcall window-predicate)))))))
 
 (defun conn--right-justify-padding (overlay width height)
-  (overlay-put overlay 'after-string
-               (propertize
-                " "
-                'display `(space :width (,width) :height (,height)))))
+  ;; The overlay has an after-string only when it is at the end of a
+  ;; line, and thus doesn't need any padding.
+  (unless (overlay-get overlay 'after-string)
+    (overlay-put overlay 'after-string
+                 (propertize
+                  " "
+                  'display `(space :width (,width) :height (,height))))))
 
 (defun conn--left-justify-padding (overlay width height)
-  (overlay-put overlay 'before-string
-               (propertize
-                " "
-                'display `(space :width (,width) :height (,height)))))
+  ;; The overlay has an after-string only when it is at the end of a
+  ;; line, and thus doesn't need any padding.
+  (unless (overlay-get overlay 'before-string)
+    (overlay-put overlay 'before-string
+                 (propertize
+                  " "
+                  'display `(space :width (,width) :height (,height))))))
 
 (defun conn--centered-padding (overlay width height)
   (let* ((left (min 15 (floor width 2)))
          (right (max (- width 15) (ceiling width 2))))
-    (overlay-put overlay 'before-string
-                 (propertize
-                  " "
-                  'display `(space :width (,left) :height (,height))
-                  'face 'conn-dispatch-label-face))
-    (overlay-put overlay 'after-string
-                 (propertize
-                  " "
-                  'display `(space :width (,right) :height (,height))
-                  'face 'conn-dispatch-label-face))))
+    ;; The overlay has an after-string only when it is at the end of a
+    ;; line, and thus shouldn't need any padding.
+    (unless (overlay-get overlay 'after-string)
+      (overlay-put overlay 'before-string
+                   (propertize
+                    " "
+                    'display `(space :width (,left) :height (,height))
+                    'face 'conn-dispatch-label-face))
+      (overlay-put overlay 'after-string
+                   (propertize
+                    " "
+                    'display `(space :width (,right) :height (,height))
+                    'face 'conn-dispatch-label-face)))))
 
 (defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
   (unless (= (overlay-start overlay) (point-max))
@@ -3852,8 +3861,17 @@ with `conn-dispatch-thing-ignored-modes'."
            (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
       (unwind-protect
           (while (not end)
-            (when (or (= line-end pt)
-                      (= pt (point-max))
+            (when (= line-end pt)
+              (if (/= pt beg)
+                  (setq end pt)
+                (setq end (1+ pt))
+                (let ((str (buffer-substring pt end)))
+                  (add-text-properties
+                   0 (length str)
+                   `(invisible ,(get-char-property pt 'invisible))
+                   str)
+                  (overlay-put overlay 'after-string str))))
+            (when (or (= pt (point-max))
                       (>= (car (window-text-pixel-size
                                 (overlay-get overlay 'window)
                                 beg pt))
