@@ -3800,39 +3800,30 @@ with `conn-dispatch-thing-ignored-modes'."
             (not (funcall window-predicate)))))))
 
 (defun conn--right-justify-padding (overlay width height)
-  ;; The overlay has an after-string only when it is at the end of a
-  ;; line, and thus doesn't need any padding.
-  (unless (overlay-get overlay 'after-string)
-    (overlay-put overlay 'after-string
-                 (propertize
-                  " "
-                  'display `(space :width (,width) :height (,height))))))
+  (overlay-put overlay 'after-string
+               (propertize
+                " "
+                'display `(space :width (,width) :height (,height)))))
 
 (defun conn--left-justify-padding (overlay width height)
-  ;; The overlay has an after-string only when it is at the end of a
-  ;; line, and thus doesn't need any padding.
-  (unless (overlay-get overlay 'before-string)
-    (overlay-put overlay 'before-string
-                 (propertize
-                  " "
-                  'display `(space :width (,width) :height (,height))))))
+  (overlay-put overlay 'before-string
+               (propertize
+                " "
+                'display `(space :width (,width) :height (,height)))))
 
 (defun conn--centered-padding (overlay width height)
   (let* ((left (min 15 (floor width 2)))
          (right (max (- width 15) (ceiling width 2))))
-    ;; The overlay has an after-string only when it is at the end of a
-    ;; line, and thus shouldn't need any padding.
-    (unless (overlay-get overlay 'after-string)
-      (overlay-put overlay 'before-string
-                   (propertize
-                    " "
-                    'display `(space :width (,left) :height (,height))
-                    'face 'conn-dispatch-label-face))
-      (overlay-put overlay 'after-string
-                   (propertize
-                    " "
-                    'display `(space :width (,right) :height (,height))
-                    'face 'conn-dispatch-label-face)))))
+    (overlay-put overlay 'before-string
+                 (propertize
+                  " "
+                  'display `(space :width (,left) :height (,height))
+                  'face 'conn-dispatch-label-face))
+    (overlay-put overlay 'after-string
+                 (propertize
+                  " "
+                  'display `(space :width (,right) :height (,height))
+                  'face 'conn-dispatch-label-face))))
 
 (defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
   (unless (= (overlay-start overlay) (point-max))
@@ -3889,24 +3880,25 @@ with `conn-dispatch-thing-ignored-modes'."
       (move-overlay overlay (overlay-start overlay) end)))
   (if (= (overlay-start overlay) (overlay-end overlay))
       (overlay-put overlay 'before-string label-string)
-    (pcase-let* ((`(,width . ,height)
-                  (window-text-pixel-size
-                   (overlay-get overlay 'window)
-                   (overlay-start overlay)
-                   (overlay-end overlay)))
-                 (`(,display-width . ,display-height)
-                  (progn
-                    (overlay-put overlay 'display label-string)
+    (unless (overlay-get overlay 'after-string)
+      (pcase-let* ((`(,width . ,height)
                     (window-text-pixel-size
                      (overlay-get overlay 'window)
                      (overlay-start overlay)
-                     (overlay-end overlay))))
-                 (padding-width (max (- width display-width) 0)))
-      (if padding-function
-          (funcall padding-function overlay padding-width
-                   (when (/= height display-height) (1- height)))
-        (funcall conn-default-label-padding-func overlay padding-width
-                 (when (/= height display-height) (1- height)))))))
+                     (overlay-end overlay)))
+                   (`(,display-width . ,display-height)
+                    (progn
+                      (overlay-put overlay 'display label-string)
+                      (window-text-pixel-size
+                       (overlay-get overlay 'window)
+                       (overlay-start overlay)
+                       (overlay-end overlay))))
+                   (padding-width (max (- width display-width) 0)))
+        (if padding-function
+            (funcall padding-function overlay padding-width
+                     (when (/= height display-height) (1- height)))
+          (funcall conn-default-label-padding-func overlay padding-width
+                   (when (/= height display-height) (1- height))))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
