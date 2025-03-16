@@ -2085,21 +2085,23 @@ are read."
                  cmd (key-binding keys t)))
          (completing-read-command ()
            (save-window-excursion
-             (setq cmd (intern
-                        (completing-read
-                         "Command: "
-                         (lambda (string pred action)
-                           (if (eq action 'metadata)
-                               `(metadata
-                                 ,(cons 'affixation-function
-                                        (conn--dispatch-make-command-affixation))
-                                 (category . conn-dispatch-command))
-                             (complete-with-action action obarray string pred)))
-                         (lambda (sym)
-                           (and (functionp sym)
-                                (not (eq sym 'help))
-                                (get sym :conn-command-thing)))
-                         t))))))
+             (setq cmd (condition-case _
+                           (intern
+                            (completing-read
+                             "Command: "
+                             (lambda (string pred action)
+                               (if (eq action 'metadata)
+                                   `(metadata
+                                     ,(cons 'affixation-function
+                                            (conn--dispatch-make-command-affixation))
+                                     (category . conn-dispatch-command))
+                                 (complete-with-action action obarray string pred)))
+                             (lambda (sym)
+                               (and (functionp sym)
+                                    (not (eq sym 'help))
+                                    (get sym :conn-command-thing)))
+                             t))
+                         (quit nil))))))
       (conn--with-state (or (conn--command-property :conn-read-state)
                             conn-default-state-for-read-mover)
         (setq prompt (substitute-command-keys
@@ -3638,29 +3640,30 @@ of a command.")
                  (funcall int))
              (set-window-configuration window-conf)))
          (completing-read-command ()
-           (conn--with-state conn-previous-state
-             (unwind-protect
-                 (setq keys nil
-                       cmd (intern
-                            (completing-read
-                             "Command: "
-                             (lambda (string pred action)
-                               (if (eq action 'metadata)
-                                   `(metadata
-                                     ,(cons 'affixation-function
-                                            (conn--dispatch-make-command-affixation))
-                                     (category . conn-dispatch-command))
-                                 (complete-with-action action obarray string pred)))
-                             (lambda (sym)
-                               (pcase sym
-                                 ('help)
-                                 ((and (pred functionp)
-                                       (guard (or (get sym :conn-command-thing)
-                                                  (conn-action-p sym))))
-                                  t)
-                                 (`(,_ ,_ . ,_) t)))
-                             t)))
-               (set-window-configuration window-conf))))
+           (unwind-protect
+               (setq keys nil
+                     cmd (condition-case _
+                             (intern
+                              (completing-read
+                               "Command: "
+                               (lambda (string pred action)
+                                 (if (eq action 'metadata)
+                                     `(metadata
+                                       ,(cons 'affixation-function
+                                              (conn--dispatch-make-command-affixation))
+                                       (category . conn-dispatch-command))
+                                   (complete-with-action action obarray string pred)))
+                               (lambda (sym)
+                                 (pcase sym
+                                   ('help)
+                                   ((and (pred functionp)
+                                         (guard (or (get sym :conn-command-thing)
+                                                    (conn-action-p sym))))
+                                    t)
+                                   (`(,_ ,_ . ,_) t)))
+                               t))
+                           (quit nil)))
+             (set-window-configuration window-conf)))
          (read-command ()
            (setq keys (read-key-sequence
                        (format prompt
@@ -4964,6 +4967,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (defvar conn-expansion-functions nil
   "Functions which provide expansions for `conn-expand'.
+
 Functions should return a list of (BEGIN . END) pairs representing
 potential expansions.  Functions may return invalid expansions
 (e.g. nil, invalid regions, etc.) and they will be filtered out.")
@@ -5298,6 +5302,7 @@ execution."
 
 (defun conn-scroll-down (&optional arg)
   "`scroll-down-command' leaving point at the same relative window position.
+
 Pulses line that was the first visible line before scrolling."
   (interactive "P")
   (if (pos-visible-in-window-p (point-min))
@@ -5309,6 +5314,7 @@ Pulses line that was the first visible line before scrolling."
 
 (defun conn-scroll-up (&optional arg)
   "`scroll-up-command' leaving point at the same relative window position.
+
 Pulses line that was the last visible line before scrolling."
   (interactive "P")
   (if (pos-visible-in-window-p (point-max))
@@ -5320,6 +5326,7 @@ Pulses line that was the last visible line before scrolling."
 
 (defun conn-backward-char (string arg)
   "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
+
 If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
 occurrence of STRING.  STRING will finish reading after
 `conn-read-string-timeout' seconds.
@@ -5336,6 +5343,7 @@ This command should only be called interactively."
 
 (defun conn-goto-string-backward (string)
   "Go to the first visible occurrence backward of STRING in buffer.
+
 When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
