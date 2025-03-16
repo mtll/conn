@@ -646,8 +646,6 @@ A zero means repeat until error."
                          (alist-get :regions args)
                          'conn--kapply-pulse-region
                          (alist-get :window-conf args)
-                         ;; Is there a way to make this option make sense?
-                         ;; (alist-get :ibuffer args)
                          (pcase (alist-get :kmacro args)
                            ('conn--kmacro-apply
                             (lambda (iterator)
@@ -878,7 +876,7 @@ A zero means repeat until error."
          (kmacro-display last-kbd-macro t))
        :transient t)]
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)
+      ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
     [ ("e" "Edit Macro"
        (lambda (arg)
@@ -942,7 +940,7 @@ A zero means repeat until error."
          (kmacro-display last-kbd-macro t))
        :transient t)]
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)
+      ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
     [ ("e" "Edit Macro"
        (lambda (arg)
@@ -986,7 +984,7 @@ A zero means repeat until error."
          (kmacro-display last-kbd-macro t))
        :transient t)]
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)
+      ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
     [ ("e" "Edit Macro"
        (lambda (arg)
@@ -1031,7 +1029,7 @@ A zero means repeat until error."
          (kmacro-display last-kbd-macro t))
        :transient t)]
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)
+      ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
     [ ("e" "Edit Macro"
        (lambda (arg)
@@ -1074,7 +1072,7 @@ A zero means repeat until error."
          (kmacro-display last-kbd-macro t))
        :transient t)]
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)
+      ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
     [ ("e" "Edit Macro"
        (lambda (arg)
@@ -1118,7 +1116,7 @@ A zero means repeat until error."
          (kmacro-display last-kbd-macro t))
        :transient t)]
     [ ("c" "Set Counter" kmacro-set-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)
+      ("F" "Set Format" conn--set-counter-format-infix)
       ("g" "Push Register" conn--push-macro-ring :transient t)]
     [ ("e" "Edit Macro"
        (lambda (arg)
@@ -1207,7 +1205,7 @@ A zero means repeat until error."
     [ ("i" "Insert Counter" kmacro-insert-counter)
       ("c" "Set Counter" kmacro-set-counter :transient t)
       ("+" "Add to Counter" kmacro-add-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix :transient t)]
+      ("F" "Set Format" conn--set-counter-format-infix)]
     [ :if (lambda () (version<= "30" emacs-version))
       ("q<" "Quit Counter Less" kmacro-quit-counter-less)
       ("q>" "Quit Counter Greater" kmacro-quit-counter-greater)
@@ -1244,7 +1242,7 @@ A zero means repeat until error."
       ("i" "Insert Counter" kmacro-insert-counter)
       ("c" "Set Counter" kmacro-set-counter :transient t)
       ("+" "Add to Counter" kmacro-add-counter :transient t)
-      ("f" "Set Format" conn--set-counter-format-infix)]])
+      ("F" "Set Format" conn--set-counter-format-infix)]])
 
 ;;;; Narrow Ring Prefix
 
