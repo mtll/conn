@@ -285,6 +285,10 @@ This variable will be bound to the state t be entered during
 
 (defvar-local conn--local-maps nil)
 
+(defvar-local conn--local-overriding-map nil)
+
+(defvar conn--state-overriding-maps (make-hash-table :test 'eq))
+
 (defvar conn--major-mode-maps (make-hash-table :test 'eq))
 
 (defvar-local conn--local-major-mode-maps nil)
@@ -530,11 +534,11 @@ meaning of these see `advice-add'."
   (cl-loop for (symbol how func props) in advice-forms
            collect `(advice-add ,symbol ,how ,func ,props) into adders
            collect `(advice-remove ,symbol ,func) into removers
-           finally return `(progn
-                             ,@adders
-                             (unwind-protect
-                                 ,(macroexp-progn body)
-                               ,@removers))))
+           finally return `(unwind-protect
+                               (progn
+                                 ,@adders
+                                 ,@body)
+                             ,@removers)))
 
 (defmacro conn--without-conn-maps (&rest body)
   "Run BODY without any state, mode, or local maps active.
@@ -980,6 +984,26 @@ the naked state keymap and will need to be regenerated.")
                 ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
                            collect (conn-get-state-map parent))))))))
 
+(defun conn-get-overriding-map (state)
+  "Return the overriding keymap for STATE."
+  (cl-check-type state conn-state)
+  (caddr
+   (or (when-let* ((map (gethash state conn--state-overriding-maps)))
+         (if (eq (nth 1 map) conn--keymap-sentinel)
+             map
+           (setf (gethash state conn--state-overriding-maps)
+                 (make-composed-keymap
+                  `(,conn--keymap-sentinel
+                    ,map
+                    ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                               collect (conn-get-overriding-map parent)))))))
+       (setf (gethash state conn--state-overriding-maps)
+             (make-composed-keymap
+              `(,conn--keymap-sentinel
+                ,(make-sparse-keymap)
+                ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
+                           collect (conn-get-overriding-map parent))))))))
+
 (defun conn-set-state-map (state keymap)
   "Set the state keymap for STATE to KEYMAP.
 
@@ -1358,6 +1382,10 @@ and specializes the method on all conn states."
                                            (cons state)
                                            (list))
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
+             conn--local-overriding-map (thread-last
+                                          (gethash state conn--state-overriding-maps)
+                                          (cons state)
+                                          (list))
              conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
              cursor-type (or (conn-state-get state :cursor) t))
             (conn--activate-input-method)
@@ -1455,6 +1483,8 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                                finally return table)
                       ',parents))
 
+           (conn-get-state-map ',name)
+           (conn-get-overriding-map ',name)
            (dolist (state ,to-update)
              (conn-get-state-map state)
              (pcase-dolist (`(,mode . ,_map) (gethash state conn--major-mode-maps))
@@ -3689,11 +3719,16 @@ of a command.")
                         ('kapply
                          ;; Run with a timer, otherwise we pick up a nil
                          ;; conn-state value for some reason.
-                         (run-with-timer 0 nil 'conn-dispatch-kapply-prefix
-                                         (lambda (action)
-                                           (set-window-configuration window-conf)
-                                           (set-action action)
-                                           (read-dispatch)))
+                         (run-with-timer
+                          0 nil 'conn-dispatch-kapply-prefix
+                          ;; We pass a continuation to the prefix
+                          ;; which will eventually be called by the
+                          ;; suffix with the kapply pipeline composed
+                          ;; from the infix arguments.
+                          (lambda (action)
+                            (set-window-configuration window-conf)
+                            (set-action action)
+                            (read-dispatch)))
                          (setq quit-flag t))
                         ('repeat-dispatch
                          (setq repeat (not repeat)
@@ -4847,6 +4882,29 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                 (xor rep repeat))))
     (_ (user-error "No last dispatch command"))))
 
+(defun conn-bind-last-dispatch-to-key ()
+  (interactive)
+  (unless conn--last-dispatch-command
+    (error "No last dispatch"))
+  (let* ((key-seq (read-key-sequence
+                   (format "Bind last dispatch to key in %s: "
+                           conn-current-state)))
+         (binding (key-binding key-seq)))
+    (when (and (not (equal key-seq "\^G"))
+               (or (not binding)
+                   (eq binding 'undefined)
+		   (stringp binding)
+		   (vectorp binding)
+		   (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
+				        (format-kbd-macro key-seq)
+				        binding))))
+      (define-key (conn-get-overriding-map conn-current-state)
+                  key-seq (let ((dispatch conn--last-dispatch-command))
+                            (lambda ()
+                              (interactive)
+                              (apply 'conn-dispatch-on-things dispatch))))
+      (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
+
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
   (interactive)
@@ -5182,6 +5240,38 @@ Expansions and contractions are provided by functions in
      (set-marker end nil))))
 
 ;;;; Commands
+
+(defun conn-bind-last-kmacro-to-key ()
+  "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
+
+This binding will be inactive during keyboard macro definition and
+execution."
+  (interactive)
+  (if (or defining-kbd-macro executing-kbd-macro)
+      (if defining-kbd-macro
+          (message "Cannot save macro while defining it."))
+    (unless last-kbd-macro
+      (error "No keyboard macro defined"))
+    (let* ((key-seq (read-key-sequence "Bind last macro to key: "))
+           (binding (key-binding key-seq)))
+      (when (and (not (equal key-seq "\^G"))
+                 (or (not binding)
+                     (eq binding 'undefined)
+		     (stringp binding)
+		     (vectorp binding)
+		     (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
+					  (format-kbd-macro key-seq)
+					  binding))))
+        (define-key (conn-get-overriding-map conn-current-state)
+                    key-seq
+                    `(menu-item
+                      "Keyboard Macro"
+                      (kmacro-ring-head)
+                      :filter ,(lambda (cmd)
+                                 (unless (or executing-kbd-macro
+                                             defining-kbd-macro)
+                                   cmd))))
+        (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
 ;;;;; Movement
 
@@ -7498,13 +7588,14 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "F" 'conn-bind-last-dispatch-to-key
   "RET" 'whitespace-cleanup
   "q" 'conn-replace-in-thing
   "r" 'conn-regexp-replace-in-thing
   "m" 'conn-narrow-indirect-to-thing
   "n" 'conn-narrow-to-thing
   "u" 'conn-join-lines-in-thing
-  "F" 'conn-fill-prefix
+  "f" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
   "," 'clone-indirect-buffer
@@ -7732,6 +7823,7 @@ When ARG is nil the root window is used."
         (cl-pushnew 'conn--local-mark-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-maps emulation-mode-map-alists)
+        (cl-pushnew 'conn--local-overriding-map emulation-mode-map-alists)
         (conn--append-keymap-parent isearch-mode-map conn-isearch-map)
         (conn--append-keymap-parent search-map conn-search-map)
         (conn--append-keymap-parent goto-map conn-goto-map)

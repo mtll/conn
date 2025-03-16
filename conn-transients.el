@@ -1226,12 +1226,13 @@ A zero means repeat until error."
                                (kmacro-start-macro '(4))))
       ("A" "Append w/o Executing" (lambda ()
                                     (interactive)
-                                    (kmacro-start-macro '(16))))
-      ("d" "Name Last Macro" kmacro-name-last-macro)]
+                                    (kmacro-start-macro '(16))))]
     [ ("e" "Edit Macro" kmacro-edit-macro)
       ("E" "Edit Lossage" kmacro-edit-lossage)
       ("s" "Register Save" kmacro-to-register)
-      ("c" "Apply Macro on Lines" apply-macro-to-region-lines)
+      ("c" "Apply Macro on Lines" apply-macro-to-region-lines)]
+    [ ("b" "Bind Last Macro" conn-bind-last-kmacro-to-key)
+      ("d" "Name Last Macro" kmacro-name-last-macro)
       ("S" "Step Edit Macro" kmacro-step-edit-macro)]]
   [ :if conn--in-kbd-macro-p
     [ "Commands"
