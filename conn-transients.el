@@ -687,10 +687,10 @@ A zero means repeat until error."
                                     (symbol-function v)
                                   (macroexp-quote v)))
                               arg-form)))
+      (apply 'conn-dispatch-on-things arg-form)
       (add-to-history 'command-history
                       (cons 'conn-dispatch-on-things hist-form)
-                      nil t)
-      (apply 'conn-dispatch-on-things arg-form))))
+                      nil t))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
