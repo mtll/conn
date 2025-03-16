@@ -2108,7 +2108,7 @@ are read."
                       (concat (propertize prompt 'face 'minibuffer-prompt)
                               " (arg: "
                               (propertize "%s" 'face 'read-multiple-choice-face)
-                              ", \\[reset-arg] reset arg; \\[help] commands"
+                              "; \\[reset-arg] reset arg; \\[help] commands"
                               (if recursive-edit
                                   (concat "; \\[recursive-edit] "
                                           "recursive edit)")
@@ -2514,21 +2514,24 @@ Possibilities: \\<query-replace-map>
                        (when face (overlay-put ov 'face face))
                        ov))))
 
-(defun conn--kapply-advance-region (region)
-  (pcase region
-    (`(,beg . ,end)
-     (when-let* ((buffer (ignore-errors (marker-buffer beg))))
-       (when (not (eq buffer (current-buffer)))
-         (pop-to-buffer-same-window buffer)
-         (deactivate-mark t)
-         (unless (eq buffer (window-buffer (selected-window)))
-           (error "Could not pop to buffer %s" buffer))))
-     (goto-char beg)
-     (when conn-local-mode
-       (conn--push-ephemeral-mark end))
-     (when (markerp beg) (set-marker beg nil))
-     (when (markerp end) (set-marker end nil))
-     t)))
+(defun conn--kapply-advance-region (regions)
+  (catch 'end
+    (while t
+      (pcase (pop regions)
+        (`(,beg . ,end)
+         (when-let* ((buffer (ignore-errors (marker-buffer beg))))
+           (when (not (eq buffer (current-buffer)))
+             (pop-to-buffer-same-window buffer)
+             (deactivate-mark t)
+             (unless (eq buffer (window-buffer (selected-window)))
+               (error "Could not pop to buffer %s" buffer))))
+         (when (isearch-filter-visible beg end)
+           (goto-char beg)
+           (conn--push-ephemeral-mark end)
+           (when (markerp beg) (set-marker beg nil))
+           (when (markerp end) (set-marker end nil))
+           (throw 'end regions)))
+        ('nil (throw 'end :terminate))))))
 
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) t))
@@ -2568,11 +2571,13 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (pcase state
         (:finalize
-         (pcase-dolist (`(,beg . ,end) matches)
-           (set-marker beg nil)
-           (set-marker end nil)))
+         (when (consp matches)
+           (pcase-dolist (`(,beg . ,end) matches)
+             (set-marker beg nil)
+             (set-marker end nil))))
         ((or :record :loop)
-         (conn--kapply-advance-region (pop matches)))))))
+         (setq matches (conn--kapply-advance-region matches))
+         (not (eq matches :terminate)))))))
 
 (defun conn--kapply-thing-iterator (thing bounds &optional order skip-empty nth)
   (deactivate-mark t)
@@ -2616,17 +2621,19 @@ Possibilities: \\<query-replace-map>
       (pcase state
         (:finalize
          (mapc #'delete-overlay overlays)
-         (pcase-dolist (`(,beg . ,end) regions)
-           (set-marker beg nil)
-           (set-marker end nil)))
+         (when (consp regions)
+           (pcase-dolist (`(,beg . ,end) regions)
+             (set-marker beg nil)
+             (set-marker end nil))))
         (:record
-         (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region))
-         (conn--kapply-advance-region (pop regions)))
+         (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region)
+               regions (conn--kapply-advance-region regions)))
         (:loop
          (when overlays
            (mapc #'delete-overlay overlays)
            (setq overlays nil))
-         (conn--kapply-advance-region (pop regions)))))))
+         (setq regions (conn--kapply-advance-region regions))
+         (not (eq regions :terminate)))))))
 
 (defun conn--kapply-point-iterator (points &optional order)
   (unless points
@@ -2637,16 +2644,17 @@ Possibilities: \\<query-replace-map>
                               ('reverse (nreverse points))
                               (_        (conn--nnearest-first points)))
                   collect (if (markerp pt)
-                              pt
-                            (conn--create-marker pt)))))
+                              (cons pt pt)
+                            (cons (conn--create-marker pt) pt)))))
     (lambda (state)
       (pcase state
         (:finalize
-         (dolist (pt points)
-           (set-marker pt nil)))
+         (when (consp points)
+           (dolist (pt points)
+             (set-marker pt nil))))
         ((or :record :loop)
-         (when-let* ((pt (pop points)))
-           (conn--kapply-advance-region (cons pt pt))))))))
+         (setq points (conn--kapply-advance-region points))
+         (not (eq points :terminate)))))))
 
 (defun conn--kapply-match-iterator ( string regions &optional
                                      regexp-flag order delimited-flag query-flag)
@@ -2671,10 +2679,11 @@ Possibilities: \\<query-replace-map>
       (pcase state
         (:finalize
          (mapc #'delete-overlay overlays)
-         (mapc (pcase-lambda (`(,beg . ,end))
-                 (set-marker beg nil)
-                 (set-marker end nil))
-               matches))
+         (when (consp matches)
+           (mapc (pcase-lambda (`(,beg . ,end))
+                   (set-marker beg nil)
+                   (set-marker end nil))
+                 matches)))
         (:record
          (setq overlays (conn--kapply-preview-overlays (cdr matches)))
          (if query-flag
@@ -2685,21 +2694,23 @@ Possibilities: \\<query-replace-map>
                (unwind-protect
                    (cl-loop
                     with len = (length matches)
-                    for cont = (conn--kapply-advance-region (pop matches))
                     for i from 1
-                    until (or (null cont)
+                    do (setq matches (conn--kapply-advance-region matches))
+                    until (or (null matches)
+                              (eq t matches)
                               (progn
                                 (recenter nil)
                                 (move-overlay hl (region-beginning) (region-end) (current-buffer))
                                 (y-or-n-p (format "[%s/%s] Record here?" i len))))
-                    finally return cont)
+                    finally return matches)
                  (delete-overlay hl)))
-           (conn--kapply-advance-region (pop matches))))
+           (setq matches (conn--kapply-advance-region matches))))
         (:loop
          (when overlays
            (mapc #'delete-overlay overlays)
            (setq overlays nil))
-         (conn--kapply-advance-region (pop matches)))))))
+         (setq matches (conn--kapply-advance-region matches))
+         (not (eq matches :terminate)))))))
 
 (defun conn--kapply-per-buffer-undo (iterator &optional atomic)
   (let (undo-handles)
@@ -2939,7 +2950,9 @@ The iterator must be the first argument in ARGLIST.
              (funcall ,iterator :finalize)
              (run-hook-wrapped 'conn-kmacro-apply-end-hook
                                (lambda (hook)
-                                 (ignore-errors (funcall hook))))))))))
+                                 (ignore-errors (funcall hook))))
+             (isearch-range-invisible (point) (1+ (point)))
+             (isearch-clean-overlays)))))))
 
 (conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
@@ -3697,7 +3710,7 @@ of a command.")
                            (concat (propertize "Targets" 'face 'minibuffer-prompt)
                                    " (arg: "
                                    (propertize "%s" 'face 'read-multiple-choice-face)
-                                   ", \\[reset-arg] reset arg; "
+                                   "; \\[reset-arg] reset arg; "
                                    "\\[repeat-dispatch] %s; "
                                    "\\[help] commands): %s")))
              (read-command)

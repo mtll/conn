@@ -699,34 +699,32 @@ A zero means repeat until error."
   :description "Matches"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (unwind-protect
-       (let* ((matches
-               (cond ((bound-and-true-p multi-isearch-file-list)
-                      (mapcan 'conn--isearch-matches
-                              (append
-                               (remq (current-buffer)
-                                     (mapcar 'find-file-noselect
-                                             multi-isearch-file-list))
-                               (list (current-buffer)))))
-                     ((bound-and-true-p multi-isearch-buffer-list)
-                      (mapcan 'conn--isearch-matches
-                              (append
-                               (remq (current-buffer) multi-isearch-buffer-list)
-                               (list (current-buffer)))))
-                     (t
-                      (conn--isearch-matches
-                       (current-buffer)
-                       (alist-get :matches args)))))
-              (at-pt
-               (seq-find (lambda (m)
-                           (and (eq (current-buffer) (marker-buffer (car m)))
-                                (or (= (car m) (point))
-                                    (= (cdr m) (point)))))
-                         matches)))
-         (if at-pt
-             (cons at-pt (delq at-pt matches))
-           matches))
-     (isearch-done))
+   (let* ((matches
+           (cond ((bound-and-true-p multi-isearch-file-list)
+                  (mapcan 'conn--isearch-matches
+                          (append
+                           (remq (current-buffer)
+                                 (mapcar 'find-file-noselect
+                                         multi-isearch-file-list))
+                           (list (current-buffer)))))
+                 ((bound-and-true-p multi-isearch-buffer-list)
+                  (mapcan 'conn--isearch-matches
+                          (append
+                           (remq (current-buffer) multi-isearch-buffer-list)
+                           (list (current-buffer)))))
+                 (t
+                  (conn--isearch-matches
+                   (current-buffer)
+                   (alist-get :matches args))))))
+     (isearch-done)
+     (if-let*
+         ((at-pt (seq-find
+                  (lambda (m)
+                    (and (eq (current-buffer) (marker-buffer (car m)))
+                         (<= (car m) (point) (cdr m))))
+                  matches)))
+         (cons at-pt (delq at-pt matches))
+       matches))
    'conn--kapply-region-iterator
    (alist-get :undo args)
    (alist-get :restrictions args)
