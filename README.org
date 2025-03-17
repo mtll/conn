@@ -8,6 +8,9 @@ Basic top-level keybindings are given in the [[file:layout.txt][layout.txt]] fil
 * Major Features
 ** Regions
 
+[[https://github.com/mtll/conn-demos/blob/main/regions.gif]]
+Movement commands also move the mark, which has its own cursor
+
 Similar to editors like Kakoune movement commands mark the things (as in =thingatpt=) over which they move. The built in commands that operate on the region can then be used on that region to to achieve a noun->verb modal style.
 
 Often times a verb->noun style makes more sense than noun->verb. For example narrowing to the current function in a noun->verb fashion would require selected the surrounding function, narrowing to region and then jumping back to the point where you started. Using a verb->noun style the jump back to the original point becomes unnecessary. Conn also provides functions to allow commands to read thing movement commands in their interactive form and use them to determine the region over which they should act, allow verb->noun style commands as well.
