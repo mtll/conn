@@ -1,0 +1,41 @@
+#+title: Conn - A Modal System Experiment
+#+author: David Feller
+
+My experiment with a modal text editing system. This is config-ware, not a real package.
+
+Basic top-level keybindings are given in the layout.txt file.
+
+* Major Features
+** Regions
+
+Similar to editors like Kakoune movement commands mark the things (as in =thingatpt=) over which they move. The built in commands that operate on the region can then be used on that region to to achieve a noun->verb modal style.
+
+Often times a verb->noun style makes more sense than noun->verb. For example narrowing to the current function in a noun->verb fashion would require selected the surrounding function, narrowing to region and then jumping back to the point where you started. Using a verb->noun style the jump back to the original point becomes unnecessary. Conn also provides functions to allow commands to read thing movement commands in their interactive form and use them to determine the region over which they should act, allow verb->noun style commands as well.
+
+By convention noun->verb command names have a =-region= or =-in-region= suffix while verb->noun command names have a =-thing= or =-in-thing= suffix.
+
+** Keyboard Macros: Kapply
+
+[[https://github.com/mtll/conn-demos/blob/main/kapplyconsult.mp4]]
+Kapply on =consult-grep= candidates
+
+Conn implements a system to apply keyboard macros at regions, designed to be easy to extend with new types of regions and different options for how to do the application. It can apply to isearch matches, consult location/grep/xref candidates (via embark), string and regexp matches similar to =replace-string/regexp= (optionally querying, as in =query-replace=, for the location to record the macro at so that, together with =kbd-macro-query=, you can have an interface like =query-replace=), hi-lock highlights, things (as in =thingatpt=, e.g. apply to the next 3 defuns) and things in region (e.g. apply to all s-expressions in region), arbitrary text properties, occur/grep/compilation-mode matches, and continuing until an error (effectively calling =execute-kbd-macro= with count of 0). It can preserve state between iterations (excursions and marks, restrictions), it can merge undo either per buffer, per buffer atomically (so changes are undone on error), per iteration, or not at all. Previous keyboard macros can be used instead of recording a new one, either by just using the macro, or =kmacro-step-edit-macro= or appending to the macro first. It handles invisible regions either by opening them with the isearch open invisible machinery or always skipping them depending on the command and the value of =search-invisible= (which makes filtering occur/grep-mode matches to execute on much easier using =consult-focus-lines= or similar).
+
+The system is controlled with transient.
+
+** Dispatch
+
+[[https://github.com/mtll/conn-demos/blob/main/dispatchkapply.mp4]]
+Ad-hoc avy-like dispatch action using kapply
+
+[[https://github.com/mtll/conn-demos/blob/main/labels.mp4]]
+Labels preserve line width when possible
+
+Conn provides an [[https://github.com/abo-abo/avy][avy]]-like system jumping to or acting on visible locations. The dispatch command reads actions (optional) and a thing (the noun->verb style), finds all of the things in visible windows (possibly prompting for a prefix character or a string contained within the thing to help reduce the initial results), and then displays labels at each thing for the user to select from.
+
+** Window Management
+
+[[https://github.com/mtll/conn-demos/blob/main/winlabels.mp4]]
+Window labels
+
+Conn provides =conn-wincontrol-mode=, a mode similar to [[https://www.gnu.org/software/hyperbole/][hyperbole's]] hycontrol for efficiently using window, tab and frame related commands. Conn uses its labeling system to provide window labels similar to [[https://github.com/abo-abo/ace-window][ace-window]], allowing commands to read a window selected by the user as one of their arguments. If =conn-posframe= is enabled a posframe display will be added to various buffer and tab commands showing the cycling list of buffers/tabs the command is moving through (e.g. next-buffer, bury-buffer, tab-next, tab-close, etc).
