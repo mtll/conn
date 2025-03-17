@@ -4973,11 +4973,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
        (when (and (not (equal key-seq "\^G"))
                   (or (not binding)
                       (eq binding 'undefined)
-		      (stringp binding)
-		      (vectorp binding)
-		      (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
-				           (format-kbd-macro key-seq)
-				           binding))))
+                      (stringp binding)
+                      (vectorp binding)
+                      (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
+                                           (format-kbd-macro key-seq)
+                                           binding))))
          (define-key (conn-get-overriding-map conn-current-state)
                      key-seq (lambda ()
                                (interactive)
@@ -5343,11 +5343,11 @@ execution."
       (when (and (not (equal key-seq "\^G"))
                  (or (not binding)
                      (eq binding 'undefined)
-		     (stringp binding)
-		     (vectorp binding)
-		     (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
-					  (format-kbd-macro key-seq)
-					  binding))))
+                     (stringp binding)
+                     (vectorp binding)
+                     (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
+                                          (format-kbd-macro key-seq)
+                                          binding))))
         (define-key (conn-get-overriding-map conn-current-state)
                     key-seq
                     `(menu-item
