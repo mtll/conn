@@ -1,4 +1,4 @@
-#+title: Conn - A Modal System Experiment
+#+title: Conn - A Modal Keybinding System
 #+author: David Feller
 
 My experiment with a modal text editing system. This is config-ware, not a real package.
