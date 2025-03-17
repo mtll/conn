@@ -3,7 +3,7 @@
 
 My experiment with a modal text editing system. This is config-ware, not a real package.
 
-Basic top-level keybindings are given in the layout.txt file.
+Basic top-level keybindings are given in the [[file:layout.txt][layout.txt]] file.
 
 * Major Features
 ** Regions
@@ -17,9 +17,9 @@ By convention noun->verb command names have a =-region= or =-in-region= suffix w
 ** Keyboard Macros: Kapply
 
 [[https://github.com/mtll/conn-demos/blob/main/kapplyconsult.gif]]
-Kapply on =consult-grep= candidates
+Kapply to =consult-grep= candidates with =embark=
 
-Conn implements a system to apply keyboard macros at regions, designed to be easy to extend with new types of regions and different options for how to do the application. It can apply to isearch matches, consult location/grep/xref candidates (via embark), string and regexp matches similar to =replace-string/regexp= (optionally querying, as in =query-replace=, for the location to record the macro at so that, together with =kbd-macro-query=, you can have an interface like =query-replace=), hi-lock highlights, things (as in =thingatpt=, e.g. apply to the next 3 defuns) and things in region (e.g. apply to all s-expressions in region), arbitrary text properties, occur/grep/compilation-mode matches, and continuing until an error (effectively calling =execute-kbd-macro= with count of 0). It can preserve state between iterations (excursions and marks, restrictions), it can merge undo either per buffer, per buffer atomically (so changes are undone on error), per iteration, or not at all. Previous keyboard macros can be used instead of recording a new one, either by just using the macro, or =kmacro-step-edit-macro= or appending to the macro first. It handles invisible regions either by opening them with the isearch open invisible machinery or always skipping them depending on the command and the value of =search-invisible= (which makes filtering occur/grep-mode matches to execute on much easier using =consult-focus-lines= or similar).
+Conn implements a system to apply keyboard macros at regions, designed to be easy to extend with new types of regions and different options for how to do the application. It can apply to isearch matches, consult location/grep/xref candidates (via =embark=), string and regexp matches similar to =replace-string/regexp= (optionally querying, as in =query-replace=, for the location to record the macro at so that, together with =kbd-macro-query=, you can have an interface like =query-replace=), hi-lock highlights, things (as in =thingatpt=, e.g. apply to the next 3 defuns) and things in region (e.g. apply to all s-expressions in region), arbitrary text properties, occur/grep/compilation-mode matches, and continuing until an error (effectively calling =execute-kbd-macro= with count of 0). It can preserve state between iterations (excursions and marks, restrictions), it can merge undo either per buffer, per buffer atomically (so changes are undone on error), per iteration, or not at all. Previous keyboard macros can be used instead of recording a new one, either by just using the macro, or =kmacro-step-edit-macro= or appending to the macro first. It handles invisible regions either by opening them with the isearch open invisible machinery or always skipping them depending on the command and the value of =search-invisible= (which makes filtering occur/grep-mode matches to execute on much easier using =consult-focus-lines= or similar).
 
 The system is controlled with transient.
 
