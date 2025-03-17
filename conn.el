@@ -4746,7 +4746,6 @@ with `conn-dispatch-thing-ignored-modes'."
 (defun conn--dispatch-columns ()
   (conn--protected-let ((goal-column (or goal-column
                                          (current-column)))
-                        (opoint (point))
                         (ovs nil (mapc #'delete-overlay ovs)))
     (save-excursion
       (with-restriction (window-start) (window-end)
@@ -4980,14 +4979,13 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 				           (format-kbd-macro key-seq)
 				           binding))))
          (define-key (conn-get-overriding-map conn-current-state)
-                     key-seq (let ((dispatch conn--last-dispatch-command))
-                               (lambda ()
-                                 (interactive)
-                                 (conn-dispatch-on-things
-                                  thing-cmd thing-arg
-                                  finder
-                                  action action-args
-                                  predicate (xor repeat rep)))))
+                     key-seq (lambda ()
+                               (interactive)
+                               (conn-dispatch-on-things
+                                thing-cmd thing-arg
+                                finder
+                                action action-args
+                                predicate (xor repeat rep))))
          (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
     (_ (error "No last dispatch"))))
 
