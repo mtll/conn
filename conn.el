@@ -3661,8 +3661,8 @@ of a command.")
 (defun conn--dispatch-read-thing (&optional default-action)
   (let* ((window-conf (current-window-configuration))
          (prompt nil)
-         (action default-action)
-         (action-struct (get default-action :conn--action))
+         (action nil)
+         (action-struct nil)
          (action-args nil)
          (keys nil)
          (cmd nil)
@@ -3842,7 +3842,7 @@ of a command.")
                  (setq handle nil))
                (save-mark-and-excursion--restore saved-marker)
                (message nil)))))
-      (set-action action)
+      (set-action default-action)
       (read-dispatch))))
 
 (defun conn-dispatch-ignored-mode (win)
@@ -3940,27 +3940,30 @@ with `conn-dispatch-thing-ignored-modes'."
                     line-prefix line-pfx
                     wrap-prefix wrap-pfx))
       (move-overlay overlay (overlay-start overlay) end)))
-  (if (= (overlay-start overlay) (overlay-end overlay))
-      (overlay-put overlay 'before-string label-string)
-    (unless (overlay-get overlay 'after-string)
-      (pcase-let* ((`(,width . ,height)
+  (cond
+   ((= (overlay-start overlay) (overlay-end overlay))
+    (overlay-put overlay 'before-string label-string))
+   ((overlay-get overlay 'after-string)
+    (overlay-put overlay 'display label-string))
+   (t
+    (pcase-let* ((`(,width . ,height)
+                  (window-text-pixel-size
+                   (overlay-get overlay 'window)
+                   (overlay-start overlay)
+                   (overlay-end overlay)))
+                 (`(,display-width . ,display-height)
+                  (progn
+                    (overlay-put overlay 'display label-string)
                     (window-text-pixel-size
                      (overlay-get overlay 'window)
                      (overlay-start overlay)
-                     (overlay-end overlay)))
-                   (`(,display-width . ,display-height)
-                    (progn
-                      (overlay-put overlay 'display label-string)
-                      (window-text-pixel-size
-                       (overlay-get overlay 'window)
-                       (overlay-start overlay)
-                       (overlay-end overlay))))
-                   (padding-width (max (- width display-width) 0)))
-        (if padding-function
-            (funcall padding-function overlay padding-width
-                     (when (/= height display-height) (1- height)))
-          (funcall conn-default-label-padding-func overlay padding-width
-                   (when (/= height display-height) (1- height))))))))
+                     (overlay-end overlay))))
+                 (padding-width (max (- width display-width) 0)))
+      (if padding-function
+          (funcall padding-function overlay padding-width
+                   (when (/= height display-height) (1- height)))
+        (funcall conn-default-label-padding-func overlay padding-width
+                 (when (/= height display-height) (1- height))))))))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
