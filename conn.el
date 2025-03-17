@@ -7668,6 +7668,7 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "v" 'diff-buffer-with-file
   "F" 'conn-bind-last-dispatch-to-key
   "RET" 'whitespace-cleanup
   "q" 'conn-replace-in-thing
@@ -7688,7 +7689,6 @@ When ARG is nil the root window is used."
   "a" 'conn-emacs-state-bol
   "t" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
-  "v" 'conn-region-to-narrow-ring
   "x" 'conn-narrow-ring-prefix
   "d" 'duplicate-dwim
   "w j" 'conn-kill-prepend-region
