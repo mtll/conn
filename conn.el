@@ -4744,7 +4744,7 @@ with `conn-dispatch-thing-ignored-modes'."
     ovs))
 
 (defun conn--dispatch-columns ()
-  (conn--protected-let ((col (current-column))
+  (conn--protected-let ((col (or goal-column (current-column)))
                         (opoint (point))
                         (ovs nil (mapc #'delete-overlay ovs)))
     (save-excursion
