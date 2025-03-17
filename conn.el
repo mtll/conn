@@ -4744,20 +4744,22 @@ with `conn-dispatch-thing-ignored-modes'."
     ovs))
 
 (defun conn--dispatch-columns ()
-  (conn--protected-let ((col (or goal-column (current-column)))
+  (conn--protected-let ((goal-column (or goal-column
+                                         (current-column)))
                         (opoint (point))
                         (ovs nil (mapc #'delete-overlay ovs)))
     (save-excursion
       (with-restriction (window-start) (window-end)
-        (goto-char (point-min))
-        (while (/= (point) (point-max))
-          (when (and (>= col (window-hscroll))
-                     (not (invisible-p (point)))
-                     (not (ignore-errors (invisible-p (1- (point))))))
-            (move-to-column col)
-            (unless (= opoint (point))
-              (push (conn--make-target-overlay (point) 0) ovs)))
-          (forward-line))))
+        (save-excursion
+          (ignore-errors
+            (while (< (point) (point-max))
+              (line-move-visual 1)
+              (push (conn--make-target-overlay (point) 0) ovs))))
+        (save-excursion
+          (ignore-errors
+            (while (< (point-min) (point))
+              (line-move-visual -1)
+              (push (conn--make-target-overlay (point) 0) ovs))))))
     ovs))
 
 (defun conn--dispatch-lines ()
