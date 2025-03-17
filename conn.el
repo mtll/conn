@@ -7038,7 +7038,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
    "\\[conn-wincontrol-exit]: exit; "
-   "\\[conn-wincontrol-zoom-in] \\[conn-wincontrol-zoom-out]: zoom; "
+   "\\[text-scale-increase] \\[text-scale-decrease]: zoom; "
    "\\[quit-window]: quit win"
    "\n"
    "\\[conn-wincontrol-other-window-scroll-down] \\[conn-wincontrol-other-window-scroll-up]"
@@ -7473,16 +7473,6 @@ When called interactively N is `last-command-event'."
           (conn--get-windows nil 'nomini 'visible))))
   (select-window window))
 
-(defun conn-wincontrol-zoom-in (arg)
-  "`text-scale-increase'."
-  (interactive "p")
-  (text-scale-increase arg))
-
-(defun conn-wincontrol-zoom-out (arg)
-  "`text-scale-decrease'."
-  (interactive "p")
-  (text-scale-decrease arg))
-
 (defun conn-wincontrol-windmove-up ()
   "`windmove-up'."
   (interactive)
@@ -7562,10 +7552,16 @@ Uses `split-window-right'."
   (split-window-right))
 
 (defun conn-wincontrol-maximize-horizontally ()
+  "Delete all adjacent windows horizontally.
+
+Operates with the selected windows parent window."
   (interactive)
   (conn-wincontrol-maximize-vertically t))
 
 (defun conn-wincontrol-maximize-vertically (&optional horizontal)
+  "Delete all adjacent windows vertically.
+
+Operates with the selected windows parent window."
   (interactive)
   (when (and (not (window-minibuffer-p (selected-window)))
              (not (window-parameter (selected-window) 'window-side))
