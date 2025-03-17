@@ -4870,6 +4870,7 @@ with `conn-dispatch-thing-ignored-modes'."
        :smatch t)))
 
 (defun conn-last-dispatch-to-register (register)
+  "Store last dispatch command in REGISTER."
   (interactive (list (register-read-with-preview "Dispatch to register: ")))
   (set-register register (conn--make-dispatch-register conn--last-dispatch-command)))
 
@@ -4957,28 +4958,36 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                 (xor rep repeat))))
     (_ (user-error "No last dispatch command"))))
 
-(defun conn-bind-last-dispatch-to-key ()
+(defun conn-bind-last-dispatch-to-key (&optional repeat)
+  "Bind last dispatch command to a key.
+
+Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
-  (unless conn--last-dispatch-command
-    (error "No last dispatch"))
-  (let* ((key-seq (read-key-sequence
-                   (format "Bind last dispatch to key in %s: "
-                           conn-current-state)))
-         (binding (key-binding key-seq)))
-    (when (and (not (equal key-seq "\^G"))
-               (or (not binding)
-                   (eq binding 'undefined)
-		   (stringp binding)
-		   (vectorp binding)
-		   (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
-				        (format-kbd-macro key-seq)
-				        binding))))
-      (define-key (conn-get-overriding-map conn-current-state)
-                  key-seq (let ((dispatch conn--last-dispatch-command))
-                            (lambda ()
-                              (interactive)
-                              (apply 'conn-dispatch-on-things dispatch))))
-      (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
+  (pcase conn--last-dispatch-command
+    (`(,thing-cmd ,thing-arg ,finder ,action ,action-args ,predicate ,rep)
+     (let* ((key-seq (read-key-sequence
+                      (format "Bind last dispatch to key in %s: "
+                              conn-current-state)))
+            (binding (key-binding key-seq)))
+       (when (and (not (equal key-seq "\^G"))
+                  (or (not binding)
+                      (eq binding 'undefined)
+		      (stringp binding)
+		      (vectorp binding)
+		      (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
+				           (format-kbd-macro key-seq)
+				           binding))))
+         (define-key (conn-get-overriding-map conn-current-state)
+                     key-seq (let ((dispatch conn--last-dispatch-command))
+                               (lambda ()
+                                 (interactive)
+                                 (conn-dispatch-on-things
+                                  thing-cmd thing-arg
+                                  finder
+                                  action action-args
+                                  predicate (xor repeat rep)))))
+         (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
+    (_ (error "No last dispatch"))))
 
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
@@ -5015,6 +5024,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
       (mapc #'delete-overlay matches))))
 
 (defun conn-goto-char-2 ()
+  "Jump to point defined by two characters and maybe a label."
   (interactive)
   (conn-dispatch-on-things nil nil
                            'conn--dispatch-2-chars
@@ -5352,6 +5362,9 @@ execution."
 ;;;;; Movement
 
 (defun conn-forward-defun (N)
+  "Move forward by defuns.
+
+Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (if (< N 0)
       (beginning-of-defun (abs N))
@@ -5423,6 +5436,7 @@ When called interactively reads STRING with timeout
 
 (defun conn-forward-char (string arg)
   "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
+
 If `current-prefix-arg' is 1 prompt for STRING and search forward for nearest
 occurrence of STRING.  STRING will finish reading after
 `conn-read-string-timeout' seconds.
@@ -5439,6 +5453,7 @@ This command should only be called interactively."
 
 (defun conn-goto-string-forward (string)
   "Go to the first visible occurrence forward of STRING in buffer.
+
 When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
@@ -5482,6 +5497,9 @@ When called interactively reads STRING with timeout
     (when (bolp) (goto-char end))))
 
 (defun conn-forward-inner-line (N)
+  "Move forward by inner lines.
+
+Behaves as `thingatpt' expects a \\='forward-op to behave."
   (interactive "p")
   (if (> N 0)
       (let ((pt (point)))
@@ -5496,6 +5514,7 @@ When called interactively reads STRING with timeout
       (back-to-indentation))))
 
 (defun conn-backward-inner-line (N)
+  "Inverse of `conn-forward-inner-line'."
   (interactive "p")
   (conn-forward-inner-line (- N)))
 
@@ -5920,6 +5939,7 @@ Exiting the recursive edit will resume the isearch."
 
 (defun conn-isearch-region-forward (beg end)
   "Isearch forward for region from BEG to END.
+
 Interactively `region-beginning' and `region-end'."
   (interactive (list (region-beginning)
                      (region-end)))
@@ -5931,6 +5951,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-isearch-region-backward (beg end)
   "Isearch backward for region from BEG to END.
+
 Interactively `region-beginning' and `region-end'."
   (interactive (list (region-beginning)
                      (region-end)))
@@ -5977,6 +5998,7 @@ Interactively `region-beginning' and `region-end'."
 
 (defun conn-mark-ring-backward ()
   "Like `pop-to-mark-command' but uses `conn-mark-ring-right'.
+
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
 so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
 `conn-mark-ring-forward' are provided which attempt to filter out
@@ -6000,6 +6022,7 @@ uninstersting marks."
 
 (defun conn-mark-ring-forward ()
   "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring-right'.
+
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
 so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
 `conn-mark-ring-forward' are provided which attempt to filter out
@@ -6027,6 +6050,7 @@ uninstersting marks."
 
 (defun conn-toggle-mark-command (&optional arg)
   "Toggle `mark-active'.
+
 With a prefix ARG activate `rectangle-mark-mode'."
   (interactive "P")
   (cond (arg (conn-rectangle-mark))
@@ -6035,6 +6059,7 @@ With a prefix ARG activate `rectangle-mark-mode'."
 
 (defun conn-set-mark-command (&optional arg)
   "Toggle `mark-active' and push ephemeral mark at point.
+
 With a prefix ARG activate `rectangle-mark-mode'.
 Immediately repeating this command pushes a mark."
   (interactive "P")
@@ -6067,6 +6092,7 @@ With a prefix ARG `push-mark' without activating it."
 
 (defun conn--apply-region-transform (transform-func)
   "Apply TRANSFORM-FUNC to region contents.
+
 Handles rectangular regions."
   (save-mark-and-excursion
     (let ((case-fold-search nil))
@@ -6201,6 +6227,12 @@ Handles rectangular regions."
   "q" 'abort-recursive-edit)
 
 (defun conn-transpose-regions (mover arg)
+  "Exchange regions defined by a thing command.
+
+With argument ARG 0, exchange the things at point and mark.
+
+If MOVER is \\='recursive-edit then exchange the current region and the
+region after a `recursive-edit'."
   (interactive
    (conn-read-thing-mover
     "Mover"
@@ -6241,11 +6273,13 @@ Handles rectangular regions."
                      (prefix-numeric-value arg)))))
 
 (defun conn-open-line (arg)
+  "Open line below the current line."
   (interactive "p")
   (move-end-of-line arg)
   (newline-and-indent))
 
 (defun conn-open-line-above (arg)
+  "Open line above the current line."
   (interactive "p")
   (forward-line (- (1- arg)))
   (move-beginning-of-line nil)
@@ -6255,6 +6289,7 @@ Handles rectangular regions."
   (indent-according-to-mode))
 
 (defun conn-comment-or-uncomment-thing (thing-mover arg)
+  "Toggle commenting of a region defined by a thing command."
   (interactive (conn-read-thing-mover "Thing Mover"))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
     (if (comment-only-p beg end)
@@ -6269,6 +6304,7 @@ Handles rectangular regions."
     (call-interactively 'shell-command-on-region)))
 
 (defun conn-yank-replace-rectangle ()
+  "Delete the current rectangle and `yank-rectangle'."
   (interactive)
   (save-mark-and-excursion
     (unless (>= (mark t) (point))
@@ -6317,6 +6353,7 @@ of `conn-recenter-positions'."
       (pulse-momentary-highlight-region beg end))))
 
 (defun conn-recenter-on-region-other-window ()
+  "Recenter the current region in `other-window-for-scrolling'."
   (interactive)
   (with-selected-window (other-window-for-scrolling)
     (conn-recenter-on-region)))
@@ -6380,15 +6417,18 @@ Interactively `region-beginning' and `region-end'."
     (occur search-string)))
 
 (defun conn-org-edit-insert-heading ()
+  "Insert org heading."
   (interactive)
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content))
 
 (defun conn-append-region (beg end &optional register kill-flag)
-  "Appne region from BEG to END to most recent kill.
+  "Append region from BEG to END to most recent kill.
+
 Optionally if REGISTER is specified append to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively.
+
 When KILL-FLAG is non-nil kill the region as well."
   (interactive
    (list (region-beginning)
@@ -6408,9 +6448,11 @@ When KILL-FLAG is non-nil kill the region as well."
 
 (defun conn-prepend-region (beg end &optional register kill-flag)
   "Prepend region from BEG to END to most recent kill.
+
 Optionally if REGISTER is specified prepend to REGISTER instead.
 When called interactively with a non-nil prefix argument read register
 interactively.
+
 When KILL-FLAG is non-nil kill the region as well."
   (interactive
    (list (region-beginning)
@@ -6429,6 +6471,9 @@ When KILL-FLAG is non-nil kill the region as well."
     (pulse-momentary-highlight-region beg end)))
 
 (defun conn-kill-append-region (beg end &optional register)
+  "Kill current region and append it to the last kill.
+
+With a prefix arg append to a register instead."
   (interactive
    (list (region-beginning)
          (region-end)
@@ -6437,6 +6482,9 @@ When KILL-FLAG is non-nil kill the region as well."
   (conn-append-region beg end register t))
 
 (defun conn-kill-prepend-region (beg end &optional register)
+  "Kill current region and prepend it to the last kill.
+
+With a prefix arg prepend to a register instead."
   (interactive
    (list (region-beginning)
          (region-end)
@@ -6475,6 +6523,7 @@ When KILL-FLAG is non-nil kill the region as well."
 
 (defun conn-narrow-indirect-to-thing (thing-mover arg &optional interactive)
   "Narrow to THING at point.
+
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
@@ -6499,6 +6548,7 @@ associated with that command (see `conn-register-thing')."
 
 (defun conn-narrow-indirect-to-region (beg end &optional record)
   "Narrow to THING at point.
+
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive (list (region-beginning) (region-end) (list t)))
@@ -6559,6 +6609,7 @@ for the meaning of prefix ARG."
 
 (defun conn-yank-replace (start end &optional arg)
   "`yank' replacing region between START and END.
+
 If called interactively uses the region between point and mark.
 If arg is non-nil, kill the region between START and END instead
 of deleting it."
@@ -6662,7 +6713,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (goto-char end)
     (conn--push-ephemeral-mark (+ (point) (length region)))))
 
-(defun conn-duplicate-region (beg end arg)
+(defun conn-duplicate-region (beg end N)
+  "Duplicate the current region.
+
+With prefix arg N duplicate region N times."
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
@@ -6670,13 +6724,16 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (duplicate-dwim)
     (let ((end (set-marker (make-marker) end)))
       (unwind-protect
-          (dotimes (_ arg)
+          (dotimes (_ N)
             (conn--duplicate-region-1 beg end))
         (goto-char end)
         (set-marker end nil)
         (indent-region (region-beginning) (region-end))))))
 
 (defun conn-duplicate-thing (thing-mover thing-arg N)
+  "Duplicate the region defined by a thing command.
+
+With prefix arg N duplicate region N times."
   (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
@@ -6692,6 +6749,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
            (set-marker end nil)))))))
 
 (defun conn-duplicate-and-comment-region (beg end &optional arg)
+  "Duplicate and comment the current region."
   (interactive (list (region-beginning)
                      (region-end)
                      (prefix-numeric-value current-prefix-arg)))
@@ -6707,6 +6765,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (goto-char (+ origin (* (length region) arg) arg))))
 
 (defun conn-duplicate-and-comment-thing (thing-mover thing-arg N)
+  "Duplicate and comment the region defined by a thing command.
+
+With prefix arg N duplicate region N times."
   (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
@@ -6728,10 +6789,23 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 ;;;;; Window Commands
 
 (defun conn-other-buffer ()
+  "Switch to the most recently selected buffer.
+
+Repeated calls allow one to switch back and forth between another
+buffer."
   (interactive)
   (switch-to-buffer nil))
 
 (defun conn-other-place-prefix ()
+  "Display next buffer in another place.
+
+Choose from among the following options:
+
+Window: `other-window-prefix'
+Frame: `other-frame-prefix'
+Tab: `other-tab-prefix'
+Prompt: `conn-other-window-prompt-prefix'
+Current Window: `conn-this-window-prefix'"
   (interactive)
   (pcase (car (read-multiple-choice
                "Place:"
@@ -6747,12 +6821,14 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (?c (conn-this-window-prefix))))
 
 (defun conn-other-window-prompt-prefix ()
+  "Display next buffer in a window selected by `conn-prompt-for-window'."
   (interactive)
   (display-buffer-override-next-command
    (lambda (_ _)
      (cons (conn-prompt-for-window (conn--get-windows nil 'nomini)) 'reuse))))
 
 (defun conn-this-window-prefix ()
+  "Display next buffer in the currently selected window."
   (interactive)
   (display-buffer-override-next-command
    'display-buffer-same-window
@@ -6770,6 +6846,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
       (user-error "No other visible windows"))))
 
 (defun conn-throw-buffer ()
+  "Send current buffer to another window and `switch-to-prev-buffer'."
   (interactive)
   (let ((buf (current-buffer)))
     (switch-to-prev-buffer)
@@ -6781,6 +6858,9 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
                'reuse))))))
 
 (defun conn-yank-window (window)
+  "Swap selected window and another window.
+
+Currently selected window remains selected afterwards."
   (interactive
    (list (conn-prompt-for-window
           (conn--get-windows nil 'nomini 'visible))))
@@ -6792,6 +6872,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
 ;;;;; Transition Functions
 
 (defun conn-change-whole-line (&optional arg)
+  "`kill-whole-line' and enter `conn-emacs-state'."
   (interactive "P")
   (kill-whole-line arg)
   (open-line 1)
@@ -6799,6 +6880,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   (conn-enter-state 'conn-emacs-state))
 
 (defun conn-change-line ()
+  "`kill-line' and enter `conn-emacs-state'."
   (interactive)
   (call-interactively (key-binding conn-kill-line-keys t))
   (conn-enter-state 'conn-emacs-state))
@@ -6827,6 +6909,7 @@ If ARG is non-nil move down ARG lines before opening line."
 
 (defun conn-emacs-state-overwrite (&optional arg)
   "Enter emacs state in `overwrite-mode'.
+
 `overwrite-mode' will be turned off when when emacs state is exited.
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
@@ -6846,6 +6929,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
 
 (defun conn-change (start end &optional kill)
   "Change region between START and END.
+
 If KILL is non-nil add region to the `kill-ring'.  When in
 `rectangle-mark-mode' defer to `string-rectangle'."
   (interactive (list (region-beginning)
@@ -7212,6 +7296,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (set-face-inverse-video 'mode-line nil)))
 
 (defun conn-wincontrol-one-command ()
+  "Execute one command in `conn-wincontrol-mode'."
   (interactive)
   (letrec ((pre-hook (lambda ()
                        (unless (memq this-command
@@ -7232,11 +7317,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (conn--wincontrol-setup t)))
 
 (defun conn-wincontrol-universal-arg ()
+  "Multiply wincontrol prefix arg by 4."
   (interactive)
   (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
 
 (defun conn-wincontrol-digit-argument (N)
   "Append N to wincontrol prefix arg.
+
 When called interactively N is `last-command-event'."
   (interactive (list (- (logand last-command-event ?\177) ?0)))
   (if conn--wincontrol-arg
@@ -7247,12 +7334,12 @@ When called interactively N is `last-command-event'."
   (setq this-command 'conn-wincontrol-digit-argument))
 
 (defun conn-wincontrol-invert-argument ()
-  "Invert wincontrol prefix arg."
+  "Invert sign of wincontrol prefix arg."
   (interactive)
   (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
 
 (defun conn-wincontrol-digit-argument-reset ()
-  "Reset wincontrol prefix arg to 0."
+  "Reset wincontrol prefix arg to nil and sign to +."
   (interactive)
   (setq conn--wincontrol-arg nil)
   (setq conn--wincontrol-arg-sign 1))
@@ -7332,6 +7419,7 @@ When called interactively N is `last-command-event'."
            (_ conn--wincontrol-simple-format)))))
 
 (defun conn-wincontrol-isearch (arg)
+  "`isearch-forward', resuming `conn-wincontrol-mode' afterward."
   (interactive "P")
   (when conn-wincontrol-mode
     (conn--wincontrol-exit)
@@ -7340,6 +7428,7 @@ When called interactively N is `last-command-event'."
       (conn--wincontrol-setup t))))
 
 (defun conn-wincontrol-isearch-backward (arg)
+  "`isearch-backward', resuming `conn-wincontrol-mode' afterward."
   (interactive "P")
   (when conn-wincontrol-mode
     (conn--wincontrol-exit)
@@ -7348,6 +7437,7 @@ When called interactively N is `last-command-event'."
       (conn--wincontrol-setup t))))
 
 (defun conn-wincontrol-isearch-other-window (arg)
+  "`isearch-forward' in `other-window-for-scrolling'."
   (interactive "P")
   (when conn-wincontrol-mode
     (conn--wincontrol-exit)
@@ -7357,6 +7447,7 @@ When called interactively N is `last-command-event'."
       (conn--wincontrol-setup t))))
 
 (defun conn-wincontrol-isearch-other-window-backward (arg)
+  "`isearch-backward' in `other-window-for-scrolling'."
   (interactive "P")
   (when conn-wincontrol-mode
     (conn--wincontrol-exit)
@@ -7366,24 +7457,29 @@ When called interactively N is `last-command-event'."
       (conn--wincontrol-setup t))))
 
 (defun conn-wincontrol-next-window ()
+  "`other-window' in cyclic order."
   (interactive)
   (other-window 1))
 
 (defun conn-wincontrol-previous-window ()
+  "`other-window' in reverse cyclic order."
   (interactive)
   (other-window -1))
 
 (defun conn-goto-window (window)
+  "Prompt for a window and then select it."
   (interactive
    (list (conn-prompt-for-window
           (conn--get-windows nil 'nomini 'visible))))
   (select-window window))
 
 (defun conn-wincontrol-zoom-in (arg)
+  "`text-scale-increase'."
   (interactive "p")
   (text-scale-increase arg))
 
 (defun conn-wincontrol-zoom-out (arg)
+  "`text-scale-decrease'."
   (interactive "p")
   (text-scale-decrease arg))
 
