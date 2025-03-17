@@ -885,12 +885,12 @@ of highlighting."
              do (delete-overlay ov))))
 
 (defun conn--append-keymap-parent (keymap new-parent)
-  (if-let ((parent (keymap-parent keymap)))
+  (if-let* ((parent (keymap-parent keymap)))
       (set-keymap-parent keymap (append parent (list new-parent)))
     (set-keymap-parent keymap (make-composed-keymap new-parent))))
 
 (defun conn--remove-keymap-parent (keymap parent-to-remove)
-  (when-let ((parent (keymap-parent keymap)))
+  (when-let* ((parent (keymap-parent keymap)))
     (setf (cdr parent) (delq parent-to-remove (cdr parent)))
     (unless (cdr parent)
       (set-keymap-parent keymap nil))))
@@ -3695,7 +3695,7 @@ of a command.")
            (setq handle (prepare-change-group))
            (activate-change-group handle)
            (unwind-protect
-               (when-let ((int (conn--action-interactive action-struct)))
+               (when-let* ((int (conn--action-interactive action-struct)))
                  (funcall int))
              (set-window-configuration window-conf)))
          (completing-read-command ()
@@ -5263,6 +5263,17 @@ Expansions and contractions are provided by functions in
        (thread-last
          (%conn--make-narrow-register :narrow-ring narrowings)
          (set-register register))))))
+
+(defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional outer)
+  (interactive
+   (append (conn-read-thing-mover "Mover")
+           (list current-prefix-arg)))
+  (pcase-let* ((`((,beg . ,end) . ,regions)
+                (conn-bounds-of-command thing-cmd thing-arg)))
+    (if outer
+        (conn--narrow-ring-record beg end)
+      (cl-loop for (b . e) in regions
+               do (conn--narrow-ring-record b e)))))
 
 (defun conn--narrow-ring-record (beg end)
   (let ((narrowing (cons (conn--create-marker beg)
@@ -7221,6 +7232,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
 
+(static-if (version<= "31" emacs-version)
+    (define-keymap
+      :keymap conn-wincontrol-map
+      "\\" 'transpose-window-layout
+      "<" 'rotate-window-layout-counterclockwise
+      ">" 'rotate-window-layout-clockwise
+      "|" 'flip-window-layout-horizontally
+      "_" 'flip-window-layout-vertically))
+
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
   :global t
@@ -7847,6 +7867,10 @@ When ARG is nil the root window is used."
 (defvar-keymap conn-other-buffer-repeat-map
   :repeat t
   "&" 'conn-other-buffer)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-emacs-state)
+  "<f8>" 'conn-command-state)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
