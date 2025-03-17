@@ -95,7 +95,7 @@
                (sp-end-of-sexp))
              (conn--push-ephemeral-mark (point)))))
         ((= (point) beg)
-         (when-let ((enc (sp-get-enclosing-sexp)))
+         (when-let* ((enc (sp-get-enclosing-sexp)))
            (if (eql (point) (sp-get enc :beg-in))
                (conn--push-ephemeral-mark (sp-get enc :end-in))
              (conn--push-ephemeral-mark (sp-get enc :beg-in)))))))
