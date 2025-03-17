@@ -8496,6 +8496,20 @@ When ARG is nil the root window is used."
     "n" 'ibuffer-backward-filter-group
     "m" 'ibuffer-forward-filter-group))
 
+(with-eval-after-load 'markdown-mode
+  (conn-register-thing
+   'md-paragraph
+   :forward-op 'markdown-forward-paragraph
+   :modes '(markdown-mode))
+
+  (conn-register-thing-commands
+   'md-paragraph 'conn-continuous-thing-handler
+   'markdown-forward-paragraph
+   'markdown-backward-paragraph)
+
+  ;; TODO: other markdown things
+  )
+
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
 ;; indent-tabs-mode: nil
