@@ -187,30 +187,31 @@
   (defvar embark-keymap-alist)
 
   (defun conn-kapply-xref-candidates (cands)
-    (thread-last
-      cands
-      (mapcar
-       (lambda (cand)
-         (when-let* ((xref (get-text-property 0 'consult-xref cand))
-                     (loc (xref-item-location xref))
-                     (type (type-of loc))
-                     (marker
-                      (pcase type
-                        ((or 'xref-file-location 'xref-etags-location)
-                         (consult--marker-from-line-column
-                          (find-file-noselect
-                           ;; xref-location-group returns the file name
-                           (let ((xref-file-name-display 'abs))
-                             (xref-location-group loc)))
-                          (xref-location-line loc)
-                          (if (eq type 'xref-file-location)
-                              (xref-file-location-column loc)
-                            0)))
-                        (_ (xref-location-marker loc)))))
-           (set-marker-insertion-type marker t)
-           marker)))
-      (apply-partially 'conn--kapply-point-iterator)
-      (funcall-interactively 'conn-regions-kapply-prefix)))
+    (let ((regions
+           (mapcar
+            (lambda (cand)
+              (when-let* ((xref (get-text-property 0 'consult-xref cand))
+                          (loc (xref-item-location xref))
+                          (type (type-of loc))
+                          (marker
+                           (pcase type
+                             ((or 'xref-file-location 'xref-etags-location)
+                              (consult--marker-from-line-column
+                               (find-file-noselect
+                                ;; xref-location-group returns the file name
+                                (let ((xref-file-name-display 'abs))
+                                  (xref-location-group loc)))
+                               (xref-location-line loc)
+                               (if (eq type 'xref-file-location)
+                                   (xref-file-location-column loc)
+                                 0)))
+                             (_ (xref-location-marker loc)))))
+                (set-marker-insertion-type marker t)
+                marker))
+            cands)))
+      (conn-regions-kapply-prefix
+       (lambda (order)
+         (conn--kapply-point-iterator regions order)))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
