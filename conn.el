@@ -2530,6 +2530,19 @@ Possibilities: \\<query-replace-map>
      (conn--push-ephemeral-mark end)
      (when (markerp beg) (set-marker beg nil))
      (when (markerp end) (set-marker end nil))
+     t)
+    ((and pt (pred markerp))
+     (when-let* ((buffer (ignore-errors (marker-buffer pt))))
+       (when (not (eq buffer (current-buffer)))
+         (pop-to-buffer-same-window buffer)
+         (deactivate-mark t)
+         (unless (eq buffer (window-buffer (selected-window)))
+           (error "Could not pop to buffer %s" buffer))))
+     (goto-char pt)
+     (when (markerp pt) (set-marker pt nil))
+     t)
+    ((and pt (pred integerp))
+     (goto-char pt)
      t)))
 
 (defun conn--kapply-infinite-iterator ()
@@ -2641,8 +2654,8 @@ Possibilities: \\<query-replace-map>
                               ('reverse (nreverse points))
                               (_        (conn--nnearest-first points)))
                   collect (if (markerp pt)
-                              (cons pt pt)
-                            (cons (conn--create-marker pt) pt)))))
+                              pt
+                            (conn--create-marker pt)))))
     (lambda (state)
       (pcase state
         (:finalize
@@ -2985,7 +2998,6 @@ The iterator must be the first argument in ARGLIST.
              (run-hook-wrapped 'conn-kmacro-apply-end-hook
                                (lambda (hook)
                                  (ignore-errors (funcall hook))))
-             (isearch-range-invisible (point) (1+ (point)))
              (isearch-clean-overlays)))))))
 
 (conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
