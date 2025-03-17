@@ -12,8 +12,8 @@
 ┃              │ windows  │          │  button  │   mark   │  buffer  │   read   │          │          │          │  prefix  │          │          │ on region┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
-┃              │ transpose│   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑column │  →word   │ register │  ↑list   │  ↓list   │  macro   ┃
-┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │  prefix  │          │          │ dispatch ┃
+┃              │ transpose│   kill   │  emacs   │  region  │  replace │   yank   │  ←word   │  ↑column │  →word   │ register │  ↑list   │  ↓list   │ kmacro   ┃
+┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │  prefix  │          │          │ apply    ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
 ┃                │   M-X    │          │          │  repeat  │          │   mark   │  ←inner  │  ↓para   │  →inner  │ one win  │  yank    │                   ┃
