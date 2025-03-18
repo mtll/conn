@@ -150,8 +150,10 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   '(("COMMIT_EDITMSG" . conn-emacs-state)
     ((or (derived-mode . calc-mode)
          (derived-mode . calc-trail-mode)
-         (derived-mode . minibuffer-mode)
          (derived-mode . calc-keypad-mode)
+         (derived-mode . minibuffer-mode)
+         (derived-mode . Info-mode)
+         (derived-mode . Man-mode)
          (derived-mode . image-mode)
          (derived-mode . doc-view-mode)
          (derived-mode . pdf-view-mode)
@@ -464,7 +466,7 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 ;;;;;; Kapply Preview
 
-(put 'kapply-preview 'priority 1900)
+(put 'kapply-preview 'priority 2001)
 (put 'kapply-preview 'face 'match)
 
 ;;;;;; Mark Cursor
@@ -2587,7 +2589,7 @@ Possibilities: \\<query-replace-map>
            (pcase-dolist (`(,beg . ,end) matches)
              (set-marker beg nil)
              (set-marker end nil))))
-        ((or :record :loop)
+        ((or :record :next)
          (conn--kapply-advance-region (pop matches)))))))
 
 (defun conn--kapply-thing-iterator (thing bounds &optional order skip-empty nth)
@@ -2639,7 +2641,7 @@ Possibilities: \\<query-replace-map>
         (:record
          (setq overlays (conn--kapply-preview-overlays (cdr regions) 'region))
          (conn--kapply-advance-region (pop regions)))
-        (:loop
+        (:next
          (when overlays
            (mapc #'delete-overlay overlays)
            (setq overlays nil))
@@ -2662,7 +2664,7 @@ Possibilities: \\<query-replace-map>
          (when (consp points)
            (dolist (pt points)
              (set-marker pt nil))))
-        ((or :record :loop)
+        ((or :record :next)
          (conn--kapply-advance-region (pop points)))))))
 
 (defun conn--kapply-match-iterator ( string regions &optional
@@ -2712,7 +2714,7 @@ Possibilities: \\<query-replace-map>
                                 (y-or-n-p (format "[%s/%s] Record here?" i len))))
                     finally return cont)
                  (delete-overlay hl)))))
-        (:loop
+        (:next
          (when overlays
            (mapc #'delete-overlay overlays)
            (setq overlays nil))
@@ -2721,7 +2723,7 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-skip-point-invisible (iterator)
   (lambda (state)
     (pcase state
-      ((or :loop :record)
+      ((or :next :record)
        (cl-loop for ret = (funcall iterator state)
                 until (or (not (invisible-p (point)))
                           (null ret))
@@ -2731,7 +2733,7 @@ Possibilities: \\<query-replace-map>
 (defun conn--kapply-skip-region-invisible (iterator)
   (lambda (state)
     (pcase state
-      ((or :loop :record)
+      ((or :next :record)
        (cl-loop for ret = (funcall iterator state)
                 until (or (conn--region-visible-p
                            (region-beginning)
@@ -2744,7 +2746,7 @@ Possibilities: \\<query-replace-map>
   (let (restore)
     (lambda (state)
       (pcase state
-        ((or :loop :record)
+        ((or :next :record)
          (prog1
              (cl-loop with search-invisible = 'open
                       for ret = (funcall iterator state)
@@ -2770,7 +2772,7 @@ Possibilities: \\<query-replace-map>
                (cancel-change-group handle)
              (accept-change-group handle)
              (undo-amalgamate-change-group handle))))
-        ((or :record :loop)
+        ((or :record :next)
          (prog1
              (funcall iterator state)
            (unless (or (alist-get (current-buffer) undo-handles)
@@ -2794,7 +2796,7 @@ Possibilities: \\<query-replace-map>
            (accept-change-group handle)
            (undo-amalgamate-change-group handle))
          (funcall iterator state))
-        (:loop
+        (:next
          (when handle
            (accept-change-group handle)
            (undo-amalgamate-change-group handle))
@@ -2823,7 +2825,7 @@ Possibilities: \\<query-replace-map>
                  (set-marker-insertion-type pt t)
                  (cons pt (save-mark-and-excursion--save))))
          (funcall iterator state))
-        (:loop
+        (:next
          (prog1 (funcall iterator state)
            (unless (alist-get (current-buffer) saved-excursions)
              (setf (alist-get (current-buffer) saved-excursions)
@@ -2842,7 +2844,7 @@ Possibilities: \\<query-replace-map>
                     (length> buffers 1))
            (ibuffer t "*Kapply Ibuffer*"
                     `((predicate . (memq (current-buffer) ',buffers))))))
-        ((or :record :loop)
+        ((or :record :next)
          (prog1 (funcall iterator state)
            (unless (or automatic
                        (memq (current-buffer) buffers))
@@ -2892,7 +2894,7 @@ Possibilities: \\<query-replace-map>
              (widen)
              (narrow-to-region (or beg (point-min))
                                (or end (point-max))))))
-        ((or :record :loop)
+        ((or :record :next)
          (prog1
              (funcall iterator state)
            (pcase (alist-get (current-buffer) kapply-saved-restrictions)
@@ -2927,7 +2929,7 @@ Possibilities: \\<query-replace-map>
                (with-current-buffer buf
                  (funcall state)
                  (setq conn-previous-state prev-state)))))
-          ((or :record :loop)
+          ((or :record :next)
            (when conn-local-mode
              (unless (alist-get (current-buffer) buffer-states)
                (setf (alist-get (current-buffer) buffer-states)
@@ -2956,7 +2958,7 @@ Possibilities: \\<query-replace-map>
         (:finalize
          (funcall iterator state)
          (set-window-configuration wconf))
-        ((or :record :loop)
+        ((or :record :next)
          (unless wconf (setq wconf (current-window-configuration)))
          (funcall iterator state))))))
 
@@ -2982,7 +2984,7 @@ The iterator must be the first argument in ARGLIST.
               (conn--kapply-automatic-flag nil)
               (success nil)
               (,iterator (lambda (&optional state)
-                           (when (funcall ,iterator (or state :loop))
+                           (when (funcall ,iterator (or state :next))
                              (run-hook-with-args-until-failure
                               'conn-kmacro-apply-loop-hook)))))
          (run-hook-wrapped 'conn-kmacro-apply-start-hook
@@ -3535,7 +3537,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
  :dispatch-target-finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
- 'inner-line 'conn-continuous-thing-handler
+ 'inner-line 'conn-discrete-thing-handler
  'back-to-indentation
  'conn-forward-inner-line
  'conn-backward-inner-line
@@ -4877,8 +4879,8 @@ with `conn-dispatch-thing-ignored-modes'."
 
 ;;;;; Dispatch Commands
 
-(cl-defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-args
-                                    &optional predicate repeat)
+(defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-args
+                                 &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
 
 The user is first prompted for a either a THING or an ACTION
@@ -8127,12 +8129,8 @@ When ARG is nil the root window is used."
 
   (conn-register-thing
    'org-link
-   :dispatch-target-finder (lambda ()
-                             (require 'org)
-                             (conn--dispatch-re-matches org-link-any-re t))
-   :bounds-op (lambda ()
-                (require 'org)
-                (org-in-regexp org-link-any-re))
+   :dispatch-target-finder (lambda () (conn--dispatch-re-matches org-link-any-re t))
+   :bounds-op (lambda () (org-in-regexp org-link-any-re))
    :mark-key "O"
    :modes '(org-mode))
 
