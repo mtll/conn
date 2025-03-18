@@ -3538,7 +3538,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
  :dispatch-target-finder 'conn--dispatch-inner-lines)
 
 (conn-register-thing-commands
- 'inner-line 'conn-discrete-thing-handler
+ 'inner-line 'conn-continuous-thing-handler
  'back-to-indentation
  'conn-forward-inner-line
  'conn-backward-inner-line
@@ -5520,12 +5520,21 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
       (let ((pt (point)))
         (conn--end-of-inner-line-1)
         (unless (= pt (point)) (cl-decf N))
-        (forward-line N)
+        (cl-loop until (or (>= 0 N)
+                           (= (point) (point-max)))
+                 do (forward-line 1)
+                 unless (eolp)
+                 do (cl-decf N))
         (conn--end-of-inner-line-1))
+    (setf N (abs N))
     (let ((pt (point)))
       (back-to-indentation)
-      (unless (= pt (point)) (cl-incf N))
-      (forward-line N)
+      (unless (= pt (point)) (cl-decf N))
+      (cl-loop until (or (>= 0 N)
+                         (= (point) (point-max)))
+               do (forward-line -1)
+               unless (eolp)
+               do (cl-decf N))
       (back-to-indentation))))
 
 (defun conn-backward-inner-line (N)
