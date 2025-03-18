@@ -4938,7 +4938,8 @@ seconds."
               (pcase-dolist (`(_ . ,ovs) target-ovs)
                 (mapc #'delete-overlay ovs))
               (mapc #'conn-label-delete labels))
-            (apply action window pt thing-cmd thing-arg action-args))
+            (save-window-excursion
+              (apply action window pt thing-cmd thing-arg action-args)))
         (undo-boundary)))))
 
 (defun conn-repeat-last-dispatch (repeat)
