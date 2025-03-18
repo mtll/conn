@@ -161,7 +161,8 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
      . conn-null-state)
     ((or (derived-mode . prog-mode)
          (derived-mode . text-mode)
-         (derived-mode . conf-mode))
+         (derived-mode . conf-mode)
+         (major-mode . fundamental-mode))
      . conn-command-state))
   "Alist of the form ((CONDITION . STATE) ...).
 
