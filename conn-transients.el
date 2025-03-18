@@ -163,10 +163,12 @@ the edit in the macro."
 
 (transient-define-argument conn--kapply-empty-infix ()
   "Include empty regions in dispatch."
-  :class 'conn-transient-lisp-bool
+  :class 'conn-transient-lisp-choices
   :key "o"
   :keyword :skip-empty
-  :description "Skip")
+  :description "Empty"
+  :choices `(nil
+             ("skip" . conn--kapply-skip-empty)))
 
 (transient-define-argument conn--kapply-macro-infix ()
   "Dispatch `last-kbd-macro'.
@@ -246,9 +248,9 @@ before each iteration."
   :key "b"
   :description "Order"
   :keyword :maybe-order
-  :choices '(("nearest")
-             ("forward" . forward)
-             ("reverse" . reverse)))
+  :choices '(("nearest" . conn--nnearest-first)
+             ("forward" . identity)
+             ("reverse" . nreverse)))
 
 (transient-define-argument conn--kapply-read-hl-patterns ()
   "Dispatch on regions from last to first."
@@ -322,11 +324,10 @@ Begins the keyboard macro by deleting the string at each match."
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
-      string
-      (or regions (list (cons beg end)))
-      nil
+      string (or regions (list (cons beg end)))
       (alist-get :maybe-order args)
-      delimited conn-query-flag))
+      nil delimited conn-query-flag))
+   'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-region-invisible)
@@ -355,11 +356,10 @@ Begins the keyboard macro in `conn-emacs-state'."
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
-      string
-      (or regions (list (cons beg end)))
-      nil
+      string (or regions (list (cons beg end)))
       (alist-get :maybe-order args)
-      delimited conn-query-flag))
+      nil delimited conn-query-flag))
+   'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-region-invisible)
@@ -387,11 +387,10 @@ Begins the keyboard macro in `conn-command-state'."
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
-      string
-      (or regions (list (cons beg end)))
-      nil
+      string (or regions (list (cons beg end)))
       (alist-get :maybe-order args)
-      delimited conn-query-flag))
+      nil delimited conn-query-flag))
+   'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-region-invisible)
@@ -415,9 +414,9 @@ Begins the keyboard macro in `conn-command-state'."
                 (< (point) (car (nth 1 regions))))
       (setq regions (nreverse regions)))
     (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions
-                                   'forward
-                                   (alist-get :skip-empty args))
+     (conn--kapply-region-iterator regions)
+     'conn--kapply-skip-empty
+     'conn--kapply-relocate-to-region
      'conn--kapply-skip-region-invisible
      (alist-get :undo args)
      (alist-get :restrictions args)
@@ -440,9 +439,9 @@ Begins the keyboard macro in `conn-command-state'."
       (setq regions (nreverse regions)))
     (deactivate-mark)
     (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions
-                                   'forward
-                                   (alist-get :skip-empty args))
+     (conn--kapply-region-iterator regions)
+     'conn--kapply-skip-empty
+     'conn--kapply-relocate-to-region
      'conn--kapply-skip-region-invisible
      (alist-get :undo args)
      (alist-get :restrictions args)
@@ -466,9 +465,9 @@ Begins the keyboard macro in `conn-command-state'."
       (setq regions (nreverse regions)))
     (deactivate-mark)
     (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions
-                                   'forward
-                                   (alist-get :skip-empty args))
+     (conn--kapply-region-iterator regions)
+     'conn--kapply-skip-empty
+     'conn--kapply-relocate-to-region
      'conn--kapply-skip-region-invisible
      (alist-get :undo args)
      (alist-get :restrictions args)
@@ -501,11 +500,10 @@ Begins the keyboard macro in `conn-command-state'."
                           (conn--read-from-with-preview
                            "String" (or regions (list (cons beg end))) nil))))
      (conn--kapply-match-iterator
-      string
-      (or regions (list (cons beg end)))
-      nil
+      string (or regions (list (cons beg end)))
       (alist-get :maybe-order args)
-      delimited conn-query-flag))
+      nil delimited conn-query-flag))
+   'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-region-invisible)
@@ -537,11 +535,10 @@ Begins the keyboard macro in `conn-command-state'."
                           (conn--read-from-with-preview
                            "Regexp" (or regions (list (cons beg end))) t))))
      (conn--kapply-match-iterator
-      regexp
-      (or regions (list (cons beg end)))
-      t
+      regexp (or regions (list (cons beg end)))
       (alist-get :maybe-order args)
-      delimited conn-query-flag))
+      t delimited conn-query-flag))
+   'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-region-invisible)
@@ -564,15 +561,12 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,thing ,_outer-bounds . ,regions)
+  (pcase-let ((`(,_thing ,_outer-bounds . ,regions)
                (conn-read-thing-region "Things")))
     (conn--kapply-compose-iterator
-     (if (alist-get :skip-empty args)
-         (seq-remove (lambda (reg)
-                       (conn-thing-empty-p thing reg))
-                     regions)
-       regions)
-     `(conn--kapply-region-iterator ,(alist-get :maybe-order args))
+     (conn--kapply-region-iterator regions)
+     (alist-get :skip-empty args)
+     'conn--kapply-relocate-to-region
      'conn--kapply-skip-point-invisible
      (alist-get :undo args)
      (alist-get :restrictions args)
@@ -593,26 +587,25 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-compose-iterator
-   (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover "Thing")))
-     (conn--kapply-thing-iterator
-      cmd (region-bounds)
-      (alist-get :maybe-order args)
-      (alist-get :skip-empty args)
-      arg))
-   'conn--kapply-skip-point-invisible
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (if (eq (alist-get :regions args)
-           'conn--kapply-change-region)
-       'conn--kapply-change-region
-     (when (> (point) (mark t))
-       'conn--kapply-at-end))
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :kmacro args)))
+  (pcase-let ((`(,cmd ,n) (conn-read-thing-mover "Thing")))
+    (conn--kapply-compose-iterator
+     (conn--kapply-thing-iterator cmd (region-bounds))
+     (alist-get :skip-empty args)
+     'conn--kapply-relocate-to-region
+     'conn--kapply-skip-point-invisible
+     `(conn--kapply-skip-n ,(1- (prefix-numeric-value n)))
+     (alist-get :undo args)
+     (alist-get :restrictions args)
+     (alist-get :excursions args)
+     (alist-get :state args)
+     (if (eq (alist-get :regions args)
+             'conn--kapply-change-region)
+         'conn--kapply-change-region
+       (when (> (point) (mark t))
+         'conn--kapply-at-end))
+     'conn--kapply-pulse-region
+     (alist-get :window-conf args)
+     (alist-get :kmacro args))))
 
 (transient-define-suffix conn--kapply-iterate-suffix (args)
   "Apply keyboard macro a specified number of times.
@@ -641,7 +634,8 @@ A zero means repeat until error."
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (funcall iterator (alist-get :maybe-order args))
+   (funcall iterator)
+   (alist-get :skip-empty args)
    'conn--kapply-open-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -747,7 +741,8 @@ A zero means repeat until error."
                   matches)))
          (cons at-pt (delq at-pt matches))
        matches))
-   'conn--kapply-region-iterator
+   `(conn--kapply-region-iterator ,(alist-get :maybe-order args))
+   'conn--kapply-relocate-to-region
    'conn--kapply-open-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -774,6 +769,7 @@ A zero means repeat until error."
       (or end (point-max))
       (alist-get :maybe-order args)
       (alist-get :read-patterns args))
+     'conn--kapply-relocate-to-region
      'conn--kapply-open-invisible
      (alist-get :undo args)
      (alist-get :restrictions args)
@@ -801,8 +797,9 @@ A zero means repeat until error."
                         ((and pt (guard (markerp pt)))
                          (list (cons pt (marker-position pt))))
                         (reg reg))))
-    (alist-get :maybe-order args)
-    (alist-get :skip-empty args))
+    (alist-get :maybe-order args))
+   (alist-get :skip-empty args)
+   'conn--kapply-relocate-to-region
    'conn--kapply-skip-region-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -839,8 +836,9 @@ A zero means repeat until error."
                                 (forward-line (1- line)))
                               (forward-char col)
                               (cons (point-marker) (line-end-position))))))))
-    (alist-get :maybe-order args)
-    (alist-get :skip-empty args))
+    (alist-get :maybe-order args))
+   (alist-get :skip-empty args)
+   'conn--kapply-advance-region
    'conn--kapply-skip-region-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -869,16 +867,17 @@ A zero means repeat until error."
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
   (conn--kapply-compose-iterator
-   (save-excursion
-     (goto-char (point-min))
-     (let (regions)
-       (while-let ((match (text-property-search-forward prop value t)))
-         (push (cons (prop-match-beginning match)
-                     (prop-match-end match))
-               regions))
-       regions))
-   `(conn--kapply-region-iterator
-     ,(alist-get :maybe-order args))
+   (conn--kapply-region-iterator
+    (save-excursion
+      (goto-char (point-min))
+      (let (regions)
+        (while-let ((match (text-property-search-forward prop value t)))
+          (push (cons (prop-match-beginning match)
+                      (prop-match-end match))
+                regions))
+        regions))
+    (alist-get :maybe-order args))
+   'conn--kapply-advance-region
    'conn--kapply-open-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
@@ -1160,7 +1159,6 @@ A zero means repeat until error."
       (conn--kapply-state-infix)
       (conn--kapply-region-infix)]
     [ :description "Save State:"
-      (conn--kapply-save-windows-infix)
       (conn--kapply-save-restriction-infix)
       (conn--kapply-save-excursion-infix)]]
   [ [ :description "Dispatch:"
