@@ -61,6 +61,11 @@
   "U" 'sp-backward-symbol
   "O" 'sp-forward-symbol)
 
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-read-thing-common-state 'smartparens-mode)
+  "m" 'forward-sexp
+  "n" 'backward-sexp)
+
 (conn-register-thing-commands
  'symbol 'conn-symbol-handler
  'sp-forward-symbol 'sp-backward-symbol)

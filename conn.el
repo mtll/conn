@@ -1521,6 +1521,10 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Move"
   :suppress-input-method t)
 
+(conn-define-state conn-read-thing-common-state (conn-movement-state)
+  "Common elements of reading thing states."
+  :suppress-input-method t)
+
 (conn-define-state conn-menu-state ()
   "A `conn-mode' state for remapping key menus.")
 
@@ -1927,7 +1931,7 @@ region.")
 
 (defvar conn-default-state-for-read-mover 'conn-read-mover-state)
 
-(conn-define-state conn-read-mover-state (conn-command-state)
+(conn-define-state conn-read-mover-state (conn-read-thing-common-state)
   "A state for reading things."
   :lighter " MOVER")
 
@@ -3556,7 +3560,7 @@ be ignored by during dispatch.")
 The default may be overridden by setting the :conn-read-dispatch-state
 of a command.")
 
-(conn-define-state conn-read-dispatch-state (conn-command-state)
+(conn-define-state conn-read-dispatch-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
