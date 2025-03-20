@@ -968,15 +968,22 @@ in STATE and return it."
       (dolist (state conn-states)
         (let (state-maps)
           (dolist (mode mode-parents)
-            (let ((mode-maps (gethash mode conn--major-mode-maps)))
-              (when mode-maps
-                (dolist (parent (conn--state-all-parents state))
-                  (when-let* ((map (gethash parent mode-maps)))
-                    (push map state-maps))))))
-          (when state-maps
-            (push (cons state (make-composed-keymap (nreverse state-maps)))
-                  major-mode-maps))))
+            (let ((mode-maps (or (gethash mode conn--major-mode-maps)
+                                 (setf (gethash mode conn--major-mode-maps)
+                                       (make-hash-table :test 'eq)))))
+              (dolist (parent (conn--state-all-parents state))
+                (if-let* ((map (gethash parent mode-maps)))
+                    (push map state-maps)
+                  (setf (gethash parent mode-maps)
+                        (make-sparse-keymap))))))
+          (push (cons state (make-composed-keymap (nreverse state-maps)))
+                major-mode-maps)))
       major-mode-maps)))
+
+(defun conn--set-minor-mode-map (state mode keymap)
+  (let ((alist (gethash state conn--minor-mode-maps)))
+    (setcdr alist (cons (cons mode keymap) (cdr alist)))
+    keymap))
 
 (defun conn-get-mode-map (state mode)
   "Return keymap for MODE in STATE.
@@ -1001,8 +1008,7 @@ return it."
       (cond
        ((autoloadp (symbol-function mode))
         (prog1
-            (setf (alist-get mode (gethash state conn--minor-mode-maps))
-                  (make-sparse-keymap))
+            (conn--set-minor-mode-map state mode (make-sparse-keymap))
           (with-eval-after-load (nth 1 (symbol-function mode))
             (when (get mode 'derived-mode-parent)
               (clrhash conn--minor-mode-map-cache)
@@ -1020,8 +1026,7 @@ return it."
                  conn--minor-mode-maps (delq old conn--minor-mode-maps)))))))
        (t
         (clrhash conn--minor-mode-map-cache)
-        (setf (alist-get mode (gethash state conn--minor-mode-maps))
-              (make-sparse-keymap))))))
+        (conn--set-minor-mode-map state mode (make-sparse-keymap))))))
 
 (defun conn-get-state-map (state)
   (gethash state conn--state-maps))
@@ -1392,6 +1397,10 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
            (unless (gethash ',name conn--state-maps)
              (setf (gethash ',name conn--state-maps)
                    (make-sparse-keymap)))
+
+           (unless (gethash ',name conn--minor-mode-maps)
+             (setf (gethash ',name conn--minor-mode-maps)
+                   (list :minor-mode-map-alist)))
 
            (unless (gethash ',name conn--override-maps)
              (setf (gethash ',name conn--override-maps)
