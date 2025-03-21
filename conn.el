@@ -1365,72 +1365,77 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                       (pop properties))
                  (format "Enter %S" (or (car-safe name) name)))))
     (cl-assert (plistp properties))
-    (cl-with-gensyms (new-parents old-parents)
-      `(progn
-         (dolist (parent ',parents)
-           (cl-check-type parent conn-state))
+    `(progn
+       (dolist (parent ',parents)
+         (cl-check-type parent conn-state))
 
-         (cl-assert
-          (cl-loop for parent in ',parents
-                   never (memq ',name (conn--state-all-parents parent)))
-          nil "Cycle detected in %s inheritance hierarchy" ',name)
+       (cl-assert
+        (cl-loop for parent in ',parents
+                 never (memq ',name (conn--state-all-parents parent)))
+        nil "Cycle detected in %s inheritance hierarchy" ',name)
 
-         (defvar-local ,name nil
-           ,(conn--stringify "Non-nil when `" name "' is active."))
+       (defvar-local ,name nil
+         ,(conn--stringify "Non-nil when `" name "' is active."))
 
-         (let* ((,new-parents
-                 (merge-ordered-lists
-                  (mapcar 'conn--state-all-parents ',parents)))
-                (,old-parents
-                 (when (get ',name :conn--state)
-                   (cdr (conn--state-all-parents ',name)))))
-           (dolist (former-parent (seq-difference ,old-parents ,new-parents))
-             (setf (aref (get former-parent :conn--state) 2)
-                   (delq ',name (aref (get former-parent :conn--state) 2))))
-
-           (dolist (parent ,new-parents)
+       (let ((state-props
+              (cl-loop with kvs = (list ,@properties)
+                       with table = (make-hash-table :test 'eq)
+                       for (k v) on kvs by #'cddr
+                       do (puthash k v table)
+                       finally return table))
+             (new-parents
+              (merge-ordered-lists
+               (mapcar 'conn--state-all-parents ',parents))))
+         (if-let* ((vec (get ',name :conn--state))
+                   (old-parents (cdr (conn--state-all-parents ',name)))
+                   (all-children (cons ',name (aref ,vec 2))))
+             (progn
+               ;; We are redefining a state and must to take care to
+               ;; do it transparently.
+               (setf (aref vec 0) state-props
+                     (aref vec 1) ',parents)
+               ;; Remove all children from all former parents.  We
+               ;; will take care of the case where a child inherits
+               ;; from some parent through multiple paths next.
+               (dolist (former (seq-difference old-parents new-parents))
+                 (setf (aref (get former :conn--state) 2)
+                       (seq-difference (aref (get former :conn--state) 2)
+                                       all-children)))
+               ;; Recompute all parents for all children and
+               ;; re-register all children with all of their parents.
+               ;; If we overzealously removed a child from some parent
+               ;; in the previous step we will fix it here.
+               (dolist (child all-children)
+                 (remhash child conn--state-all-parents-cache)
+                 (dolist (parent (conn--state-all-parents child))
+                   (cl-pushnew child (aref (get parent :conn--state) 2))))
+               ;; Rebuild all keymaps for all children with the new
+               ;; inheritance hierarchy.  Existing composed keymaps
+               ;; are destructively modified so that states will not
+               ;; have to recompose their keymaps before these changes
+               ;; take effect.
+               (dolist (child all-children)
+                 (conn--rebuild-state-map child)
+                 (conn--rebuild-override-map child)
+                 (maphash (lambda (mode _map)
+                            (conn--rebuild-major-mode-map child mode))
+                          (gethash child conn--major-mode-maps))
+                 (pcase-dolist (`(,mode . ,_map) (cdr (gethash child conn--minor-mode-maps)))
+                   (conn--rebuild-minor-mode-map ',name mode))))
+           (put ',name :conn--state (vector state-props ',parents nil))
+           (dolist (parent (conn--state-all-parents ',name))
              (cl-pushnew ',name (aref (get parent :conn--state) 2)))
+           (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
+                 (gethash ',name conn--override-maps) (make-sparse-keymap)
+                 (gethash ',name conn--minor-mode-maps) (list :conn-keymap-alist)
+                 (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))))
 
-           (if-let* ((vec (get ',name :conn--state)))
-               (progn
-                 (dolist (child (aref vec 2))
-                   (dolist (parent ,new-parents)
-                     (cl-pushnew child (aref (get parent :conn--state) 2))))
-                 (setf (aref vec 0) (cl-loop with kvs = (list ,@properties)
-                                             with table = (make-hash-table :test 'eq)
-                                             for (k v) on kvs by #'cddr
-                                             do (puthash k v table)
-                                             finally return table)
-                       (aref vec 1) ',parents)
-                 (dolist (child (cons ',name (aref vec 2)))
-                   (remhash child conn--state-all-parents-cache))
-                 (dolist (child (cons ',name (aref vec 2)))
-                   (conn--rebuild-state-map child)
-                   (conn--rebuild-override-map child)
-                   (maphash (lambda (mode _map)
-                              (conn--rebuild-major-mode-map child mode))
-                            (gethash child conn--major-mode-maps))
-                   (pcase-dolist (`(,mode . ,_map) (cdr (gethash child conn--minor-mode-maps)))
-                     (conn--rebuild-minor-mode-map ',name mode))))
-             (put ',name :conn--state
-                  (vector (cl-loop with kvs = (list ,@properties)
-                                   with table = (make-hash-table :test 'eq)
-                                   for (k v) on kvs by #'cddr
-                                   do (puthash k v table)
-                                   finally return table)
-                          ',parents
-                          nil))
-             (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
-                   (gethash ',name conn--override-maps) (make-sparse-keymap)
-                   (gethash ',name conn--minor-mode-maps) (list :conn-keymap-alist)
-                   (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))))
+       (cl-pushnew ',name conn-states)
 
-         (cl-pushnew ',name conn-states)
-
-         (defun ,name ()
-           ,doc
-           (interactive)
-           (conn-enter-state ',name))))))
+       (defun ,name ()
+         ,doc
+         (interactive)
+         (conn-enter-state ',name)))))
 
 (conn-define-state conn-null-state ()
   "An empty state.
