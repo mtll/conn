@@ -1208,17 +1208,17 @@ property from its parents."
        (cl-check-type ,state conn-state)
        (remhash (aref (get ,state :conn--state) 0) ,property)))))
 
-(eval-and-compile
-  (pcase-defmacro conn-substate (parent)
-    "Matches if EXPVAL is a substate of PARENT."
-    `(and (pred conn-state-p)
-          (pred (lambda (s)
-                  (and (conn-state-p ',parent)
-                       (conn-substate-p s ',parent))))))
+(pcase-defmacro conn-substate (parent)
+  "Matches if EXPVAL is a substate of PARENT."
+  `(and (pred conn-state-p)
+        (guard (conn-state-p ',parent))
+        (pred ,(static-if (< emacs-major-version 30)
+                   `(pcase--flip conn-substate-p ',parent)
+                 `(conn-substate-p _ ',parent)))))
 
-  ;; Adapted from map pattern
-  (pcase-defmacro conn-state-props (&rest properties)
-    "Build a `pcase' pattern matching state properties.
+;; Adapted from map pattern
+(pcase-defmacro conn-state-props (&rest properties)
+  "Build a `pcase' pattern matching state properties.
 
 PROPERTIES is a list of elements to be matched in the state.
 
@@ -1229,25 +1229,25 @@ property KEY in the state and matches to associated value against
 Each element can also be a SYMBOL, which is an abbreviation of a (KEY
 PAT) tuple of the form (\\='SYMBOL SYMBOL).  When SYMBOL is a keyword,
 it is an abbreviation of the form (:SYMBOL SYMBOL)."
-    `(and (pred conn-state-p)
-          ,@(mapcar
-             (static-if (< emacs-major-version 30)
-                 (lambda (prop)
-                   (cond ((consp elt)
-                          `(app (pcase--flip conn-state-get ,(car prop))
-                                ,(cadr prop)))
-                         ((keywordp prop)
-                          (let ((var (intern (substring (symbol-name prop) 1))))
-                            `(app (pcase--flip conn-state-get ,prop) ,var)))
-                         (t `(app (pcase--flip conn-state-get ',prop) ,prop))))
+  `(and (pred conn-state-p)
+        ,@(mapcar
+           (static-if (< emacs-major-version 30)
                (lambda (prop)
-                 (cond ((consp prop)
-                        `(app (conn-state-get _ ,(car prop)) ,(cadr prop)))
+                 (cond ((consp elt)
+                        `(app (pcase--flip conn-state-get ,(car prop))
+                              ,(cadr prop)))
                        ((keywordp prop)
                         (let ((var (intern (substring (symbol-name prop) 1))))
-                          `(app (conn-state-get _ ,prop) ,var)))
-                       (t `(app (conn-state-get _ ',prop) ,prop)))))
-             properties))))
+                          `(app (pcase--flip conn-state-get ,prop) ,var)))
+                       (t `(app (pcase--flip conn-state-get ',prop) ,prop))))
+             (lambda (prop)
+               (cond ((consp prop)
+                      `(app (conn-state-get _ ,(car prop)) ,(cadr prop)))
+                     ((keywordp prop)
+                      (let ((var (intern (substring (symbol-name prop) 1))))
+                        `(app (conn-state-get _ ,prop) ,var)))
+                     (t `(app (conn-state-get _ ',prop) ,prop)))))
+           properties)))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
