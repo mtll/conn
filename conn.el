@@ -984,12 +984,6 @@ in STATE and return it."
      (cl-loop for pstate in (conn--state-all-parents state)
               collect (gethash pstate conn--override-maps)))))
 
-(defun conn--rebuild-override-map (state)
-  (when-let* ((override-map (gethash state conn--override-map-cache)))
-    (setf (cdr override-map)
-          (cl-loop for pstate in (conn--state-all-parents state)
-                   collect (gethash pstate conn--override-maps)))))
-
 (defun conn-get-state-map (state)
   "Return the state keymap for STATE."
   (cl-check-type state conn-state)
@@ -1003,12 +997,6 @@ in STATE and return it."
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
               collect (gethash pstate conn--state-maps)))))
-
-(defun conn--rebuild-state-map (state)
-  (when-let* ((state-map (gethash state conn--state-map-cache)))
-    (setf (cdr state-map)
-          (cl-loop for pstate in (conn--state-all-parents state)
-                   collect (gethash pstate conn--state-maps)))))
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1067,19 +1055,26 @@ return it."
       (t
        (nth 1 (compose-minor-mode-map state)))))))
 
-(defun conn--rebuild-minor-mode-map (state mode)
-  (conn-get-mode-map state mode)
-  (let ((map (alist-get mode (gethash state conn--minor-mode-maps))))
-    (setf (cddr map)
-          (cl-loop for pstate in (cdr (conn--state-all-parents state))
-                   collect (conn-get-mode-map pstate mode)))))
-
-(defun conn--rebuild-major-mode-map (state mode)
-  (conn-get-mode-map state mode)
-  (let ((map (gethash mode (gethash state conn--major-mode-maps))))
-    (setf (cddr map)
-          (cl-loop for pstate in (cdr (conn--state-all-parents state))
-                   collect (conn-get-mode-map pstate mode)))))
+(defun conn--rebuild-state-keymaps (state)
+  (let ((parents (conn--state-all-parents state)))
+    (when-let* ((state-map (gethash state conn--state-map-cache)))
+      (setf (cdr state-map)
+            (cl-loop for pstate in parents
+                     collect (gethash pstate conn--state-maps))))
+    (when-let* ((override-map (gethash state conn--override-map-cache)))
+      (setf (cdr override-map)
+            (cl-loop for pstate in parents
+                     collect (gethash pstate conn--override-maps))))
+    (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
+      (setf (cdr map)
+            (cl-loop for pstate in parents
+                     collect (conn-get-mode-map pstate mode))))
+    (maphash
+     (lambda (mode map)
+       (setf (cdr map)
+             (cl-loop for pstate in parents
+                      collect (conn-get-mode-map pstate mode))))
+     (gethash state conn--major-mode-maps))))
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
@@ -1235,23 +1230,24 @@ Each element can also be a SYMBOL, which is an abbreviation of a (KEY
 PAT) tuple of the form (\\='SYMBOL SYMBOL).  When SYMBOL is a keyword,
 it is an abbreviation of the form (:SYMBOL SYMBOL)."
     `(and (pred conn-state-p)
-          ,@(mapcar (static-if (< emacs-major-version 30)
-                        (lambda (prop)
-                          (cond ((consp elt)
-                                 `(app (pcase--flip conn-state-get ,(car prop))
-                                       ,(cadr prop)))
-                                ((keywordp prop)
-                                 (let ((var (intern (substring (symbol-name prop) 1))))
-                                   `(app (pcase--flip conn-state-get ,prop) ,var)))
-                                (t `(app (pcase--flip conn-state-get ',prop) ,prop))))
-                      (lambda (prop)
-                        (cond ((consp prop)
-                               `(app (conn-state-get _ ,(car prop)) ,(cadr prop)))
-                              ((keywordp prop)
-                               (let ((var (intern (substring (symbol-name prop) 1))))
-                                 `(app (conn-state-get _ ,prop) ,var)))
-                              (t `(app (conn-state-get _ ',prop) ,prop)))))
-                    properties))))
+          ,@(mapcar
+             (static-if (< emacs-major-version 30)
+                 (lambda (prop)
+                   (cond ((consp elt)
+                          `(app (pcase--flip conn-state-get ,(car prop))
+                                ,(cadr prop)))
+                         ((keywordp prop)
+                          (let ((var (intern (substring (symbol-name prop) 1))))
+                            `(app (pcase--flip conn-state-get ,prop) ,var)))
+                         (t `(app (pcase--flip conn-state-get ',prop) ,prop))))
+               (lambda (prop)
+                 (cond ((consp prop)
+                        `(app (conn-state-get _ ,(car prop)) ,(cadr prop)))
+                       ((keywordp prop)
+                        (let ((var (intern (substring (symbol-name prop) 1))))
+                          `(app (conn-state-get _ ,prop) ,var)))
+                       (t `(app (conn-state-get _ ',prop) ,prop)))))
+             properties))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
@@ -1453,14 +1449,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                ;; are destructively modified so that states will not
                ;; have to recompose their keymaps before these changes
                ;; take effect.
-               (dolist (child all-children)
-                 (conn--rebuild-state-map child)
-                 (conn--rebuild-override-map child)
-                 (maphash (lambda (mode _map)
-                            (conn--rebuild-major-mode-map child mode))
-                          (gethash child conn--major-mode-maps))
-                 (pcase-dolist (`(,mode . ,_map) (cdr (gethash child conn--minor-mode-maps)))
-                   (conn--rebuild-minor-mode-map ',name mode))))
+               (mapc #'conn--rebuild-state-keymaps all-children))
            (put ',name :conn--state (vector state-props ',parents nil))
            (dolist (parent (cdr (conn--state-all-parents ',name)))
              (cl-pushnew ',name (aref (get parent :conn--state) 2)))
@@ -7782,6 +7771,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "Z" 'pop-to-mark-command
   "," 'conn-goto-char-2
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
