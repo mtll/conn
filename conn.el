@@ -988,9 +988,10 @@ in STATE and return it."
               collect (gethash pstate conn--override-maps)))))
 
 (defun conn--rebuild-override-map (state)
-  (setf (cdr (gethash state conn--override-map-cache))
-        (cl-loop for pstate in (conn--state-all-parents state)
-                 collect (gethash pstate conn--override-maps))))
+  (when-let* ((override-map (gethash state conn--override-map-cache)))
+    (setf (cdr override-map)
+          (cl-loop for pstate in (conn--state-all-parents state)
+                   collect (gethash pstate conn--override-maps)))))
 
 (defun conn-get-state-map (state)
   "Return the state keymap for STATE."
@@ -1007,9 +1008,10 @@ in STATE and return it."
               collect (gethash pstate conn--state-maps)))))
 
 (defun conn--rebuild-state-map (state)
-  (setf (cdr (gethash state conn--state-map-cache))
-        (cl-loop for pstate in (conn--state-all-parents state)
-                 collect (gethash pstate conn--state-maps))))
+  (when-let* ((state-map (gethash state conn--state-map-cache)))
+    (setf (cdr state-map)
+          (cl-loop for pstate in (conn--state-all-parents state)
+                   collect (gethash pstate conn--state-maps)))))
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1407,7 +1409,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                ;; in the previous step we will fix it here.
                (dolist (child all-children)
                  (remhash child conn--state-all-parents-cache)
-                 (dolist (parent (conn--state-all-parents child))
+                 (dolist (parent (cdr (conn--state-all-parents child)))
                    (cl-pushnew child (aref (get parent :conn--state) 2))))
                ;; Rebuild all keymaps for all children with the new
                ;; inheritance hierarchy.  Existing composed keymaps
@@ -1423,7 +1425,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                  (pcase-dolist (`(,mode . ,_map) (cdr (gethash child conn--minor-mode-maps)))
                    (conn--rebuild-minor-mode-map ',name mode))))
            (put ',name :conn--state (vector state-props ',parents nil))
-           (dolist (parent (conn--state-all-parents ',name))
+           (dolist (parent (cdr (conn--state-all-parents ',name)))
              (cl-pushnew ',name (aref (get parent :conn--state) 2)))
            (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
