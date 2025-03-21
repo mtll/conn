@@ -1361,6 +1361,9 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
     (cl-assert (plistp properties))
     (cl-with-gensyms (new-parents old-parents)
       `(progn
+         (dolist (parent ',parents)
+           (cl-check-type parent conn-state))
+
          (cl-assert
           (cl-loop for parent in ',parents
                    never (memq ',name (conn--state-all-parents parent)))
