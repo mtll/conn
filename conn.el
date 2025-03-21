@@ -908,6 +908,43 @@ of highlighting."
       (list mmode)
     (conn--derived-mode-all-parents mmode)))
 
+(define-inline conn--state-parents (state)
+  "Return only the immediate parents for STATE."
+  (inline-letevals (state)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (aref (get ,state :conn--state) 1)))))
+
+(define-inline conn--state-all-children (state)
+  "Return only the immediate parents for STATE."
+  (inline-letevals (state)
+    (inline-quote
+     (progn
+       (cl-check-type ,state conn-state)
+       (aref (get ,state :conn--state) 2)))))
+
+(defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
+
+(define-inline conn--state-all-parents (state)
+  "Return all parents of state.
+
+The returned list is not fresh, don't modify it."
+  (inline-letevals (state)
+    (inline-quote
+     (with-memoization
+         (gethash ,state conn--state-all-parents-cache)
+       (cl-check-type ,state conn-state)
+       (cons ,state
+             (merge-ordered-lists
+              (mapcar 'conn--state-all-parents
+                      (aref (get ,state :conn--state) 1))))))))
+
+(define-inline conn-substate-p (state parent)
+  (inline-letevals (state parent)
+    (inline-quote
+     (memq ,parent (conn--state-all-parents ,state)))))
+
 (defun conn--setup-mark-maps ()
   (unless (alist-get conn-current-state conn--local-mark-map)
     (let ((mark-map-bindings
@@ -1009,9 +1046,8 @@ return it."
            (dolist (child (conn--state-all-children state))
              (conn-get-mode-map child mode)))))
     (or
-     (when-let* ((mmode-table (gethash state conn--major-mode-maps))
-                 (map (gethash mode mmode-table)))
-       (nth 1 map))
+     (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
+       (nth 1 (gethash mode mmode-table)))
      (nth 1 (alist-get mode (gethash state conn--minor-mode-maps)))
      (cond
       ((autoloadp (symbol-function mode))
@@ -1122,22 +1158,6 @@ mouse-3: Describe current input method")
                  nil nil #'buffer-match-p)
       conn-default-state))
 
-(define-inline conn--state-parents (state)
-  "Return only the immediate parents for STATE."
-  (inline-letevals (state)
-    (inline-quote
-     (progn
-       (cl-check-type ,state conn-state)
-       (aref (get ,state :conn--state) 1)))))
-
-(define-inline conn--state-all-children (state)
-  "Return only the immediate parents for STATE."
-  (inline-letevals (state)
-    (inline-quote
-     (progn
-       (cl-check-type ,state conn-state)
-       (aref (get ,state :conn--state) 2)))))
-
 (defconst conn--hash-key-missing (make-symbol "key-missing"))
 
 (define-inline conn-state-get (state property)
@@ -1187,21 +1207,6 @@ property from its parents."
      (progn
        (cl-check-type ,state conn-state)
        (remhash (aref (get ,state :conn--state) 0) ,property)))))
-
-(defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
-
-(define-inline conn--state-all-parents (state)
-  "Return all parents of state.
-
-The returned list is not fresh, don't modify it."
-  (inline-letevals (state)
-    (inline-quote
-     (with-memoization
-         (gethash ,state conn--state-all-parents-cache)
-       (cl-check-type ,state conn-state)
-       (cons ,state
-             (merge-ordered-lists (mapcar 'conn--state-all-parents
-                                          (conn--state-parents ,state))))))))
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
@@ -1364,8 +1369,6 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
          (defvar-local ,name nil
            ,(conn--stringify "Non-nil when `" name "' is active."))
 
-         ;; Regenerate all state keymaps if the inheritance hierarchy
-         ;; has changed.
          (let* ((,new-parents
                  (merge-ordered-lists
                   (mapcar 'conn--state-all-parents ',parents)))
@@ -7560,11 +7563,12 @@ Operates with the selected windows parent window."
   "C-s" 'reb-next-match
   "C-r" 'reb-prev-match)
 
-(dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
+(with-eval-after-load 'occur-mode
+  (dolist (state '(conn-command-state conn-emacs-state))
+    (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
-(dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
+  (dolist (state '(conn-command-state conn-emacs-state))
+    (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit)))
 
 (defvar-keymap conn-region-map
   :prefix 'conn-region-map
