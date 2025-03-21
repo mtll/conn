@@ -1381,25 +1381,32 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
 
            (dolist (parent ,new-parents)
              (cl-pushnew ',name (aref (get parent :conn--state) 2)))
-           (when-let* ((vec (get ',name :conn--state)))
-             (dolist (child (aref vec 2))
-               (dolist (parent ,new-parents)
-                 (cl-pushnew child (aref (get parent :conn--state) 2)))))
-
-           (when (get ',name :conn--state)
-             (clrhash conn--state-all-parents-cache)
-             (clrhash conn--override-map-cache)
-             (clrhash conn--state-map-cache))
 
            (if-let* ((vec (get ',name :conn--state)))
                (progn
+                 (dolist (child (aref vec 2))
+                   (dolist (parent ,new-parents)
+                     (cl-pushnew child (aref (get parent :conn--state) 2))))
+
+                 (clrhash conn--state-all-parents-cache)
                  (setf (aref vec 0) (cl-loop with kvs = (list ,@properties)
                                              with table = (make-hash-table :test 'eq)
                                              for (k v) on kvs by #'cddr
                                              do (puthash k v table)
                                              finally return table)
 
-                       (aref vec 1) ',parents))
+                       (aref vec 1) ',parents)
+
+                 (dolist (child (cons ',name (aref vec 2)))
+                   (when-let* ((state-map (gethash child conn--state-map-cache)))
+                     (setf (cdr state-map)
+                           (cl-loop for pstate in (conn--state-all-parents child)
+                                    collect (gethash pstate conn--state-maps))))
+
+                   (when-let* ((override-map (cons ',name (aref vec 2))))
+                     (setf (cdr override-map)
+                           (cl-loop for pstate in (conn--state-all-parents child)
+                                    collect (gethash pstate conn--override-maps))))))
              (put ',name :conn--state
                   (vector (cl-loop with kvs = (list ,@properties)
                                    with table = (make-hash-table :test 'eq)
