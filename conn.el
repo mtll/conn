@@ -237,9 +237,6 @@ For the meaning of CONDITION see `buffer-match-p'."
 
 ;;;;; State Variables
 
-(defvar conn-states nil
-  "All defined conn states.")
-
 (defvar conn-exit-functions nil
   "Abnormal hook run when a state is exited.
 
@@ -1259,10 +1256,10 @@ and specializes the method on all conn states."
     (let ((success nil))
       (unwind-protect
           (progn
-            (set state nil)
             (setq conn-current-state nil
                   conn-previous-state state
                   cursor-type t)
+            (set state nil)
             (cl-call-next-method)
             (setq success t))
         (unless success
@@ -1431,8 +1428,6 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
                  (gethash ',name conn--minor-mode-maps) (list :conn-keymap-alist)
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))))
-
-       (cl-pushnew ',name conn-states)
 
        (defun ,name ()
          ,doc
@@ -7930,11 +7925,11 @@ Operates with the selected windows parent window."
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
         (funcall (conn--default-state-for-buffer)))
-    (dolist (state conn-states)
-      (kill-local-variable state))
-    (setq conn-current-state nil
-          conn-previous-state nil
-          cursor-type t)
+    ;; conn-exit-state sets conn-current-state to nil before
+    ;; anything else, so if we got here after an error in
+    ;; conn-exit-state this prevents an infinite loop.
+    (when conn-current-state
+      (conn-exit-state conn-current-state))
     (conn--clear-overlays)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
