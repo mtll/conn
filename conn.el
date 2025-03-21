@@ -3674,8 +3674,6 @@ of a command.")
                ('keyboard-quit
                 (keyboard-quit))
                ('kapply
-                ;; Run with a timer, otherwise we pick up a nil
-                ;; conn-state value for some reason.
                 (conn--with-state conn-previous-state
                   (conn-dispatch-kapply-prefix
                    (lambda (action)
