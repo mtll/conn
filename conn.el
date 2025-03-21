@@ -2998,12 +2998,7 @@ command should be automatically created.
 MARK-KEY is a key which should be bound to MARK-CMD in
 `conn-mark-thing-map' (only in MODES if MODES is non-nil).
 
-INTERIOR-OP is a function which returns the bounds of the interior of a
-THING.  The INTERIOR-OP function should take two argument, the beginning
-and end of the THING, and return a cons of the beginning and end of the
-interior of THING.
-
-\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP INTERIOR-OP MODES MARK-CMD MARK-KEY)"
+\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
   (intern (symbol-name thing))
   (when-let* ((target-finder (plist-get rest :dispatch-target-finder)))
     (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
@@ -3017,8 +3012,6 @@ interior of THING.
     (put thing 'end-op end))
   (when-let* ((bounds (plist-get rest :bounds-op)))
     (put thing 'bounds-of-thing-at-point bounds))
-  (when-let* ((interior-op (plist-get rest :interior-op)))
-    (put thing :conn-interior-op interior-op))
   (cl-flet ((make-mark-command ()
               (let ((mark-command (conn--symbolicate "conn-mark-" thing)))
                 (fset mark-command
@@ -3191,17 +3184,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
-(defun conn-bounds-of-interior (thing bounds)
-  "Bounds of the interior of THING at BOUNDS."
-  (if-let* ((inner-op (get thing :conn-interior-op)))
-      (funcall inner-op (car bounds) (cdr bounds))
-    bounds))
-
-(defun conn-thing-empty-p (thing bounds)
-  "Return non-nil if the interior of THING at BOUNDS has length > 0."
-  (pcase-let ((`(,beg . ,end) (conn-bounds-of-interior thing bounds)))
-    (= beg end)))
-
 ;;;;; Thing Definitions
 
 ;; Definitions for various things and thing commands.
@@ -3301,17 +3283,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (conn-register-thing
  'list
- :forward-op 'forward-list
- :interior-op (lambda (beg end)
-                (ignore-errors
-                  (cons (save-excursion
-                          (goto-char beg)
-                          (down-list 1)
-                          (point))
-                        (save-excursion
-                          (goto-char end)
-                          (down-list -1)
-                          (point))))))
+ :forward-op 'forward-list)
 
 (conn-register-thing-commands
  'list 'conn-continuous-thing-handler
@@ -3414,7 +3386,6 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 (conn-register-thing
  'line
  :forward-op 'conn-line-forward-op
- :interior-op (lambda (beg end) (cons beg (1- end)))
  :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
