@@ -2514,7 +2514,7 @@ Possibilities: \\<query-replace-map>
            (dolist (pt points)
              (set-marker pt nil))))
         ((or :record :next)
-         (let ((pt (pop points)))
+         (when-let* ((pt (pop points)))
            (cons pt pt)))))))
 
 (defun conn--kapply-match-iterator ( string regions &optional
