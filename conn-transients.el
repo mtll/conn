@@ -26,6 +26,7 @@
 
 (defvar sort-fold-case)
 
+
 ;;;; Transient Classes
 
 ;;;;; Lisp Values
@@ -41,6 +42,7 @@
           (oref obj description))
         (oref obj value)))
 
+
 ;;;;;; Switch
 
 (defclass conn-transient-lisp-bool (conn-transient-lisp-value)
@@ -61,6 +63,7 @@
                         'transient-argument
                       'transient-inactive-value)))
 
+
 ;;;;;; Choices
 
 (defclass conn-transient-lisp-choices (conn-transient-lisp-value)
@@ -101,7 +104,8 @@
         (funcall (oref obj value-transform)
                  (cdr (oref obj value)))))
 
-;;;; Kapply Prefix
+
+;;;; Kapply Transients
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
@@ -160,6 +164,9 @@ the edit in the macro."
     (user-error "Invalid keyboard macro"))
   (kmacro-push-ring macro)
   (kmacro-swap-ring))
+
+
+;;;;; Kapply infixes
 
 (transient-define-argument conn--kapply-macro-infix ()
   "Dispatch `last-kbd-macro'.
@@ -287,6 +294,9 @@ before each iteration."
   :description "Window Conf"
   :choices '(nil
              ("save" . conn--kapply-save-windows)))
+
+
+;;;;; Kapply suffixes
 
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.
@@ -861,6 +871,9 @@ A zero means repeat until error."
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
 
+
+;;;;; Kapply prefixes
+
 ;;;###autoload (autoload 'conn-kapply-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-prefix (arg)
   "Transient menu for keyboard macro application on regions."
@@ -1139,6 +1152,7 @@ A zero means repeat until error."
   (kmacro-display last-kbd-macro t)
   (transient-setup 'conn-dispatch-kapply-prefix nil nil :scope continuation))
 
+
 ;;;; Kmacro Prefix
 
 (defun conn--kmacro-display (macro &optional trunc)
@@ -1239,6 +1253,7 @@ A zero means repeat until error."
       ("+" "Add to Counter" kmacro-add-counter :transient t)
       ("F" "Set Format" conn--set-counter-format-infix)]])
 
+
 ;;;; Narrow Ring Prefix
 
 (defun conn--narrow-ring-restore-state (state)
@@ -1339,6 +1354,7 @@ A zero means repeat until error."
                          collect (cons (marker-position beg)
                                        (marker-position end))))))
 
+
 ;;;; Register Prefix
 
 ;;;###autoload (autoload 'conn-register-prefix "conn-transients" nil t)
@@ -1391,6 +1407,7 @@ A zero means repeat until error."
          (region-beginning) (region-end)
          (register-read-with-preview "Prepend to register: "))))]])
 
+
 ;;;; Fill Prefix
 
 (transient-define-infix conn--set-fill-column-infix ()
@@ -1430,6 +1447,7 @@ A zero means repeat until error."
       ("p" "Prefix" conn--set-fill-prefix-infix)
       ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
 
+
 ;;;; Sort Prefix
 
 (transient-define-infix conn--case-fold-infix ()
@@ -1455,6 +1473,7 @@ A zero means repeat until error."
   (require 'sort)
   (transient-setup 'conn-sort-prefix))
 
+
 ;;;; Case Prefix
 
 ;;;###autoload (autoload 'conn-region-case-prefix "conn-transients" nil t)
