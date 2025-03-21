@@ -2332,11 +2332,11 @@ BOUNDS is of the form returned by `region-bounds'."
 (defun conn--setup-advice ()
   (if conn-mode
       (progn
-        (advice-add 'toggle-input-method :around 'conn--toggle-input-method-ad)
+        (advice-add 'toggle-input-method :around #'conn--toggle-input-method-ad)
         (advice-add 'query-replace-read-from-suggestions :around
-                    'conn--read-from-suggestions-ad)
+                    #'conn--read-from-suggestions-ad)
         (advice-add 'read-regexp-suggestions :around
-                    'conn--read-from-suggestions-ad)
+                    #'conn--read-from-suggestions-ad)
         (advice-add 'repeat :around #'conn--repeat-ad)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'pop-mark :before #'conn--pop-mark-ad)
@@ -2345,11 +2345,11 @@ BOUNDS is of the form returned by `region-bounds'."
                     #'conn--save-ephemeral-mark-ad)
         (advice-add 'save-mark-and-excursion--restore :after
                     #'conn--restore-ephemeral-mark-ad))
-    (advice-remove 'toggle-input-method 'conn--toggle-input-method-ad)
+    (advice-remove 'toggle-input-method #'conn--toggle-input-method-ad)
     (advice-remove 'query-replace-read-from-suggestions
-                   'conn--read-from-suggestions-ad)
+                   #'conn--read-from-suggestions-ad)
     (advice-remove 'read-regexp-suggestions
-                   'conn--read-from-suggestions-ad)
+                   #'conn--read-from-suggestions-ad)
     (advice-remove 'set-mark #'conn--set-mark-ad)
     (advice-remove 'repeat #'conn--repeat-ad)
     (advice-remove 'pop-mark #'conn--pop-mark-ad)
@@ -3666,90 +3666,90 @@ of a command.")
                                    "\\[repeat-dispatch] %s; "
                                    "\\[help] commands): %s")))
              (read-command)
-             (unwind-protect
-                 (prog1
-                     (cl-loop
-                      (pcase cmd
-                        (`(,thing ,finder . ,default-action)
-                         (unless action
-                           (set-action (or default-action
-                                           (conn--dispatch-default-action thing))))
-                         (cl-return
-                          (list thing
-                                (when thing-arg
-                                  (* (if thing-sign -1 1) (or thing-arg 1)))
-                                finder action action-args
-                                (conn--dispatch-window-predicate
-                                 action (get thing :conn-command-thing) cmd keys)
-                                repeat)))
-                        ('keyboard-quit
-                         (keyboard-quit))
-                        ('kapply
-                         ;; Run with a timer, otherwise we pick up a nil
-                         ;; conn-state value for some reason.
-                         (run-with-timer
-                          0 nil 'conn-dispatch-kapply-prefix
-                          ;; We pass a continuation to the prefix
-                          ;; which will eventually be called by the
-                          ;; suffix with the kapply pipeline composed
-                          ;; from the infix arguments.
-                          (lambda (action)
-                            (set-window-configuration window-conf)
-                            (set-action action)
-                            (read-dispatch)))
-                         (setq quit-flag t))
-                        ('repeat-dispatch
-                         (setq repeat (not repeat)
-                               repeat-indicator
-                               (propertize repeat-indicator
-                                           'face (when repeat
-                                                   'eldoc-highlight-function-argument))))
-                        ('digit-argument
-                         (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                           (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-                        ('backward-delete-arg
-                         (setq thing-arg (floor thing-arg 10)))
-                        ('forward-delete-arg
-                         (setq thing-arg (when thing-arg
-                                           (thread-last
-                                             (log thing-arg 10)
-                                             floor
-                                             (expt 10)
-                                             (mod thing-arg)))))
-                        ('reset-arg
-                         (setq thing-arg nil))
-                        ('negative-argument
-                         (setq thing-sign (not thing-sign)))
-                        ('help
-                         (completing-read-command))
-                        ((and (let thing (when (symbolp cmd)
-                                           (get cmd :conn-command-thing)))
-                              (guard thing))
-                         (unless action
-                           (set-action (conn--dispatch-default-action cmd)))
-                         (cl-return
-                          (list cmd
-                                (when thing-arg
-                                  (* (if thing-sign -1 1) (or thing-arg 1)))
-                                (conn--dispatch-target-finder cmd)
-                                action action-args
-                                (conn--dispatch-window-predicate action thing cmd keys)
-                                repeat)))
-                        ((and (cl-type conn-action) cmd)
-                         (set-action (unless (eq cmd action) cmd)))
-                        (_
-                         (setq invalid t)))
-                      (read-command))
-                   (setq success t))
-               (when handle
-                 (if success
-                     (accept-change-group handle)
-                   (cancel-change-group handle))
-                 (setq handle nil))
-               (save-mark-and-excursion--restore saved-marker)
-               (message nil)))))
-      (set-action default-action)
-      (read-dispatch))))
+             (while t
+               (pcase cmd
+                 (`(,thing ,finder . ,default-action)
+                  (unless action
+                    (set-action (or default-action
+                                    (conn--dispatch-default-action thing))))
+                  (cl-return-from read-dispatch
+                    (list thing
+                          (when thing-arg
+                            (* (if thing-sign -1 1) (or thing-arg 1)))
+                          finder action action-args
+                          (conn--dispatch-window-predicate
+                           action (get thing :conn-command-thing) cmd keys)
+                          repeat)))
+                 ('keyboard-quit
+                  (keyboard-quit))
+                 ('kapply
+                  ;; Run with a timer, otherwise we pick up a nil
+                  ;; conn-state value for some reason.
+                  (run-with-timer
+                   0 nil 'conn-dispatch-kapply-prefix
+                   ;; We pass a continuation to the prefix
+                   ;; which will eventually be called by the
+                   ;; suffix with the kapply pipeline composed
+                   ;; from the infix arguments.
+                   (lambda (action)
+                     (set-window-configuration window-conf)
+                     (set-action action)
+                     (read-dispatch)))
+                  (setq quit-flag t))
+                 ('repeat-dispatch
+                  (setq repeat (not repeat)
+                        repeat-indicator
+                        (propertize repeat-indicator
+                                    'face (when repeat
+                                            'eldoc-highlight-function-argument))))
+                 ('digit-argument
+                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                 ('backward-delete-arg
+                  (setq thing-arg (floor thing-arg 10)))
+                 ('forward-delete-arg
+                  (setq thing-arg (when thing-arg
+                                    (thread-last
+                                      (log thing-arg 10)
+                                      floor
+                                      (expt 10)
+                                      (mod thing-arg)))))
+                 ('reset-arg
+                  (setq thing-arg nil))
+                 ('negative-argument
+                  (setq thing-sign (not thing-sign)))
+                 ('help
+                  (completing-read-command))
+                 ((and (let thing (when (symbolp cmd)
+                                    (get cmd :conn-command-thing)))
+                       (guard thing))
+                  (unless action
+                    (set-action (conn--dispatch-default-action cmd)))
+                  (cl-return-from read-dispatch
+                    (list cmd
+                          (when thing-arg
+                            (* (if thing-sign -1 1) (or thing-arg 1)))
+                          (conn--dispatch-target-finder cmd)
+                          action action-args
+                          (conn--dispatch-window-predicate action thing cmd keys)
+                          repeat)))
+                 ((and (cl-type conn-action) cmd)
+                  (set-action (unless (eq cmd action) cmd)))
+                 (_
+                  (setq invalid t)))
+               (read-command)))))
+      (unwind-protect
+          (prog2
+              (set-action default-action)
+              (read-dispatch)
+            (setq success t))
+        (when handle
+          (if success
+              (accept-change-group handle)
+            (cancel-change-group handle))
+          (setq handle nil))
+        (save-mark-and-excursion--restore saved-marker)
+        (message nil)))))
 
 (defun conn-dispatch-ignored-mode (win)
   "Return non-nil if the major mode of WIN's buffer is ignored by dispatch.
