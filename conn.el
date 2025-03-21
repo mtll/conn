@@ -1388,7 +1388,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                (mapcar 'conn--state-all-parents ',parents))))
          (if-let* ((vec (get ',name :conn--state))
                    (old-parents (cdr (conn--state-all-parents ',name)))
-                   (all-children (cons ',name (aref ,vec 2))))
+                   (all-children (cons ',name (aref vec 2))))
              (progn
                ;; We are redefining a state and must to take care to
                ;; do it transparently.
