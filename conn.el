@@ -1914,7 +1914,7 @@ region.")
 
 (defvar conn-default-state-for-read-mover 'conn-read-mover-state)
 
-(conn-define-state conn-read-mover-state (conn-read-thing-common-state)
+(conn-define-state conn-read-mover-state (conn-read-thing-common-state conn-command-state)
   "A state for reading things."
   :lighter " MOVER")
 
