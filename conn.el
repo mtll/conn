@@ -1248,9 +1248,9 @@ from PARENT-STATE.
 
 CONN-STATE: this takes the form (STATE conn-state) in a argument list
 and specializes the method on all conn states."
-  (:method ((_state (eql nil))) "Noop" nil)
-  (:method ((_state conn-state)) "Noop" nil)
-  (:method (state) (error "Attempting to exit unknown state: %s" state)))
+  ( :method ((_state (eql nil))) "Noop" nil)
+  ( :method ((_state conn-state)) "Noop" nil)
+  ( :method (state) (error "Attempting to exit unknown state: %s" state)))
 
 (cl-defmethod conn-exit-state :around ((state conn-state))
   (when (symbol-value state)
@@ -1288,8 +1288,8 @@ from PARENT-STATE.
 
 CONN-STATE: this takes the form (STATE conn-state) in a argument list
 and specializes the method on all conn states."
-  (:method ((_state (eql nil)) &key &allow-other-keys) "Noop" nil)
-  (:method ((_state conn-state) &key &allow-other-keys) "Noop" nil)
+  ( :method ((_state (eql nil)) &key &allow-other-keys) "Noop" nil)
+  ( :method ((_state conn-state) &key &allow-other-keys) "Noop" nil)
   ( :method (state &key &allow-other-keys)
     (error "Attempting to enter unknown state: %s" state)))
 
@@ -1396,13 +1396,14 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                  (dolist (child (aref vec 2))
                    (dolist (parent ,new-parents)
                      (cl-pushnew child (aref (get parent :conn--state) 2))))
-                 (clrhash conn--state-all-parents-cache)
                  (setf (aref vec 0) (cl-loop with kvs = (list ,@properties)
                                              with table = (make-hash-table :test 'eq)
                                              for (k v) on kvs by #'cddr
                                              do (puthash k v table)
                                              finally return table)
                        (aref vec 1) ',parents)
+                 (dolist (child (cons ',name (aref vec 2)))
+                   (remhash child conn--state-all-parents-cache))
                  (dolist (child (cons ',name (aref vec 2)))
                    (conn--rebuild-state-map child)
                    (conn--rebuild-override-map child)
