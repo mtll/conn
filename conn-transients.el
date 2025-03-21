@@ -621,8 +621,9 @@ A zero means repeat until error."
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
-   (funcall iterator)
+   iterator
    (alist-get :skip-empty args)
+   'conn--kapply-relocate-to-region
    'conn--kapply-open-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
