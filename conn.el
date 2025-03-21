@@ -1216,7 +1216,7 @@ property from its parents."
                   (and (conn-state-p ',parent)
                        (conn-substate-p s ',parent))))))
 
-  ;; Adaptation of map pcase pattern
+  ;; Adapted from map pattern
   (pcase-defmacro conn-state-props (&rest properties)
     "Build a `pcase' pattern matching state properties.
 
@@ -2889,36 +2889,40 @@ The iterator must be the first argument in ARGLIST.
            (indent 2))
   (let ((iterator (car arglist))
         (docstring (if (stringp (car body)) (pop body) "")))
-    `(defun ,name ,arglist
-       ,docstring
-       (require 'kmacro)
-       (let* ((undo-outer-limit nil)
-              (undo-limit most-positive-fixnum)
-              (undo-strong-limit most-positive-fixnum)
-              (conn-kmacro-applying-p t)
-              (conn--kapply-automatic-flag nil)
-              (success nil)
-              (,iterator (lambda (&optional state)
-                           (pcase (funcall ,iterator (or state :next))
-                             (`(,beg . ,end)
-                              (when (markerp beg) (set-marker beg nil))
-                              (when (markerp end) (set-marker end nil))
-                              (run-hook-with-args-until-failure
-                               'conn-kmacro-apply-loop-hook))))))
-         (run-hook-wrapped 'conn-kmacro-apply-start-hook
-                           (lambda (hook)
-                             (ignore-errors (funcall hook))))
-         (deactivate-mark)
-         (unwind-protect
-             (conn--with-advice (('kmacro-loop-setup-function :before-while ,iterator))
-               ,@body
-               (setq success t))
-           (let ((conn-kmacro-apply-error (not success)))
-             (funcall ,iterator :finalize)
-             (run-hook-wrapped 'conn-kmacro-apply-end-hook
-                               (lambda (hook)
-                                 (ignore-errors (funcall hook))))
-             (isearch-clean-overlays)))))))
+    (cl-with-gensyms (iterations)
+      `(defun ,name ,arglist
+         ,docstring
+         (require 'kmacro)
+         (let* ((undo-outer-limit nil)
+                (undo-limit most-positive-fixnum)
+                (undo-strong-limit most-positive-fixnum)
+                (conn-kmacro-applying-p t)
+                (conn--kapply-automatic-flag nil)
+                (,iterations 0)
+                (success nil)
+                (,iterator (lambda (&optional state)
+                             (pcase (funcall ,iterator (or state :next))
+                               (`(,beg . ,end)
+                                (when (markerp beg) (set-marker beg nil))
+                                (when (markerp end) (set-marker end nil))
+                                (when (run-hook-with-args-until-failure
+                                       'conn-kmacro-apply-loop-hook)
+                                  (cl-incf ,iterations)))))))
+           (run-hook-wrapped 'conn-kmacro-apply-start-hook
+                             (lambda (hook)
+                               (ignore-errors (funcall hook))))
+           (deactivate-mark)
+           (unwind-protect
+               (conn--with-advice (('kmacro-loop-setup-function :before-while ,iterator))
+                 ,@body
+                 (setq success t)
+                 (message "Kapply completed successfully after %s iterations" ,iterations))
+             (let ((conn-kmacro-apply-error (not success)))
+               (funcall ,iterator :finalize)
+               (run-hook-wrapped 'conn-kmacro-apply-end-hook
+                                 (lambda (hook)
+                                   (ignore-errors (funcall hook))))
+               (isearch-clean-overlays))))))))
 
 (conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
