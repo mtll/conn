@@ -3656,100 +3656,100 @@ of a command.")
                    action-struct nil
                    action-args nil)))
          (read-dispatch ()
-           (conn--with-state (or (conn--command-property :conn-read-dispatch-state)
-                                 conn-default-state-for-read-dispatch)
-             (setq prompt (substitute-command-keys
-                           (concat (propertize "Targets" 'face 'minibuffer-prompt)
-                                   " (arg: "
-                                   (propertize "%s" 'face 'read-multiple-choice-face)
-                                   "; \\[reset-arg] reset arg; "
-                                   "\\[repeat-dispatch] %s; "
-                                   "\\[help] commands): %s")))
-             (read-command)
-             (while t
-               (pcase cmd
-                 (`(,thing ,finder . ,default-action)
-                  (unless action
-                    (set-action (or default-action
-                                    (conn--dispatch-default-action thing))))
-                  (cl-return-from read-dispatch
-                    (list thing
-                          (when thing-arg
-                            (* (if thing-sign -1 1) (or thing-arg 1)))
-                          finder action action-args
-                          (conn--dispatch-window-predicate
-                           action (get thing :conn-command-thing) cmd keys)
-                          repeat)))
-                 ('keyboard-quit
-                  (keyboard-quit))
-                 ('kapply
-                  ;; Run with a timer, otherwise we pick up a nil
-                  ;; conn-state value for some reason.
-                  (run-with-timer
-                   0 nil 'conn-dispatch-kapply-prefix
-                   ;; We pass a continuation to the prefix
-                   ;; which will eventually be called by the
-                   ;; suffix with the kapply pipeline composed
-                   ;; from the infix arguments.
-                   (lambda (action)
-                     (set-window-configuration window-conf)
-                     (set-action action)
-                     (read-dispatch)))
-                  (setq quit-flag t))
-                 ('repeat-dispatch
-                  (setq repeat (not repeat)
-                        repeat-indicator
-                        (propertize repeat-indicator
-                                    'face (when repeat
-                                            'eldoc-highlight-function-argument))))
-                 ('digit-argument
-                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-                 ('backward-delete-arg
-                  (setq thing-arg (floor thing-arg 10)))
-                 ('forward-delete-arg
-                  (setq thing-arg (when thing-arg
-                                    (thread-last
-                                      (log thing-arg 10)
-                                      floor
-                                      (expt 10)
-                                      (mod thing-arg)))))
-                 ('reset-arg
-                  (setq thing-arg nil))
-                 ('negative-argument
-                  (setq thing-sign (not thing-sign)))
-                 ('help
-                  (completing-read-command))
-                 ((and (let thing (when (symbolp cmd)
-                                    (get cmd :conn-command-thing)))
-                       (guard thing))
-                  (unless action
-                    (set-action (conn--dispatch-default-action cmd)))
-                  (cl-return-from read-dispatch
-                    (list cmd
-                          (when thing-arg
-                            (* (if thing-sign -1 1) (or thing-arg 1)))
-                          (conn--dispatch-target-finder cmd)
-                          action action-args
-                          (conn--dispatch-window-predicate action thing cmd keys)
-                          repeat)))
-                 ((and (cl-type conn-action) cmd)
-                  (set-action (unless (eq cmd action) cmd)))
-                 (_
-                  (setq invalid t)))
-               (read-command)))))
-      (unwind-protect
-          (prog2
-              (set-action default-action)
-              (read-dispatch)
-            (setq success t))
-        (when handle
-          (if success
-              (accept-change-group handle)
-            (cancel-change-group handle))
-          (setq handle nil))
-        (save-mark-and-excursion--restore saved-marker)
-        (message nil)))))
+           (read-command)
+           (while t
+             (pcase cmd
+               (`(,thing ,finder . ,default-action)
+                (unless action
+                  (set-action (or default-action
+                                  (conn--dispatch-default-action thing))))
+                (cl-return-from read-dispatch
+                  (list thing
+                        (when thing-arg
+                          (* (if thing-sign -1 1) (or thing-arg 1)))
+                        finder action action-args
+                        (conn--dispatch-window-predicate
+                         action (get thing :conn-command-thing) cmd keys)
+                        repeat)))
+               ('keyboard-quit
+                (keyboard-quit))
+               ('kapply
+                ;; Run with a timer, otherwise we pick up a nil
+                ;; conn-state value for some reason.
+                (run-with-timer
+                 0 nil 'conn-dispatch-kapply-prefix
+                 ;; We pass a continuation to the prefix
+                 ;; which will eventually be called by the
+                 ;; suffix with the kapply pipeline composed
+                 ;; from the infix arguments.
+                 (lambda (action)
+                   (set-window-configuration window-conf)
+                   (run action)))
+                (setq quit-flag t))
+               ('repeat-dispatch
+                (setq repeat (not repeat)
+                      repeat-indicator
+                      (propertize repeat-indicator
+                                  'face (when repeat
+                                          'eldoc-highlight-function-argument))))
+               ('digit-argument
+                (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                  (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+               ('backward-delete-arg
+                (setq thing-arg (floor thing-arg 10)))
+               ('forward-delete-arg
+                (setq thing-arg (when thing-arg
+                                  (thread-last
+                                    (log thing-arg 10)
+                                    floor
+                                    (expt 10)
+                                    (mod thing-arg)))))
+               ('reset-arg
+                (setq thing-arg nil))
+               ('negative-argument
+                (setq thing-sign (not thing-sign)))
+               ('help
+                (completing-read-command))
+               ((and (let thing (when (symbolp cmd)
+                                  (get cmd :conn-command-thing)))
+                     (guard thing))
+                (unless action
+                  (set-action (conn--dispatch-default-action cmd)))
+                (cl-return-from read-dispatch
+                  (list cmd
+                        (when thing-arg
+                          (* (if thing-sign -1 1) (or thing-arg 1)))
+                        (conn--dispatch-target-finder cmd)
+                        action action-args
+                        (conn--dispatch-window-predicate action thing cmd keys)
+                        repeat)))
+               ((and (cl-type conn-action) cmd)
+                (set-action (unless (eq cmd action) cmd)))
+               (_
+                (setq invalid t)))
+             (read-command)))
+         (run (action)
+           (unwind-protect
+               (conn--with-state (or (conn--command-property :conn-read-dispatch-state)
+                                     conn-default-state-for-read-dispatch)
+                 (setq prompt (substitute-command-keys
+                               (concat (propertize "Targets" 'face 'minibuffer-prompt)
+                                       " (arg: "
+                                       (propertize "%s" 'face 'read-multiple-choice-face)
+                                       "; \\[reset-arg] reset arg; "
+                                       "\\[repeat-dispatch] %s; "
+                                       "\\[help] commands): %s")))
+                 (set-action action)
+                 (prog1 (read-dispatch)
+                   (setq success t)))
+             (when handle
+               (if success
+                   (accept-change-group handle)
+                 (cancel-change-group handle))
+               (setq handle nil))
+             (save-mark-and-excursion--restore saved-marker)
+             (message nil))))
+      (run default-action))))
 
 (defun conn-dispatch-ignored-mode (win)
   "Return non-nil if the major mode of WIN's buffer is ignored by dispatch.
