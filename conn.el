@@ -3676,15 +3676,11 @@ of a command.")
                ('kapply
                 ;; Run with a timer, otherwise we pick up a nil
                 ;; conn-state value for some reason.
-                (run-with-timer
-                 0 nil 'conn-dispatch-kapply-prefix
-                 ;; We pass a continuation to the prefix
-                 ;; which will eventually be called by the
-                 ;; suffix with the kapply pipeline composed
-                 ;; from the infix arguments.
-                 (lambda (action)
-                   (set-window-configuration window-conf)
-                   (run action)))
+                (conn--with-state conn-previous-state
+                  (conn-dispatch-kapply-prefix
+                   (lambda (action)
+                     (set-window-configuration window-conf)
+                     (run action))))
                 (setq quit-flag t))
                ('repeat-dispatch
                 (setq repeat (not repeat)

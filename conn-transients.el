@@ -213,7 +213,8 @@ BEFORE means only those matches before, and including, the current match."
              ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
                 (with-slots (choices value) obj
-                  (setf value (rassq conn-current-state choices))))
+                  (setf value (rassq (or conn-current-state 'conn-command-state)
+                                     choices))))
   :value-transform (lambda (val)
                      (lambda (it)
                        (conn--kapply-with-state it val))))
