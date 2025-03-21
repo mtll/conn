@@ -608,7 +608,7 @@ meaning of these see `advice-add'."
          (conn--activate-input-method))
      ,@body))
 
-(static-if (version< emacs-version "30")
+(static-if (< emacs-major-version 30)
     (defun conn--derived-mode-all-parents (mode)
       "Return all the parents of MODE, starting with MODE.
 
@@ -4718,7 +4718,7 @@ with `conn-dispatch-thing-ignored-modes'."
 (cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
   (princ "Dispatch Register"))
 
-(static-if (version<= "30.1" emacs-version)
+(static-if (<= 30 emacs-major-version)
     (cl-defmethod register-command-info ((_command (eql conn-last-dispatch-to-register)))
       (make-register-preview-info
        :types '(all)
@@ -5052,7 +5052,7 @@ Expansions and contractions are provided by functions in
     (format "Narrowings In:  %s")
     (princ)))
 
-(static-if (version<= "30.1" emacs-version)
+(static-if (<= 30 emacs-major-version)
     (cl-defmethod register-command-info ((_command (eql conn-narrow-ring-to-register)))
       (make-register-preview-info
        :types '(all)
@@ -5066,7 +5066,7 @@ Expansions and contractions are provided by functions in
   (interactive (list (register-read-with-preview "Narrow ring to register: ")))
   (set-register register (conn--make-narrow-register)))
 
-(static-if (version<= "30.1" emacs-version)
+(static-if (<= 30 emacs-major-version)
     (cl-defmethod register-command-info ((_command (eql conn-push-region-to-narrow-register)))
       (make-register-preview-info
        :types '(all)
@@ -5671,7 +5671,7 @@ instances of from-string.")
   (princ (format "Command:  %s"
                  (car (conn-command-register-command val)))))
 
-(static-if (version<= "30.1" emacs-version)
+(static-if (<= 30 emacs-major-version)
     (cl-defmethod register-command-info ((_command (eql conn-command-to-register)))
       (make-register-preview-info
        :types '(all)
@@ -5740,7 +5740,7 @@ instances of from-string.")
                                (alist-get 'name tab)))))
                    "on another frame"))))
 
-(static-if (version<= "30.1" emacs-version)
+(static-if (<= 30 emacs-major-version)
     (cl-defmethod register-command-info ((_command (eql conn-tab-to-register)))
       (make-register-preview-info
        :types '(all)
@@ -7096,7 +7096,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
 
-(static-if (version<= "31" emacs-version)
+(static-if (<= 31 emacs-major-version)
     (define-keymap
       :keymap conn-wincontrol-map
       "\\" 'transpose-window-layout
@@ -7574,7 +7574,7 @@ Operates with the selected windows parent window."
   "n" 'conn-narrow-to-region
   "m" 'conn-narrow-indirect-to-region)
 
-(static-if (version<= "30" emacs-version)
+(static-if (<= 30 emacs-major-version)
     (progn
       (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
       (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff)))
