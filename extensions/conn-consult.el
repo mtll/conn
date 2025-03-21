@@ -210,43 +210,37 @@
                 marker))
             cands)))
       (conn-regions-kapply-prefix
-       (lambda (order)
-         (conn--kapply-point-iterator regions order)))))
+       (conn--kapply-point-iterator regions))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-xref-candidates)
 
   (defun conn-kapply-grep-candidates (cands)
-    (thread-last
-      (lambda (reverse)
-        (conn--kapply-region-iterator
-         (mapcar (lambda (cand)
-                   (pcase-let ((`(,line-marker (,beg . ,end) . _)
-                                (consult--grep-position cand 'find-file-noselect)))
-                     (cons (move-marker line-marker
-                                        (+ line-marker beg)
-                                        (marker-buffer line-marker))
-                           (+ line-marker end))))
-                 cands)
-         reverse))
-      (funcall-interactively 'conn-regions-kapply-prefix)))
+    (conn-regions-kapply-prefix
+     (conn--kapply-region-iterator
+      (mapcar (lambda (cand)
+                (pcase-let ((`(,line-marker (,beg . ,end) . _)
+                             (consult--grep-position cand 'find-file-noselect)))
+                  (cons (move-marker line-marker
+                                     (+ line-marker beg)
+                                     (marker-buffer line-marker))
+                        (+ line-marker end))))
+              cands))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-grep-candidates)
 
   (defun conn-kapply-location-candidates (cands)
-    (funcall-interactively
-     'conn-regions-kapply-prefix
-     (let ((lines (mapcar (lambda (cand)
-                            (car (consult--get-location cand)))
-                          cands)))
-       (lambda (reverse)
-         (when reverse (setq lines (nreverse lines)))
-         (lambda (&optional state)
-           (if (eq state :finalize)
-               (dolist (line lines)
-                 (set-marker line nil))
-             (when-let* ((line (pop lines)))
-               (conn--kapply-advance-region
-                (cons line (save-excursion
-                             (goto-char line)
-                             (conn--create-marker (line-end-position))))))))))))
+    (conn-regions-kapply-prefix
+     (let ((regions (mapcar (lambda (cand)
+                              (car (consult--get-location cand)))
+                            cands)))
+       (lambda (state)
+         (pcase state
+           (:finalize
+            (dolist (line regions)
+              (set-marker line nil)))
+           ((or :record :next)
+            (when-let* ((line (pop regions)))
+              (cons line (save-excursion
+                           (goto-char line)
+                           (line-end-position))))))))))
   (add-to-list 'embark-multitarget-actions 'conn-kapply-location-candidates)
 
   (defvar-keymap conn-embark-consult-xref-map
