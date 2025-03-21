@@ -3515,6 +3515,25 @@ of a command.")
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
+(define-keymap
+  :keymap (conn-get-overriding-map conn-default-state-for-read-dispatch)
+  "l" 'forward-line
+  "u" 'forward-symbol
+  "j" 'forward-char
+  "h" `(conn-expand-remote conn--dispatch-chars)
+  "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word t)))
+  "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t))))
+
+(define-keymap
+  :keymap (conn-get-mode-map conn-default-state-for-read-dispatch 'conn-dot-mode)
+  "k" `(dot ,(lambda ()
+               (mapcar (lambda (ov)
+                         (conn--make-target-overlay
+                          (overlay-start ov)
+                          (- (overlay-end ov)
+                             (overlay-start ov))))
+                       conn--dots))))
+
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
@@ -3818,7 +3837,10 @@ with `conn-dispatch-thing-ignored-modes'."
             (dolist (ov (overlays-in pt (1+ pt)))
               (when (and (eq 'conn-read-string-match
                              (overlay-get ov 'category))
-                         (not (eq target ov)))
+                         (or (/= (overlay-start target)
+                                 (overlay-start ov))
+                             (/= (overlay-end target)
+                                 (overlay-end ov))))
                 (setq end pt)))
             (cl-incf pt))
         (setq-local display-line-numbers linum
@@ -3883,58 +3905,6 @@ with `conn-dispatch-thing-ignored-modes'."
           (beginning-of-line)
           (looking-at "\\s)*\n"))
     (join-line)))
-
-;;;;; Things
-
-(defmacro conn-define-dispatch-thing (thing &rest rest)
-  "\(fn THING &key KEY MODES TARGET-FINDER DEFAULT-ACTION STATE &body BODY)"
-  (declare (debug (name [&rest keywordp form]))
-           (indent 1))
-  (pcase-let* (((map :key :modes :target-finder :default-action :state)
-                rest))
-    (if modes
-        `(dolist (mode ',(ensure-list modes))
-           (keymap-set (conn-get-mode-map
-                        ,(or state 'conn-default-state-for-read-dispatch) mode)
-                       ,key `(,',thing
-                              ,(or ,target-finder
-                                   (conn--dispatch-target-finder ',thing))
-                              .
-                              ,',default-action)))
-      `(keymap-set (conn-get-state-map
-                    ,(or state 'conn-default-state-for-read-dispatch))
-                   ,key `(,',thing
-                          ,(or ,target-finder
-                               (conn--dispatch-target-finder ',thing))
-                          .
-                          ,',default-action)))))
-
-(conn-define-dispatch-thing forward-line :key "l")
-(conn-define-dispatch-thing forward-symbol :key "u")
-(conn-define-dispatch-thing forward-char :key "j")
-
-(conn-define-dispatch-thing conn-expand-remote
-  :key "h"
-  :target-finder 'conn--dispatch-chars)
-
-(conn-define-dispatch-thing dot
-  :key "k"
-  :modes (conn-dot-mode)
-  :target-finder (lambda ()
-                   (mapcar (lambda (ov)
-                             (conn--make-target-overlay
-                              (overlay-start ov)
-                              (- (overlay-end ov)
-                                 (overlay-start ov))))
-                           conn--dots)))
-
-(conn-define-dispatch-thing forward-word
-  :key "O"
-  :target-finder (lambda () (conn--dispatch-all-things 'word t)))
-
-(conn-define-dispatch-thing forward-symbol
-  :key "U"
-  :target-finder (lambda () (conn--dispatch-all-things 'symbol t)))
 
 ;;;;; Actions
 
