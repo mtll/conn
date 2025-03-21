@@ -629,7 +629,8 @@ A zero means repeat until error."
                      (transient-args transient-current-command)))
   (let* ((macro nil)
          (action-sym (make-symbol "action"))
-         (pipeline (list 'conn--kapply-per-iteration-undo
+         (pipeline (list 'conn--kapply-relocate-to-region
+                         'conn--kapply-per-iteration-undo
                          (alist-get :restrictions args)
                          (alist-get :state args)
                          (alist-get :regions args)
