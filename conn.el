@@ -287,11 +287,11 @@ This variable will be bound to the state t be entered during
 (defvar conn--major-mode-maps (make-hash-table :test 'eq))
 (defvar conn--minor-mode-maps (make-hash-table :test 'eq))
 
-(defvar-local conn--current-state-map)
+(defvar-local conn--local-state-map)
 (defvar-local conn--local-override-map)
 (defvar-local conn--local-major-mode-map)
 (defvar-local conn--local-minor-mode-maps)
-(defvar-local conn--local-mark-map nil)
+(defvar-local conn--local-mark-map)
 
 ;;;;; Mark Variables
 
@@ -545,7 +545,7 @@ meaning of these see `advice-add'."
                           '(conn--local-minor-mode-maps
                             conn--local-major-mode-map
                             conn--local-mark-map
-                            conn--current-state-map)
+                            conn--local-state-map)
                           #'eq)))
      ,(macroexp-progn body)))
 
@@ -956,7 +956,7 @@ The returned list is not fresh, don't modify it."
                       (make-composed-keymap))))
       (dolist (key (ignore-errors
                      (where-is-internal 'conn-mark-thing-map
-                                        (list (cdar conn--current-state-map)))))
+                                        (list (cdar conn--local-state-map)))))
         (define-key mark-map-bindings key mark-map)))))
 
 (defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
@@ -987,6 +987,11 @@ in STATE and return it."
      (cl-loop for pstate in (conn--state-all-parents state)
               collect (gethash pstate conn--override-maps)))))
 
+(defun conn--rebuild-override-map (state)
+  (setf (cdr (gethash state conn--override-map-cache))
+        (cl-loop for pstate in (conn--state-all-parents state)
+                 collect (gethash pstate conn--override-maps))))
+
 (defun conn-get-state-map (state)
   "Return the state keymap for STATE."
   (cl-check-type state conn-state)
@@ -1000,6 +1005,11 @@ in STATE and return it."
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
               collect (gethash pstate conn--state-maps)))))
+
+(defun conn--rebuild-state-map (state)
+  (setf (cdr (gethash state conn--state-map-cache))
+        (cl-loop for pstate in (conn--state-all-parents state)
+                 collect (gethash pstate conn--state-maps))))
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1063,18 +1073,14 @@ return it."
   (let ((map (alist-get mode (gethash state conn--minor-mode-maps))))
     (setf (cddr map)
           (cl-loop for pstate in (cdr (conn--state-all-parents state))
-                   collect (conn-get-mode-map pstate mode))))
-  (dolist (child (conn--state-all-children state))
-    (conn--rebuild-minor-mode-map child mode)))
+                   collect (conn-get-mode-map pstate mode)))))
 
 (defun conn--rebuild-major-mode-map (state mode)
   (conn-get-mode-map state mode)
   (let ((map (gethash mode (gethash state conn--major-mode-maps))))
     (setf (cddr map)
           (cl-loop for pstate in (cdr (conn--state-all-parents state))
-                   collect (conn-get-mode-map pstate mode))))
-  (dolist (child (conn--state-all-children state))
-    (conn--rebuild-major-mode-map child mode)))
+                   collect (conn-get-mode-map pstate mode)))))
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
@@ -1298,7 +1304,7 @@ and specializes the method on all conn states."
             (setf
              conn-current-state state
              (cdar conn--local-override-map) (conn--compose-overide-map state)
-             (cdar conn--current-state-map) (conn--compose-state-map state)
+             (cdar conn--local-state-map) (conn--compose-state-map state)
              (cdar conn--local-major-mode-map) (conn--compose-major-mode-map state)
              conn-lighter (or (conn-state-get state :lighter)
                               (default-value 'conn-lighter))
@@ -1390,26 +1396,21 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                  (dolist (child (aref vec 2))
                    (dolist (parent ,new-parents)
                      (cl-pushnew child (aref (get parent :conn--state) 2))))
-
                  (clrhash conn--state-all-parents-cache)
                  (setf (aref vec 0) (cl-loop with kvs = (list ,@properties)
                                              with table = (make-hash-table :test 'eq)
                                              for (k v) on kvs by #'cddr
                                              do (puthash k v table)
                                              finally return table)
-
                        (aref vec 1) ',parents)
-
                  (dolist (child (cons ',name (aref vec 2)))
-                   (when-let* ((state-map (gethash child conn--state-map-cache)))
-                     (setf (cdr state-map)
-                           (cl-loop for pstate in (conn--state-all-parents child)
-                                    collect (gethash pstate conn--state-maps))))
-
-                   (when-let* ((override-map (cons ',name (aref vec 2))))
-                     (setf (cdr override-map)
-                           (cl-loop for pstate in (conn--state-all-parents child)
-                                    collect (gethash pstate conn--override-maps))))))
+                   (conn--rebuild-state-map child)
+                   (conn--rebuild-override-map child)
+                   (maphash (lambda (mode _map)
+                              (conn--rebuild-major-mode-map child mode))
+                            (gethash child conn--major-mode-maps))
+                   (pcase-dolist (`(,mode . ,_map) (cdr (gethash child conn--minor-mode-maps)))
+                     (conn--rebuild-minor-mode-map ',name mode))))
              (put ',name :conn--state
                   (vector (cl-loop with kvs = (list ,@properties)
                                    with table = (make-hash-table :test 'eq)
@@ -1417,30 +1418,11 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                                    do (puthash k v table)
                                    finally return table)
                           ',parents
-                          nil)))
-
-           (unless (gethash ',name conn--state-maps)
-             (setf (gethash ',name conn--state-maps)
-                   (make-sparse-keymap)))
-
-           (unless (gethash ',name conn--override-maps)
-             (setf (gethash ',name conn--override-maps)
-                   (make-sparse-keymap)))
-
-           (unless (gethash ',name conn--minor-mode-maps)
-             (setf (gethash ',name conn--minor-mode-maps)
-                   (list :conn-minor-mode-map-alist)))
-
-           (unless (gethash ',name conn--major-mode-maps)
-             (setf (gethash ',name conn--major-mode-maps)
-                   (make-hash-table :test 'eq)))
-
-           (maphash (lambda (mode _map)
-                      (conn--rebuild-major-mode-map ',name mode))
-                    (gethash ',name conn--major-mode-maps))
-
-           (pcase-dolist (`(,mode . ,_map) (cdr (gethash ',name conn--minor-mode-maps)))
-             (conn--rebuild-minor-mode-map ',name mode)))
+                          nil))
+             (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
+                   (gethash ',name conn--override-maps) (make-sparse-keymap)
+                   (gethash ',name conn--minor-mode-maps) (list :conn-keymap-alist)
+                   (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))))
 
          (cl-pushnew ',name conn-states)
 
@@ -7893,7 +7875,7 @@ Operates with the selected windows parent window."
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn
-        (cl-pushnew 'conn--current-state-map emulation-mode-map-alists)
+        (cl-pushnew 'conn--local-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-mark-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
@@ -7907,7 +7889,7 @@ Operates with the selected windows parent window."
     (conn--remove-keymap-parent goto-map conn-goto-map)
     (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
-          (seq-difference '(conn--current-state-map
+          (seq-difference '(conn--local-state-map
                             conn--local-mark-map
                             conn--local-major-mode-map
                             conn--local-minor-mode-maps)
@@ -7925,11 +7907,13 @@ Operates with the selected windows parent window."
       (progn
         (setq conn-current-state nil
               conn-previous-state nil)
-        (setq-local conn-lighter (seq-copy conn-lighter)
-                    conn--current-state-map (list (list 'conn-local-mode))
-                    conn--local-override-map (list (list 'conn-local-mode))
-                    conn--local-major-mode-map (list (list 'conn-local-mode))
-                    conn--local-minor-mode-maps (list (list 'conn-local-mode)))
+        (setq-local
+         conn-lighter (seq-copy conn-lighter)
+         conn--local-state-map (list (list 'conn-local-mode))
+         conn--local-override-map (list (list 'conn-local-mode))
+         conn--local-major-mode-map (list (list 'conn-local-mode))
+         conn--local-minor-mode-maps (list (list 'conn-local-mode))
+         conn--local-mark-map nil)
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
