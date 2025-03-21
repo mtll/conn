@@ -2613,8 +2613,8 @@ Possibilities: \\<query-replace-map>
        (funcall iterator state))
       ((or :next :record)
        (catch 'non-empty
-         (while t
-           (pcase (funcall iterator state)
+         (while-let ((region (funcall iterator state)))
+           (pcase region
              ((and `(,beg . ,end)
                    (guard (/= beg end))
                    region)
@@ -2853,7 +2853,7 @@ Possibilities: \\<query-replace-map>
            (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
              (when state
                (with-current-buffer buf
-                 (funcall state)
+                 (conn-enter-state state)
                  (setq conn-previous-state prev-state)))))
           ((or :record :next)
            (when conn-local-mode
@@ -2939,14 +2939,17 @@ The iterator must be the first argument in ARGLIST.
      (kmacro-call-macro (or count 0) nil nil macro))
     ('nil
      (when (funcall iterator :record)
-       (kmacro-start-macro nil)
-       (unwind-protect
-           (progn
-             (recursive-edit)
-             (when (not defining-kbd-macro)
-               (user-error "Not defining keyboard macro")))
-         (when defining-kbd-macro (kmacro-end-macro nil)))
-       (kmacro-call-macro (or count 0))))))
+       (let ((last-macro last-kbd-macro))
+         (kmacro-start-macro nil)
+         (unwind-protect
+             (progn
+               (recursive-edit)
+               (when (not defining-kbd-macro)
+                 (user-error "Not defining keyboard macro")))
+           (when defining-kbd-macro (kmacro-end-macro nil)))
+         (when (eq last-macro last-kbd-macro)
+           (user-error "New keyboard not defined"))
+         (kmacro-call-macro (or count 0)))))))
 
 (conn--define-kapply conn--kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
