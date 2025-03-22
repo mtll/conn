@@ -3357,9 +3357,8 @@ of a command.")
                 (setq thing-sign (not thing-sign)))
                ('help
                 (completing-read-command))
-               ((and (let thing (when (symbolp cmd)
-                                  (get cmd :conn-command-thing)))
-                     (guard thing))
+               ((and (pred conn-thing-command-p)
+                     (let thing (get cmd :conn-command-thing)))
                 (unless action
                   (set-action (conn--dispatch-default-action cmd)))
                 (cl-return-from read-dispatch
@@ -3370,7 +3369,7 @@ of a command.")
                         action action-args
                         (conn--dispatch-window-predicate action thing cmd keys)
                         repeat)))
-               ((and (cl-type conn-action) cmd)
+               ((and cmd (pred conn-action-p))
                 (set-action (unless (eq cmd action) cmd)))
                (_
                 (setq invalid t)))
@@ -6078,9 +6077,7 @@ Handles rectangular regions."
   (conn--apply-region-transform 'conn--buffer-to-words))
 
 
-;;;;; Editing Commands
-
-;;;;;; Transpose
+;;;;; Transpose
 
 (conn-define-state conn-read-transpose-state (conn-read-mover-state))
 (put 'conn-transpose-regions :conn-read-state 'conn-read-transpose-state)
@@ -6166,7 +6163,7 @@ region after a `recursive-edit'."
                      (prefix-numeric-value arg)))))
 
 
-;;;;;; Line commands
+;;;;; Line commands
 
 (defun conn-open-line (arg)
   "Open line below the current line."
@@ -6212,7 +6209,7 @@ With arg N, insert N newlines."
        (indent-according-to-mode)))))
 
 
-;;;;;; Prepend/append to kill/register
+;;;;; Prepend/append to kill/register
 
 (defun conn-append-region (beg end &optional register kill-flag)
   "Append region from BEG to END to most recent kill.
@@ -6296,7 +6293,7 @@ With a prefix arg prepend to a register instead."
       (pulse-momentary-highlight-region beg end))))
 
 
-;;;;;; Narrowing Commands
+;;;;; Narrowing Commands
 
 (defun conn--narrow-to-region-1 (beg end &optional record)
   (narrow-to-region beg end)
@@ -6352,7 +6349,7 @@ associated with that command (see `conn-register-thing')."
     (message "Buffer narrowed indirect")))
 
 
-;;;;;; Register setting and loading
+;;;;; Register setting and loading
 
 (defvar conn--seperator-history nil
   "History var for `conn-set-register-seperator'.")
@@ -6393,7 +6390,7 @@ for the meaning of prefix ARG."
   (set-register register nil))
 
 
-;;;;;; Killing and yanking commands
+;;;;; Killing and yanking commands
 
 (defcustom conn-completion-region-quote-function 'regexp-quote
   "Function used to quote region strings for consult search functions."
@@ -6526,7 +6523,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (yank-rectangle)))
 
 
-;;;;;; Duplicate commands
+;;;;; Duplicate commands
 
 (defun conn--duplicate-region-1 (beg end)
   (let* ((region (buffer-substring-no-properties beg end))
@@ -6619,7 +6616,7 @@ With prefix arg N duplicate region N times."
      (conn--push-ephemeral-mark (- (point) mark-offset)))))
 
 
-;;;;;; Recenter
+;;;;; Recenter
 
 (defcustom conn-recenter-pulse t
   "Momentarily highlight region after `conn-recenter-on-region'."
@@ -6673,7 +6670,7 @@ of `conn-recenter-positions'."
     (conn-recenter-on-region)))
 
 
-;;;;;; Misc commands
+;;;;; Misc commands
 
 (defun conn-comment-or-uncomment-thing (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
@@ -6802,6 +6799,12 @@ Currently selected window remains selected afterwards."
 
 
 ;;;;; Transition Functions
+
+(defun conn-emacs-state-at-mark ()
+  "Exchange point and mark then enter `conn-emacs-state'."
+  (interactive)
+  (conn-exchange-mark-command)
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-change-whole-line (&optional arg)
   "`kill-whole-line' and enter `conn-emacs-state'."
@@ -7237,9 +7240,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (conn--wincontrol-setup t)))
 
-
-;;;;; Wincontrol commands
-
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
@@ -7257,7 +7257,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn-wincontrol))
 
 
-;;;;;; Wincontrol prefix arg
+;;;;; Wincontrol prefix arg
 
 (defun conn-wincontrol-universal-arg ()
   "Multiply wincontrol prefix arg by 4."
@@ -7302,7 +7302,7 @@ When called interactively N is `last-command-event'."
                                (mod conn--wincontrol-arg))))
 
 
-;;;;;; Wincontrol quiting
+;;;;; Wincontrol quiting
 
 (defun conn-wincontrol-exit ()
   "Exit `conn-wincontrol-mode'."
@@ -7327,7 +7327,7 @@ When called interactively N is `last-command-event'."
       (select-window conn--wincontrol-initial-window))))
 
 
-;;;;;; Wincontrol help
+;;;;; Wincontrol help
 
 (defun conn-wincontrol-help (&optional interactive)
   "Cycle to the next `conn-wincontrol-mode' help message."
@@ -7368,7 +7368,7 @@ When called interactively N is `last-command-event'."
            (_ conn--wincontrol-simple-format)))))
 
 
-;;;;;; Wincontrol isearch
+;;;;; Wincontrol isearch
 
 (defun conn-wincontrol-isearch (arg)
   "`isearch-forward', resuming `conn-wincontrol-mode' afterward."
@@ -7409,7 +7409,7 @@ When called interactively N is `last-command-event'."
       (conn--wincontrol-setup t))))
 
 
-;;;;;; Window selection
+;;;;; Window selection
 
 (defun conn-wincontrol-next-window ()
   "`other-window' in cyclic order."
@@ -7435,7 +7435,7 @@ When called interactively N is `last-command-event'."
     (select-window mru)))
 
 
-;;;;;; Windmove
+;;;;; Windmove
 
 (defun conn-wincontrol-windmove-up ()
   "`windmove-up'."
@@ -7464,7 +7464,7 @@ When called interactively N is `last-command-event'."
     (quit-window)))
 
 
-;;;;;; Window scroll commands
+;;;;; Window scroll commands
 
 (defun conn-wincontrol-other-window-scroll-down (arg)
   "Scroll down with ARG `next-screen-context-lines'."
@@ -7501,7 +7501,7 @@ When called interactively N is `last-command-event'."
     (conn-scroll-up)))
 
 
-;;;;;; Window configuration commands
+;;;;; Window configuration commands
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
@@ -7746,6 +7746,7 @@ When ARG is nil the root window is used."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "z" 'conn-emacs-state-at-mark
   "v" 'diff-buffer-with-file
   "F" 'conn-bind-last-dispatch-to-key
   "RET" 'whitespace-cleanup
