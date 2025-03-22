@@ -1393,7 +1393,7 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Move"
   :suppress-input-method t)
 
-(conn-define-state conn-read-thing-common-state (conn-movement-state)
+(conn-define-state conn-read-thing-common-state (conn-command-state)
   "Common elements of reading thing states."
   :suppress-input-method t)
 
