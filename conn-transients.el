@@ -189,7 +189,7 @@ the edit in the macro."
   "Display buffers touched in an `ibuffer' buffer."
   :class 'conn-transient-lisp-choices
   :description "Ibuffer"
-  :key "i"
+  :key "b"
   :keyword :ibuffer
   :choices `(("auto" . conn--kapply-ibuffer-overview)
              nil))
@@ -281,7 +281,7 @@ before each iteration."
   :key "u"
   :keyword :undo
   :description "Merge Undo Per"
-  :choices '(("buffer atomic" . (conn--kapply-per-buffer-undo t))
+  :choices '(("buffer atomic" . conn--kapply-per-buffer-atomic-undo)
              ("buffer" . conn--kapply-per-buffer-undo)
              ("iteration" . conn--kapply-per-iteration-undo)
              nil))
@@ -596,12 +596,11 @@ apply to each contiguous component of the region."
 
 A zero means repeat until error."
   :transient 'transient--do-exit
-  :key "I"
+  :key "i"
   :description "Iterate"
   (interactive (list (transient-args transient-current-command)))
   (conn--kapply-compose-iterator
    (conn--kapply-infinite-iterator)
-   'conn--kapply-open-invisible
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -903,15 +902,13 @@ A zero means repeat until error."
   [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-state-infix)
-      (conn--kapply-empty-infix)
       (conn--kapply-macro-infix)]]
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-state-infix)
-      (conn--kapply-empty-infix)]
-    [(conn--kapply-macro-infix)
-     (conn--kapply-ibuffer-infix)]]
+      (conn--kapply-state-infix)]
+    [ (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)]]
   [ [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "With State:"
       (conn--kapply-things-in-region-suffix)
@@ -964,8 +961,7 @@ A zero means repeat until error."
          (transient-resume))
        :transient transient--do-suspend)]]
   [ :description "Options:"
-    [ (conn--kapply-empty-infix)
-      (conn--kapply-macro-infix)
+    [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
   [ [ :description "With State:"
       (conn--kapply-replace-region-string)

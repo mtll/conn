@@ -800,10 +800,9 @@ Composed keymap is of the same form as returned by
 The composed keymap is of the form:
 
 (keymap
- (keymap . bindings...)  ;; state map for STATE
- (keymap . bindings...)  ;; state map for STATE parent
- ...                     ;; additional parent state maps
- )"
+ (keymap . bindings)  ;; state map for STATE
+ (keymap . bindings)  ;; state map for STATE parent
+ ...)"
   (with-memoization
       (gethash state conn--state-map-cache)
     (make-composed-keymap
@@ -820,12 +819,12 @@ The composed map is a keymap of the form:
 ;; Fully composed major-mode map
 (keymap
  ;; major-mode composed map
- (keymap (keymap . bindings...)  ;; map in STATE for major-mode
-         (keymap . bindings...)  ;; map in STATE-parent for major-mode
+ (keymap (keymap . bindings)  ;; map in STATE for major-mode
+         (keymap . bindings)  ;; map in STATE-parent for major-mode
          ...)
  ;; parent-mode composed map
- (keymap (keymap . bindings...)  ;; map in STATE for parent-mode
-         (keymap . bindings...)  ;; map in STATE-parent for parent-mode
+ (keymap (keymap . bindings)  ;; map in STATE for parent-mode
+         (keymap . bindings)  ;; map in STATE-parent for parent-mode
          ..)
  ...)"
   (with-memoization
@@ -1393,10 +1392,6 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Move"
   :suppress-input-method t)
 
-(conn-define-state conn-read-thing-common-state (conn-command-state)
-  "Common elements of reading thing states."
-  :suppress-input-method t)
-
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-read-thing-common-state))
                                 &key &allow-other-keys)
   (unless executing-kbd-macro
@@ -1417,6 +1412,10 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Cmd"
   :suppress-input-method t
   :cursor 'box)
+
+(conn-define-state conn-read-thing-common-state (conn-command-state)
+  "Common elements of reading thing states."
+  :suppress-input-method t)
 
 (conn-define-state conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
@@ -2532,8 +2531,8 @@ Possibilities: \\<query-replace-map>
       (pcase state
         ((or :next :record)
          (pcase region
-           ('nil nil)
-           (`(,beg . ,end)
+           ((and (pred identity)
+                 `(,beg . ,end))
             (when-let* ((buffer (and (markerp beg) (marker-buffer beg)))
                         ((not (eq buffer (current-buffer)))))
               (pop-to-buffer-same-window buffer)
@@ -2541,18 +2540,35 @@ Possibilities: \\<query-replace-map>
               (unless (eq buffer (window-buffer (selected-window)))
                 (error "Could not pop to buffer %s" buffer)))
             (goto-char beg)
-            (conn--push-ephemeral-mark end))
-           (_ (error "Unknown region from iterator")))))
+            (conn--push-ephemeral-mark end)))))
       region)))
 
-(defun conn--kapply-per-buffer-undo (iterator &optional atomic)
+(defun conn--kapply-per-buffer-undo (iterator)
   (let (undo-handles)
     (lambda (state)
       (pcase state
         (:finalize
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
-           (if (and atomic conn-kmacro-apply-error)
+           (accept-change-group handle)
+           (undo-amalgamate-change-group handle)))
+        ((or :record :next)
+         (prog1
+             (funcall iterator state)
+           (unless (or (alist-get (current-buffer) undo-handles)
+                       (eq buffer-undo-list t))
+             (activate-change-group
+              (setf (alist-get (current-buffer) undo-handles)
+                    (prepare-change-group))))))))))
+
+(defun conn--kapply-per-buffer-atomic-undo (iterator)
+  (let (undo-handles)
+    (lambda (state)
+      (pcase state
+        (:finalize
+         (funcall iterator state)
+         (pcase-dolist (`(_ . ,handle) undo-handles)
+           (if conn-kmacro-apply-error
                (cancel-change-group handle)
              (accept-change-group handle)
              (undo-amalgamate-change-group handle))))
@@ -2773,13 +2789,14 @@ The iterator must be the first argument in ARGLIST.
                 (,iterations 0)
                 (success nil)
                 (,iterator (lambda (&optional state)
-                             (pcase (funcall ,iterator (or state :next))
-                               (`(,beg . ,end)
-                                (when (markerp beg) (set-marker beg nil))
-                                (when (markerp end) (set-marker end nil))
-                                (when (run-hook-with-args-until-failure
-                                       'conn-kmacro-apply-loop-hook)
-                                  (cl-incf ,iterations)))))))
+                             (when-let* ((ret (funcall ,iterator (or state :next))))
+                               (pcase ret
+                                 (`(,beg . ,end)
+                                  (when (markerp beg) (set-marker beg nil))
+                                  (when (markerp end) (set-marker end nil))))
+                               (when (run-hook-with-args-until-failure
+                                      'conn-kmacro-apply-loop-hook)
+                                 (cl-incf ,iterations))))))
            (run-hook-wrapped 'conn-kmacro-apply-start-hook
                              (lambda (hook)
                                (ignore-errors (funcall hook))))
