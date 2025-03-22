@@ -312,8 +312,8 @@ meaning of these see `advice-add'."
           (seq-difference emulation-mode-map-alists
                           '(conn--local-minor-mode-maps
                             conn--local-major-mode-map
-                            conn--local-mark-map
-                            conn--local-state-map)
+                            conn--local-state-map
+                            conn--local-override-map)
                           #'eq)))
      ,(macroexp-progn body)))
 
@@ -740,34 +740,12 @@ The returned list is not fresh, don't modify it."
 (defvar-local conn--local-override-map)
 (defvar-local conn--local-major-mode-map)
 (defvar-local conn--local-minor-mode-maps)
-(defvar-local conn--local-mark-map)
 
 (defvar-keymap conn-mark-thing-map
   :prefix 'conn-mark-thing-map
   "L" 'forward-line
   ")" 'forward-list
   "(" 'backward-list)
-
-(defun conn--setup-mark-maps ()
-  (unless (alist-get conn-current-state conn--local-mark-map)
-    (let ((mark-map-bindings
-           (setf (alist-get conn-current-state conn--local-mark-map)
-                 (make-sparse-keymap)))
-          (mark-map (thread-last
-                      (conn--derived-mode-all-parents major-mode)
-                      (mapcar #'conn-get-mode-mark-map)
-                      (make-composed-keymap))))
-      (dolist (key (ignore-errors
-                     (where-is-internal 'conn-mark-thing-map
-                                        (list (cdar conn--local-state-map)))))
-        (define-key mark-map-bindings key mark-map)))))
-
-(defun conn-get-mode-mark-map (mode)
-  "Get MODE keymap for STATE things.
-If one does not exists assign a new sparse keymap for MODE things
-in STATE and return it."
-  (or (get mode :conn-mode-things)
-      (put mode :conn-mode-things (make-sparse-keymap))))
 
 (defun conn-get-overriding-map (state)
   "Return the overriding keymap for STATE."
@@ -1254,7 +1232,6 @@ and specializes the method on all conn states."
              conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
              cursor-type (or (conn-state-get state :cursor) t))
             (conn--activate-input-method)
-            (conn--setup-mark-maps)
             (cl-call-next-method)
             (unless executing-kbd-macro
               (force-mode-line-update))
@@ -1815,7 +1792,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defvar conn-default-state-for-read-mover 'conn-read-mover-state)
 
-(conn-define-state conn-read-mover-state (conn-read-thing-common-state conn-command-state)
+(conn-define-state conn-read-mover-state (conn-read-thing-common-state)
   "A state for reading things."
   :lighter " MOVER")
 
@@ -1889,8 +1866,10 @@ are read."
                                        (if thing-sign "-" "")
                                        thing-arg)
                                (if invalid
-                                   (propertize "Not a valid thing command"
-                                               'face 'error)
+                                   (propertize
+                                    (format "%s is not a valid thing command"
+                                            cmd)
+                                    'face 'error)
                                  "")))
                  cmd (key-binding keys t)))
          (completing-read-command ()
@@ -1927,32 +1906,33 @@ are read."
         (read-command)
         (unwind-protect
             (cl-loop
-             (pcase cmd
-               ('keyboard-quit (keyboard-quit))
-               ('help
-                (completing-read-command))
-               ('digit-argument
-                (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                  (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-               ('reset-arg
-                (setq thing-arg nil))
-               ('backward-delete-arg
-                (setq thing-arg (floor thing-arg 10)))
-               ('forward-delete-arg
-                (setq thing-arg (thread-last
-                                  (log thing-arg 10)
-                                  (floor)
-                                  (expt 10)
-                                  (mod thing-arg))))
-               ('negative-argument
-                (setq thing-sign (not thing-sign)))
-               ((guard (or (conn-thing-command-p cmd)
-                           (alist-get cmd conn-bounds-of-command-alist)))
-                (cl-return
-                 (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                                 (thing-sign '-)))))
-               (_ (setq invalid t)))
-             (read-command))
+             (catch 'continue
+               (pcase cmd
+                 ('keyboard-quit (keyboard-quit))
+                 ('help
+                  (throw 'continue (completing-read-command)))
+                 ('digit-argument
+                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                 ('reset-arg
+                  (setq thing-arg nil))
+                 ('backward-delete-arg
+                  (setq thing-arg (floor thing-arg 10)))
+                 ('forward-delete-arg
+                  (setq thing-arg (thread-last
+                                    (log thing-arg 10)
+                                    (floor)
+                                    (expt 10)
+                                    (mod thing-arg))))
+                 ('negative-argument
+                  (setq thing-sign (not thing-sign)))
+                 ((guard (or (conn-thing-command-p cmd)
+                             (alist-get cmd conn-bounds-of-command-alist)))
+                  (cl-return
+                   (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                                   (thing-sign '-)))))
+                 (_ (setq invalid t)))
+               (read-command)))
           (message nil))))))
 
 (defun conn-read-thing-region (prompt &optional arg)
@@ -2872,82 +2852,6 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
       (when (symbolp command)
         (get command :conn-mark-handler))))
 
-(defun conn-register-thing (thing &rest rest)
-  "Register a new THING.
-
-THINGs may have several optional properties that control how they
-function in various conn features
-
-FORWARD-OP, BEG-OP, END-OP and BOUNDS-OP provide operations for
-`thingatpt', which see.
-
-TARGET-FINDER is a function that produces targets for
-`conn-dispatch-on-things'.
-
-DEFAULT-ACTION is the default action for THING in
-`conn-dispatch-on-things'.
-
-MODES is a list of the modes in which THINGs may be present.
-
-MARK-CMD is either a command which marks a THING at point or t if such a
-command should be automatically created.
-
-MARK-KEY is a key which should be bound to MARK-CMD in
-`conn-mark-thing-map' (only in MODES if MODES is non-nil).
-
-\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP MODES MARK-CMD MARK-KEY)"
-  (intern (symbol-name thing))
-  (when-let* ((target-finder (plist-get rest :dispatch-target-finder)))
-    (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
-  (when-let* ((action (plist-get rest :default-action)))
-    (setf (alist-get thing conn-dispatch-default-action-alist) action))
-  (when-let* ((forward (plist-get rest :forward-op)))
-    (put thing 'forward-op forward))
-  (when-let* ((beg (plist-get rest :beg-op)))
-    (put thing 'beginning-op beg))
-  (when-let* ((end (plist-get rest :end-op)))
-    (put thing 'end-op end))
-  (when-let* ((bounds (plist-get rest :bounds-op)))
-    (put thing 'bounds-of-thing-at-point bounds))
-  (cl-flet ((make-mark-command ()
-              (let ((mark-command (conn--symbolicate "conn-mark-" thing)))
-                (fset mark-command
-                      (lambda ()
-                        (interactive)
-                        (pcase (bounds-of-thing-at-point thing)
-                          (`(,beg . ,end)
-                           (goto-char beg)
-                           (if conn-local-mode
-                               (conn--push-ephemeral-mark end)
-                             (push-mark end t)))
-                          (_ (user-error "Point not in %s" thing)))))
-                (put mark-command :conn-command-thing thing)
-                mark-command)))
-    (let* ((mark-key (plist-get rest :mark-key))
-           (mark-command (pcase (plist-get rest :mark-cmd)
-                           ((or 't (guard (key-valid-p mark-key)))
-                            (make-mark-command))
-                           ((and cmd (pred symbolp) (pred functionp))
-                            (put cmd :conn-command-thing thing)))))
-      (when (key-valid-p mark-key)
-        (if (plist-get rest :modes)
-            (dolist (mode (put thing :conn-thing-modes
-                               (ensure-list (plist-get rest :modes))))
-              (keymap-set (conn-get-mode-mark-map mode)
-                          mark-key mark-command))
-          (keymap-set conn-mark-thing-map mark-key mark-command))))))
-
-(defun conn-register-thing-commands (thing handler &rest commands)
-  "Associate COMMANDS with a THING and a HANDLER.
-
-HANDLER will be run from the `post-command-hook' and should be a
-function of one argument, the location of `point' before the command
-ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
-order to mark the region that should be defined by any of COMMANDS."
-  (dolist (cmd commands)
-    (put cmd :conn-command-thing thing)
-    (put cmd :conn-mark-handler handler)))
-
 (defun conn-symbol-handler (beg)
   "Mark handler for symbols."
   (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
@@ -3328,69 +3232,72 @@ of a command.")
          (read-dispatch ()
            (read-command)
            (while t
-             (pcase cmd
-               (`(,thing ,finder . ,default-action)
-                (unless action
-                  (set-action (or default-action
-                                  (conn--dispatch-default-action thing))))
-                (cl-return-from read-dispatch
-                  (list thing
-                        (when thing-arg
-                          (* (if thing-sign -1 1) (or thing-arg 1)))
-                        finder action action-args
-                        (conn--dispatch-window-predicate
-                         action (get thing :conn-command-thing) cmd keys)
-                        repeat)))
-               ('keyboard-quit
-                (keyboard-quit))
-               ('kapply
-                (conn--with-state conn-previous-state
-                  (conn-dispatch-kapply-prefix
-                   (lambda (action)
-                     (set-window-configuration window-conf)
-                     (run action))))
-                (setq quit-flag t))
-               ('repeat-dispatch
-                (setq repeat (not repeat)
-                      repeat-indicator
-                      (propertize repeat-indicator
-                                  'face (when repeat
-                                          'eldoc-highlight-function-argument))))
-               ('digit-argument
-                (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                  (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-               ('backward-delete-arg
-                (setq thing-arg (floor thing-arg 10)))
-               ('forward-delete-arg
-                (setq thing-arg (when thing-arg
-                                  (thread-last
-                                    (log thing-arg 10)
-                                    floor
-                                    (expt 10)
-                                    (mod thing-arg)))))
-               ('reset-arg
-                (setq thing-arg nil))
-               ('negative-argument
-                (setq thing-sign (not thing-sign)))
-               ('help
-                (completing-read-command))
-               ((and (pred conn-thing-command-p)
-                     (let thing (get cmd :conn-command-thing)))
-                (unless action
-                  (set-action (conn--dispatch-default-action cmd)))
-                (cl-return-from read-dispatch
-                  (list cmd
-                        (when thing-arg
-                          (* (if thing-sign -1 1) (or thing-arg 1)))
-                        (conn--dispatch-target-finder cmd)
-                        action action-args
-                        (conn--dispatch-window-predicate action thing cmd keys)
-                        repeat)))
-               ((and cmd (pred conn-action-p))
-                (set-action (unless (eq cmd action) cmd)))
-               (_
-                (setq invalid t)))
-             (read-command)))
+             (catch 'continue
+               (pcase cmd
+                 (`(,thing ,finder . ,default-action)
+                  (unless action
+                    (set-action (or default-action
+                                    (conn--dispatch-default-action thing))))
+                  (cl-return-from read-dispatch
+                    (list thing
+                          (when thing-arg
+                            (* (if thing-sign -1 1) (or thing-arg 1)))
+                          finder action action-args
+                          (conn--dispatch-window-predicate
+                           action (get thing :conn-command-thing) cmd keys)
+                          repeat)))
+                 ('keyboard-quit
+                  (keyboard-quit))
+                 ('kapply
+                  (conn--with-state conn-previous-state
+                    (conn-dispatch-kapply-prefix
+                     (lambda (action)
+                       (set-window-configuration window-conf)
+                       (run action))))
+                  (setq quit-flag t))
+                 ('repeat-dispatch
+                  (setq repeat (not repeat)
+                        repeat-indicator
+                        (propertize repeat-indicator
+                                    'face (when repeat
+                                            'eldoc-highlight-function-argument))))
+                 ('digit-argument
+                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                 ('backward-delete-arg
+                  (setq thing-arg (floor thing-arg 10)))
+                 ('forward-delete-arg
+                  (setq thing-arg (when thing-arg
+                                    (thread-last
+                                      (log thing-arg 10)
+                                      floor
+                                      (expt 10)
+                                      (mod thing-arg)))))
+                 ('reset-arg
+                  (setq thing-arg nil))
+                 ('negative-argument
+                  (setq thing-sign (not thing-sign)))
+                 ('help
+                  (throw 'continue (completing-read-command)))
+                 ((and (let thing (or (alist-get cmd conn-bounds-of-command-alist)
+                                      (when (symbolp cmd)
+                                        (get cmd :conn-command-thing))))
+                       (guard thing))
+                  (unless action
+                    (set-action (conn--dispatch-default-action cmd)))
+                  (cl-return-from read-dispatch
+                    (list cmd
+                          (when thing-arg
+                            (* (if thing-sign -1 1) (or thing-arg 1)))
+                          (conn--dispatch-target-finder cmd)
+                          action action-args
+                          (conn--dispatch-window-predicate action thing cmd keys)
+                          repeat)))
+                 ((and cmd (pred conn-action-p))
+                  (set-action (unless (eq cmd action) cmd)))
+                 (_
+                  (setq invalid t)))
+               (read-command))))
          (run (action)
            (unwind-protect
                (conn--with-state (or (conn--command-property :conn-read-dispatch-state)
@@ -4766,11 +4673,52 @@ Expansions and contractions are provided by functions in
 
 ;; Definitions for various things and thing commands.
 
-(conn-register-thing 'url :mark-key "!")
-(conn-register-thing 'email :mark-key "@")
-(conn-register-thing 'uuid :mark-key "$")
-(conn-register-thing 'string :mark-key "\"")
-(conn-register-thing 'filename :mark-key "/")
+(defun conn-register-thing (thing &rest rest)
+  "Register a new THING.
+
+THINGs may have several optional properties that control how they
+function in various conn features
+
+FORWARD-OP, BEG-OP, END-OP and BOUNDS-OP provide operations for
+`thingatpt', which see.
+
+TARGET-FINDER is a function that produces targets for
+`conn-dispatch-on-things'.
+
+DEFAULT-ACTION is the default action for THING in
+`conn-dispatch-on-things'.
+
+\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP)"
+  (intern (symbol-name thing))
+  (when-let* ((target-finder (plist-get rest :dispatch-target-finder)))
+    (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
+  (when-let* ((action (plist-get rest :default-action)))
+    (setf (alist-get thing conn-dispatch-default-action-alist) action))
+  (when-let* ((forward (plist-get rest :forward-op)))
+    (put thing 'forward-op forward))
+  (when-let* ((beg (plist-get rest :beg-op)))
+    (put thing 'beginning-op beg))
+  (when-let* ((end (plist-get rest :end-op)))
+    (put thing 'end-op end))
+  (when-let* ((bounds (plist-get rest :bounds-op)))
+    (put thing 'bounds-of-thing-at-point bounds)))
+
+(defun conn-register-thing-commands (thing handler &rest commands)
+  "Associate COMMANDS with a THING and a HANDLER.
+
+HANDLER will be run from the `post-command-hook' and should be a
+function of one argument, the location of `point' before the command
+ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
+order to mark the region that should be defined by any of COMMANDS."
+  (dolist (cmd commands)
+    (put cmd :conn-command-thing thing)
+    (put cmd :conn-mark-handler handler)))
+
+(conn-register-thing 'url)
+(conn-register-thing 'email)
+(conn-register-thing 'uuid)
+(conn-register-thing 'string)
+(conn-register-thing 'filename)
 
 (conn-register-thing
  'defun
@@ -4787,13 +4735,11 @@ Expansions and contractions are provided by functions in
 
 (conn-register-thing
  'buffer-after-point
- :bounds-op (lambda () (cons (point) (point-max)))
- :mark-key ">")
+ :bounds-op (lambda () (cons (point) (point-max))))
 
 (conn-register-thing
  'buffer-before-point
- :bounds-op (lambda () (cons (point-min) (point)))
- :mark-key "<")
+ :bounds-op (lambda () (cons (point-min) (point))))
 
 (conn-register-thing
  'visible
@@ -4824,7 +4770,6 @@ Expansions and contractions are provided by functions in
 
 (conn-register-thing
  'page
- :mark-key "p"
  :forward-op 'forward-page)
 
 (conn-register-thing-commands
@@ -4909,7 +4854,6 @@ Expansions and contractions are provided by functions in
 
 (conn-register-thing
  'whitespace
- :mark-key "SPC"
  :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
@@ -8109,7 +8053,6 @@ When ARG is nil the root window is used."
       (progn
         (cl-pushnew 'conn--local-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-map emulation-mode-map-alists)
-        (cl-pushnew 'conn--local-mark-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
         (cl-pushnew 'conn--local-override-map emulation-mode-map-alists)
         (conn--append-keymap-parent isearch-mode-map conn-isearch-map)
@@ -8122,9 +8065,9 @@ When ARG is nil the root window is used."
     (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
           (seq-difference '(conn--local-state-map
-                            conn--local-mark-map
                             conn--local-major-mode-map
-                            conn--local-minor-mode-maps)
+                            conn--local-minor-mode-maps
+                            conn--local-override-map)
                           emulation-mode-map-alists #'eq))))
 
 (define-minor-mode conn-local-mode
@@ -8142,8 +8085,7 @@ When ARG is nil the root window is used."
          conn--local-state-map (list (list 'conn-local-mode))
          conn--local-override-map (list (list 'conn-local-mode))
          conn--local-major-mode-map (list (list 'conn-local-mode))
-         conn--local-minor-mode-maps (list (list 'conn-local-mode))
-         conn--local-mark-map nil)
+         conn--local-minor-mode-maps (list (list 'conn-local-mode)))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
@@ -8223,16 +8165,12 @@ When ARG is nil the root window is used."
   (conn-register-thing
    'org-link
    :dispatch-target-finder (lambda () (conn--dispatch-re-matches org-link-any-re t))
-   :bounds-op (lambda () (org-in-regexp org-link-any-re))
-   :mark-key "O"
-   :modes '(org-mode))
+   :bounds-op (lambda () (org-in-regexp org-link-any-re)))
 
   (conn-register-thing
    'org-paragraph
    :dispatch-target-finder (lambda () (conn--dispatch-all-things 'org-paragraph t))
-   :forward-op 'org-forward-paragraph
-   :mark-key "I"
-   :modes '(org-mode))
+   :forward-op 'org-forward-paragraph)
 
   (conn-register-thing-commands
    'org-paragraph 'conn-continuous-thing-handler
@@ -8256,9 +8194,7 @@ When ARG is nil the root window is used."
 
   (conn-register-thing
    'org-sentence
-   :forward-op 'conn-org-sentence-forward
-   :mark-key "{"
-   :modes '(org-mode))
+   :forward-op 'conn-org-sentence-forward)
 
   (conn-register-thing-commands
    'org-sentence 'conn-continuous-thing-handler
@@ -8271,10 +8207,8 @@ When ARG is nil the root window is used."
                 (save-mark-and-excursion
                   (org-mark-element)
                   (cons (region-beginning) (region-end))))
-   :mark-key "m"
    :beg-op 'org-backward-element
-   :end-op 'org-forward-element
-   :modes '(org-mode))
+   :end-op 'org-forward-element)
 
   ;; FIXME: org-element all broken
   (conn-register-thing-commands
@@ -8305,8 +8239,7 @@ When ARG is nil the root window is used."
    'org-heading
    :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
    :dispatch-target-finder (lambda () (conn--dispatch-all-things 'org-heading t))
-   :forward-op 'org-next-visible-heading
-   :modes '(org-mode))
+   :forward-op 'org-next-visible-heading)
 
   (conn-register-thing-commands
    'org-heading 'conn-continuous-thing-handler
@@ -8380,16 +8313,12 @@ When ARG is nil the root window is used."
 
   (conn-register-thing
    'heading
-   :mark-cmd t
    :dispatch-target-finder (lambda () (conn--dispatch-all-things 'heading t))
    :bounds-op (lambda ()
                 (save-mark-and-excursion
                   (outline-mark-subtree)
                   (cons (region-beginning) (region-end))))
    :forward-op 'conn-forward-heading-op)
-
-  (keymap-set (conn-get-mode-map 'conn-command-state 'outline-minor-mode)
-              "H H" 'conn-mark-heading)
 
   (conn-register-thing-commands
    'heading 'conn-continuous-thing-handler
