@@ -251,25 +251,29 @@ dynamically.")
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
     (intern (apply #'conn--stringify symbols-or-strings))))
 
-(defmacro conn--thread (form needle &rest forms)
-  (declare (debug (form symbolp body))
-           (indent 2))
-  (if forms
-      `(let ((,needle ,form))
-         (conn--thread ,(car forms) ,needle ,@(cdr forms)))
-    form))
+(defmacro conn--protected-let (varlist &rest body)
+  "Bind variables according to VARLIST then eval body as in `let*'.
 
-(defmacro conn--protected-let (var-forms &rest body)
+In addition to what `let*' accepts, each element of VARLIST may also be
+of the form (SYMBOL VALUEFORM CLEANUP-FORM), which binds SYMBOL to
+VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM."
   (declare (indent 1))
   (cl-with-gensyms (success)
     `(let* ((,success nil)
-            ,@(mapcar (lambda (form) (take 2 form)) var-forms))
+            ,@(mapcar (lambda (form)
+                        (if (consp form)
+                            (take 2 form)
+                          form))
+                      varlist))
        (unwind-protect
            (prog1
                ,(macroexp-progn body)
              (setq ,success t))
          (unless ,success
-           ,@(mapcan (lambda (form) (drop 2 form)) var-forms))))))
+           ,@(mapcan (lambda (form)
+                       (when (consp form)
+                         (drop 2 form)))
+                     varlist))))))
 
 (defmacro conn--with-advice (advice-forms &rest body)
   "Run BODY with ADVICE-FORMS temporarily applied.
@@ -688,7 +692,7 @@ This variable will be bound to the state t be entered during
        (aref (get ,state :conn--state) 1)))))
 
 (define-inline conn--state-all-children (state)
-  "Return only the immediate parents for STATE."
+  "Return all parents for STATE."
   (inline-letevals (state)
     (inline-quote
      (progn
@@ -712,6 +716,7 @@ The returned list is not fresh, don't modify it."
                       (aref (get ,state :conn--state) 1))))))))
 
 (define-inline conn-substate-p (state parent)
+  "Return non-nil if STATE is a substate of PARENT."
   (inline-letevals (state parent)
     (inline-quote
      (memq ,parent (conn--state-all-parents ,state)))))
@@ -779,6 +784,10 @@ in STATE and return it."
 (defconst conn--override-map-cache (make-hash-table :test 'eq))
 
 (defun conn--compose-overide-map (state)
+  "Return composed override map for STATE.
+
+Composed keymap is of the same form as returned by
+`conn--compose-state-map'."
   (with-memoization
       (gethash state conn--override-map-cache)
     (make-composed-keymap
@@ -793,6 +802,15 @@ in STATE and return it."
 (defconst conn--state-map-cache (make-hash-table :test 'eq))
 
 (defun conn--compose-state-map (state)
+  "Return composed state map for STATE.
+
+The composed keymap is of the form:
+
+(keymap
+ (keymap . bindings...)  ;; state map for STATE
+ (keymap . bindings...)  ;; state map for STATE parent
+ ...                     ;; additional parent state maps
+ )"
   (with-memoization
       (gethash state conn--state-map-cache)
     (make-composed-keymap
@@ -802,6 +820,21 @@ in STATE and return it."
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
 (defun conn--compose-major-mode-map (state)
+  "Return composed major mode maps for STATE.
+
+The composed map is a keymap of the form:
+
+;; Fully composed major-mode map
+(keymap
+ ;; major-mode composed map
+ (keymap (keymap . bindings...)  ;; map in STATE for major-mode
+         (keymap . bindings...)  ;; map in STATE-parent for major-mode
+         ...)
+ ;; parent-mode composed map
+ (keymap (keymap . bindings...)  ;; map in STATE for parent-mode
+         (keymap . bindings...)  ;; map in STATE-parent for parent-mode
+         ..)
+ ...)"
   (with-memoization
       (gethash (conn--derived-mode-all-parents major-mode)
                conn--major-mode-maps-cache)
@@ -857,6 +890,9 @@ return it."
        (nth 1 (compose-minor-mode-map state)))))))
 
 (defun conn--rebuild-state-keymaps (state)
+  "Rebuild all composed keymaps for STATE.
+
+Called when the inheritance hierarchy for STATE changes."
   (let ((parents (conn--state-all-parents state)))
     (when-let* ((state-map (gethash state conn--state-map-cache)))
       (setf (cdr state-map)
@@ -991,7 +1027,7 @@ mouse-3: Describe current input method")
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
-PROPERTY."
+PROPERTY.  If no parent has that property either than nil is returned."
   (inline-letevals (state property)
     (inline-quote
      (progn
@@ -1038,7 +1074,8 @@ property from its parents."
 
 ;;;;; State macros
 
-;; Adapted from map pattern
+;; Adapted from map pattern, we can't just use the map pattern on the
+;; property table because of inheritance.
 (pcase-defmacro conn-state-props (&rest properties)
   "Build a `pcase' pattern matching state properties.
 
@@ -1107,6 +1144,8 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 
 ;;;;; cl-generic specializers
+
+;; Add generic function specializers for conn-substate and conn-state
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
@@ -1327,9 +1366,9 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                    (cl-pushnew child (aref (get parent :conn--state) 2))))
                ;; Rebuild all keymaps for all children with the new
                ;; inheritance hierarchy.  Existing composed keymaps
-               ;; are destructively modified so that states will not
-               ;; have to recompose their keymaps before these changes
-               ;; take effect.
+               ;; are destructively modified so that local map
+               ;; variables will not have to be updated in each buffer
+               ;; before these changes take effect.
                (mapc #'conn--rebuild-state-keymaps all-children))
            (put ',name :conn--state (vector state-props ',parents nil))
            (dolist (parent (cdr (conn--state-all-parents ',name)))
@@ -5713,13 +5752,11 @@ instances of from-string.")
   (princ (format "Tab:  %s"
                  (if (eq (selected-frame) (conn-tab-register-frame val))
                      (when-let* ((index (conn--get-tab-index-by-cookie
-                                         (conn-tab-register-cookie val))))
-                       (thread-first
-                         (nth index (funcall tab-bar-tabs-function))
-                         (conn--thread tab
-                             (if (eq (car tab) 'current-tab)
-                                 (propertize "*CURRENT TAB*" 'face 'error)
-                               (alist-get 'name tab)))))
+                                         (conn-tab-register-cookie val)))
+                                 (tab (nth index (funcall tab-bar-tabs-function))))
+                       (if (eq (car tab) 'current-tab)
+                           (propertize "*CURRENT TAB*" 'face 'error)
+                         (alist-get 'name tab)))
                    "on another frame"))))
 
 (static-if (<= 30 emacs-major-version)
