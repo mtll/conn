@@ -418,7 +418,10 @@ This function destructively modifies LIST."
     (if min (cons min (delq min list)) list)))
 
 (defun conn--merge-regions (regions &optional points)
-  "Merge all overlapping regions in REGIONS."
+  "Merge all overlapping regions in REGIONS.
+
+REGIONS is a list of the form ((BEG . END) ...), the returned list is of
+the same form and contains disjoint (BEG . END) pairs."
   (let (merged)
     (pcase-dolist ((and region `(,beg1 . ,end1)) regions)
       (pcase (catch 'found
@@ -453,18 +456,13 @@ so don't modify it."
         (nreverse parents)))
   (defalias 'conn--derived-mode-all-parents 'derived-mode-all-parents))
 
-(defun conn--maybe-mmode-all-parents (mmode)
-  (if (get mmode :conn-inhibit-inherit-maps)
-      (list mmode)
-    (conn--derived-mode-all-parents mmode)))
-
 (defun conn--derived-mode-property (property &optional buffer)
   "Check major mode in BUFFER and each `derived-mode-parent' for PROPERTY.
 If BUFFER is nil check `current-buffer'."
   (cl-loop for mode in (thread-first
                          'major-mode
                          (buffer-local-value (or buffer (current-buffer)))
-                         (conn--maybe-mmode-all-parents))
+                         (conn--derived-mode-all-parents))
            for prop = (get mode property)
            when prop return prop))
 
@@ -616,11 +614,13 @@ of highlighting."
 ;;;;; Append/prepend keymaps
 
 (defun conn--append-keymap-parent (keymap new-parent)
+  "Append NEW-PARENT to KEYMAP\\='s parents."
   (if-let* ((parent (keymap-parent keymap)))
       (set-keymap-parent keymap (append parent (list new-parent)))
     (set-keymap-parent keymap (make-composed-keymap new-parent))))
 
 (defun conn--remove-keymap-parent (keymap parent-to-remove)
+  "Remove PARENT-TO-REMOVE from KEYMAP\\='s parents."
   (when-let* ((parent (keymap-parent keymap)))
     (setf (cdr parent) (delq parent-to-remove (cdr parent)))
     (unless (cdr parent)
@@ -754,20 +754,13 @@ The returned list is not fresh, don't modify it."
            (setf (alist-get conn-current-state conn--local-mark-map)
                  (make-sparse-keymap)))
           (mark-map (thread-last
-                      (conn--maybe-mmode-all-parents major-mode)
+                      (conn--derived-mode-all-parents major-mode)
                       (mapcar #'conn-get-mode-mark-map)
                       (make-composed-keymap))))
       (dolist (key (ignore-errors
                      (where-is-internal 'conn-mark-thing-map
                                         (list (cdar conn--local-state-map)))))
         (define-key mark-map-bindings key mark-map)))))
-
-(defun conn-set-derived-mode-inherit-maps (mode inhibit-inherit-maps)
-  "Set whether derived MODE inherits `conn-get-mode-map' keymaps from parents.
-If INHIBIT-INHERIT-MAPS is non-nil then any maps defined using
-`conn-get-mode-map' for parents of MODE will not be made active
-when MODE is."
-  (put mode :conn-inhibit-inherit-maps inhibit-inherit-maps))
 
 (defun conn-get-mode-mark-map (mode)
   "Get MODE keymap for STATE things.
@@ -1145,8 +1138,6 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 ;;;;; cl-generic specializers
 
-;; Add generic function specializers for conn-substate and conn-state
-
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
   (lambda (state &rest _)
@@ -1516,7 +1507,7 @@ strings have `conn-dispatch-label-face'."
          (list (selected-window)))))
 
 
-;;;;; Label reading api
+;;;;; Label reading
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
