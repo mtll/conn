@@ -726,7 +726,11 @@ The returned list is not fresh, don't modify it."
 
 (defun conn-setup-minibuffer-state ()
   (setq-local conn-state-for-insert 'conn-minibuffer-state)
-  (conn-enter-state 'conn-minibuffer-state))
+  (conn-enter-state 'conn-minibuffer-state)
+  (letrec ((hook (lambda ()
+                   (conn--push-ephemeral-mark)
+                   (remove-hook 'minibuffer-setup-hook hook))))
+    (add-hook 'minibuffer-setup-hook hook)))
 
 (defun conn-setup-null-state ()
   (setq-local conn-state-for-insert 'conn-null-state
