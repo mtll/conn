@@ -806,7 +806,7 @@ The composed map is a keymap of the form:
          ..)
  ...)"
   (with-memoization
-      (gethash (conn--derived-mode-all-parents major-mode)
+      (gethash (cons state (conn--derived-mode-all-parents major-mode))
                conn--major-mode-maps-cache)
     (make-composed-keymap
      (cl-loop for pmode in (conn--derived-mode-all-parents major-mode)
