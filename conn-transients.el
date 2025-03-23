@@ -326,7 +326,8 @@ Begins the keyboard macro by deleting the string at each match."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    'conn--kapply-change-region
-   '(conn--kapply-with-state conn-insert-state)
+   (lambda (iterator)
+     (conn--kapply-with-state iterator conn-state-for-emacs))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -356,7 +357,8 @@ Begins the keyboard macro in `conn-insert-state'."
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
-   '(conn--kapply-with-state conn-insert-state)
+   (lambda (iterator)
+     (conn--kapply-with-state iterator conn-state-for-emacs))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -386,7 +388,8 @@ Begins the keyboard macro in `conn-command-state'."
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
-   '(conn--kapply-with-state conn-command-state)
+   (lambda (iterator)
+     (conn--kapply-with-state iterator conn-state-for-command))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -410,7 +413,8 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :restrictions args)
      (alist-get :excursions args)
      'conn--kapply-change-region
-     '(conn--kapply-with-state conn-insert-state)
+     (lambda (iterator)
+       (conn--kapply-with-state iterator conn-state-for-emacs))
      'conn--kapply-pulse-region
      (alist-get :window-conf args)
      (alist-get :kmacro args))))
@@ -433,7 +437,8 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
-     '(conn--kapply-with-state conn-insert-state)
+     (lambda (iterator)
+       (conn--kapply-with-state iterator conn-state-for-emacs))
      (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region
@@ -458,7 +463,8 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
-     '(conn--kapply-with-state conn-command-state)
+     (lambda (iterator)
+       (conn--kapply-with-state iterator conn-state-for-command))
      (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region

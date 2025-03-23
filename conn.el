@@ -656,14 +656,14 @@ of highlighting."
   "Alist of the form ((CONDITION . STATE-SETUP-FN) ...).
 
 Elements specify a STATE-SETUP-FN that should enter the default state
-and optionally set any of the state variables `conn-state-for-insert',
+and optionally set any of the state variables `conn-state-for-emacs',
 `conn-state-for-command', `conn-state-for-read-dispatch' or
 `conn-state-for-read-mover' for buffers matching CONDITION.  For the
 meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
-(defvar-local conn-state-for-insert 'conn-emacs-state)
+(defvar-local conn-state-for-emacs 'conn-emacs-state)
 
 (defvar-local conn-state-for-command 'conn-command-state)
 
@@ -725,7 +725,7 @@ The returned list is not fresh, don't modify it."
      (memq ,parent (conn--state-all-parents ,state)))))
 
 (defun conn-setup-minibuffer-state ()
-  (setq-local conn-state-for-insert 'conn-minibuffer-state)
+  (setq-local conn-state-for-emacs 'conn-minibuffer-state)
   (conn-enter-state 'conn-minibuffer-state)
   (letrec ((hook (lambda ()
                    (conn--push-ephemeral-mark)
@@ -733,7 +733,7 @@ The returned list is not fresh, don't modify it."
     (add-hook 'minibuffer-setup-hook hook)))
 
 (defun conn-setup-null-state ()
-  (setq-local conn-state-for-insert 'conn-null-state
+  (setq-local conn-state-for-emacs 'conn-null-state
               conn-state-for-command 'conn-null-state)
   (conn-enter-state 'conn-null-state))
 
@@ -2698,7 +2698,7 @@ Possibilities: \\<query-replace-map>
       (delete-region (region-beginning) (region-end))
       ret)))
 
-(defun conn--kapply-with-state (iterator transition)
+(defun conn--kapply-with-state (iterator conn-state)
   (let (buffer-states)
     (lambda (state)
       (prog1
@@ -2715,7 +2715,7 @@ Possibilities: \\<query-replace-map>
              (unless (alist-get (current-buffer) buffer-states)
                (setf (alist-get (current-buffer) buffer-states)
                      (list conn-current-state conn-previous-state)))
-             (funcall transition))))))))
+             (conn-enter-state conn-state))))))))
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
@@ -6763,7 +6763,7 @@ Currently selected window remains selected afterwards."
 (defun conn-insert-state ()
   "Enter insert state for the current buffer."
   (interactive)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-command-state ()
   "Enter command state for the current buffer."
@@ -6774,7 +6774,7 @@ Currently selected window remains selected afterwards."
   "Exchange point and mark then enter `conn-emacs-state'."
   (interactive)
   (conn-exchange-mark-command)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-change-whole-line (&optional arg)
   "`kill-whole-line' and enter `conn-emacs-state'."
@@ -6782,13 +6782,13 @@ Currently selected window remains selected afterwards."
   (kill-whole-line arg)
   (open-line 1)
   (indent-according-to-mode)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-change-line ()
   "`kill-line' and enter `conn-emacs-state'."
   (interactive)
   (call-interactively (key-binding conn-kill-line-keys t))
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
   "Open line above and enter `conn-emacs-state'.
@@ -6801,7 +6801,7 @@ If ARG is non-nil move up ARG lines before opening line."
   (forward-line -1)
   ;; FIXME: see crux smart open line
   (indent-according-to-mode)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-open-line (&optional arg)
   "Open line and enter `conn-emacs-state'.
@@ -6810,7 +6810,7 @@ If ARG is non-nil move down ARG lines before opening line."
   (interactive "p")
   (move-end-of-line arg)
   (newline-and-indent)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-overwrite (&optional arg)
   "Enter emacs state in `overwrite-mode'.
@@ -6818,7 +6818,7 @@ If ARG is non-nil move down ARG lines before opening line."
 `overwrite-mode' will be turned off when when emacs state is exited.
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
-  (conn-enter-state conn-state-for-insert)
+  (conn-enter-state conn-state-for-emacs)
   (letrec ((hook (lambda (_state)
                    (overwrite-mode -1)
                    (remove-hook 'conn-exit-functions hook))))
@@ -6849,36 +6849,36 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (funcall (conn--without-conn-maps
                     (key-binding conn-kill-region-keys t))
                   start end)
-         (conn-enter-state conn-state-for-insert))
+         (conn-enter-state conn-state-for-emacs))
         (t
          (funcall (conn--without-conn-maps
                     (key-binding conn-delete-region-keys t))
                   start end)
-         (conn-enter-state conn-state-for-insert))))
+         (conn-enter-state conn-state-for-emacs))))
 
 (defun conn-emacs-state-eol (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (end-of-line N)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-bol (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (beginning-of-line N)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-eoil (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-end-of-inner-line N)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-boil (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-beginning-of-inner-line N)
-  (conn-enter-state conn-state-for-insert))
+  (conn-enter-state conn-state-for-emacs))
 
 
 ;;;; WinControl
@@ -8106,7 +8106,7 @@ When ARG is nil the root window is used."
                    (alist-get (current-buffer) conn-buffer-state-setup-alist
                               nil nil #'buffer-match-p)))
             (funcall setup-fn)
-          (conn-enter-state conn-state-for-insert)))
+          (conn-enter-state conn-state-for-emacs)))
     ;; conn-exit-state sets conn-current-state to nil before
     ;; anything else, so if we got here after an error in
     ;; conn-exit-state this prevents an infinite loop.
