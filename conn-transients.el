@@ -217,7 +217,7 @@ BEFORE means only those matches before, and including, the current match."
   :key "g"
   :keyword :state
   :choices '(("command" . conn-command-state)
-             ("emacs" . conn-emacs-state))
+             ("emacs" . conn-insert-state))
   :init-value (lambda (obj)
                 (with-slots (choices value) obj
                   (setf value (rassq (or conn-current-state 'conn-command-state)
@@ -326,7 +326,7 @@ Begins the keyboard macro by deleting the string at each match."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    'conn--kapply-change-region
-   '(conn--kapply-with-state conn-emacs-state)
+   '(conn--kapply-with-state conn-insert-state)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -334,7 +334,7 @@ Begins the keyboard macro by deleting the string at each match."
 (transient-define-suffix conn--kapply-emacs-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
 
-Begins the keyboard macro in `conn-emacs-state'."
+Begins the keyboard macro in `conn-insert-state'."
   :transient 'transient--do-exit
   :key "e"
   :description "Emacs"
@@ -356,7 +356,7 @@ Begins the keyboard macro in `conn-emacs-state'."
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
-   '(conn--kapply-with-state conn-emacs-state)
+   '(conn--kapply-with-state conn-insert-state)
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -410,13 +410,13 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :restrictions args)
      (alist-get :excursions args)
      'conn--kapply-change-region
-     '(conn--kapply-with-state conn-emacs-state)
+     '(conn--kapply-with-state conn-insert-state)
      'conn--kapply-pulse-region
      (alist-get :window-conf args)
      (alist-get :kmacro args))))
 
 (transient-define-suffix conn--kapply-emacs-rectangle-suffix (args)
-  "Apply keyboard macro in `conn-emacs-state' to a rectangle."
+  "Apply keyboard macro in `conn-insert-state' to a rectangle."
   :transient 'transient--do-exit
   :key "e"
   :description "Emacs"
@@ -433,7 +433,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
-     '(conn--kapply-with-state conn-emacs-state)
+     '(conn--kapply-with-state conn-insert-state)
      (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region

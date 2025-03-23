@@ -59,7 +59,7 @@ Commands may set this variable if they need to change their handler
 dynamically.")
 
 (defvar conn-this-command-thing nil
-  "`this-command''s thing.")
+  "`this-command'\\='s thing.")
 
 (defvar conn-this-command-start (make-marker)
   "Start position for current mark movement command.")
@@ -95,11 +95,6 @@ dynamically.")
 (defcustom conn-lighter " Conn"
   "Default modeline lighter for conn-mode."
   :type '(choice string (const nil))
-  :group 'conn-states)
-
-(defcustom conn-default-state 'conn-emacs-state
-  "Default conn state for new buffers."
-  :type 'symbol
   :group 'conn-states)
 
 
@@ -639,30 +634,38 @@ of highlighting."
 
 ;;;; States
 
-(defcustom conn-buffer-default-state-alist
-  '(("COMMIT_EDITMSG" . conn-emacs-state)
+(defcustom conn-buffer-state-setup-alist
+  `(("COMMIT_EDITMSG" . nil)
     ((or (derived-mode . calc-mode)
          (derived-mode . calc-trail-mode)
          (derived-mode . calc-keypad-mode)
-         (derived-mode . minibuffer-mode)
          (derived-mode . Info-mode)
          (derived-mode . Man-mode)
          (derived-mode . image-mode)
          (derived-mode . doc-view-mode)
          (derived-mode . pdf-view-mode)
          (derived-mode . magit-status-mode))
-     . conn-null-state)
+     . conn-setup-null-state)
+    ((major-mode . minibuffer-mode)
+     . conn-setup-minibuffer-state)
     ((or (derived-mode . prog-mode)
          (derived-mode . text-mode)
          (derived-mode . conf-mode)
          (major-mode . fundamental-mode))
-     . conn-command-state))
-  "Alist of the form ((CONDITION . STATE) ...).
+     . conn-setup-command-state))
+  "Alist of the form ((CONDITION . STATE-SETUP-FN) ...).
 
-Elements specify default STATE for buffers matching CONDITION.
-For the meaning of CONDITION see `buffer-match-p'."
+Elements specify a STATE-SETUP-FN that should enter the default state
+and optionally set any of the state variables `conn-state-for-insert',
+`conn-state-for-command', `conn-state-for-read-dispatch' or
+`conn-state-for-read-mover' for buffers matching CONDITION.  For the
+meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
+
+(defvar-local conn-state-for-insert 'conn-emacs-state)
+
+(defvar-local conn-state-for-command 'conn-command-state)
 
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
@@ -721,12 +724,17 @@ The returned list is not fresh, don't modify it."
     (inline-quote
      (memq ,parent (conn--state-all-parents ,state)))))
 
-(defun conn--default-state-for-buffer (&optional buffer)
-  "Get default state for BUFFER."
-  (or (alist-get (or buffer (current-buffer))
-                 conn-buffer-default-state-alist
-                 nil nil #'buffer-match-p)
-      conn-default-state))
+(defun conn-setup-minibuffer-state ()
+  (setq-local conn-state-for-insert 'conn-minibuffer-state)
+  (conn-enter-state 'conn-minibuffer-state))
+
+(defun conn-setup-null-state ()
+  (setq-local conn-state-for-insert 'conn-null-state
+              conn-state-for-command 'conn-null-state)
+  (conn-enter-state 'conn-null-state))
+
+(defun conn-setup-command-state ()
+  (conn-enter-state conn-state-for-command))
 
 
 ;;;;; State keymaps
@@ -821,36 +829,35 @@ If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
-  (or
-   (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
-     (nth 1 (gethash mode mmode-table)))
-   (nth 1 (alist-get mode (gethash state conn--minor-mode-maps)))
-   (cond
-    ((autoloadp (symbol-function mode))
-     (error "%s not loaded" mode))
-    ((or (eq 'fundamental-mode mode)
-         (plist-member (symbol-plist mode) 'derived-mode-parent))
-     (let* ((keymap
-             (setf (gethash mode (gethash state conn--major-mode-maps))
-                   (make-composed-keymap (make-sparse-keymap)))))
-       (setf (cddr keymap)
-             (cl-loop for parent in (cdr (conn--state-all-parents state))
-                      collect (conn-get-mode-map parent mode)))
-       (dolist (child (conn--state-all-children state))
-         (conn-get-mode-map child mode))
-       (nth 1 keymap)))
-    (t
-     (let ((keymap (make-composed-keymap (make-sparse-keymap)))
-           (alist (gethash state conn--minor-mode-maps)))
-       (if (alist-get mode alist)
-           (setf (alist-get mode alist) keymap)
-         (setcdr alist (cons (cons mode keymap) (cdr alist))))
-       (setf (cddr keymap)
-             (cl-loop for parent in (cdr (conn--state-all-parents state))
-                      collect (conn-get-mode-map parent mode)))
-       (dolist (child (conn--state-all-children state))
-         (conn-get-mode-map child mode))
-       (nth 1 keymap))))))
+  (or (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
+        (nth 1 (gethash mode mmode-table)))
+      (nth 1 (alist-get mode (gethash state conn--minor-mode-maps)))
+      (cond
+       ((autoloadp (symbol-function mode))
+        (error "%s not loaded" mode))
+       ((or (eq 'fundamental-mode mode)
+            (plist-member (symbol-plist mode) 'derived-mode-parent))
+        (let* ((keymap
+                (setf (gethash mode (gethash state conn--major-mode-maps))
+                      (make-composed-keymap (make-sparse-keymap)))))
+          (setf (cddr keymap)
+                (cl-loop for parent in (cdr (conn--state-all-parents state))
+                         collect (conn-get-mode-map parent mode)))
+          (dolist (child (conn--state-all-children state))
+            (conn-get-mode-map child mode))
+          (nth 1 keymap)))
+       (t
+        (let ((keymap (make-composed-keymap (make-sparse-keymap)))
+              (alist (gethash state conn--minor-mode-maps)))
+          (if (alist-get mode alist)
+              (setf (alist-get mode alist) keymap)
+            (setcdr alist (cons (cons mode keymap) (cdr alist))))
+          (setf (cddr keymap)
+                (cl-loop for parent in (cdr (conn--state-all-parents state))
+                         collect (conn-get-mode-map parent mode)))
+          (dolist (child (conn--state-all-children state))
+            (conn-get-mode-map child mode))
+          (nth 1 keymap))))))
 
 (defun conn--rebuild-state-keymaps (state)
   "Rebuild all composed keymaps for STATE.
@@ -1079,31 +1086,28 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
 
-(defmacro conn--with-state (transition-fn &rest body)
+(defmacro conn--with-state (transition-form &rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms ( saved-state saved-prev-state
+  (cl-with-gensyms ( saved-curr-state saved-prev-state
                      saved-cursor-type buffer)
-    (cl-once-only (transition-fn)
-      `(let ((,saved-state conn-current-state)
-             (,saved-prev-state conn-previous-state)
-             (,buffer (current-buffer))
-             (,saved-cursor-type cursor-type))
-         (unwind-protect
-             (progn
-               (cond (,transition-fn
-                      (funcall ,transition-fn))
-                     (conn-current-state
-                      (conn-exit-state conn-current-state)))
-               ,@body)
-           (with-current-buffer ,buffer
-             (if ,saved-state
-                 (conn-enter-state ,saved-state)
-               (when conn-current-state
-                 (conn-exit-state conn-current-state))
-               (setq cursor-type ,saved-cursor-type))
-             (setq conn-previous-state ,saved-prev-state)))))))
+    `(let ((,saved-curr-state conn-current-state)
+           (,saved-prev-state conn-previous-state)
+           (,buffer (current-buffer))
+           (,saved-cursor-type cursor-type))
+       (unwind-protect
+           (progn
+             ,(or transition-form
+                  '(conn-exit-state conn-current-state))
+             ,@body)
+         (with-current-buffer ,buffer
+           (if ,saved-curr-state
+               (conn-enter-state ,saved-curr-state)
+             (when conn-current-state
+               (conn-exit-state conn-current-state))
+             (setq cursor-type ,saved-cursor-type))
+           (setq conn-previous-state ,saved-prev-state))))))
 
 
 ;;;;; cl-generic specializers
@@ -1278,7 +1282,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
            (indent 2))
   (let ((doc (or (and (stringp (car properties))
                       (pop properties))
-                 (format "Enter %S" (or (car-safe name) name)))))
+                 (conn--stringify "Non-nil when `" name "' is active."))))
     (cl-assert (plistp properties))
     `(progn
        (dolist (parent ',parents)
@@ -1289,8 +1293,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                  never (memq ',name (conn--state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
 
-       (defvar-local ,name nil
-         ,(conn--stringify "Non-nil when `" name "' is active."))
+       (defvar-local ,name nil ,doc)
 
        (let ((state-props
               (cl-loop with kvs = (list ,@properties)
@@ -1336,12 +1339,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
            (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
                  (gethash ',name conn--minor-mode-maps) (list :conn-keymap-alist)
-                 (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))))
-
-       (defun ,name ()
-         ,doc
-         (interactive)
-         (conn-enter-state ',name)))))
+                 (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq)))))))
 
 (conn-define-state conn-null-state ()
   "An empty state.
@@ -1356,6 +1354,11 @@ For use in buffers that should not have any other state."
 By default `conn-emacs-state' does not bind anything."
   :lighter " Emacs"
   :cursor '(hbar . 8))
+
+(conn-define-state conn-minibuffer-state (conn-emacs-state)
+  "Default state for the minibuffer."
+  :hide-mark-cursor t
+  :cursor '(bar . 5))
 
 (conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
@@ -1783,7 +1786,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Read mover state
 
-(defvar conn-default-state-for-read-mover 'conn-read-mover-state)
+(defvar-local conn-state-for-read-mover 'conn-read-mover-state)
 
 (conn-define-state conn-read-mover-state (conn-read-thing-common-state)
   "A state for reading things."
@@ -1884,8 +1887,9 @@ are read."
                                     (get sym :conn-command-thing)))
                              t))
                          (quit nil))))))
-      (conn--with-state (or (conn--command-property :conn-read-state)
-                            conn-default-state-for-read-mover)
+      (conn--with-state (conn-enter-state
+                         (or (conn--command-property :conn-read-state)
+                             conn-state-for-read-mover))
         (setq prompt (substitute-command-keys
                       (concat (propertize prompt 'face 'minibuffer-prompt)
                               " (arg: "
@@ -3060,7 +3064,7 @@ associated with a command's thing.
 
 For the meaning of ACTION see `conn-define-dispatch-action'.")
 
-(defvar conn-default-state-for-read-dispatch 'conn-read-dispatch-state
+(defvar-local conn-state-for-read-dispatch 'conn-read-dispatch-state
   "Default state for performing `conn--dispatch-read-thing'.
 
 The default may be overridden by setting the :conn-read-dispatch-state
@@ -3085,7 +3089,7 @@ of a command.")
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
 (define-keymap
-  :keymap (conn-get-overriding-map conn-default-state-for-read-dispatch)
+  :keymap (conn-get-overriding-map conn-state-for-read-dispatch)
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
@@ -3094,7 +3098,7 @@ of a command.")
   "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t))))
 
 (define-keymap
-  :keymap (conn-get-mode-map conn-default-state-for-read-dispatch 'conn-dot-mode)
+  :keymap (conn-get-mode-map conn-state-for-read-dispatch 'conn-dot-mode)
   "k" `(dot ,(lambda ()
                (mapcar (lambda (ov)
                          (conn--make-target-overlay
@@ -3242,7 +3246,7 @@ of a command.")
                  ('keyboard-quit
                   (keyboard-quit))
                  ('kapply
-                  (conn--with-state conn-previous-state
+                  (conn--with-state (conn-enter-state conn-previous-state)
                     (conn-dispatch-kapply-prefix
                      (lambda (action)
                        (set-window-configuration window-conf)
@@ -3293,8 +3297,9 @@ of a command.")
                (read-command))))
          (run (action)
            (unwind-protect
-               (conn--with-state (or (conn--command-property :conn-read-dispatch-state)
-                                     conn-default-state-for-read-dispatch)
+               (conn--with-state (conn-enter-state
+                                  (or (conn--command-property :conn-read-dispatch-state)
+                                      conn-state-for-read-dispatch))
                  (setq prompt (substitute-command-keys
                                (concat (propertize "Targets" 'face 'minibuffer-prompt)
                                        " (arg: "
@@ -3523,14 +3528,14 @@ Target overlays may override this default by setting the
                  ,@(cl-loop for key in (ensure-list keys)
                             collect `(keymap-set
                                       (conn-get-mode-map
-                                       ,(or state 'conn-default-state-for-read-dispatch)
+                                       ,(or state 'conn-state-for-read-dispatch)
                                        mode)
                                       ,key (list ,@menu-item))))
             (macroexp-progn
              (cl-loop for key in (ensure-list keys)
                       collect `(keymap-set
                                 (conn-get-state-map
-                                 ,(or state 'conn-default-state-for-read-dispatch))
+                                 ,(or state 'conn-state-for-read-dispatch))
                                 ,key (list ,@menu-item)))))))))
 
 (defun conn--dispatch-fixup-whitespace ()
@@ -6751,11 +6756,21 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Transition Functions
 
+(defun conn-insert-state ()
+  "Enter insert state for the current buffer."
+  (interactive)
+  (conn-enter-state conn-state-for-insert))
+
+(defun conn-command-state ()
+  "Enter command state for the current buffer."
+  (interactive)
+  (conn-enter-state conn-state-for-command))
+
 (defun conn-emacs-state-at-mark ()
   "Exchange point and mark then enter `conn-emacs-state'."
   (interactive)
   (conn-exchange-mark-command)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-change-whole-line (&optional arg)
   "`kill-whole-line' and enter `conn-emacs-state'."
@@ -6763,13 +6778,13 @@ Currently selected window remains selected afterwards."
   (kill-whole-line arg)
   (open-line 1)
   (indent-according-to-mode)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-change-line ()
   "`kill-line' and enter `conn-emacs-state'."
   (interactive)
   (call-interactively (key-binding conn-kill-line-keys t))
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
   "Open line above and enter `conn-emacs-state'.
@@ -6782,7 +6797,7 @@ If ARG is non-nil move up ARG lines before opening line."
   (forward-line -1)
   ;; FIXME: see crux smart open line
   (indent-according-to-mode)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-emacs-state-open-line (&optional arg)
   "Open line and enter `conn-emacs-state'.
@@ -6791,7 +6806,7 @@ If ARG is non-nil move down ARG lines before opening line."
   (interactive "p")
   (move-end-of-line arg)
   (newline-and-indent)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-emacs-state-overwrite (&optional arg)
   "Enter emacs state in `overwrite-mode'.
@@ -6799,7 +6814,7 @@ If ARG is non-nil move down ARG lines before opening line."
 `overwrite-mode' will be turned off when when emacs state is exited.
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
-  (conn-enter-state 'conn-emacs-state)
+  (conn-enter-state conn-state-for-insert)
   (letrec ((hook (lambda (_state)
                    (overwrite-mode -1)
                    (remove-hook 'conn-exit-functions hook))))
@@ -6830,36 +6845,36 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (funcall (conn--without-conn-maps
                     (key-binding conn-kill-region-keys t))
                   start end)
-         (conn-enter-state 'conn-emacs-state))
+         (conn-enter-state conn-state-for-insert))
         (t
          (funcall (conn--without-conn-maps
                     (key-binding conn-delete-region-keys t))
                   start end)
-         (conn-enter-state 'conn-emacs-state))))
+         (conn-enter-state conn-state-for-insert))))
 
 (defun conn-emacs-state-eol (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (end-of-line N)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-emacs-state-bol (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (beginning-of-line N)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-emacs-state-eoil (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-end-of-inner-line N)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 (defun conn-emacs-state-boil (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-beginning-of-inner-line N)
-  (conn-enter-state 'conn-emacs-state))
+  (conn-enter-state conn-state-for-insert))
 
 
 ;;;; WinControl
@@ -7749,7 +7764,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
   :suppress t
-  "e" 'conn-emacs-state
+  "e" 'conn-insert-state
   ">" 'forward-line
   "<" 'conn-backward-line
   "o" (conn-remap-key conn-forward-word-keys)
@@ -7811,7 +7826,7 @@ When ARG is nil the root window is used."
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
-  "e" 'conn-emacs-state
+  "e" 'conn-insert-state
   "E" 'conn-dispatch-on-buttons
   "t" 'conn-change
   ":" 'conn-wincontrol-one-command
@@ -7867,7 +7882,7 @@ When ARG is nil the root window is used."
 (define-keymap
   :keymap (conn-get-state-map 'conn-org-edit-state)
   :suppress t
-  "e" 'conn-emacs-state
+  "e" 'conn-insert-state
   "SPC" 'conn-scroll-up
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
@@ -8083,7 +8098,11 @@ When ARG is nil the root window is used."
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
-        (funcall (conn--default-state-for-buffer)))
+        (if-let* ((setup-fn
+                   (alist-get (current-buffer) conn-buffer-state-setup-alist
+                              nil nil #'buffer-match-p)))
+            (funcall setup-fn)
+          (conn-enter-state conn-state-for-insert)))
     ;; conn-exit-state sets conn-current-state to nil before
     ;; anything else, so if we got here after an error in
     ;; conn-exit-state this prevents an infinite loop.
@@ -8127,7 +8146,8 @@ When ARG is nil the root window is used."
   (declare-function calc-dispatch "calc")
 
   (defun conn--calc-dispatch-ad (&rest app)
-    (conn--with-state 'conn-null-state (apply app)))
+    (conn--with-state (conn-enter-state 'conn-null-state)
+      (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 
 (with-eval-after-load 'corfu
@@ -8446,7 +8466,7 @@ When ARG is nil the root window is used."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-default-state-for-read-dispatch 'dired-mode)
+    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'dired-mode)
     "f" 'conn-dispatch-dired-mark
     "w" 'conn-dispatch-dired-kill-line
     "d" 'conn-dispatch-dired-kill-subdir)
@@ -8527,7 +8547,7 @@ When ARG is nil the root window is used."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-default-state-for-read-dispatch 'ibuffer-mode)
+    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'ibuffer-mode)
     "f" 'conn-dispatch-ibuffer-mark
     "i" 'ibuffer-backward-line
     "k" 'ibuffer-forward-line
