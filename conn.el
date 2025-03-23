@@ -644,7 +644,8 @@ of highlighting."
          (derived-mode . image-mode)
          (derived-mode . doc-view-mode)
          (derived-mode . pdf-view-mode)
-         (derived-mode . magit-status-mode))
+         (derived-mode . magit-status-mode)
+         (derived-mode . treemacs-mode))
      . conn-setup-null-state)
     ((major-mode . minibuffer-mode)
      . conn-setup-minibuffer-state)
@@ -1350,19 +1351,19 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
 
 For use in buffers that should not have any other state."
   :hide-mark-cursor t
-  :cursor '(bar . 5))
+  :cursor '(bar . 4))
 
 (conn-define-state conn-emacs-state ()
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
   :lighter " Emacs"
-  :cursor '(bar . 5))
+  :cursor '(bar . 4))
 
 (conn-define-state conn-minibuffer-state (conn-emacs-state)
   "Default state for the minibuffer."
   :hide-mark-cursor t
-  :cursor '(bar . 5))
+  :cursor '(bar . 4))
 
 (conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
@@ -8316,30 +8317,13 @@ When ARG is nil the root window is used."
   (declare-function outline-on-heading-p "outline")
   (declare-function outline-up-heading "outline")
 
-  (defun conn-forward-heading-op (N)
-    (interactive "p")
-    (cond ((< N 0)
-           (dotimes (_ (abs N))
-             (outline-previous-heading)))
-          ((> N 0)
-           (dotimes (_ N)
-             (outline-next-heading)))))
-
-  (keymap-set (conn-get-mode-map 'conn-command-state 'outline-minor-mode)
-              "H H" 'conn-forward-heading-op)
-
   (conn-register-thing
    'heading
    :dispatch-target-finder (lambda () (conn--dispatch-all-things 'heading t))
    :bounds-op (lambda ()
                 (save-mark-and-excursion
                   (outline-mark-subtree)
-                  (cons (region-beginning) (region-end))))
-   :forward-op 'conn-forward-heading-op)
-
-  (conn-register-thing-commands
-   'heading 'conn-continuous-thing-handler
-   'conn-forward-heading-op)
+                  (cons (region-beginning) (region-end)))))
 
   (conn-register-thing-commands
    'heading 'conn-discrete-thing-handler
