@@ -1357,7 +1357,7 @@ For use in buffers that should not have any other state."
 
 By default `conn-emacs-state' does not bind anything."
   :lighter " Emacs"
-  :cursor '(hbar . 8))
+  :cursor '(bar . 5))
 
 (conn-define-state conn-minibuffer-state (conn-emacs-state)
   "Default state for the minibuffer."
