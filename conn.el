@@ -821,43 +821,36 @@ If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
-  (cl-labels
-      ((set-minor-mode-map (state mode keymap)
-         (let ((alist (gethash state conn--minor-mode-maps)))
-           (setcdr alist (cons (cons mode keymap) (cdr alist)))
-           keymap))
-       (compose-minor-mode-map (state)
-         (prog1
-             (set-minor-mode-map
-              state mode
-              (make-composed-keymap
-               `(,(or (alist-get mode (gethash state conn--minor-mode-maps))
-                      (make-sparse-keymap))
-                 ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
-                            collect (conn-get-mode-map parent mode)))))
-           (dolist (child (conn--state-all-children state))
-             (conn-get-mode-map child mode))))
-       (compose-major-mode-map (state)
-         (prog1
+  (or
+   (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
+     (nth 1 (gethash mode mmode-table)))
+   (nth 1 (alist-get mode (gethash state conn--minor-mode-maps)))
+   (cond
+    ((autoloadp (symbol-function mode))
+     (error "%s not loaded" mode))
+    ((or (eq 'fundamental-mode mode)
+         (plist-member (symbol-plist mode) 'derived-mode-parent))
+     (let* ((keymap
              (setf (gethash mode (gethash state conn--major-mode-maps))
-                   (make-composed-keymap
-                    `(,(make-sparse-keymap)
-                      ,@(cl-loop for parent in (cdr (conn--state-all-parents state))
-                                 collect (conn-get-mode-map parent mode)))))
-           (dolist (child (conn--state-all-children state))
-             (conn-get-mode-map child mode)))))
-    (or
-     (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
-       (nth 1 (gethash mode mmode-table)))
-     (nth 1 (alist-get mode (gethash state conn--minor-mode-maps)))
-     (cond
-      ((autoloadp (symbol-function mode))
-       (error "%s not loaded" mode))
-      ((or (eq 'fundamental-mode mode)
-           (plist-member (symbol-plist mode) 'derived-mode-parent))
-       (nth 1 (compose-major-mode-map state)))
-      (t
-       (nth 1 (compose-minor-mode-map state)))))))
+                   (make-composed-keymap (make-sparse-keymap)))))
+       (setf (cddr keymap)
+             (cl-loop for parent in (cdr (conn--state-all-parents state))
+                      collect (conn-get-mode-map parent mode)))
+       (dolist (child (conn--state-all-children state))
+         (conn-get-mode-map child mode))
+       (nth 1 keymap)))
+    (t
+     (let ((keymap (make-composed-keymap (make-sparse-keymap)))
+           (alist (gethash state conn--minor-mode-maps)))
+       (if (alist-get mode alist)
+           (setf (alist-get mode alist) keymap)
+         (setcdr alist (cons (cons mode keymap) (cdr alist))))
+       (setf (cddr keymap)
+             (cl-loop for parent in (cdr (conn--state-all-parents state))
+                      collect (conn-get-mode-map parent mode)))
+       (dolist (child (conn--state-all-children state))
+         (conn-get-mode-map child mode))
+       (nth 1 keymap))))))
 
 (defun conn--rebuild-state-keymaps (state)
   "Rebuild all composed keymaps for STATE.
@@ -5079,6 +5072,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
        (set-register register (conn--make-narrow-register narrowings))))))
 
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional outer)
+  "Push thing regions to narrow ring."
   (interactive
    (append (conn-read-thing-mover "Mover")
            (list current-prefix-arg)))
@@ -8306,6 +8300,9 @@ When ARG is nil the root window is used."
           ((> N 0)
            (dotimes (_ N)
              (outline-next-heading)))))
+
+  (keymap-set (conn-get-mode-map 'conn-command-state 'outline-minor-mode)
+              "H H" 'conn-forward-heading-op)
 
   (conn-register-thing
    'heading
