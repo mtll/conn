@@ -2104,11 +2104,18 @@ BOUNDS is of the form returned by `region-bounds', which see."
   (conn--create-dot point (1+ point) nil t))
 
 (defun conn-region-to-dot (bounds)
-  "Create dot coverting region BOUNDS.
+  "Create dot covering region BOUNDS.
 
 BOUNDS is of the form returned by `region-bounds'."
   (interactive (list (region-bounds)))
   (pcase-dolist (`(,beg . ,end) bounds)
+    (conn--create-dot beg end))
+  (deactivate-mark t))
+
+(defun conn-thing-to-dot (thing-cmd thing-arg)
+  "Create dots at thing command region."
+  (interactive (conn-read-thing-mover "Mover"))
+  (pcase-dolist (`(,beg . ,end) (cdr (conn-bounds-of-command thing-cmd thing-arg)))
     (conn--create-dot beg end))
   (deactivate-mark t))
 
@@ -2152,6 +2159,7 @@ BOUNDS is of the form returned by `region-bounds'."
 (defvar-keymap conn-dot-mode-map
   "C-w" 'conn-region-to-dot
   "C-d" 'conn-point-to-dot
+  "t" 'conn-thing-to-dot
   "S-<mouse-1>" 'conn-mouse-click-dot
   "S-<down-mouse-1>" 'conn-mouse-click-dot
   "S-<drag-mouse-1>" 'conn-mouse-click-dot
@@ -7519,73 +7527,7 @@ Operates with the selected windows parent window."
       "<" 'rotate-window-layout-counterclockwise
       ">" 'rotate-window-layout-clockwise
       "|" 'flip-window-layout-horizontally
-      "_" 'flip-window-layout-vertically)
-  (defun conn--wincontrol-split-window-state (state)
-    (let (params windows)
-      (dolist (elem state)
-        (if (memq (car-safe elem) '(vc hc leaf))
-            (push elem windows)
-          (push elem params)))
-      (cons (reverse params) (reverse windows))))
-
-  (defun conn--wincontrol-reflect-window (state)
-    (pcase-let* ((`(,params . ,windows)
-                  (conn--wincontrol-split-window-state state))
-                 (height  (alist-get 'normal-height params))
-                 (width   (alist-get 'normal-width  params))
-                 (pheight (* (alist-get 'pixel-width  params) (/ height width)))
-                 (theight (* (alist-get 'total-width  params) (/ height width)))
-                 (pwidth  (* (alist-get 'pixel-height params) (/ height width)))
-                 (twidth  (* (alist-get 'total-height params) (/ height width))))
-      (setf (alist-get 'normal-width  params) height
-            (alist-get 'normal-height params) width
-            (alist-get 'pixel-height  params) pheight
-            (alist-get 'pixel-width   params) pwidth
-            (alist-get 'total-height  params) theight
-            (alist-get 'total-width   params) twidth)
-      (append (cl-loop for elem in params collect (pcase elem
-                                                    ('vc 'hc)
-                                                    ('hc 'vc)
-                                                    (_   elem)))
-              (mapcar #'conn--wincontrol-reflect-window windows))))
-
-  (defun conn--wincontrol-reverse-window (state &optional recursive)
-    (pcase-let* ((`(,params . ,windows)
-                  (conn--wincontrol-split-window-state state)))
-      (when (length> windows 1)
-        (setf (alist-get 'last (cdar windows)) t
-              windows (reverse windows)
-              (car windows) (assq-delete-all 'last (car windows))))
-      (append params
-              (if recursive
-                  (cl-loop for win in windows
-                           collect (conn--wincontrol-reverse-window win t))
-                windows))))
-
-  (defun conn-wincontrol-reverse ()
-    "Reverse order of windows in ARGth parent window.
-When ARG is nil the root window is used."
-    (interactive)
-    (let ((window (window-main-window)))
-      (thread-first
-        (window-state-get window)
-        (conn--wincontrol-reverse-window)
-        (window-state-put window))))
-
-  (defun conn-wincontrol-reflect ()
-    "Rotate all window arrangements within ARGth parent window of `selected-window'.
-When ARG is nil the root window is used."
-    (interactive)
-    (let ((window (window-main-window)))
-      (thread-first
-        (window-state-get window)
-        (conn--wincontrol-reflect-window)
-        (window-state-put window))))
-
-  (define-keymap
-    :keymap conn-wincontrol-map
-    "<" 'conn-wincontrol-reverse
-    ">" 'conn-wincontrol-reflect))
+      "_" 'flip-window-layout-vertically))
 
 
 ;;;; Keymaps
