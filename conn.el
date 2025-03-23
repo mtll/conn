@@ -4990,12 +4990,12 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 (defvar-local conn-narrow-ring nil
   "Ring of recent narrowed regions.")
 
-(cl-defstruct (conn-narrow-register (:constructor %conn--make-narrow-register))
+(cl-defstruct (conn-narrow-register
+               (:constructor conn--make-narrow-register (narrow-ring)))
   (narrow-ring nil))
 
-(defun conn--make-narrow-register ()
-  (%conn--make-narrow-register
-   :narrow-ring
+(defun conn--narrow-ring-to-register ()
+  (conn--make-narrow-register
    (cl-loop for (beg . end) in conn-narrow-ring
             collect (cons (copy-marker beg) (copy-marker end)))))
 
@@ -5025,7 +5025,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 (defun conn-narrow-ring-to-register (register)
   "Store narrow ring in REGISTER."
   (interactive (list (register-read-with-preview "Narrow ring to register: ")))
-  (set-register register (conn--make-narrow-register)))
+  (set-register register (conn--narrow-ring-to-register)))
 
 (static-if (<= 30 emacs-major-version)
     (cl-defmethod register-command-info ((_command (eql conn-push-region-to-narrow-register)))
@@ -5050,11 +5050,9 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
                        (conn--create-marker end))
                  narrow-ring)))
     (_
-     (thread-last
-       (list (cons (conn--create-marker beg)
-                   (conn--create-marker end)))
-       (%conn--make-narrow-register :narrow-ring)
-       (set-register register)))))
+     (set-register register (conn--make-narrow-register
+                             (list (cons (conn--create-marker beg)
+                                         (conn--create-marker end))))))))
 
 (defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register outer)
   "Prepend thing regions to narrow register."
@@ -5078,9 +5076,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
        (setf (conn-narrow-register-narrow-ring struct)
              (nconc narrowings narrow-ring)))
       (_
-       (thread-last
-         (%conn--make-narrow-register :narrow-ring narrowings)
-         (set-register register))))))
+       (set-register register (conn--make-narrow-register narrowings))))))
 
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional outer)
   (interactive

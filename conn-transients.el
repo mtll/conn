@@ -1306,22 +1306,6 @@ A zero means repeat until error."
 (transient-define-prefix conn-narrow-ring-prefix ()
   "Transient menu for narrow ring function."
   [ :description conn--narrow-ring-display
-    [ ("N" "In Indired Buffer"
-       (lambda ()
-         (interactive)
-         (let ((beg (point-min))
-               (end (point-max))
-               (buf (current-buffer))
-               (win (selected-window)))
-           (widen)
-           (conn--narrow-indirect beg end)
-           (with-current-buffer buf
-             (if (eq (window-buffer win) buf)
-                 (with-selected-window win
-                   (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
-               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
-      ("s" "Register Store" conn-narrow-ring-to-register :transient t)
-      ("l" "Register Load" conn-register-load :transient t)]
     [ ("m" "Merge" conn-merge-narrow-ring :transient t)
       ("w" "Widen"
        (lambda ()
@@ -1340,7 +1324,23 @@ A zero means repeat until error."
       ("a" "Abort Cycling"
        (lambda ()
          (interactive)
-         (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))]]
+         (conn--narrow-ring-restore-state (oref transient-current-prefix scope))))]
+    [ ("N" "Narrow Indirect"
+       (lambda ()
+         (interactive)
+         (let ((beg (point-min))
+               (end (point-max))
+               (buf (current-buffer))
+               (win (selected-window)))
+           (widen)
+           (conn--narrow-indirect beg end)
+           (with-current-buffer buf
+             (if (eq (window-buffer win) buf)
+                 (with-selected-window win
+                   (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
+               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
+      ("s" "Save Ring to Register" conn-narrow-ring-to-register :transient t)
+      ("l" "Load Ring From Register" conn-register-load :transient t)]]
   (interactive)
   (transient-setup
    'conn-narrow-ring-prefix nil nil
