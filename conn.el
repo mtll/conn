@@ -6445,6 +6445,7 @@ for the meaning of prefix ARG."
 (defvar-local conn--minibuffer-initial-region nil)
 
 (defun conn-yank (&optional register)
+  "Like `yank' but with a prefix argument `conn-register-load' instead."
   (interactive
    (list (when current-prefix-arg
            (register-read-with-preview "Register: "))))
@@ -7650,12 +7651,11 @@ Operates with the selected windows parent window."
   "{" 'conn-beginning-of-list
   "}" 'conn-end-of-list)
 
-(with-eval-after-load 'occur-mode
-  (dolist (state '(conn-command-state conn-emacs-state))
-    (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
+(dolist (state '(conn-command-state conn-emacs-state))
+  (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
-  (dolist (state '(conn-command-state conn-emacs-state))
-    (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit)))
+(dolist (state '(conn-command-state conn-emacs-state))
+  (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
 (with-eval-after-load 'compilation-mode
   (define-keymap
