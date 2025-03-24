@@ -2054,7 +2054,6 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (defvar conn--dots nil)
 
-(put 'conn--dot-overlay 'priority (cons nil 2000))
 (put 'conn--dot-overlay 'conn-overlay t)
 (put 'conn--dot-overlay 'evaporate t)
 
@@ -4725,11 +4724,40 @@ order to mark the region that should be defined by any of COMMANDS."
     (put cmd :conn-command-thing thing)
     (put cmd :conn-mark-handler handler)))
 
-(conn-register-thing 'url)
-(conn-register-thing 'email)
-(conn-register-thing 'uuid)
-(conn-register-thing 'string)
-(conn-register-thing 'filename)
+(defun conn-mark-email ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'email)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
+(defun conn-mark-uuid ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'uuid)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
+(defun conn-mark-string ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'string)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
+(defun conn-mark-filename ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'filename)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-movement-state)
+  "H /" 'conn-mark-filename
+  "H U" 'conn-mark-uuid
+  "H s" 'conn-mark-string
+  "H @" 'conn-mark-email)
 
 (conn-register-thing
  'defun
