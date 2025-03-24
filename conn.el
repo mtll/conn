@@ -1812,7 +1812,7 @@ Returns a cons of (STRING . OVERLAYS)."
 ;;;; Bounds of command
 
 (defvar conn-bounds-of-command-alist
-  `((conn-toggle-mark-command . conn--bounds-of-region)
+  '((conn-toggle-mark-command . conn--bounds-of-region)
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (set-mark-command . conn--bounds-of-region)
     (conn-set-mark-command . conn--bounds-of-region)
@@ -6444,6 +6444,15 @@ for the meaning of prefix ARG."
 
 (defvar-local conn--minibuffer-initial-region nil)
 
+(defun conn-yank (&optional register)
+  (interactive
+   (list (when current-prefix-arg
+           (register-read-with-preview "Register: "))))
+  (if register
+      (conn-register-load register)
+    (funcall (conn--without-conn-maps
+               (key-binding conn-yank-keys t)))))
+
 (defun conn--yank-region-to-minibuffer-hook ()
   (setq conn--minibuffer-initial-region
         (with-minibuffer-selected-window
@@ -7899,7 +7908,7 @@ Operates with the selected windows parent window."
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
-  "y" (conn-remap-key conn-yank-keys)
+  "y" 'conn-yank
   "z" 'conn-exchange-mark-command)
 
 (define-keymap
