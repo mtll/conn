@@ -21,6 +21,7 @@
 
 (require 'conn)
 (require 'transient)
+(require 'text-property-search)
 
 ;;;; Declarations
 
@@ -799,45 +800,6 @@ A zero means repeat until error."
    (alist-get :window-conf args)
    (alist-get :ibuffer args)
    (alist-get :kmacro args)))
-
-(transient-define-suffix conn--kapply-compilation (args)
-  "Apply keyboard macro on regions of text with a specified text property."
-  :transient 'transient--do-exit
-  :key "m"
-  :description "Compilation Matches"
-  :if (lambda () (derived-mode-p 'compilation-mode))
-  (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-compose-iterator
-   (conn--kapply-region-iterator
-    (save-excursion
-      (goto-char (point-min))
-      (cl-loop for match = (text-property-search-forward 'compilation-message)
-               while match
-               collect (pcase (compilation--message->loc (prop-match-value match))
-                         (`(,col ,line (,file . ,_) . ,_)
-                          (with-current-buffer
-                              (let ((name (apply #'expand-file-name file)))
-                                (or (get-file-buffer name)
-                                    (find-file-noselect name)))
-                            (save-excursion
-                              (if (eq selective-display t)
-                                  (re-search-forward "[\n\C-m]" nil 'end (1- line))
-                                (forward-line (1- line)))
-                              (forward-char col)
-                              (cons (point-marker) (line-end-position))))))))
-    'conn--nnearest-first)
-   'conn--kapply-advance-region
-   'conn--kapply-skip-region-invisible
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (alist-get :regions args)
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :ibuffer args)
-   (alist-get :kmacro args)))
-
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
@@ -924,7 +886,6 @@ A zero means repeat until error."
     [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "Apply Kmacro On:"
       (conn--kapply-occur)
-      (conn--kapply-compilation)
       (conn--kapply-string-suffix)
       (conn--kapply-regexp-suffix)
       (conn--kapply-things-suffix)
@@ -1493,6 +1454,50 @@ A zero means repeat until error."
       ("d" "downcase" downcase-region)]])
 
 (provide 'conn-transients)
+
+(with-eval-after-load 'compile
+  (transient-define-suffix conn--kapply-compilation (args)
+    "Apply keyboard macro on regions of text with a specified text property."
+    :transient 'transient--do-exit
+    :key "m"
+    :description "Compilation Matches"
+    :if (lambda () (derived-mode-p 'compilation-mode))
+    (interactive (list (transient-args transient-current-command)))
+    (conn--kapply-compose-iterator
+     (conn--kapply-region-iterator
+      (save-excursion
+        (goto-char (point-min))
+        (cl-loop for match = (text-property-search-forward 'compilation-message)
+                 while match
+                 collect (pcase (compilation--message->loc (prop-match-value match))
+                           (`(,col ,line (,file . ,_) . ,_)
+                            (with-current-buffer
+                                (let ((name (apply #'expand-file-name file)))
+                                  (or (get-file-buffer name)
+                                      (find-file-noselect name)))
+                              (save-excursion
+                                (if (eq selective-display t)
+                                    (re-search-forward "[\n\C-m]" nil 'end (1- line))
+                                  (forward-line (1- line)))
+                                (forward-char col)
+                                (cons (point-marker) (line-end-position))))))))
+      'conn--nnearest-first)
+     'conn--kapply-advance-region
+     'conn--kapply-skip-region-invisible
+     (alist-get :undo args)
+     (alist-get :restrictions args)
+     (alist-get :excursions args)
+     (alist-get :state args)
+     (alist-get :regions args)
+     'conn--kapply-pulse-region
+     (alist-get :window-conf args)
+     (alist-get :ibuffer args)
+     (alist-get :kmacro args)))
+
+  (transient-append-suffix
+    'conn-kapply-prefix
+    '(conn--kapply-string-suffix)
+    '(conn--kapply-compilation)))
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
