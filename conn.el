@@ -1816,7 +1816,7 @@ Returns a cons of (STRING . OVERLAYS)."
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (set-mark-command . conn--bounds-of-region)
     (conn-set-mark-command . conn--bounds-of-region)
-    (visible . conn--bounds-of-window)
+    (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
     (dot . conn--bounds-of-dot))
   "Alist of bounds-op functions for things or commands.
@@ -1845,8 +1845,8 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                      (when (symbolp cmd)
                        (alist-get (get cmd :conn-command-thing)
                                   conn-bounds-of-command-alist))
-                     (lambda (arg) (funcall conn-bounds-of-command-default cmd arg)))
-                 arg)))
+                     conn-bounds-of-command-default)
+                 cmd arg)))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -1949,6 +1949,11 @@ is read."
 
 ;;;;; bounds-of-command providers
 
+(defun conn--bounds-of-command-thing (cmd _arg)
+  (let* ((thing (get cmd :conn-command-thing))
+         (bounds (ignore-errors (bounds-of-thing-at-point thing))))
+    (list bounds bounds)))
+
 (defun conn--bounds-of-thing-command-default (cmd arg)
   (let ((current-prefix-arg (when (> 0 (prefix-numeric-value arg)) '-))
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
@@ -1967,14 +1972,14 @@ is read."
                   (seq-max (mapcar #'cdr regions)))
             (nreverse regions)))))
 
-(defun conn--bounds-of-region (_arg)
+(defun conn--bounds-of-region (_cmd _arg)
   (cons (cons (region-beginning) (region-end))
         (region-bounds)))
 
-(defun conn--bounds-of-window (_arg)
+(defun conn--bounds-of-window (_cmd _arg)
   (list (cons (window-start) (window-end))))
 
-(defun conn--bounds-of-remote-expansion (arg)
+(defun conn--bounds-of-remote-expansion (_cmd arg)
   (conn--push-ephemeral-mark)
   (conn--bounds-of-expansion 'conn-expand arg))
 
@@ -2078,7 +2083,7 @@ BOUNDS is of the form returned by `region-bounds', which see."
       (overlay-put dot 'face (car faces))
       (push dot conn--dots))))
 
-(defun conn--bounds-of-dot (_arg)
+(defun conn--bounds-of-dot (_cmd _arg)
   (catch 'found
     (dolist (ov (overlays-at (point)))
       (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
@@ -4731,12 +4736,16 @@ order to mark the region that should be defined by any of COMMANDS."
      (goto-char beg)
      (conn--push-ephemeral-mark end))))
 
+(conn-register-thing-commands 'email nil 'conn-mark-email)
+
 (defun conn-mark-uuid ()
   (interactive)
   (pcase (bounds-of-thing-at-point 'uuid)
     (`(,beg . ,end)
      (goto-char beg)
      (conn--push-ephemeral-mark end))))
+
+(conn-register-thing-commands 'uuid nil 'conn-mark-uuid)
 
 (defun conn-mark-string ()
   (interactive)
@@ -4745,12 +4754,16 @@ order to mark the region that should be defined by any of COMMANDS."
      (goto-char beg)
      (conn--push-ephemeral-mark end))))
 
+(conn-register-thing-commands 'string nil 'conn-mark-string)
+
 (defun conn-mark-filename ()
   (interactive)
   (pcase (bounds-of-thing-at-point 'filename)
     (`(,beg . ,end)
      (goto-char beg)
      (conn--push-ephemeral-mark end))))
+
+(conn-register-thing-commands 'filename nil 'conn-mark-filename)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
@@ -4776,18 +4789,53 @@ order to mark the region that should be defined by any of COMMANDS."
  'buffer-after-point
  :bounds-op (lambda () (cons (point) (point-max))))
 
+(defun conn-mark-after-point ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'buffer-after-point)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
+(conn-register-thing-commands 'buffer-after-point nil 'conn-mark-after-point)
+
 (conn-register-thing
  'buffer-before-point
  :bounds-op (lambda () (cons (point-min) (point))))
+
+(defun conn-mark-before-point ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'buffer-before-point)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
+(conn-register-thing-commands 'buffer-before-point nil 'conn-mark-before-point)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-movement-state)
+  "H <" 'conn-mark-before-point
+  "H >" 'conn-mark-after-point)
 
 (conn-register-thing
  'visible
  :bounds-op (lambda () (cons (window-start) (window-end))))
 
+(defun conn-mark-visible ()
+  (interactive)
+  (pcase (bounds-of-thing-at-point 'visible)
+    (`(,beg . ,end)
+     (goto-char beg)
+     (conn--push-ephemeral-mark end))))
+
 (conn-register-thing-commands
  'visible nil
  'conn-scroll-up 'conn-scroll-down
- 'scroll-up-command 'scroll-down-command)
+ 'scroll-up-command 'scroll-down-command
+ 'conn-mark-visible)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-movement-state)
+  "H v" 'conn-mark-visible)
 
 (conn-register-thing-commands
  'region nil
@@ -5193,7 +5241,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
 
 ;;;;; Bounds of narrow ring
 
-(defun conn--bounds-of-narrowings (_arg)
+(defun conn--bounds-of-narrowings (_cmd _arg)
   (cl-loop for (beg . end) in conn-narrow-ring
            minimize beg into narrow-beg
            maximize end into narrow-end
