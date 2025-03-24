@@ -1456,6 +1456,8 @@ A zero means repeat until error."
 (provide 'conn-transients)
 
 (with-eval-after-load 'compile
+  (declare-function compilation--message->loc "compile")
+
   (transient-define-suffix conn--kapply-compilation (args)
     "Apply keyboard macro on regions of text with a specified text property."
     :transient 'transient--do-exit
