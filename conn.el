@@ -1662,10 +1662,11 @@ Returns a cons of (STRING . OVERLAYS)."
     (conn--protected-let
         ((prompt (propertize "string: " 'face 'minibuffer-prompt))
          (string (char-to-string (read-char prompt t)))
-         (overlays (while-no-input
-                     (conn--string-preview-overlays string dir all-windows predicate))
-                   (unless (eq overlays t)
-                     (mapc #'delete-overlay overlays))))
+         (overlays nil (unless (eq overlays t)
+                         (mapc #'delete-overlay overlays))))
+      (setq overlays
+            (while-no-input
+              (conn--string-preview-overlays string dir all-windows predicate)))
       (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                         conn-read-string-timeout)))
         (setq string (concat string (char-to-string next-char)))
@@ -1686,10 +1687,11 @@ Returns a cons of (STRING . OVERLAYS)."
     (conn--protected-let
         ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
          (string (char-to-string (read-char prompt t)))
-         (overlays (while-no-input
-                     (conn--string-preview-overlays string dir all-windows))
-                   (unless (eq overlays t)
-                     (mapc #'delete-overlay overlays))))
+         (overlays nil (unless (eq overlays t)
+                         (mapc #'delete-overlay overlays))))
+      (setq overlays
+            (while-no-input
+              (conn--string-preview-overlays string dir all-windows)))
       (dotimes (_ (1- N))
         (thread-last
           (read-char (format (concat prompt "%s") string) t)
