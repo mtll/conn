@@ -1757,12 +1757,13 @@ Returns a cons of (STRING . OVERLAYS)."
                    (and (null dedicated) (window-dedicated-p win)))
            collect win))
 
-(defun conn-prompt-for-window (windows)
+(defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (cond
    ((length< windows 2)
     nil)
-   ((length= windows 2)
+   ((and (length= windows 2)
+         (not always-prompt))
     (if (eq (selected-window) (car windows))
         (cadr windows)
       (car windows)))
@@ -6794,12 +6795,12 @@ Current Window: `conn-this-window-prefix'"
                '((?w "window")
                  (?f "frame")
                  (?t "tab")
-                 (?p "prompt")
+                 (?g "prompt")
                  (?c "current window"))))
     (?w (other-window-prefix))
     (?f (other-frame-prefix))
     (?t (other-tab-prefix))
-    (?p (conn-other-window-prompt-prefix))
+    (?g (conn-other-window-prompt-prefix))
     (?c (conn-this-window-prefix))))
 
 (defun conn-other-window-prompt-prefix ()
@@ -6807,7 +6808,8 @@ Current Window: `conn-this-window-prefix'"
   (interactive)
   (display-buffer-override-next-command
    (lambda (_ _)
-     (cons (conn-prompt-for-window (conn--get-windows nil 'nomini)) 'reuse))))
+     (cons (conn-prompt-for-window (conn--get-windows nil 'nomini) t)
+           'reuse))))
 
 (defun conn-this-window-prefix ()
   "Display next buffer in the currently selected window."
