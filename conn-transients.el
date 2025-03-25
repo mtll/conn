@@ -1333,7 +1333,9 @@ A zero means repeat until error."
      ("p" "Point" point-to-register)
      ("r" "Rectangle" copy-rectangle-to-register)
      ("a" "Command" conn-command-to-register)
-     ("m" "Macro" kmacro-to-register)]
+     ("m" "Macro" kmacro-to-register)
+     ("b" "Buffer" buffer-to-register :if (lambda () (<= 31 emacs-major-version)))
+     ("o" "File" file-to-register :if (lambda () (<= 31 emacs-major-version)))]
    [ ""
      ("f" "Dispatch" conn-last-dispatch-to-register)
      ("t" "Tab" conn-tab-to-register)
