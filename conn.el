@@ -1909,7 +1909,7 @@ are read."
                              (lambda (sym)
                                (and (functionp sym)
                                     (not (eq sym 'help))
-                                    (get sym :conn-command-thing)))
+                                    (conn-thing-command-p sym)))
                              t))
                          (quit nil))))))
       (conn--with-state (conn-enter-state
@@ -3027,7 +3027,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (setf (alist-get (recursion-depth) conn--last-bounds-of-command) nil)
     (when (and conn-local-mode
                (eq (current-buffer) (marker-buffer conn-this-command-start))
-               conn-this-command-thing
                conn-this-command-handler
                (not (region-active-p)))
       (ignore-errors
@@ -3075,8 +3074,7 @@ A target finder function should return a list of overlays.")
   `((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
     (conn-backward-symbol . ,(lambda () (conn--dispatch-all-things 'symbol t)))
-    (backward-word . ,(lambda () (conn--dispatch-all-things 'word t)))
-    (defun . ,(lambda () (conn--dispatch-chars-in-thing 'defun t))))
+    (backward-word . ,(lambda () (conn--dispatch-all-things 'word t))))
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
@@ -4151,6 +4149,7 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-all-things-1 (thing)
   (let ((last-point (point))
+        (opt (point))
         ovs)
     (ignore-error scan-error
       (save-excursion
@@ -4161,10 +4160,10 @@ Target overlays may override this default by setting the
           (unless (invisible-p (point))
             (cl-pushnew (point) ovs))
           (forward-thing thing -1))))
+    (setq last-point opt)
     (ignore-error scan-error
       (save-excursion
         (forward-thing thing 1)
-        (forward-thing thing -1)
         (while (/= (point) last-point)
           (setq last-point (point))
           (unless (invisible-p (point))
@@ -4549,8 +4548,8 @@ potential expansions.  Functions may return invalid expansions
 (defvar-keymap conn-expand-repeat-map
   :repeat t
   "z" 'conn-expand-exchange
-  "H" 'conn-contract
-  "h" 'conn-expand)
+  "h" 'conn-contract
+  "H" 'conn-expand)
 
 (defun conn--expand-post-change-hook (&rest _)
   (setq conn--current-expansions nil)
@@ -8355,12 +8354,6 @@ Operates with the selected windows parent window."
    'outline-forward-same-level
    'outline-backward-same-level))
 
-(with-eval-after-load 'treesit
-  (conn-register-thing-commands
-   'defun 'conn-continuous-thing-handler
-   'treesit-end-of-defun
-   'treesit-beginning-of-defun))
-
 (with-eval-after-load 'dired
   (defvar dired-subdir-alist)
   (defvar dired-movement-style)
@@ -8576,51 +8569,12 @@ Operates with the selected windows parent window."
   ;; TODO: other markdown things
   )
 
-(static-if (<= emacs-major-version 30)
+(static-if (<= 30 emacs-major-version)
     (with-eval-after-load 'treesit
-      (defvar conn--ts-modes '(c++-ts-mode
-                               rustic-mode
-                               c-ts-mode
-                               csharp-ts-mode
-                               elixir-ts-mode
-                               elm-ts-mode
-                               go-ts-mode
-                               haskell-ts-mode
-                               html-ts-mode
-                               java-ts-mode
-                               javascript-ts-mode
-                               js-ts-mode
-                               julia-ts-mode
-                               php-ts-mode
-                               prisma-ts-mode
-                               python-ts-mode
-                               ruby-ts-mode
-                               rust-ts-mode
-                               bash-ts-mode
-                               typescript-ts-mode))
-
-      (defun conn--dispatch-all-treesit-things (thing)
-        (cl-loop for node in (thread-first
-                               (treesit-buffer-root-node)
-                               (treesit-induce-sparse-tree thing)
-                               (flatten-tree))
-                 for beg = (treesit-node-start node)
-                 when (and (not (invisible-p beg))
-                           (<= (window-start) beg (window-end)))
-                 collect beg into things
-                 finally return (mapcar (lambda (pt)
-                                          (conn--make-target-overlay pt 0 thing))
-                                        (seq-sort '< things))))
-
-      (dolist (mode conn--ts-modes)
-        (add-hook (conn--symbolicate mode "-hook")
-                  (lambda ()
-                    (dolist (thing '(sexp defun))
-                      (setq-local
-                       conn-dispatch-target-finders-alist
-                       `((,thing . ,(lambda ()
-                                      (conn--dispatch-all-treesit-things ,thing)))
-                         . ,conn-dispatch-target-finders-alist))))))))
+      (conn-register-thing-commands
+       'defun 'conn-continuous-thing-handler
+       'treesit-end-of-defun
+       'treesit-beginning-of-defun)))
 
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
