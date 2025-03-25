@@ -297,6 +297,13 @@ meaning of these see `advice-add'."
 
 ;;;;; Keymap utils
 
+(defvar conn-thing-map
+  `(menu-item
+    "Thing Map"
+    nil
+    :filter ,(lambda (_real-binding)
+               (key-binding [conn-thing-map] t))))
+
 (defmacro conn--without-conn-maps (&rest body)
   "Run BODY without any state, mode, or local maps active.
 
@@ -755,12 +762,6 @@ The returned list is not fresh, don't modify it."
 (defvar-local conn--local-override-map)
 (defvar-local conn--local-major-mode-map)
 (defvar-local conn--local-minor-mode-maps)
-
-(defvar-keymap conn-mark-thing-map
-  :prefix 'conn-mark-thing-map
-  "L" 'forward-line
-  ")" 'forward-list
-  "(" 'backward-list)
 
 (defun conn-get-overriding-map (state)
   "Return the overriding keymap for STATE."
@@ -1824,7 +1825,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
-  "t" 'conn-mark-thing-map
+  "h" conn-thing-map
   "e" 'recursive-edit)
 
 
@@ -4752,48 +4753,21 @@ order to mark the region that should be defined by any of COMMANDS."
     (put cmd :conn-command-thing thing)
     (put cmd :conn-mark-handler handler)))
 
-(defun conn-mark-email ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'email)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(defmacro conn-define-mark-command (name thing)
+  `(progn
+     (defun ,name ()
+       (interactive)
+       (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
+         (`(,beg . ,end)
+          (goto-char beg)
+          (conn--push-ephemeral-mark end))))
+     (put ',name :conn-command-thing ',thing)
+     (put ',name :conn-mark-handler #'ignore)))
 
-(conn-register-thing-commands 'email nil 'conn-mark-email)
-
-(defun conn-mark-uuid ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'uuid)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(conn-register-thing-commands 'uuid nil 'conn-mark-uuid)
-
-(defun conn-mark-string ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'string)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(conn-register-thing-commands 'string nil 'conn-mark-string)
-
-(defun conn-mark-filename ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'filename)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(conn-register-thing-commands 'filename nil 'conn-mark-filename)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-movement-state)
-  "H /" 'conn-mark-filename
-  "H U" 'conn-mark-uuid
-  "H s" 'conn-mark-string
-  "H @" 'conn-mark-email)
+(conn-define-mark-command conn-mark-email email)
+(conn-define-mark-command conn-mark-uuid uuid)
+(conn-define-mark-command conn-mark-string string)
+(conn-define-mark-command conn-mark-filename filename)
 
 (conn-register-thing
  'defun
@@ -4812,53 +4786,24 @@ order to mark the region that should be defined by any of COMMANDS."
  'buffer-after-point
  :bounds-op (lambda () (cons (point) (point-max))))
 
-(defun conn-mark-after-point ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'buffer-after-point)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(conn-register-thing-commands 'buffer-after-point nil 'conn-mark-after-point)
-
 (conn-register-thing
  'buffer-before-point
  :bounds-op (lambda () (cons (point-min) (point))))
 
-(defun conn-mark-before-point ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'buffer-before-point)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
-
-(conn-register-thing-commands 'buffer-before-point nil 'conn-mark-before-point)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-movement-state)
-  "H <" 'conn-mark-before-point
-  "H >" 'conn-mark-after-point)
+(conn-define-mark-command conn-mark-after-point buffer-after-point)
+(conn-define-mark-command conn-mark-before-point buffer-before-point)
 
 (conn-register-thing
  'visible
  :bounds-op (lambda () (cons (window-start) (window-end))))
 
-(defun conn-mark-visible ()
-  (interactive)
-  (pcase (bounds-of-thing-at-point 'visible)
-    (`(,beg . ,end)
-     (goto-char beg)
-     (conn--push-ephemeral-mark end))))
+(conn-define-mark-command conn-mark-visible visible)
 
 (conn-register-thing-commands
  'visible nil
  'conn-scroll-up 'conn-scroll-down
  'scroll-up-command 'scroll-down-command
  'conn-mark-visible)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-movement-state)
-  "H v" 'conn-mark-visible)
 
 (conn-register-thing-commands
  'region nil
@@ -7918,8 +7863,8 @@ Operates with the selected windows parent window."
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
-  "h" 'conn-expand
-  "H" 'conn-mark-thing-map
+  "h" conn-thing-map
+  "H" 'conn-expand
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
@@ -8017,6 +7962,16 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap conn-mode-map
+  "<conn-thing-map> <" 'conn-mark-before-point
+  "<conn-thing-map> >" 'conn-mark-after-point
+  "<conn-thing-map> /" 'conn-mark-filename
+  "<conn-thing-map> U" 'conn-mark-uuid
+  "<conn-thing-map> s" 'conn-mark-string
+  "<conn-thing-map> @" 'conn-mark-email
+  "<conn-thing-map> v" 'conn-mark-visible
+  "<conn-thing-map> L" 'forward-line
+  "<conn-thing-map> )" 'forward-list
+  "<conn-thing-map> (" 'backward-list
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
 
@@ -8202,7 +8157,8 @@ Operates with the selected windows parent window."
                               (eval-when-compile
                                 (regexp-opt
                                  '("conn-define-state"
-                                   "conn-define-dispatch-action")
+                                   "conn-define-dispatch-action"
+                                   "conn-define-mark-command")
                                  t))
                               "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
                   2)
@@ -8619,6 +8575,52 @@ Operates with the selected windows parent window."
 
   ;; TODO: other markdown things
   )
+
+(static-if (<= emacs-major-version 30)
+    (with-eval-after-load 'treesit
+      (defvar conn--ts-modes '(c++-ts-mode
+                               rustic-mode
+                               c-ts-mode
+                               csharp-ts-mode
+                               elixir-ts-mode
+                               elm-ts-mode
+                               go-ts-mode
+                               haskell-ts-mode
+                               html-ts-mode
+                               java-ts-mode
+                               javascript-ts-mode
+                               js-ts-mode
+                               julia-ts-mode
+                               php-ts-mode
+                               prisma-ts-mode
+                               python-ts-mode
+                               ruby-ts-mode
+                               rust-ts-mode
+                               bash-ts-mode
+                               typescript-ts-mode))
+
+      (defun conn--dispatch-all-treesit-things (thing)
+        (cl-loop for node in (thread-first
+                               (treesit-buffer-root-node)
+                               (treesit-induce-sparse-tree thing)
+                               (flatten-tree))
+                 for beg = (treesit-node-start node)
+                 when (and (not (invisible-p beg))
+                           (<= (window-start) beg (window-end)))
+                 collect beg into things
+                 finally return (mapcar (lambda (pt)
+                                          (conn--make-target-overlay pt 0 thing))
+                                        (seq-sort '< things))))
+
+      (dolist (mode conn--ts-modes)
+        (add-hook (conn--symbolicate mode "-hook")
+                  (lambda ()
+                    (dolist (thing '(sexp defun))
+                      (setq-local
+                       conn-dispatch-target-finders-alist
+                       `((,thing . ,(lambda ()
+                                      (conn--dispatch-all-treesit-things ,thing)))
+                         . ,conn-dispatch-target-finders-alist))))))))
 
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
