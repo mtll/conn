@@ -517,7 +517,7 @@ be restricted to those before or after the current match inclusive."
   "Return t if STRING contains no upper case characters."
   (cl-loop for char across string always (eql char (downcase char))))
 
-(defun conn--visible-matches (string &optional dir)
+(defun conn--visible-matches (string &optional dir predicate)
   "Return all matches for STRING visible in the selected window.
 
 If dir is \\='forward or \\='backward then restrict to matches before or
@@ -530,7 +530,9 @@ after point."
       (let ((case-fold-search (conn--string-no-upper-case-p string))
             matches)
         (while (search-forward string nil t)
-          (when (conn--region-visible-p (match-beginning 0) (match-end 0))
+          (when (and (conn--region-visible-p (match-beginning 0) (match-end 0))
+                     (or (null predicate)
+                         (funcall predicate (match-beginning 0))))
             (push (match-beginning 0) matches)))
         (nreverse matches)))))
 
@@ -1621,10 +1623,12 @@ themselves once the selection process has concluded."
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
-  (let* ((eol (save-excursion
-                (goto-char pt)
-                (line-end-position)))
-         (ov (make-overlay pt (min (+ pt length) eol) nil t)))
+  (conn--protected-let
+      ((eol (save-excursion
+              (goto-char pt)
+              (line-end-position)))
+       (ov (make-overlay pt (min (+ pt length) eol) nil t)
+           (delete-overlay ov)))
     (overlay-put ov 'conn-overlay t)
     (overlay-put ov 'thing thing)
     (overlay-put ov 'category 'conn-read-string-match)
@@ -1638,16 +1642,19 @@ Optionally the overlay may have an associated THING."
     (overlay-put ov 'padding-function padding-function)
     ov))
 
-(defun conn--string-preview-overlays-1 (win string &optional dir)
-  (with-selected-window win
-    (cl-loop for pt in (conn--visible-matches string dir)
-             collect (conn--make-target-overlay pt (length string)))))
+(defun conn--string-preview-overlays-1 (win string &optional dir predicate)
+  (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
+    (with-selected-window win
+      (dolist (pt (conn--visible-matches string dir predicate) ovs)
+        (push (conn--make-target-overlay pt (length string)) ovs)))))
 
-(defun conn--string-preview-overlays (string &optional dir all-windows)
-  (cl-loop for win in (conn--get-dispatch-windows all-windows)
-           nconc (conn--string-preview-overlays-1 win string dir)))
+(defun conn--string-preview-overlays (string &optional dir all-windows predicate)
+  (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
+    (dolist (win (conn--get-dispatch-windows all-windows) ovs)
+      (setq ovs (nconc (conn--string-preview-overlays-1 win string dir predicate)
+                       ovs)))))
 
-(defun conn--read-string-with-timeout-1 (&optional dir all-windows)
+(defun conn--read-string-with-timeout-1 (&optional dir all-windows predicate)
   "Read a string with preview overlays and timeout `conn-read-string-timeout'.
 
 Returns a cons of (STRING . OVERLAYS)."
@@ -1655,13 +1662,18 @@ Returns a cons of (STRING . OVERLAYS)."
     (conn--protected-let
         ((prompt (propertize "string: " 'face 'minibuffer-prompt))
          (string (char-to-string (read-char prompt t)))
-         (overlays (conn--string-preview-overlays string dir all-windows)
-                   (mapc #'delete-overlay overlays)))
+         (overlays (while-no-input
+                     (conn--string-preview-overlays string dir all-windows predicate))
+                   (unless (eq overlays t)
+                     (mapc #'delete-overlay overlays))))
       (while-let ((next-char (read-char (format (concat prompt "%s") string) t
                                         conn-read-string-timeout)))
         (setq string (concat string (char-to-string next-char)))
-        (mapc #'delete-overlay overlays)
-        (setq overlays (conn--string-preview-overlays string dir all-windows)))
+        (unless (eq overlays t)
+          (mapc #'delete-overlay overlays))
+        (setq overlays
+              (while-no-input
+                (conn--string-preview-overlays string dir all-windows predicate))))
       (message nil)
       (cons string overlays))))
 
@@ -1674,16 +1686,21 @@ Returns a cons of (STRING . OVERLAYS)."
     (conn--protected-let
         ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
          (string (char-to-string (read-char prompt t)))
-         (overlays (conn--string-preview-overlays string dir all-windows)
-                   (mapc #'delete-overlay overlays)))
+         (overlays (while-no-input
+                     (conn--string-preview-overlays string dir all-windows))
+                   (unless (eq overlays t)
+                     (mapc #'delete-overlay overlays))))
       (dotimes (_ (1- N))
         (thread-last
           (read-char (format (concat prompt "%s") string) t)
           (char-to-string)
           (concat string)
           (setq string))
-        (mapc #'delete-overlay overlays)
-        (setq overlays (conn--string-preview-overlays string dir all-windows)))
+        (unless (eq overlays t)
+          (mapc #'delete-overlay overlays))
+        (setq overlays
+              (while-no-input
+                (conn--string-preview-overlays string dir all-windows))))
       (message nil)
       (cons string overlays))))
 
@@ -3055,7 +3072,8 @@ A target finder function should return a list of overlays.")
   `((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
     (conn-backward-symbol . ,(lambda () (conn--dispatch-all-things 'symbol t)))
-    (backward-word . ,(lambda () (conn--dispatch-all-things 'word t))))
+    (backward-word . ,(lambda () (conn--dispatch-all-things 'word t)))
+    (defun . ,(lambda () (conn--dispatch-chars-in-thing 'defun t))))
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
@@ -4112,6 +4130,17 @@ Target overlays may override this default by setting the
            when ovs return ovs
            do (message "(no matches)")))
 
+(defun conn--dispatch-chars-in-thing (thing &optional all-windows)
+  (cl-loop for (_ . ovs) = (conn--read-string-with-timeout-1
+                            nil all-windows
+                            (lambda (pt)
+                              (save-excursion
+                                (goto-char pt)
+                                (ignore-errors
+                                  (bounds-of-thing-at-point thing)))))
+           when ovs return ovs
+           do (message "(no matches)")))
+
 (defun conn--dispatch-2-chars ()
   (cl-loop for (_ . ovs) = (conn--read-n-chars 2 nil t)
            when ovs return ovs
@@ -4178,40 +4207,32 @@ Target overlays may override this default by setting the
                                            (- (match-end 0)
                                               (match-beginning 0))))))))))
 
-(defun conn--dispatch-things-with-prefix-1 (things prefix)
-  (let ((case-fold-search (conn--string-no-upper-case-p prefix))
-        (things (ensure-list things))
-        ovs)
-    (save-excursion
-      (goto-char (window-end))
-      (while (search-backward prefix (window-start) t)
-        (unless (invisible-p (point))
-          (dolist (thing things)
-            (pcase-let ((`(,beg . ,end) (bounds-of-thing-at-point thing)))
-              (when (and (eql (point) beg)
-                         (conn--region-visible-p beg end)
-                         (not (eql (point) (caar ovs))))
-                (push (list (point) (length prefix) thing) ovs)))))))
-    (cl-loop for ov in ovs
-             collect (apply 'conn--make-target-overlay ov))))
-
-(defun conn--dispatch-things-with-prefix (things prefix-length &optional all-windows)
+(defun conn--dispatch-things-with-prefix (thing prefix-length &optional all-windows)
   (conn--protected-let ((prefix "")
+                        (predicate
+                         (lambda (pt)
+                           (save-match-data
+                             (save-excursion
+                               (goto-char pt)
+                               (pcase (ignore-errors (bounds-of-thing-at-point thing))
+                                 (`(,beg . ,_end) (= beg pt)))))))
                         (prompt "char: ")
-                        (windows (conn--get-dispatch-windows all-windows))
-                        (ovs nil (mapc #'delete-overlay ovs)))
-    (while (not ovs)
+                        (ovs nil (unless (eq ovs t)
+                                   (mapc #'delete-overlay ovs))))
+    (while (or (not ovs) (eq ovs t))
       (conn--with-input-method
         (while (length< prefix prefix-length)
           (setq prefix (thread-last
                          (read-char prompt t)
                          (char-to-string)
                          (concat prefix))
-                prompt (concat "char: " prefix))))
-      (dolist (win windows)
-        (setq ovs (nconc (with-selected-window win
-                           (conn--dispatch-things-with-prefix-1 things prefix))
-                         ovs)))
+                prompt (concat "char: " prefix))
+          (unless (eq ovs t)
+            (mapc #'delete-overlay ovs))
+          (if (length= prefix prefix-length)
+              (setq ovs (conn--string-preview-overlays prefix nil all-windows predicate))
+            (setq ovs (while-no-input
+                        (conn--string-preview-overlays prefix nil all-windows predicate))))))
       (setq prefix ""
             prompt "char: (no matches)"))
     ovs))
@@ -4849,7 +4870,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'symbol
  :forward-op 'forward-symbol
- :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'symbol 1 t)))
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'symbol 2 t)))
 
 (conn-register-thing-commands
  'symbol 'conn-continuous-thing-handler
@@ -4874,7 +4895,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'word
  :forward-op 'forward-word
- :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'word 1 t)))
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'word 2 t)))
 
 (conn-register-thing-commands
  'word 'conn-symbol-handler
