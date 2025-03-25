@@ -8194,6 +8194,19 @@ Operates with the selected windows parent window."
 (provide 'conn)
 
 
+;;; Misc
+
+(cl-pushnew (list nil (concat "^\\s-*("
+                              (eval-when-compile
+                                (regexp-opt
+                                 '("conn-define-state"
+                                   "conn-define-dispatch-action")
+                                 t))
+                              "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
+                  2)
+            lisp-imenu-generic-expression :test #'equal)
+
+
 ;;; Load Extensions
 
 (with-eval-after-load 'calc
