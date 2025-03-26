@@ -3391,14 +3391,16 @@ with `conn-dispatch-thing-ignored-modes'."
 
 ;;;;; Label setup and padding
 
-(put 'conn-label-overlay 'priority 3000)
-(put 'conn-label-overlay 'conn-overlay t)
-
 (defvar conn-default-label-padding-func 'conn--centered-padding
   "Default function for padding dispatch labels.
 
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
+
+(defvar-local conn-pixelwise-dispatch-labels t)
+
+(put 'conn-label-overlay 'priority 3000)
+(put 'conn-label-overlay 'conn-overlay t)
 
 (defun conn--right-justify-padding (overlay width height)
   (overlay-put overlay 'after-string
@@ -3426,7 +3428,7 @@ Target overlays may override this default by setting the
                   'display `(space :width (,right) :height (,height))
                   'face 'conn-dispatch-label-face))))
 
-(defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
+(defun conn--dispatch-setup-label-pixelwise (overlay label-string &optional padding-function)
   (unless (= (overlay-start overlay) (point-max))
     (move-overlay overlay
                   (overlay-start overlay)
@@ -3454,7 +3456,7 @@ Target overlays may override this default by setting the
       (unwind-protect
           (while (not end)
             (when (= line-end pt)
-              (if (/= pt beg)
+              (if (not (invisible-p (1+ pt)))
                   (setq end pt)
                 (setq end (1+ pt))
                 (let ((str (buffer-substring pt end)))
@@ -3506,6 +3508,55 @@ Target overlays may override this default by setting the
                    (when (/= height display-height) (1- height)))
         (funcall conn-default-label-padding-func overlay padding-width
                  (when (/= height display-height) (1- height))))))))
+
+(defun conn--dispatch-setup-label-charwise (overlay label-string &optional _padding-function)
+  (unless (= (overlay-start overlay) (point-max))
+    (move-overlay overlay
+                  (overlay-start overlay)
+                  (min (+ (overlay-start overlay)
+                          (length label-string))
+                       (save-excursion
+                         (goto-char (overlay-start overlay))
+                         (line-end-position))))
+    (let* ((target (overlay-get overlay 'target-overlay))
+           (beg (overlay-start overlay))
+           (end nil)
+           (line-end (save-excursion
+                       (goto-char beg)
+                       (line-end-position)))
+           (pt beg))
+      (while (not end)
+        (when (= line-end pt)
+          (if (not (invisible-p (1+ pt)))
+              (setq end pt)
+            (setq end (1+ pt))
+            (let ((str (buffer-substring pt end)))
+              (add-text-properties
+               0 (length str)
+               `(invisible ,(get-char-property pt 'invisible))
+               str)
+              (overlay-put overlay 'after-string str))))
+        (when (or (= pt (point-max))
+                  (= (- pt beg) (length label-string)))
+          (setq end pt))
+        (dolist (ov (overlays-in pt (1+ pt)))
+          (when (and (eq 'conn-read-string-match
+                         (overlay-get ov 'category))
+                     (or (/= (overlay-start target)
+                             (overlay-start ov))
+                         (/= (overlay-end target)
+                             (overlay-end ov))))
+            (setq end pt)))
+        (cl-incf pt))
+      (move-overlay overlay (overlay-start overlay) end)))
+  (if (= (overlay-start overlay) (overlay-end overlay))
+      (overlay-put overlay 'before-string label-string)
+    (overlay-put overlay 'display label-string)))
+
+(defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
+  (if conn-pixelwise-dispatch-labels
+      (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
+    (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
