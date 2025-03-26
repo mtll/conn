@@ -7614,11 +7614,6 @@ Operates with the selected windows parent window."
 
 ;;;;; Mode Keymaps
 
-(define-keymap
-  :keymap (conn-get-mode-map 'conn-command-state 'prog-mode)
-  "{" 'conn-beginning-of-list
-  "}" 'conn-end-of-list)
-
 (dolist (state '(conn-command-state conn-emacs-state))
   (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
