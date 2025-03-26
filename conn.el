@@ -1821,7 +1821,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :keymap (conn-get-state-map 'conn-read-mover-state)
   "DEL" 'backward-delete-arg
   "C-d" 'forward-delete-arg
-  "," 'reset-arg
+  "M-DEL" 'reset-arg
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
@@ -1834,6 +1834,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (defvar conn-bounds-of-command-alist
   '((conn-toggle-mark-command . conn--bounds-of-region)
     (conn-expand-remote . conn--bounds-of-remote-expansion)
+    (conn-expand . conn--bounds-of-expansion)
     (set-mark-command . conn--bounds-of-region)
     (conn-set-mark-command . conn--bounds-of-region)
     (visible . conn--bounds-of-command-thing)
@@ -3090,7 +3091,8 @@ For the meaning of TARGET-FINDER see
 
 For the meaning of action function see `conn-define-dispatch-action'.")
 
-(defvar conn-dispatch-default-action-alist nil
+(defvar conn-dispatch-default-action-alist
+  '((conn-expand . conn-dispatch-jump))
   "Default action functions for things or commands.
 
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
@@ -3113,9 +3115,7 @@ of a command.")
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
   "C-h" 'help
-  "," 'reset-arg
-  "i" 'forward-line
-  "L" 'move-end-of-line
+  "M-DEL" 'reset-arg
   "TAB" 'repeat-dispatch
   "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
@@ -3129,7 +3129,10 @@ of a command.")
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
-  "h" `(conn-expand-remote conn--dispatch-chars)
+  "," `(conn-expand-remote conn--dispatch-chars)
+  "n" 'conn-forward-defun
+  "H" 'conn-forward-inner-line
+  "L" 'conn-end-of-inner-line
   "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word t)))
   "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t))))
 
@@ -4199,35 +4202,18 @@ Target overlays may override this default by setting the
            do (message "(no matches)")))
 
 (defun conn--dispatch-all-things-1 (thing)
-  (let ((last-point (point))
-        (opt (point))
+  (let ((start (point))
+        (last (point))
         ovs)
-    (ignore-error scan-error
-      (save-excursion
-        (forward-thing thing -1)
-        (while (and (/= (point) last-point)
-                    (>= (point) (window-start)))
-          (setq last-point (point))
-          (unless (invisible-p (point))
-            (cl-pushnew (point) ovs))
-          (forward-thing thing -1))))
-    (setq last-point opt)
-    (ignore-error scan-error
-      (save-excursion
-        (forward-thing thing 1)
-        (while (/= (point) last-point)
-          (setq last-point (point))
-          (unless (invisible-p (point))
-            (pcase (bounds-of-thing-at-point thing)
-              ((or 'nil (and `(,beg . ,_) (guard (> beg (window-end)))))
-               (signal 'scan-error nil))
-              ((and `(,beg . ,_)
-                    (guard (or (null (car ovs))
-                               (/= beg (car ovs)))))
-               (cl-pushnew beg ovs))))
-          (forward-thing thing 1))))
-    (cl-loop for pt in ovs
-             collect (conn--make-target-overlay pt 0 thing))))
+    (save-excursion
+      (goto-char (window-end))
+      (while (prog2
+                 (forward-thing thing -1)
+                 (<= (window-start) (point))
+               (setq last (point)))
+        (unless (= (point) start)
+          (push (conn--make-target-overlay (point) 0 thing) ovs))))
+    ovs))
 
 (defun conn--dispatch-all-things (thing &optional all-windows)
   (cl-loop for win in (conn--get-dispatch-windows all-windows)
@@ -4370,24 +4356,14 @@ Target overlays may override this default by setting the
       (with-selected-window win
         (save-excursion
           (with-restriction (window-start) (window-end)
-            (goto-char (point-min))
-            (when (and (bolp)
-                       (progn
-                         (if end
-                             (conn--end-of-inner-line-1)
-                           (back-to-indentation))
-                         (not (eobp)))
-                       (not (invisible-p (point))))
-              (push (conn--make-target-overlay (point) 0) ovs))
-            (while (/= (point) (point-max))
-              (forward-line)
-              (when (and (bolp)
-                         (progn
-                           (if end
-                               (conn--end-of-inner-line-1)
-                             (back-to-indentation))
-                           (not (eobp)))
-                         (not (invisible-p (point)))
+            (goto-char (point-max))
+            (while (let ((pt (point)))
+                     (forward-line -1)
+                     (if end
+                         (conn-end-of-inner-line)
+                       (conn-beginning-of-inner-line))
+                     (/= (point) pt))
+              (when (and (not (invisible-p (point)))
                          (not (invisible-p (1- (point)))))
                 (push (conn--make-target-overlay (point) 0) ovs)))))))))
 
@@ -4599,8 +4575,8 @@ potential expansions.  Functions may return invalid expansions
 (defvar-keymap conn-expand-repeat-map
   :repeat t
   "z" 'conn-expand-exchange
-  "h" 'conn-contract
-  "H" 'conn-expand)
+  "." 'conn-contract
+  "," 'conn-expand)
 
 (defun conn--expand-post-change-hook (&rest _)
   (setq conn--current-expansions nil)
@@ -4985,7 +4961,8 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-register-thing-commands
  'defun 'conn-continuous-thing-handler
- 'end-of-defun 'beginning-of-defun)
+ 'end-of-defun 'beginning-of-defun
+ 'conn-forward-defun)
 
 (conn-register-thing 'char :default-action 'conn-dispatch-jump)
 
@@ -7155,7 +7132,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "`" 'conn-wincontrol-next-window
   "C-u" 'conn-wincontrol-universal-arg
   "-" 'conn-wincontrol-invert-argument
-  "," 'conn-wincontrol-digit-argument-reset
   "/" 'tab-bar-history-back
   "0" 'conn-wincontrol-digit-argument
   "1" 'conn-wincontrol-digit-argument
@@ -7868,7 +7844,6 @@ Operates with the selected windows parent window."
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
   "Z" 'pop-to-mark-command
-  "," 'conn-goto-char-2
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "\"" 'conn-yank-window
@@ -7909,7 +7884,7 @@ Operates with the selected windows parent window."
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
   "h" conn-thing-map
-  "H" 'conn-expand
+  "," 'conn-expand
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
