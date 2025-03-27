@@ -4207,15 +4207,13 @@ Target overlays may override this default by setting the
            do (message "(no matches)")))
 
 (defun conn--dispatch-all-things-1 (thing)
-  (let ((start (point))
-        (last (point))
-        ovs)
+  (conn--protected-let ((start (point))
+                        (ovs nil (mapc #'delete-overlay ovs)))
     (save-excursion
       (goto-char (window-end))
-      (while (prog2
-                 (forward-thing thing -1)
-                 (<= (window-start) (point))
-               (setq last (point)))
+      (while (progn
+               (forward-thing thing -1)
+               (<= (window-start) (point)))
         (unless (= (point) start)
           (push (conn--make-target-overlay (point) 0 thing) ovs))))
     ovs))
