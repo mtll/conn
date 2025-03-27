@@ -3077,7 +3077,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 A target finder function should return a list of overlays.")
 
 (defvar conn-dispatch-target-finders-alist
-  `((conn-end-of-inner-line . conn--dispatch-inner-lines-end)
+  `((conn-backward-inner-line . conn--dispatch-inner-lines-end)
     (move-end-of-line . conn--dispatch-lines-end)
     (conn-backward-symbol . ,(lambda () (conn--dispatch-all-things 'symbol t)))
     (backward-word . ,(lambda () (conn--dispatch-all-things 'word t))))
@@ -3136,8 +3136,8 @@ of a command.")
   "j" 'forward-char
   "," `(conn-expand-remote conn--dispatch-chars)
   "n" 'conn-forward-defun
-  "H" 'conn-forward-inner-line
-  "L" 'conn-end-of-inner-line
+  "J" 'conn-forward-inner-line
+  "L" 'conn-backward-inner-line
   "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word t)))
   "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t))))
 
@@ -4368,8 +4368,7 @@ Target overlays may override this default by setting the
                          (conn-end-of-inner-line)
                        (conn-beginning-of-inner-line))
                      (/= (point) pt))
-              (when (and (not (invisible-p (point)))
-                         (not (invisible-p (1- (point)))))
+              (when (not (invisible-p (point)))
                 (push (conn--make-target-overlay (point) 0) ovs)))))))))
 
 (defun conn--dispatch-inner-lines-end ()
@@ -6146,6 +6145,7 @@ Handles rectangular regions."
 (define-minor-mode conn-transpose-recursive-edit-mode
   "Find a region to transpose in a recursive edit."
   :global t
+  :group 'conn
   (if conn-transpose-recursive-edit-mode
       (progn
         (setq conn--transpose-eldoc-prev-msg-fn eldoc-message-function
@@ -8118,6 +8118,7 @@ Operates with the selected windows parent window."
   :init-value nil
   :lighter (:eval conn-lighter)
   :keymap conn-mode-map
+  :group 'conn
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
