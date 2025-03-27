@@ -1822,11 +1822,14 @@ Returns a cons of (STRING . OVERLAYS)."
   "DEL" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
   "h" conn-thing-map
   "e" 'recursive-edit)
+
+(put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
 
 ;;;; Bounds of command
@@ -3400,7 +3403,7 @@ with `conn-dispatch-thing-ignored-modes'."
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
-(defvar-local conn-pixelwise-dispatch-labels t)
+(defvar conn-pixelwise-dispatch-labels t)
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
@@ -3557,7 +3560,9 @@ Target overlays may override this default by setting the
     (overlay-put overlay 'display label-string)))
 
 (defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
-  (if conn-pixelwise-dispatch-labels
+  (if (if (functionp conn-pixelwise-dispatch-labels)
+          (funcall conn-pixelwise-dispatch-labels)
+        conn-pixelwise-dispatch-labels)
       (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
     (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
 
@@ -7112,8 +7117,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
-  "C-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
+  "M-DEL" 'conn-wincontrol-digit-argument-reset
   "C-w" 'conn-wincontrol-backward-delete-arg
   "C-d" 'conn-wincontrol-forward-delete-arg
   "C-0" 'delete-window
@@ -7220,6 +7225,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "y" 'conn-yank-window
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
+
+(put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
 (define-minor-mode conn-wincontrol-mode
   "Global minor mode for window control."
