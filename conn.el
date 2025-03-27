@@ -1183,8 +1183,9 @@ and specializes the method on all conn states."
       (unwind-protect
           (progn
             (setq conn-current-state nil
-                  conn-previous-state state
                   cursor-type t)
+            (unless (conn-state-get state :transient)
+              (setq conn-previous-state state))
             (set state nil)
             (cl-call-next-method)
             (setq success t))
@@ -1395,7 +1396,8 @@ By default `conn-emacs-state' does not bind anything."
 
 (conn-define-state conn-read-thing-common-state (conn-command-state)
   "Common elements of reading thing states."
-  :suppress-input-method t)
+  :suppress-input-method t
+  :transient t)
 
 (conn-define-state conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
