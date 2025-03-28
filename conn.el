@@ -1833,14 +1833,17 @@ Returns a cons of (STRING . OVERLAYS)."
 ;;;; Bounds of command
 
 (defvar conn-bounds-of-command-alist
-  '((conn-toggle-mark-command . conn--bounds-of-region)
+  `((conn-toggle-mark-command . conn--bounds-of-region)
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (conn-expand . conn--bounds-of-expansion)
     (set-mark-command . conn--bounds-of-region)
     (conn-set-mark-command . conn--bounds-of-region)
     (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
-    (dot . conn--bounds-of-dot))
+    (dot . conn--bounds-of-dot)
+    (conn-expand . ,(lambda (arg) (conn--bounds-of-expansion 'conn-expand arg)))
+    (conn-contract . ,(lambda (arg) (conn--bounds-of-expansion 'conn-contract arg)))
+    (recursive-edit . conn--bounds-of-dots))
   "Alist of bounds-op functions for things or commands.
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
@@ -2110,9 +2113,6 @@ BOUNDS is of the form returned by `region-bounds', which see."
     (dolist (ov (overlays-at (point)))
       (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
         (throw 'found (list (conn--overlay-bounds-markers ov)))))))
-
-(setf (alist-get 'recursive-edit conn-bounds-of-command-alist)
-      'conn--bounds-of-dots)
 
 
 ;;;;;; Dot commands
@@ -3017,12 +3017,15 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
              (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
              (overlay-put cursor 'after-string nil))))))
 
+(defvar conn--movement-state nil)
+
 (defun conn--mark-pre-command-hook ()
   (unless conn--hide-mark-cursor
     (set-marker conn-this-command-start (point))
     (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
                                         (conn--command-property :conn-mark-handler))
-          conn-this-command-thing (conn--command-property :conn-command-thing))))
+          conn-this-command-thing (conn--command-property :conn-command-thing)
+          conn--movement-state (cons (buffer-chars-modified-tick) (mark t)))))
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
@@ -3032,7 +3035,12 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                conn-this-command-handler
                (not (region-active-p)))
       (ignore-errors
-        (funcall conn-this-command-handler conn-this-command-start)))))
+        (funcall conn-this-command-handler conn-this-command-start)))
+    (pcase-let ((`(,tick . ,mark) conn--movement-state))
+      (unless (or (not (eql tick (buffer-chars-modified-tick)))
+                  (eql (mark t) mark)
+                  (= (point) conn-this-command-start))
+        (conn-push-region (point) (mark t))))))
 
 (defun conn--setup-mark ()
   (if conn-mode
@@ -4735,11 +4743,6 @@ Expansions and contractions are provided by functions in
           (funcall exit)))
       (list (cons (region-beginning) (region-end))))))
 
-(setf (alist-get 'conn-expand conn-bounds-of-command-alist)
-      (lambda (arg) (conn--bounds-of-expansion 'conn-expand arg))
-      (alist-get 'conn-contract conn-bounds-of-command-alist)
-      (lambda (arg) (conn--bounds-of-expansion 'conn-contract arg)))
-
 
 ;;;;; Thing Definitions
 
@@ -5974,6 +5977,52 @@ uninstersting marks."
          (conn--push-mark-ring-right (point))
          (goto-char (mark t))))
   (deactivate-mark))
+
+(defvar-local conn-movement-ring-left nil)
+(defvar-local conn-movement-ring-right nil)
+
+(defvar conn-movement-ring-max 16)
+
+(defun conn-push-region (point mark &optional left)
+  (pcase-let ((`(,ptl . ,mkl) (car conn-movement-ring-left))
+              (`(,ptr . ,mkr) (car conn-movement-ring-right)))
+    (unless (or (and ptl (= point ptl) (= mark mkl))
+                (and ptr (= point ptr) (= mark mkr)))
+      (if left
+          (setq conn-movement-ring-left
+                (take conn-movement-ring-max
+                      (cons (cons (conn--create-marker point)
+                                  (conn--create-marker mark))
+                            conn-movement-ring-left)))
+        (setq conn-movement-ring-right
+              (take conn-movement-ring-max
+                    (cons (cons (conn--create-marker point)
+                                (conn--create-marker mark))
+                          conn-movement-ring-right)))))))
+
+(defun conn-movement-ring-back ()
+  (interactive)
+  (if (null conn-movement-ring-right)
+      (message "No more regions")
+    (setq conn-movement-ring-left (take conn-movement-ring-max
+                                        (cons (pop conn-movement-ring-right)
+                                              conn-movement-ring-left)))
+    (pcase (car conn-movement-ring-right)
+      (`(,pt . ,mk)
+       (goto-char pt)
+       (conn--push-ephemeral-mark mk)))))
+
+(defun conn-movement-ring-forward ()
+  (interactive)
+  (if (null conn-movement-ring-left)
+      (message "No more regions")
+    (setq conn-movement-ring-right (take conn-movement-ring-max
+                                         (cons (pop conn-movement-ring-left)
+                                               conn-movement-ring-right)))
+    (pcase (car conn-movement-ring-right)
+      (`(,pt . ,mk)
+       (goto-char pt)
+       (conn--push-ephemeral-mark mk)))))
 
 (defun conn-rectangle-mark ()
   "Toggle `rectangle-mark-mode'."
@@ -7989,6 +8038,16 @@ Operates with the selected windows parent window."
 (defun conn-disable-global-bindings ()
   "Remove `conn--global-binding-map' from `conn-mode-map'."
   (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
+
+(define-keymap
+  :keymap conn-mode-map
+  "M-g j" 'conn-movement-ring-back
+  "M-g l" 'conn-movement-ring-forward)
+
+(defvar-keymap conn-movement-ring-repeat-map
+  :repeat t
+  "j" 'conn-movement-ring-back
+  "l" 'conn-movement-ring-forward)
 
 (define-keymap
   :keymap conn-mode-map
