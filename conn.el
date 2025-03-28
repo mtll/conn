@@ -3017,6 +3017,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
              (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
              (overlay-put cursor 'after-string nil))))))
 
+(defvar conn--movement-rotating nil)
 (defvar conn--movement-state nil)
 
 (defun conn--mark-pre-command-hook ()
@@ -3025,7 +3026,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
                                         (conn--command-property :conn-mark-handler))
           conn-this-command-thing (conn--command-property :conn-command-thing)
-          conn--movement-state (cons (buffer-chars-modified-tick) (mark t)))))
+          conn--movement-state (cons (buffer-chars-modified-tick) (mark t))
+          conn--movement-rotating nil)))
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
@@ -3036,11 +3038,11 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                (not (region-active-p)))
       (ignore-errors
         (funcall conn-this-command-handler conn-this-command-start)))
-    (pcase-let ((`(,tick . ,mark) conn--movement-state))
-      (unless (or (not (eql tick (buffer-chars-modified-tick)))
-                  (eql (mark t) mark)
-                  (= (point) conn-this-command-start))
-        (conn-push-region (point) (mark t))))))
+    (unless (or conn--movement-rotating
+                (not (eql (car conn--movement-state)
+                          (buffer-chars-modified-tick)))
+                (eql (mark t) (cdr conn--movement-state)))
+      (conn-push-region conn-this-command-start (cdr conn--movement-state)))))
 
 (defun conn--setup-mark ()
   (if conn-mode
@@ -5907,122 +5909,170 @@ Interactively `region-beginning' and `region-end'."
 
 ;;;;; Mark Commands
 
-(defvar-local conn-mark-ring-right nil)
-(defvar-local conn-mark-ring-left nil)
 
-(defun conn--push-mark-ring-right (location)
-  (unless (or (seq-contains-p conn-mark-ring-right location #'=)
-              (seq-contains-p conn-mark-ring-left location #'=))
-    (let ((old (nth mark-ring-max conn-mark-ring-right)))
-      (setq conn-mark-ring-right
-            (cons (pcase location
-                    ((pred markerp) (copy-marker location))
-                    ((pred numberp) (conn--create-marker location)))
-                  (take (1- mark-ring-max) conn-mark-ring-right)))
-      (when (and old (not (memq old conn-mark-ring-right)))
-        (set-marker old nil)))))
+(cl-defstruct (conn-ring
+               (:constructor conn-ring (capacity &key cleanup)))
+  list history capacity
+  (cleanup #'ignore))
 
-(defun conn--push-mark-ring-left (location)
-  (unless (or (seq-contains-p conn-mark-ring-left location #'=)
-              (seq-contains-p conn-mark-ring-right location #'=))
-    (let ((old (nth mark-ring-max conn-mark-ring-left)))
-      (setq conn-mark-ring-left
-            (cons (pcase location
-                    ((pred markerp) (copy-marker location))
-                    ((pred numberp) (conn--create-marker location)))
-                  (take (1- mark-ring-max) conn-mark-ring-left)))
-      (when (and old (not (memq old conn-mark-ring-left)))
-        (set-marker old nil)))))
+(defun conn-ring--touch (ring item)
+  (cl-loop for elem in (conn-ring-history ring)
+           unless (eq elem item)
+           collect elem into newhist
+           finally (setf (conn-ring-history ring) (cons item newhist))))
 
-(defun conn-mark-ring-backward ()
+(defun conn-ring--remove (ring item)
+  (cl-loop for elem in (conn-ring-list ring)
+           unless (eq elem item)
+           collect elem into newlist
+           finally (progn
+                     (funcall (conn-ring-cleanup ring) item)
+                     (setf (conn-ring-list ring) newlist))))
+
+(defun conn-ring-insert-front (ring item)
+  (setf (conn-ring-list ring) (cons item (conn-ring-list ring)))
+  (conn-ring--touch ring item)
+  (when (length> (conn-ring-list ring)
+                 (conn-ring-capacity ring))
+    (let ((old (car (last (conn-ring-history ring))))
+          (newhist (butlast (conn-ring-history ring))))
+      (conn-ring--remove ring old)
+      (setf (conn-ring-history ring) newhist))))
+
+(defun conn-ring-insert-back (ring item)
+  (conn-ring-insert-front ring item)
+  (conn-ring-rotate-backward ring))
+
+(defun conn-ring-rotate-forward (ring)
+  (let ((head (car (setf (conn-ring-list ring)
+                         (nconc (cdr (conn-ring-list ring))
+                                (list (car (conn-ring-list ring))))))))
+    (conn-ring--touch ring head)
+    head))
+
+(defun conn-ring-rotate-backward (ring)
+  (let ((head (car (setf (conn-ring-list ring)
+                         (append (last (conn-ring-list ring))
+                                 (butlast (conn-ring-list ring)))))))
+    (conn-ring--touch ring head)
+    head))
+
+(defun conn-ring-front (ring)
+  (car (conn-ring-list ring)))
+
+(defun conn-ring-back (ring)
+  (car (last (conn-ring-list ring))))
+
+(defvar-local conn-mark-ring nil)
+(defvar conn-mark-ring-max 40)
+(defvar conn--mark-ring-ignore nil)
+
+(defun conn--push-mark-ring (location &optional back)
+  (unless conn--mark-ring-ignore
+    (unless conn-mark-ring
+      (setq conn-mark-ring (conn-ring conn-mark-ring-max
+                                      :cleanup (lambda (mk) (set-marker mk nil)))))
+    (pcase-let ((ptb (conn-ring-back conn-mark-ring))
+                (ptf (conn-ring-front conn-mark-ring)))
+      (cond
+       ((and ptf (= location ptf))
+        (when back (conn-ring-rotate-forward conn-mark-ring)))
+       ((and ptb (= location ptb))
+        (unless back (conn-ring-rotate-backward conn-mark-ring)))
+       (t
+        (if back
+            (conn-ring-insert-back conn-mark-ring (conn--create-marker location))
+          (conn-ring-insert-front conn-mark-ring (conn--create-marker location))))))))
+
+(defun conn-pop-mark-ring ()
   "Like `pop-to-mark-command' but uses `conn-mark-ring-right'.
 
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
-`conn-mark-ring-forward' are provided which attempt to filter out
-uninstersting marks."
+so `conn-mark-ring-right' and the functions `conn-pop-mark-ring' and
+`conn-unpop-mark-ring' are provided which attempt to filter out
+uninteresting marks."
   (interactive)
-  (cond ((null (mark t))
-         (user-error "No mark set in this buffer"))
-        ((null conn-mark-ring-right)
-         (user-error "No marks to unpop"))
-        ((or conn--ephemeral-mark
-             (= (point) (mark t)))
-         (conn--push-mark-ring-left (point))
-         (let ((conn-mark-ring-right conn-mark-ring-right))
-           (push-mark (car conn-mark-ring-right)))
-         (pop conn-mark-ring-right)
-         (goto-char (mark t)))
-        (t
-         (conn--push-mark-ring-left (point))
-         (goto-char (mark t))))
+  (if (null conn-mark-ring)
+      (user-error "Mark ring empty")
+    (conn--push-ephemeral-mark (point))
+    (conn--push-mark-ring (point))
+    (conn-ring-rotate-forward conn-mark-ring)
+    (goto-char (conn-ring-front conn-mark-ring)))
   (deactivate-mark))
 
-(defun conn-mark-ring-forward ()
+(defun conn-unpop-mark-ring ()
   "Like `pop-to-mark-command' in reverse but uses `conn-mark-ring-right'.
 
 Unfortunately conn adds many uninteresting marks to the `mark-ring',
-so `conn-mark-ring-right' and the functions `conn-mark-ring-backward' and
-`conn-mark-ring-forward' are provided which attempt to filter out
-uninstersting marks."
+so `conn-mark-ring-right' and the functions `conn-pop-mark-ring' and
+`conn-unpop-mark-ring' are provided which attempt to filter out
+uninteresting marks."
   (interactive)
-  (cond ((null (mark t))
-         (user-error "No mark set in this buffer"))
-        ((null conn-mark-ring-left)
-         (user-error "No marks to unpop"))
-        ((= (point) (mark t))
-         (push-mark (pop conn-mark-ring-left))
-         (goto-char (mark t)))
-        (t
-         (conn--push-mark-ring-right (point))
-         (goto-char (mark t))))
+  (if (null conn-mark-ring)
+      (user-error "Mark ring empty")
+    (conn--push-ephemeral-mark (point))
+    (conn--push-mark-ring (point))
+    (conn-ring-rotate-backward conn-mark-ring)
+    (goto-char (conn-ring-front conn-mark-ring)))
   (deactivate-mark))
 
-(defvar-local conn-movement-ring-left nil)
-(defvar-local conn-movement-ring-right nil)
+(defvar-local conn-movement-ring nil)
 
-(defvar conn-movement-ring-max 16)
+(defvar conn-movement-ring-max 10)
 
-(defun conn-push-region (point mark &optional left)
-  (pcase-let ((`(,ptl . ,mkl) (car conn-movement-ring-left))
-              (`(,ptr . ,mkr) (car conn-movement-ring-right)))
-    (unless (or (and ptl (= point ptl) (= mark mkl))
-                (and ptr (= point ptr) (= mark mkr)))
-      (if left
-          (setq conn-movement-ring-left
-                (take conn-movement-ring-max
-                      (cons (cons (conn--create-marker point)
-                                  (conn--create-marker mark))
-                            conn-movement-ring-left)))
-        (setq conn-movement-ring-right
-              (take conn-movement-ring-max
-                    (cons (cons (conn--create-marker point)
-                                (conn--create-marker mark))
-                          conn-movement-ring-right)))))))
+(defun conn-push-region (point mark &optional back)
+  (unless conn-movement-ring
+    (setq conn-movement-ring (conn-ring conn-movement-ring-max
+                                        :cleanup (pcase-lambda (`(,pt . ,mk))
+                                                   (set-marker pt nil)
+                                                   (set-marker mk nil)))))
+  (pcase-let ((`(,ptf . ,mkf) (conn-ring-front conn-movement-ring))
+              (`(,ptb . ,mkb) (conn-ring-back conn-movement-ring)))
+    (cond
+     ((and ptf (= point ptf) (= mark mkf))
+      (when back (conn-ring-rotate-backward conn-movement-ring)))
+     ((and ptb (= point ptb) (= mark mkb))
+      (unless back (conn-ring-rotate-forward conn-movement-ring)))
+     (t
+      (if back
+          (conn-ring-insert-back conn-movement-ring
+                                 (cons (conn--create-marker point)
+                                       (conn--create-marker mark)))
+        (conn-ring-insert-front conn-movement-ring
+                                (cons (conn--create-marker point)
+                                      (conn--create-marker mark))))))))
 
-(defun conn-movement-ring-back ()
-  (interactive)
-  (if (null conn-movement-ring-right)
-      (message "No more regions")
-    (setq conn-movement-ring-left (take conn-movement-ring-max
-                                        (cons (pop conn-movement-ring-right)
-                                              conn-movement-ring-left)))
-    (pcase (car conn-movement-ring-right)
-      (`(,pt . ,mk)
-       (goto-char pt)
-       (conn--push-ephemeral-mark mk)))))
+(defun conn-unpop-movement-ring (arg)
+  (interactive "p")
+  (setq conn--movement-rotating t)
+  (cond ((< arg 0)
+         (conn-pop-movement-ring (abs arg)))
+        ((null conn-movement-ring)
+         (message "Movement ring empty"))
+        (t
+         (conn-push-region (point) (mark t))
+         (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
+           (conn-ring-rotate-backward conn-movement-ring))
+         (pcase (conn-ring-front conn-movement-ring)
+           (`(,pt . ,mk)
+            (goto-char pt)
+            (conn--push-ephemeral-mark mk))))))
 
-(defun conn-movement-ring-forward ()
-  (interactive)
-  (if (null conn-movement-ring-left)
-      (message "No more regions")
-    (setq conn-movement-ring-right (take conn-movement-ring-max
-                                         (cons (pop conn-movement-ring-left)
-                                               conn-movement-ring-right)))
-    (pcase (car conn-movement-ring-right)
-      (`(,pt . ,mk)
-       (goto-char pt)
-       (conn--push-ephemeral-mark mk)))))
+(defun conn-pop-movement-ring (arg)
+  (interactive "p")
+  (setq conn--movement-rotating t)
+  (cond ((< arg 0)
+         (conn-unpop-movement-ring (abs arg)))
+        ((null conn-movement-ring)
+         (message "Movement ring empty"))
+        (t
+         (conn-push-region (point) (mark t))
+         (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
+           (conn-ring-rotate-forward conn-movement-ring))
+         (pcase (conn-ring-front conn-movement-ring)
+           (`(,pt . ,mk)
+            (goto-char pt)
+            (conn--push-ephemeral-mark mk))))))
 
 (defun conn-rectangle-mark ()
   "Toggle `rectangle-mark-mode'."
@@ -7681,8 +7731,8 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-pop-mark-repeat-map
   :repeat t
-  "o" 'conn-mark-ring-backward
-  "u" 'conn-mark-ring-forward)
+  "o" 'conn-pop-mark-ring
+  "u" 'conn-unpop-mark-ring)
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
@@ -8012,8 +8062,8 @@ Operates with the selected windows parent window."
   ;; "M-j" 'conn-open-line-and-indent
   ;; "C-o" 'conn-open-line-above
   ;; "M-o" 'conn-open-line
-  "M-g o" 'conn-mark-ring-backward
-  "M-g u" 'conn-mark-ring-forward
+  "M-g o" 'conn-pop-mark-ring
+  "M-g u" 'conn-unpop-mark-ring
   "C-S-w" 'delete-region
   "C-." 'conn-dispatch-on-things
   "C->" 'conn-dispatch-on-buttons
@@ -8041,13 +8091,13 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap conn-mode-map
-  "M-g j" 'conn-movement-ring-back
-  "M-g l" 'conn-movement-ring-forward)
+  "M-g j" 'conn-unpop-movement-ring
+  "M-g l" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-movement-ring-repeat-map
   :repeat t
-  "j" 'conn-movement-ring-back
-  "l" 'conn-movement-ring-forward)
+  "j" 'conn-unpop-movement-ring
+  "l" 'conn-pop-movement-ring)
 
 (define-keymap
   :keymap conn-mode-map
@@ -8102,13 +8152,13 @@ Operates with the selected windows parent window."
 (defun conn--push-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
               (null (marker-position (mark-marker))))
-    (conn--push-mark-ring-right (mark-marker)))
+    (conn--push-mark-ring (mark-marker)))
   (setq conn--ephemeral-mark nil))
 
 (defun conn--pop-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
               (null (marker-position (mark-marker))))
-    (conn--push-mark-ring-left (mark-marker)))
+    (conn--push-mark-ring (mark-marker) t))
   (setq conn--ephemeral-mark t))
 
 (defun conn--set-mark-ad (&rest _)
