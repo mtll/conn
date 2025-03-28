@@ -297,38 +297,36 @@ meaning of these see `advice-add'."
 
 ;;;;; Rings
 
+;; Expects no two items added to the ring to be eq to one another.  This
+;; works well enough for now but maybe it should be fixed.
 (cl-defstruct (conn-ring
-               (:constructor conn-ring (capacity &key cleanup)))
+               (:constructor conn--make-ring (capacity cleanup)))
   "A ring that removes elements in least recently visited order."
   list history capacity
+  (size 0)
   (cleanup #'ignore))
 
-(defun conn-ring--visit (ring item)
-  "Visit ITEM in RING, moving it to the front of the ring history."
-  (cl-loop for elem in (conn-ring-history ring)
-           unless (eq elem item)
-           collect elem into newhist
-           finally (setf (conn-ring-history ring) (cons item newhist))))
+(defun conn-ring (capacity &key cleanup)
+  (cl-assert (and (integerp capacity)
+                  (> capacity 0)))
+  (conn--make-ring capacity cleanup))
 
-(defun conn-ring--remove (ring item)
-  "Remove ITEM from RING."
-  (cl-loop for elem in (conn-ring-list ring)
-           unless (eq elem item)
-           collect elem into newlist
-           finally (progn
-                     (funcall (conn-ring-cleanup ring) item)
-                     (setf (conn-ring-list ring) newlist))))
+(define-inline conn-ring--visit (ring item)
+  (inline-quote
+   (setf (conn-ring-history ,ring)
+         (cons ,item (delq ,item (conn-ring-history ,ring))))))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (setf (conn-ring-list ring) (cons item (conn-ring-list ring)))
+  (push item (conn-ring-list ring))
   (conn-ring--visit ring item)
-  (when (length> (conn-ring-list ring)
-                 (conn-ring-capacity ring))
-    (let ((old (car (last (conn-ring-history ring))))
-          (newhist (butlast (conn-ring-history ring))))
-      (conn-ring--remove ring old)
-      (setf (conn-ring-history ring) newhist))))
+  (if (= (conn-ring-size ring) (conn-ring-capacity ring))
+      (let ((old (nth (1- (conn-ring-size ring))
+                      (conn-ring-history ring))))
+        (setf (conn-ring-list ring) (delq old (conn-ring-list ring))
+              (conn-ring-history ring) (take (conn-ring-size ring)
+                                             (conn-ring-history ring))))
+    (cl-incf (conn-ring-size ring))))
 
 (defun conn-ring-insert-back (ring item)
   "Insert ITEM into back of RING."
@@ -350,8 +348,8 @@ Takes (1 2 3 4) to (2 3 4 1)."
 
 Takes (1 2 3 4) to (4 1 2 3)."
   (let ((head (car (setf (conn-ring-list ring)
-                         (append (last (conn-ring-list ring))
-                                 (butlast (conn-ring-list ring)))))))
+                         (nconc (last (conn-ring-list ring))
+                                (butlast (conn-ring-list ring)))))))
     (conn-ring--visit ring head)
     head))
 
