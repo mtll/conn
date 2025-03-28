@@ -302,9 +302,8 @@ meaning of these see `advice-add'."
 (cl-defstruct (conn-ring
                (:constructor conn--make-ring (capacity cleanup)))
   "A ring that removes elements in least recently visited order."
-  list history capacity
-  (size 0)
-  (cleanup #'ignore))
+  list history capacity cleanup
+  (size 0))
 
 (defun conn-ring (capacity &key cleanup)
   (cl-assert (and (integerp capacity)
@@ -325,7 +324,9 @@ meaning of these see `advice-add'."
                       (conn-ring-history ring))))
         (setf (conn-ring-list ring) (delq old (conn-ring-list ring))
               (conn-ring-history ring) (take (conn-ring-size ring)
-                                             (conn-ring-history ring))))
+                                             (conn-ring-history ring)))
+        (when-let* ((cleanup (conn-ring-cleanup ring)))
+          (funcall cleanup old)))
     (cl-incf (conn-ring-size ring))))
 
 (defun conn-ring-insert-back (ring item)
