@@ -1478,13 +1478,9 @@ strings have `conn-dispatch-label-face'."
 (defun conn--get-dispatch-windows (all-windows)
   (cond (all-windows
          (cl-loop for win in (conn--get-windows nil nil 'visible)
-                  when (run-hook-with-args-until-failure
-                        'conn-dispatch-window-predicates
-                        win)
+                  when (funcall conn-dispatch-window-predicate win)
                   collect win))
-        ((run-hook-with-args-until-failure
-          'conn-dispatch-window-predicates
-          (selected-window))
+        ((funcall conn-dispatch-window-predicate (selected-window))
          (list (selected-window)))))
 
 
@@ -2254,7 +2250,7 @@ BOUNDS is of the form returned by `region-bounds'."
 (defvar conn-kmacro-apply-end-hook nil
   "Hook run after macro application has completed.")
 
-(defvar conn-kmacro-apply-loop-hook nil
+(defvar conn-kmacro-apply-loop-predicate nil
   "Hook run during each iteration of macro application.
 If any function returns a nil value then macro application it halted.")
 
@@ -2814,8 +2810,8 @@ The iterator must be the first argument in ARGLIST.
                                  (`(,beg . ,end)
                                   (when (markerp beg) (set-marker beg nil))
                                   (when (markerp end) (set-marker end nil))))
-                               (when (run-hook-with-args-until-failure
-                                      'conn-kmacro-apply-loop-hook)
+                               (when (and conn-kmacro-apply-loop-predicate
+                                          (funcall conn-kmacro-apply-loop-predicate))
                                  (cl-incf ,iterations))))))
            (run-hook-wrapped 'conn-kmacro-apply-start-hook
                              (lambda (hook)
@@ -3284,8 +3280,7 @@ of a command.")
                           (when thing-arg
                             (* (if thing-sign -1 1) (or thing-arg 1)))
                           finder action action-args
-                          (conn--dispatch-window-predicate
-                           action (get thing :conn-command-thing) cmd keys)
+                          (get action :conn-action-window-predicate)
                           repeat)))
                  ('keyboard-quit
                   (keyboard-quit))
@@ -3332,7 +3327,7 @@ of a command.")
                             (* (if thing-sign -1 1) (or thing-arg 1)))
                           (conn--dispatch-target-finder cmd)
                           action action-args
-                          (conn--dispatch-window-predicate action thing cmd keys)
+                          (get action :conn-action-window-predicate)
                           repeat)))
                  ((and cmd (pred conn-action-p))
                   (set-action (unless (eq cmd action) cmd)))
@@ -3372,8 +3367,8 @@ of a command.")
   :group 'conn
   :type '(list symbol))
 
-(defvar conn-dispatch-window-predicates
-  '(conn-dispatch-ignored-mode)
+(defvar conn-dispatch-window-predicate
+  'conn-dispatch-ignored-mode
   "Predicates which windows must satisfy in order to be considered during
 dispatch.
 
@@ -3388,13 +3383,6 @@ with `conn-dispatch-thing-ignored-modes'."
   (not (apply #'provided-mode-derived-p
               (buffer-local-value 'major-mode (window-buffer win))
               conn-dispatch-thing-ignored-modes)))
-
-(defun conn--dispatch-window-predicate (action _thing _binding _keys)
-  (lambda (win)
-    (let ((window-predicate (get action :conn-action-window-predicate)))
-      (or (null window-predicate)
-          (with-selected-window win
-            (not (funcall window-predicate)))))))
 
 
 ;;;;; Label setup and padding
@@ -3652,7 +3640,8 @@ Target overlays may override this default by setting the
   :description "Yank Replace To"
   :keys "C-y"
   :interactive (list (funcall region-extract-function nil))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3669,7 +3658,8 @@ Target overlays may override this default by setting the
   :description "Yank Replace To"
   :keys "M-y"
   :interactive (list (read-from-kill-ring "Yank Replace To from kill-ring: "))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3686,7 +3676,8 @@ Target overlays may override this default by setting the
   :description "Yank To"
   :keys "y"
   :interactive (list (funcall region-extract-function nil))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3699,7 +3690,8 @@ Target overlays may override this default by setting the
   :description "Yank To"
   :keys "Y"
   :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3712,7 +3704,8 @@ Target overlays may override this default by setting the
   :description "Throw"
   :keys "t"
   :interactive (list (funcall region-extract-function t))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3747,7 +3740,8 @@ Target overlays may override this default by setting the
   :keys ("<remap> <downcase-word>"
          "<remap> <downcase-region>"
          "<remap> <downcase-dwim>")
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-mark-and-excursion
       (goto-char pt)
@@ -3760,7 +3754,8 @@ Target overlays may override this default by setting the
   :keys ("<remap> <upcase-word>"
          "<remap> <upcase-region>"
          "<remap> <upcase-dwim>")
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-mark-and-excursion
       (goto-char pt)
@@ -3773,7 +3768,8 @@ Target overlays may override this default by setting the
   :keys ("<remap> <capitalize-word>"
          "<remap> <capitalize-region>"
          "<remap> <capitalize-dwim>")
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-mark-and-excursion
       (goto-char pt)
@@ -3795,7 +3791,8 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-comment (window pt thing-cmd thing-arg)
   :description "Comment"
   :keys (";" "M-;" "r ;")
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3808,7 +3805,8 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-duplicate (window pt thing-cmd thing-arg arg)
   :description "Duplicate"
   :keys ("r e")
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   :interactive (list (prefix-numeric-value current-prefix-arg))
   (with-selected-window window
     (save-excursion
@@ -3822,7 +3820,8 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-duplicate-and-comment (window pt thing-cmd thing-arg arg)
   :description "Duplicate and Comment"
   :keys ("r d")
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   :interactive (list (prefix-numeric-value current-prefix-arg))
   (with-selected-window window
     (save-excursion
@@ -3867,7 +3866,8 @@ Target overlays may override this default by setting the
                      (format "Kill to Register <%c>" register)
                    "Kill"))
   :keys "w"
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   :interactive (list (when current-prefix-arg
                        (register-read-with-preview "Register: ")))
   (with-selected-window window
@@ -3889,7 +3889,8 @@ Target overlays may override this default by setting the
                      (format "Kill Append Register <%c>" register)
                    "Kill Append"))
   :keys "]"
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   :interactive (list (when current-prefix-arg
                        (register-read-with-preview "Register: ")))
   (with-selected-window window
@@ -3912,7 +3913,8 @@ Target overlays may override this default by setting the
                      (format "Kill Prepend Register <%c>" register)
                    "Kill Prepend"))
   :keys "["
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   :interactive (list (when current-prefix-arg
                        (register-read-with-preview "Register: ")))
   (with-selected-window window
@@ -4011,7 +4013,8 @@ Target overlays may override this default by setting the
   :description "Cut Replace"
   :keys "d"
   :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4025,7 +4028,7 @@ Target overlays may override this default by setting the
 
 (conn-define-dispatch-action conn-dispatch-copy (window pt thing-cmd thing-arg)
   :description "Copy"
-  :keys ("c" "s")
+  :keys "c"
   :filter (lambda () (unless buffer-read-only 'this))
   (let (str)
     (with-selected-window window
@@ -4044,7 +4047,8 @@ Target overlays may override this default by setting the
   :description "Cut"
   :keys "x"
   :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4127,7 +4131,8 @@ Target overlays may override this default by setting the
   :description "Transpose"
   :keys "q"
   :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda () buffer-read-only)
+  :window-predicate (lambda (win)
+                      (buffer-local-value 'buffer-read-only (window-buffer win)))
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
                  (cons (region-beginning) (region-end))
@@ -4423,12 +4428,10 @@ seconds."
   (setq conn--last-dispatch-command
         (list thing-cmd thing-arg finder action
               action-args predicate repeat))
-  (let ((conn-dispatch-window-predicates
-         (if predicate
-             (append conn-dispatch-window-predicates
-                     (list predicate))
-           conn-dispatch-window-predicates))
+  (let ((conn-dispatch-window-predicate conn-dispatch-window-predicate)
         target-ovs labels target window pt)
+    (when predicate
+      (add-function :after-while conn-dispatch-window-predicate predicate))
     (ignore-error quit
       (while
           (prog1 repeat
@@ -8465,7 +8468,9 @@ Operates with the selected windows parent window."
     :description "Mark"
     :key "f"
     :modes (dired-mode)
-    :window-predicate (lambda () (eq major-mode 'dired-mode))
+    :window-predicate (lambda (win)
+                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                            'dired-mode))
     (with-selected-window window
       (save-excursion
         (let ((regexp (dired-marker-regexp)))
@@ -8479,7 +8484,9 @@ Operates with the selected windows parent window."
     :description "Kill Line"
     :key "w"
     :modes (dired-mode)
-    :window-predicate (lambda () (eq major-mode 'dired-mode))
+    :window-predicate (lambda (win)
+                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                            'dired-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -8489,7 +8496,9 @@ Operates with the selected windows parent window."
     :description "Kill Subdir"
     :key "d"
     :modes (dired-mode)
-    :window-predicate (lambda () (eq major-mode 'dired-mode))
+    :window-predicate (lambda (win)
+                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                            'dired-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -8567,7 +8576,9 @@ Operates with the selected windows parent window."
     :description "Mark"
     :key "f"
     :modes (ibuffer-mode)
-    :window-predicate (lambda () (eq major-mode 'ibuffer-mode))
+    :window-predicate (lambda (win)
+                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                            'ibuffer-mode))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
