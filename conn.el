@@ -2322,10 +2322,6 @@ BOUNDS is of the form returned by `region-bounds'."
 (defvar conn-kmacro-apply-end-hook nil
   "Hook run after macro application has completed.")
 
-(defvar conn-kmacro-apply-loop-predicate nil
-  "Hook run during each iteration of macro application.
-If any function returns a nil value then macro application it halted.")
-
 
 ;;;;; Kapply query
 
@@ -2882,9 +2878,7 @@ The iterator must be the first argument in ARGLIST.
                                  (`(,beg . ,end)
                                   (when (markerp beg) (set-marker beg nil))
                                   (when (markerp end) (set-marker end nil))))
-                               (when (and conn-kmacro-apply-loop-predicate
-                                          (funcall conn-kmacro-apply-loop-predicate))
-                                 (cl-incf ,iterations))))))
+                               (cl-incf ,iterations)))))
            (run-hook-wrapped 'conn-kmacro-apply-start-hook
                              (lambda (hook)
                                (ignore-errors (funcall hook))))
