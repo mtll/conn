@@ -8131,7 +8131,12 @@ Operates with the selected windows parent window."
   "<conn-thing-map> v" 'conn-mark-visible
   "<conn-thing-map> L" 'forward-line
   "<conn-thing-map> )" 'forward-list
-  "<conn-thing-map> (" 'backward-list
+  "<conn-thing-map> (" 'backward-list)
+
+(define-keymap
+  :keymap (or (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
+              (setf (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
+                    (make-sparse-keymap)))
   "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
 
