@@ -7045,6 +7045,11 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Transition Functions
 
+(defun conn-org-edit-state ()
+  "A `conn-mode' state for structural editing of `org-mode' buffers."
+  (interactive)
+  (conn-enter-state 'conn-org-edit-state))
+
 (defun conn-insert-state ()
   "Enter insert state for the current buffer."
   (interactive)
@@ -8565,6 +8570,12 @@ Operates with the selected windows parent window."
    'conn-org-speed-previous-block)
 
   (define-keymap
+    :keymap (conn-get-mode-map 'conn-command-state 'conntext-org-mode)
+    "c" (define-conntext-key "Org Edit State"
+          (when (and (bolp) (looking-at org-outline-regexp))
+            'conn-org-edit-state)))
+
+  (define-keymap
     :keymap (conn-get-mode-map 'conn-emacs-state 'conntext-org-mode)
     "k" (define-conntext-key "Next Visible Heading"
           (when (and (bolp) (looking-at org-outline-regexp))
@@ -8595,15 +8606,15 @@ Operates with the selected windows parent window."
             (lambda ()
               (interactive)
               (org-refile '(4)))))
-    "c" (define-conntext-key "Cycle"
+    "c" (define-conntext-key "Org Edit State"
           (when (and (bolp) (looking-at org-outline-regexp))
-            'org-cycle))
+            'conn-org-edit-state))
     "C" (define-conntext-key "Shift Tab"
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-shifttab))
     "SPC" (define-conntext-key "Outline Path"
-              (when (and (bolp) (looking-at org-outline-regexp))
-                'org-display-outline-path))
+            (when (and (bolp) (looking-at org-outline-regexp))
+              'org-display-outline-path))
     "s" (define-conntext-key "Narrow to Subtree"
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-toggle-narrow-to-subtree))
