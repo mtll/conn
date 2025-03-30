@@ -43,7 +43,7 @@
 
 (defun conn-embark-conn-bindings ()
   (interactive)
-  (embark-bindings-in-keymap (alist-get conn-current-state conn--state-maps)))
+  (embark-bindings-in-keymap (current-global-map)))
 
 (provide 'conn-embark)
 
