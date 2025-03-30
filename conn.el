@@ -31,6 +31,7 @@
 
 (require 'compat)
 (eval-when-compile
+  (require 'oclosure)
   (require 'inline)
   (require 'subr-x)
   (require 'cl-lib)
@@ -8436,6 +8437,11 @@ Operates with the selected windows parent window."
   (declare-function org-in-regexp "org-macs")
   (declare-function org-backward-element "org")
   (declare-function org-mark-element "org")
+  (declare-function org-agenda-remove-restriction-lock "org-agenda")
+  (declare-function org-priority "org")
+  (declare-function org-refile "org-refile")
+  (declare-function org-speed-move-safe "org-keys")
+  (declare-function org-entry-put "org")
 
   (conn-register-thing
    'org-link
