@@ -418,9 +418,39 @@ the original binding.  Also see `conn-remap-key'."
                  (let ((binding (key-binding from-keys t)))
                    (if (keymapp binding) binding real-binding))))))
 
-(defmacro conn-conntext-key (doc test &rest body)
-  ``(menu-item ,',doc nil
-               :filter ,(lambda (_) (when ,test ,@body))))
+
+;;;;;; Conntext
+
+(oclosure-define conntext-filter-function
+  "Conntext filter function"
+  (filter-function :mutable t))
+
+(defmacro define-conntext-key (doc &rest body)
+  (declare (indent 1))
+  `(letrec ((filter-fn (oclosure-lambda (conntext-filter-function
+                                         (filter-function (lambda () ,@body)))
+                           (_)
+                         (if conn--get-conntext-key
+                             filter-fn
+                           (funcall filter-function)))))
+     (list 'menu-item ,doc nil :filter filter-fn)))
+
+(defvar conn--get-conntext-key nil)
+
+(defun conntext-key (state mode key)
+  (let* ((conn--get-conntext-key t)
+         (keymap (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
+         (binding (keymap-lookup keymap key t)))
+    (if binding
+        (conntext-filter-function--filter-function binding)
+      (error "No conntext binding for %s" key))))
+
+(gv-define-setter conntext-key (fn state mode key)
+  `(let* ((conn--get-conntext-key t)
+          (keymap (alist-get ,mode (cdr (gethash ,state conn--minor-mode-maps)))))
+     (setf (conntext-filter-function--filter-function
+            (keymap-lookup keymap ,key t))
+           ,fn)))
 
 
 ;;;;; Region utils
