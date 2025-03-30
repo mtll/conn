@@ -418,6 +418,10 @@ the original binding.  Also see `conn-remap-key'."
                  (let ((binding (key-binding from-keys t)))
                    (if (keymapp binding) binding real-binding))))))
 
+(defmacro conn-conntext-key (doc test &rest body)
+  ``(menu-item ,',doc nil
+               :filter ,(lambda (_) (when ,test ,@body))))
+
 
 ;;;;; Region utils
 
@@ -902,6 +906,33 @@ The composed map is a keymap of the form:
                         (conn-get-mode-map state pmode)
                         (gethash pmode (gethash state conn--major-mode-maps)))))))
 
+(defun conn--sort-mode-maps (state)
+  (cl-check-type state conn-state)
+  (let* ((parents (conn--state-all-parents state))
+         (depths (mapcar (lambda (parent)
+                           (car (gethash parent conn--minor-mode-maps)))
+                         parents)))
+    (setf (cdr (gethash state conn--minor-mode-maps))
+          (compat-call
+           sort (cdr (gethash state conn--minor-mode-maps))
+           :key (lambda (cons)
+                  (or (seq-some (lambda (table) (gethash (car cons) table))
+                                depths)
+                      0))
+           :in-place t))))
+
+(defun conn-set-mode-map-depth (state mode depth)
+  (cl-check-type state conn-state)
+  (cl-assert (symbolp mode))
+  (cl-assert (<= -100 depth 100))
+  (conn-get-mode-map state mode)
+  (let ((map-depths (car (gethash state conn--minor-mode-maps))))
+    (unless (eql (gethash mode map-depths) depth)
+      (setf (gethash mode map-depths) depth)
+      (mapc #'conn--sort-mode-maps
+            (cons state (conn--state-all-children state)))))
+  nil)
+
 (defun conn-get-mode-map (state mode)
   "Return keymap for MODE in STATE.
 
@@ -927,17 +958,19 @@ return it."
             (conn-get-mode-map child mode))
           (nth 1 keymap)))
        (t
-        (let ((keymap (make-composed-keymap (make-sparse-keymap)))
-              (alist (gethash state conn--minor-mode-maps)))
-          (if (alist-get mode alist)
-              (setf (alist-get mode alist) keymap)
-            (setcdr alist (cons (cons mode keymap) (cdr alist))))
-          (setf (cddr keymap)
-                (cl-loop for parent in (cdr (conn--state-all-parents state))
-                         collect (conn-get-mode-map parent mode)))
-          (dolist (child (conn--state-all-children state))
-            (conn-get-mode-map child mode))
-          (nth 1 keymap))))))
+        (prog1
+            (let ((keymap (make-composed-keymap (make-sparse-keymap)))
+                  (alist (gethash state conn--minor-mode-maps)))
+              (if (alist-get mode alist)
+                  (setf (alist-get mode alist) keymap)
+                (setcdr alist (cons (cons mode keymap) (cdr alist))))
+              (setf (cddr keymap)
+                    (cl-loop for parent in (cdr (conn--state-all-parents state))
+                             collect (conn-get-mode-map parent mode)))
+              (dolist (child (conn--state-all-children state))
+                (conn-get-mode-map child mode))
+              (nth 1 keymap))
+          (conn--sort-mode-maps state))))))
 
 (defun conn--rebuild-state-keymaps (state)
   "Rebuild all composed keymaps for STATE.
@@ -1418,7 +1451,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
              (cl-pushnew ',name (aref (get parent :conn--state) 2)))
            (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
-                 (gethash ',name conn--minor-mode-maps) (list :conn-keymap-alist)
+                 (gethash ',name conn--minor-mode-maps) (list (make-hash-table))
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq)))))))
 
 (conn-define-state conn-null-state ()
@@ -8262,12 +8295,10 @@ Operates with the selected windows parent window."
       (progn
         (setq conn-current-state nil
               conn-previous-state nil)
-        (setq-local
-         conn-lighter (seq-copy conn-lighter)
-         conn--local-state-map (list (list 'conn-local-mode))
-         conn--local-override-map (list (list 'conn-local-mode))
-         conn--local-major-mode-map (list (list 'conn-local-mode))
-         conn--local-minor-mode-maps (list (list 'conn-local-mode)))
+        (setq-local conn-lighter (seq-copy conn-lighter)
+                    conn--local-state-map (list (list 'conn-local-mode))
+                    conn--local-override-map (list (list 'conn-local-mode))
+                    conn--local-major-mode-map (list (list 'conn-local-mode)))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
@@ -8519,7 +8550,59 @@ Operates with the selected windows parent window."
    'outline-previous-visible-heading
    'outline-previous-heading
    'outline-forward-same-level
-   'outline-backward-same-level))
+   'outline-backward-same-level)
+
+  (define-minor-mode conntext-outline-mode
+    "Minor mode for contextual bindings in outline-mode.")
+
+  (defvar-keymap conntext-outline-map
+    "/ h" 'outline-hide-by-heading-regexp
+    "/ s" 'outline-show-by-heading-regexp
+    "<" 'outline-promote
+    ">" 'outline-demote
+    "I" 'outline-move-subtree-up
+    "K" 'outline-move-subtree-down
+    "RET" 'outline-insert-heading
+    "a" 'outline-show-all
+    "c" 'outline-hide-entry
+    "e" 'outline-show-entry
+    "f" 'outline-hide-other
+    "h" 'outline-hide-subtree
+    "i" 'outline-previous-visible-heading
+    "j" 'outline-backward-same-level
+    "k" 'outline-next-visible-heading
+    "b" 'outline-show-branches
+    "l" 'outline-forward-same-level
+    "v" 'outline-hide-leaves
+    "m" 'outline-mark-subtree
+    "o" 'outline-show-children
+    "q" 'outline-hide-sublevels
+    "s" 'outline-show-subtree
+    "t" 'outline-hide-body
+    "u" 'outline-up-heading)
+
+  (defvar-keymap conntext-outline-edit-repeat-map
+    :repeat t
+    "<" 'outline-promote
+    ">" 'outline-demote
+    "I" 'outline-move-subtree-up
+    "K" 'outline-move-subtree-down)
+
+  (defvar-keymap conntext-outline-movement-repeat-map
+    :repeat t
+    "i" 'outline-previous-visible-heading
+    "j" 'outline-backward-same-level
+    "k" 'outline-next-visible-heading
+    "l" 'outline-forward-same-level
+    "u" 'outline-up-heading)
+
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
+    "c" (conn-conntext-key "Conntext Outline Map"
+                           (looking-at-p outline-regexp)
+                           conntext-outline-map))
+
+  (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80))
 
 (with-eval-after-load 'dired
   (defvar dired-subdir-alist)
