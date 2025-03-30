@@ -909,9 +909,10 @@ The composed map is a keymap of the form:
 (defun conn--sort-mode-maps (state)
   (cl-check-type state conn-state)
   (let* ((parents (conn--state-all-parents state))
-         (depths (mapcar (lambda (parent)
-                           (car (gethash parent conn--minor-mode-maps)))
-                         parents)))
+         (depths (delq nil (mapcar
+                            (lambda (parent)
+                              (car (gethash parent conn--minor-mode-maps)))
+                            parents))))
     (setf (cdr (gethash state conn--minor-mode-maps))
           (compat-call
            sort (cdr (gethash state conn--minor-mode-maps))
@@ -926,7 +927,9 @@ The composed map is a keymap of the form:
   (cl-assert (symbolp mode))
   (cl-assert (<= -100 depth 100))
   (conn-get-mode-map state mode)
-  (let ((map-depths (car (gethash state conn--minor-mode-maps))))
+  (let ((map-depths (or (car (gethash state conn--minor-mode-maps))
+                        (setf (car (gethash state conn--minor-mode-maps))
+                              (make-hash-table :test 'eq)))))
     (unless (eql (gethash mode map-depths) depth)
       (setf (gethash mode map-depths) depth)
       (mapc #'conn--sort-mode-maps
@@ -942,7 +945,7 @@ return it."
   (cl-assert (symbolp mode))
   (or (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
         (nth 1 (gethash mode mmode-table)))
-      (nth 1 (alist-get mode (gethash state conn--minor-mode-maps)))
+      (nth 1 (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
       (cond
        ((autoloadp (symbol-function mode))
         (error "%s not loaded" mode))
@@ -961,7 +964,7 @@ return it."
         (prog1
             (let ((keymap (make-composed-keymap (make-sparse-keymap)))
                   (alist (gethash state conn--minor-mode-maps)))
-              (if (alist-get mode alist)
+              (if (alist-get mode (cdr alist))
                   (setf (alist-get mode alist) keymap)
                 (setcdr alist (cons (cons mode keymap) (cdr alist))))
               (setf (cddr keymap)
@@ -1451,7 +1454,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
              (cl-pushnew ',name (aref (get parent :conn--state) 2)))
            (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
-                 (gethash ',name conn--minor-mode-maps) (list (make-hash-table))
+                 (gethash ',name conn--minor-mode-maps) (list nil)
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq)))))))
 
 (conn-define-state conn-null-state ()
@@ -8527,6 +8530,9 @@ Operates with the selected windows parent window."
         (funcall conn-previous-state))))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
+(define-minor-mode conntext-outline-mode
+  "Minor mode for contextual bindings in outline-mode.")
+
 (with-eval-after-load 'outline
   (declare-function outline-mark-subtree "outline")
   (declare-function outline-next-heading "outline")
@@ -8551,9 +8557,6 @@ Operates with the selected windows parent window."
    'outline-previous-heading
    'outline-forward-same-level
    'outline-backward-same-level)
-
-  (define-minor-mode conntext-outline-mode
-    "Minor mode for contextual bindings in outline-mode.")
 
   (defvar-keymap conntext-outline-map
     "/ h" 'outline-hide-by-heading-regexp
