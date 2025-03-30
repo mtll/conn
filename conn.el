@@ -422,11 +422,12 @@ the original binding.  Also see `conn-remap-key'."
 
 ;;;;;; Conntextual Bindings
 
-(oclosure-define conntext-filter-function
+(oclosure-define (conntext-filter-function
+                  (:predicate conntext-filter-function-p))
   "Conntext filter function"
   (filter :mutable t))
 
-(defmacro conntext-define-key (doc &rest body)
+(defmacro conntext-define-key (description &rest body)
   (declare (indent 1))
   `(letrec ((self (oclosure-lambda (conntext-filter-function
                                     (filter (lambda () ,@body)))
@@ -434,22 +435,20 @@ the original binding.  Also see `conn-remap-key'."
                     (if conn--get-conntext-key
                         self
                       (funcall filter)))))
-     (list 'menu-item ,doc nil :filter self)))
+     (list 'menu-item ,description :conntext-key :filter self)))
 
 (defvar conn--get-conntext-key nil)
 
-(defun conntext-key (state mode key)
+(defun conntext-key (keymap key)
   (let* ((conn--get-conntext-key t)
-         (keymap (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
          (binding (keymap-lookup keymap key t)))
-    (if binding
+    (if (conntext-filter-function-p binding)
         (conntext-filter-function--filter binding)
-      (error "No conntext binding for %s" key))))
+      (error "No conntext binding found for %s" key))))
 
-(gv-define-setter conntext-key (fn state mode key)
+(gv-define-setter conntext-key (fn keymap key)
   `(let* ((conn--get-conntext-key t)
-          (keymap (alist-get ,mode (cdr (gethash ,state conn--minor-mode-maps))))
-          (binding (keymap-lookup keymap ,key t)))
+          (binding (keymap-lookup ,keymap ,key t)))
      (setf (conntext-filter-function--filter binding) ,fn)))
 
 
@@ -8003,25 +8002,19 @@ Operates with the selected windows parent window."
   "I" (conn-remap-key conn-backward-paragraph-keys)
   "i" (conn-remap-key conn-previous-line-keys)
   "J" 'conn-backward-inner-line
-  "j" `(menu-item
-        ""
-        nil
-        :filter ,(lambda (&rest _)
-                   (let ((binding (key-binding conn-backward-char-keys t)))
-                     (if (eq binding 'backward-char)
-                         'conn-backward-char
-                       binding))))
+  "j" (conntext-define-key "Conn Backward Char"
+        (let ((binding (key-binding conn-backward-char-keys t)))
+          (if (eq binding 'backward-char)
+              'conn-backward-char
+            binding)))
   "K" (conn-remap-key conn-forward-paragraph-keys)
   "k" (conn-remap-key conn-next-line-keys)
   "L" 'conn-forward-inner-line
-  "l" `(menu-item
-        ""
-        nil
-        :filter ,(lambda (&rest _)
-                   (let ((binding (key-binding conn-forward-char-keys t)))
-                     (if (eq binding 'forward-char)
-                         'conn-forward-char
-                       binding))))
+  "l" (conntext-define-key "Conn Forward Char"
+        (let ((binding (key-binding conn-forward-char-keys t)))
+          (if (eq binding 'forward-char)
+              'conn-forward-char
+            binding)))
   "M" (conn-remap-key conn-end-of-defun-keys)
   "m" (conn-remap-key conn-forward-sexp-keys)
   "N" (conn-remap-key conn-beginning-of-defun-keys)
