@@ -41,6 +41,7 @@
 
 (defvar conn-mode)
 (defvar conn-local-mode)
+(defvar conn-dispatch-window-predicate)
 
 (defvar-local conn--hide-mark-cursor nil)
 
@@ -9097,6 +9098,34 @@ Operates with the selected windows parent window."
 
 ;;;; Ibuffer
 
+(conn-define-state conn-ibuffer-state ()
+  "State for `ibuffer-mode'."
+  :cursor 'box
+  :lighter " Ibf"
+  :suppress-input-method t)
+
+(conn-define-state conn-ibuffer-dispatch-state (conn-ibuffer-state conn-read-dispatch-state)
+  "State for dispatch in `ibuffer-mode'."
+  :cursor 'box
+  :lighter " DISPATCH"
+  :suppress-input-method t)
+
+(defun conn-setup-ibuffer-state ()
+  (conn-enter-state 'conn-ibuffer-state)
+  (setq conn-state-for-command 'conn-ibuffer-state
+        conn-state-for-read-dispatch 'conn-ibuffer-dispatch-state))
+
+(define-minor-mode conn-ibuffer-mode
+  "Enable `conn-ibuffer-state' in `ibuffer-mode'."
+  :global t
+  (if conn-ibuffer-mode
+      (setf (alist-get '(derived-mode . ibuffer-mode)
+                       conn-buffer-state-setup-alist nil nil #'equal)
+            'conn-setup-ibuffer-state)
+    (setq conn-buffer-state-setup-alist
+          (delq (assoc '(derived-mode . ibuffer-mode) conn-buffer-state-setup-alist)
+                conn-buffer-state-setup-alist))))
+
 (with-eval-after-load 'ibuffer
   (defvar ibuffer-movement-cycle)
   (defvar ibuffer-marked-char)
@@ -9136,7 +9165,8 @@ Operates with the selected windows parent window."
 
   (conn-register-thing
    'ibuffer-line
-   :dispatch-target-finder 'conn--dispatch-ibuffer-lines)
+   :dispatch-target-finder 'conn--dispatch-ibuffer-lines
+   :default-action 'conn-dispatch-jump)
 
   (conn-register-thing-commands
    'ibuffer-line nil
@@ -9144,7 +9174,8 @@ Operates with the selected windows parent window."
 
   (conn-register-thing
    'ibuffer-filter-group
-   :dispatch-target-finder 'conn--dispatch-ibuffer-filter-group)
+   :dispatch-target-finder 'conn--dispatch-ibuffer-filter-group
+   :default-action 'conn-dispatch-jump)
 
   (conn-register-thing-commands
    'ibuffer-filter-group nil
@@ -9153,8 +9184,8 @@ Operates with the selected windows parent window."
 
   (conn-define-dispatch-action conn-dispatch-ibuffer-mark (window pt _thing-cmd _thing-arg)
     :description "Mark"
-    :key "f"
-    :modes (ibuffer-mode)
+    :keys "f"
+    :state 'conn-ibuffer-dispatch-state
     :window-predicate (lambda (win)
                         (eq (buffer-local-value 'major-mode (window-buffer win))
                             'ibuffer-mode))
@@ -9167,12 +9198,56 @@ Operates with the selected windows parent window."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'ibuffer-mode)
-    "f" 'conn-dispatch-ibuffer-mark
-    "i" 'ibuffer-backward-line
+    :keymap (conn-get-state-map 'conn-ibuffer-state)
+    ";" 'conn-wincontrol
+    "/" 'ibuffer-do-revert
+    "`" 'other-window
+    "y" 'ibuffer-yank
+    "z" 'ibuffer-jump-to-buffer
+    "r" (conn-remap-key (key-parse "%"))
+    "h" (conn-remap-key (key-parse "*"))
+    "l" 'ibuffer-forward-filter-group
+    "j" 'ibuffer-backward-filter-group
+    "m" 'ibuffer-jump-to-filter-group
+    "n" 'conn-ibuffer-filter-prefix
+    "f" 'conn-dispatch-on-things
     "k" 'ibuffer-forward-line
-    "n" 'ibuffer-backward-filter-group
-    "m" 'ibuffer-forward-filter-group))
+    "i" 'ibuffer-backward-line
+    "w" 'ibuffer-do-kill-lines
+    "u" 'ibuffer-do-kill-on-deletion-marks
+    "x" (conn-remap-key (key-parse "C-x"))
+    "s" (conn-remap-key (key-parse "M-s"))
+    "t a" 'ibuffer-do-sort-by-alphabetic
+    "t f" 'ibuffer-do-sort-by-filename/process
+    "t i" 'ibuffer-invert-sorting
+    "t m" 'ibuffer-do-sort-by-major-mode
+    "t s" 'ibuffer-do-sort-by-size
+    "t v" 'ibuffer-do-sort-by-recency
+    "M-s i r" 'ibuffer-do-isearch-regexp
+    "M-s i s" 'ibuffer-do-isearch
+    "M-s i o" 'ibuffer-do-occur
+    "M-w" 'ibuffer-copy-filename-as-kill
+    "<" 'ibuffer-forward-next-marked
+    ">" 'ibuffer-backwards-next-marked
+    "M-SPC" 'ibuffer-toggle-marks
+    "C-M-l" 'ibuffer-redisplay
+    "SPC" 'scroll-up-command
+    "DEL" 'scroll-down-command
+    "v" 'ibuffer-mark-forward
+    "c" 'ibuffer-unmark-forward
+    "C" 'ibuffer-unmark-backward
+    "o" 'ibuffer-visit-buffer-other-window
+    "RET" 'ibuffer-visit-buffer
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
 
 
 ;;;; Markdown
@@ -9190,6 +9265,7 @@ Operates with the selected windows parent window."
 
   ;; TODO: other markdown things
   )
+
 
 ;;;; Treesit
 
@@ -9223,15 +9299,20 @@ Operates with the selected windows parent window."
 
 (conn-define-state conn-help-state (conn-movement-state conn-menu-state)
   :lighter " Help"
-  :cursor 'box)
+  :cursor 'box
+  :suppress-input-method t)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-help-state)
   "j" 'backward-button
   "l" 'forward-button
-  "f" 'conn-dispatch-on-buttons
-  "`" 'other-window)
+  "b" 'conn-dispatch-on-buttons
+  "f" 'conn-dispatch-on-things
+  "`" 'other-window
+  ";" 'conn-wincontrol)
 
+
+;;; Footer
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
 ;; indent-tabs-mode: nil

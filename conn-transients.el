@@ -1455,6 +1455,62 @@ A zero means repeat until error."
       ("c" "Capitalize" capitalize-region)
       ("d" "downcase" downcase-region)]])
 
+;;;; Ibuffer
+
+(declare-function ibuffer-format-qualifier "ibuf-ext")
+(defvar ibuffer-filtering-qualifiers)
+
+;;;###autoload (autoload 'conn-ibuffer-filter-prefix "conn-transients" nil t)
+(transient-define-prefix conn-ibuffer-filter-prefix ()
+  "Ibuffer filter prefix"
+  [:description
+   (lambda ()
+     (require 'ibuffer)
+     (require 'ibuf-ext)
+     (concat
+      " "
+      (mapconcat
+       (lambda (q)
+         (propertize (substring (ibuffer-format-qualifier q) 1)
+                     'face 'transient-value))
+       ibuffer-filtering-qualifiers
+       " ")))
+   ["Filter"
+    ("s" "Save" ibuffer-save-filters :transient t)
+    ("x" "Delete Saved" ibuffer-delete-saved-filters :transient t)
+    ("/" "Disable" ibuffer-filter-disable :transient t)
+    ("r" "Switch To" ibuffer-switch-to-saved-filters :transient t)
+    ("p" "Pop" ibuffer-pop-filter :transient t)]
+   ["Ops"
+    ("!" "Negate" ibuffer-negate-filter :transient t)
+    ("+" "And" ibuffer-and-filter :transient t)
+    ("*" "Or" ibuffer-or-filter :transient t)
+    ("D" "Decompose" ibuffer-decompose-filter :transient t)
+    ("t" "Exchange" ibuffer-exchange-filters :transient t)]
+   ["Groups"
+    ("S" "Save" ibuffer-delete-saved-filter-groups :transient t)
+    ("X" "Delete Saved" ibuffer-delete-saved-filter-groups :transient t)
+    ("g" "Group" ibuffer-filters-to-filter-group :transient t)
+    ("P" "Pop" ibuffer-pop-filter-group :transient t)
+    ("R" "Switch To" ibuffer-switch-to-saved-filter-groups :transient t)]]
+  ["Filter By"
+   [("i" "Modified" ibuffer-filter-by-modified :transient t)
+    ("m" "Mode" ibuffer-filter-by-mode :transient t)
+    ("M" "Derived Mode" ibuffer-filter-by-derived-mode :transient t)
+    ("." "Extension" ibuffer-filter-by-file-extension :transient t)
+    ("*" "Starred Name" ibuffer-filter-by-starred-name :transient t)]
+   [("c" "Content" ibuffer-filter-by-content :transient t)
+    ("f" "Filename" ibuffer-filter-by-filename :transient t)
+    ("F" "Directory" ibuffer-filter-by-directory :transient t)
+    ("n" "Name" ibuffer-filter-by-name :transient t)
+    ("v" "Visiting" ibuffer-filter-by-visiting-file :transient t)]
+   [("<" "Size" ibuffer-filter-by-size-lt :transient t)
+    (">" "Size" ibuffer-filter-by-size-gt :transient t)
+    ("e" "Predicate" ibuffer-filter-by-predicate :transient t)
+    ("b" "Basename" ibuffer-filter-by-basename :transient t)
+    ("E" "Process" ibuffer-filter-by-process :transient t)]
+   [("q" "quit" ignore)]])
+
 (provide 'conn-transients)
 
 (with-eval-after-load 'compile
