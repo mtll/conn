@@ -31,7 +31,6 @@
 
 (require 'compat)
 (eval-when-compile
-  (require 'oclosure)
   (require 'inline)
   (require 'subr-x)
   (require 'cl-lib)
