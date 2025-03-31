@@ -419,10 +419,7 @@ the original binding.  Also see `conn-remap-key'."
                  (let ((binding (key-binding from-keys t)))
                    (if (keymapp binding) binding real-binding))))))
 
-
-;;;;;; Conntextual Bindings
-
-(defmacro conntext-define-key (name &rest body)
+(defmacro conntext-define (name &rest body)
   (declare (indent 1))
   `(progn
      (defun ,name () ,@body)
@@ -430,8 +427,10 @@ the original binding.  Also see `conn-remap-key'."
      (list 'menu-item ,(symbol-name name) :conntext-key
            :filter (lambda (_) (,name)))))
 
-(defun conntext-key-binding (conntext-key)
-  `(menu-item (symbol-name ,conntext-key) :conntext-key :filter ,conntext-key))
+(defun conntext-binding-form (conntext-function)
+  (cl-check-type conntext-function symbol)
+  `(menu-item (symbol-name ,conntext-function) :conntext-key
+              :filter ,(lambda (_) (funcall conntext-function))))
 
 
 ;;;;; Region utils
@@ -7984,7 +7983,7 @@ Operates with the selected windows parent window."
   "I" (conn-remap-key conn-backward-paragraph-keys)
   "i" (conn-remap-key conn-previous-line-keys)
   "J" 'conn-backward-inner-line
-  "j" (conntext-define-key conntext-backward-char
+  "j" (conntext-define conntext-backward-char
         (let ((binding (key-binding conn-backward-char-keys t)))
           (if (eq binding 'backward-char)
               'conn-backward-char
@@ -7992,7 +7991,7 @@ Operates with the selected windows parent window."
   "K" (conn-remap-key conn-forward-paragraph-keys)
   "k" (conn-remap-key conn-next-line-keys)
   "L" 'conn-forward-inner-line
-  "l" (conntext-define-key conntext-backward-char
+  "l" (conntext-define conntext-forward-char
         (let ((binding (key-binding conn-forward-char-keys t)))
           (if (eq binding 'forward-char)
               'conn-forward-char
@@ -8551,157 +8550,157 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-command-state 'conntext-org-mode)
-    "c" (conntext-define-key conntext-org-edit-state
+    "c" (conntext-define conntext-org-edit-state
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-edit-state)))
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-emacs-state 'conntext-org-mode)
-    "k" (conntext-define-key conntext-org-next-visible-heading
+    "k" (conntext-define conntext-org-next-visible-heading
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-speed-next-heading))
-    "i" (conntext-define-key conntext-org-prev-visible-heading
+    "i" (conntext-define conntext-org-prev-visible-heading
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-speed-previous-heading))
-    "l" (conntext-define-key conntext-org-forward-heading
+    "l" (conntext-define conntext-org-forward-heading
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-speed-forward-heading))
-    "j" (conntext-define-key conntext-org-backward-heading
+    "j" (conntext-define conntext-org-backward-heading
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-speed-backward-heading))
-    "F" (conntext-define-key conntext-org-next-block
+    "F" (conntext-define conntext-org-next-block
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-next-block))
-    "B" (conntext-define-key conntext-org-prev-block
+    "B" (conntext-define conntext-org-prev-block
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-previous-block))
-    "u" (conntext-define-key conntext-org-up-heading
+    "u" (conntext-define conntext-org-up-heading
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-speed-up-heading))
-    ;; "j" (conntext-define-key ""
+    ;; "j" (conntext-define ""
     ;;       (when (and (bolp) (looking-at org-outline-regexp))
     ;;         'org-goto))
-    "g" (conntext-define-key conntext-org-refile-goto
+    "g" (conntext-define conntext-org-refile-goto
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-refile '(4)))))
-    "c" (conntext-define-key conntext-org-edit-state
+    "c" (conntext-define conntext-org-edit-state
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-edit-state))
-    "C" (conntext-define-key conntext-org-shifttab
+    "C" (conntext-define conntext-org-shifttab
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-shifttab))
-    "SPC" (conntext-define-key conntext-org-outline-path
+    "SPC" (conntext-define conntext-org-outline-path
             (when (and (bolp) (looking-at org-outline-regexp))
               'org-display-outline-path))
-    "s" (conntext-define-key conntext-org-narrow-subtree
+    "s" (conntext-define conntext-org-narrow-subtree
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-toggle-narrow-to-subtree))
-    "w" (conntext-define-key conntext-org-cut-subtree
+    "w" (conntext-define conntext-org-cut-subtree
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-cut-subtree))
-    "=" (conntext-define-key conntext-org-columns
+    "=" (conntext-define conntext-org-columns
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-columns))
-    "I" (conntext-define-key conntext-org-metaup
+    "I" (conntext-define conntext-org-metaup
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-metaup))
-    "K" (conntext-define-key conntext-org-metadown
+    "K" (conntext-define conntext-org-metadown
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-metadown))
-    "L" (conntext-define-key conntext-org-metaright
+    "L" (conntext-define conntext-org-metaright
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-metaright))
-    "J" (conntext-define-key conntext-org-metaleft
+    "J" (conntext-define conntext-org-metaleft
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-metaleft))
-    "M-L" (conntext-define-key conntext-org-shiftmetaright
+    "M-L" (conntext-define conntext-org-shiftmetaright
             (when (and (bolp) (looking-at org-outline-regexp))
               'org-shiftmetaright))
-    "M-J" (conntext-define-key conntext-org-shiftmetaleft
+    "M-J" (conntext-define conntext-org-shiftmetaleft
             (when (and (bolp) (looking-at org-outline-regexp))
               'org-shiftmetaleft))
-    "RET" (conntext-define-key conntext-org-insert-heading
+    "RET" (conntext-define conntext-org-insert-heading
             (when (and (bolp) (looking-at org-outline-regexp))
               (progn (forward-char 1) (call-interactively 'org-insert-heading-respect-content))))
-    "^" (conntext-define-key conntext-org-sort
+    "^" (conntext-define conntext-org-sort
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-sort))
-    "r" (conntext-define-key conntext-org-refile
+    "r" (conntext-define conntext-org-refile
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-refile))
-    "a" (conntext-define-key conntext-org-archive-subtree
+    "a" (conntext-define conntext-org-archive-subtree
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-archive-subtree-default-with-confirmation))
-    "@" (conntext-define-key conntext-org-mark-subtree
+    "@" (conntext-define conntext-org-mark-subtree
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-mark-subtree))
-    "#" (conntext-define-key conntext-org-comment
+    "#" (conntext-define conntext-org-comment
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-toggle-comment))
-    "p" (conntext-define-key conntext-org-clock-map
+    "p" (conntext-define conntext-org-clock-map
           (when (and (bolp) (looking-at org-outline-regexp))
             (define-keymap
               "i" 'org-clock-in
               "o" 'org-clock-out)))
-    "t" (conntext-define-key conntext-org-todo
+    "t" (conntext-define conntext-org-todo
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-todo))
-    "," (conntext-define-key conntext-org-priority
+    "," (conntext-define conntext-org-priority
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-priority))))
-    "0" (conntext-define-key conntext-org-priority-0
+    "0" (conntext-define conntext-org-priority-0
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-priority ?\ ))))
-    "1" (conntext-define-key conntext-org-priority-1
+    "1" (conntext-define conntext-org-priority-1
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-priority ?A))))
-    "2" (conntext-define-key conntext-org-priority-2
+    "2" (conntext-define conntext-org-priority-2
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-priority ?B))))
-    "3" (conntext-define-key conntext-org-priority-3
+    "3" (conntext-define conntext-org-priority-3
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-priority ?C))))
-    ":" (conntext-define-key conntext-org-set-tags
+    ":" (conntext-define conntext-org-set-tags
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-set-tags-command))
-    "e" (conntext-define-key conntext-org-set-effort
+    "e" (conntext-define conntext-org-set-effort
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-set-effort))
-    "E" (conntext-define-key conntext-org-inc-effor
+    "E" (conntext-define conntext-org-inc-effor
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-inc-effort))
-    "W" (conntext-define-key conntext-org-appt-warning
+    "W" (conntext-define conntext-org-appt-warning
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda (m)
               (interactive "sMinutes before warning: ")
               (org-entry-put (point) "APPT_WARNTIME" m))))
-    "v" (conntext-define-key conntext-org-agenda
+    "v" (conntext-define conntext-org-agenda
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-agenda))
-    "/" (conntext-define-key conntext-org-sparse-tree
+    "/" (conntext-define conntext-org-sparse-tree
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-sparse-tree))
-    "o" (conntext-define-key conntext-org-open-at-point
+    "o" (conntext-define conntext-org-open-at-point
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-open-at-point))
-    "<" (conntext-define-key conntext-org-agenda-lock
+    "<" (conntext-define conntext-org-agenda-lock
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-agenda-set-restriction-lock 'subtree))))
-    ">" (conntext-define-key conntext-org-agenda-unlock
+    ">" (conntext-define conntext-org-agenda-unlock
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
@@ -8806,7 +8805,7 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
-    "c" (conntext-define-key conntext-outline-map
+    "c" (conntext-define conntext-outline-map
           "Context outline map."
           (when (looking-at-p outline-regexp)
             conntext-outline-map)))
