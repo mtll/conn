@@ -9107,6 +9107,55 @@ Operates with the selected windows parent window."
     "% t" 'dired-flag-garbage-files))
 
 
+;;;; Magit
+
+(conn-define-state conn-magit-status-state ()
+  "State for magit status buffer"
+  :lighter " Stat"
+  :suppress-input-method t
+  :hide-mark-cursor t
+  :cursor '(bar . 4))
+
+(defun conn-setup-magit-status-state ()
+  (setq-local conn-state-for-emacs 'conn-magit-status-state)
+  (conn-enter-state 'conn-magit-status-state))
+
+(define-minor-mode conn-magit-state-mode
+  "Use `conn-magit-status-state' in `magit-status-mode'."
+  :global t
+  (if conn-magit-state-mode
+      (setf (alist-get '(major-mode . magit-status-mode)
+                       conn-buffer-state-setup-alist nil nil #'equal)
+            'conn-setup-magit-status-state)
+    (setq conn-buffer-state-setup-alist
+          (delq (assoc '(major-mode . magit-status-mode)
+                       conn-buffer-state-setup-alist)
+                conn-buffer-state-setup-alist))))
+
+(with-eval-after-load 'magit-status
+  (define-keymap
+    :keymap (conn-get-state-map 'conn-magit-status-state)
+    "<f8>" 'conn-command-state
+    "i" 'magit-section-backward
+    "k" 'magit-section-forward
+    "w" 'magit-delete-thing
+    "p" 'magit-reset-quickly
+    "n" 'magit-gitignore
+    "`" 'other-window
+    "@" 'magit-am
+    "x" (conn-remap-key (key-parse "C-x"))
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
+
+
 ;;;; Ibuffer
 
 (conn-define-state conn-ibuffer-state ()
