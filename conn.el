@@ -7959,19 +7959,23 @@ Operates with the selected windows parent window."
   "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-goto-map
-  :parent goto-map
   "p" 'pop-global-mark
   "r" 'xref-find-references
   "d" 'xref-find-definitions
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward
-  "l" 'next-buffer
-  "j" 'previous-buffer
-  "i" 'previous-error
-  "k" 'next-error
+  "j" 'previous-error
+  "l" 'next-error
   "y" 'imenu
-  "b" 'goto-line)
+  "b" 'goto-line
+  "m" 'conn-unpop-movement-ring
+  "n" 'conn-pop-movement-ring)
+
+(defvar-keymap conn-movement-ring-repeat-map
+  :repeat t
+  "n" 'conn-unpop-movement-ring
+  "m" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-global-mark-repeat-map
   :repeat t
@@ -7979,13 +7983,8 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-error-repeat-map
   :repeat t
-  "I" 'previous-error
-  "K" 'next-error)
-
-(defvar-keymap conn-buffer-repeat-map
-  :repeat t
-  "l" 'next-buffer
-  "j" 'previous-buffer)
+  "l" 'previous-error
+  "j" 'next-error)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
@@ -8202,6 +8201,8 @@ Operates with the selected windows parent window."
   ;; "M-j" 'conn-open-line-and-indent
   ;; "C-o" 'conn-open-line-above
   ;; "M-o" 'conn-open-line
+  ;; "C-x l" 'next-buffer
+  ;; "C-x j" 'previous-buffer
   "M-g o" 'conn-pop-mark-ring
   "M-g u" 'conn-unpop-mark-ring
   "C-S-w" 'delete-region
@@ -8228,16 +8229,6 @@ Operates with the selected windows parent window."
 (defun conn-disable-global-bindings ()
   "Remove `conn--global-binding-map' from `conn-mode-map'."
   (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
-
-(define-keymap
-  :keymap conn-mode-map
-  "M-g m" 'conn-unpop-movement-ring
-  "M-g n" 'conn-pop-movement-ring)
-
-(defvar-keymap conn-movement-ring-repeat-map
-  :repeat t
-  "n" 'conn-unpop-movement-ring
-  "m" 'conn-pop-movement-ring)
 
 (define-keymap
   :keymap conn-mode-map
@@ -8357,11 +8348,11 @@ Operates with the selected windows parent window."
         (cl-pushnew 'conn--local-override-map emulation-mode-map-alists)
         (conn--append-keymap-parent isearch-mode-map conn-isearch-map)
         (conn--append-keymap-parent search-map conn-search-map)
-        (keymap-global-set "M-g" conn-goto-map)
+        (conn--append-keymap-parent goto-map conn-goto-map)
         (conn--append-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
     (conn--remove-keymap-parent isearch-mode-map conn-isearch-map)
     (conn--remove-keymap-parent search-map conn-search-map)
-    (keymap-global-set "M-g" goto-map)
+    (conn--remove-keymap-parent goto-map conn-goto-map)
     (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
           (seq-difference '(conn--local-state-map
