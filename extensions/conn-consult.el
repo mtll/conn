@@ -28,6 +28,8 @@
   (require 'cl-lib)
   (require 'subr-x))
 
+(declare-function conn-regions-kapply-prefix "conn-transient")
+
 ;; TODO: do this with treesit
 ;; (defmacro conn--each-thing (thing beg end &rest body)
 ;;   "Iterate over each THING in buffer.
