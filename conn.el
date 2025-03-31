@@ -443,9 +443,9 @@ the original binding.  Also see `conn-remap-key'."
     `(let (,overlays)
        (unwind-protect
            (progn
-             (cl-loop for (beg end) on (append (list (point-min))
-                                               (flatten-tree ,regions)
-                                               (list (point-max)))
+             (cl-loop for (beg end) on (nconc (list (point-min))
+                                              (flatten-tree ,regions)
+                                              (list (point-max)))
                       by #'cddr
                       while beg
                       for ov = (make-overlay beg end)
@@ -3190,7 +3190,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 ;; on visible Things.
 
 (cl-defstruct (conn--action)
-  interactive description window-predicate)
+  interactive description window-predicate filter)
 
 (defun conn-action-p (command)
   "Return non-nil if COMMAND is a dispatch action."
@@ -3723,41 +3723,71 @@ Target overlays may override this default by setting the
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :description :interactive :filter
-                     :window-predicate :keys :modes :state)
-                rest)
-               (menu-item `( 'menu-item
-                             ,(or description (symbol-name name))
-                             ',name
-                             ,@(when filter
-                                 `(:filter (lambda (_)
-                                             (pcase (funcall ,filter)
-                                               ('this ',name)
-                                               (res res)))))))
-               (body (cl-loop for sublist on rest by #'cddr
-                              unless (keywordp (car sublist))
-                              do (cl-return sublist))))
-    `(progn
-       (defun ,name ,arglist ,@body)
-       (put ',name :conn--action (make-conn--action
-                                  :interactive (lambda () ,interactive)
-                                  :description ,(cadr menu-item)
-                                  :window-predicate ,window-predicate))
-       ,(when keys
-          (if modes
-              `(dolist (mode ',(ensure-list modes))
-                 ,@(cl-loop for key in (ensure-list keys)
-                            collect `(keymap-set
-                                      (conn-get-mode-map
-                                       ,(or state 'conn-state-for-read-dispatch)
-                                       mode)
-                                      ,key (list ,@menu-item))))
-            (macroexp-progn
-             (cl-loop for key in (ensure-list keys)
-                      collect `(keymap-set
-                                (conn-get-state-map
-                                 ,(or state 'conn-state-for-read-dispatch))
-                                ,key (list ,@menu-item)))))))))
+  (cl-with-gensyms (struct menu-item desc)
+    (pcase-let* (((map :description :interactive :filter
+                       :window-predicate :keys :modes :state)
+                  rest)
+                 (body (cl-loop for sublist on rest by #'cddr
+                                unless (keywordp (car sublist))
+                                do (cl-return sublist))))
+      `(progn
+         (defun ,name ,arglist ,@body)
+         (let* ((,desc ,(or description (symbol-name name)))
+                (,struct (make-conn--action
+                          :interactive ,interactive
+                          :description ,desc
+                          :window-predicate ,window-predicate
+                          :filter ,filter))
+                (,menu-item
+                 (list 'menu-item ,desc ',name
+                       :filter (lambda (_)
+                                 (if-let* ((fn (conn--action-filter ,struct)))
+                                     (pcase (funcall fn)
+                                       ('this ',name)
+                                       (res res))
+                                   ',name)))))
+           (put ',name :conn--action ,struct)
+           (defvar ,name)
+           (setq ,name ,menu-item)
+           ,(when keys
+              (if modes
+                  `(dolist (mode ',(ensure-list modes))
+                     ,@(cl-loop for key in (ensure-list keys)
+                                collect `(keymap-set
+                                          (conn-get-mode-map
+                                           ,(or state 'conn-state-for-read-dispatch)
+                                           mode)
+                                          ,key ,name)))
+                (macroexp-progn
+                 (cl-loop for key in (ensure-list keys)
+                          collect `(keymap-set
+                                    (conn-get-state-map
+                                     ,(or state 'conn-state-for-read-dispatch))
+                                    ,key ,name))))))))))
+
+(defun conn-action-filter (action)
+  (conn--action-filter (get :conn--action action)))
+
+(gv-define-setter conn-action-filter (val action)
+  `(setf (conn--action-filter (get :conn--action ,action)) ,val))
+
+(defun conn-action-interactive (action)
+  (conn--action-interactive (get :conn--action action)))
+
+(gv-define-setter conn-action-interactive (val action)
+  `(setf (conn--action-interactive (get :conn--action ,action)) ,val))
+
+(defun conn-action-window-predicate (action)
+  (conn--action-window-predicate (get :conn--action action)))
+
+(gv-define-setter conn-action-window-predicate (val action)
+  `(setf (conn--action-window-predicate (get :conn--action ,action)) ,val))
+
+(defun conn-action-description (action)
+  (conn--action-description (get :conn--action action)))
+
+(gv-define-setter conn-action-description (val action)
+  `(setf (conn--action-description (get :conn--action ,action)) ,val))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -3775,7 +3805,7 @@ Target overlays may override this default by setting the
     (window pt thing-cmd thing-arg str)
   :description "Yank Replace To"
   :keys "C-y"
-  :interactive (list (funcall region-extract-function nil))
+  :interactive (lambda () (list (funcall region-extract-function nil)))
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
@@ -3793,7 +3823,8 @@ Target overlays may override this default by setting the
     (window pt thing-cmd thing-arg str)
   :description "Yank Replace To"
   :keys "M-y"
-  :interactive (list (read-from-kill-ring "Yank Replace To from kill-ring: "))
+  :interactive (lambda ()
+                 (list (read-from-kill-ring "Yank Replace To from kill-ring: ")))
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
@@ -3811,7 +3842,7 @@ Target overlays may override this default by setting the
     (window pt _thing-cmd _thing-arg str)
   :description "Yank To"
   :keys "y"
-  :interactive (list (funcall region-extract-function nil))
+  :interactive (lambda () (list (funcall region-extract-function nil)))
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
@@ -3825,7 +3856,7 @@ Target overlays may override this default by setting the
     (window pt _thing-cmd _thing-arg str)
   :description "Yank To"
   :keys "Y"
-  :interactive (list (read-from-kill-ring "Yank To from kill-ring: "))
+  :interactive (lambda () (list (read-from-kill-ring "Yank To from kill-ring: ")))
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
@@ -3839,7 +3870,7 @@ Target overlays may override this default by setting the
     (window pt _thing-cmd _thing-arg str)
   :description "Throw"
   :keys "t"
-  :interactive (list (funcall region-extract-function t))
+  :interactive (lambda () (list (funcall region-extract-function t)))
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
   (with-selected-window window
@@ -3943,7 +3974,7 @@ Target overlays may override this default by setting the
   :keys ("r e")
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
-  :interactive (list (prefix-numeric-value current-prefix-arg))
+  :interactive (lambda () (list (prefix-numeric-value current-prefix-arg)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3958,7 +3989,7 @@ Target overlays may override this default by setting the
   :keys ("r d")
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
-  :interactive (list (prefix-numeric-value current-prefix-arg))
+  :interactive (lambda () (list (prefix-numeric-value current-prefix-arg)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3971,7 +4002,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-register (window pt _thing-cmd _thing-arg register)
   :description "Register <%c>"
   :keys "p"
-  :interactive (list (register-read-with-preview "Register: "))
+  :interactive (lambda () (list (register-read-with-preview "Register: ")))
   (with-selected-window window
     ;; If there is a keyboard macro in the register we would like to
     ;; amalgamate the undo
@@ -3983,7 +4014,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-register-replace (window pt thing-cmd thing-arg register)
   :description "Register Replace <%c>"
   :keys "P"
-  :interactive (list (register-read-with-preview "Register: "))
+  :interactive (lambda () (list (register-read-with-preview "Register: ")))
   (with-selected-window window
     ;; If there is a keyboard macro in the register we would like to
     ;; amalgamate the undo
@@ -4004,8 +4035,9 @@ Target overlays may override this default by setting the
   :keys "w"
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
-  :interactive (list (when current-prefix-arg
-                       (register-read-with-preview "Register: ")))
+  :interactive (lambda ()
+                 (when current-prefix-arg
+                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4027,8 +4059,9 @@ Target overlays may override this default by setting the
   :keys "]"
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
-  :interactive (list (when current-prefix-arg
-                       (register-read-with-preview "Register: ")))
+  :interactive (lambda ()
+                 (when current-prefix-arg
+                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4051,8 +4084,9 @@ Target overlays may override this default by setting the
   :keys "["
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
-  :interactive (list (when current-prefix-arg
-                       (register-read-with-preview "Register: ")))
+  :interactive (lambda ()
+                 (when current-prefix-arg
+                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4074,8 +4108,9 @@ Target overlays may override this default by setting the
                      (format "Copy to Register <%c>" register)
                    "Copy As Kill"))
   :keys "a"
-  :interactive (list (when current-prefix-arg
-                       (register-read-with-preview "Register: ")))
+  :interactive (lambda ()
+                 (when current-prefix-arg
+                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4093,8 +4128,9 @@ Target overlays may override this default by setting the
                      (format "Copy Append to Register <%c>" register)
                    "Copy Append"))
   :keys "}"
-  :interactive (list (when current-prefix-arg
-                       (register-read-with-preview "Register: ")))
+  :interactive (lambda ()
+                 (when current-prefix-arg
+                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4114,8 +4150,9 @@ Target overlays may override this default by setting the
                      (format "Copy Prepend to Register <%c>" register)
                    "Copy Prepend"))
   :keys "{"
-  :interactive (list (when current-prefix-arg
-                       (register-read-with-preview "Register: ")))
+  :interactive (lambda ()
+                 (when current-prefix-arg
+                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
