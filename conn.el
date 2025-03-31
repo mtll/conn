@@ -8899,9 +8899,9 @@ Operates with the selected windows parent window."
 
 ;;;; Dired
 
-(conn-define-state conn-dired-state ()
+(conn-define-state conn-dired-state (conn-emacs-state)
   "State for `dired-mode'."
-  :cursor 'box
+  :cursor '(bar . 4)
   :lighter " Drd"
   :suppress-input-method t)
 
@@ -8912,9 +8912,9 @@ Operates with the selected windows parent window."
   :suppress-input-method t)
 
 (defun conn-setup-dired-state ()
-  (conn-enter-state 'conn-dired-state)
-  (setq conn-state-for-command 'conn-dired-state
-        conn-state-for-read-dispatch 'conn-dired-dispatch-state))
+  (setq conn-state-for-emacs 'conn-dired-state
+        conn-state-for-read-dispatch 'conn-dired-dispatch-state)
+  (conn-enter-state 'conn-dired-state))
 
 (define-minor-mode conn-dired-mode
   "Enable `conn-dired-state' in `dired-mode'."
@@ -9158,9 +9158,8 @@ Operates with the selected windows parent window."
 
 ;;;; Ibuffer
 
-(conn-define-state conn-ibuffer-state ()
+(conn-define-state conn-ibuffer-state (conn-emacs-state)
   "State for `ibuffer-mode'."
-  :cursor 'box
   :lighter " Ibf"
   :suppress-input-method t)
 
@@ -9171,9 +9170,9 @@ Operates with the selected windows parent window."
   :suppress-input-method t)
 
 (defun conn-setup-ibuffer-state ()
-  (conn-enter-state 'conn-ibuffer-state)
-  (setq conn-state-for-command 'conn-ibuffer-state
-        conn-state-for-read-dispatch 'conn-ibuffer-dispatch-state))
+  (setq conn-state-for-emacs 'conn-ibuffer-state
+        conn-state-for-read-dispatch 'conn-ibuffer-dispatch-state)
+  (conn-enter-state 'conn-ibuffer-state))
 
 (define-minor-mode conn-ibuffer-mode
   "Enable `conn-ibuffer-state' in `ibuffer-mode'."
@@ -9339,9 +9338,15 @@ Operates with the selected windows parent window."
 
 ;;;; Help
 
+(conn-define-state conn-help-state (conn-emacs-state
+                                    conn-movement-state
+                                    conn-menu-state)
+  :lighter " Help"
+  :suppress-input-method t)
+
 (defun conn-setup-help-state ()
-  (conn-enter-state 'conn-help-state)
-  (setq conn-state-for-command 'conn-help-state))
+  (setq conn-state-for-emacs 'conn-help-state)
+  (conn-enter-state 'conn-help-state))
 
 (define-minor-mode conn-help-state-mode
   "Use `conn-help-state' in `help-mode'."
@@ -9356,11 +9361,6 @@ Operates with the selected windows parent window."
                             (derived-mode . helpful-mode))
                        conn-buffer-state-setup-alist)
                 conn-buffer-state-setup-alist))))
-
-(conn-define-state conn-help-state (conn-movement-state conn-menu-state)
-  :lighter " Help"
-  :cursor 'box
-  :suppress-input-method t)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-help-state)
