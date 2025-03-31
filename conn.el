@@ -8425,6 +8425,8 @@ Operates with the selected windows parent window."
 
 ;;; Load Extensions
 
+;;;; Calc
+
 (with-eval-after-load 'calc
   (declare-function calc-dispatch "calc")
 
@@ -8433,10 +8435,16 @@ Operates with the selected windows parent window."
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 
+
+;;;; Corfu
+
 (with-eval-after-load 'corfu
   (defun conn--exit-completion (_state)
     (completion-in-region-mode -1))
   (add-hook 'conn-exit-functions 'conn--exit-completion))
+
+
+;;;; Org
 
 (define-minor-mode conntext-org-mode
   "Conntext keys for org mode.")
@@ -8765,6 +8773,9 @@ Operates with the selected windows parent window."
 ;;                conn-emacs-state))
 ;;     (cl-pushnew v polymode-move-these-vars-from-old-buffer)))
 
+
+;;;; Eldoc
+
 (with-eval-after-load 'eldoc
   (eldoc-add-command 'conn-end-of-inner-line
                      'conn-beginning-of-inner-line
@@ -8774,6 +8785,9 @@ Operates with the selected windows parent window."
                      'conn-goto-char-forward
                      'conn-dispatch-on-things))
 
+
+;;;; Edebug
+
 (with-eval-after-load 'edebug
   (defvar edebug-mode)
   (defun conn--edebug-toggle-emacs-state ()
@@ -8782,6 +8796,9 @@ Operates with the selected windows parent window."
       (when conn-previous-state
         (funcall conn-previous-state))))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
+
+
+;;;; Outline
 
 (define-minor-mode conntext-outline-mode
   "Minor mode for contextual bindings in outline-mode.")
@@ -8857,9 +8874,42 @@ Operates with the selected windows parent window."
     "c" (conntext-define conntext-outline-map
           "Context outline map."
           (when (looking-at-p outline-regexp)
-            conntext-outline-map)))
+            (make-composed-keymap
+             (list conntext-outline-map
+                   (key-binding "\C-c"))))))
 
   (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80))
+
+
+;;;; Dired
+
+(conn-define-state conn-dired-state ()
+  "State for `dired-mode'."
+  :cursor 'box
+  :lighter " Drd"
+  :suppress-input-method t)
+
+(conn-define-state conn-dired-dispatch-state (conn-dired-state conn-read-dispatch-state)
+  "State for dispatch in `dired-mode'."
+  :cursor 'box
+  :lighter " DISPATCH"
+  :suppress-input-method t)
+
+(defun conn-setup-dired-state ()
+  (conn-enter-state 'conn-dired-state)
+  (setq conn-state-for-command 'conn-dired-state
+        conn-state-for-read-dispatch 'conn-dired-dispatch-state))
+
+(define-minor-mode conn-dired-mode
+  "Enable `conn-dired-state' in `dired-mode'."
+  :global t
+  (if conn-dired-mode
+      (setf (alist-get '(derived-mode . dired-mode)
+                       conn-buffer-state-setup-alist nil nil #'equal)
+            'conn-setup-dired-state)
+    (setq conn-buffer-state-setup-alist
+          (delq (assoc '(derived-mode . dired-mode) conn-buffer-state-setup-alist)
+                conn-buffer-state-setup-alist))))
 
 (with-eval-after-load 'dired
   (defvar dired-subdir-alist)
@@ -8941,8 +8991,8 @@ Operates with the selected windows parent window."
 
   (conn-define-dispatch-action conn-dispatch-dired-mark (window pt _thing-cmd _thing-arg)
     :description "Mark"
-    :key "f"
-    :modes (dired-mode)
+    :keys "f"
+    :state 'conn-dired-dispatch-state
     :window-predicate (lambda (win)
                         (eq (buffer-local-value 'major-mode (window-buffer win))
                             'dired-mode))
@@ -8957,8 +9007,8 @@ Operates with the selected windows parent window."
 
   (conn-define-dispatch-action conn-dispatch-dired-kill-line (window pt _thing-cmd _thing-arg)
     :description "Kill Line"
-    :key "w"
-    :modes (dired-mode)
+    :keys "w"
+    :state 'conn-dired-dispatch-state
     :window-predicate (lambda (win)
                         (eq (buffer-local-value 'major-mode (window-buffer win))
                             'dired-mode))
@@ -8969,8 +9019,8 @@ Operates with the selected windows parent window."
 
   (conn-define-dispatch-action conn-dispatch-dired-kill-subdir (window pt _thing-cmd _thing-arg)
     :description "Kill Subdir"
-    :key "d"
-    :modes (dired-mode)
+    :keys "d"
+    :state 'conn-dired-dispatch-state
     :window-predicate (lambda (win)
                         (eq (buffer-local-value 'major-mode (window-buffer win))
                             'dired-mode))
@@ -8980,18 +9030,68 @@ Operates with the selected windows parent window."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-mode-map conn-state-for-read-dispatch 'dired-mode)
-    "f" 'conn-dispatch-dired-mark
-    "w" 'conn-dispatch-dired-kill-line
-    "d" 'conn-dispatch-dired-kill-subdir)
-
-  (define-keymap
-    :keymap (conn-get-mode-map 'conn-movement-state 'dired-mode)
+    :keymap (conn-get-state-map 'conn-dired-state)
+    "k" 'dired-next-line
+    "i" 'dired-previous-line
+    "/" 'dired-undo
+    "I" 'dired-tree-up
+    "l" 'dired-next-dirline
+    "j" 'dired-prev-dirline
     "m" 'dired-next-subdir
     "n" 'dired-prev-subdir
-    "u" 'dired-next-dirline
-    "k" 'dired-next-line
-    "i" 'dired-previous-line))
+    ">" 'dired-next-marked-file
+    "<" 'dired-prev-marked-file
+    "K" 'dired-tree-down
+    "TAB" 'dired-maybe-insert-subdir
+    "M-TAB" 'dired-kill-subdir
+    "w" 'dired-do-kill-lines
+    "s" (conn-remap-key (key-parse "M-s"))
+    "r" (conn-remap-key (key-parse "%"))
+    "h" (conn-remap-key (key-parse "*"))
+    "x" (conn-remap-key (key-parse "C-x"))
+    "f" 'conn-dispatch-on-things
+    "M-SPC" 'dired-toggle-marks
+    "t" (conn-remap-key (key-parse "t"))
+    "C-M-l" 'dired-do-redisplay
+    "z" 'dired-goto-file
+    ";" 'conn-wincontrol
+    "`" 'other-window
+    "SPC" 'scroll-up-command
+    "DEL" 'scroll-down-command
+    "v" 'dired-mark
+    "c" 'dired-unmark
+    "u" 'dired-do-delete
+    "M-w" 'dired-copy-filename-as-kill
+    "RET" 'dired-find-file
+    "o" 'dired-find-file-other-window
+    "M-o" 'conn-pop-mark-ring
+    "M-u" 'conn-unpop-mark-ring
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window)
+
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-dired-state 'dired-mode)
+    "* p" 'dired-sort-toggle-or-edit
+    "* e" 'dired-mark-executables
+    "* l" 'dired-mark-symlinks
+    "* d" 'dired-mark-directories
+    "* r" 'dired-mark-files-regexp
+    "% c" 'dired-do-copy-regexp
+    "% h" 'dired-do-hardlink-regexp
+    "% s" 'dired-do-symlink-regexp
+    "% y" 'dired-do-relsymlink-regexp
+    "% t" 'dired-flag-garbage-files))
+
+
+;;;; Ibuffer
 
 (with-eval-after-load 'ibuffer
   (defvar ibuffer-movement-cycle)
@@ -9070,6 +9170,9 @@ Operates with the selected windows parent window."
     "n" 'ibuffer-backward-filter-group
     "m" 'ibuffer-forward-filter-group))
 
+
+;;;; Markdown
+
 (with-eval-after-load 'markdown-mode
   (conn-register-thing
    'md-paragraph
@@ -9083,6 +9186,8 @@ Operates with the selected windows parent window."
 
   ;; TODO: other markdown things
   )
+
+;;;; Treesit
 
 (static-if (<= 30 emacs-major-version)
     (with-eval-after-load 'treesit
