@@ -777,7 +777,8 @@ This variable will be bound to the state t be entered during
 
 (define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
-  (inline-quote (not (not (get ,state :conn--state)))))
+  (inline-quote
+   (eq 'conn-state (type-of (get ,state :conn--state)))))
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
 
@@ -787,7 +788,7 @@ This variable will be bound to the state t be entered during
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (aref (get ,state :conn--state) 1)))))
+       (aref (get ,state :conn--state) 2)))))
 
 (define-inline conn--state-all-children (state)
   "Return all parents for STATE."
@@ -795,7 +796,7 @@ This variable will be bound to the state t be entered during
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (aref (get ,state :conn--state) 2)))))
+       (aref (get ,state :conn--state) 3)))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
@@ -811,7 +812,7 @@ The returned list is not fresh, don't modify it."
        (cons ,state
              (merge-ordered-lists
               (mapcar 'conn--state-all-parents
-                      (aref (get ,state :conn--state) 1))))))))
+                      (aref (get ,state :conn--state) 2))))))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
@@ -1128,7 +1129,7 @@ PROPERTY.  If no parent has that property either than nil is returned."
      (progn
        (cl-check-type ,state conn-state)
        (cl-loop for parent in (conn--state-all-parents ,state)
-                for table = (aref (get parent :conn--state) 0)
+                for table = (aref (get parent :conn--state) 1)
                 for prop = (gethash ,property table conn--hash-key-missing)
                 unless (eq prop conn--hash-key-missing) return prop)))))
 
@@ -1141,7 +1142,7 @@ PROPERTY.  If no parent has that property either than nil is returned."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (not (eq (gethash ,property (aref (get ,state :conn--state) 0)
+       (not (eq (gethash ,property (aref (get ,state :conn--state) 1)
                          conn--hash-key-missing)
                 conn--hash-key-missing))))))
 
@@ -1153,7 +1154,7 @@ Returns VALUE."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (puthash ,property ,value (aref (get ,state :conn--state) 0))))))
+       (puthash ,property ,value (aref (get ,state :conn--state) 1))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -1164,7 +1165,7 @@ property from its parents."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (remhash (aref (get ,state :conn--state) 0) ,property)))))
+       (remhash (aref (get ,state :conn--state) 1) ,property)))))
 
 
 ;;;;; State macros
@@ -1430,19 +1431,19 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
              (new-parents
               (merge-ordered-lists
                (mapcar 'conn--state-all-parents ',parents))))
-         (if-let* ((vec (get ',name :conn--state)))
+         (if-let* ((record (get ',name :conn--state)))
              (let ((old-parents (cdr (conn--state-all-parents ',name)))
-                   (all-children (cons ',name (aref vec 2))))
+                   (all-children (cons ',name (aref record 3))))
                ;; We are redefining a state and must to take care to
                ;; do it transparently.
-               (setf (aref vec 0) state-props
-                     (aref vec 1) ',parents)
+               (setf (aref record 1) state-props
+                     (aref record 2) ',parents)
                ;; Remove all children from all former parents.  We
                ;; will take care of the case where a child inherits
                ;; from some parent through multiple paths next.
                (dolist (former (seq-difference old-parents new-parents))
-                 (setf (aref (get former :conn--state) 2)
-                       (seq-difference (aref (get former :conn--state) 2)
+                 (setf (aref (get former :conn--state) 3)
+                       (seq-difference (aref (get former :conn--state) 3)
                                        all-children)))
                ;; Recompute all parents for all children and
                ;; re-register all children with all of their parents.
@@ -1451,16 +1452,19 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
                (dolist (child all-children)
                  (remhash child conn--state-all-parents-cache)
                  (dolist (parent (cdr (conn--state-all-parents child)))
-                   (cl-pushnew child (aref (get parent :conn--state) 2))))
+                   (cl-pushnew child (aref (get parent :conn--state) 3))))
                ;; Rebuild all keymaps for all children with the new
                ;; inheritance hierarchy.  Existing composed keymaps
                ;; are destructively modified so that local map
                ;; variables will not have to be updated in each buffer
                ;; before these changes take effect.
                (mapc #'conn--rebuild-state-keymaps all-children))
-           (put ',name :conn--state (vector state-props ',parents nil))
+           (let ((record (make-record 'conn-state 3 nil)))
+             (setf (aref record 1) state-props
+                   (aref record 2) ',parents)
+             (put ',name :conn--state record))
            (dolist (parent (cdr (conn--state-all-parents ',name)))
-             (cl-pushnew ',name (aref (get parent :conn--state) 2)))
+             (cl-pushnew ',name (aref (get parent :conn--state) 3)))
            (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
                  (gethash ',name conn--minor-mode-maps) (list nil)
