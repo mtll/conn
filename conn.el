@@ -7959,13 +7959,33 @@ Operates with the selected windows parent window."
   "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-goto-map
-  "l" 'pop-global-mark
-  "k" 'goto-line
+  :parent goto-map
+  "p" 'pop-global-mark
   "r" 'xref-find-references
   "d" 'xref-find-definitions
   "s" 'xref-find-apropos
   "," 'xref-go-back
-  "." 'xref-go-forward)
+  "." 'xref-go-forward
+  "l" 'next-buffer
+  "j" 'previous-buffer
+  "i" 'previous-error
+  "k" 'next-error
+  "y" 'imenu
+  "b" 'goto-line)
+
+(defvar-keymap conn-global-mark-repeat-map
+  :repeat t
+  "p" 'pop-global-mark)
+
+(defvar-keymap conn-error-repeat-map
+  :repeat t
+  "I" 'previous-error
+  "K" 'next-error)
+
+(defvar-keymap conn-buffer-repeat-map
+  :repeat t
+  "l" 'next-buffer
+  "j" 'previous-buffer)
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
@@ -8211,13 +8231,13 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap conn-mode-map
-  "M-g j" 'conn-unpop-movement-ring
-  "M-g l" 'conn-pop-movement-ring)
+  "M-g m" 'conn-unpop-movement-ring
+  "M-g n" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-movement-ring-repeat-map
   :repeat t
-  "j" 'conn-unpop-movement-ring
-  "l" 'conn-pop-movement-ring)
+  "n" 'conn-unpop-movement-ring
+  "m" 'conn-pop-movement-ring)
 
 (define-keymap
   :keymap conn-mode-map
@@ -8337,11 +8357,11 @@ Operates with the selected windows parent window."
         (cl-pushnew 'conn--local-override-map emulation-mode-map-alists)
         (conn--append-keymap-parent isearch-mode-map conn-isearch-map)
         (conn--append-keymap-parent search-map conn-search-map)
-        (conn--append-keymap-parent goto-map conn-goto-map)
+        (keymap-global-set "M-g" conn-goto-map)
         (conn--append-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
     (conn--remove-keymap-parent isearch-mode-map conn-isearch-map)
     (conn--remove-keymap-parent search-map conn-search-map)
-    (conn--remove-keymap-parent goto-map conn-goto-map)
+    (keymap-global-set "M-g" goto-map)
     (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
     (setq emulation-mode-map-alists
           (seq-difference '(conn--local-state-map
@@ -9147,7 +9167,7 @@ Operates with the selected windows parent window."
                        (ibuffer-backward-line)
                        (point)))
             (unless (get-text-property (point) 'ibuffer-filter-group-name)
-              (push (conn--make-target-overlay (point) 1) ovs))))
+              (push (conn--make-target-overlay (point) 0) ovs))))
         ovs)))
 
   (defun conn--dispatch-ibuffer-filter-group ()
@@ -9160,7 +9180,7 @@ Operates with the selected windows parent window."
                      (progn
                        (ibuffer-backward-filter-group)
                        (point)))
-            (push (conn--make-target-overlay (point) 1) ovs)))
+            (push (conn--make-target-overlay (point) 0) ovs)))
         ovs)))
 
   (conn-register-thing
