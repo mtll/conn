@@ -4703,7 +4703,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-dispatch-on-things
    nil nil
    (lambda () (conn--dispatch-all-buttons t))
-   (lambda (win pt _thing)
+   (lambda (win pt _thing _thing-arg)
      (select-window win)
      (push-button pt))
    nil))
@@ -9199,6 +9199,38 @@ Operates with the selected windows parent window."
        'defun 'conn-continuous-thing-handler
        'treesit-end-of-defun
        'treesit-beginning-of-defun)))
+
+
+;;;; Help
+
+(defun conn-setup-help-state ()
+  (conn-enter-state 'conn-help-state)
+  (setq conn-state-for-command 'conn-help-state))
+
+(define-minor-mode conn-help-state-mode
+  "Use `conn-help-state' in `help-mode'."
+  :global t
+  (if conn-help-state-mode
+      (setf (alist-get '(or (derived-mode . help-mode)
+                            (derived-mode . helpful-mode))
+                       conn-buffer-state-setup-alist nil nil #'equal)
+            'conn-setup-help-state)
+    (setq conn-buffer-state-setup-alist
+          (delq (assoc '(or (derived-mode . help-mode)
+                            (derived-mode . helpful-mode))
+                       conn-buffer-state-setup-alist)
+                conn-buffer-state-setup-alist))))
+
+(conn-define-state conn-help-state (conn-movement-state conn-menu-state)
+  :lighter " Help"
+  :cursor 'box)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-help-state)
+  "j" 'backward-button
+  "l" 'forward-button
+  "f" 'conn-dispatch-on-buttons
+  "`" 'other-window)
 
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
