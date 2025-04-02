@@ -1719,7 +1719,7 @@ themselves once the selection process has concluded."
        (_
         (setq prompt "char:")))
      (setq current (let ((next nil)
-                         (c (read-char prompt)))
+                         (c (conn-dispatch-read-event prompt)))
                      (dolist (label current next)
                        (when-let* ((l (conn-label-narrow label c)))
                          (push l next))))))))
@@ -1788,42 +1788,14 @@ Returns a cons of (STRING . OVERLAYS)."
       (setq overlays
             (while-no-input
               (conn--string-preview-overlays string dir all-windows predicate)))
-      (while-let ((next-char (read-char (format (concat prompt "%s") string) t
-                                        conn-read-string-timeout)))
+      (while-let ((next-char (read-char (format (concat prompt "%s") string)
+                                        t conn-read-string-timeout)))
         (setq string (concat string (char-to-string next-char)))
         (unless (eq overlays t)
           (mapc #'delete-overlay overlays))
         (setq overlays
               (while-no-input
                 (conn--string-preview-overlays string dir all-windows predicate))))
-      (message nil)
-      (cons string overlays))))
-
-(defun conn--read-n-chars (N &optional dir all-windows)
-  "Read a string of N chars with preview overlays.
-
-Returns a cons of (STRING . OVERLAYS)."
-  (cl-assert (> N 0))
-  (conn--with-input-method
-    (conn--protected-let
-        ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
-         (string (char-to-string (read-char prompt t)))
-         (overlays nil (unless (eq overlays t)
-                         (mapc #'delete-overlay overlays))))
-      (setq overlays
-            (while-no-input
-              (conn--string-preview-overlays string dir all-windows)))
-      (dotimes (_ (1- N))
-        (thread-last
-          (read-char (format (concat prompt "%s") string) t)
-          (char-to-string)
-          (concat string)
-          (setq string))
-        (unless (eq overlays t)
-          (mapc #'delete-overlay overlays))
-        (setq overlays
-              (while-no-input
-                (conn--string-preview-overlays string dir all-windows))))
       (message nil)
       (cons string overlays))))
 
@@ -4369,13 +4341,81 @@ Target overlays may override this default by setting the
 
 ;;;;; Target Finders
 
+(defun conn--dispatch-read-n-chars (N &optional dir all-windows)
+  "Read a string of N chars with preview overlays.
+
+Returns a cons of (STRING . OVERLAYS)."
+  (cl-assert (> N 0))
+  (conn--with-input-method
+    (conn--protected-let
+        ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
+         (string (char-to-string (conn-dispatch-read-event prompt t)))
+         (overlays nil (unless (eq overlays t)
+                         (mapc #'delete-overlay overlays))))
+      (setq overlays
+            (while-no-input
+              (conn--string-preview-overlays string dir all-windows)))
+      (dotimes (_ (1- N))
+        (thread-last
+          (conn-dispatch-read-event (format (concat prompt "%s") string) t)
+          (char-to-string)
+          (concat string)
+          (setq string))
+        (unless (eq overlays t)
+          (mapc #'delete-overlay overlays))
+        (setq overlays
+              (while-no-input
+                (conn--string-preview-overlays string dir all-windows))))
+      (message nil)
+      (cons string overlays))))
+
+(defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
+  (catch 'char
+    (while t
+      (pcase (read-event prompt inherit-input-method seconds)
+        ((and event
+              `(mouse-1 . ,_)
+              (let posn (event-start event))
+              (let win (posn-window posn))
+              (let pt (posn-point posn)))
+         (when (and (funcall conn-dispatch-window-predicate win)
+                    (not (posn-area posn)))
+           (throw 'mouse-click (list pt win nil))))
+        ((and ev (pred characterp))
+         (throw 'char ev))))))
+
+(defun conn--dispatch-read-string-with-timeout (&optional dir all-windows predicate)
+  "Read a string with preview overlays and timeout `conn-read-string-timeout'.
+
+Returns a cons of (STRING . OVERLAYS)."
+  (conn--with-input-method
+    (conn--protected-let
+        ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+         (string (char-to-string (conn-dispatch-read-event prompt t)))
+         (overlays nil (unless (eq overlays t)
+                         (mapc #'delete-overlay overlays))))
+      (setq overlays
+            (while-no-input
+              (conn--string-preview-overlays string dir all-windows predicate)))
+      (while-let ((next-char (conn-dispatch-read-event
+                              (format (concat prompt "%s") string) t
+                              conn-read-string-timeout)))
+        (setq string (concat string (char-to-string next-char)))
+        (unless (eq overlays t)
+          (mapc #'delete-overlay overlays))
+        (setq overlays
+              (while-no-input
+                (conn--string-preview-overlays string dir all-windows predicate))))
+      (message nil)
+      (cons string overlays))))
+
 (defun conn--dispatch-chars ()
-  (cl-loop for (_ . ovs) = (conn--read-string-with-timeout-1 nil t)
+  (cl-loop for (_ . ovs) = (conn--dispatch-read-string-with-timeout nil t)
            when ovs return ovs
            do (message "(no matches)")))
 
 (defun conn--dispatch-chars-in-thing (thing &optional all-windows)
-  (cl-loop for (_ . ovs) = (conn--read-string-with-timeout-1
+  (cl-loop for (_ . ovs) = (conn--dispatch-read-string-with-timeout
                             nil all-windows
                             (lambda (pt)
                               (save-excursion
@@ -4386,7 +4426,7 @@ Target overlays may override this default by setting the
            do (message "(no matches)")))
 
 (defun conn--dispatch-2-chars ()
-  (cl-loop for (_ . ovs) = (conn--read-n-chars 2 nil t)
+  (cl-loop for (_ . ovs) = (conn--dispatch-read-n-chars 2 nil t)
            when ovs return ovs
            do (message "(no matches)")))
 
@@ -4395,10 +4435,15 @@ Target overlays may override this default by setting the
                         (ovs nil (mapc #'delete-overlay ovs)))
     (save-excursion
       (goto-char (window-end))
-      (while (progn
-               (forward-thing thing -1)
-               (<= (window-start) (point)))
-        (unless (= (point) start)
+      (while (and
+              (/= (point)
+                  (progn
+                    (forward-thing thing -1)
+                    (point)))
+              (<= (window-start) (point)))
+        (unless (or (= (point) start)
+                    (and (= (point) (point-min))
+                         (not (bounds-of-thing-at-point thing))))
           (push (conn--make-target-overlay (point) 0 thing) ovs))))
     ovs))
 
@@ -4449,7 +4494,7 @@ Target overlays may override this default by setting the
       (conn--with-input-method
         (while (length< prefix prefix-length)
           (setq prefix (thread-last
-                         (read-char prompt t)
+                         (conn-dispatch-read-event prompt t)
                          (char-to-string)
                          (concat prefix))
                 prompt (concat "char: " prefix))
@@ -4588,6 +4633,40 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Commands
 
+(defun dispatch--find-target (finder)
+  (catch 'mouse-click
+    (let (target-ovs labels)
+      (unwind-protect
+          (progn
+            (setf target-ovs (compat-call
+                              sort
+                              (seq-group-by (lambda (ov) (overlay-get ov 'window))
+                                            (funcall finder))
+                              :in-place t
+                              :lessp (lambda (a _) (eq (selected-window) (car a)))))
+            (setf (alist-get (selected-window) target-ovs)
+                  (compat-call sort
+                               (alist-get (selected-window) target-ovs)
+                               :in-place t
+                               :lessp (lambda (a b)
+                                        (< (abs (- (overlay-start a) (point)))
+                                           (abs (- (overlay-start b) (point)))))))
+            (setf labels (conn--dispatch-labels
+                          (or (funcall
+                               conn-label-string-generator
+                               (let ((sum 0))
+                                 (dolist (p target-ovs sum)
+                                   (setq sum (+ sum (length (cdr p)))))))
+                              (user-error "No matching candidates"))
+                          target-ovs))
+            (let ((target (conn-label-select labels)))
+              (list (overlay-start target)
+                    (overlay-get target 'window)
+                    (overlay-get target 'thing))))
+        (pcase-dolist (`(_ . ,ovs) target-ovs)
+          (mapc #'delete-overlay ovs))
+        (mapc #'conn-label-delete labels)))))
+
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-args
                                  &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
@@ -4605,49 +4684,17 @@ seconds."
   (setq conn--last-dispatch-command
         (list thing-cmd thing-arg finder action
               action-args predicate repeat))
-  (let ((conn-dispatch-window-predicate conn-dispatch-window-predicate)
-        target-ovs labels target window pt)
+  (let ((conn-dispatch-window-predicate conn-dispatch-window-predicate))
     (when predicate
       (add-function :after-while conn-dispatch-window-predicate predicate))
     (ignore-error quit
       (while
           (prog1 repeat
-            (unwind-protect
-                (setf target-ovs
-                      (compat-call
-                       sort
-                       (seq-group-by (lambda (ov) (overlay-get ov 'window))
-                                     (funcall finder))
-                       :in-place t
-                       :lessp (lambda (a _) (eq (selected-window) (car a))))
-                      (alist-get (selected-window) target-ovs)
-                      (compat-call sort
-                                   (alist-get (selected-window) target-ovs)
-                                   :in-place t
-                                   :lessp (lambda (a b)
-                                            (< (abs (- (overlay-start a) (point)))
-                                               (abs (- (overlay-start b) (point))))))
-                      labels (conn--dispatch-labels
-                              (or (funcall
-                                   conn-label-string-generator
-                                   (let ((sum 0))
-                                     (dolist (p target-ovs sum)
-                                       (setq sum (+ sum (length (cdr p)))))))
-                                  (user-error "No matching %s"
-                                              (or (when (symbolp thing-cmd)
-                                                    (get thing-cmd :conn-command-thing))
-                                                  "candidates")))
-                              target-ovs)
-                      target (conn-label-select labels)
-                      pt (overlay-start target)
-                      window (overlay-get target 'window)
-                      conn-this-command-thing (or (overlay-get target 'thing)
-                                                  (ignore-errors
-                                                    (get thing-cmd :conn-command-thing))))
-              (pcase-dolist (`(_ . ,ovs) target-ovs)
-                (mapc #'delete-overlay ovs))
-              (mapc #'conn-label-delete labels))
-            (apply action window pt thing-cmd thing-arg action-args))
+            (pcase-let ((`(,pt ,window ,thing) (dispatch--find-target finder)))
+              (setf conn-this-command-thing
+                    (or thing (ignore-errors
+                                (get thing-cmd :conn-command-thing))))
+              (apply action window pt thing-cmd thing-arg action-args)))
         (undo-boundary)))))
 
 (defun conn-repeat-last-dispatch (repeat)
@@ -7988,6 +8035,7 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-edit-map
   :prefix 'conn-edit-map
+  "\\" 'conn-kapply-on-thing-prefix
   "z" 'conn-emacs-state-at-mark
   "v" 'diff-buffer-with-file
   "F" 'conn-bind-last-dispatch-to-key
@@ -9369,7 +9417,18 @@ Operates with the selected windows parent window."
   "b" 'conn-dispatch-on-buttons
   "f" 'conn-dispatch-on-things
   "`" 'other-window
-  ";" 'conn-wincontrol)
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key (key-parse "C-x"))
+  "C-+" 'maximize-window
+  "C--" 'shrink-window-if-larger-than-buffer
+  "C-0" 'delete-window
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-8" 'conn-tab-to-register
+  "C-9" 'quit-window
+  "C-=" 'balance-windows
+  "C-M-0" 'kill-buffer-and-window)
 
 
 ;;; Footer
