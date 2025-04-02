@@ -927,6 +927,56 @@ A zero means repeat until error."
          (conn-recursive-edit-lossage)
          (transient-resume))
        :transient transient--do-suspend)]]
+  [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
+    :description "Options:"
+    [ (conn--kapply-state-infix)
+      (conn--kapply-macro-infix)]]
+  [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
+    :description "Options:"
+    [ (conn--kapply-region-infix)
+      (conn--kapply-state-infix)]
+    [ (conn--kapply-macro-infix)
+      (conn--kapply-ibuffer-infix)]]
+  [ [ :description "With State:"
+      (conn--kapply-things-in-region-suffix)
+      (conn--kapply-replace-rectangle-suffix)
+      (conn--kapply-emacs-rectangle-suffix)
+      (conn--kapply-command-rectangle-suffix)]
+    [ :description "Save State:"
+      (conn--kapply-merge-undo-infix)
+      (conn--kapply-save-windows-infix)
+      (conn--kapply-save-restriction-infix)
+      (conn--kapply-save-excursion-infix)]]
+  (interactive "P")
+  (kmacro-display last-kbd-macro t)
+  (transient-setup 'conn-kapply-on-region-prefix nil nil :scope arg))
+
+;;;###autoload (autoload 'conn-kapply-on-thing-prefix "conn-transients" nil t)
+(transient-define-prefix conn-kapply-on-thing-prefix (arg)
+  "Transient menu for keyboard macro application on regions."
+  [ :description conn--kmacro-ring-display
+    [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
+      ("p" "Previous" kmacro-cycle-ring-next :transient t)
+      ("M" "Display"
+       (lambda ()
+         (interactive)
+         (kmacro-display last-kbd-macro t))
+       :transient t)]
+    [ ("c" "Set Counter" kmacro-set-counter :transient t)
+      ("F" "Set Format" conn--set-counter-format-infix)
+      ("g" "Push Register" conn--push-macro-ring :transient t)]
+    [ ("e" "Edit Macro"
+       (lambda (arg)
+         (interactive "P")
+         (conn-recursive-edit-kmacro arg)
+         (transient-resume))
+       :transient transient--do-suspend)
+      ("E" "Edit Lossage"
+       (lambda ()
+         (interactive)
+         (conn-recursive-edit-lossage)
+         (transient-resume))
+       :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
@@ -941,7 +991,7 @@ A zero means repeat until error."
       (conn--kapply-save-excursion-infix)]]
   (interactive "P")
   (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-kapply-on-region-prefix nil nil :scope arg))
+  (transient-setup 'conn-kapply-on-thing-prefix nil nil :scope arg))
 
 ;;;###autoload (autoload 'conn-kapply-hightlight-prefix "conn-transients" nil t)
 (transient-define-prefix conn-kapply-hightlight-prefix ()
