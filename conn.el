@@ -9390,7 +9390,8 @@ Operates with the selected windows parent window."
                                     conn-movement-state
                                     conn-menu-state)
   :lighter " Help"
-  :suppress-input-method t)
+  :suppress-input-method t
+  :hide-mark-cursor t)
 
 (defun conn-setup-help-state ()
   (setq conn-state-for-emacs 'conn-help-state)
@@ -9429,6 +9430,83 @@ Operates with the selected windows parent window."
   "C-9" 'quit-window
   "C-=" 'balance-windows
   "C-M-0" 'kill-buffer-and-window)
+
+;;;; Info
+
+(conn-define-state conn-info-state (conn-emacs-state
+                                    conn-movement-state
+                                    conn-menu-state)
+  :lighter " Info"
+  :suppress-input-method t
+  :hide-mark-cursor t)
+
+(defun conn-setup-info-state ()
+  (setq conn-state-for-emacs 'conn-info-state)
+  (conn-enter-state 'conn-info-state))
+
+(define-minor-mode conn-info-state-mode
+  "Use `conn-info-state' in `info-mode'."
+  :global t
+  (if conn-info-state-mode
+      (setf (alist-get '(major-mode . Info-mode)
+                       conn-buffer-state-setup-alist nil nil #'equal)
+            'conn-setup-info-state)
+    (setq conn-buffer-state-setup-alist
+          (delq (assoc '(major-mode . Info-mode) conn-buffer-state-setup-alist)
+                conn-buffer-state-setup-alist))))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-info-state)
+  "o" 'Info-history-back
+  "u" 'Info-history-forward
+  "m" 'Info-next
+  "n" 'Info-prev
+  "k" 'Info-scroll-up
+  "i" 'Info-scroll-down
+  "l" 'Info-forward-node
+  "j" 'Info-backward-node
+  "r" 'Info-up
+  "a" 'Info-menu
+  "z" 'Info-toc
+  "f" 'dispatch-on-info-refs
+  "v" 'Info-index
+  "`" 'other-window
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key (key-parse "C-x"))
+  "C-+" 'maximize-window
+  "C--" 'shrink-window-if-larger-than-buffer
+  "C-0" 'delete-window
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-8" 'conn-tab-to-register
+  "C-9" 'quit-window
+  "C-=" 'balance-windows
+  "C-M-0" 'kill-buffer-and-window)
+
+(defun dispatch-on-info-refs ()
+  (interactive)
+  (conn-dispatch-on-things
+   nil nil
+   (lambda ()
+     (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
+       (cl-loop for win in (conn--get-dispatch-windows t)
+                do (with-selected-window win
+                     (save-excursion
+                       (let ((last-pt (goto-char (window-end))))
+                         (while (and (> last-pt (progn
+                                                  (Info-prev-reference)
+                                                  (setq last-pt (point))))
+                                     (<= (window-start) (point) (window-end)))
+                           (push (conn--make-target-overlay (point) 0 nil) ovs)))))
+                finally return ovs)))
+   (lambda (win pt _thing _thing-arg)
+     (select-window win)
+     (goto-char pt)
+     (Info-follow-nearest-node))
+   nil
+   (lambda (win)
+     (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
 
 
 ;;; Footer

@@ -800,6 +800,7 @@ A zero means repeat until error."
    (alist-get :window-conf args)
    (alist-get :ibuffer args)
    (alist-get :kmacro args)))
+
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
