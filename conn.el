@@ -9468,6 +9468,7 @@ Operates with the selected windows parent window."
     "C-=" 'balance-windows
     "C-M-0" 'kill-buffer-and-window))
 
+
 ;;;; treemacs
 
 (with-eval-after-load 'treemacs
@@ -9490,6 +9491,31 @@ Operates with the selected windows parent window."
     "C-9" 'quit-window
     "C-=" 'balance-windows
     "C-M-0" 'kill-buffer-and-window))
+
+
+;;;; Messages
+
+(conn-set-mode-property 'messages-buffer-mode :hide-mark-cursor t)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
+  "b" 'beginning-of-buffer
+  "e" 'end-of-buffer
+  "`" 'other-window
+  "i" 'scroll-down
+  "k" 'scroll-up
+  "f" 'conn-dispatch-on-things
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key (key-parse "C-x"))
+  "C-+" 'maximize-window
+  "C--" 'shrink-window-if-larger-than-buffer
+  "C-0" 'delete-window
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-8" 'conn-tab-to-register
+  "C-9" 'quit-window
+  "C-=" 'balance-windows
+  "C-M-0" 'kill-buffer-and-window)
 
 
 ;;; Footer
