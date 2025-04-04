@@ -8161,7 +8161,6 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "e" 'conn-insert-state
   "Z" 'pop-to-mark-command
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
