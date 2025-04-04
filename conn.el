@@ -9102,6 +9102,8 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+    "a" 'execute-extended-command
+    "A" 'dired-find-alternate-file
     "/" 'dired-undo
     "b" 'dired-up-directory
     "k" 'dired-next-line
@@ -9163,10 +9165,10 @@ Operates with the selected windows parent window."
     "% s" 'dired-do-symlink-regexp
     "% y" 'dired-do-relsymlink-regexp
     "% t" 'dired-flag-garbage-files
-    "M-s M-s" 'dired-do-isearch
     "M-s s" 'dired-do-isearch
-    "M-s M-r" 'dired-do-isearch-regexp
-    "M-s r" 'dired-do-isearch-regexp))
+    "M-s c" 'dired-do-isearch-regexp
+    "M-s q" 'dired-do-find-regexp
+    "M-s r" 'dired-do-find-regexp-and-replace))
 
 
 ;;;; Magit
@@ -9281,6 +9283,7 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+    "a" 'execute-extended-command
     ";" 'conn-wincontrol
     "/" 'ibuffer-do-revert
     "`" 'other-window
@@ -9364,6 +9367,7 @@ Operates with the selected windows parent window."
 (with-eval-after-load 'help-mode
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
+    "a" 'execute-extended-command
     "b" 'beginning-of-buffer
     "e" 'end-of-buffer
     "j" 'backward-button
@@ -9388,6 +9392,7 @@ Operates with the selected windows parent window."
 (with-eval-after-load 'helpful
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
+    "a" 'execute-extended-command
     "b" 'beginning-of-buffer
     "e" 'end-of-buffer
     "j" 'backward-button
@@ -9409,6 +9414,7 @@ Operates with the selected windows parent window."
     "C-=" 'balance-windows
     "C-M-0" 'kill-buffer-and-window))
 
+
 ;;;; Info
 
 (with-eval-after-load 'info
@@ -9450,7 +9456,8 @@ Operates with the selected windows parent window."
     "l" 'Info-forward-node
     "j" 'Info-backward-node
     "r" 'Info-up
-    "a" 'Info-menu
+    "a" 'execute-extended-command
+    "p" 'Info-menu
     "z" 'Info-toc
     "f" 'dispatch-on-info-refs
     "v" 'Info-index
@@ -9475,6 +9482,7 @@ Operates with the selected windows parent window."
   (conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
+    "a" 'execute-extended-command
     "`" 'treemacs-select-window
     "i" 'treemacs-previous-line
     "k" 'treemacs-next-line
@@ -9498,6 +9506,7 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'messages-buffer-mode :hide-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
+  "a" 'execute-extended-command
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
   "`" 'other-window
