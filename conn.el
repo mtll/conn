@@ -234,6 +234,8 @@ dynamically.")
 
 ;;;; Utilities
 
+(defconst conn--hash-key-missing (make-symbol "key-missing"))
+
 (eval-and-compile
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
@@ -556,8 +558,18 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn-get-mode-property (mode propname)
   (cl-loop for mode in (conn--derived-mode-all-parents mode)
-           when (plist-member (symbol-plist mode) propname)
-           return (get mode propname)))
+           for prop = (if-let* ((table (get mode :conn-properties)))
+                          (gethash propname table conn--hash-key-missing)
+                        conn--hash-key-missing)
+           unless (eq conn--hash-key-missing prop) return prop))
+
+(defun conn-set-mode-property (mode prop value)
+  (let ((table (or (get mode :conn-properties)
+                   (put mode :conn-properties (make-hash-table :test 'eq)))))
+    (puthash prop value table)))
+
+(gv-define-setter conn-get-mode-property (value mode prop)
+  `(conn-set-mode-property ,mode ,prop ,value))
 
 
 ;;;;; Misc utils
@@ -1118,8 +1130,6 @@ mouse-3: Describe current input method")
 
 
 ;;;;; State properties
-
-(defconst conn--hash-key-missing (make-symbol "key-missing"))
 
 (define-inline conn-state-get (state property)
   "Return the value of PROPERTY for STATE.
@@ -9168,7 +9178,7 @@ Operates with the selected windows parent window."
 ;;;; Magit
 
 (with-eval-after-load 'magit
-  (put 'magit-section-mode :hide-mark-cursor t)
+  (conn-set-mode-property 'magit-section-mode :hide-mark-cursor t)
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-emacs-state 'magit-section-mode)
@@ -9203,7 +9213,7 @@ Operates with the selected windows parent window."
   :suppress-input-method t)
 
 (with-eval-after-load 'ibuffer
-  (put 'ibuffer-mode :hide-mark-cursor t)
+  (conn-set-mode-property 'ibuffer-mode :hide-mark-cursor t)
 
   (defvar ibuffer-movement-cycle)
   (defvar ibuffer-marked-char)
@@ -9467,7 +9477,7 @@ Operates with the selected windows parent window."
 ;;;; treemacs
 
 (with-eval-after-load 'treemacs
-  (put 'treemacs-mode :hide-mark-cursor t)
+  (conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
   (define-keymap
     :keymap (conn-get-mode-map 'conn-emacs-state 'treemacs-mode)
     "`" 'treemacs-select-window
