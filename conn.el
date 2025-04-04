@@ -4460,9 +4460,9 @@ Returns a cons of (STRING . OVERLAYS)."
                     (save-excursion
                       (goto-char (point-min))
                       (when (button-at (point))
-                        (push (conn--make-target-overlay (point) 1 nil) ovs))
+                        (push (conn--make-target-overlay (point) 0 nil) ovs))
                       (while (forward-button 1 nil nil t)
-                        (push (conn--make-target-overlay (point) 1 nil) ovs)))))
+                        (push (conn--make-target-overlay (point) 0 nil) ovs)))))
              finally return ovs)))
 
 (defun conn--dispatch-re-matches (regexp &optional all-windows)
@@ -7281,7 +7281,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;;; Help format strings
 
-(defconst conn--wincontrol-window-format-1
+(defvar conn--wincontrol-window-format-1
   (concat
    "\\<conn-wincontrol-map>"
    (propertize "Window: " 'face 'minibuffer-prompt)
@@ -7309,7 +7309,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "transpose/throw/yank; "
    "\\[conn-wincontrol-mru-window]: last win"))
 
-(defconst conn--wincontrol-window-format-2
+(defvar conn--wincontrol-window-format-2
   (concat
    "\\<conn-wincontrol-map>"
    (propertize "Window: " 'face 'minibuffer-prompt)
@@ -7333,9 +7333,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "\\[balance-windows] \\[maximize-window]: balance/max; "
    "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
    "max vert/horiz; "
-   "\\[conn-register-load] \\[window-configuration-to-register]: load/store"))
+   "\\[conn-register-prefix]: register"))
 
-(defconst conn--wincontrol-tab-format
+(defvar conn--wincontrol-tab-format
   (concat
    "\\<conn-wincontrol-map>"
    (propertize "Tab: " 'face 'minibuffer-prompt)
@@ -7353,7 +7353,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    "new/clone/kill; "
    "\\[tab-bar-detach-tab]: tear off"))
 
-(defconst conn--wincontrol-frame-format
+(defvar conn--wincontrol-frame-format
   (concat
    "\\<conn-wincontrol-map>"
    (propertize "Frame: " 'face 'minibuffer-prompt)
@@ -7361,19 +7361,28 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    (propertize "%s" 'face 'read-multiple-choice-face) "; "
    "\\[conn-wincontrol-digit-argument-reset]: reset; "
    "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-   "\\[conn-wincontrol-exit]: exit"
-   "\n"
-   "\\[other-frame]: other; "
+   "\\[conn-wincontrol-exit]: exit; "
    "\\[clone-frame]: clone; "
+   "\\[other-frame]: other"
+   "\n"
    "\\[undelete-frame]: undelete; "
    "\\[tear-off-window]: tear off; "
-   "\\[toggle-frame-fullscreen]: fullscreen"
-   "\n"
-   "\\[conn-wincontrol-reverse] \\[conn-wincontrol-reflect]: reverse/reflect; "
-   "\\[make-frame-command]: iconify/create; "
+   "\\[toggle-frame-fullscreen]: fullscreen; "
+   "\\[make-frame-command]: create; "
    "\\[delete-frame] \\[delete-other-frames]: delete/other"))
 
-(defconst conn--wincontrol-simple-format
+(static-if (<= emacs-major-version 31)
+    (setq conn--wincontrol-frame-format
+          (concat
+           conn--wincontrol-frame-format
+           "\n"
+           "\\[rotate-windows-back] \\[rotate-windows] "
+           "\\[rotate-window-layout-clockwise] \\[rotate-window-layout-counterclockwise]"
+           ": rotate windows/layout; "
+           "\\[transpose-window-layout] \\[flip-window-layout-horizontally] \\[flip-window-layout-vertically]"
+           ": transpose/flip vertical/horizontal")))
+
+(defvar conn--wincontrol-simple-format
   (concat
    "\\<conn-wincontrol-map>"
    (propertize "WinControl: " 'face 'minibuffer-prompt)
@@ -7409,7 +7418,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-o" 'other-frame
   "M-c" 'clone-frame
   "M-d" 'delete-frame
-  "`" 'conn-wincontrol-next-window
   "C-u" 'conn-wincontrol-universal-arg
   "-" 'conn-wincontrol-invert-argument
   "/" 'tab-bar-history-back
@@ -7423,7 +7431,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "7" 'conn-wincontrol-digit-argument
   "8" 'conn-wincontrol-digit-argument
   "9" 'conn-wincontrol-digit-argument
-  "=" 'balance-windows
   "?" 'tab-bar-history-forward
   "_" 'shrink-window-if-larger-than-buffer
   "<down>" 'conn-wincontrol-windmove-down
@@ -7452,9 +7459,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "<tab>" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
-  "." 'conn-wincontrol-maximize-horizontally
   ";" 'conn-wincontrol-exit-to-initial-win
-  "b" 'conn-tab-to-register
+  "B" 'balance-windows
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key (key-parse "C-c"))
   "d" 'delete-window
@@ -7465,7 +7471,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "g" 'delete-other-windows
   "C-f" 'conn-wincontrol-help
   "C-b" 'conn-wincontrol-help-backward
-  "H" 'maximize-window
+  "M" 'maximize-window
+  "m" 'conn-wincontrol-mru-window
+  "H" 'conn-wincontrol-maximize-horizontally
   "h" 'enlarge-window
   "I" 'tab-new
   "i" 'tab-next
@@ -7475,28 +7483,26 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "k" 'tab-previous
   "l" 'next-buffer
   "L" 'unbury-buffer
-  "M" 'tab-bar-move-window-to-tab
-  "m" 'conn-wincontrol-maximize-vertically
+  "P" 'tab-bar-move-window-to-tab
   "n" 'shrink-window-horizontally
   "N" 'tab-bar-new-tab
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
-  "p" 'conn-register-load
-  "P" 'window-configuration-to-register
+  "p" 'conn-register-prefix
   "x" (conn-remap-key (key-parse "C-x"))
-  "X" 'conn-wincontrol-mru-window
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "s" 'shrink-window
   "S" 'conn-wincontrol-isearch-other-window
   "t" 'tab-switch
-  "T" 'conn-throw-buffer
+  "Y" 'conn-throw-buffer
   "u" 'conn-wincontrol-previous-window
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
+  "V" 'conn-wincontrol-maximize-vertically
   "w" 'enlarge-window-horizontally
-  "q" 'conn-transpose-window
-  "Q" 'quit-window
+  "q" 'quit-window
+  "`" 'conn-transpose-window
   "y" 'conn-yank-window
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
@@ -7887,6 +7893,8 @@ Operates with the selected windows parent window."
     (define-keymap
       :keymap conn-wincontrol-map
       "\\" 'transpose-window-layout
+      "," 'rotate-windows-back
+      "." 'rotate-windows
       "<" 'rotate-window-layout-counterclockwise
       ">" 'rotate-window-layout-clockwise
       "|" 'flip-window-layout-horizontally
@@ -8088,7 +8096,6 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
   :suppress t
-  "e" 'conn-insert-state
   ">" 'forward-line
   "<" 'conn-backward-line
   "o" (conn-remap-key conn-forward-word-keys)
@@ -8139,6 +8146,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "e" 'conn-insert-state
   "Z" 'pop-to-mark-command
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
@@ -8950,7 +8958,7 @@ Operates with the selected windows parent window."
 (conn-define-state conn-dired-state (conn-emacs-state)
   "State for `dired-mode'."
   :cursor '(bar . 4)
-  :lighter " Drd"
+  :hide-mark-cursor t
   :suppress-input-method t)
 
 (conn-define-state conn-dired-dispatch-state (conn-dired-state conn-read-dispatch-state)
@@ -9159,7 +9167,6 @@ Operates with the selected windows parent window."
 
 (conn-define-state conn-magit-status-state ()
   "State for magit status buffer"
-  :lighter " Stat"
   :suppress-input-method t
   :hide-mark-cursor t
   :cursor '(bar . 4))
@@ -9208,13 +9215,13 @@ Operates with the selected windows parent window."
 
 (conn-define-state conn-ibuffer-state (conn-emacs-state)
   "State for `ibuffer-mode'."
-  :lighter " Ibf"
   :suppress-input-method t)
 
 (conn-define-state conn-ibuffer-dispatch-state (conn-ibuffer-state conn-read-dispatch-state)
   "State for dispatch in `ibuffer-mode'."
-  :cursor 'box
+  :cursor '(bar . 4)
   :lighter " DISPATCH"
+  :hide-mark-cursor t
   :suppress-input-method t)
 
 (defun conn-setup-ibuffer-state ()
@@ -9389,7 +9396,6 @@ Operates with the selected windows parent window."
 (conn-define-state conn-help-state (conn-emacs-state
                                     conn-movement-state
                                     conn-menu-state)
-  :lighter " Help"
   :suppress-input-method t
   :hide-mark-cursor t)
 
@@ -9413,10 +9419,13 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-help-state)
+  "b" 'beginning-of-buffer
+  "e" 'end-of-buffer
   "j" 'backward-button
   "l" 'forward-button
-  "b" 'conn-dispatch-on-buttons
-  "f" 'conn-dispatch-on-things
+  "i" 'scroll-down
+  "k" 'scroll-up
+  "f" 'conn-dispatch-on-buttons
   "`" 'other-window
   ";" 'conn-wincontrol
   "x" (conn-remap-key (key-parse "C-x"))
@@ -9436,7 +9445,6 @@ Operates with the selected windows parent window."
 (conn-define-state conn-info-state (conn-emacs-state
                                     conn-movement-state
                                     conn-menu-state)
-  :lighter " Info"
   :suppress-input-method t
   :hide-mark-cursor t)
 
@@ -9484,29 +9492,33 @@ Operates with the selected windows parent window."
   "C-=" 'balance-windows
   "C-M-0" 'kill-buffer-and-window)
 
-(defun dispatch-on-info-refs ()
-  (interactive)
-  (conn-dispatch-on-things
-   nil nil
-   (lambda ()
-     (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
-       (cl-loop for win in (conn--get-dispatch-windows t)
-                do (with-selected-window win
-                     (save-excursion
-                       (let ((last-pt (goto-char (window-end))))
-                         (while (and (> last-pt (progn
-                                                  (Info-prev-reference)
-                                                  (setq last-pt (point))))
-                                     (<= (window-start) (point) (window-end)))
-                           (push (conn--make-target-overlay (point) 0 nil) ovs)))))
-                finally return ovs)))
-   (lambda (win pt _thing _thing-arg)
-     (select-window win)
-     (goto-char pt)
-     (Info-follow-nearest-node))
-   nil
-   (lambda (win)
-     (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
+(with-eval-after-load 'info
+  (declare-function Info-prev-reference "info")
+  (declare-function Info-follow-nearest-node "info")
+
+  (defun dispatch-on-info-refs ()
+    (interactive)
+    (conn-dispatch-on-things
+     nil nil
+     (lambda ()
+       (conn--protected-let ((ovs nil (mapc #'delete-overlay ovs)))
+         (cl-loop for win in (conn--get-dispatch-windows t)
+                  do (with-selected-window win
+                       (save-excursion
+                         (let ((last-pt (goto-char (window-end))))
+                           (while (and (> last-pt (progn
+                                                    (Info-prev-reference)
+                                                    (setq last-pt (point))))
+                                       (<= (window-start) (point) (window-end)))
+                             (push (conn--make-target-overlay (point) 0 nil) ovs)))))
+                  finally return ovs)))
+     (lambda (win pt _thing _thing-arg)
+       (select-window win)
+       (goto-char pt)
+       (Info-follow-nearest-node))
+     nil
+     (lambda (win)
+       (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win)))))))
 
 
 ;;; Footer
