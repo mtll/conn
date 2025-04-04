@@ -554,6 +554,10 @@ If BUFFER is nil check `current-buffer'."
            for prop = (get mode property)
            when prop return prop))
 
+(defun conn-get-mode-property (mode propname)
+  (cl-loop for mode in (conn--derived-mode-all-parents mode)
+           thereis (get mode propname)))
+
 
 ;;;;; Misc utils
 
@@ -734,13 +738,9 @@ of highlighting."
     ((or (derived-mode . calc-mode)
          (derived-mode . calc-trail-mode)
          (derived-mode . calc-keypad-mode)
-         (derived-mode . Info-mode)
-         (derived-mode . Man-mode)
          (derived-mode . image-mode)
          (derived-mode . doc-view-mode)
-         (derived-mode . pdf-view-mode)
-         (derived-mode . magit-status-mode)
-         (derived-mode . treemacs-mode))
+         (derived-mode . pdf-view-mode))
      . conn-setup-null-state)
     ((major-mode . minibuffer-mode)
      . conn-setup-minibuffer-state)
@@ -1354,7 +1354,8 @@ and specializes the method on all conn states."
              conn-lighter (or (conn-state-get state :lighter)
                               (default-value 'conn-lighter))
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
-             conn--hide-mark-cursor (conn-state-get state :hide-mark-cursor)
+             conn--hide-mark-cursor (or (conn-get-mode-property major-mode :hide-mark-cursor)
+                                        (conn-state-get state :hide-mark-cursor))
              cursor-type (or (conn-state-get state :cursor) t))
             (conn--activate-input-method)
             (cl-call-next-method)
@@ -9165,31 +9166,11 @@ Operates with the selected windows parent window."
 
 ;;;; Magit
 
-(conn-define-state conn-magit-status-state ()
-  "State for magit status buffer"
-  :suppress-input-method t
-  :hide-mark-cursor t
-  :cursor '(bar . 4))
+(with-eval-after-load 'magit
+  (put 'magit-section-mode :hide-mark-cursor t)
 
-(defun conn-setup-magit-status-state ()
-  (setq-local conn-state-for-emacs 'conn-magit-status-state)
-  (conn-enter-state 'conn-magit-status-state))
-
-(define-minor-mode conn-magit-state-mode
-  "Use `conn-magit-status-state' in `magit-status-mode'."
-  :global t
-  (if conn-magit-state-mode
-      (setf (alist-get '(major-mode . magit-status-mode)
-                       conn-buffer-state-setup-alist nil nil #'equal)
-            'conn-setup-magit-status-state)
-    (setq conn-buffer-state-setup-alist
-          (delq (assoc '(major-mode . magit-status-mode)
-                       conn-buffer-state-setup-alist)
-                conn-buffer-state-setup-alist))))
-
-(with-eval-after-load 'magit-status
   (define-keymap
-    :keymap (conn-get-state-map 'conn-magit-status-state)
+    :keymap (conn-get-mode-map 'conn-emacs-state 'magit-section-mode)
     "<f8>" 'conn-command-state
     "i" 'magit-section-backward
     "k" 'magit-section-forward
@@ -9213,34 +9194,16 @@ Operates with the selected windows parent window."
 
 ;;;; Ibuffer
 
-(conn-define-state conn-ibuffer-state (conn-emacs-state)
-  "State for `ibuffer-mode'."
-  :suppress-input-method t)
-
-(conn-define-state conn-ibuffer-dispatch-state (conn-ibuffer-state conn-read-dispatch-state)
+(conn-define-state conn-ibuffer-dispatch-state (conn-emacs-state conn-read-dispatch-state)
   "State for dispatch in `ibuffer-mode'."
   :cursor '(bar . 4)
   :lighter " DISPATCH"
   :hide-mark-cursor t
   :suppress-input-method t)
 
-(defun conn-setup-ibuffer-state ()
-  (setq conn-state-for-emacs 'conn-ibuffer-state
-        conn-state-for-read-dispatch 'conn-ibuffer-dispatch-state)
-  (conn-enter-state 'conn-ibuffer-state))
-
-(define-minor-mode conn-ibuffer-mode
-  "Enable `conn-ibuffer-state' in `ibuffer-mode'."
-  :global t
-  (if conn-ibuffer-mode
-      (setf (alist-get '(derived-mode . ibuffer-mode)
-                       conn-buffer-state-setup-alist nil nil #'equal)
-            'conn-setup-ibuffer-state)
-    (setq conn-buffer-state-setup-alist
-          (delq (assoc '(derived-mode . ibuffer-mode) conn-buffer-state-setup-alist)
-                conn-buffer-state-setup-alist))))
-
 (with-eval-after-load 'ibuffer
+  (put 'ibuffer-mode :hide-mark-cursor t)
+
   (defvar ibuffer-movement-cycle)
   (defvar ibuffer-marked-char)
 
@@ -9312,7 +9275,7 @@ Operates with the selected windows parent window."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-state-map 'conn-ibuffer-state)
+    :keymap (conn-get-mode-map 'conn-emacs-state 'ibuffer-mode)
     ";" 'conn-wincontrol
     "/" 'ibuffer-do-revert
     "`" 'other-window
@@ -9393,104 +9356,55 @@ Operates with the selected windows parent window."
 
 ;;;; Help
 
-(conn-define-state conn-help-state (conn-emacs-state
-                                    conn-movement-state
-                                    conn-menu-state)
-  :suppress-input-method t
-  :hide-mark-cursor t)
+(with-eval-after-load 'help-mode
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-emacs-state 'help-mode)
+    "b" 'beginning-of-buffer
+    "e" 'end-of-buffer
+    "j" 'backward-button
+    "l" 'forward-button
+    "i" 'scroll-down
+    "k" 'scroll-up
+    "f" 'conn-dispatch-on-buttons
+    "`" 'other-window
+    ";" 'conn-wincontrol
+    "x" (conn-remap-key (key-parse "C-x"))
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
 
-(defun conn-setup-help-state ()
-  (setq conn-state-for-emacs 'conn-help-state)
-  (conn-enter-state 'conn-help-state))
-
-(define-minor-mode conn-help-state-mode
-  "Use `conn-help-state' in `help-mode'."
-  :global t
-  (if conn-help-state-mode
-      (setf (alist-get '(or (derived-mode . help-mode)
-                            (derived-mode . helpful-mode))
-                       conn-buffer-state-setup-alist nil nil #'equal)
-            'conn-setup-help-state)
-    (setq conn-buffer-state-setup-alist
-          (delq (assoc '(or (derived-mode . help-mode)
-                            (derived-mode . helpful-mode))
-                       conn-buffer-state-setup-alist)
-                conn-buffer-state-setup-alist))))
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-help-state)
-  "b" 'beginning-of-buffer
-  "e" 'end-of-buffer
-  "j" 'backward-button
-  "l" 'forward-button
-  "i" 'scroll-down
-  "k" 'scroll-up
-  "f" 'conn-dispatch-on-buttons
-  "`" 'other-window
-  ";" 'conn-wincontrol
-  "x" (conn-remap-key (key-parse "C-x"))
-  "C-+" 'maximize-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-0" 'delete-window
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-8" 'conn-tab-to-register
-  "C-9" 'quit-window
-  "C-=" 'balance-windows
-  "C-M-0" 'kill-buffer-and-window)
+(with-eval-after-load 'helpful
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-emacs-state 'helpful-mode)
+    "b" 'beginning-of-buffer
+    "e" 'end-of-buffer
+    "j" 'backward-button
+    "l" 'forward-button
+    "i" 'scroll-down
+    "k" 'scroll-up
+    "f" 'conn-dispatch-on-buttons
+    "`" 'other-window
+    ";" 'conn-wincontrol
+    "x" (conn-remap-key (key-parse "C-x"))
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
 
 ;;;; Info
-
-(conn-define-state conn-info-state (conn-emacs-state
-                                    conn-movement-state
-                                    conn-menu-state)
-  :suppress-input-method t
-  :hide-mark-cursor t)
-
-(defun conn-setup-info-state ()
-  (setq conn-state-for-emacs 'conn-info-state)
-  (conn-enter-state 'conn-info-state))
-
-(define-minor-mode conn-info-state-mode
-  "Use `conn-info-state' in `info-mode'."
-  :global t
-  (if conn-info-state-mode
-      (setf (alist-get '(major-mode . Info-mode)
-                       conn-buffer-state-setup-alist nil nil #'equal)
-            'conn-setup-info-state)
-    (setq conn-buffer-state-setup-alist
-          (delq (assoc '(major-mode . Info-mode) conn-buffer-state-setup-alist)
-                conn-buffer-state-setup-alist))))
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-info-state)
-  "o" 'Info-history-back
-  "u" 'Info-history-forward
-  "m" 'Info-next
-  "n" 'Info-prev
-  "k" 'Info-scroll-up
-  "i" 'Info-scroll-down
-  "l" 'Info-forward-node
-  "j" 'Info-backward-node
-  "r" 'Info-up
-  "a" 'Info-menu
-  "z" 'Info-toc
-  "f" 'dispatch-on-info-refs
-  "v" 'Info-index
-  "`" 'other-window
-  ";" 'conn-wincontrol
-  "x" (conn-remap-key (key-parse "C-x"))
-  "C-+" 'maximize-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-0" 'delete-window
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-8" 'conn-tab-to-register
-  "C-9" 'quit-window
-  "C-=" 'balance-windows
-  "C-M-0" 'kill-buffer-and-window)
 
 (with-eval-after-load 'info
   (declare-function Info-prev-reference "info")
@@ -9518,7 +9432,59 @@ Operates with the selected windows parent window."
        (Info-follow-nearest-node))
      nil
      (lambda (win)
-       (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win)))))))
+       (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
+
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-emacs-state 'Info-mode)
+    "o" 'Info-history-back
+    "u" 'Info-history-forward
+    "m" 'Info-next
+    "n" 'Info-prev
+    "k" 'Info-scroll-up
+    "i" 'Info-scroll-down
+    "l" 'Info-forward-node
+    "j" 'Info-backward-node
+    "r" 'Info-up
+    "a" 'Info-menu
+    "z" 'Info-toc
+    "f" 'dispatch-on-info-refs
+    "v" 'Info-index
+    "`" 'other-window
+    ";" 'conn-wincontrol
+    "x" (conn-remap-key (key-parse "C-x"))
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
+
+;;;; treemacs
+
+(with-eval-after-load 'treemacs
+  (put 'treemacs-mode :hide-mark-cursor t)
+  (define-keymap
+    :keymap (conn-get-mode-map 'conn-emacs-state 'treemacs-mode)
+    "`" 'treemacs-select-window
+    "i" 'treemacs-previous-line
+    "k" 'treemacs-next-line
+    "f" 'conn-dispatch-on-things
+    ";" 'conn-wincontrol
+    "x" (conn-remap-key (key-parse "C-x"))
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
 
 
 ;;; Footer
