@@ -556,7 +556,8 @@ If BUFFER is nil check `current-buffer'."
 
 (defun conn-get-mode-property (mode propname)
   (cl-loop for mode in (conn--derived-mode-all-parents mode)
-           thereis (get mode propname)))
+           when (plist-member (symbol-plist mode) propname)
+           return (get mode propname)))
 
 
 ;;;;; Misc utils
