@@ -755,6 +755,8 @@ of highlighting."
          (derived-mode . doc-view-mode)
          (derived-mode . pdf-view-mode))
      . conn-setup-null-state)
+    ((derived-mode . dired-mode)
+     . conn-setup-dired-state)
     ((major-mode . minibuffer-mode)
      . conn-setup-minibuffer-state)
     ((or (derived-mode . prog-mode)
@@ -927,7 +929,7 @@ The composed map is a keymap of the form:
     (make-composed-keymap
      (cl-loop for pmode in (conn--derived-mode-all-parents major-mode)
               collect (progn
-                        (conn-get-mode-map state pmode)
+                        (conn-get-major-mode-map state pmode)
                         (gethash pmode (gethash state conn--major-mode-maps)))))))
 
 (defun conn--sort-mode-maps (state)
@@ -967,37 +969,38 @@ If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
+  (or (nth 1 (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
+      (prog1
+          (let ((keymap (make-composed-keymap (make-sparse-keymap)))
+                (alist (gethash state conn--minor-mode-maps)))
+            (if (alist-get mode (cdr alist))
+                (setf (alist-get mode alist) keymap)
+              (setcdr alist (cons (cons mode keymap) (cdr alist))))
+            (setf (cddr keymap)
+                  (cl-loop for parent in (cdr (conn--state-all-parents state))
+                           collect (conn-get-mode-map parent mode)))
+            (dolist (child (conn--state-all-children state))
+              (conn-get-mode-map child mode))
+            (nth 1 keymap))
+        (conn--sort-mode-maps state))))
+
+(defun conn-get-major-mode-map (state mode)
+  "Return keymap for major MODE in STATE.
+
+If one does not exists create a new sparse keymap for MODE in STATE and
+return it."
+  (cl-check-type state conn-state)
+  (cl-assert (symbolp mode))
   (or (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
         (nth 1 (gethash mode mmode-table)))
-      (nth 1 (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
-      (cond
-       ((autoloadp (symbol-function mode))
-        (error "%s not loaded" mode))
-       ((or (eq 'fundamental-mode mode)
-            (plist-member (symbol-plist mode) 'derived-mode-parent))
-        (let* ((keymap
-                (setf (gethash mode (gethash state conn--major-mode-maps))
-                      (make-composed-keymap (make-sparse-keymap)))))
-          (setf (cddr keymap)
-                (cl-loop for parent in (cdr (conn--state-all-parents state))
-                         collect (conn-get-mode-map parent mode)))
-          (dolist (child (conn--state-all-children state))
-            (conn-get-mode-map child mode))
-          (nth 1 keymap)))
-       (t
-        (prog1
-            (let ((keymap (make-composed-keymap (make-sparse-keymap)))
-                  (alist (gethash state conn--minor-mode-maps)))
-              (if (alist-get mode (cdr alist))
-                  (setf (alist-get mode alist) keymap)
-                (setcdr alist (cons (cons mode keymap) (cdr alist))))
-              (setf (cddr keymap)
-                    (cl-loop for parent in (cdr (conn--state-all-parents state))
-                             collect (conn-get-mode-map parent mode)))
-              (dolist (child (conn--state-all-children state))
-                (conn-get-mode-map child mode))
-              (nth 1 keymap))
-          (conn--sort-mode-maps state))))))
+      (let* ((keymap (setf (gethash mode (gethash state conn--major-mode-maps))
+                           (make-composed-keymap (make-sparse-keymap)))))
+        (setf (cddr keymap)
+              (cl-loop for parent in (cdr (conn--state-all-parents state))
+                       collect (conn-get-major-mode-map parent mode)))
+        (dolist (child (conn--state-all-children state))
+          (conn-get-major-mode-map child mode))
+        (nth 1 keymap))))
 
 (defun conn--rebuild-state-keymaps (state)
   "Rebuild all composed keymaps for STATE.
@@ -1020,7 +1023,7 @@ Called when the inheritance hierarchy for STATE changes."
      (lambda (mode map)
        (setf (cdr map)
              (cl-loop for pstate in parents
-                      collect (conn-get-mode-map pstate mode))))
+                      collect (conn-get-major-mode-map pstate mode))))
      (gethash state conn--major-mode-maps))))
 
 
@@ -3742,7 +3745,7 @@ Target overlays may override this default by setting the
                   `(dolist (mode ',(ensure-list modes))
                      ,@(cl-loop for key in (ensure-list keys)
                                 collect `(keymap-set
-                                          (conn-get-mode-map
+                                          (conn-get-major-mode-map
                                            ,(or state 'conn-state-for-read-dispatch)
                                            mode)
                                           ,key ,name)))
@@ -7944,14 +7947,14 @@ Operates with the selected windows parent window."
 ;;;;; Mode Keymaps
 
 (dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
+  (keymap-set (conn-get-major-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
 
 (dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
+  (keymap-set (conn-get-major-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
 (with-eval-after-load 'compilation-mode
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-movement-state 'compilation-mode)
+    :keymap (conn-get-major-mode-map 'conn-movement-state 'compilation-mode)
     "<" 'previous-error-no-select
     ">" 'next-error-no-select))
 
@@ -8653,7 +8656,7 @@ Operates with the selected windows parent window."
    'org-up-heading)
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-movement-state 'org-mode)
+    :keymap (conn-get-major-mode-map 'conn-movement-state 'org-mode)
     "=" 'conn-org-edit-state
     "^" 'org-up-element
     ")" 'org-next-visible-heading
@@ -8967,37 +8970,20 @@ Operates with the selected windows parent window."
 
 ;;;; Dired
 
-(conn-define-state conn-dired-state (conn-emacs-state)
-  "State for `dired-mode'."
-  :cursor '(bar . 4)
-  :hide-mark-cursor t
-  :suppress-input-method t)
-
-(conn-define-state conn-dired-dispatch-state (conn-dired-state conn-read-dispatch-state)
+(conn-define-state conn-dired-dispatch-state (conn-emacs-state conn-read-dispatch-state)
   "State for dispatch in `dired-mode'."
   :cursor 'box
   :lighter " DISPATCH"
   :suppress-input-method t)
 
 (defun conn-setup-dired-state ()
-  (setq conn-state-for-emacs 'conn-dired-state
-        conn-state-for-read-dispatch 'conn-dired-dispatch-state)
-  (conn-enter-state 'conn-dired-state))
-
-(define-minor-mode conn-dired-mode
-  "Enable `conn-dired-state' in `dired-mode'."
-  :global t
-  (if conn-dired-mode
-      (setf (alist-get '(derived-mode . dired-mode)
-                       conn-buffer-state-setup-alist nil nil #'equal)
-            'conn-setup-dired-state)
-    (setq conn-buffer-state-setup-alist
-          (delq (assoc '(derived-mode . dired-mode) conn-buffer-state-setup-alist)
-                conn-buffer-state-setup-alist))))
+  (setq conn-state-for-read-dispatch 'conn-dired-dispatch-state)
+  (conn-enter-state 'conn-emacs-state))
 
 (with-eval-after-load 'dired
   (defvar dired-subdir-alist)
   (defvar dired-movement-style)
+  (defvar dired-mode-map)
 
   (declare-function dired-mark "dired")
   (declare-function dired-unmark "dired")
@@ -9006,6 +8992,8 @@ Operates with the selected windows parent window."
   (declare-function dired-marker-regexp "dired")
   (declare-function dired-kill-subdir "dired-aux")
   (declare-function dired-kill-line "dired-aux")
+
+  (conn-set-mode-property 'dired-mode :hide-mark-cursor t)
 
   (defun conn--dispatch-dired-lines ()
     (conn--protected-let ((dired-movement-style 'bounded)
@@ -9114,7 +9102,9 @@ Operates with the selected windows parent window."
         (dired-kill-subdir))))
 
   (define-keymap
-    :keymap (conn-get-state-map 'conn-dired-state)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+    "/" 'dired-undo
+    "b" 'dired-up-directory
     "k" 'dired-next-line
     "i" 'dired-previous-line
     "/" 'dired-undo
@@ -9126,6 +9116,7 @@ Operates with the selected windows parent window."
     ">" 'dired-next-marked-file
     "<" 'dired-prev-marked-file
     "K" 'dired-tree-down
+    "F" 'dired-create-empty-file
     "TAB" 'dired-maybe-insert-subdir
     "M-TAB" 'dired-kill-subdir
     "w" 'dired-do-kill-lines
@@ -9162,7 +9153,7 @@ Operates with the selected windows parent window."
     "C-M-0" 'kill-buffer-and-window)
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-dired-state 'dired-mode)
+    :keymap dired-mode-map
     "* p" 'dired-sort-toggle-or-edit
     "* e" 'dired-mark-executables
     "* l" 'dired-mark-symlinks
@@ -9172,7 +9163,11 @@ Operates with the selected windows parent window."
     "% h" 'dired-do-hardlink-regexp
     "% s" 'dired-do-symlink-regexp
     "% y" 'dired-do-relsymlink-regexp
-    "% t" 'dired-flag-garbage-files))
+    "% t" 'dired-flag-garbage-files
+    "M-s M-s" 'dired-do-isearch
+    "M-s s" 'dired-do-isearch
+    "M-s M-r" 'dired-do-isearch-regexp
+    "M-s r" 'dired-do-isearch-regexp))
 
 
 ;;;; Magit
@@ -9181,7 +9176,7 @@ Operates with the selected windows parent window."
   (conn-set-mode-property 'magit-section-mode :hide-mark-cursor t)
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-emacs-state 'magit-section-mode)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
     "<f8>" 'conn-command-state
     "i" 'magit-section-backward
     "k" 'magit-section-forward
@@ -9286,7 +9281,7 @@ Operates with the selected windows parent window."
           (ibuffer-unmark-forward nil nil 1)))))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-emacs-state 'ibuffer-mode)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
     ";" 'conn-wincontrol
     "/" 'ibuffer-do-revert
     "`" 'other-window
@@ -9369,7 +9364,7 @@ Operates with the selected windows parent window."
 
 (with-eval-after-load 'help-mode
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-emacs-state 'help-mode)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
     "b" 'beginning-of-buffer
     "e" 'end-of-buffer
     "j" 'backward-button
@@ -9393,7 +9388,7 @@ Operates with the selected windows parent window."
 
 (with-eval-after-load 'helpful
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-emacs-state 'helpful-mode)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
     "b" 'beginning-of-buffer
     "e" 'end-of-buffer
     "j" 'backward-button
@@ -9446,7 +9441,7 @@ Operates with the selected windows parent window."
        (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
 
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-emacs-state 'Info-mode)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
     "o" 'Info-history-back
     "u" 'Info-history-forward
     "m" 'Info-next
@@ -9479,7 +9474,7 @@ Operates with the selected windows parent window."
 (with-eval-after-load 'treemacs
   (conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
   (define-keymap
-    :keymap (conn-get-mode-map 'conn-emacs-state 'treemacs-mode)
+    :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
     "`" 'treemacs-select-window
     "i" 'treemacs-previous-line
     "k" 'treemacs-next-line
