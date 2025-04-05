@@ -202,7 +202,9 @@
   :keymap (conn-get-mode-map 'conn-command-state 'conntext-smartparens-mode)
   "TAB" (conntext-define conntext-smartparens-map
           "Context smartparens map."
-          (when (eql ?\( (char-after)) 'conn-paren-state)))
+          (when (or (eql ?\( (char-after))
+                    (eql ?\) (char-before)))
+            'conn-paren-state)))
 
 (conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
 
