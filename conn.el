@@ -7141,6 +7141,10 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Transition Functions
 
+(defun conn-previous-state ()
+  (interactive)
+  (conn-enter-state conn-previous-state))
+
 (defun conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
