@@ -8698,9 +8698,9 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-command-state 'conntext-org-mode)
-    "c" (conntext-define conntext-org-edit-state
-          (when (and (bolp) (looking-at org-outline-regexp))
-            'conn-org-edit-state)))
+    "TAB" (conntext-define conntext-org-edit-state
+            (when (and (bolp) (looking-at org-outline-regexp))
+              'conn-org-edit-state)))
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-emacs-state 'conntext-org-mode)
@@ -8963,12 +8963,9 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
-    "c" (conntext-define conntext-outline-map
-          "Context outline map."
-          (when (looking-at-p outline-regexp)
-            (make-composed-keymap
-             (list conntext-outline-map
-                   (key-binding "\C-c"))))))
+    "TAB" (conntext-define conntext-outline-map
+            "Context outline map."
+            (when (looking-at-p outline-regexp) conntext-outline-map)))
 
   (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80))
 

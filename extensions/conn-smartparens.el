@@ -154,6 +154,8 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-paren-state)
   :suppress t
+  "N" 'beginning-of-defun
+  "M" 'end-of-defun
   "o" 'sp-forward-symbol
   "u" 'sp-backward-symbol
   "O" 'forward-word
@@ -175,29 +177,32 @@
   "s" 'sp-splice-sexp
   "c" 'sp-convolute-sexp
   "f" 'conn-dispatch-on-things
-  "," 'sp-backward-slurp-sexp
+  "," 'sp-forward-barf-sexp
   "." 'sp-forward-slurp-sexp
-  "y" 'sp-forward-barf-sexp
-  "t" 'sp-backward-barf-sexp
+  ">" 'sp-backward-barf-sexp
+  "<" 'sp-backward-slurp-sexp
   "q" 'transpose-sexps
   "h" 'sp-join-sexp
   "n" 'sp-backward-sexp
-  "m" 'sp-forward-sexp)
+  "m" 'sp-forward-sexp
+  "/" 'undo-only
+  "?" 'undo-redo
+  "x" (conn-remap-key (key-parse "C-x")))
 
 (defun conn-paren-state ()
   (interactive)
   (conn-enter-state 'conn-paren-state))
 
 (define-minor-mode conntext-smartparens-mode
-  "Minor mode for contextual bindings in outline-mode.")
+  "Minor mode for contextual bindings in outline-mode."
+  :global t
+  :group 'conn)
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-command-state 'conntext-smartparens-mode)
-  "c" (conntext-define conntext-smartparens-map
-        "Context smartparens map."
-        (when (or (looking-at-p "(")
-                  (looking-back ")"))
-          'conn-paren-state)))
+  "TAB" (conntext-define conntext-smartparens-map
+          "Context smartparens map."
+          (when (eql ?\( (char-after)) 'conn-paren-state)))
 
 (conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
 
