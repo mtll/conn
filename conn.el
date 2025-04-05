@@ -30,8 +30,6 @@
 ;;;; Requires
 
 (require 'compat)
-(static-if (<= 31 emacs-major-version)
-    (require 'subr-x))
 (eval-when-compile
   (require 'inline)
   (require 'subr-x)
@@ -299,35 +297,34 @@ meaning of these see `advice-add'."
       (and (symbolp real-this-command)
            (get real-this-command propname))))
 
-;; ensure we have the emacs 31 version of string-pixel-width
-(static-if (<= emacs-major-version 30)
-    (defun conn--string-pixel-width (string &optional buffer)
-      (declare (important-return-value t))
-      (if (zerop (length string))
-          0
-        ;; Keeping a work buffer around is more efficient than creating a
-        ;; new temporary buffer.
-        (with-work-buffer
-          ;; Setup current buffer to correctly compute pixel width.
-          (when buffer
-            (dolist (v '(face-remapping-alist
-                         char-property-alias-alist
-                         default-text-properties))
-              (if (local-variable-p v buffer)
-                  (set (make-local-variable v)
-                       (buffer-local-value v buffer)))))
-          ;; Avoid deactivating the region as side effect.
-          (let (deactivate-mark)
-            (insert string))
-          ;; If `display-line-numbers' is enabled in internal
-          ;; buffers (e.g. globally), it breaks width calculation
-          ;; (bug#59311).  Disable `line-prefix' and `wrap-prefix',
-          ;; for the same reason.
-          (add-text-properties
-           (point-min) (point-max)
-           '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
-          (car (buffer-text-pixel-size nil nil t)))))
-  (defalias 'conn--string-pixel-width 'string-pixel-width))
+;; This is string-pixel-width from emacs 31 but we want width and
+;; height
+(defun conn--string-pixel-size (string &optional buffer)
+  (declare (important-return-value t))
+  (if (zerop (length string))
+      0
+    ;; Keeping a work buffer around is more efficient than creating a
+    ;; new temporary buffer.
+    (with-work-buffer
+      ;; Setup current buffer to correctly compute pixel width.
+      (when buffer
+        (dolist (v '(face-remapping-alist
+                     char-property-alias-alist
+                     default-text-properties))
+          (if (local-variable-p v buffer)
+              (set (make-local-variable v)
+                   (buffer-local-value v buffer)))))
+      ;; Avoid deactivating the region as side effect.
+      (let (deactivate-mark)
+        (insert string))
+      ;; If `display-line-numbers' is enabled in internal
+      ;; buffers (e.g. globally), it breaks width calculation
+      ;; (bug#59311).  Disable `line-prefix' and `wrap-prefix',
+      ;; for the same reason.
+      (add-text-properties
+       (point-min) (point-max)
+       '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
+      (buffer-text-pixel-size nil nil t))))
 
 
 ;;;;; Rings
@@ -3546,7 +3543,7 @@ with `conn-dispatch-thing-ignored-modes'."
 
 ;;;;; Label setup and padding
 
-(defvar conn-default-label-padding-func 'conn--centered-padding
+(defvar conn-default-label-padding-function 'conn--centered-padding
   "Default function for padding dispatch labels.
 
 Target overlays may override this default by setting the
@@ -3584,77 +3581,74 @@ Target overlays may override this default by setting the
                   'face 'conn-dispatch-label-face))))
 
 (defun conn--dispatch-setup-label-pixelwise (overlay label-string &optional padding-function)
-  (unless (= (overlay-start overlay) (point-max))
-    (let* ((target (overlay-get overlay 'target-overlay))
-           (beg (overlay-start overlay))
-           (end nil)
-           (line-end (save-excursion
-                       (goto-char beg)
-                       (line-end-position)))
-           (pt beg)
-           (width (conn--string-pixel-width
-                   label-string
-                   (window-buffer (overlay-get overlay 'window))))
-           ;; display-line-numbers, line-prefix and wrap-prefix break
-           ;; width calculations, temporarily disable them.
-           (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
-           (line-pfx (prog1 line-prefix (setq-local line-prefix nil)))
-           (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
-      (unwind-protect
-          (while (not end)
-            (when (= line-end pt)
-              (if (not (invisible-p (1+ pt)))
-                  (setq end pt)
-                (setq end (1+ pt))
-                (let ((str (buffer-substring pt end)))
-                  (add-text-properties
-                   0 (length str)
-                   `(invisible ,(get-char-property pt 'invisible))
-                   str)
-                  (overlay-put overlay 'after-string str))))
-            (when (or (= pt (point-max))
-                      (>= (car (window-text-pixel-size
-                                (overlay-get overlay 'window)
-                                beg pt))
-                          width))
-              (setq end pt))
-            (dolist (ov (overlays-in pt (1+ pt)))
-              (when (and (eq 'conn-read-string-match
-                             (overlay-get ov 'category))
-                         (or (/= (overlay-start target)
-                                 (overlay-start ov))
-                             (/= (overlay-end target)
-                                 (overlay-end ov))))
-                (setq end pt)))
-            (cl-incf pt))
-        (setq-local display-line-numbers linum
-                    line-prefix line-pfx
-                    wrap-prefix wrap-pfx))
-      (move-overlay overlay (overlay-start overlay) end)))
-  (cond
-   ((= (overlay-start overlay) (overlay-end overlay))
-    (overlay-put overlay 'before-string label-string))
-   ((overlay-get overlay 'after-string)
-    (overlay-put overlay 'display label-string))
-   (t
-    (pcase-let* ((`(,width . ,height)
-                  (window-text-pixel-size
-                   (overlay-get overlay 'window)
-                   (overlay-start overlay)
-                   (overlay-end overlay)))
-                 (`(,display-width . ,display-height)
-                  (progn
-                    (overlay-put overlay 'display label-string)
-                    (window-text-pixel-size
-                     (overlay-get overlay 'window)
-                     (overlay-start overlay)
-                     (overlay-end overlay))))
-                 (padding-width (max (- width display-width) 0)))
-      (if padding-function
-          (funcall padding-function overlay padding-width
-                   (when (/= height display-height) (1- height)))
-        (funcall conn-default-label-padding-func overlay padding-width
-                 (when (/= height display-height) (1- height))))))))
+  (pcase-let ((`(,display-width . ,display-height)
+               (conn--string-pixel-size label-string
+                                        (window-buffer
+                                         (overlay-get overlay 'window))))
+              ;; display-line-numbers, line-prefix and wrap-prefix break
+              ;; width calculations, temporarily disable them.
+              (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
+              (line-pfx (prog1 line-prefix (setq-local line-prefix nil)))
+              (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
+    (unwind-protect
+        (progn
+          (unless (= (overlay-start overlay) (point-max))
+            (let* ((target (overlay-get overlay 'target-overlay))
+                   (beg (overlay-start overlay))
+                   (end nil)
+                   (line-end (save-excursion
+                               (goto-char beg)
+                               (line-end-position)))
+                   (pt beg))
+              (unwind-protect
+                  (while (not end)
+                    (when (= line-end pt)
+                      (if (not (invisible-p (1+ pt)))
+                          (setq end pt)
+                        (setq end (1+ pt))
+                        (let ((str (buffer-substring pt end)))
+                          (add-text-properties
+                           0 (length str)
+                           `(invisible ,(get-char-property pt 'invisible))
+                           str)
+                          (overlay-put overlay 'after-string str))))
+                    (when (or (= pt (point-max))
+                              (>= (car (window-text-pixel-size
+                                        (overlay-get overlay 'window)
+                                        beg pt))
+                                  display-width))
+                      (setq end pt))
+                    (dolist (ov (overlays-in pt (1+ pt)))
+                      (when (and (eq 'conn-read-string-match
+                                     (overlay-get ov 'category))
+                                 (or (/= (overlay-start target)
+                                         (overlay-start ov))
+                                     (/= (overlay-end target)
+                                         (overlay-end ov))))
+                        (setq end pt)))
+                    (cl-incf pt)))
+              (move-overlay overlay (overlay-start overlay) end)))
+          (cond
+           ((= (overlay-start overlay) (overlay-end overlay))
+            (overlay-put overlay 'before-string label-string))
+           ((overlay-get overlay 'after-string)
+            (overlay-put overlay 'display label-string))
+           (t
+            (pcase-let* ((`(,width . ,height)
+                          (window-text-pixel-size
+                           (overlay-get overlay 'window)
+                           (overlay-start overlay)
+                           (overlay-end overlay)))
+                         (padding-width (max (- width display-width) 0)))
+              (overlay-put overlay 'display label-string)
+              (if padding-function
+                  (funcall padding-function overlay padding-width
+                           (when (/= height display-height) (1- height)))
+                (funcall conn-default-label-padding-function overlay padding-width
+                         (when (/= height display-height) (1- height))))))))
+      (setq-local display-line-numbers linum
+                  line-prefix line-pfx
+                  wrap-prefix wrap-pfx))))
 
 (defun conn--dispatch-setup-label-charwise (overlay label-string &optional _padding-function)
   (unless (= (overlay-start overlay) (point-max))
