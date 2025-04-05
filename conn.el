@@ -8537,7 +8537,8 @@ Operates with the selected windows parent window."
 ;;;; Org
 
 (define-minor-mode conntext-org-mode
-  "Conntext keys for org mode.")
+  "Conntext keys for org mode."
+  :global t)
 
 (with-eval-after-load 'org
   (defvar org-mode-map)
@@ -8891,7 +8892,8 @@ Operates with the selected windows parent window."
 ;;;; Outline
 
 (define-minor-mode conntext-outline-mode
-  "Minor mode for contextual bindings in outline-mode.")
+  "Minor mode for contextual bindings in outline-mode."
+  :global t)
 
 (with-eval-after-load 'outline
   (declare-function outline-mark-subtree "outline")
