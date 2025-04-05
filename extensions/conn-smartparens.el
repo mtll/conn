@@ -145,6 +145,62 @@
                      'sp-backward-sexp
                      'sp-forward-sexp))
 
+(conn-define-state conn-paren-state ()
+  "State for editing parens."
+  :cursor '(hbar . 5)
+  :suppress-input-method t
+  :lighter " ()")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-paren-state)
+  :suppress t
+  "o" 'sp-forward-symbol
+  "u" 'sp-backward-symbol
+  "O" 'forward-word
+  "U" 'backward-word
+  "e" 'conn-previous-state
+  "i" 'sp-backward-up-sexp
+  "j" 'sp-backward-down-sexp
+  "k" 'sp-down-sexp
+  "I" 'sp-beginning-of-sexp
+  "K" 'sp-end-of-sexp
+  ")" 'sp-splice-sexp-killing-forward
+  "(" 'sp-splice-sexp-killing-backward
+  ";" 'comment-region
+  "DEL" 'backward-kill-sexp
+  "d" 'kill-sexp
+  "p" 'sp-splice-sexp-killing-around
+  "l" 'sp-up-sexp
+  "r" 'sp-raise-sexp
+  "s" 'sp-splice-sexp
+  "c" 'sp-convolute-sexp
+  "f" 'conn-dispatch-on-things
+  "," 'sp-backward-slurp-sexp
+  "." 'sp-forward-slurp-sexp
+  "y" 'sp-forward-barf-sexp
+  "t" 'sp-backward-barf-sexp
+  "q" 'transpose-sexps
+  "h" 'sp-join-sexp
+  "n" 'sp-backward-sexp
+  "m" 'sp-forward-sexp)
+
+(defun conn-paren-state ()
+  (interactive)
+  (conn-enter-state 'conn-paren-state))
+
+(define-minor-mode conntext-smartparens-mode
+  "Minor mode for contextual bindings in outline-mode.")
+
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-command-state 'conntext-smartparens-mode)
+  "c" (conntext-define conntext-smartparens-map
+        "Context smartparens map."
+        (when (or (looking-at-p "(")
+                  (looking-back ")"))
+          'conn-paren-state)))
+
+(conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
+
 (provide 'conn-smartparens)
 
 ;; Local Variables:
