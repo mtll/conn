@@ -154,33 +154,46 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-paren-state)
   :suppress t
+  "C-+" 'maximize-window
+  "C--" 'shrink-window-if-larger-than-buffer
+  "C-0" 'delete-window
+  "C-1" 'delete-other-windows
+  "C-2" 'split-window-below
+  "C-3" 'split-window-right
+  "C-8" 'conn-tab-to-register
+  "C-9" 'quit-window
+  "C-=" 'balance-windows
+  "C-M-0" 'kill-buffer-and-window
+  "`" 'other-window
+  "TAB" 'conn-previous-state
+  "e" 'conn-emacs-state
+  "<f8>" 'conn-command-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun
   "o" 'sp-forward-symbol
   "u" 'sp-backward-symbol
   "O" 'forward-word
   "U" 'backward-word
-  "e" 'conn-previous-state
   "i" 'sp-backward-up-sexp
-  "j" 'sp-backward-down-sexp
+  "I" 'sp-backward-down-sexp
+  "K" 'sp-up-sexp
   "k" 'sp-down-sexp
-  "I" 'sp-beginning-of-sexp
-  "K" 'sp-end-of-sexp
+  "," 'sp-beginning-of-sexp
+  "." 'sp-end-of-sexp
   ")" 'sp-splice-sexp-killing-forward
   "(" 'sp-splice-sexp-killing-backward
   ";" 'comment-region
   "DEL" 'backward-kill-sexp
   "d" 'kill-sexp
   "p" 'sp-splice-sexp-killing-around
-  "l" 'sp-up-sexp
   "r" 'sp-raise-sexp
   "s" 'sp-splice-sexp
   "c" 'sp-convolute-sexp
   "f" 'conn-dispatch-on-things
-  "," 'sp-forward-barf-sexp
-  "." 'sp-forward-slurp-sexp
-  ">" 'sp-backward-barf-sexp
-  "<" 'sp-backward-slurp-sexp
+  "j" 'sp-forward-barf-sexp
+  "l" 'sp-forward-slurp-sexp
+  "L" 'sp-backward-barf-sexp
+  "J" 'sp-backward-slurp-sexp
   "q" 'transpose-sexps
   "h" 'sp-join-sexp
   "n" 'sp-backward-sexp
@@ -198,13 +211,26 @@
   :global t
   :group 'conn)
 
-(define-keymap
-  :keymap (conn-get-mode-map 'conn-command-state 'conntext-smartparens-mode)
-  "TAB" (conntext-define conntext-smartparens-map
-          "Context smartparens map."
-          (when (or (eql ?\( (char-after))
-                    (eql ?\) (char-before)))
-            'conn-paren-state)))
+;; (define-keymap
+;;   :keymap (conn-get-mode-map 'conn-command-state 'conntext-smartparens-mode)
+;;   "TAB" (conntext-define conntext-smartparens-command-map
+;;           "Context smartparens map."
+;;           (when (and (not (eql ?\( (char-after)))
+;;                      (not (eql ?\) (char-before)))
+;;                      (or (eql ?\( (char-before))
+;;                          (eql ?\  (char-before))
+;;                          (eql ?\n (char-before))))
+;;             'conn-paren-state)))
+;; 
+;; (define-keymap
+;;   :keymap (conn-get-mode-map 'conn-emacs-state 'conntext-smartparens-mode)
+;;   "TAB" (conntext-define conntext-smartparens-emacs-map
+;;           "Context smartparens map."
+;;           (when (or (eql ?\( (char-after))
+;;                     (eql ?\) (char-before))
+;;                     (eql ?\( (char-before))
+;;                     (eql ?\  (char-before)))
+;;             'conn-paren-state)))
 
 (conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
 
