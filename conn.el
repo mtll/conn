@@ -30,6 +30,8 @@
 ;;;; Requires
 
 (require 'compat)
+(static-if (<= 31 emacs-major-version)
+    (require 'subr-x))
 (eval-when-compile
   (require 'inline)
   (require 'subr-x)
@@ -296,6 +298,36 @@ meaning of these see `advice-add'."
            (get this-command propname))
       (and (symbolp real-this-command)
            (get real-this-command propname))))
+
+;; ensure we have the emacs 31 version of string-pixel-width
+(static-if (<= emacs-major-version 30)
+    (defun conn--string-pixel-width (string &optional buffer)
+      (declare (important-return-value t))
+      (if (zerop (length string))
+          0
+        ;; Keeping a work buffer around is more efficient than creating a
+        ;; new temporary buffer.
+        (with-work-buffer
+          ;; Setup current buffer to correctly compute pixel width.
+          (when buffer
+            (dolist (v '(face-remapping-alist
+                         char-property-alias-alist
+                         default-text-properties))
+              (if (local-variable-p v buffer)
+                  (set (make-local-variable v)
+                       (buffer-local-value v buffer)))))
+          ;; Avoid deactivating the region as side effect.
+          (let (deactivate-mark)
+            (insert string))
+          ;; If `display-line-numbers' is enabled in internal
+          ;; buffers (e.g. globally), it breaks width calculation
+          ;; (bug#59311).  Disable `line-prefix' and `wrap-prefix',
+          ;; for the same reason.
+          (add-text-properties
+           (point-min) (point-max)
+           '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
+          (car (buffer-text-pixel-size nil nil t)))))
+  (defalias 'conn--string-pixel-width 'string-pixel-width))
 
 
 ;;;;; Rings
@@ -1362,9 +1394,9 @@ and specializes the method on all conn states."
             (set state t)
             (setf
              conn-current-state state
-             (cdar conn--local-override-map) (conn--compose-overide-map state)
-             (cdar conn--local-state-map) (conn--compose-state-map state)
-             (cdar conn--local-major-mode-map) (conn--compose-major-mode-map state)
+             conn--local-override-map `((conn-local-mode . ,(conn--compose-overide-map state)))
+             conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
+             conn--local-major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
              conn-lighter (or (conn-state-get state :lighter)
                               (default-value 'conn-lighter))
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
@@ -3553,9 +3585,6 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-setup-label-pixelwise (overlay label-string &optional padding-function)
   (unless (= (overlay-start overlay) (point-max))
-    (move-overlay overlay
-                  (overlay-start overlay)
-                  (1+ (overlay-start overlay)))
     (let* ((target (overlay-get overlay 'target-overlay))
            (beg (overlay-start overlay))
            (end nil)
