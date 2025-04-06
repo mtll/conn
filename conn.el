@@ -3711,9 +3711,10 @@ Target overlays may override this default by setting the
     (pcase-dolist (`(,window . ,previews) target-overlays)
       (with-current-buffer (window-buffer window)
         (dolist (p previews)
-          (let* ((string (pop label-strings))
-                 (beg (overlay-end p))
-                 (ov (make-overlay beg beg)))
+          (conn--protected-let
+              ((string (pop label-strings))
+               (beg (overlay-end p))
+               (ov (make-overlay beg beg) (delete-overlay ov)))
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
             (overlay-put ov 'target-overlay p)
