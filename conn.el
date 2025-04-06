@@ -3648,9 +3648,11 @@ Target overlays may override this default by setting the
                            (overlay-end overlay))))
               (if padding-function
                   (funcall padding-function overlay padding-width
-                           (when (/= height display-height) (1- height)))
+                           (when (and height (/= height display-height))
+                             (1- height)))
                 (funcall conn-default-label-padding-function overlay padding-width
-                         (when (/= height display-height) (1- height))))))))
+                         (when (and height (/= height display-height))
+                           (1- height))))))))
       (setq-local display-line-numbers linum
                   line-prefix line-pfx
                   wrap-prefix wrap-pfx))))
