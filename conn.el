@@ -1975,7 +1975,8 @@ Returns a cons of (STRING . OVERLAYS)."
 ;;;; Bounds of command
 
 (defvar conn-bounds-of-command-alist
-  `((conn-toggle-mark-command . conn--bounds-of-region)
+  `((conn-dispatch-on-things . conn--bounds-of-dispatch)
+    (conn-toggle-mark-command . conn--bounds-of-region)
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (conn-expand . conn--bounds-of-expansion)
     (set-mark-command . conn--bounds-of-region)
@@ -3269,6 +3270,20 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 The default may be overridden by setting the :conn-read-dispatch-state
 of a command.")
 
+(conn-define-state conn-dispatch-bounds-state (conn-read-thing-common-state)
+  "State for reading a dispatch command."
+  :lighter " DISPATCH")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
+  "C-h" 'help
+  "M-DEL" 'reset-arg
+  "TAB" 'repeat-dispatch
+  "'" 'repeat-dispatch
+  "C-d" 'forward-delete-arg
+  "DEL" 'backward-delete-arg
+  "\\" 'kapply)
+
 (conn-define-state conn-read-dispatch-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
@@ -3588,7 +3603,7 @@ Target overlays may override this default by setting the
   (let ((display-width (conn--string-pixel-width label-string
                                                  (window-buffer
                                                   (overlay-get overlay 'window))))
-        (padding-width nil)
+        (padding-width 0)
         (height nil)
         ;; display-line-numbers, line-prefix and wrap-prefix break
         ;; width calculations, temporarily disable them.
@@ -4730,6 +4745,29 @@ seconds."
                                 (get thing-cmd :conn-command-thing))))
               (apply action window pt thing-cmd thing-arg action-args)))
         (undo-boundary)))))
+
+(defun conn--bounds-of-dispatch (_cmd _arg)
+  (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-bounds-state)
+               (`(,thing-cmd ,thing-arg ,finder ,action ,action-args ,_ ,repeat)
+                (conn--dispatch-read-thing))
+               (regions nil)
+               (win (selected-window))
+               (conn-dispatch-window-predicate conn-dispatch-window-predicate))
+    (add-function :before-while conn-dispatch-window-predicate
+                  (lambda (window) (eq win window)))
+    (save-mark-and-excursion
+      (ignore-error quit
+        (while
+            (prog1 repeat
+              (pcase-let ((`(,pt ,window ,thing) (dispatch--find-target finder)))
+                (setf conn-this-command-thing
+                      (or thing (ignore-errors
+                                  (get thing-cmd :conn-command-thing))))
+                (apply action window pt thing-cmd thing-arg action-args)
+                (push (cons (region-beginning) (region-end)) regions))))))
+    (setq regions (compat-call sort (conn--merge-regions regions t)
+                               :key #'car :in-place t))
+    (cons (cons (caar regions) (cdar (last regions))) regions)))
 
 (defun conn-repeat-last-dispatch (repeat)
   "Repeat the last dispatch command.
@@ -8984,7 +9022,8 @@ Operates with the selected windows parent window."
     :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
     "TAB" (conntext-define conntext-outline-map
             "Context outline map."
-            (when (looking-at-p outline-regexp) conntext-outline-map)))
+            (when (and (looking-at-p outline-regexp) (bolp))
+              conntext-outline-map)))
 
   (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80))
 
@@ -9126,7 +9165,6 @@ Operates with the selected windows parent window."
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
     "a" 'execute-extended-command
     "A" 'dired-find-alternate-file
-    "/" 'dired-undo
     "b" 'dired-up-directory
     "k" 'dired-next-line
     "i" 'dired-previous-line
