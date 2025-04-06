@@ -7350,134 +7350,42 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                  (const :tag "Tab" tab)
                  (const :tag "Short" nil)))
 
+(defvar conn--wincontrol-help-format
+  (concat
+   "\\<conn-wincontrol-map>"
+   (propertize "WinControl: " 'face 'minibuffer-prompt)
+   "arg: "
+   (propertize "%s" 'face 'read-multiple-choice-face) ", "
+   "\\[conn-wincontrol-digit-argument-reset]: reset; "
+   "\\[conn-wincontrol-exit]: exit"))
+
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--previous-scroll-conservatively)
 (defvar conn--wincontrol-help)
-(defvar conn--wincontrol-help-format)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
 
-;;;;; Help format strings
-
-(defvar conn--wincontrol-window-format-1
-  (concat
-   "\\<conn-wincontrol-map>"
-   (propertize "Window: " 'face 'minibuffer-prompt)
-   "arg: "
-   (propertize "%s" 'face 'read-multiple-choice-face) "; "
-   "\\[conn-wincontrol-digit-argument-reset]: reset; "
-   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-   "\\[conn-wincontrol-exit]: exit; "
-   "\\[tab-bar-history-back] \\[tab-bar-history-forward]: undo/redo"
-   "\n"
-   "\\[enlarge-window] "
-   "\\[shrink-window] "
-   "\\[enlarge-window-horizontally] "
-   "\\[shrink-window-horizontally]: "
-   "heighten shorten widen narrow; "
-   "\\[previous-buffer] \\[next-buffer] "
-   "\\[conn-wincontrol-previous-window] \\[conn-wincontrol-next-window]"
-   ": prev/next buffer/win; "
-   "\\[conn-goto-window]: goto win"
-   "\n"
-   "\\[delete-window] \\[delete-other-windows]: delete win/other; "
-   "\\[conn-wincontrol-split-vertically] \\[conn-wincontrol-split-right]: "
-   "split vert/right; "
-   "\\[conn-transpose-window] \\[conn-throw-buffer] \\[conn-yank-window]: "
-   "transpose/throw/yank; "
-   "\\[conn-wincontrol-mru-window]: last win"))
-
-(defvar conn--wincontrol-window-format-2
-  (concat
-   "\\<conn-wincontrol-map>"
-   (propertize "Window: " 'face 'minibuffer-prompt)
-   "arg: "
-   (propertize "%s" 'face 'read-multiple-choice-face) "; "
-   "\\[conn-wincontrol-digit-argument-reset]: reset; "
-   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-   "\\[conn-wincontrol-exit]: exit; "
-   "\\[text-scale-increase] \\[text-scale-decrease]: zoom; "
-   "\\[quit-window]: quit win"
-   "\n"
-   "\\[conn-wincontrol-other-window-scroll-down] \\[conn-wincontrol-other-window-scroll-up]"
-   ": scroll other; "
-   "\\[conn-wincontrol-isearch-other-window] \\[conn-wincontrol-isearch-other-window-backward]"
-   ": isearch other; "
-   "\\[conn-wincontrol-isearch] \\[conn-wincontrol-isearch-backward]"
-   ": isearch; "
-   "\\[unbury-buffer] \\[bury-buffer]: un/bury"
-   "\n"
-   "\\[shrink-window-if-larger-than-buffer]: shrink win to buf; "
-   "\\[balance-windows] \\[maximize-window]: balance/max; "
-   "\\[conn-wincontrol-maximize-vertically] \\[conn-wincontrol-maximize-horizontally]: "
-   "max vert/horiz; "
-   "\\[conn-register-prefix]: register"))
-
-(defvar conn--wincontrol-tab-format
-  (concat
-   "\\<conn-wincontrol-map>"
-   (propertize "Tab: " 'face 'minibuffer-prompt)
-   "arg: "
-   (propertize "%s" 'face 'read-multiple-choice-face) "; "
-   "\\[conn-wincontrol-digit-argument-reset]: reset; "
-   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-   "\\[conn-wincontrol-exit]: exit; "
-   "\\[conn-tab-to-register]: store; "
-   "\\[tab-switch]: switch"
-   "\n"
-   "\\[tab-bar-move-window-to-tab]: win to new tab; "
-   "\\[tab-previous] \\[tab-next]: next/prev; "
-   "\\[tab-new] \\[tab-bar-duplicate-tab] \\[tab-close]: "
-   "new/clone/kill; "
-   "\\[tab-bar-detach-tab]: tear off"))
-
-(defvar conn--wincontrol-frame-format
-  (concat
-   "\\<conn-wincontrol-map>"
-   (propertize "Frame: " 'face 'minibuffer-prompt)
-   "arg: "
-   (propertize "%s" 'face 'read-multiple-choice-face) "; "
-   "\\[conn-wincontrol-digit-argument-reset]: reset; "
-   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-   "\\[conn-wincontrol-exit]: exit; "
-   "\\[clone-frame]: clone; "
-   "\\[other-frame]: other"
-   "\n"
-   "\\[undelete-frame]: undelete; "
-   "\\[tear-off-window]: tear off; "
-   "\\[toggle-frame-fullscreen]: fullscreen; "
-   "\\[make-frame-command]: create; "
-   "\\[delete-frame] \\[delete-other-frames]: delete/other"))
-
-(static-if (<= emacs-major-version 31)
-    (setq conn--wincontrol-frame-format
-          (concat
-           conn--wincontrol-frame-format
-           "\n"
-           "\\[rotate-windows-back] \\[rotate-windows] "
-           "\\[rotate-window-layout-clockwise] \\[rotate-window-layout-counterclockwise]"
-           ": rotate windows/layout; "
-           "\\[transpose-window-layout] \\[flip-window-layout-horizontally] \\[flip-window-layout-vertically]"
-           ": transpose/flip vertical/horizontal")))
-
-(defvar conn--wincontrol-simple-format
-  (concat
-   "\\<conn-wincontrol-map>"
-   (propertize "WinControl: " 'face 'minibuffer-prompt)
-   "arg: "
-   (propertize "%s" 'face 'read-multiple-choice-face) "; "
-   "\\[conn-wincontrol-digit-argument-reset]: reset; "
-   "\\[conn-wincontrol-help] \\[conn-wincontrol-help-backward]: help; "
-   "\\[conn-wincontrol-exit]: exit; "
-   "\\[conn-wincontrol-scroll-up] "
-   "\\[conn-wincontrol-scroll-down]: "
-   "scroll"))
-
-
 ;;;;; Wincontrol internals
+
+(defvar-keymap conn-window-resize-map
+  "i" 'conn-wincontrol-maximize-vertically
+  "l" 'conn-wincontrol-maximize-horizontally
+  "m" 'maximize-window
+  "b" 'balance-windows
+  "n" 'shrink-window-horizontally
+  "s" 'shrink-window
+  "h" 'enlarge-window
+  "w" 'enlarge-window-horizontally)
+
+(defvar-keymap conn-window-resize-repeat-map
+  :repeat t
+  "n" 'shrink-window-horizontally
+  "s" 'shrink-window
+  "h" 'enlarge-window
+  "w" 'enlarge-window-horizontally)
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
@@ -7486,14 +7394,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-DEL" 'conn-wincontrol-digit-argument-reset
   "C-w" 'conn-wincontrol-backward-delete-arg
   "C-d" 'conn-wincontrol-forward-delete-arg
-  "C-0" 'delete-window
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-8" 'conn-tab-to-register
-  "C-9" 'tab-close
   "C-]" 'conn-wincontrol-abort
-  "C-M-0" 'kill-buffer-and-window
   "C-M-d" 'delete-other-frames
   "M-/" 'undelete-frame
   "M-o" 'other-frame
@@ -7541,21 +7442,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
-  "B" 'balance-windows
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key (key-parse "C-c"))
   "d" 'delete-window
+  "D" 'kill-buffer-and-window
   "e" 'conn-wincontrol-exit
-  "C-g" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
   "g" 'delete-other-windows
-  "C-f" 'conn-wincontrol-help
-  "C-b" 'conn-wincontrol-help-backward
-  "M" 'maximize-window
   "m" 'conn-wincontrol-mru-window
-  "H" 'conn-wincontrol-maximize-horizontally
-  "h" 'enlarge-window
   "I" 'tab-new
   "i" 'tab-next
   "j" 'previous-buffer
@@ -7565,7 +7460,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "l" 'next-buffer
   "L" 'unbury-buffer
   "P" 'tab-bar-move-window-to-tab
-  "n" 'shrink-window-horizontally
   "N" 'tab-bar-new-tab
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
@@ -7573,15 +7467,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "x" (conn-remap-key (key-parse "C-x"))
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
-  "s" 'shrink-window
   "S" 'conn-wincontrol-isearch-other-window
+  "s" conn-window-resize-map
   "t" 'tab-switch
   "Y" 'conn-throw-buffer
   "u" 'conn-wincontrol-previous-window
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
-  "V" 'conn-wincontrol-maximize-vertically
-  "w" 'enlarge-window-horizontally
   "q" 'quit-window
   "`" 'conn-transpose-window
   "y" 'conn-yank-window
@@ -7628,7 +7520,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
         (resize-mini-windows t))
-    (message conn--wincontrol-help-format
+    (message conn--wincontrol-help
              (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                      (if (= conn--wincontrol-arg-sign -1) "-" "")
                      conn--wincontrol-arg))))
@@ -7644,11 +7536,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (unless preserve-state
     (setq conn--wincontrol-arg (when current-prefix-arg
                                  (prefix-numeric-value current-prefix-arg))
-          conn--wincontrol-help conn-wincontrol-initial-help
+          conn--wincontrol-help (substitute-command-keys
+                                 conn--wincontrol-help-format)
           conn--wincontrol-arg-sign 1
           conn--wincontrol-initial-window (selected-window)
           conn--wincontrol-initial-winconf (current-window-configuration)))
-  (conn-wincontrol-help)
   ;; TODO: make inverse-video a custom option
   (unless executing-kbd-macro
     (set-face-inverse-video 'mode-line t))
@@ -7754,47 +7646,6 @@ When called interactively N is `last-command-event'."
     (conn-wincontrol-mode -1)
     (when (window-live-p conn--wincontrol-initial-window)
       (select-window conn--wincontrol-initial-window))))
-
-
-;;;;; Wincontrol help
-
-(defun conn-wincontrol-help (&optional interactive)
-  "Cycle to the next `conn-wincontrol-mode' help message."
-  (interactive (list t))
-  (when interactive
-    (setq conn--wincontrol-help (pcase conn--wincontrol-help
-                                  ('window-1 'window-2)
-                                  ('window-2 'tab)
-                                  ('tab 'frame)
-                                  ('frame nil)
-                                  (_ 'window-1))))
-  (setq conn--wincontrol-help-format
-        (substitute-command-keys
-         (pcase conn--wincontrol-help
-           ('window-1 conn--wincontrol-window-format-1)
-           ('window-2 conn--wincontrol-window-format-2)
-           ('tab conn--wincontrol-tab-format)
-           ('frame conn--wincontrol-frame-format)
-           (_ conn--wincontrol-simple-format)))))
-
-(defun conn-wincontrol-help-backward (&optional interactive)
-  "Cycle to the next `conn-wincontrol-mode' help message."
-  (interactive (list t))
-  (when interactive
-    (setq conn--wincontrol-help (pcase conn--wincontrol-help
-                                  ('window-1 nil)
-                                  ('window-2 'window-1)
-                                  ('tab 'window-2)
-                                  ('frame 'tab)
-                                  (_ 'frame))))
-  (setq conn--wincontrol-help-format
-        (substitute-command-keys
-         (pcase conn--wincontrol-help
-           ('window-1 conn--wincontrol-window-format-1)
-           ('window-2 conn--wincontrol-window-format-2)
-           ('tab conn--wincontrol-tab-format)
-           ('frame conn--wincontrol-frame-format)
-           (_ conn--wincontrol-simple-format)))))
 
 
 ;;;;; Wincontrol isearch
@@ -7936,13 +7787,15 @@ When called interactively N is `last-command-event'."
   "Split window vertically.
 Uses `split-window-vertically'."
   (interactive)
-  (split-window-vertically))
+  (select-window
+   (split-window-vertically)))
 
 (defun conn-wincontrol-split-right ()
   "Split window vertically.
 Uses `split-window-right'."
   (interactive)
-  (split-window-right))
+  (select-window
+   (split-window-right)))
 
 (defun conn-wincontrol-maximize-horizontally ()
   "Delete all adjacent windows horizontally.
@@ -8175,6 +8028,10 @@ Operates with the selected windows parent window."
 ;;;;; State Keymaps
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  "h" conn-thing-map)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
   :suppress t
   ">" 'forward-line
@@ -8247,16 +8104,6 @@ Operates with the selected windows parent window."
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command
   "M-y" 'conn-completing-yank-replace
-  "C-+" 'maximize-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-0" 'delete-window
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-8" 'conn-tab-to-register
-  "C-9" 'quit-window
-  "C-=" 'balance-windows
-  "C-M-0" 'kill-buffer-and-window
   "C-M-l" 'conn-recenter-on-region
   "C-M-S-l" 'conn-recenter-on-region-other-window
   "C-y" 'conn-yank-replace
@@ -8267,8 +8114,8 @@ Operates with the selected windows parent window."
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
-  "h" conn-thing-map
-  "," 'conn-expand
+  "h" 'conn-wincontrol-one-command
+  "," conn-thing-map
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" 'conn-region-map
@@ -9168,6 +9015,7 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+    "h" 'conn-wincontrol-one-command
     "a" 'execute-extended-command
     "A" 'dired-find-alternate-file
     "b" 'dired-up-directory
@@ -9188,7 +9036,7 @@ Operates with the selected windows parent window."
     "w" 'dired-do-kill-lines
     "s" (conn-remap-key (key-parse "M-s"))
     "r" (conn-remap-key (key-parse "%"))
-    "h" (conn-remap-key (key-parse "*"))
+    "," (conn-remap-key (key-parse "*"))
     "x" (conn-remap-key (key-parse "C-x"))
     "f" 'conn-dispatch-on-things
     "M-SPC" 'dired-toggle-marks
@@ -9219,17 +9067,7 @@ Operates with the selected windows parent window."
     "M-s s" 'dired-do-isearch
     "M-s c" 'dired-do-isearch-regexp
     "M-s q" 'dired-do-find-regexp
-    "M-s r" 'dired-do-find-regexp-and-replace
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "M-s r" 'dired-do-find-regexp-and-replace))
 
 
 ;;;; Magit
@@ -9239,6 +9077,8 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
+    "h" 'conn-wincontrol-one-command
+    "," 'magit-dispatch
     "<f8>" 'conn-command-state
     "i" 'magit-section-backward
     "k" 'magit-section-forward
@@ -9247,17 +9087,7 @@ Operates with the selected windows parent window."
     "n" 'magit-gitignore
     "`" 'other-window
     "@" 'magit-am
-    "x" (conn-remap-key (key-parse "C-x"))
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "x" (conn-remap-key (key-parse "C-x"))))
 
 
 ;;;; Ibuffer
@@ -9345,6 +9175,7 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+    "h" 'conn-wincontrol-one-command
     "a" 'execute-extended-command
     ";" 'conn-wincontrol
     "/" 'ibuffer-do-revert
@@ -9352,7 +9183,7 @@ Operates with the selected windows parent window."
     "y" 'ibuffer-yank
     "z" 'ibuffer-jump-to-buffer
     "r" (conn-remap-key (key-parse "%"))
-    "h" (conn-remap-key (key-parse "*"))
+    "," (conn-remap-key (key-parse "*"))
     "l" 'ibuffer-forward-filter-group
     "j" 'ibuffer-backward-filter-group
     "m" 'ibuffer-jump-to-filter-group
@@ -9384,17 +9215,7 @@ Operates with the selected windows parent window."
     "c" 'ibuffer-unmark-forward
     "C" 'ibuffer-unmark-backward
     "o" 'ibuffer-visit-buffer-other-window
-    "RET" 'ibuffer-visit-buffer
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "RET" 'ibuffer-visit-buffer))
 
 
 ;;;; Markdown
@@ -9429,6 +9250,7 @@ Operates with the selected windows parent window."
 (with-eval-after-load 'help-mode
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
+    "h" 'conn-wincontrol-one-command
     "a" 'execute-extended-command
     "b" 'beginning-of-buffer
     "e" 'end-of-buffer
@@ -9439,21 +9261,12 @@ Operates with the selected windows parent window."
     "f" 'conn-dispatch-on-buttons
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "x" (conn-remap-key (key-parse "C-x"))))
 
 (with-eval-after-load 'helpful
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
+    "h" 'conn-wincontrol-one-command
     "a" 'execute-extended-command
     "b" 'beginning-of-buffer
     "e" 'end-of-buffer
@@ -9464,17 +9277,7 @@ Operates with the selected windows parent window."
     "f" 'conn-dispatch-on-buttons
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "x" (conn-remap-key (key-parse "C-x"))))
 
 
 ;;;; Info
@@ -9509,6 +9312,7 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
+    "h" 'conn-wincontrol-one-command
     "o" 'Info-history-back
     "u" 'Info-history-forward
     "m" 'Info-next
@@ -9525,17 +9329,7 @@ Operates with the selected windows parent window."
     "v" 'Info-index
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "x" (conn-remap-key (key-parse "C-x"))))
 
 
 ;;;; treemacs
@@ -9544,23 +9338,14 @@ Operates with the selected windows parent window."
   (conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
+    "h" 'conn-wincontrol-one-command
     "a" 'execute-extended-command
     "`" 'treemacs-select-window
     "i" 'treemacs-previous-line
     "k" 'treemacs-next-line
     "f" 'conn-dispatch-on-things
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window))
+    "x" (conn-remap-key (key-parse "C-x"))))
 
 
 ;;;; Messages
@@ -9568,6 +9353,7 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'messages-buffer-mode :hide-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
+  "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
@@ -9576,17 +9362,7 @@ Operates with the selected windows parent window."
   "k" 'scroll-up
   "f" 'conn-dispatch-on-things
   ";" 'conn-wincontrol
-  "x" (conn-remap-key (key-parse "C-x"))
-  "C-+" 'maximize-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-0" 'delete-window
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-8" 'conn-tab-to-register
-  "C-9" 'quit-window
-  "C-=" 'balance-windows
-  "C-M-0" 'kill-buffer-and-window)
+  "x" (conn-remap-key (key-parse "C-x")))
 
 
 ;;; Footer
