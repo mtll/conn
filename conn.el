@@ -427,7 +427,7 @@ If ring is (1 2 3 4) 4 would be returned."
                           #'eq)))
      ,(macroexp-progn body)))
 
-(defun conn-remap-key (from-keys)
+(defun conn-remap-key (from-keys &optional without-conn-maps)
   "Map to whatever is bound at FROM-KEYS.
 
 This allows for transparently binding keys to commands which may be
@@ -437,10 +437,12 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
     ,(format "Remap %s" (key-description from-keys))
     ,(conn--without-conn-maps (key-binding from-keys t))
     :filter ,(lambda (_real-binding)
-               (conn--without-conn-maps
+               (if without-conn-maps
+                   (conn--without-conn-maps
+                     (key-binding from-keys t))
                  (key-binding from-keys t)))))
 
-(defun conn-remap-keymap (from-keys)
+(defun conn-remap-keymap (from-keys &optional without-conn-maps)
   "Map to the keymap at FROM-KEYS.
 
 If the binding at FROM-KEYS is for any reason not a keymap, say because
@@ -450,9 +452,11 @@ the original binding.  Also see `conn-remap-key'."
     ,(format "Remap %s Keymap" (key-description from-keys))
     ,(conn--without-conn-maps (key-binding from-keys t))
     :filter ,(lambda (real-binding)
-               (conn--without-conn-maps
-                 (let ((binding (key-binding from-keys t)))
-                   (if (keymapp binding) binding real-binding))))))
+               (let ((binding (if without-conn-maps
+                                  (conn--without-conn-maps
+                                    (key-binding from-keys t))
+                                (key-binding from-keys t))))
+                 (if (keymapp binding) binding real-binding)))))
 
 (defmacro conntext-define (name &rest body)
   (declare (indent 1))
@@ -1517,7 +1521,8 @@ added as methods to `conn-enter-state' and `conn-exit-state', which see.
            (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
                  (gethash ',name conn--override-maps) (make-sparse-keymap)
                  (gethash ',name conn--minor-mode-maps) (list nil)
-                 (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq)))))))
+                 (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))))
+       ',name)))
 
 (conn-define-state conn-null-state ()
   "An empty state.
@@ -9187,7 +9192,6 @@ Operates with the selected windows parent window."
     "x" (conn-remap-key (key-parse "C-x"))
     "f" 'conn-dispatch-on-things
     "M-SPC" 'dired-toggle-marks
-    "t" (conn-remap-key (key-parse "t"))
     "C-M-l" 'dired-do-redisplay
     "z" 'dired-goto-file
     ";" 'conn-wincontrol
@@ -9202,19 +9206,6 @@ Operates with the selected windows parent window."
     "o" 'dired-find-file-other-window
     "M-o" 'conn-pop-mark-ring
     "M-u" 'conn-unpop-mark-ring
-    "C-+" 'maximize-window
-    "C--" 'shrink-window-if-larger-than-buffer
-    "C-0" 'delete-window
-    "C-1" 'delete-other-windows
-    "C-2" 'split-window-below
-    "C-3" 'split-window-right
-    "C-8" 'conn-tab-to-register
-    "C-9" 'quit-window
-    "C-=" 'balance-windows
-    "C-M-0" 'kill-buffer-and-window)
-
-  (define-keymap
-    :keymap dired-mode-map
     "* p" 'dired-sort-toggle-or-edit
     "* e" 'dired-mark-executables
     "* l" 'dired-mark-symlinks
@@ -9228,7 +9219,17 @@ Operates with the selected windows parent window."
     "M-s s" 'dired-do-isearch
     "M-s c" 'dired-do-isearch-regexp
     "M-s q" 'dired-do-find-regexp
-    "M-s r" 'dired-do-find-regexp-and-replace))
+    "M-s r" 'dired-do-find-regexp-and-replace
+    "C-+" 'maximize-window
+    "C--" 'shrink-window-if-larger-than-buffer
+    "C-0" 'delete-window
+    "C-1" 'delete-other-windows
+    "C-2" 'split-window-below
+    "C-3" 'split-window-right
+    "C-8" 'conn-tab-to-register
+    "C-9" 'quit-window
+    "C-=" 'balance-windows
+    "C-M-0" 'kill-buffer-and-window))
 
 
 ;;;; Magit
