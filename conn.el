@@ -7375,17 +7375,29 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "l" 'conn-wincontrol-maximize-horizontally
   "m" 'maximize-window
   "b" 'balance-windows
-  "n" 'shrink-window-horizontally
-  "s" 'shrink-window
-  "h" 'enlarge-window
-  "w" 'enlarge-window-horizontally)
+  "n" 'conn-wincontrol-narrow-window
+  "s" 'conn-wincontrol-shorten-window
+  "h" 'conn-wincontrol-heighten-window
+  "w" 'conn-wincontrol-widen-window)
 
 (defvar-keymap conn-window-resize-repeat-map
   :repeat t
-  "n" 'shrink-window-horizontally
-  "s" 'shrink-window
-  "h" 'enlarge-window
-  "w" 'enlarge-window-horizontally)
+  "n" 'conn-wincontrol-narrow-window
+  "s" 'conn-wincontrol-shorten-window
+  "h" 'conn-wincontrol-heighten-window
+  "w" 'conn-wincontrol-widen-window)
+
+(defvar-keymap conn-wincontrol-scroll-repeat-map
+  :repeat t
+  "SPC" 'conn-wincontrol-scroll-up
+  "DEL" 'conn-wincontrol-scroll-down
+  "M-TAB" 'conn-wincontrol-other-window-scroll-up
+  "TAB" 'conn-wincontrol-other-window-scroll-down)
+
+(defvar-keymap conn-wincontrol-text-scale-repeat-map
+  :repeat t
+  "z" 'text-scale-decrease
+  "Z" 'text-scale-increase)
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
@@ -7445,7 +7457,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key (key-parse "C-c"))
   "d" 'delete-window
-  "D" 'kill-buffer-and-window
+  "h" 'kill-buffer-and-window
   "e" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
@@ -7459,8 +7471,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "k" 'tab-previous
   "l" 'next-buffer
   "L" 'unbury-buffer
-  "P" 'tab-bar-move-window-to-tab
-  "N" 'tab-bar-new-tab
+  "M" 'tab-bar-move-window-to-tab
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-prefix
@@ -7469,13 +7480,13 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
   "s" conn-window-resize-map
-  "t" 'tab-switch
-  "Y" 'conn-throw-buffer
+  "`" 'tab-switch
+  "w" 'conn-throw-buffer
   "u" 'conn-wincontrol-previous-window
   "U" 'tab-bar-detach-tab
   "v" 'conn-wincontrol-split-vertically
   "q" 'quit-window
-  "`" 'conn-transpose-window
+  "t" 'conn-transpose-window
   "y" 'conn-yank-window
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
@@ -7782,6 +7793,26 @@ When called interactively N is `last-command-event'."
 
 
 ;;;;; Window configuration commands
+
+(defun conn-wincontrol-widen-window ()
+  (interactive)
+  (enlarge-window-horizontally
+   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+
+(defun conn-wincontrol-narrow-window ()
+  (interactive)
+  (shrink-window-horizontally
+   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+
+(defun conn-wincontrol-heighten-window ()
+  (interactive)
+  (enlarge-window
+   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+
+(defun conn-wincontrol-shorten-window ()
+  (interactive)
+  (shrink-window
+   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
