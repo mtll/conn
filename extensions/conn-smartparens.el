@@ -194,7 +194,7 @@
   "l" 'sp-forward-slurp-sexp
   "L" 'sp-backward-barf-sexp
   "J" 'sp-backward-slurp-sexp
-  "q" 'transpose-sexps
+  "t" 'transpose-sexps
   "h" 'sp-join-sexp
   "n" 'sp-backward-sexp
   "m" 'sp-forward-sexp

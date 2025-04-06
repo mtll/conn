@@ -306,7 +306,7 @@ before each iteration."
 
 Begins the keyboard macro by deleting the string at each match."
   :transient 'transient--do-exit
-  :key "t"
+  :key "q"
   :description "Replace"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
@@ -398,7 +398,7 @@ Begins the keyboard macro in `conn-command-state'."
 (transient-define-suffix conn--kapply-replace-rectangle-suffix (args)
   "Apply keyboard macro to a rectangle replacing each line."
   :transient 'transient--do-exit
-  :key "t"
+  :key "q"
   :description "Replace"
   (interactive (list (transient-args transient-current-command)))
   (let ((regions (region-bounds)))

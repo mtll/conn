@@ -412,6 +412,20 @@ If ring is (1 2 3 4) 4 would be returned."
     :filter ,(lambda (_real-binding)
                (key-binding [conn-thing-map] t))))
 
+(defvar conn-region-map
+  `(menu-item
+    "Region Map"
+    nil
+    :filter ,(lambda (_real-binding)
+               (key-binding [conn-region-map] t))))
+
+(defvar conn-edit-map
+  `(menu-item
+    "Edit Map"
+    nil
+    :filter ,(lambda (_real-binding)
+               (key-binding [conn-edit-map] t))))
+
 (defmacro conn--without-conn-maps (&rest body)
   "Run BODY without any state, mode, or local maps active.
 
@@ -4356,7 +4370,7 @@ Target overlays may override this default by setting the
   "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-yank-read-to
-  "t" 'conn-dispatch-throw
+  "q" 'conn-dispatch-throw
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -4389,7 +4403,7 @@ Target overlays may override this default by setting the
   "g" 'conn-dispatch-goto
   "e" 'conn-dispatch-over
   "z" 'conn-dispatch-jump
-  "q" 'conn-dispatch-transpose)
+  "t" 'conn-dispatch-transpose)
 
 
 ;;;;; Target Finders
@@ -7387,6 +7401,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "h" 'conn-wincontrol-heighten-window
   "w" 'conn-wincontrol-widen-window)
 
+(defvar-keymap conn-other-window-repeat-map
+  :repeat t
+  "o" 'conn-wincontrol-next-window)
+
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
   "SPC" 'conn-wincontrol-scroll-up
@@ -7934,8 +7952,7 @@ Operates with the selected windows parent window."
 
 ;;;;; Top-level command state maps
 
-(defvar-keymap conn-region-map
-  :prefix 'conn-region-map
+(defvar-keymap conn-default-region-map
   "\\" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region
@@ -8006,8 +8023,7 @@ Operates with the selected windows parent window."
   "l" 'previous-error
   "j" 'next-error)
 
-(defvar-keymap conn-edit-map
-  :prefix 'conn-edit-map
+(defvar-keymap conn-default-edit-map
   "\\" 'conn-kapply-on-thing-prefix
   "z" 'conn-emacs-state-at-mark
   "v" 'diff-buffer-with-file
@@ -8029,7 +8045,7 @@ Operates with the selected windows parent window."
   "e" 'conn-emacs-state-eol
   "j" 'conn-emacs-state-boil
   "a" 'conn-emacs-state-bol
-  "t" 'conn-emacs-state-overwrite
+  "g" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
   "x" 'conn-narrow-ring-prefix
   "d" 'duplicate-dwim
@@ -8044,16 +8060,73 @@ Operates with the selected windows parent window."
 
 ;;;;; Misc maps
 
-(static-if (<= 30 emacs-major-version)
-    (progn
-      (keymap-set conn-region-map "W" 'replace-regexp-as-diff)
-      (keymap-set conn-region-map "Q" 'multi-file-replace-regexp-as-diff)))
-
 (defvar-keymap conn-indent-rigidly-map
   "l" 'indent-rigidly-right
   "j" 'indent-rigidly-left
   "L" 'indent-rigidly-right-to-tab-stop
   "J" 'indent-rigidly-left-to-tab-stop)
+
+
+;;;;; Global bindings
+
+(defvar-keymap conn--global-binding-map
+  ;; "M-j" 'conn-open-line-and-indent
+  ;; "C-o" 'conn-open-line-above
+  ;; "M-o" 'conn-open-line
+  ;; "C-x l" 'next-buffer
+  ;; "C-x j" 'previous-buffer
+  "M-g o" 'conn-pop-mark-ring
+  "M-g u" 'conn-unpop-mark-ring
+  "C-S-w" 'delete-region
+  "C-." 'conn-dispatch-on-things
+  "C->" 'conn-dispatch-on-buttons
+  "C-x /" 'tab-bar-history-back
+  "C-x 4 /" 'tab-bar-history-back
+  "C-x 4 ?" 'tab-bar-history-forward
+  "C-x 4 -" 'conn-window-resize-map
+  "C-x ?" 'tab-bar-history-forward
+  "C-x t s" 'tab-switch
+  "C-x t a" 'conn-tab-to-register
+  "C-`" 'other-window
+  "C-x m" 'conn-kmacro-prefix
+  "M-H" 'conn-wincontrol-maximize-horizontally
+  "M-V" 'conn-wincontrol-maximize-vertically)
+
+(defvar-keymap conn-mode-map)
+
+(defun conn-enable-global-bindings ()
+  "Add `conn--global-binding-map' to `conn-mode-map'."
+  (conn--append-keymap-parent conn-mode-map conn--global-binding-map))
+
+(defun conn-disable-global-bindings ()
+  "Remove `conn--global-binding-map' from `conn-mode-map'."
+  (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
+
+(define-keymap
+  :keymap conn-mode-map
+  "<conn-region-map>" conn-default-region-map
+  "<conn-edit-map>" conn-default-edit-map
+  "<conn-thing-map> <" 'conn-mark-before-point
+  "<conn-thing-map> >" 'conn-mark-after-point
+  "<conn-thing-map> /" 'conn-mark-filename
+  "<conn-thing-map> U" 'conn-mark-uuid
+  "<conn-thing-map> s" 'conn-mark-string
+  "<conn-thing-map> @" 'conn-mark-email
+  "<conn-thing-map> v" 'conn-mark-visible
+  "<conn-thing-map> L" 'forward-line
+  "<conn-thing-map> )" 'forward-list
+  "<conn-thing-map> (" 'backward-list)
+
+(static-if (<= 30 emacs-major-version)
+    (progn
+      (keymap-set conn-mode-map "<conn-edit-map> W" 'replace-regexp-as-diff)
+      (keymap-set conn-mode-map "<conn-edit-map> Q" 'multi-file-replace-regexp-as-diff)))
+
+(define-keymap
+  :keymap (or (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
+              (setf (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
+                    (make-sparse-keymap)))
+  "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
 
 ;;;;; State Keymaps
@@ -8118,10 +8191,9 @@ Operates with the selected windows parent window."
   "Z" 'pop-to-mark-command
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
-  "\"" 'conn-yank-window
   "e" 'conn-insert-state
   "E" 'conn-dispatch-on-buttons
-  "t" 'conn-change
+  "q" 'conn-change
   ":" 'conn-wincontrol-one-command
   "`" 'other-window
   "|" 'conn-shell-command-on-region
@@ -8140,7 +8212,7 @@ Operates with the selected windows parent window."
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" 'conn-edit-map
+  "b" conn-edit-map
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
@@ -8148,11 +8220,9 @@ Operates with the selected windows parent window."
   "h" 'conn-wincontrol-one-command
   "," conn-thing-map
   "p" 'conn-register-prefix
-  "q" 'conn-transpose-regions
-  "r" 'conn-region-map
+  "t" 'conn-transpose-regions
+  "r" conn-region-map
   "R" 'conn-rectangle-mark
-  "Q" 'conn-transpose-window
-  "T" 'conn-throw-buffer
   "V" 'conn-narrow-to-thing
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
@@ -8207,61 +8277,6 @@ Operates with the selected windows parent window."
   "w" 'org-refile
   "x" (conn-remap-key (key-parse "C-x"))
   "z" 'conn-exchange-mark-command)
-
-
-;;;;; Global bindings
-
-(defvar-keymap conn--global-binding-map
-  ;; "M-j" 'conn-open-line-and-indent
-  ;; "C-o" 'conn-open-line-above
-  ;; "M-o" 'conn-open-line
-  ;; "C-x l" 'next-buffer
-  ;; "C-x j" 'previous-buffer
-  "M-g o" 'conn-pop-mark-ring
-  "M-g u" 'conn-unpop-mark-ring
-  "C-S-w" 'delete-region
-  "C-." 'conn-dispatch-on-things
-  "C->" 'conn-dispatch-on-buttons
-  "C-x /" 'tab-bar-history-back
-  "C-x 4 /" 'tab-bar-history-back
-  "C-x 4 ?" 'tab-bar-history-forward
-  "C-x 4 -" 'conn-window-resize-map
-  "C-x ?" 'tab-bar-history-forward
-  "C-x t s" 'tab-switch
-  "C-x t a" 'conn-tab-to-register
-  "C-`" 'other-window
-  "C-x m" 'conn-kmacro-prefix
-  "M-H" 'conn-wincontrol-maximize-horizontally
-  "M-V" 'conn-wincontrol-maximize-vertically)
-
-(defvar-keymap conn-mode-map)
-
-(defun conn-enable-global-bindings ()
-  "Add `conn--global-binding-map' to `conn-mode-map'."
-  (conn--append-keymap-parent conn-mode-map conn--global-binding-map))
-
-(defun conn-disable-global-bindings ()
-  "Remove `conn--global-binding-map' from `conn-mode-map'."
-  (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
-
-(define-keymap
-  :keymap conn-mode-map
-  "<conn-thing-map> <" 'conn-mark-before-point
-  "<conn-thing-map> >" 'conn-mark-after-point
-  "<conn-thing-map> /" 'conn-mark-filename
-  "<conn-thing-map> U" 'conn-mark-uuid
-  "<conn-thing-map> s" 'conn-mark-string
-  "<conn-thing-map> @" 'conn-mark-email
-  "<conn-thing-map> v" 'conn-mark-visible
-  "<conn-thing-map> L" 'forward-line
-  "<conn-thing-map> )" 'forward-list
-  "<conn-thing-map> (" 'backward-list)
-
-(define-keymap
-  :keymap (or (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
-              (setf (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
-                    (make-sparse-keymap)))
-  "<remap> <kbd-macro-query>" 'conn-kapply-kbd-macro-query)
 
 
 ;;;; Advice
