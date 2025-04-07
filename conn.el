@@ -276,22 +276,6 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM."
                          (drop 2 form)))
                      varlist))))))
 
-(defmacro conn--with-advice (advice-forms &rest body)
-  "Run BODY with ADVICE-FORMS temporarily applied.
-
-ADVICE-FORMS are of the form (SYMBOL HOW FUNCTION PROPS), for the
-meaning of these see `advice-add'."
-  (declare (debug (form body))
-           (indent 1))
-  (cl-loop for (symbol how func props) in advice-forms
-           collect `(advice-add ,symbol ,how ,func ,props) into adders
-           collect `(advice-remove ,symbol ,func) into removers
-           finally return `(unwind-protect
-                               (progn
-                                 ,@adders
-                                 ,@body)
-                             ,@removers)))
-
 ;; From repeat-mode
 (defun conn--command-property (propname)
   "Return the value of the current commands PROPNAME property."
@@ -2966,7 +2950,8 @@ The iterator must be the first argument in ARGLIST.
                                (ignore-errors (funcall hook))))
            (deactivate-mark)
            (unwind-protect
-               (conn--with-advice (('kmacro-loop-setup-function :before-while ,iterator))
+               (cl-letf (((symbol-function 'kmacro-loop-setup-function)))
+                 (advice-add 'kmacro-loop-setup-function :before-while ,iterator)
                  ,@body
                  (setq success t)
                  (message "Kapply completed successfully after %s iterations" ,iterations))
@@ -3280,7 +3265,9 @@ of a command.")
   "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
-  "e" 'conn-dispatch-over)
+  "e" 'conn-dispatch-over
+  "i" 'forward-line
+  "h" (conn-remap-key "<conn-thing-map>"))
 
 (conn-define-state conn-read-dispatch-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
@@ -3294,7 +3281,9 @@ of a command.")
   "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
-  "\\" 'kapply)
+  "\\" 'kapply
+  "i" 'forward-line
+  "h" (conn-remap-key "<conn-thing-map>"))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
@@ -8130,19 +8119,11 @@ Operates with the selected windows parent window."
   "I" (conn-remap-key conn-backward-paragraph-keys)
   "i" (conn-remap-key conn-previous-line-keys)
   "J" 'conn-backward-inner-line
-  "j" (conntext-define conntext-backward-char
-        (let ((binding (keymap-lookup nil conn-backward-char-keys t)))
-          (if (eq binding 'backward-char)
-              'conn-backward-char
-            binding)))
+  "j" (conn-remap-key conn-backward-char-keys)
   "K" (conn-remap-key conn-forward-paragraph-keys)
   "k" (conn-remap-key conn-next-line-keys)
   "L" 'conn-forward-inner-line
-  "l" (conntext-define conntext-forward-char
-        (let ((binding (keymap-lookup nil conn-forward-char-keys t)))
-          (if (eq binding 'forward-char)
-              'conn-forward-char
-            binding)))
+  "l" (conn-remap-key conn-forward-char-keys)
   "M" (conn-remap-key conn-end-of-defun-keys)
   "m" (conn-remap-key conn-forward-sexp-keys)
   "N" (conn-remap-key conn-beginning-of-defun-keys)
