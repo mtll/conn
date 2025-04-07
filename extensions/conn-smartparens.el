@@ -200,7 +200,7 @@
   "m" 'sp-forward-sexp
   "/" 'undo-only
   "?" 'undo-redo
-  "x" (conn-remap-key (key-parse "C-x")))
+  "x" (conn-remap-key "C-x"))
 
 (defun conn-paren-state ()
   (interactive)

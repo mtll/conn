@@ -104,132 +104,132 @@ dynamically.")
 
 ;;;;; Key Remapping
 
-(defcustom conn-undo-keys (key-parse "C-/")
+(defcustom conn-undo-keys "C-/"
   "`undo' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-undo-redo-keys (key-parse "C-?")
+(defcustom conn-undo-redo-keys "C-?"
   "`undo-redo' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-yank-keys (key-parse "C-y")
+(defcustom conn-yank-keys "C-y"
   "`yank' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-kill-region-keys (key-parse "C-w")
+(defcustom conn-kill-region-keys "C-w"
   "`kill-region' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-delete-region-keys (key-parse "C-S-w")
+(defcustom conn-delete-region-keys "C-S-w"
   "`delete-region' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-sexp-keys (key-parse "C-M-f")
+(defcustom conn-forward-sexp-keys "C-M-f"
   "`forward-sexp' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-sexp-keys (key-parse "C-M-b")
+(defcustom conn-backward-sexp-keys "C-M-b"
   "`backward-sexp' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-paragraph-keys (key-parse "M-{")
+(defcustom conn-backward-paragraph-keys "M-{"
   "`backward-paragraph' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-paragraph-keys (key-parse "M-}")
+(defcustom conn-forward-paragraph-keys "M-}"
   "`forward-paragraph' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-beginning-of-defun-keys (key-parse "C-M-a")
+(defcustom conn-beginning-of-defun-keys "C-M-a"
   "`beginning-of-defun' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-end-of-defun-keys (key-parse "C-M-e")
+(defcustom conn-end-of-defun-keys "C-M-e"
   "`end-of-defun' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-next-line-keys (key-parse "C-n")
+(defcustom conn-next-line-keys "C-n"
   "`next-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-previous-line-keys (key-parse "C-p")
+(defcustom conn-previous-line-keys "C-p"
   "`previous-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-char-keys (key-parse "C-f")
+(defcustom conn-forward-char-keys "C-f"
   "`forward-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-char-keys (key-parse "C-b")
+(defcustom conn-backward-char-keys "C-b"
   "`backward-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-word-keys (key-parse "M-f")
+(defcustom conn-forward-word-keys "M-f"
   "`forward-word' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-word-keys (key-parse "M-b")
+(defcustom conn-backward-word-keys "M-b"
   "`backward-word' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-sentence-keys (key-parse "M-a")
+(defcustom conn-backward-sentence-keys "M-a"
   "`backward-sentence' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-sentence-keys (key-parse "M-e")
+(defcustom conn-forward-sentence-keys "M-e"
   "`forward-sentence' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-delete-char-keys (key-parse "DEL")
+(defcustom conn-backward-delete-char-keys "DEL"
   "`backward-delete-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-delete-char-keys (key-parse "C-d")
+(defcustom conn-delete-char-keys "C-d"
   "`delete-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-up-list-keys (key-parse "C-M-u")
+(defcustom conn-backward-up-list-keys "C-M-u"
   "`backward-up-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-down-list-keys (key-parse "C-M-d")
+(defcustom conn-down-list-keys "C-M-d"
   "`down-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-list-keys (key-parse "C-M-n")
+(defcustom conn-forward-list-keys "C-M-n"
   "`forward-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-list-keys (key-parse "C-M-p")
+(defcustom conn-backward-list-keys "C-M-p"
   "`backward-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-kill-line-keys (key-parse "C-k")
+(defcustom conn-kill-line-keys "C-k"
   "`kill-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
@@ -424,14 +424,15 @@ If ring is (1 2 3 4) 4 would be returned."
 This allows for transparently binding keys to commands which may be
 conceptually the same but vary in implementation by mode, for example
 paredit or smartparens commands.  Also see `conn-remap-key'."
-  `(menu-item
-    ,(format "Remap %s" (key-description from-keys))
-    ,(conn--without-conn-maps (key-binding from-keys t))
-    :filter ,(lambda (_real-binding)
-               (if without-conn-maps
-                   (conn--without-conn-maps
-                     (key-binding from-keys t))
-                 (key-binding from-keys t)))))
+  (let ((from-keys (key-parse from-keys)))
+    `(menu-item
+      ,(format "Remap %s" (key-description from-keys))
+      ,(conn--without-conn-maps (key-binding from-keys t))
+      :filter ,(lambda (_real-binding)
+                 (if without-conn-maps
+                     (conn--without-conn-maps
+                       (key-binding from-keys t))
+                   (key-binding from-keys t))))))
 
 (defun conn-remap-keymap (from-keys &optional without-conn-maps)
   "Map to the keymap at FROM-KEYS.
@@ -439,15 +440,16 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 If the binding at FROM-KEYS is for any reason not a keymap, say because
 a minor mode has shadowed the keymap originally bound there, then map to
 the original binding.  Also see `conn-remap-key'."
-  `(menu-item
-    ,(format "Remap %s Keymap" (key-description from-keys))
-    ,(conn--without-conn-maps (key-binding from-keys t))
-    :filter ,(lambda (real-binding)
-               (let ((binding (if without-conn-maps
-                                  (conn--without-conn-maps
-                                    (key-binding from-keys t))
-                                (key-binding from-keys t))))
-                 (if (keymapp binding) binding real-binding)))))
+  (let ((from-keys (key-parse from-keys)))
+    `(menu-item
+      ,(format "Remap %s Keymap" (key-description from-keys))
+      ,(conn--without-conn-maps (key-binding from-keys t))
+      :filter ,(lambda (real-binding)
+                 (let ((binding (if without-conn-maps
+                                    (conn--without-conn-maps
+                                      (key-binding from-keys t))
+                                  (key-binding from-keys t))))
+                   (if (keymapp binding) binding real-binding))))))
 
 (defmacro conntext-define (name &rest body)
   (declare (indent 1))
@@ -1962,7 +1964,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
-  "h" (conn-remap-key [conn-thing-map])
+  "h" (conn-remap-key "<conn-thing-map>")
   "e" 'recursive-edit)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -7458,7 +7460,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
   "C" 'tab-bar-duplicate-tab
-  "c" (conn-remap-key (key-parse "C-c"))
+  "c" (conn-remap-key "C-c")
   "d" 'delete-window
   "h" 'kill-buffer-and-window
   "e" 'conn-wincontrol-exit
@@ -7478,7 +7480,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-prefix
-  "x" (conn-remap-key (key-parse "C-x"))
+  "x" (conn-remap-key "C-x")
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
@@ -8108,7 +8110,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "h" (conn-remap-key [conn-thing-map]))
+  "h" (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
@@ -8149,12 +8151,12 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
   :suppress t
-  "s" (conn-remap-keymap (key-parse "M-s"))
-  "g" (conn-remap-keymap (key-parse "M-g"))
-  "c" (conn-remap-key (key-parse "C-c"))
-  "x" (conn-remap-key (key-parse "C-x"))
-  "C-4" (conn-remap-key (key-parse "C-x 4"))
-  "C-5" (conn-remap-key (key-parse "C-x 5")))
+  "s" (conn-remap-keymap "M-s")
+  "g" (conn-remap-keymap "M-g")
+  "c" (conn-remap-key "C-c")
+  "x" (conn-remap-key "C-x")
+  "C-4" (conn-remap-key "C-x 4")
+  "C-5" (conn-remap-key "C-x 5"))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-emacs-state)
@@ -8187,16 +8189,16 @@ Operates with the selected windows parent window."
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" (conn-remap-key [conn-edit-map])
+  "b" (conn-remap-key "<conn-edit-map>")
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
   "h" 'conn-wincontrol-one-command
-  "," (conn-remap-key [conn-thing-map])
+  "," (conn-remap-key "<conn-thing-map>")
   "p" 'conn-register-prefix
   "t" 'conn-transpose-regions
-  "r" (conn-remap-key [conn-region-map])
+  "r" (conn-remap-key "<conn-region-map>")
   "R" 'conn-rectangle-mark
   "V" 'conn-narrow-to-thing
   "v" 'conn-toggle-mark-command
@@ -8224,11 +8226,11 @@ Operates with the selected windows parent window."
   "?" (conn-remap-key conn-undo-redo-keys)
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
-  "b" (conn-remap-key (key-parse "C-c C-v"))
-  "c" (conn-remap-key (key-parse "C-c"))
-  "r" (conn-remap-key (key-parse "C-c C-x"))
+  "b" (conn-remap-key "C-c C-v")
+  "c" (conn-remap-key "C-c")
+  "r" (conn-remap-key "C-c C-x")
   "d" 'org-down-element
-  "g" (conn-remap-keymap (key-parse "M-g"))
+  "g" (conn-remap-keymap "M-g")
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
   "J" 'org-metaleft
@@ -8243,14 +8245,14 @@ Operates with the selected windows parent window."
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
   "p" 'conn-register-load
-  "s" (conn-remap-keymap (key-parse "M-s"))
+  "s" (conn-remap-keymap "M-s")
   "T" 'org-todo
   "t" 'org-sparse-tree
   "U" 'org-previous-block
   "u" 'org-up-element
   "W" 'widen
   "w" 'org-refile
-  "x" (conn-remap-key (key-parse "C-x"))
+  "x" (conn-remap-key "C-x")
   "z" 'conn-exchange-mark-command)
 
 
@@ -9054,10 +9056,10 @@ Operates with the selected windows parent window."
     "TAB" 'dired-maybe-insert-subdir
     "M-TAB" 'dired-kill-subdir
     "w" 'dired-do-kill-lines
-    "s" (conn-remap-key (key-parse "M-s"))
-    "r" (conn-remap-key (key-parse "%"))
-    "," (conn-remap-key (key-parse "*"))
-    "x" (conn-remap-key (key-parse "C-x"))
+    "s" (conn-remap-key "M-s")
+    "r" (conn-remap-key "%")
+    "," (conn-remap-key "*")
+    "x" (conn-remap-key "C-x")
     "f" 'conn-dispatch-on-things
     "M-SPC" 'dired-toggle-marks
     "C-M-l" 'dired-do-redisplay
@@ -9107,7 +9109,7 @@ Operates with the selected windows parent window."
     "n" 'magit-gitignore
     "`" 'other-window
     "@" 'magit-am
-    "x" (conn-remap-key (key-parse "C-x"))))
+    "x" (conn-remap-key "C-x")))
 
 
 ;;;; Ibuffer
@@ -9202,8 +9204,8 @@ Operates with the selected windows parent window."
     "`" 'other-window
     "y" 'ibuffer-yank
     "z" 'ibuffer-jump-to-buffer
-    "r" (conn-remap-key (key-parse "%"))
-    "," (conn-remap-key (key-parse "*"))
+    "r" (conn-remap-key "%")
+    "," (conn-remap-key "*")
     "l" 'ibuffer-forward-filter-group
     "j" 'ibuffer-backward-filter-group
     "m" 'ibuffer-jump-to-filter-group
@@ -9213,8 +9215,8 @@ Operates with the selected windows parent window."
     "i" 'ibuffer-backward-line
     "w" 'ibuffer-do-kill-lines
     "u" 'ibuffer-do-kill-on-deletion-marks
-    "x" (conn-remap-key (key-parse "C-x"))
-    "s" (conn-remap-key (key-parse "M-s"))
+    "x" (conn-remap-key "C-x")
+    "s" (conn-remap-key "M-s")
     "t a" 'ibuffer-do-sort-by-alphabetic
     "t f" 'ibuffer-do-sort-by-filename/process
     "t i" 'ibuffer-invert-sorting
@@ -9281,7 +9283,7 @@ Operates with the selected windows parent window."
     "f" 'conn-dispatch-on-buttons
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))))
+    "x" (conn-remap-key "C-x")))
 
 (with-eval-after-load 'helpful
   (define-keymap
@@ -9297,7 +9299,7 @@ Operates with the selected windows parent window."
     "f" 'conn-dispatch-on-buttons
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))))
+    "x" (conn-remap-key "C-x")))
 
 
 ;;;; Info
@@ -9349,7 +9351,7 @@ Operates with the selected windows parent window."
     "v" 'Info-index
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))))
+    "x" (conn-remap-key "C-x")))
 
 
 ;;;; treemacs
@@ -9365,7 +9367,7 @@ Operates with the selected windows parent window."
     "k" 'treemacs-next-line
     "f" 'conn-dispatch-on-things
     ";" 'conn-wincontrol
-    "x" (conn-remap-key (key-parse "C-x"))))
+    "x" (conn-remap-key "C-x")))
 
 
 ;;;; Messages
@@ -9382,7 +9384,7 @@ Operates with the selected windows parent window."
   "k" 'scroll-up
   "f" 'conn-dispatch-on-things
   ";" 'conn-wincontrol
-  "x" (conn-remap-key (key-parse "C-x")))
+  "x" (conn-remap-key "C-x"))
 
 
 ;;; Footer
