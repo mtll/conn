@@ -3299,7 +3299,7 @@ of a command.")
   "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
-  "\\" 'kapply)
+  "e" 'conn-dispatch-over)
 
 (conn-define-state conn-read-dispatch-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
