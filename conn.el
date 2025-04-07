@@ -405,27 +405,6 @@ If ring is (1 2 3 4) 4 would be returned."
 
 ;;;;; Keymap utils
 
-(defvar conn-thing-map
-  `(menu-item
-    "Thing Map"
-    nil
-    :filter ,(lambda (_real-binding)
-               (key-binding [conn-thing-map] t))))
-
-(defvar conn-region-map
-  `(menu-item
-    "Region Map"
-    nil
-    :filter ,(lambda (_real-binding)
-               (key-binding [conn-region-map] t))))
-
-(defvar conn-edit-map
-  `(menu-item
-    "Edit Map"
-    nil
-    :filter ,(lambda (_real-binding)
-               (key-binding [conn-edit-map] t))))
-
 (defmacro conn--without-conn-maps (&rest body)
   "Run BODY without any state, mode, or local maps active."
   (declare (debug (body))
@@ -1983,7 +1962,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
-  "h" conn-thing-map
+  "h" (conn-remap-key [conn-thing-map])
   "e" 'recursive-edit)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -8129,7 +8108,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "h" conn-thing-map)
+  "h" (conn-remap-key [conn-thing-map]))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
@@ -8208,16 +8187,16 @@ Operates with the selected windows parent window."
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" conn-edit-map
+  "b" (conn-remap-key [conn-edit-map])
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys)
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
   "h" 'conn-wincontrol-one-command
-  "," conn-thing-map
+  "," (conn-remap-key [conn-thing-map])
   "p" 'conn-register-prefix
   "t" 'conn-transpose-regions
-  "r" conn-region-map
+  "r" (conn-remap-key [conn-region-map])
   "R" 'conn-rectangle-mark
   "V" 'conn-narrow-to-thing
   "v" 'conn-toggle-mark-command
