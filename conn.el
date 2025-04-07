@@ -427,9 +427,7 @@ If ring is (1 2 3 4) 4 would be returned."
                (key-binding [conn-edit-map] t))))
 
 (defmacro conn--without-conn-maps (&rest body)
-  "Run BODY without any state, mode, or local maps active.
-
-`conn-mode-map' will still be active."
+  "Run BODY without any state, mode, or local maps active."
   (declare (debug (body))
            (indent 0))
   `(let ((emulation-mode-map-alists
@@ -6491,7 +6489,8 @@ Handles rectangular regions."
   :keymap (conn-get-state-map 'conn-read-transpose-state)
   "i" 'conn-backward-line
   "k" 'forward-line
-  "u" 'forward-symbol)
+  "u" 'forward-symbol
+  "f" 'conn-dispatch-transpose)
 
 (defun conn--transpose-message ()
   (message
@@ -6555,6 +6554,13 @@ region after a `recursive-edit'."
              (setq str2 (filter-buffer-substring beg end t))
              (insert str1))
            (insert str2)))))
+    ('conn-dispatch-transpose
+     (pcase-let* ((conn-state-for-read-dispatch 'conn-read-transpose-state)
+                  (`(,thing-cmd ,thing-arg ,finder ,_ ,action-args ,predicate ,_)
+                   (conn--dispatch-read-thing 'conn-dispatch-transpose)))
+       (conn-dispatch-on-things thing-cmd thing-arg finder
+                                'conn-dispatch-transpose
+                                action-args predicate)))
     ((let 0 arg)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
@@ -8092,18 +8098,8 @@ Operates with the selected windows parent window."
   "M-H" 'conn-wincontrol-maximize-horizontally
   "M-V" 'conn-wincontrol-maximize-vertically)
 
-(defvar-keymap conn-mode-map)
-
-(defun conn-enable-global-bindings ()
-  "Add `conn--global-binding-map' to `conn-mode-map'."
-  (conn--append-keymap-parent conn-mode-map conn--global-binding-map))
-
-(defun conn-disable-global-bindings ()
-  "Remove `conn--global-binding-map' from `conn-mode-map'."
-  (conn--remove-keymap-parent conn-mode-map conn--global-binding-map))
-
 (define-keymap
-  :keymap conn-mode-map
+  :keymap global-map
   "<conn-region-map>" conn-default-region-map
   "<conn-edit-map>" conn-default-edit-map
   "<conn-thing-map> <" 'conn-mark-before-point
@@ -8119,8 +8115,8 @@ Operates with the selected windows parent window."
 
 (static-if (<= 30 emacs-major-version)
     (progn
-      (keymap-set conn-mode-map "<conn-edit-map> W" 'replace-regexp-as-diff)
-      (keymap-set conn-mode-map "<conn-edit-map> Q" 'multi-file-replace-regexp-as-diff)))
+      (keymap-global-set "<conn-edit-map> W" 'replace-regexp-as-diff)
+      (keymap-global-set "<conn-edit-map> Q" 'multi-file-replace-regexp-as-diff)))
 
 (define-keymap
   :keymap (or (alist-get 'conn-kmacro-applying-p minor-mode-map-alist)
@@ -8394,7 +8390,6 @@ Operates with the selected windows parent window."
   "Minor mode for setting up conn in a buffer."
   :init-value nil
   :lighter (:eval conn-lighter)
-  :keymap conn-mode-map
   :group 'conn
   (conn--input-method-mode-line)
   (if conn-local-mode
