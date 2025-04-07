@@ -4349,7 +4349,7 @@ Target overlays may override this default by setting the
   "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-yank-read-to
-  "q" 'conn-dispatch-throw
+  "t" 'conn-dispatch-throw
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -4382,7 +4382,7 @@ Target overlays may override this default by setting the
   "g" 'conn-dispatch-goto
   "e" 'conn-dispatch-over
   "z" 'conn-dispatch-jump
-  "t" 'conn-dispatch-transpose)
+  "q" 'conn-dispatch-transpose)
 
 
 ;;;;; Target Finders
@@ -6800,7 +6800,7 @@ for the meaning of prefix ARG."
   (if register
       (conn-register-load register)
     (funcall (conn--without-conn-maps
-               (key-binding conn-yank-keys t)))))
+               (keymap-lookup nil conn-yank-keys t)))))
 
 (defun conn--yank-region-to-minibuffer-hook ()
   (setq conn--minibuffer-initial-region
@@ -6838,11 +6838,11 @@ of deleting it."
                      current-prefix-arg))
   (conn--without-conn-maps
     (if arg
-        (funcall (key-binding conn-kill-region-keys t) start end)
-      (funcall (or (key-binding conn-delete-region-keys t)
+        (funcall (keymap-lookup nil conn-kill-region-keys t) start end)
+      (funcall (or (keymap-lookup nil conn-delete-region-keys t)
                    'delete-region)
                start end))
-    (funcall (key-binding conn-yank-keys t))))
+    (funcall (keymap-lookup nil conn-yank-keys t))))
 
 (defun conn-copy-region (start end &optional register)
   "Copy region between START and END as kill.
@@ -6876,7 +6876,7 @@ If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
          (call-interactively (conn--without-conn-maps
-                               (key-binding conn-backward-delete-char-keys t))))
+                               (keymap-lookup nil conn-backward-delete-char-keys t))))
         ((numberp arg)
          (thread-first
            (concat "Kill "
@@ -6890,7 +6890,7 @@ If ARG is a numeric prefix argument kill region to a register."
          (kill-rectangle (region-beginning) (region-end)))
         (t (call-interactively
             (conn--without-conn-maps
-              (key-binding conn-kill-region-keys t))))))
+              (keymap-lookup nil conn-kill-region-keys t))))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
@@ -7240,7 +7240,7 @@ Currently selected window remains selected afterwards."
 (defun conn-change-line ()
   "`kill-line' and enter `conn-emacs-state'."
   (interactive)
-  (call-interactively (key-binding conn-kill-line-keys t))
+  (call-interactively (keymap-lookup nil conn-kill-line-keys t))
   (conn-enter-state conn-state-for-emacs))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
@@ -7300,12 +7300,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (call-interactively #'string-rectangle))
         (kill
          (funcall (conn--without-conn-maps
-                    (key-binding conn-kill-region-keys t))
+                    (keymap-lookup nil conn-kill-region-keys t))
                   start end)
          (conn-enter-state conn-state-for-emacs))
         (t
          (funcall (conn--without-conn-maps
-                    (key-binding conn-delete-region-keys t))
+                    (keymap-lookup nil conn-delete-region-keys t))
                   start end)
          (conn-enter-state conn-state-for-emacs))))
 
@@ -8131,7 +8131,7 @@ Operates with the selected windows parent window."
   "i" (conn-remap-key conn-previous-line-keys)
   "J" 'conn-backward-inner-line
   "j" (conntext-define conntext-backward-char
-        (let ((binding (key-binding conn-backward-char-keys t)))
+        (let ((binding (keymap-lookup nil conn-backward-char-keys t)))
           (if (eq binding 'backward-char)
               'conn-backward-char
             binding)))
@@ -8139,7 +8139,7 @@ Operates with the selected windows parent window."
   "k" (conn-remap-key conn-next-line-keys)
   "L" 'conn-forward-inner-line
   "l" (conntext-define conntext-forward-char
-        (let ((binding (key-binding conn-forward-char-keys t)))
+        (let ((binding (keymap-lookup nil conn-forward-char-keys t)))
           (if (eq binding 'forward-char)
               'conn-forward-char
             binding)))
@@ -8170,7 +8170,7 @@ Operates with the selected windows parent window."
   "&" 'conn-other-buffer
   "e" 'conn-insert-state
   "E" 'conn-dispatch-on-buttons
-  "q" 'conn-change
+  "t" 'conn-change
   ":" 'conn-wincontrol-one-command
   "`" 'other-window
   "|" 'conn-shell-command-on-region
@@ -8197,7 +8197,7 @@ Operates with the selected windows parent window."
   "h" 'conn-wincontrol-one-command
   "," (conn-remap-key "<conn-thing-map>")
   "p" 'conn-register-prefix
-  "t" 'conn-transpose-regions
+  "q" 'conn-transpose-regions
   "r" (conn-remap-key "<conn-region-map>")
   "R" 'conn-rectangle-mark
   "V" 'conn-narrow-to-thing
