@@ -1553,6 +1553,7 @@ By default `conn-emacs-state' does not bind anything."
 
 (conn-define-state conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
+  :cursor '(hbar . 8)
   :lighter " OEdit"
   :suppress-input-method t)
 
@@ -5072,8 +5073,7 @@ order to mark the region that should be defined by any of COMMANDS."
          (`(,beg . ,end)
           (goto-char beg)
           (conn--push-ephemeral-mark end))))
-     (put ',name :conn-command-thing ',thing)
-     (put ',name :conn-mark-handler #'ignore)))
+     (conn-register-thing-commands ',thing 'ignore ',name)))
 
 (conn-define-mark-command conn-mark-email email)
 (conn-define-mark-command conn-mark-uuid uuid)
@@ -7193,6 +7193,12 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Transition Functions
 
+(defvar conntext-state-hook nil)
+
+(defun conntext-state ()
+  (interactive)
+  (run-hook-with-args-until-success 'conntext-state-hook))
+
 (defun conn-previous-state ()
   (interactive)
   (conn-enter-state conn-previous-state))
@@ -8045,7 +8051,7 @@ Operates with the selected windows parent window."
 
 ;;;;; Global bindings
 
-(defvar-keymap conn--global-binding-map
+(defvar-keymap conn-local-mode-map
   ;; "M-j" 'conn-open-line-and-indent
   ;; "C-o" 'conn-open-line-above
   ;; "M-o" 'conn-open-line
@@ -8146,6 +8152,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "=" 'conntext-state
   "Z" 'pop-to-mark-command
   "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
@@ -8160,7 +8167,6 @@ Operates with the selected windows parent window."
   "/" (conn-remap-key conn-undo-keys)
   ";" 'conn-wincontrol
   "\\" 'conn-kapply-prefix
-  "=" 'indent-relative
   "?" (conn-remap-key conn-undo-redo-keys)
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command
@@ -8193,7 +8199,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-org-edit-state)
   :suppress t
-  "e" 'conn-insert-state
+  "e" 'conn-previous-state
   "SPC" 'conn-scroll-up
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
@@ -8353,6 +8359,7 @@ Operates with the selected windows parent window."
   :init-value nil
   :lighter (:eval conn-lighter)
   :group 'conn
+  :keymap conn-local-mode-map
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
@@ -8475,6 +8482,9 @@ Operates with the selected windows parent window."
   (declare-function org-refile "org-refile")
   (declare-function org-speed-move-safe "org-keys")
   (declare-function org-entry-put "org")
+  (declare-function org-edit-special "org")
+  (declare-function org-babel-where-is-src-block-head "ob-core")
+  (declare-function texmathp "texmathp")
 
   (conn-register-thing
    'org-link
@@ -8573,7 +8583,6 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-major-mode-map 'conn-movement-state 'org-mode)
-    "=" 'conn-org-edit-state
     "^" 'org-up-element
     ")" 'org-next-visible-heading
     "(" 'org-previous-visible-heading
@@ -8608,11 +8617,21 @@ Operates with the selected windows parent window."
    'conn-org-speed-next-block
    'conn-org-speed-previous-block)
 
-  (define-keymap
-    :keymap (conn-get-mode-map 'conn-command-state 'conntext-org-mode)
-    "TAB" (conntext-define conntext-org-edit-state
-            (when (and (bolp) (looking-at org-outline-regexp))
-              'conn-org-edit-state)))
+  (defun conntext-org-edit-state ()
+    (conn-enter-state 'conn-org-edit-state)
+    t)
+
+  (defun conntext-edit-special ()
+    (when (or (org-babel-where-is-src-block-head)
+              (texmathp))
+      (org-edit-special)
+      t))
+
+  (defun conntext-org-hook ()
+    (add-hook 'conntext-state-hook 'conntext-edit-special -20 t)
+    (add-hook 'conntext-state-hook 'conntext-org-edit-state 90 t))
+
+  (add-hook 'org-mode-hook 'conntext-org-hook)
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-emacs-state 'conntext-org-mode)
@@ -8637,17 +8656,11 @@ Operates with the selected windows parent window."
     "u" (conntext-define conntext-org-up-heading
           (when (and (bolp) (looking-at org-outline-regexp))
             'conn-org-speed-up-heading))
-    ;; "j" (conntext-define ""
-    ;;       (when (and (bolp) (looking-at org-outline-regexp))
-    ;;         'org-goto))
     "g" (conntext-define conntext-org-refile-goto
           (when (and (bolp) (looking-at org-outline-regexp))
             (lambda ()
               (interactive)
               (org-refile '(4)))))
-    "c" (conntext-define conntext-org-edit-state
-          (when (and (bolp) (looking-at org-outline-regexp))
-            'conn-org-edit-state))
     "C" (conntext-define conntext-org-shifttab
           (when (and (bolp) (looking-at org-outline-regexp))
             'org-shifttab))

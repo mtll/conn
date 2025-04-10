@@ -165,9 +165,7 @@
   "C-=" 'balance-windows
   "C-M-0" 'kill-buffer-and-window
   "`" 'other-window
-  "TAB" 'conn-previous-state
-  "e" 'conn-emacs-state
-  "<f8>" 'conn-command-state
+  "e" 'conn-previous-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun
   "o" 'sp-forward-symbol
@@ -203,34 +201,22 @@
   "x" (conn-remap-key "C-x"))
 
 (defun conn-paren-state ()
-  (interactive)
-  (conn-enter-state 'conn-paren-state))
+  (conn-enter-state 'conn-paren-state)
+  t)
 
+;;;###autoload
 (define-minor-mode conntext-smartparens-mode
   "Minor mode for contextual bindings in outline-mode."
   :global t
-  :group 'conn)
+  :group 'conn
+  (if conntext-smartparens-mode
+      (add-hook 'smartparens-mode-hook 'conntext-smartparens--turn-on)
+    (remove-hook 'smartparens-mode-hook 'conntext-smartparens--turn-on)))
 
-;; (define-keymap
-;;   :keymap (conn-get-mode-map 'conn-command-state 'conntext-smartparens-mode)
-;;   "TAB" (conntext-define conntext-smartparens-command-map
-;;           "Context smartparens map."
-;;           (when (and (not (eql ?\( (char-after)))
-;;                      (not (eql ?\) (char-before)))
-;;                      (or (eql ?\( (char-before))
-;;                          (eql ?\  (char-before))
-;;                          (eql ?\n (char-before))))
-;;             'conn-paren-state)))
-;; 
-;; (define-keymap
-;;   :keymap (conn-get-mode-map 'conn-emacs-state 'conntext-smartparens-mode)
-;;   "TAB" (conntext-define conntext-smartparens-emacs-map
-;;           "Context smartparens map."
-;;           (when (or (eql ?\( (char-after))
-;;                     (eql ?\) (char-before))
-;;                     (eql ?\( (char-before))
-;;                     (eql ?\  (char-before)))
-;;             'conn-paren-state)))
+(defun conntext-smartparens--turn-on ()
+  (if conntext-smartparens-mode
+      (add-hook 'conntext-state-hook 'conn-paren-state 95 t)
+    (remove-hook 'conntext-state-hook 'conn-paren-state t)))
 
 (conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
 
