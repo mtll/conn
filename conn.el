@@ -8115,7 +8115,7 @@ Operates with the selected windows parent window."
   "<" (conn-remap-key conn-end-of-defun-keys t)
   "," (conn-remap-key conn-forward-sexp-keys t)
   "M" (conn-remap-key conn-beginning-of-defun-keys t)
-  "m" (conn-remap-key conn-backward-sexp-keys) t)
+  "m" (conn-remap-key conn-backward-sexp-keys t))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
