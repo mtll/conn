@@ -4022,12 +4022,11 @@ Target overlays may override this default by setting the
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (if register
-               (copy-to-register register beg end t)
-             (kill-region beg end))
-           (conn--dispatch-fixup-whitespace)
-           (message "Killed thing")))
+         (if register
+             (copy-to-register register beg end t)
+           (kill-region beg end))
+         (conn--dispatch-fixup-whitespace)
+         (message "Killed thing"))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-kill-append (window pt thing-cmd thing-arg register)
@@ -7187,7 +7186,8 @@ Currently selected window remains selected afterwards."
 
 (defun conntext-state ()
   (interactive)
-  (run-hook-with-args-until-success 'conntext-state-hook))
+  (when-let* ((state (run-hook-with-args-until-success 'conntext-state-hook)))
+    (conn-enter-state state)))
 
 (defun conn-previous-state ()
   (interactive)
@@ -8610,14 +8610,12 @@ Operates with the selected windows parent window."
    'conn-org-speed-previous-block)
 
   (defun conntext-org-edit-state ()
-    (conn-enter-state 'conn-org-edit-state)
-    t)
+    'conn-org-edit-state)
 
   (defun conntext-edit-special ()
     (when (or (org-babel-where-is-src-block-head)
               (texmathp))
-      (org-edit-special)
-      t))
+      'org-edit-special))
 
   (defun conntext-org-hook ()
     (add-hook 'conntext-state-hook 'conntext-edit-special -20 t)

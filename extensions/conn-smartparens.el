@@ -200,9 +200,7 @@
   "?" 'undo-redo
   "x" (conn-remap-key "C-x"))
 
-(defun conn-paren-state ()
-  (conn-enter-state 'conn-paren-state)
-  t)
+(defun conn-paren-state () 'conn-paren-state)
 
 ;;;###autoload
 (define-minor-mode conntext-smartparens-mode
