@@ -7436,6 +7436,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
+  "b" 'conn-wincontrol-quit-other-window-for-scrolling
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
