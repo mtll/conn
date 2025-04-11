@@ -276,6 +276,16 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM."
                          (drop 2 form)))
                      varlist))))))
 
+(defmacro conn-make-thing-command (name region-fn &rest body)
+  (declare (indent 2))
+  `(progn
+     (defalias ',name ,region-fn)
+     (advice-add ',name :around
+                 (lambda (&rest app)
+                   (save-mark-and-excursion
+                     ,@body
+                     (apply app))))))
+
 ;; From repeat-mode
 (defun conn--command-property (propname)
   "Return the value of the current commands PROPNAME property."
@@ -284,7 +294,8 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM."
       (and (symbolp real-this-command)
            (get real-this-command propname))))
 
-;; This is string-pixel-width from emacs 31
+;; We need string-pixel-width from emacs 31 since it accounts for face
+;; remapping
 (static-if (<= 31 emacs-major-version)
     (defalias 'conn--string-pixel-width 'string-pixel-width)
   (defun conn--string-pixel-width (string &optional buffer)
