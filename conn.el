@@ -340,11 +340,9 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM."
   (push item (conn-ring-list ring))
   (conn-ring--visit ring item)
   (if (= (conn-ring-size ring) (conn-ring-capacity ring))
-      (let ((old (nth (1- (conn-ring-size ring))
-                      (conn-ring-history ring))))
+      (let ((old (car (last (conn-ring-history ring)))))
         (setf (conn-ring-list ring) (delq old (conn-ring-list ring))
-              (conn-ring-history ring) (take (conn-ring-size ring)
-                                             (conn-ring-history ring)))
+              (conn-ring-history ring) (delq old (conn-ring-history ring)))
         (when-let* ((cleanup (conn-ring-cleanup ring)))
           (funcall cleanup old)))
     (cl-incf (conn-ring-size ring))))
@@ -3151,7 +3149,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
              (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
              (overlay-put cursor 'after-string nil))))))
 
-(defvar conn--movement-rotating nil)
+(defvar conn--movement-ring-rotating nil)
 (defvar conn--movement-tick nil)
 (defvar conn--movement-mark nil)
 
@@ -3163,7 +3161,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
           conn-this-command-thing (conn--command-property :conn-command-thing)
           conn--movement-tick (buffer-chars-modified-tick)
           conn--movement-mark (mark t)
-          conn--movement-rotating nil)))
+          conn--movement-ring-rotating nil)))
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
@@ -3174,7 +3172,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                  (not (region-active-p)))
         (ignore-errors
           (funcall conn-this-command-handler conn-this-command-start)))
-      (unless (or conn--movement-rotating
+      (unless (or conn--movement-ring-rotating
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (conn-push-region conn-this-command-start conn--movement-mark)))))
@@ -6307,7 +6305,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 (defun conn-unpop-movement-ring (arg)
   "Rotate backward through `conn-movement-ring'."
   (interactive "p")
-  (setq conn--movement-rotating t)
+  (setq conn--movement-ring-rotating t)
   (cond ((< arg 0)
          (conn-pop-movement-ring (abs arg)))
         ((null conn-movement-ring)
@@ -6324,7 +6322,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 (defun conn-pop-movement-ring (arg)
   "Rotate forward through `conn-movement-ring'."
   (interactive "p")
-  (setq conn--movement-rotating t)
+  (setq conn--movement-ring-rotating t)
   (cond ((< arg 0)
          (conn-unpop-movement-ring (abs arg)))
         ((null conn-movement-ring)
@@ -7975,17 +7973,15 @@ Operates with the selected windows parent window."
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward
-  "j" 'previous-error
-  "l" 'next-error
   "y" 'imenu
   "b" 'goto-line
-  "m" 'conn-unpop-movement-ring
-  "n" 'conn-pop-movement-ring)
+  "j" 'conn-unpop-movement-ring
+  "l" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-movement-ring-repeat-map
   :repeat t
-  "n" 'conn-unpop-movement-ring
-  "m" 'conn-pop-movement-ring)
+  "j" 'conn-unpop-movement-ring
+  "l" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-global-mark-repeat-map
   :repeat t
@@ -8096,7 +8092,8 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "b" (conn-remap-key "<conn-thing-map>"))
+  "b" (conn-remap-key "<conn-thing-map>")
+  "a" 'beginning-of-buffer)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
