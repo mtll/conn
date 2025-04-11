@@ -9364,6 +9364,21 @@ Operates with the selected windows parent window."
   "x" (conn-remap-key "C-x" t))
 
 
+;;;; debugger mode
+
+(conn-set-mode-property 'debugger-mode :hide-mark-cursor t)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'debugger-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "`" 'other-window
+  "i" 'scroll-down
+  "k" 'scroll-up
+  "f" 'conn-dispatch-on-things
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
+
+
 ;;; Footer
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
