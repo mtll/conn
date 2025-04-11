@@ -1949,7 +1949,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
-  "h" (conn-remap-key "<conn-thing-map>")
+  "b" (conn-remap-key "<conn-thing-map>")
   "e" 'recursive-edit)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -3268,7 +3268,7 @@ of a command.")
   "DEL" 'backward-delete-arg
   "e" 'conn-dispatch-over
   "i" 'forward-line
-  "h" (conn-remap-key "<conn-thing-map>"))
+  "b" (conn-remap-key "<conn-thing-map>"))
 
 (conn-define-state conn-read-dispatch-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
@@ -3284,7 +3284,7 @@ of a command.")
   "DEL" 'backward-delete-arg
   "\\" 'kapply
   "i" 'forward-line
-  "h" (conn-remap-key "<conn-thing-map>"))
+  "b" (conn-remap-key "<conn-thing-map>"))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
@@ -5255,26 +5255,8 @@ order to mark the region that should be defined by any of COMMANDS."
  'buffer 'conn-discrete-thing-handler
  'end-of-buffer 'beginning-of-buffer)
 
-(defun conn-line-forward-op (N)
-  "Move forward across one line.
-
-With arg N do it that many times.  Negative arg -N means move backward N
-lines.
-
-Behaves as `thingatpt' expects a \\='forward-op to behave."
-  (interactive "p")
-  (cond ((> N 0)
-         (forward-line N))
-        ((< N 0)
-         (let ((pt (point)))
-           (beginning-of-line)
-           (if (= pt (point))
-               (forward-line N)
-             (forward-line (1+ N)))))))
-
 (conn-register-thing
  'line
- :forward-op 'conn-line-forward-op
  :dispatch-target-finder 'conn--dispatch-lines)
 
 (conn-register-thing-commands
@@ -7455,7 +7437,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
   "C" 'tab-bar-duplicate-tab
-  "c" (conn-remap-key "C-c")
+  "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
   "h" 'kill-buffer-and-window
   "e" 'conn-wincontrol-exit
@@ -7475,7 +7457,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-prefix
-  "x" (conn-remap-key "C-x")
+  "x" (conn-remap-key "C-x" t)
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
@@ -8105,45 +8087,45 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "h" (conn-remap-key "<conn-thing-map>"))
+  "b" (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
   :suppress t
   ">" 'forward-line
-  "<" 'conn-backward-line
-  "o" (conn-remap-key conn-forward-word-keys)
+  "N" 'conn-backward-line
+  "o" (conn-remap-key conn-forward-word-keys t)
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
-  "u" (conn-remap-key conn-backward-word-keys)
-  "(" (conn-remap-key conn-backward-list-keys)
-  ")" (conn-remap-key conn-forward-list-keys)
-  "[" (conn-remap-key conn-backward-up-list-keys)
-  "]" (conn-remap-key conn-down-list-keys)
-  "{" (conn-remap-key conn-backward-sentence-keys)
-  "}" (conn-remap-key conn-forward-sentence-keys)
-  "I" (conn-remap-key conn-backward-paragraph-keys)
-  "i" (conn-remap-key conn-previous-line-keys)
+  "u" (conn-remap-key conn-backward-word-keys t)
+  "(" (conn-remap-key conn-backward-list-keys t)
+  ")" (conn-remap-key conn-forward-list-keys t)
+  "[" (conn-remap-key conn-backward-up-list-keys t)
+  "]" (conn-remap-key conn-down-list-keys t)
+  "{" (conn-remap-key conn-backward-sentence-keys t)
+  "}" (conn-remap-key conn-forward-sentence-keys t)
+  "I" (conn-remap-key conn-backward-paragraph-keys t)
+  "i" (conn-remap-key conn-previous-line-keys t)
   "J" 'conn-backward-inner-line
-  "j" (conn-remap-key conn-backward-char-keys)
-  "K" (conn-remap-key conn-forward-paragraph-keys)
-  "k" (conn-remap-key conn-next-line-keys)
+  "j" (conn-remap-key conn-backward-char-keys t)
+  "K" (conn-remap-key conn-forward-paragraph-keys t)
+  "k" (conn-remap-key conn-next-line-keys t)
   "L" 'conn-forward-inner-line
-  "l" (conn-remap-key conn-forward-char-keys)
-  "M" (conn-remap-key conn-end-of-defun-keys)
-  "m" (conn-remap-key conn-forward-sexp-keys)
-  "N" (conn-remap-key conn-beginning-of-defun-keys)
-  "n" (conn-remap-key conn-backward-sexp-keys))
+  "l" (conn-remap-key conn-forward-char-keys t)
+  "<" (conn-remap-key conn-end-of-defun-keys t)
+  "," (conn-remap-key conn-forward-sexp-keys t)
+  "M" (conn-remap-key conn-beginning-of-defun-keys t)
+  "m" (conn-remap-key conn-backward-sexp-keys) t)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
   :suppress t
-  "s" (conn-remap-keymap "M-s")
-  "g" (conn-remap-keymap "M-g")
-  "c" (conn-remap-key "C-c")
-  "x" (conn-remap-key "C-x")
-  "C-4" (conn-remap-key "C-x 4")
-  "C-5" (conn-remap-key "C-x 5"))
+  "s" (conn-remap-keymap "M-s" t)
+  "g" (conn-remap-keymap "M-g" t)
+  "c" (conn-remap-key "C-c" t)
+  "x" (conn-remap-key "C-x" t)
+  "C-4" (conn-remap-key "C-x 4" t)
+  "C-5" (conn-remap-key "C-x 5" t))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-emacs-state)
@@ -8152,6 +8134,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "n" (conn-remap-key "<conn-edit-map>")
   "=" 'conntext-state
   "Z" 'pop-to-mark-command
   "P" 'conn-region-case-prefix
@@ -8164,10 +8147,10 @@ Operates with the selected windows parent window."
   "|" 'conn-shell-command-on-region
   "'" 'repeat
   "." 'conn-other-place-prefix
-  "/" (conn-remap-key conn-undo-keys)
+  "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
   "\\" 'conn-kapply-prefix
-  "?" (conn-remap-key conn-undo-redo-keys)
+  "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command
   "M-y" 'conn-completing-yank-replace
@@ -8176,13 +8159,12 @@ Operates with the selected windows parent window."
   "C-y" 'conn-yank-replace
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
-  "b" (conn-remap-key "<conn-edit-map>")
   "C" 'conn-copy-region
-  "d" (conn-remap-key conn-delete-char-keys)
+  "d" (conn-remap-key conn-delete-char-keys t)
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
   "h" 'conn-wincontrol-one-command
-  "," (conn-remap-key "<conn-thing-map>")
+  "b" (conn-remap-key "<conn-thing-map>")
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" (conn-remap-key "<conn-region-map>")
@@ -8204,20 +8186,20 @@ Operates with the selected windows parent window."
   "<backspace>" 'conn-scroll-down
   "DEL" 'conn-scroll-down
   "." 'point-to-register
-  "/" (conn-remap-key conn-undo-keys)
+  "/" (conn-remap-key conn-undo-keys t)
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer
   "*" 'conn-org-edit-insert-heading
   "<" 'org-drag-element-backward
   ">" 'org-drag-element-forward
-  "?" (conn-remap-key conn-undo-redo-keys)
+  "?" (conn-remap-key conn-undo-redo-keys t)
   "f" 'conn-dispatch-on-things
   "C" 'org-toggle-comment
   "b" (conn-remap-key "C-c C-v")
   "c" (conn-remap-key "C-c")
   "r" (conn-remap-key "C-c C-x")
   "d" 'org-down-element
-  "g" (conn-remap-keymap "M-g")
+  "g" (conn-remap-keymap "M-g" t)
   "i" 'org-backward-heading-same-level
   "I" 'org-metaup
   "J" 'org-metaleft
@@ -8232,14 +8214,14 @@ Operates with the selected windows parent window."
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
   "p" 'conn-register-load
-  "s" (conn-remap-keymap "M-s")
+  "s" (conn-remap-keymap "M-s" t)
   "T" 'org-todo
   "t" 'org-sparse-tree
   "U" 'org-previous-block
   "u" 'org-up-element
   "W" 'widen
   "w" 'org-refile
-  "x" (conn-remap-key "C-x")
+  "x" (conn-remap-key "C-x" t)
   "z" 'conn-exchange-mark-command)
 
 
@@ -9050,10 +9032,10 @@ Operates with the selected windows parent window."
     "TAB" 'dired-maybe-insert-subdir
     "M-TAB" 'dired-kill-subdir
     "w" 'dired-do-kill-lines
-    "s" (conn-remap-key "M-s")
+    "s" (conn-remap-key "M-s" t)
     "r" (conn-remap-key "%")
     "," (conn-remap-key "*")
-    "x" (conn-remap-key "C-x")
+    "x" (conn-remap-key "C-x" t)
     "f" 'conn-dispatch-on-things
     "M-SPC" 'dired-toggle-marks
     "C-M-l" 'dired-do-redisplay
@@ -9103,7 +9085,7 @@ Operates with the selected windows parent window."
     "n" 'magit-gitignore
     "`" 'other-window
     "@" 'magit-am
-    "x" (conn-remap-key "C-x")))
+    "x" (conn-remap-key "C-x" t)))
 
 
 ;;;; Ibuffer
@@ -9209,8 +9191,8 @@ Operates with the selected windows parent window."
     "i" 'ibuffer-backward-line
     "w" 'ibuffer-do-kill-lines
     "u" 'ibuffer-do-kill-on-deletion-marks
-    "x" (conn-remap-key "C-x")
-    "s" (conn-remap-key "M-s")
+    "x" (conn-remap-key "C-x" t)
+    "s" (conn-remap-key "M-s" t)
     "t a" 'ibuffer-do-sort-by-alphabetic
     "t f" 'ibuffer-do-sort-by-filename/process
     "t i" 'ibuffer-invert-sorting
@@ -9277,7 +9259,7 @@ Operates with the selected windows parent window."
     "f" 'conn-dispatch-on-buttons
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x")))
+    "x" (conn-remap-key "C-x" t)))
 
 (with-eval-after-load 'helpful
   (define-keymap
@@ -9293,7 +9275,7 @@ Operates with the selected windows parent window."
     "f" 'conn-dispatch-on-buttons
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x")))
+    "x" (conn-remap-key "C-x" t)))
 
 
 ;;;; Info
@@ -9345,7 +9327,7 @@ Operates with the selected windows parent window."
     "v" 'Info-index
     "`" 'other-window
     ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x")))
+    "x" (conn-remap-key "C-x" t)))
 
 
 ;;;; treemacs
@@ -9361,7 +9343,7 @@ Operates with the selected windows parent window."
     "k" 'treemacs-next-line
     "f" 'conn-dispatch-on-things
     ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x")))
+    "x" (conn-remap-key "C-x" t)))
 
 
 ;;;; Messages
@@ -9378,7 +9360,7 @@ Operates with the selected windows parent window."
   "k" 'scroll-up
   "f" 'conn-dispatch-on-things
   ";" 'conn-wincontrol
-  "x" (conn-remap-key "C-x"))
+  "x" (conn-remap-key "C-x" t))
 
 
 ;;; Footer
