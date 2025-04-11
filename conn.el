@@ -3293,7 +3293,7 @@ of a command.")
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
-  "," `(conn-expand-remote conn--dispatch-chars)
+  "h" `(conn-expand-remote conn--dispatch-chars)
   "n" 'conn-forward-defun
   "J" 'conn-forward-inner-line
   "L" 'conn-backward-inner-line
@@ -4015,8 +4015,8 @@ Target overlays may override this default by setting the
   :window-predicate (lambda (win)
                       (buffer-local-value 'buffer-read-only (window-buffer win)))
   :interactive (lambda ()
-                 (when current-prefix-arg
-                   (list (register-read-with-preview "Register: "))))
+                 (list (when current-prefix-arg
+                         (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4726,11 +4726,11 @@ seconds."
       (add-function :after-while conn-dispatch-window-predicate predicate))
     (ignore-error quit
       (while
-          (prog1 repeat
-            (pcase-let ((`(,pt ,window ,thing) (dispatch--find-target finder)))
-              (setf conn-this-command-thing
-                    (or thing (ignore-errors
-                                (get thing-cmd :conn-command-thing))))
+          (pcase-let* ((`(,pt ,window ,thing) (dispatch--find-target finder))
+                       (conn-this-command-thing
+                        (or thing (ignore-errors
+                                    (get thing-cmd :conn-command-thing)))))
+            (prog1 repeat
               (apply action window pt thing-cmd thing-arg action-args)))
         (undo-boundary)))))
 
@@ -4866,8 +4866,8 @@ potential expansions.  Functions may return invalid expansions
 (defvar-keymap conn-expand-repeat-map
   :repeat t
   "z" 'conn-expand-exchange
-  "." 'conn-contract
-  "," 'conn-expand)
+  "j" 'conn-contract
+  "h" 'conn-expand)
 
 (defun conn--expand-post-change-hook (&rest _)
   (setq conn--current-expansions nil)
@@ -5249,7 +5249,14 @@ order to mark the region that should be defined by any of COMMANDS."
  'end-of-defun 'beginning-of-defun
  'conn-forward-defun)
 
-(conn-register-thing 'char :default-action 'conn-dispatch-jump)
+(conn-register-thing
+ 'char
+ :default-action 'conn-dispatch-jump
+ :dispatch-target-finder (lambda ()
+                           (cl-loop with ovs = (conn--dispatch-chars)
+                                    for ov in ovs
+                                    do (overlay-put ov 'thing 'region)
+                                    finally return ovs)))
 
 (conn-register-thing-commands
  'buffer 'conn-discrete-thing-handler
@@ -8135,6 +8142,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "H" 'conn-expand
   "n" (conn-remap-key "<conn-edit-map>")
   "=" 'conntext-state
   "Z" 'pop-to-mark-command
