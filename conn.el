@@ -4027,7 +4027,7 @@ Target overlays may override this default by setting the
                (copy-to-register register beg end t)
              (kill-region beg end))
            (conn--dispatch-fixup-whitespace)
-           (message "Killed: %s" str)))
+           (message "Killed thing")))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-kill-append (window pt thing-cmd thing-arg register)
@@ -4726,12 +4726,13 @@ seconds."
       (add-function :after-while conn-dispatch-window-predicate predicate))
     (ignore-error quit
       (while
-          (pcase-let* ((`(,pt ,window ,thing) (dispatch--find-target finder))
-                       (conn-this-command-thing
-                        (or thing (ignore-errors
-                                    (get thing-cmd :conn-command-thing)))))
+          (pcase-let* ((`(,pt ,window ,thing-override)
+                        (dispatch--find-target finder)))
+            (conn--push-ephemeral-mark)
             (prog1 repeat
-              (apply action window pt thing-cmd thing-arg action-args)))
+              (apply action window pt
+                     (or thing-override thing-cmd) thing-arg
+                     action-args)))
         (undo-boundary)))))
 
 (defun conn--bounds-of-dispatch (_cmd _arg)
@@ -5255,7 +5256,7 @@ order to mark the region that should be defined by any of COMMANDS."
  :dispatch-target-finder (lambda ()
                            (cl-loop with ovs = (conn--dispatch-chars)
                                     for ov in ovs
-                                    do (overlay-put ov 'thing 'region)
+                                    do (overlay-put ov 'thing 'conn-toggle-mark-command)
                                     finally return ovs)))
 
 (conn-register-thing-commands
