@@ -9394,6 +9394,38 @@ Operates with the selected windows parent window."
   "x" (conn-remap-key "C-x" t))
 
 
+;;;; occur mode
+
+(conn-set-mode-property 'occur-mode :hide-mark-cursor t)
+(conn-set-mode-property 'occur-edit-mode :hide-mark-cursor nil)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'occur-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "`" 'other-window
+  "k" 'next-error-no-select
+  "i" 'previous-error-no-select
+  "f" 'conn-dispatch-on-things
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
+
+
+;;;; compile mode
+
+(conn-set-mode-property 'compilation-mode :hide-mark-cursor t)
+(conn-set-mode-property 'grep-edit-mode :hide-mark-cursor nil)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'compilation-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "`" 'other-window
+  "k" 'next-error-no-select
+  "i" 'previous-error-no-select
+  "f" 'conn-dispatch-on-things
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
+
+
 ;;; Footer
 ;; Local Variables:
 ;; outline-regexp: "^;;;;* [^    \n]"
