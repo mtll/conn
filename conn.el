@@ -2123,11 +2123,16 @@ is read."
         (conn-this-command-start (point-marker))
         (regions))
     (save-mark-and-excursion
-      (dotimes (_ (abs (prefix-numeric-value arg)))
-        (call-interactively cmd)
-        (funcall conn-this-command-handler conn-this-command-start)
-        (move-marker conn-this-command-start (point))
-        (push (cons (region-beginning) (region-end)) regions))
+      (catch 'done
+        (ignore-errors
+          (dotimes (_ (abs (prefix-numeric-value arg)))
+            (call-interactively cmd)
+            (funcall conn-this-command-handler conn-this-command-start)
+            (move-marker conn-this-command-start (point))
+            (let ((reg (cons (region-beginning) (region-end))))
+              (if (equal reg (car regions))
+                  (throw 'done nil)
+                (push reg regions))))))
       (cons (cons (seq-min (mapcar #'car regions))
                   (seq-max (mapcar #'cdr regions)))
             (nreverse regions)))))
