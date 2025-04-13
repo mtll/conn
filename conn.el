@@ -3570,7 +3570,8 @@ with `conn-dispatch-thing-ignored-modes'."
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
-(defvar conn-pixelwise-dispatch-labels t)
+(defvar conn-pixelwise-labels-predicate
+  (lambda (win) (eq (selected-frame) (window-frame win))))
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
@@ -3719,9 +3720,7 @@ Target overlays may override this default by setting the
     (overlay-put overlay 'display label-string)))
 
 (defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
-  (if (if (functionp conn-pixelwise-dispatch-labels)
-          (funcall conn-pixelwise-dispatch-labels)
-        conn-pixelwise-dispatch-labels)
+  (if (funcall conn-pixelwise-labels-predicate (overlay-get overlay 'window))
       (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
     (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
 
