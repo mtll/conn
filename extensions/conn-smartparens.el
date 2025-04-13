@@ -63,8 +63,8 @@
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-read-thing-common-state 'smartparens-mode)
-  "m" 'forward-sexp
-  "n" 'backward-sexp)
+  "," 'forward-sexp
+  "m" 'backward-sexp)
 
 (conn-register-thing-commands
  'symbol 'conn-symbol-handler
