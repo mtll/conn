@@ -5089,15 +5089,15 @@ order to mark the region that should be defined by any of COMMANDS."
     (put cmd :conn-command-thing thing)
     (put cmd :conn-mark-handler handler)))
 
-(defmacro conn-define-mark-command (name thing)
+(defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
   `(progn
      (defun ,name ()
        (interactive)
        (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
          (`(,beg . ,end)
-          (if (region-active-p)
+          (if ,(unless ignore-mark-active '(region-active-p))
               (pcase (car (read-multiple-choice
-                           "Mark to end or beginning?"
+                           "Mark to?"
                            '((?e "end")
                              (?b "beginning"))))
                 (?e (goto-char end))
@@ -5132,8 +5132,8 @@ order to mark the region that should be defined by any of COMMANDS."
  'buffer-before-point
  :bounds-op (lambda () (cons (point-min) (point))))
 
-(conn-define-mark-command conn-mark-after-point buffer-after-point)
-(conn-define-mark-command conn-mark-before-point buffer-before-point)
+(conn-define-mark-command conn-mark-after-point buffer-after-point t)
+(conn-define-mark-command conn-mark-before-point buffer-before-point t)
 
 (conn-register-thing
  'visible
