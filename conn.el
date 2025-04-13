@@ -1971,8 +1971,6 @@ Returns a cons of (STRING . OVERLAYS)."
     (conn-toggle-mark-command . conn--bounds-of-region)
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (conn-expand . conn--bounds-of-expansion)
-    (set-mark-command . conn--bounds-of-region)
-    (conn-set-mark-command . conn--bounds-of-region)
     (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
     (dot . conn--bounds-of-dot)
@@ -2000,13 +1998,15 @@ Bounds list is of the form ((BEG . END) . SUBREGIONS).  Commands may return
 multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
-  (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
-        (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                     (when (symbolp cmd)
-                       (alist-get (get cmd :conn-command-thing)
-                                  conn-bounds-of-command-alist))
-                     conn-bounds-of-command-default)
-                 cmd arg)))
+  (prog1
+      (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
+            (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                         (when (symbolp cmd)
+                           (alist-get (get cmd :conn-command-thing)
+                                      conn-bounds-of-command-alist))
+                         conn-bounds-of-command-default)
+                     cmd arg))
+    (deactivate-mark t)))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -2018,6 +2018,10 @@ command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
   (let* ((thing-arg (when arg (abs (prefix-numeric-value arg))))
          (thing-sign (when arg (> 0 arg)))
+         (mark-flag (region-active-p))
+         (mark-indicator
+          (propertize "Mark Active"
+                      'face 'eldoc-highlight-function-argument))
          invalid keys cmd)
     (cl-flet
         ((read-command ()
@@ -2031,7 +2035,8 @@ are read."
                                     (format "%s is not a valid thing command"
                                             cmd)
                                     'face 'error)
-                                 "")))
+                                 "")
+                               (if mark-flag mark-indicator "")))
                  cmd (key-binding keys t)))
          (completing-read-command ()
            (save-window-excursion
@@ -2064,37 +2069,42 @@ are read."
                                   (concat "; \\[recursive-edit] "
                                           "recursive edit)")
                                 ")")
-                              ": %s")))
+                              ": %s %s")))
         (read-command)
         (unwind-protect
-            (cl-loop
-             (catch 'continue
-               (pcase cmd
-                 ('keyboard-quit (keyboard-quit))
-                 ('help
-                  (throw 'continue (completing-read-command)))
-                 ('digit-argument
-                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-                 ('reset-arg
-                  (setq thing-arg nil))
-                 ('backward-delete-arg
-                  (setq thing-arg (floor thing-arg 10)))
-                 ('forward-delete-arg
-                  (setq thing-arg (thread-last
-                                    (log thing-arg 10)
-                                    (floor)
-                                    (expt 10)
-                                    (mod thing-arg))))
-                 ('negative-argument
-                  (setq thing-sign (not thing-sign)))
-                 ((guard (or (conn-thing-command-p cmd)
-                             (alist-get cmd conn-bounds-of-command-alist)))
-                  (cl-return
-                   (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                                   (thing-sign '-)))))
-                 (_ (setq invalid t)))
-               (read-command)))
+            (prog1
+                (cl-loop
+                 (pcase cmd
+                   ('conn-set-mark-command
+                    (setq mark-flag (not mark-flag)))
+                   ('keyboard-quit (keyboard-quit))
+                   ('help (completing-read-command))
+                   ('digit-argument
+                    (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
+                      (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                   ('reset-arg
+                    (setq thing-arg nil))
+                   ('backward-delete-arg
+                    (setq thing-arg (floor thing-arg 10)))
+                   ('forward-delete-arg
+                    (setq thing-arg (thread-last
+                                      (log thing-arg 10)
+                                      (floor)
+                                      (expt 10)
+                                      (mod thing-arg))))
+                   ('negative-argument
+                    (setq thing-sign (not thing-sign)))
+                   ((guard (or (conn-thing-command-p cmd)
+                               (alist-get cmd conn-bounds-of-command-alist)))
+                    (cl-return
+                     (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
+                                     (thing-sign '-)))))
+                   (_ (setq invalid t)))
+                 (read-command))
+              (unless (eq mark-flag (region-active-p))
+                (if (region-active-p)
+                    (deactivate-mark t)
+                  (push-mark nil t t))))
           (message nil))))))
 
 (defun conn-read-thing-region (prompt &optional arg)
@@ -2127,7 +2137,8 @@ is read."
         (ignore-errors
           (dotimes (_ (abs (prefix-numeric-value arg)))
             (call-interactively cmd)
-            (funcall conn-this-command-handler conn-this-command-start)
+            (unless (region-active-p)
+              (funcall conn-this-command-handler conn-this-command-start))
             (move-marker conn-this-command-start (point))
             (let ((reg (cons (region-beginning) (region-end))))
               (if (equal reg (car regions))
@@ -4383,7 +4394,7 @@ Target overlays may override this default by setting the
   "x" 'conn-dispatch-cut
   "g" 'conn-dispatch-goto
   "e" 'conn-dispatch-over
-  "z" 'conn-dispatch-jump
+  "SPC" 'conn-dispatch-jump
   "q" 'conn-dispatch-transpose)
 
 
@@ -5084,8 +5095,15 @@ order to mark the region that should be defined by any of COMMANDS."
        (interactive)
        (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
          (`(,beg . ,end)
-          (goto-char beg)
-          (conn--push-ephemeral-mark end))))
+          (if (region-active-p)
+              (pcase (car (read-multiple-choice
+                           "Mark to end or beginning?"
+                           '((?e "end")
+                             (?b "beginning"))))
+                (?e (goto-char end))
+                (?b (goto-char beg)))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end)))))
      (conn-register-thing-commands ',thing 'ignore ',name)))
 
 (conn-define-mark-command conn-mark-email email)
