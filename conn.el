@@ -6371,106 +6371,6 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
             (conn--push-ephemeral-mark mk))))))
 
 
-;;;;; Case Commands
-
-(defun conn--apply-region-transform (transform-func)
-  "Apply TRANSFORM-FUNC to region contents.
-
-Handles rectangular regions."
-  (save-mark-and-excursion
-    (let ((case-fold-search nil))
-      (if (and (fboundp 'apply-on-rectangle)
-               (bound-and-true-p rectangle-mark-mode))
-          (apply-on-rectangle
-           (lambda (start-col end-col)
-             (with-restriction
-                 (+ (point) start-col) (+ (point) end-col)
-               (goto-char (point-min))
-               (funcall transform-func)))
-           (region-beginning) (region-end))
-        (with-restriction
-            (region-beginning) (region-end)
-          (goto-char (point-min))
-          (funcall transform-func))))))
-
-(defun conn--buffer-to-words ()
-  (let ((subword-p (and (boundp 'subword-mode) subword-mode)))
-    (subword-mode 1)
-    (unwind-protect
-        (save-excursion
-          (goto-char (point-min))
-          (while (re-search-forward "\\W+" nil t)
-            (replace-match " "))
-          (goto-char (point-min))
-          (forward-word 1)
-          (while (/= (point) (point-max))
-            (unless (looking-at " ")
-              (insert " "))
-            (forward-word 1))
-          (goto-char (point-min))
-          (delete-horizontal-space)
-          (goto-char (point-max))
-          (delete-horizontal-space))
-      (unless subword-p (subword-mode -1)))))
-
-(defun conn-kebab-case-region ()
-  "Transform region text to kebab-case."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (downcase-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "-")))))
-
-(defun conn-capital-snake-case-region ()
-  "Transform region text to Capital_Snake_Case."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (capitalize-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "_")))))
-
-(defun conn-snake-case-region ()
-  "Transform region text to snake_case."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (downcase-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "_")))))
-
-(defun conn-capital-case-region ()
-  "Transform region text to CapitalCase."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (capitalize-region (point-min) (point-max))
-     (while (re-search-forward " " nil t)
-       (replace-match "")))))
-
-(defun conn-camel-case-region ()
-  "Transform region text to camelCase."
-  (interactive)
-  (conn--apply-region-transform
-   (lambda ()
-     (conn--buffer-to-words)
-     (capitalize-region (point-min) (point-max))
-     (downcase-region (point-min) (1+ (point-min)))
-     (goto-char (point-min))
-     (while (re-search-forward " " nil t)
-       (replace-match "")))))
-
-(defun conn-case-to-words-region ()
-  "Transform region text to individual words."
-  (interactive)
-  (conn--apply-region-transform 'conn--buffer-to-words))
-
-
 ;;;;; Transpose
 
 (conn-define-state conn-read-transpose-state (conn-read-mover-state))
@@ -8178,7 +8078,6 @@ Operates with the selected windows parent window."
   "n" (conn-remap-key "<conn-edit-map>")
   "=" 'conntext-state
   "Z" 'pop-to-mark-command
-  "P" 'conn-region-case-prefix
   "&" 'conn-other-buffer
   "e" 'conn-insert-state
   "E" 'conn-dispatch-on-buttons

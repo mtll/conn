@@ -1489,23 +1489,6 @@ A zero means repeat until error."
   (require 'sort)
   (transient-setup 'conn-sort-prefix))
 
-
-;;;; Case Prefix
-
-;;;###autoload (autoload 'conn-region-case-prefix "conn-transients" nil t)
-(transient-define-prefix conn-region-case-prefix ()
-  "Transient menu for case in region."
-  [ "Change Case"
-    [ ("k" "kebab-case" conn-kebab-case-region)
-      ("a" "CapitalCase" conn-capital-case-region)
-      ("m" "camelCase" conn-camel-case-region)]
-    [ ("n" "Snake_Case" conn-capital-snake-case-region)
-      ("s" "snake_case" conn-snake-case-region)
-      ("w" "discrete words" conn-case-to-words-region)]
-    [ ("u" "UPCASE" upcase-region)
-      ("c" "Capitalize" capitalize-region)
-      ("d" "downcase" downcase-region)]])
-
 ;;;; Ibuffer
 
 (declare-function ibuffer-format-qualifier "ibuf-ext")
