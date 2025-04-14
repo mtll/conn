@@ -2020,8 +2020,7 @@ are read."
          (thing-sign (when arg (> 0 arg)))
          (mark-flag (region-active-p))
          (mark-indicator
-          (propertize "Mark Active"
-                      'face 'eldoc-highlight-function-argument))
+          (propertize "Mark Active" 'face 'eldoc-highlight-function-argument))
          invalid keys cmd)
     (cl-flet
         ((read-command ()
@@ -2030,13 +2029,13 @@ are read."
                                (format (if thing-arg "%s%s" "[%s1]")
                                        (if thing-sign "-" "")
                                        thing-arg)
+                               (if mark-flag mark-indicator "")
                                (if invalid
                                    (propertize
-                                    (format "%s is not a valid thing command"
+                                    (format " %s is not a valid thing command"
                                             cmd)
                                     'face 'error)
-                                 "")
-                               (if mark-flag mark-indicator "")))
+                                 "")))
                  cmd (key-binding keys t)))
          (completing-read-command ()
            (save-window-excursion
@@ -2069,7 +2068,7 @@ are read."
                                   (concat "; \\[recursive-edit] "
                                           "recursive edit)")
                                 ")")
-                              ": %s %s")))
+                              ": %s%s")))
         (read-command)
         (unwind-protect
             (prog1
@@ -3323,7 +3322,12 @@ of a command.")
   "J" 'conn-forward-inner-line
   "L" 'conn-backward-inner-line
   "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word t)))
-  "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t))))
+  "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t)))
+  "m" 'forward-sexp)
+
+(define-keymap
+  :keymap (conn-get-major-mode-map conn-state-for-read-dispatch 'lisp-data-mode)
+  "," `(forward-sexp ,(lambda () (conn--string-preview-overlays "(" nil t))))
 
 (define-keymap
   :keymap (conn-get-mode-map conn-state-for-read-dispatch 'conn-dot-mode)
