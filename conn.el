@@ -3231,8 +3231,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (cl-deftype conn-action () '(satisfies conn-action-p))
 
-(defvar conn--last-dispatch-command nil)
-
 
 ;;;;; Dispatch read thing
 
@@ -4666,9 +4664,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (dispatch-command nil))
 
 (cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
-  (let ((conn--last-dispatch-command
-         (conn-dispatch-register-dispatch-command val)))
-    (conn-repeat-last-dispatch arg)))
+  (funcall (conn-dispatch-register-dispatch-command val) arg))
 
 (cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
   (princ "Dispatch Register"))
@@ -4685,7 +4681,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn-last-dispatch-to-register (register)
   "Store last dispatch command in REGISTER."
   (interactive (list (register-read-with-preview "Dispatch to register: ")))
-  (set-register register (conn--make-dispatch-register conn--last-dispatch-command)))
+  (set-register register (conn--make-dispatch-register
+                          (symbol-function 'conn-repeat-last-dispatch))))
 
 
 ;;;;; Dispatch Commands
@@ -4738,9 +4735,14 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
-  (setq conn--last-dispatch-command
-        (list thing-cmd thing-arg finder action
-              action-args predicate repeat))
+  (setf (symbol-function 'conn-repeat-last-dispatch)
+        (lambda (invert-repeat)
+          (interactive "P")
+          (cl-letf (((symbol-function 'conn-repeat-last-dispatch)))
+            (conn-dispatch-on-things thing-cmd thing-arg finder
+                                     action action-args
+                                     predicate
+                                     (xor invert-repeat repeat)))))
   (let ((conn-dispatch-window-predicate conn-dispatch-window-predicate))
     (when predicate
       (add-function :after-while conn-dispatch-window-predicate predicate))
@@ -4778,53 +4780,35 @@ seconds."
                                :key #'car :in-place t))
     (cons (cons (caar regions) (cdar (last regions))) regions)))
 
-(defun conn-repeat-last-dispatch (repeat)
+(defun conn-repeat-last-dispatch (_repeat)
   "Repeat the last dispatch command.
 
 Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive "P")
-  (pcase conn--last-dispatch-command
-    (`(,thing-cmd ,thing-arg ,finder ,action ,action-args ,predicate ,rep)
-     ;; If we invert repeat we don't want that reflected in
-     ;; conn--last-dispatch-command so we let bind it around this
-     ;; call.
-     (let (conn--last-dispatch-command)
-       (conn-dispatch-on-things thing-cmd thing-arg
-                                finder
-                                action action-args
-                                predicate
-                                (xor rep repeat))))
-    (_ (user-error "No last dispatch command"))))
+  ;; This is a stub, conn-dispatch-on-things will update the
+  ;; symbol-function value after each call.
+  (user-error "No last dispatch command"))
 
-(defun conn-bind-last-dispatch-to-key (&optional repeat)
+(defun conn-bind-last-dispatch-to-key ()
   "Bind last dispatch command to a key.
 
 Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
-  (pcase conn--last-dispatch-command
-    (`(,thing-cmd ,thing-arg ,finder ,action ,action-args ,predicate ,rep)
-     (let* ((key-seq (read-key-sequence
-                      (format "Bind last dispatch to key in %s: "
-                              conn-current-state)))
-            (binding (key-binding key-seq)))
-       (when (and (not (equal key-seq "\^G"))
-                  (or (not binding)
-                      (eq binding 'undefined)
-                      (stringp binding)
-                      (vectorp binding)
-                      (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
-                                           (format-kbd-macro key-seq)
-                                           binding))))
-         (define-key (conn-get-overriding-map conn-current-state)
-                     key-seq (lambda ()
-                               (interactive)
-                               (conn-dispatch-on-things
-                                thing-cmd thing-arg
-                                finder
-                                action action-args
-                                predicate (xor repeat rep))))
-         (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
-    (_ (error "No last dispatch"))))
+  (let* ((key-seq (read-key-sequence
+                   (format "Bind last dispatch to key in %s: "
+                           conn-current-state)))
+         (binding (key-binding key-seq)))
+    (when (and (not (equal key-seq "\^G"))
+               (or (not binding)
+                   (eq binding 'undefined)
+                   (stringp binding)
+                   (vectorp binding)
+                   (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
+                                        (format-kbd-macro key-seq)
+                                        binding))))
+      (define-key (conn-get-overriding-map conn-current-state)
+                  key-seq (symbol-function 'conn-repeat-last-dispatch))
+      (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
 
 (defun conn-dispatch-on-buttons ()
   "Dispatch on buttons."
