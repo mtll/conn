@@ -3278,12 +3278,16 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 The default may be overridden by setting the :conn-read-dispatch-state
 of a command.")
 
-(conn-define-state conn-dispatch-bounds-state (conn-read-thing-common-state)
+(conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
+  "State for reading a dispatch command."
+  :lighter " DISPATCH")
+
+(conn-define-state conn-read-dispatch-state (conn-dispatch-mover-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-bounds-state)
+  :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   "C-h" 'help
   "M-DEL" 'reset-arg
   "TAB" 'repeat-dispatch
@@ -3294,26 +3298,8 @@ of a command.")
   "i" 'forward-line
   "b" (conn-remap-key "<conn-thing-map>"))
 
-(conn-define-state conn-read-dispatch-state (conn-read-thing-common-state)
-  "State for reading a dispatch command."
-  :lighter " DISPATCH")
-
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-dispatch-state)
-  "C-h" 'help
-  "M-DEL" 'reset-arg
-  "TAB" 'repeat-dispatch
-  "'" 'repeat-dispatch
-  "C-d" 'forward-delete-arg
-  "DEL" 'backward-delete-arg
-  "\\" 'kapply
-  "i" 'forward-line
-  "b" (conn-remap-key "<conn-thing-map>"))
-
-(put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
-
-(define-keymap
-  :keymap (conn-get-overriding-map conn-state-for-read-dispatch)
+  :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
@@ -3326,11 +3312,17 @@ of a command.")
   "m" 'forward-sexp)
 
 (define-keymap
-  :keymap (conn-get-major-mode-map conn-state-for-read-dispatch 'lisp-data-mode)
+  :keymap (conn-get-state-map 'conn-read-dispatch-state)
+  "\\" 'kapply)
+
+(put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "," `(forward-sexp ,(lambda () (conn--string-preview-overlays "(" nil t))))
 
 (define-keymap
-  :keymap (conn-get-mode-map conn-state-for-read-dispatch 'conn-dot-mode)
+  :keymap (conn-get-mode-map 'conn-dispatch-mover-state 'conn-dot-mode)
   "k" `(dot ,(lambda ()
                (mapcar (lambda (ov)
                          (conn--make-target-overlay
@@ -4764,7 +4756,7 @@ seconds."
         (undo-boundary)))))
 
 (defun conn--bounds-of-dispatch (_cmd arg)
-  (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-bounds-state)
+  (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
                (`(,thing-cmd ,thing-arg ,finder ,action ,action-args ,_ ,repeat)
                 (conn--dispatch-read-thing nil arg))
                (regions nil)
