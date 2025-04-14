@@ -23,8 +23,6 @@
 (require 'org)
 (require 'org-element)
 (require 'org-agenda)
-(eval-when-compile
-  (require 'cl-lib))
 
 ;;;###autoload
 (define-minor-mode conntext-org-mode
@@ -39,26 +37,26 @@
                 (save-excursion
                   (pcase (org-element-type node)
                     ('latex-environment
-                      (cons (progn
-                              (goto-char (org-element-begin node))
-                              (re-search-forward "\\\\begin{[^}]*}")
-                              (skip-chars-forward "\n\t ")
-                              (point))
-                            (progn
-                              (goto-char (org-element-end node))
-                              (re-search-backward "\\\\end")
-                              (skip-chars-backward "\n\t ")
-                              (point))))
+                     (cons (progn
+                             (goto-char (org-element-begin node))
+                             (re-search-forward "\\\\begin{[^}]*}")
+                             (skip-chars-forward "\n\t ")
+                             (point))
+                           (progn
+                             (goto-char (org-element-end node))
+                             (re-search-backward "\\\\end")
+                             (skip-chars-backward "\n\t ")
+                             (point))))
                     ('latex-fragment
-                      (cons (progn
-                              (goto-char (org-element-begin node))
-                              (re-search-forward (regexp-opt '("\\(" "\\[")))
-                              (point))
-                            (progn
-                              (goto-char (org-element-end node))
-                              (re-search-backward (regexp-opt '("\\)" "\\]")))
-                              (point))))
-                    (_ (error "no latex at point")))))))
+                     (cons (progn
+                             (goto-char (org-element-begin node))
+                             (re-search-forward (regexp-opt '("\\(" "\\[")))
+                             (point))
+                           (progn
+                             (goto-char (org-element-end node))
+                             (re-search-backward (regexp-opt '("\\)" "\\]")))
+                             (point))))
+                    (_ (error "no math at point")))))))
 
 (conn-define-mark-command conn-mark-org-inner-math org-inner-math)
 
@@ -69,14 +67,14 @@
                 (save-excursion
                   (pcase (org-element-type node)
                     ('latex-environment
-                      (cons (org-element-begin node)
-                            (- (org-element-end node)
-                               (org-element-post-blank node))))
+                     (cons (org-element-begin node)
+                           (- (org-element-end node)
+                              (org-element-post-blank node))))
                     ('latex-fragment
-                      (cons (org-element-begin node)
-                            (- (org-element-end node)
-                               (org-element-post-blank node))))
-                    (_ (error "no latex at point")))))))
+                     (cons (org-element-begin node)
+                           (- (org-element-end node)
+                              (org-element-post-blank node))))
+                    (_ (error "no math at point")))))))
 
 (conn-define-mark-command conn-mark-org-math org-math)
 
