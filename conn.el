@@ -3465,7 +3465,7 @@ of a command.")
                           (when thing-arg
                             (* (if thing-sign -1 1) (or thing-arg 1)))
                           finder action action-args
-                          (conn--action-window-predicate action)
+                          (conn--action-window-predicate action-struct)
                           repeat)))
                  ('keyboard-quit
                   (keyboard-quit))
@@ -3512,7 +3512,7 @@ of a command.")
                             (* (if thing-sign -1 1) (or thing-arg 1)))
                           (conn--dispatch-target-finder cmd)
                           action action-args
-                          (conn--action-window-predicate action)
+                          (conn--action-window-predicate action-struct)
                           repeat)))
                  ((and cmd (pred conn-action-p))
                   (set-action (unless (eq cmd action) cmd)))
