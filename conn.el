@@ -1959,7 +1959,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
   "b" (conn-remap-key "<conn-thing-map>")
-  "e" 'recursive-edit)
+  "r" 'recursive-edit)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
@@ -6108,41 +6108,49 @@ Exiting the recursive edit will resume the isearch."
     (with-isearch-suspended)
     (save-selected-window)))
 
+(defun conn--isearch-in-thing (thing-cmd thing-arg &optional backward)
+  (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
+         (regions (mapcar (pcase-lambda (`(,beg . ,end))
+                            (cons (conn--create-marker beg)
+                                  (conn--create-marker end nil t)))
+                          (or (conn--merge-regions (cdr regions) t)
+                              regions)))
+         (depth (recursion-depth))
+         (in-regions-p (lambda (beg end)
+                         (or (/= depth (recursion-depth))
+                             (cl-loop for (nbeg . nend) in regions
+                                      thereis (<= nbeg beg end nend)))))
+         (thing (upcase (symbol-name (or (get thing-cmd :conn-command-thing)
+                                         thing-cmd))))
+         (prefix (concat "[" thing "] ")))
+    (letrec ((setup (lambda ()
+                      (when (= depth (recursion-depth))
+                        (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
+                                      `((isearch-message-prefix . ,prefix)))
+                        (remove-hook 'isearch-mode-hook setup t))))
+             (cleanup (lambda ()
+                        (if (and (= depth (recursion-depth))
+                                 (not isearch-suspended))
+                            (remove-hook 'isearch-mode-end-hook cleanup t)
+                          (add-hook 'isearch-mode-hook setup nil t))
+                        (remove-function (local 'isearch-filter-predicate)
+                                         in-regions-p))))
+      (add-hook 'isearch-mode-end-hook cleanup nil t))
+    (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
+                  `((isearch-message-prefix . ,prefix)))
+    (if backward
+        (isearch-backward nil t)
+      (isearch-forward nil t))))
+
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg)
   "Isearch forward within the bounds of a thing."
   (interactive (conn-read-thing-mover "Thing" nil t))
-  (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
-         (regions (or (conn--merge-regions (cdr regions) t)
-                      (list regions)))
-         (in-regions-p (lambda (beg end)
-                         (cl-loop for (nbeg . nend) in regions
-                                  thereis (<= nbeg beg end nend))))
-         (thing (upcase (symbol-name (get thing-cmd :conn-command-thing)))))
-    (letrec ((cleanup (lambda ()
-                        (remove-hook 'isearch-mode-end-hook cleanup)
-                        (remove-function isearch-filter-predicate in-regions-p))))
-      (add-hook 'isearch-mode-end-hook cleanup))
-    (add-function :after-while isearch-filter-predicate in-regions-p
-                  `((isearch-message-prefix . ,(concat "[" thing "] "))))
-    (isearch-forward nil t)))
+  (conn--isearch-in-thing thing-cmd thing-arg))
 
 (defun conn-isearch-backward-in-thing (thing-cmd thing-arg)
   "Isearch backward within the bounds of a thing."
   (interactive (conn-read-thing-mover "Thing" nil t))
-  (let* ((regions (conn-bounds-of-command thing-cmd thing-arg))
-         (regions (or (conn--merge-regions (cdr regions) t)
-                      (list regions)))
-         (in-regions-p (lambda (beg end)
-                         (cl-loop for (nbeg . nend) in regions
-                                  thereis (<= nbeg beg end nend))))
-         (thing (upcase (symbol-name (get thing-cmd :conn-command-thing)))))
-    (letrec ((cleanup (lambda ()
-                        (remove-hook 'isearch-mode-end-hook cleanup)
-                        (remove-function isearch-filter-predicate in-regions-p))))
-      (add-hook 'isearch-mode-end-hook cleanup))
-    (add-function :after-while isearch-filter-predicate in-regions-p
-                  `((isearch-message-prefix . ,(concat "[" thing "] "))))
-    (isearch-backward nil t)))
+  (conn--isearch-in-thing thing-cmd thing-arg t))
 
 (defun conn-multi-isearch-project ()
   "Perform a `multi-isearch' within the files of a project."
@@ -6159,11 +6167,13 @@ Exiting the recursive edit will resume the isearch."
 Interactively `region-beginning' and `region-end'."
   (interactive (list (region-beginning)
                      (region-end)))
-  (isearch-mode t)
-  (with-isearch-suspended
-   (setq isearch-new-string (buffer-substring-no-properties beg end)
-         isearch-new-message (mapconcat #'isearch-text-char-description
-                                        isearch-new-string ""))))
+  (pcase-let ((string (buffer-substring-no-properties beg end))
+              (`(,cmd . ,arg) (conn-read-thing-mover "Thing" nil t)))
+    (conn--isearch-in-thing cmd arg)
+    (with-isearch-suspended
+     (setq isearch-new-string string
+           isearch-new-message (mapconcat #'isearch-text-char-description
+                                          isearch-new-string "")))))
 
 (defun conn-isearch-region-backward (beg end)
   "Isearch backward for region from BEG to END.
@@ -6171,11 +6181,13 @@ Interactively `region-beginning' and `region-end'."
 Interactively `region-beginning' and `region-end'."
   (interactive (list (region-beginning)
                      (region-end)))
-  (isearch-mode nil)
-  (with-isearch-suspended
-   (setq isearch-new-string (buffer-substring-no-properties beg end)
-         isearch-new-message (mapconcat #'isearch-text-char-description
-                                        isearch-new-string ""))))
+  (pcase-let ((string (buffer-substring-no-properties beg end))
+              (`(,cmd . ,arg) (conn-read-thing-mover "Thing" nil t)))
+    (conn--isearch-in-thing cmd arg t)
+    (with-isearch-suspended
+     (setq isearch-new-string string
+           isearch-new-message (mapconcat #'isearch-text-char-description
+                                          isearch-new-string "")))))
 
 (defun conn-isearch-exit-and-mark ()
   "`isearch-exit' and set region to match."
@@ -8010,7 +8022,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
   "b" (conn-remap-key "<conn-thing-map>")
-  "a" 'beginning-of-buffer)
+  "e" 'end-of-buffer)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
