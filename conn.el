@@ -502,7 +502,10 @@ the original binding.  Also see `conn-remap-key'."
        (cl-loop for pt = (next-single-char-property-change
                           beg 'invisible nil end)
                 while (and pt (< pt end))
-                never (invisible-p pt))))
+                never (invisible-p pt))
+       (not (get-text-property beg 'composition))
+       (= (1+ end) (next-single-char-property-change
+                    beg 'composition nil (1+ end)))))
 
 (defun conn--nnearest-first (list &optional buffer)
   "Move the region nearest point in LIST to the front.
@@ -3642,6 +3645,8 @@ Target overlays may override this default by setting the
                        `(invisible ,(get-char-property pt 'invisible))
                        str)
                       (overlay-put overlay 'after-string str))))
+                (when (get-text-property pt 'composition)
+                  (setq end pt))
                 (pcase-let ((`(,w . ,h) (window-text-pixel-size
                                          (overlay-get overlay 'window)
                                          beg pt)))
@@ -6123,18 +6128,20 @@ Exiting the recursive edit will resume the isearch."
          (thing (upcase (symbol-name (or (get thing-cmd :conn-command-thing)
                                          thing-cmd))))
          (prefix (concat "[" thing "] ")))
-    (letrec ((setup (lambda ()
-                      (when (= depth (recursion-depth))
-                        (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
-                                      `((isearch-message-prefix . ,prefix)))
-                        (remove-hook 'isearch-mode-hook setup t))))
-             (cleanup (lambda ()
-                        (if (and (= depth (recursion-depth))
-                                 (not isearch-suspended))
-                            (remove-hook 'isearch-mode-end-hook cleanup t)
-                          (add-hook 'isearch-mode-hook setup nil t))
-                        (remove-function (local 'isearch-filter-predicate)
-                                         in-regions-p))))
+    (letrec ((setup
+              (lambda ()
+                (when (= depth (recursion-depth))
+                  (add-function :after-while (local 'isearch-filter-predicate)
+                                in-regions-p `((isearch-message-prefix . ,prefix)))
+                  (remove-hook 'isearch-mode-hook setup t))))
+             (cleanup
+              (lambda ()
+                (if (and (= depth (recursion-depth))
+                         (not isearch-suspended))
+                    (remove-hook 'isearch-mode-end-hook cleanup t)
+                  (add-hook 'isearch-mode-hook setup nil t))
+                (remove-function (local 'isearch-filter-predicate)
+                                 in-regions-p))))
       (add-hook 'isearch-mode-end-hook cleanup nil t))
     (add-function :after-while (local 'isearch-filter-predicate) in-regions-p
                   `((isearch-message-prefix . ,prefix)))
