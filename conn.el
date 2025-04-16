@@ -3191,7 +3191,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
-    (setf (alist-get (recursion-depth) conn--last-bounds-of-command) nil)
+    (setf conn--last-bounds-of-command
+          (delq conn--last-bounds-of-command
+                (assq (recursion-depth) conn--last-bounds-of-command)))
     (when (and conn-local-mode
                (eq (current-buffer) (marker-buffer conn-this-command-start)))
       (when (and conn-this-command-handler
@@ -4874,10 +4876,6 @@ potential expansions.  Functions may return invalid expansions
   "j" 'conn-contract
   "h" 'conn-expand)
 
-(defun conn--expand-post-change-hook (&rest _)
-  (setq conn--current-expansions nil)
-  (remove-hook 'after-change-functions 'conn--expand-post-change-hook t))
-
 (defun conn--expand-filter-regions (regions)
   (let (result)
     (pcase-dolist ((and reg `(,beg . ,end)) regions)
@@ -4889,7 +4887,10 @@ potential expansions.  Functions may return invalid expansions
     result))
 
 (defun conn--expand-create-expansions ()
-  (add-hook 'after-change-functions 'conn--expand-post-change-hook nil t)
+  (letrec ((hook (lambda (&rest _)
+                   (setq conn--current-expansions nil)
+                   (remove-hook 'after-change-functions hook t))))
+    (add-hook 'after-change-functions hook nil t))
   (thread-last
     (mapcan #'funcall conn-expansion-functions)
     (cons (cons (region-beginning) (region-end)))
@@ -6115,13 +6116,14 @@ Exiting the recursive edit will resume the isearch."
                       (list regions)))
          (in-regions-p (lambda (beg end)
                          (cl-loop for (nbeg . nend) in regions
-                                  thereis (<= nbeg beg end nend)))))
+                                  thereis (<= nbeg beg end nend))))
+         (thing (upcase (symbol-name (get thing-cmd :conn-command-thing)))))
     (letrec ((cleanup (lambda ()
                         (remove-hook 'isearch-mode-end-hook cleanup)
                         (remove-function isearch-filter-predicate in-regions-p))))
       (add-hook 'isearch-mode-end-hook cleanup))
     (add-function :after-while isearch-filter-predicate in-regions-p
-                  '((isearch-message-prefix . "[THING] ")))
+                  `((isearch-message-prefix . ,(concat "[" thing "] "))))
     (isearch-forward nil t)))
 
 (defun conn-isearch-backward-in-thing (thing-cmd thing-arg)
@@ -6132,13 +6134,14 @@ Exiting the recursive edit will resume the isearch."
                       (list regions)))
          (in-regions-p (lambda (beg end)
                          (cl-loop for (nbeg . nend) in regions
-                                  thereis (<= nbeg beg end nend)))))
+                                  thereis (<= nbeg beg end nend))))
+         (thing (upcase (symbol-name (get thing-cmd :conn-command-thing)))))
     (letrec ((cleanup (lambda ()
                         (remove-hook 'isearch-mode-end-hook cleanup)
                         (remove-function isearch-filter-predicate in-regions-p))))
       (add-hook 'isearch-mode-end-hook cleanup))
     (add-function :after-while isearch-filter-predicate in-regions-p
-                  '((isearch-message-prefix . "[THING] ")))
+                  `((isearch-message-prefix . ,(concat "[" thing "] "))))
     (isearch-backward nil t)))
 
 (defun conn-multi-isearch-project ()
