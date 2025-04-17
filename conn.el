@@ -3607,30 +3607,30 @@ Target overlays may override this default by setting the
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
 
-(defun conn--right-justify-padding (overlay width height)
+(defun conn--right-justify-padding (overlay width)
   (overlay-put overlay 'after-string
                (propertize
                 "a" ;; A letter wont cause word-wrap to wrap at the padding
-                'display `(space :width (,width) :height (,height)))))
+                'display `(space :width (,width)))))
 
-(defun conn--left-justify-padding (overlay width height)
+(defun conn--left-justify-padding (overlay width)
   (overlay-put overlay 'before-string
                (propertize
                 "a"
-                'display `(space :width (,width) :height (,height)))))
+                'display `(space :width (,width)))))
 
-(defun conn--centered-padding (overlay width height)
+(defun conn--centered-padding (overlay width)
   (let* ((left (min 15 (floor width 2)))
          (right (max (- width 15) (ceiling width 2))))
     (overlay-put overlay 'before-string
                  (propertize
                   "a" ;; A letter wont cause word-wrap to wrap at the padding
-                  'display `(space :width (,left) :height (,height))
+                  'display `(space :width (,left))
                   'face 'conn-dispatch-label-face))
     (overlay-put overlay 'after-string
                  (propertize
                   "a" ;; A letter wont cause word-wrap to wrap at the padding
-                  'display `(space :width (,right) :height (,height))
+                  'display `(space :width (,right))
                   'face 'conn-dispatch-label-face))))
 
 (defun conn--dispatch-setup-label-pixelwise (overlay label-string &optional padding-function)
@@ -3638,7 +3638,6 @@ Target overlays may override this default by setting the
                                                  (window-buffer
                                                   (overlay-get overlay 'window))))
         (padding-width 0)
-        (height nil)
         ;; display-line-numbers, line-prefix and wrap-prefix break
         ;; width calculations, temporarily disable them.
         (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
@@ -3669,13 +3668,13 @@ Target overlays may override this default by setting the
                       (overlay-put overlay 'after-string str))))
                  ((get-text-property pt 'composition)
                   (setq end pt))
-                 ((pcase-let ((`(,w . ,h) (window-text-pixel-size
-                                           (overlay-get overlay 'window)
-                                           beg pt)))
+                 ((pcase-let ((`(,width . ,_)
+                               (window-text-pixel-size
+                                (overlay-get overlay 'window)
+                                beg pt)))
                     (when (or (= pt (point-max))
-                              (>= w display-width))
-                      (setq padding-width (max (- w display-width) 0)
-                            height h
+                              (>= width display-width))
+                      (setq padding-width (max (- width display-width) 0)
                             end pt))))
                  ((dolist (ov (overlays-in pt (1+ pt)) end)
                     (when (and (eq 'conn-read-string-match
@@ -3694,18 +3693,9 @@ Target overlays may override this default by setting the
             (overlay-put overlay 'display label-string))
            (t
             (overlay-put overlay 'display label-string)
-            (pcase-let* ((`(,_ . ,display-height)
-                          (window-text-pixel-size
-                           (overlay-get overlay 'window)
-                           (overlay-start overlay)
-                           (overlay-end overlay))))
-              (if padding-function
-                  (funcall padding-function overlay padding-width
-                           (when (and height (/= height display-height))
-                             (1- height)))
-                (funcall conn-default-label-padding-function overlay padding-width
-                         (when (and height (/= height display-height))
-                           (1- height))))))))
+            (if padding-function
+                (funcall padding-function overlay padding-width)
+              (funcall conn-default-label-padding-function overlay padding-width)))))
       (setq-local display-line-numbers linum
                   line-prefix line-pfx
                   wrap-prefix wrap-pfx))))
