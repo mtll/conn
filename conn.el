@@ -2009,13 +2009,15 @@ multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
   (prog1
-      (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
-            (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                         (when (symbolp cmd)
-                           (alist-get (get cmd :conn-command-thing)
-                                      conn-bounds-of-command-alist))
-                         conn-bounds-of-command-default)
-                     cmd arg))
+      (if-let ((forward (get cmd 'forward-op)))
+          (conn-bounds-of-command forward arg)
+        (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
+              (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                           (when (symbolp cmd)
+                             (alist-get (get cmd :conn-command-thing)
+                                        conn-bounds-of-command-alist))
+                           conn-bounds-of-command-default)
+                       cmd arg)))
     (deactivate-mark t)))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
@@ -3589,7 +3591,11 @@ Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
 (defvar conn-pixelwise-labels-predicate
-  (lambda (win) (eq (selected-frame) (window-frame win))))
+  (lambda (win)
+    (and (eq (selected-frame) (window-frame win))
+         ;; TODO: come up with a sensible long line test
+         ;; (>= (cadr (buffer-line-statistics (window-buffer win))) 1000)
+         )))
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
@@ -3711,7 +3717,8 @@ Target overlays may override this default by setting the
            (end nil)
            (line-end (save-excursion
                        (goto-char beg)
-                       (line-end-position)))
+                       (end-of-visual-line)
+                       (point)))
            (pt beg))
       (while (not end)
         (when (= line-end pt)
@@ -3751,10 +3758,9 @@ Target overlays may override this default by setting the
     (pcase-dolist (`(,window . ,previews) target-overlays)
       (with-current-buffer (window-buffer window)
         (dolist (p previews)
-          (conn--protected-let
-              ((string (pop label-strings))
-               (beg (overlay-end p))
-               (ov (make-overlay beg beg) (delete-overlay ov)))
+          (conn--protected-let ((string (pop label-strings))
+                                (beg (overlay-end p))
+                                (ov (make-overlay beg beg) (delete-overlay ov)))
             (overlay-put ov 'category 'conn-label-overlay)
             (overlay-put ov 'window window)
             (overlay-put ov 'target-overlay p)
