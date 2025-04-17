@@ -502,10 +502,7 @@ the original binding.  Also see `conn-remap-key'."
        (cl-loop for pt = (next-single-char-property-change
                           beg 'invisible nil end)
                 while (and pt (< pt end))
-                never (invisible-p pt))
-       (not (get-text-property beg 'composition))
-       (= end (next-single-char-property-change
-               beg 'composition nil end))))
+                never (invisible-p pt))))
 
 (defun conn--nnearest-first (list &optional buffer)
   "Move the region nearest point in LIST to the front.
@@ -1795,10 +1792,20 @@ themselves once the selection process has concluded."
 
 Optionally the overlay may have an associated THING."
   (conn--protected-let
-      ((eol (save-excursion
-              (goto-char pt)
-              (line-end-position)))
-       (ov (make-overlay pt (min (+ pt length) eol) nil t)
+      ((bounds (save-excursion
+                 (goto-char pt)
+                 (cons (line-beginning-position)
+                       (line-end-position))))
+       (compp (get-text-property pt 'composition))
+       (ov (make-overlay (if compp
+                             (previous-single-property-change
+                              pt 'composition nil (car bounds))
+                           pt)
+                         (if compp
+                             (next-single-property-change
+                              pt 'composition nil (cdr bounds))
+                           (min (+ pt length) (cdr bounds)))
+                         nil t)
            (delete-overlay ov)))
     (overlay-put ov 'conn-overlay t)
     (overlay-put ov 'thing thing)
