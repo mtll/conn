@@ -504,8 +504,8 @@ the original binding.  Also see `conn-remap-key'."
                 while (and pt (< pt end))
                 never (invisible-p pt))
        (not (get-text-property beg 'composition))
-       (= (1+ end) (next-single-char-property-change
-                    beg 'composition nil (1+ end)))))
+       (= end (next-single-char-property-change
+               beg 'composition nil end))))
 
 (defun conn--nnearest-first (list &optional buffer)
   "Move the region nearest point in LIST to the front.
@@ -1749,21 +1749,28 @@ for the label to process and `conn-label-reset' is called when the user
 has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
-  (let ((current candidates)
-        (prompt "char:"))
+  (let* ((current candidates)
+         (len (number-to-string (length candidates)))
+         (init-prompt (propertize
+                       (concat "[" len "] char: ")
+                       'face 'minibuffer-prompt))
+         (no-matches (propertize
+                      (concat "[" len "] char: (no matches)")
+                      'face 'minibuffer-prompt))
+         (prompt init-prompt))
     (cl-loop
      (pcase current
        ('nil
         (setq current candidates
-              prompt "char: (no matches)")
+              prompt no-matches)
         (mapc #'conn-label-reset current))
        (`(,it . nil)
-        (cl-return (conn-label-payload it)))
-       (_
-        (setq prompt "char:")))
-     (setq current (let ((next nil)
-                         (c (conn-dispatch-read-event prompt)))
-                     (dolist (label current next)
+        (cl-return (conn-label-payload it))))
+     (let ((next nil)
+           (c (conn-dispatch-read-event prompt)))
+       (setq prompt (concat (if (eq no-matches prompt) init-prompt prompt)
+                            (string c))
+             current (dolist (label current next)
                        (when-let* ((l (conn-label-narrow label c)))
                          (push l next))))))))
 
@@ -3590,13 +3597,13 @@ Target overlays may override this default by setting the
 (defun conn--right-justify-padding (overlay width height)
   (overlay-put overlay 'after-string
                (propertize
-                " "
+                "a" ;; A letter wont cause word-wrap to wrap at the padding
                 'display `(space :width (,width) :height (,height)))))
 
 (defun conn--left-justify-padding (overlay width height)
   (overlay-put overlay 'before-string
                (propertize
-                " "
+                "a"
                 'display `(space :width (,width) :height (,height)))))
 
 (defun conn--centered-padding (overlay width height)
@@ -3604,12 +3611,12 @@ Target overlays may override this default by setting the
          (right (max (- width 15) (ceiling width 2))))
     (overlay-put overlay 'before-string
                  (propertize
-                  " "
+                  "a" ;; A letter wont cause word-wrap to wrap at the padding
                   'display `(space :width (,left) :height (,height))
                   'face 'conn-dispatch-label-face))
     (overlay-put overlay 'after-string
                  (propertize
-                  " "
+                  "a" ;; A letter wont cause word-wrap to wrap at the padding
                   'display `(space :width (,right) :height (,height))
                   'face 'conn-dispatch-label-face))))
 
@@ -3631,11 +3638,13 @@ Target overlays may override this default by setting the
                    (beg (overlay-start overlay))
                    (line-end (save-excursion
                                (goto-char beg)
-                               (line-end-position)))
+                               (end-of-visual-line)
+                               (point)))
                    (end nil)
                    (pt beg))
               (while (not end)
-                (when (= line-end pt)
+                (cond
+                 ((= line-end pt)
                   (if (not (invisible-p (1+ pt)))
                       (setq end pt)
                     (setq end (1+ pt))
@@ -3645,25 +3654,25 @@ Target overlays may override this default by setting the
                        `(invisible ,(get-char-property pt 'invisible))
                        str)
                       (overlay-put overlay 'after-string str))))
-                (when (get-text-property pt 'composition)
+                 ((get-text-property pt 'composition)
                   (setq end pt))
-                (pcase-let ((`(,w . ,h) (window-text-pixel-size
-                                         (overlay-get overlay 'window)
-                                         beg pt)))
-                  (when (or (= pt (point-max))
-                            (>= w display-width))
-                    (setq padding-width (max (- w display-width) 0)
-                          height h
-                          end pt)))
-                (dolist (ov (overlays-in pt (1+ pt)))
-                  (when (and (eq 'conn-read-string-match
-                                 (overlay-get ov 'category))
-                             (or (/= (overlay-start target)
-                                     (overlay-start ov))
-                                 (/= (overlay-end target)
-                                     (overlay-end ov))))
-                    (setq end pt)))
-                (cl-incf pt))
+                 ((pcase-let ((`(,w . ,h) (window-text-pixel-size
+                                           (overlay-get overlay 'window)
+                                           beg pt)))
+                    (when (or (= pt (point-max))
+                              (>= w display-width))
+                      (setq padding-width (max (- w display-width) 0)
+                            height h
+                            end pt))))
+                 ((dolist (ov (overlays-in pt (1+ pt)) end)
+                    (when (and (eq 'conn-read-string-match
+                                   (overlay-get ov 'category))
+                               (or (/= (overlay-start target)
+                                       (overlay-start ov))
+                                   (/= (overlay-end target)
+                                       (overlay-end ov))))
+                      (setq end pt))))
+                 (t (cl-incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
           (cond
            ((= (overlay-start overlay) (overlay-end overlay))
