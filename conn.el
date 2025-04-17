@@ -3762,8 +3762,9 @@ Target overlays may override this default by setting the
        ;; Don't even if we are too far into a long line,
        ;; window-text-pixel-width becomes far too slow
        (let ((beg (overlay-start overlay)))
-         (goto-char beg)
-         (< (- beg (pos-bol)) conn-dispatch-pixelwise-labels-line-limit))
+         (save-excursion
+           (goto-char beg)
+           (< (- beg (pos-bol)) conn-dispatch-pixelwise-labels-line-limit)))
        (funcall conn-pixelwise-labels-predicate (overlay-get overlay 'window)))
       (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
     (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
