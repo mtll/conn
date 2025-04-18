@@ -3598,11 +3598,7 @@ Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
 (defvar conn-pixelwise-labels-predicate
-  (lambda (win)
-    (and (eq (selected-frame) (window-frame win))
-         ;; TODO: come up with a sensible long line test
-         ;; (>= (cadr (buffer-line-statistics (window-buffer win))) 1000)
-         )))
+  (lambda (win) (eq (selected-frame) (window-frame win))))
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
@@ -3666,8 +3662,6 @@ Target overlays may override this default by setting the
                        `(invisible ,(get-char-property pt 'invisible))
                        str)
                       (overlay-put overlay 'after-string str))))
-                 ((get-text-property pt 'composition)
-                  (setq end pt))
                  ((pcase-let ((`(,width . ,_)
                                (window-text-pixel-size
                                 (overlay-get overlay 'window)
@@ -3676,6 +3670,8 @@ Target overlays may override this default by setting the
                               (>= width display-width))
                       (setq padding-width (max (- width display-width) 0)
                             end pt))))
+                 ((get-text-property pt 'composition)
+                  (setq end pt))
                  ((dolist (ov (overlays-in pt (1+ pt)) end)
                     (when (and (eq 'conn-read-string-match
                                    (overlay-get ov 'category))
