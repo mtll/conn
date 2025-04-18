@@ -2343,16 +2343,6 @@ BOUNDS is of the form returned by `region-bounds'."
 
 ;;;;;; Dot mode
 
-(defun conn--dot-mode-command-hook ()
-  (when (overlay-buffer mouse-secondary-overlay)
-    (with-current-buffer (overlay-buffer mouse-secondary-overlay)
-      (let* ((beg (overlay-start mouse-secondary-overlay))
-             (end (overlay-end mouse-secondary-overlay))
-             (ov (make-overlay beg (if (= beg end) (1+ beg) end))))
-        (overlay-put ov 'category 'conn--dot-overlay)
-        (push ov conn--dots)
-        (delete-overlay mouse-secondary-overlay)))))
-
 (defvar-keymap conn-dot-mode-map
   "C-w" 'conn-region-to-dot
   "C-d" 'conn-point-to-dot
@@ -2374,12 +2364,9 @@ BOUNDS is of the form returned by `region-bounds'."
   (if conn-dot-mode
       (progn
         (internal-push-keymap conn-dot-mode-map 'overriding-terminal-local-map)
-        (delete-overlay mouse-secondary-overlay)
         (setq conn--dots nil
-              buffer-read-only t)
-        (add-hook 'post-command-hook 'conn--dot-mode-command-hook))
+              buffer-read-only t))
     (internal-pop-keymap conn-dot-mode-map 'overriding-terminal-local-map)
-    (remove-hook 'post-command-hook 'conn--dot-mode-command-hook)
     (mapc #'delete-overlay conn--dots)
     (setq conn--dots nil
           buffer-read-only nil)))
@@ -2392,9 +2379,10 @@ BOUNDS is of the form returned by `region-bounds'."
                (cl-loop for dot in (progn (recursive-edit) conn--dots)
                         when (overlay-buffer dot)
                         collect (if (overlay-get dot 'point)
-                                    (cons (conn--overlay-start-marker dot)
-                                          (conn--overlay-start-marker dot))
-                                  (conn--overlay-bounds-markers dot)))))
+                                    (cons (overlay-start dot)
+                                          (overlay-start dot))
+                                  (cons (overlay-start dot)
+                                        (overlay-end dot))))))
           (if dots
               (cl-loop for (b . e) in dots
                        minimize b into beg
