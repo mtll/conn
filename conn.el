@@ -260,12 +260,12 @@ of the form (SYMBOL VALUEFORM CLEANUP-FORM), which binds SYMBOL to
 VALUEFORM and if BODY exits non-locally runs CLEANUP-FORM."
   (declare (indent 1))
   (cl-with-gensyms (success)
-    `(let* ((,success nil)
-            ,@(mapcar (lambda (form)
-                        (if (consp form)
-                            (take 2 form)
-                          form))
-                      varlist))
+    `(pcase-let* ((,success nil)
+                  ,@(mapcar (lambda (form)
+                              (if (consp form)
+                                  (take 2 form)
+                                form))
+                            varlist))
        (unwind-protect
            (prog1
                ,(macroexp-progn body)
@@ -1792,21 +1792,22 @@ themselves once the selection process has concluded."
 
 Optionally the overlay may have an associated THING."
   (conn--protected-let
-      ((bounds (save-excursion
-                 (goto-char pt)
-                 (cons (line-beginning-position)
-                       (line-end-position))))
-       (compp (and (> length 0)
-                   (get-text-property pt 'composition)))
-       (ov (make-overlay (if compp
-                             (previous-single-property-change
-                              pt 'composition nil (car bounds))
-                           pt)
-                         (if compp
-                             (next-single-property-change
-                              pt 'composition nil (cdr bounds))
-                           (min (+ pt length) (cdr bounds)))
-                         nil t)
+      ((`(,bol . ,eol)
+        (save-excursion
+          (goto-char pt)
+          (cons (pos-bol) (pos-eol))))
+       (composition-end
+        (when (and (> length 0)
+                   (get-text-property pt 'composition))
+          (next-single-property-change
+           pt 'composition nil eol)))
+       (composition-start
+        (when composition-end
+          (previous-single-property-change
+           composition-end 'composition nil bol)))
+       (ov (if composition-start
+               (make-overlay composition-start composition-end nil t)
+             (make-overlay pt (min (+ pt length) eol) nil t))
            (delete-overlay ov)))
     (overlay-put ov 'conn-overlay t)
     (overlay-put ov 'thing thing)
