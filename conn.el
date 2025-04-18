@@ -3619,14 +3619,9 @@ Target overlays may override this default by setting the
 (defvar conn-dispatch-pixelwise-labels-line-limit 400
   "Maximum position in a line for pixelwise labeling.")
 
-(defvar conn-dispatch-pixelwise-labels-window-char-limit 100000
-  "Maximum position in a line for pixelwise labeling.")
-
 (defun conn--pixelwise-labels-window-p (win targets)
   (and (eq (selected-frame) (window-frame win))
-       (length< targets conn-pixelwise-label-target-limit)
-       (< (- (window-end) (window-start win))
-          conn-dispatch-pixelwise-labels-window-char-limit)))
+       (length< targets conn-pixelwise-label-target-limit)))
 
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
@@ -3684,8 +3679,10 @@ Target overlays may override this default by setting the
                    (beg (overlay-start overlay))
                    (line-end (save-excursion
                                (goto-char beg)
-                               (end-of-visual-line)
-                               (point)))
+                               (min (pos-eol)
+                                    (save-excursion
+                                      (end-of-visual-line)
+                                      (point)))))
                    (end nil)
                    (pt beg))
               ;; Find the end of the label overlay.  Barring
