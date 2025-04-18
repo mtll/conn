@@ -2017,7 +2017,7 @@ multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
   (prog1
-      (if-let ((forward (get cmd 'forward-op)))
+      (if-let* ((forward (get cmd 'forward-op)))
           (conn-bounds-of-command forward arg)
         (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
               (funcall (or (alist-get cmd conn-bounds-of-command-alist)
@@ -3716,7 +3716,8 @@ Target overlays may override this default by setting the
                        (point)))
            (pt beg))
       (while (not end)
-        (when (= line-end pt)
+        (cond
+         ((= line-end pt)
           (if (not (invisible-p (1+ pt)))
               (setq end pt)
             (setq end (1+ pt))
@@ -3726,18 +3727,18 @@ Target overlays may override this default by setting the
                `(invisible ,(get-char-property pt 'invisible))
                str)
               (overlay-put overlay 'after-string str))))
-        (when (or (= pt (point-max))
-                  (= (- pt beg) (length label-string)))
+         ((or (= pt (point-max))
+              (= (- pt beg) (length label-string)))
           (setq end pt))
-        (dolist (ov (overlays-in pt (1+ pt)))
-          (when (and (eq 'conn-read-string-match
-                         (overlay-get ov 'category))
-                     (or (/= (overlay-start target)
-                             (overlay-start ov))
-                         (/= (overlay-end target)
-                             (overlay-end ov))))
-            (setq end pt)))
-        (cl-incf pt))
+         ((dolist (ov (overlays-in pt (1+ pt)) end)
+            (when (and (eq 'conn-read-string-match
+                           (overlay-get ov 'category))
+                       (or (/= (overlay-start target)
+                               (overlay-start ov))
+                           (/= (overlay-end target)
+                               (overlay-end ov))))
+              (setq end pt))))
+         (t (cl-incf pt))))
       (move-overlay overlay (overlay-start overlay) end)))
   (if (= (overlay-start overlay) (overlay-end overlay))
       (overlay-put overlay 'before-string label-string)
@@ -3855,7 +3856,7 @@ Target overlays may override this default by setting the
   :description "Yank Replace To"
   :interactive (lambda () (list (funcall region-extract-function nil)))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3873,7 +3874,7 @@ Target overlays may override this default by setting the
   :interactive (lambda ()
                  (list (read-from-kill-ring "Yank Replace To from kill-ring: ")))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3890,7 +3891,7 @@ Target overlays may override this default by setting the
   :description "Yank To"
   :interactive (lambda () (list (funcall region-extract-function nil)))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3903,7 +3904,7 @@ Target overlays may override this default by setting the
   :description "Yank To"
   :interactive (lambda () (list (read-from-kill-ring "Yank To from kill-ring: ")))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3916,7 +3917,7 @@ Target overlays may override this default by setting the
   :description "Throw"
   :interactive (lambda () (list (funcall region-extract-function t)))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -3945,7 +3946,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-downcase (window pt thing-cmd thing-arg)
   :description "Downcase"
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-mark-and-excursion
       (goto-char pt)
@@ -3956,7 +3957,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-upcase (window pt thing-cmd thing-arg)
   :description "Upcase"
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-mark-and-excursion
       (goto-char pt)
@@ -3967,7 +3968,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-capitalize (window pt thing-cmd thing-arg)
   :description "Capitalize"
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-mark-and-excursion
       (goto-char pt)
@@ -3988,7 +3989,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-comment (window pt thing-cmd thing-arg)
   :description "Comment"
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4001,7 +4002,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-duplicate (window pt thing-cmd thing-arg arg)
   :description "Duplicate"
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :interactive (lambda () (list (prefix-numeric-value current-prefix-arg)))
   (with-selected-window window
     (save-excursion
@@ -4015,7 +4016,7 @@ Target overlays may override this default by setting the
 (conn-define-dispatch-action conn-dispatch-duplicate-and-comment (window pt thing-cmd thing-arg arg)
   :description "Duplicate and Comment"
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :interactive (lambda () (list (prefix-numeric-value current-prefix-arg)))
   (with-selected-window window
     (save-excursion
@@ -4058,7 +4059,7 @@ Target overlays may override this default by setting the
                      (format "Kill to Register <%c>" register)
                    "Kill"))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :interactive (lambda ()
                  (list (when current-prefix-arg
                          (register-read-with-preview "Register: "))))
@@ -4080,7 +4081,7 @@ Target overlays may override this default by setting the
                      (format "Kill Append Register <%c>" register)
                    "Kill Append"))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :interactive (lambda ()
                  (when current-prefix-arg
                    (list (register-read-with-preview "Register: "))))
@@ -4104,7 +4105,7 @@ Target overlays may override this default by setting the
                      (format "Kill Prepend Register <%c>" register)
                    "Kill Prepend"))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :interactive (lambda ()
                  (when current-prefix-arg
                    (list (register-read-with-preview "Register: "))))
@@ -4203,7 +4204,7 @@ Target overlays may override this default by setting the
   :description "Cut Replace"
   :filter (lambda () (unless buffer-read-only 'this))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4235,7 +4236,7 @@ Target overlays may override this default by setting the
   :description "Cut"
   :filter (lambda () (unless buffer-read-only 'this))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4315,7 +4316,7 @@ Target overlays may override this default by setting the
   :description "Transpose"
   :filter (lambda () (unless buffer-read-only 'this))
   :window-predicate (lambda (win)
-                      (buffer-local-value 'buffer-read-only (window-buffer win)))
+                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (if (eq (current-buffer) (window-buffer window))
       (pcase (if (region-active-p)
                  (cons (region-beginning) (region-end))
