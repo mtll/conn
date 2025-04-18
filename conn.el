@@ -1796,7 +1796,8 @@ Optionally the overlay may have an associated THING."
                  (goto-char pt)
                  (cons (line-beginning-position)
                        (line-end-position))))
-       (compp (get-text-property pt 'composition))
+       (compp (and (> length 0)
+                   (get-text-property pt 'composition)))
        (ov (make-overlay (if compp
                              (previous-single-property-change
                               pt 'composition nil (car bounds))
@@ -3671,7 +3672,8 @@ Target overlays may override this default by setting the
                       (setq padding-width (max (- width display-width) 0)
                             end pt))))
                  ((get-text-property pt 'composition)
-                  (setq end pt))
+                  (setq pt (next-single-property-change
+                            pt 'composition nil line-end)))
                  ((dolist (ov (overlays-in pt (1+ pt)) end)
                     (when (and (eq 'conn-read-string-match
                                    (overlay-get ov 'category))
@@ -3745,7 +3747,7 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
   (if (and
-       ;; Don't even if we are too far into a long line,
+       ;; Don't even try if we are too far into a long line,
        ;; window-text-pixel-width becomes far too slow
        (let ((beg (overlay-start overlay)))
          (save-excursion
@@ -8507,10 +8509,10 @@ Operates with the selected windows parent window."
 
   (define-keymap
     :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
-    "TAB" (conntext-define conntext-outline-map
-            "Context outline map."
-            (when (and (looking-at-p outline-regexp) (bolp))
-              conntext-outline-map)))
+    "b" (conntext-define conntext-outline-map
+          "Context outline map."
+          (when (and (looking-at-p outline-regexp) (bolp))
+            conntext-outline-map)))
 
   (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80))
 
