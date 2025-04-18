@@ -3610,13 +3610,13 @@ Target overlays may override this default by setting the
 
 (defvar conn--window-pixelwise-labels-p nil)
 
-(defvar conn-pixelwise-label-target-limit 200
+(defvar conn-pixelwise-label-target-limit 500
   "Maximum number of targets in a window for pixelwise labeling.")
 
 (defvar conn-pixelwise-labels-window-predicate
   'conn--pixelwise-labels-window-p)
 
-(defvar conn-dispatch-pixelwise-labels-line-limit 400
+(defvar conn-dispatch-pixelwise-labels-line-limit 750
   "Maximum position in a line for pixelwise labeling.")
 
 (defun conn--pixelwise-labels-window-p (win targets)
@@ -3627,11 +3627,13 @@ Target overlays may override this default by setting the
   'conn--pixelwise-labels-target-p)
 
 (defun conn--pixelwise-labels-target-p (target)
-  (let ((beg (overlay-start target)))
-    (save-excursion
-      (goto-char beg)
-      (< (- beg (pos-bol))
-         conn-dispatch-pixelwise-labels-line-limit))))
+  (cl-loop with ov-beg = (overlay-start target)
+           for (beg . end) in (window-parameter (overlay-get target 'window)
+                                                'conn-dispatch-lines)
+           when (and (<= beg ov-beg)
+                     (< ov-beg end))
+           return (< (- ov-beg beg)
+                     conn-dispatch-pixelwise-labels-line-limit)))
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
@@ -3639,33 +3641,53 @@ Target overlays may override this default by setting the
 (defun conn--right-justify-padding (overlay width)
   (overlay-put overlay 'after-string
                (propertize
-                "a" ;; A letter wont cause word-wrap to wrap at the padding
+                (if (save-excursion
+                      (goto-char (overlay-start overlay))
+                      (looking-at-p "\\W"))
+                    " "
+                  "a")
                 'display `(space :width (,width)))))
 
 (defun conn--left-justify-padding (overlay width)
   (overlay-put overlay 'before-string
                (propertize
-                "a"
+                (if (save-excursion
+                      (goto-char (overlay-start overlay))
+                      (looking-at-p "\\W"))
+                    " "
+                  "a")
                 'display `(space :width (,width)))))
 
 (defun conn--centered-padding (overlay width)
   (let* ((left (min 15 (floor width 2)))
-         (right (max (- width 15) (ceiling width 2))))
+         (right (max (- width 15) (ceiling width 2)))
+         (char (if (save-excursion
+                     (goto-char (overlay-start overlay))
+                     (looking-at-p "\\W"))
+                   " "
+                 "a")))
     (overlay-put overlay 'before-string
                  (propertize
-                  "a" ;; A letter wont cause word-wrap to wrap at the padding
+                  char ;; A letter wont cause word-wrap to wrap at the padding
                   'display `(space :width (,left))
                   'face 'conn-dispatch-label-face))
     (overlay-put overlay 'after-string
                  (propertize
-                  "a" ;; A letter wont cause word-wrap to wrap at the padding
+                  char ;; A letter wont cause word-wrap to wrap at the padding
                   'display `(space :width (,right))
                   'face 'conn-dispatch-label-face))))
 
+(defun conn--dispatch-eol (pt window)
+  (cl-loop for (beg . end) in (window-parameter window 'conn-dispatch-lines)
+           when (and (<= beg pt) (< pt end))
+           return (1- end)))
+
 (defun conn--dispatch-setup-label-pixelwise (overlay label-string &optional padding-function)
-  (let ((display-width (conn--string-pixel-width label-string
-                                                 (window-buffer
-                                                  (overlay-get overlay 'window))))
+  (let ((display-width
+         (conn--string-pixel-width label-string
+                                   (thread-first
+                                     (overlay-get overlay 'window)
+                                     (window-buffer))))
         (padding-width 0)
         ;; display-line-numbers, line-prefix and wrap-prefix break
         ;; width calculations, temporarily disable them.
@@ -3676,13 +3698,8 @@ Target overlays may override this default by setting the
         (progn
           (unless (= (overlay-start overlay) (point-max))
             (let* ((target (overlay-get overlay 'target-overlay))
-                   (beg (overlay-start overlay))
-                   (line-end (save-excursion
-                               (goto-char beg)
-                               (min (pos-eol)
-                                    (save-excursion
-                                      (end-of-visual-line)
-                                      (point)))))
+                   (beg (overlay-end target))
+                   (line-end (conn--dispatch-eol beg (overlay-get target 'window)))
                    (end nil)
                    (pt beg))
               ;; Find the end of the label overlay.  Barring
@@ -3710,9 +3727,11 @@ Target overlays may override this default by setting the
                  ;; If the label overlay is wider than the label
                  ;; string then we are done.
                  ((pcase-let ((`(,width . ,_)
-                               (window-text-pixel-size
-                                (overlay-get overlay 'window)
-                                beg pt)))
+                               (save-excursion
+                                 (with-restriction beg pt
+                                   (window-text-pixel-size
+                                    (overlay-get overlay 'window)
+                                    beg pt)))))
                     (when (or (= pt (point-max))
                               (>= width display-width))
                       (setq padding-width (max (- width display-width) 0)
@@ -3761,10 +3780,7 @@ Target overlays may override this default by setting the
     (let* ((target (overlay-get overlay 'target-overlay))
            (beg (overlay-start overlay))
            (end nil)
-           (line-end (save-excursion
-                       (goto-char beg)
-                       (end-of-visual-line)
-                       (point)))
+           (line-end (conn--dispatch-eol beg (overlay-get overlay 'window)))
            (pt beg))
       (while (not end)
         (cond
@@ -3801,12 +3817,24 @@ Target overlays may override this default by setting the
       (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
     (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
 
+(defun conn--dispatch-window-lines (window)
+  (let (lines prev)
+    (save-excursion
+      (goto-char (window-start window))
+      (setq prev (pos-bol))
+      (while (< prev (window-end window))
+        (forward-line)
+        (push (cons prev (point)) lines)
+        (setq prev (point))))
+    (set-window-parameter window 'conn-dispatch-lines lines)))
+
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
     (pcase-dolist (`(,window . ,targets) target-overlays)
-      (let ((conn--window-pixelwise-labels-p
-             (funcall conn-pixelwise-labels-window-predicate window targets)))
-        (with-current-buffer (window-buffer window)
+      (with-current-buffer (window-buffer window)
+        (conn--dispatch-window-lines window)
+        (let ((conn--window-pixelwise-labels-p
+               (funcall conn-pixelwise-labels-window-predicate window targets)))
           (dolist (tar targets)
             (conn--protected-let ((string (pop label-strings))
                                   (beg (overlay-end tar))
