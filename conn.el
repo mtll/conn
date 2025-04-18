@@ -651,6 +651,9 @@ be restricted to those before or after the current match inclusive."
   (cl-loop for char across string always (eql char (downcase char))))
 
 (defun conn--visible-regions (beg end &optional forward)
+  (while (and (invisible-p beg)
+              (/= end (setq beg (next-single-char-property-change
+                                 beg 'invisible nil end)))))
   (let ((next beg)
         visible)
     (while (/= end beg)
