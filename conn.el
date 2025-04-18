@@ -3671,9 +3671,6 @@ Target overlays may override this default by setting the
                               (>= width display-width))
                       (setq padding-width (max (- width display-width) 0)
                             end pt))))
-                 ((get-text-property pt 'composition)
-                  (setq pt (next-single-property-change
-                            pt 'composition nil line-end)))
                  ((dolist (ov (overlays-in pt (1+ pt)) end)
                     (when (and (eq 'conn-read-string-match
                                    (overlay-get ov 'category))
@@ -3682,6 +3679,9 @@ Target overlays may override this default by setting the
                                    (/= (overlay-end target)
                                        (overlay-end ov))))
                       (setq end pt))))
+                 ((get-text-property pt 'composition)
+                  (setq pt (next-single-property-change
+                            pt 'composition nil line-end)))
                  (t (cl-incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
           (cond
