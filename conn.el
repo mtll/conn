@@ -815,6 +815,10 @@ meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
+(defface conn-read-thing-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a read-thing state.")
+
 (defvar-local conn-state-for-emacs 'conn-emacs-state)
 
 (defvar-local conn-state-for-command 'conn-command-state)
@@ -1552,15 +1556,16 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Move"
   :suppress-input-method t)
 
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-read-thing-common-state))
+(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state))
                                 &key &allow-other-keys)
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line t))
+  (when-let* ((face (conn-state-get state :mode-line-face)))
+    (setf (alist-get 'mode-line face-remapping-alist) face))
   (cl-call-next-method))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line nil))
+  (setf face-remapping-alist
+        (delq (assq 'mode-line face-remapping-alist)
+              face-remapping-alist))
   (cl-call-next-method))
 
 (conn-define-state conn-menu-state ()
@@ -1576,7 +1581,8 @@ By default `conn-emacs-state' does not bind anything."
 (conn-define-state conn-read-thing-common-state (conn-command-state)
   "Common elements of reading thing states."
   :suppress-input-method t
-  :transient t)
+  :transient t
+  :mode-line-face 'conn-read-thing-mode-line-face)
 
 (conn-define-state conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
@@ -3263,6 +3269,10 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 ;;;;; Dispatch read thing
 
+(defface conn-dispatch-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a dispatch state.")
+
 (defvar conn-dispatch-default-target-finder 'conn--dispatch-chars
   "Default target finder for dispatch.
 
@@ -3307,7 +3317,8 @@ of a command.")
 
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
-  :lighter " DISPATCH")
+  :lighter " DISPATCH"
+  :mode-line-face 'conn-dispatch-mode-line-face)
 
 (conn-define-state conn-read-dispatch-state (conn-dispatch-mover-state)
   "State for reading a dispatch command."
@@ -7363,6 +7374,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                  (const :tag "Tab" tab)
                  (const :tag "Short" nil)))
 
+(defface conn-wincontrol-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a `conn-wincontrol-mode'.")
+
 (defvar conn--wincontrol-help-format
   (concat
    "\\<conn-wincontrol-map>"
@@ -7570,9 +7585,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
           conn--wincontrol-arg-sign 1
           conn--wincontrol-initial-window (selected-window)
           conn--wincontrol-initial-winconf (current-window-configuration)))
-  ;; TODO: make inverse-video a custom option
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line t))
+  (setf (alist-get 'mode-line face-remapping-alist)
+        'conn-wincontrol-mode-line-face)
   (conn--wincontrol-message))
 
 (defun conn--wincontrol-exit ()
@@ -7582,8 +7596,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
   (setq scroll-conservatively conn--previous-scroll-conservatively
         eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
-  (unless executing-kbd-macro
-    (set-face-inverse-video 'mode-line nil)))
+  (setf face-remapping-alist
+        (delq (assq 'mode-line face-remapping-alist)
+              face-remapping-alist)))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
