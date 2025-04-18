@@ -1705,8 +1705,7 @@ returned.")
                                 (overlay-start target-overlay)
                                 (overlay-end target-overlay))
                                'face 'conn-read-string-match-face))
-      (conn--dispatch-setup-label
-       overlay string (overlay-get target-overlay 'padding-function)))))
+      (funcall (overlay-get overlay 'setup-fn) string))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
@@ -1730,8 +1729,7 @@ returned.")
                (overlay-put overlay 'display nil)
                (overlay-put overlay 'before-string nil)
                (overlay-put overlay 'after-string nil)
-               (conn--dispatch-setup-label
-                overlay new-string (overlay-get target-overlay 'padding-function)))
+               (funcall (overlay-get overlay 'setup-fn) new-string))
              label)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
@@ -3619,8 +3617,6 @@ with `conn-dispatch-thing-ignored-modes'."
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
-(defvar conn--window-pixelwise-labels-p nil)
-
 (defvar conn-pixelwise-label-target-limit 500
   "Maximum number of targets in a window for pixelwise labeling.")
 
@@ -3822,12 +3818,6 @@ Target overlays may override this default by setting the
       (overlay-put overlay 'before-string label-string)
     (overlay-put overlay 'display label-string)))
 
-(defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
-  (if (and conn--window-pixelwise-labels-p
-           (funcall conn-pixelwise-labels-target-predicate overlay))
-      (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
-    (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
-
 (defun conn--dispatch-window-lines (window)
   (let (lines prev)
     (save-excursion
@@ -3844,7 +3834,7 @@ Target overlays may override this default by setting the
     (pcase-dolist (`(,window . ,targets) target-overlays)
       (with-current-buffer (window-buffer window)
         (conn--dispatch-window-lines window)
-        (let ((conn--window-pixelwise-labels-p
+        (let ((window-pixelwise
                (funcall conn-pixelwise-labels-window-predicate window targets)))
           (dolist (tar targets)
             (conn--protected-let ((string (pop label-strings))
@@ -3853,8 +3843,17 @@ Target overlays may override this default by setting the
               (overlay-put ov 'category 'conn-label-overlay)
               (overlay-put ov 'window window)
               (overlay-put ov 'target-overlay tar)
-              (conn--dispatch-setup-label
-               ov string (overlay-get tar 'padding-function))
+              (funcall (thread-last
+                         (if (and window-pixelwise
+                                  (funcall conn-pixelwise-labels-target-predicate ov))
+                             (lambda (str)
+                               (conn--dispatch-setup-label-pixelwise
+                                ov str (overlay-get tar 'padding-function)))
+                           (lambda (str)
+                             (conn--dispatch-setup-label-charwise
+                              ov str (overlay-get tar 'padding-function))))
+                         (overlay-put ov 'setup-fn))
+                       string)
               (push (make-conn-dispatch-label :string string
                                               :overlay ov
                                               :prop (if (overlay-get ov 'display)
