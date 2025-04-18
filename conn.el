@@ -3605,20 +3605,24 @@ Target overlays may override this default by setting the
   "Maximum number of targets in a window for pixelwise labeling.")
 
 (defvar conn-pixelwise-labels-window-predicate
-  (lambda (win targets)
-    (and (eq (selected-frame) (window-frame win))
-         (length< targets conn-pixelwise-label-target-limit))))
+  'conn--pixelwise-labels-window-p)
+
+(defun conn--pixelwise-labels-window-p (win targets)
+  (and (eq (selected-frame) (window-frame win))
+       (length< targets conn-pixelwise-label-target-limit)))
 
 (defvar conn-dispatch-pixelwise-labels-line-limit 400
   "Maximum position in a line for pixelwise labeling.")
 
 (defvar conn-pixelwise-labels-target-predicate
-  (lambda (target)
-    (let ((beg (overlay-start target)))
-      (save-excursion
-        (goto-char beg)
-        (< (- beg (pos-bol))
-           conn-dispatch-pixelwise-labels-line-limit)))))
+  'conn--pixelwise-labels-target-p)
+
+(defun conn--pixelwise-labels-target-p (target)
+  (let ((beg (overlay-start target)))
+    (save-excursion
+      (goto-char beg)
+      (< (- beg (pos-bol))
+         conn-dispatch-pixelwise-labels-line-limit))))
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
