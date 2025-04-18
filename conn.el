@@ -3599,8 +3599,26 @@ with `conn-dispatch-thing-ignored-modes'."
 Target overlays may override this default by setting the
 \\='padding-function overlay property.")
 
-(defvar conn-pixelwise-labels-predicate
-  (lambda (win) (eq (selected-frame) (window-frame win))))
+(defvar conn--window-pixelwise-labels-p nil)
+
+(defvar conn-pixelwise-label-target-limit 200
+  "Maximum number of targets in a window for pixelwise labeling.")
+
+(defvar conn-pixelwise-labels-window-predicate
+  (lambda (win targets)
+    (and (eq (selected-frame) (window-frame win))
+         (length< targets conn-pixelwise-label-target-limit))))
+
+(defvar conn-dispatch-pixelwise-labels-line-limit 400
+  "Maximum position in a line for pixelwise labeling.")
+
+(defvar conn-pixelwise-labels-target-predicate
+  (lambda (target)
+    (let ((beg (overlay-start target)))
+      (save-excursion
+        (goto-char beg)
+        (< (- beg (pos-bol))
+           conn-dispatch-pixelwise-labels-line-limit)))))
 
 (put 'conn-label-overlay 'priority 3000)
 (put 'conn-label-overlay 'conn-overlay t)
@@ -3745,40 +3763,34 @@ Target overlays may override this default by setting the
       (overlay-put overlay 'before-string label-string)
     (overlay-put overlay 'display label-string)))
 
-(defvar conn-dispatch-pixelwise-labels-line-limit 400)
-
 (defun conn--dispatch-setup-label (overlay label-string &optional padding-function)
-  (if (and
-       ;; Don't even try if we are too far into a long line,
-       ;; window-text-pixel-width becomes far too slow
-       (let ((beg (overlay-start overlay)))
-         (save-excursion
-           (goto-char beg)
-           (< (- beg (pos-bol)) conn-dispatch-pixelwise-labels-line-limit)))
-       (funcall conn-pixelwise-labels-predicate (overlay-get overlay 'window)))
+  (if (and conn--window-pixelwise-labels-p
+           (funcall conn-pixelwise-labels-target-predicate overlay))
       (conn--dispatch-setup-label-pixelwise overlay label-string padding-function)
     (conn--dispatch-setup-label-charwise overlay label-string padding-function)))
 
 (defun conn--dispatch-labels (label-strings target-overlays)
   (conn--protected-let ((labels nil (mapc #'conn-label-delete labels)))
-    (pcase-dolist (`(,window . ,previews) target-overlays)
-      (with-current-buffer (window-buffer window)
-        (dolist (p previews)
-          (conn--protected-let ((string (pop label-strings))
-                                (beg (overlay-end p))
-                                (ov (make-overlay beg beg) (delete-overlay ov)))
-            (overlay-put ov 'category 'conn-label-overlay)
-            (overlay-put ov 'window window)
-            (overlay-put ov 'target-overlay p)
-            (conn--dispatch-setup-label
-             ov string (overlay-get p 'padding-function))
-            (push (make-conn-dispatch-label :string string
-                                            :overlay ov
-                                            :prop (if (overlay-get ov 'display)
-                                                      'display
-                                                    'before-string)
-                                            :target-overlay p)
-                  labels)))))
+    (pcase-dolist (`(,window . ,targets) target-overlays)
+      (let ((conn--window-pixelwise-labels-p
+             (funcall conn-pixelwise-labels-window-predicate window targets)))
+        (with-current-buffer (window-buffer window)
+          (dolist (tar targets)
+            (conn--protected-let ((string (pop label-strings))
+                                  (beg (overlay-end tar))
+                                  (ov (make-overlay beg beg) (delete-overlay ov)))
+              (overlay-put ov 'category 'conn-label-overlay)
+              (overlay-put ov 'window window)
+              (overlay-put ov 'target-overlay tar)
+              (conn--dispatch-setup-label
+               ov string (overlay-get tar 'padding-function))
+              (push (make-conn-dispatch-label :string string
+                                              :overlay ov
+                                              :prop (if (overlay-get ov 'display)
+                                                        'display
+                                                      'before-string)
+                                              :target-overlay tar)
+                    labels))))))
     labels))
 
 
