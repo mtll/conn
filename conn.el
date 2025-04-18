@@ -650,24 +650,39 @@ be restricted to those before or after the current match inclusive."
   "Return t if STRING contains no upper case characters."
   (cl-loop for char across string always (eql char (downcase char))))
 
+(defun conn--visible-regions (beg end &optional forward)
+  (let ((next beg)
+        visible)
+    (while (/= end beg)
+      (while (and (/= end (setq next (next-single-char-property-change
+                                      next 'invisible nil end)))
+                  (not (invisible-p next))))
+      (push (cons beg next) visible)
+      (while (and (/= end (setq next (next-single-char-property-change
+                                      next 'invisible nil end)))
+                  (invisible-p next)))
+      (setq beg next))
+    (if forward
+        (nreverse visible)
+      visible)))
+
 (defun conn--visible-matches (string &optional dir predicate)
   "Return all matches for STRING visible in the selected window.
 
 If dir is \\='forward or \\='backward then restrict to matches before or
 after point."
-  (save-excursion
-    (with-restriction
-        (if (eq dir 'forward)  (point) (window-start))
-        (if (eq dir 'backward) (point) (window-end))
-      (goto-char (point-min))
-      (let ((case-fold-search (conn--string-no-upper-case-p string))
-            matches)
-        (while (search-forward string nil t)
-          (when (and (conn--region-visible-p (match-beginning 0) (match-end 0))
-                     (or (null predicate)
-                         (funcall predicate (match-beginning 0))))
-            (push (match-beginning 0) matches)))
-        (nreverse matches)))))
+  (let ((case-fold-search (conn--string-no-upper-case-p string))
+        matches)
+    (save-excursion
+      (pcase-dolist (`(,beg . ,end) (conn--visible-regions (window-start)
+                                                           (window-end)
+                                                           (eq dir 'forward)))
+        (goto-char beg)
+        (while (search-forward string end t)
+          (when (or (null predicate)
+                    (funcall predicate (match-beginning 0)))
+            (push (match-beginning 0) matches)))))
+    (nreverse matches)))
 
 (defun conn--read-from-with-preview (prompt bounds &optional regexp-flag)
   "Read a from string with `minibuffer-lazy-highlight-setup' previews.
@@ -3598,12 +3613,17 @@ Target overlays may override this default by setting the
 (defvar conn-pixelwise-labels-window-predicate
   'conn--pixelwise-labels-window-p)
 
-(defun conn--pixelwise-labels-window-p (win targets)
-  (and (eq (selected-frame) (window-frame win))
-       (length< targets conn-pixelwise-label-target-limit)))
-
 (defvar conn-dispatch-pixelwise-labels-line-limit 400
   "Maximum position in a line for pixelwise labeling.")
+
+(defvar conn-dispatch-pixelwise-labels-window-char-limit 100000
+  "Maximum position in a line for pixelwise labeling.")
+
+(defun conn--pixelwise-labels-window-p (win targets)
+  (and (eq (selected-frame) (window-frame win))
+       (length< targets conn-pixelwise-label-target-limit)
+       (< (- (window-end) (window-start win))
+          conn-dispatch-pixelwise-labels-window-char-limit)))
 
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
@@ -3665,11 +3685,21 @@ Target overlays may override this default by setting the
                                (point)))
                    (end nil)
                    (pt beg))
+              ;; Find the end of the label overlay.  Barring
+              ;; exceptional conditions, which see the test clauses of
+              ;; the following cond form, we want the label overlay to
+              ;; be wider than the label string.
               (while (not end)
                 (cond
+                 ;; If we are at the end of a line than end the label overlay.
                  ((= line-end pt)
                   (if (not (invisible-p (1+ pt)))
                       (setq end pt)
+                    ;; If we are at the end of the line and the label
+                    ;; overlay has width 0 then we need to expand the
+                    ;; label overlay to include the EOL and append it
+                    ;; as an after overlay.  Ensure we preserve the
+                    ;; invisibility property when we do so.
                     (setq end (1+ pt))
                     (let ((str (buffer-substring pt end)))
                       (add-text-properties
@@ -3677,6 +3707,8 @@ Target overlays may override this default by setting the
                        `(invisible ,(get-char-property pt 'invisible))
                        str)
                       (overlay-put overlay 'after-string str))))
+                 ;; If the label overlay is wider than the label
+                 ;; string then we are done.
                  ((pcase-let ((`(,width . ,_)
                                (window-text-pixel-size
                                 (overlay-get overlay 'window)
@@ -3685,6 +3717,8 @@ Target overlays may override this default by setting the
                               (>= width display-width))
                       (setq padding-width (max (- width display-width) 0)
                             end pt))))
+                 ;; If we are abutting another target overlay then end
+                 ;; the label overlay here so that we don't hide it.
                  ((dolist (ov (overlays-in pt (1+ pt)) end)
                     (when (and (eq 'conn-read-string-match
                                    (overlay-get ov 'category))
@@ -3693,9 +3727,12 @@ Target overlays may override this default by setting the
                                    (/= (overlay-end target)
                                        (overlay-end ov))))
                       (setq end pt))))
+                 ;; If a composition starts here then skip to the
+                 ;; end of the composition.
                  ((get-text-property pt 'composition)
                   (setq pt (next-single-property-change
                             pt 'composition nil line-end)))
+                 ;; Move forward one character
                  (t (cl-incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
           (cond
