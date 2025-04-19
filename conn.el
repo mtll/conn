@@ -3652,7 +3652,7 @@ Target overlays may override this default by setting the
                       (goto-char (overlay-start overlay))
                       (looking-at-p "\\W"))
                     " "
-                  "a")
+                  "a") ;; A letter wont cause word-wrap to wrap at the padding
                 'display `(space :width (,width)))))
 
 (defun conn--left-justify-padding (overlay width)
@@ -3662,7 +3662,7 @@ Target overlays may override this default by setting the
                       (goto-char (overlay-start overlay))
                       (looking-at-p "\\W"))
                     " "
-                  "a")
+                  "a") ;; A letter wont cause word-wrap to wrap at the padding
                 'display `(space :width (,width)))))
 
 (defun conn--centered-padding (overlay width)
@@ -3672,15 +3672,15 @@ Target overlays may override this default by setting the
                      (goto-char (overlay-start overlay))
                      (looking-at-p "\\W"))
                    " "
-                 "a")))
+                 "a"))) ;; A letter wont cause word-wrap to wrap at the padding
     (overlay-put overlay 'before-string
                  (propertize
-                  char ;; A letter wont cause word-wrap to wrap at the padding
+                  char
                   'display `(space :width (,left))
                   'face 'conn-dispatch-label-face))
     (overlay-put overlay 'after-string
                  (propertize
-                  char ;; A letter wont cause word-wrap to wrap at the padding
+                  char
                   'display `(space :width (,right))
                   'face 'conn-dispatch-label-face))))
 
@@ -3717,7 +3717,8 @@ Target overlays may override this default by setting the
                 (cond
                  ;; If we are at the end of a line than end the label overlay.
                  ((= line-end pt)
-                  (if (not (invisible-p (1+ pt)))
+                  (if (and (not (invisible-p (1+ pt)))
+                           (/= pt beg))
                       (setq end pt)
                     ;; If we are at the end of the line and the label
                     ;; overlay has width 0 then we need to expand the
@@ -3823,7 +3824,7 @@ Target overlays may override this default by setting the
     (save-excursion
       (goto-char (window-start window))
       (setq prev (pos-bol))
-      (while (< prev (window-end window))
+      (while (<= prev (window-end window))
         (forward-line)
         (push (cons prev (point)) lines)
         (setq prev (point))))
