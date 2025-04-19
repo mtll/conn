@@ -3807,7 +3807,8 @@ Target overlays may override this default by setting the
     (save-excursion
       (goto-char (window-start window))
       (setq prev (pos-bol))
-      (while (<= prev (window-end window))
+      (while (and (<= prev (window-end window))
+                  (not (eobp)))
         (forward-line)
         (push (cons prev (point)) lines)
         (setq prev (point))))
