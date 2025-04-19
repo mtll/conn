@@ -5204,6 +5204,15 @@ order to mark the region that should be defined by any of COMMANDS."
  :dispatch-target-finder (lambda () (conn--dispatch-all-things 'defun t)))
 
 (conn-register-thing
+ 'visual-line
+ :forward-op (lambda (&optional N)
+               (let ((line-move-visual t))
+                 (beginning-of-visual-line)
+                 (line-move N t))))
+
+(conn-define-mark-command conn-mark-visual-line visual-line)
+
+(conn-register-thing
  'region
  :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
@@ -8105,6 +8114,7 @@ Operates with the selected windows parent window."
   :keymap global-map
   "<conn-region-map>" conn-default-region-map
   "<conn-edit-map>" conn-default-edit-map
+  "<conn-thing-map> V" 'conn-mark-visual-line
   "<conn-thing-map> <" 'conn-mark-before-point
   "<conn-thing-map> >" 'conn-mark-after-point
   "<conn-thing-map> /" 'conn-mark-filename
