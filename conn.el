@@ -817,7 +817,8 @@ meaning of CONDITION see `buffer-match-p'."
 
 (defface conn-read-thing-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a read-thing state.")
+  "Face for mode-line in a read-thing state."
+  :group 'conn-faces)
 
 (defvar-local conn-state-for-emacs 'conn-emacs-state)
 
@@ -1999,7 +2000,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-forward-char>" 'forward-char
   "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
-  "b" (conn-remap-key "<conn-thing-map>")
+  "," (conn-remap-key "<conn-thing-map>")
   "r" 'recursive-edit)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -3269,7 +3270,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defface conn-dispatch-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a dispatch state.")
+  "Face for mode-line in a dispatch state."
+  :group 'conn-faces)
 
 (defvar conn-dispatch-default-target-finder 'conn--dispatch-chars
   "Default target finder for dispatch.
@@ -3332,7 +3334,7 @@ of a command.")
   "DEL" 'backward-delete-arg
   "e" 'conn-dispatch-over
   "i" 'forward-line
-  "b" (conn-remap-key "<conn-thing-map>"))
+  "," (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
@@ -3345,7 +3347,7 @@ of a command.")
   "L" 'conn-backward-inner-line
   "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word t)))
   "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol t)))
-  "m" 'forward-sexp)
+  "n" 'forward-sexp)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
@@ -3355,7 +3357,7 @@ of a command.")
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
-  "," `(forward-sexp ,(lambda () (conn--string-preview-overlays "(" nil t))))
+  "n" `(forward-sexp ,(lambda () (conn--string-preview-overlays "(" nil t))))
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-dispatch-mover-state 'conn-dot-mode)
@@ -7382,7 +7384,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defface conn-wincontrol-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a `conn-wincontrol-mode'.")
+  "Face for mode-line in a `conn-wincontrol-mode'."
+  :group 'conn-faces)
 
 (defvar conn--wincontrol-help-format
   (concat
@@ -8143,14 +8146,14 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "b" (conn-remap-key "<conn-thing-map>")
+  "," (conn-remap-key "<conn-thing-map>")
   "e" 'end-of-buffer)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
   :suppress t
   ">" 'forward-line
-  "N" 'conn-backward-line
+  "<" 'conn-backward-line
   "o" (conn-remap-key conn-forward-word-keys t)
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
@@ -8169,10 +8172,10 @@ Operates with the selected windows parent window."
   "k" (conn-remap-key conn-next-line-keys t)
   "L" 'conn-forward-inner-line
   "l" (conn-remap-key conn-forward-char-keys t)
-  "<" (conn-remap-key conn-end-of-defun-keys t)
-  "," (conn-remap-key conn-forward-sexp-keys t)
-  "M" (conn-remap-key conn-beginning-of-defun-keys t)
-  "m" (conn-remap-key conn-backward-sexp-keys t))
+  "M" (conn-remap-key conn-end-of-defun-keys t)
+  "m" (conn-remap-key conn-forward-sexp-keys t)
+  "N" (conn-remap-key conn-beginning-of-defun-keys t)
+  "n" (conn-remap-key conn-backward-sexp-keys t))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
@@ -8192,7 +8195,7 @@ Operates with the selected windows parent window."
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
   "H" 'conn-expand
-  "n" (conn-remap-key "<conn-edit-map>")
+  "b" (conn-remap-key "<conn-edit-map>")
   "=" 'conntext-state
   "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
@@ -8221,7 +8224,7 @@ Operates with the selected windows parent window."
   "f" 'conn-dispatch-on-things
   "F" 'conn-repeat-last-dispatch
   "h" 'conn-wincontrol-one-command
-  "b" (conn-remap-key "<conn-thing-map>")
+  "," (conn-remap-key "<conn-thing-map>")
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" (conn-remap-key "<conn-region-map>")
