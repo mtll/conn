@@ -3647,40 +3647,23 @@ Target overlays may override this default by setting the
 
 (defun conn--right-justify-padding (overlay width)
   (overlay-put overlay 'after-string
-               (propertize
-                (if (save-excursion
-                      (goto-char (overlay-start overlay))
-                      (looking-at-p "\\W"))
-                    " "
-                  "a") ;; A letter wont cause word-wrap to wrap at the padding
-                'display `(space :width (,width)))))
+               (propertize " " 'display `(space :width (,width)))))
 
 (defun conn--left-justify-padding (overlay width)
   (overlay-put overlay 'before-string
-               (propertize
-                (if (save-excursion
-                      (goto-char (overlay-start overlay))
-                      (looking-at-p "\\W"))
-                    " "
-                  "a") ;; A letter wont cause word-wrap to wrap at the padding
-                'display `(space :width (,width)))))
+               (propertize " " 'display `(space :width (,width)))))
 
 (defun conn--centered-padding (overlay width)
   (let* ((left (min 15 (floor width 2)))
-         (right (max (- width 15) (ceiling width 2)))
-         (char (if (save-excursion
-                     (goto-char (overlay-start overlay))
-                     (looking-at-p "\\W"))
-                   " "
-                 "a"))) ;; A letter wont cause word-wrap to wrap at the padding
+         (right (max (- width 15) (ceiling width 2))))
     (overlay-put overlay 'before-string
                  (propertize
-                  char
+                  " "
                   'display `(space :width (,left))
                   'face 'conn-dispatch-label-face))
     (overlay-put overlay 'after-string
                  (propertize
-                  char
+                  " "
                   'display `(space :width (,right))
                   'face 'conn-dispatch-label-face))))
 
@@ -4138,7 +4121,7 @@ Target overlays may override this default by setting the
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (conn-define-dispatch-action conn-dispatch-kill (window pt thing-cmd thing-arg register)
-  :description (lambda (register)
+  :description (lambda (&optional register)
                  (if register
                      (format "Kill to Register <%c>" register)
                    "Kill"))
@@ -4160,7 +4143,7 @@ Target overlays may override this default by setting the
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-kill-append (window pt thing-cmd thing-arg register)
-  :description (lambda (register)
+  :description (lambda (&optional register)
                  (if register
                      (format "Kill Append Register <%c>" register)
                    "Kill Append"))
@@ -4184,7 +4167,7 @@ Target overlays may override this default by setting the
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-kill-prepend (window pt thing-cmd thing-arg register)
-  :description (lambda (register)
+  :description (lambda (&optional register)
                  (if register
                      (format "Kill Prepend Register <%c>" register)
                    "Kill Prepend"))
@@ -4209,7 +4192,7 @@ Target overlays may override this default by setting the
 
 (conn-define-dispatch-action conn-dispatch-copy-as-kill
     (window pt thing-cmd thing-arg register)
-  :description (lambda (register)
+  :description (lambda (&optional register)
                  (if register
                      (format "Copy to Register <%c>" register)
                    "Copy As Kill"))
@@ -4228,7 +4211,7 @@ Target overlays may override this default by setting the
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-copy-append (window pt thing-cmd thing-arg register)
-  :description (lambda (register)
+  :description (lambda (&optional register)
                  (if register
                      (format "Copy Append to Register <%c>" register)
                    "Copy Append"))
@@ -4249,7 +4232,7 @@ Target overlays may override this default by setting the
                        (get thing-cmd :conn-command-thing)))))))
 
 (conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing-cmd thing-arg register)
-  :description (lambda (register)
+  :description (lambda (&optional register)
                  (if register
                      (format "Copy Prepend to Register <%c>" register)
                    "Copy Prepend"))
@@ -4803,10 +4786,23 @@ Returns a cons of (STRING . OVERLAYS)."
     (let (target-ovs labels)
       (unwind-protect
           (progn
-            (setf target-ovs (compat-call
+            (setf target-ovs (thread-last
+                               (conn--protected-let
+                                   ((filtered nil)
+                                    (targets (funcall finder)
+                                             (mapc #'delete-overlay targets)))
+                                 (dolist (tar targets filtered)
+                                   (if (catch 'overlap
+                                         (dolist (filt filtered)
+                                           (when (= (overlay-start tar)
+                                                    (overlay-start filt))
+                                             (throw 'overlap t))))
+                                       (delete-overlay tar)
+                                     (push tar filtered))))
+                               (seq-group-by (lambda (ov) (overlay-get ov 'window))))
+                  target-ovs (compat-call
                               sort
-                              (seq-group-by (lambda (ov) (overlay-get ov 'window))
-                                            (funcall finder))
+                              target-ovs
                               :in-place t
                               :lessp (lambda (a _) (eq (selected-window) (car a)))))
             (setf (alist-get (selected-window) target-ovs)
