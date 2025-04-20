@@ -78,14 +78,27 @@
 
 (conn-define-mark-command conn-mark-org-math org-math)
 
+(defun conn--org-window-p (win)
+  (eq 'org-mode (buffer-local-value 'major-mode (window-buffer win))))
+
 (conn-register-thing
  'org-link
- :dispatch-target-finder (lambda () (conn--dispatch-re-matches org-link-any-re t))
+ :dispatch-target-finder (lambda ()
+                           (let ((conn-target-window-predicate conn-target-window-predicate))
+                             (add-function :before-while
+                                           conn-target-window-predicate
+                                           'conn--org-window-p)
+                             (conn--dispatch-re-matches org-link-any-re)))
  :bounds-op (lambda () (org-in-regexp org-link-any-re)))
 
 (conn-register-thing
  'org-paragraph
- :dispatch-target-finder (lambda () (conn--dispatch-all-things 'org-paragraph t))
+ :dispatch-target-finder (lambda ()
+                           (let ((conn-target-window-predicate conn-target-window-predicate))
+                             (add-function :before-while
+                                           conn-target-window-predicate
+                                           'conn--org-window-p)
+                             (conn--dispatch-all-things 'org-paragraph)))
  :forward-op 'org-forward-paragraph)
 
 (conn-register-thing-commands
@@ -154,7 +167,12 @@
 (conn-register-thing
  'org-heading
  :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
- :dispatch-target-finder (lambda () (conn--dispatch-all-things 'org-heading t))
+ :dispatch-target-finder (lambda ()
+                           (let ((conn-target-window-predicate conn-target-window-predicate))
+                             (add-function :before-while
+                                           conn-target-window-predicate
+                                           'conn--org-window-p)
+                             (conn--dispatch-all-things 'org-heading)))
  :forward-op 'org-next-visible-heading)
 
 (conn-register-thing-commands

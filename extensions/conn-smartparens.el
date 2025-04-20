@@ -124,7 +124,7 @@
  'sp-sexp
  :forward-op 'conn-sp-forward-sexp-op
  :bounds-op 'conn-sp-bounds-of-sexp
- :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'sp-sexp 1 t))
+ :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'sp-sexp 1))
  :default-action 'conn-dispatch-goto)
 
 (conn-register-thing-commands
