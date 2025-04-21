@@ -7934,7 +7934,8 @@ Operates with the selected windows parent window."
     "<backspace>" 'clear-rectangle
     "d" 'open-rectangle
     "C-d" 'delete-whitespace-rectangle
-    "#" 'rectangle-number-lines))
+    "#" 'rectangle-number-lines)
+  (conn-set-mode-map-depth 'conn-command-state 'rectangle-mark-mode -90))
 
 (defvar-keymap conn-isearch-map
   "M-Y" 'conn-isearch-yank-region
