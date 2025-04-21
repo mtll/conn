@@ -3556,6 +3556,10 @@ with `conn-dispatch-thing-ignored-modes'."
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
+(defvar conn-targets nil)
+
+(defvar conn-target-count 0)
+
 (defun conn-make-target-overlay (pt length &optional thing padding-function window)
   "Make a target overlay at PT of LENGTH.
 
@@ -3591,7 +3595,16 @@ Optionally the overlay may have an associated THING."
                                'face 'conn-target-overlay-face)))
     (overlay-put ov 'window (or window (selected-window)))
     (overlay-put ov 'padding-function padding-function)
-    (push ov (window-parameter (or window (selected-window)) 'conn-targets))))
+    (cl-incf conn-target-count)
+    (push ov (alist-get (or window (selected-window)) conn-targets))))
+
+(defun conn-delete-target-overlay (ov)
+  (let ((win (overlay-get ov 'window)))
+    (cl-assert (memq ov (alist-get win conn-targets)))
+    (setf (alist-get win conn-targets)
+          (delq ov (alist-get win conn-targets))))
+  (delete-overlay ov)
+  (cl-decf conn-target-count))
 
 (defun conn-make-string-target-overlays (string &optional predicate)
   (dolist (win (conn--get-target-windows))
@@ -3599,26 +3612,19 @@ Optionally the overlay may have an associated THING."
       (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
         (conn-make-target-overlay beg (- end beg))))))
 
-(defun conn--read-string-with-timeout (&optional predicate ensure-targets)
+(defun conn--read-string-with-timeout (&optional predicate)
   (unwind-protect
       (conn-with-input-method
         (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-               (string (char-to-string (read-char prompt t)))
-               (success nil))
+               (string (char-to-string (read-char prompt t))))
           (while-no-input
-            (conn-make-string-target-overlays string predicate)
-            (setq success t))
+            (conn-make-string-target-overlays string predicate))
           (while-let ((next-char (read-char (format (concat prompt "%s") string)
                                             t conn-read-string-timeout)))
-            (setq string (concat string (char-to-string next-char))
-                  success nil)
+            (setq string (concat string (char-to-string next-char)))
             (conn-delete-targets)
             (while-no-input
-              (conn-make-string-target-overlays string predicate)
-              (setq success t)))
-          (unless (or success (not ensure-targets))
-            (conn-delete-targets)
-            (conn-make-string-target-overlays string predicate))
+              (conn-make-string-target-overlays string predicate)))
           (message nil)
           string))
     (conn-delete-targets)))
@@ -3830,21 +3836,13 @@ Target overlays may override this default by setting the
     (set-window-parameter window 'conn-dispatch-lines lines)))
 
 (defun conn--dispatch-labels ()
-  (conn-protected-let*
-      ((count 0)
-       (target-overlays
-        (cl-loop for win in (conn--get-target-windows)
-                 for targets = (funcall conn-target-sort-function
-                                        (window-parameter win 'conn-targets))
-                 do (cl-incf count (length targets))
-                 collect (cons win targets)))
-       (label-strings
-        (or (funcall conn-label-string-generator count)
-            (user-error "No matching candidates")))
-       (labels
-        nil
-        (mapc #'conn-label-delete labels)))
-    (pcase-dolist (`(,window . ,targets) target-overlays)
+  (conn-protected-let* ((label-strings
+                         (or (funcall conn-label-string-generator
+                                      conn-target-count)
+                             (user-error "No matching candidates")))
+                        (labels nil (mapc #'conn-label-delete labels)))
+    (pcase-dolist (`(,window . ,targets) conn-targets)
+      (setq targets (seq-sort conn-target-sort-function targets))
       (with-current-buffer (window-buffer window)
         (conn--dispatch-window-lines window)
         (let ((window-pixelwise
@@ -3885,6 +3883,8 @@ Target overlays may override this default by setting the
     labels))
 
 (defun conn-dispatch--select-target (finder)
+  (when (or conn-targets (/= conn-target-count 0))
+    (conn-delete-targets))
   (catch 'mouse-click
     (let ((conn-target-window-predicate conn-target-window-predicate)
           (conn-target-sort-function conn-target-sort-function)
@@ -3905,19 +3905,15 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch target Finders
 
-(defun conn-target-sort-nearest (targets)
-  (compat-call sort
-               targets
-               :lessp (lambda (a b)
-                        (< (abs (- (overlay-end a) (point)))
-                           (abs (- (overlay-end b) (point)))))))
+(defun conn-target-sort-nearest (a b)
+  (< (abs (- (overlay-end a) (point)))
+     (abs (- (overlay-end b) (point)))))
 
 (defun conn-delete-targets ()
-  (cl-loop for win in (conn--get-target-windows)
-           for targets = (window-parameter win 'conn-targets)
-           do
-           (mapc #'delete-overlay targets)
-           (set-window-parameter win 'conn-targets nil)))
+  (cl-loop for (_ . targets) in conn-targets
+           do (mapc #'delete-overlay targets))
+  (setq conn-targets nil
+        conn-target-count 0))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (catch 'char
