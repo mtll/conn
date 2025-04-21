@@ -3239,9 +3239,6 @@ associated with a command's thing.
 
 For the meaning of ACTION see `conn-define-dispatch-action'.")
 
-(defvar conn-target-sort-function
-  'conn-target-sort-nearest)
-
 (defvar-local conn-state-for-read-dispatch 'conn-read-dispatch-state
   "Default state for performing `conn--dispatch-read-thing'.
 
@@ -3523,14 +3520,6 @@ of a command.")
   :group 'conn
   :type '(list symbol))
 
-(defvar conn-target-window-predicate
-  'conn-dispatch-ignored-mode
-  "Predicates which windows must satisfy in order to be considered during
-dispatch.
-
-Each function should take a window and return nil if the window should
-be ignored by during dispatch.")
-
 (defun conn-dispatch-ignored-mode (win)
   "Return non-nil if the major mode of WIN's buffer is ignored by dispatch.
 
@@ -3553,12 +3542,23 @@ with `conn-dispatch-thing-ignored-modes'."
   "Face for matches when reading strings."
   :group 'conn-faces)
 
-(put 'conn-target-overlay 'conn-overlay t)
-(put 'conn-target-overlay 'priority 2002)
-
 (defvar conn-targets nil)
 
 (defvar conn-target-count 0)
+
+(defvar conn-target-sort-function
+  'conn-target-sort-nearest)
+
+(defvar conn-target-window-predicate
+  'conn-dispatch-ignored-mode
+  "Predicate which windows must satisfy in order to be considered during
+dispatch.
+
+Each function should take a window and return nil if the window should
+be ignored by during dispatch.")
+
+(put 'conn-target-overlay 'conn-overlay t)
+(put 'conn-target-overlay 'priority 2002)
 
 (defun conn-make-target-overlay (pt length &optional thing padding-function window)
   "Make a target overlay at PT of LENGTH.
