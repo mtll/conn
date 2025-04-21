@@ -1777,7 +1777,7 @@ returned.")
       (set-window-parameter window 'conn-label (substring string 1))
       label)))
 
-(defun conn-label-select (candidates)
+(defun conn-label-select (candidates &optional prompt-prefix)
   "Select a label from CANDIDATES.
 
 Prompts to user for prefix characters one at a time and narrows the
@@ -1791,12 +1791,11 @@ has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
   (let* ((current candidates)
-         (len (number-to-string (length candidates)))
          (init-prompt (propertize
-                       (concat "[" len "] char: ")
+                       (concat prompt-prefix "char: ")
                        'face 'minibuffer-prompt))
          (no-matches (propertize
-                      (concat "[" len "] char: (no matches)")
+                      (concat prompt-prefix "char: (no matches)")
                       'face 'minibuffer-prompt))
          (prompt init-prompt))
     (cl-loop
@@ -3596,7 +3595,8 @@ Optionally the overlay may have an associated THING."
     (overlay-put ov 'window (or window (selected-window)))
     (overlay-put ov 'padding-function padding-function)
     (cl-incf conn-target-count)
-    (push ov (alist-get (or window (selected-window)) conn-targets))))
+    (push ov (alist-get (or window (selected-window)) conn-targets))
+    ov))
 
 (defun conn-delete-target-overlay (ov)
   (let ((win (overlay-get ov 'window)))
@@ -3893,7 +3893,10 @@ Target overlays may override this default by setting the
           (progn
             (funcall finder)
             (setf labels (conn--dispatch-labels))
-            (let ((target (conn-label-select labels)))
+            (let* ((prompt (concat "["
+                                   (number-to-string conn-target-count)
+                                   "] "))
+                   (target (conn-label-select labels prompt)))
               (list (overlay-start target)
                     (overlay-get target 'window)
                     (overlay-get target 'thing))))
@@ -3996,10 +3999,9 @@ Returns a cons of (STRING . OVERLAYS)."
     (with-selected-window win
       (save-excursion
         (goto-char (window-end))
-        (while (and (/= (point)
-                        (progn
-                          (forward-thing thing -1)
-                          (point)))
+        (while (and (/= (point) (progn
+                                  (forward-thing thing -1)
+                                  (point)))
                     (<= (window-start) (point)))
           (unless (and (= (point) (point-min))
                        (not (bounds-of-thing-at-point thing)))
@@ -4034,17 +4036,16 @@ Returns a cons of (STRING . OVERLAYS)."
          (`(,tbeg . ,_tend) (= beg tbeg)))))))
 
 (defun conn--dispatch-columns ()
-  (save-excursion
-    (with-restriction (window-start) (window-end)
-      (save-excursion
-        (ignore-errors
-          (while (< (point) (point-max))
-            (line-move-visual 1)
-            (conn-make-target-overlay (point) 0))))
-      (save-excursion
-        (ignore-errors
-          (while (< (point-min) (point))
-            (line-move-visual -1)
+  (let ((goal-column (or goal-column (current-column))))
+    (save-excursion
+      (with-restriction (window-start) (window-end)
+        (save-excursion
+          (while (and (< (point) (point-max))
+                      (line-move-visual 1 t))
+            (conn-make-target-overlay (point) 0)))
+        (save-excursion
+          (while (and (< (point-min) (point))
+                      (line-move-visual -1 t))
             (conn-make-target-overlay (point) 0)))))))
 
 (defun conn--dispatch-lines ()
