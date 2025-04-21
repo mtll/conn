@@ -3563,40 +3563,52 @@ be ignored by during dispatch.")
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
-  (conn-protected-let*
-      ((line-bounds
-        (save-excursion
-          (goto-char pt)
-          (cons (pos-bol) (pos-eol))))
-       (composition-end
-        (when (and (> length 0)
-                   (get-text-property pt 'composition))
-          (next-single-property-change
-           pt 'composition nil (cdr line-bounds))))
-       (composition-start
-        (when composition-end
-          (previous-single-property-change
-           composition-end 'composition nil (car line-bounds))))
-       (ov (if composition-start
-               (if (> length 0)
-                   (make-overlay composition-start composition-end nil t)
-                 (make-overlay composition-start composition-start nil t))
-             (make-overlay pt (min (+ pt length) (cdr line-bounds)) nil t))
-           (delete-overlay ov)))
-    (overlay-put ov 'conn-overlay t)
-    (overlay-put ov 'thing thing)
-    (overlay-put ov 'category 'conn-target-overlay)
-    ;; Prevents overlay extending into invisible text ellipsis
-    (when (> length 0)
-      (overlay-put ov 'display
-                   (propertize (buffer-substring (overlay-start ov)
-                                                 (overlay-end ov))
-                               'face 'conn-target-overlay-face)))
-    (overlay-put ov 'window (or window (selected-window)))
-    (overlay-put ov 'padding-function padding-function)
-    (cl-incf conn-target-count)
-    (push ov (alist-get (or window (selected-window)) conn-targets))
-    ov))
+  (unless window
+    (setq window (selected-window)))
+  (unless (cl-loop for ov in (overlays-in pt (+ pt length))
+                   thereis (and (eq (overlay-get ov 'category) 'conn-target-overlay)
+                                (eq (overlay-get ov 'window) window)))
+    (conn-protected-let* ((line-bounds
+                           (save-excursion
+                             (goto-char pt)
+                             (cons (pos-bol) (pos-eol))))
+                          (composition-end
+                           (when (get-text-property pt 'composition)
+                             (next-single-property-change
+                              pt 'composition
+                              nil (cdr line-bounds))))
+                          (composition-start
+                           (when composition-end
+                             (previous-single-property-change
+                              composition-end 'composition
+                              nil (car line-bounds))))
+                          (ov (if composition-start
+                                  (if (> length 0)
+                                      (make-overlay composition-start
+                                                    composition-end
+                                                    nil t)
+                                    (make-overlay composition-start
+                                                  composition-start
+                                                  nil t))
+                                (make-overlay pt
+                                              (min (+ pt length)
+                                                   (cdr line-bounds))
+                                              nil t))
+                              (delete-overlay ov)))
+      (overlay-put ov 'conn-overlay t)
+      (overlay-put ov 'thing thing)
+      (overlay-put ov 'category 'conn-target-overlay)
+      ;; Prevents overlay extending into invisible text ellipsis
+      (when (> length 0)
+        (overlay-put ov 'display
+                     (propertize (buffer-substring (overlay-start ov)
+                                                   (overlay-end ov))
+                                 'face 'conn-target-overlay-face)))
+      (overlay-put ov 'window window)
+      (overlay-put ov 'padding-function padding-function)
+      (cl-incf conn-target-count)
+      (push ov (alist-get window conn-targets))
+      ov)))
 
 (defun conn-delete-target-overlay (ov)
   (let ((win (overlay-get ov 'window)))
@@ -3848,38 +3860,30 @@ Target overlays may override this default by setting the
         (let ((window-pixelwise
                (funcall conn-pixelwise-labels-window-predicate window targets)))
           (dolist (tar targets)
-            (if (cl-loop for ov in (overlays-in (overlay-start tar)
-                                                (overlay-end tar))
-                         thereis (and (not (eq ov tar))
-                                      (eq (overlay-get ov 'category)
-                                          'conn-target-overlay)
-                                      (eq (overlay-get ov 'window)
-                                          window)))
-                (delete-overlay tar)
-              (conn-protected-let* ((string (pop label-strings))
-                                    (beg (overlay-end tar))
-                                    (ov (make-overlay beg beg) (delete-overlay ov)))
-                (overlay-put ov 'category 'conn-label-overlay)
-                (overlay-put ov 'window window)
-                (overlay-put ov 'target-overlay tar)
-                (funcall (thread-last
-                           (if (and window-pixelwise
-                                    (funcall conn-pixelwise-labels-target-predicate ov))
-                               (lambda (str)
-                                 (conn--dispatch-setup-label-pixelwise
-                                  ov str (overlay-get tar 'padding-function)))
+            (conn-protected-let* ((string (pop label-strings))
+                                  (beg (overlay-end tar))
+                                  (ov (make-overlay beg beg) (delete-overlay ov)))
+              (overlay-put ov 'category 'conn-label-overlay)
+              (overlay-put ov 'window window)
+              (overlay-put ov 'target-overlay tar)
+              (funcall (thread-last
+                         (if (and window-pixelwise
+                                  (funcall conn-pixelwise-labels-target-predicate ov))
                              (lambda (str)
-                               (conn--dispatch-setup-label-charwise
-                                ov str (overlay-get tar 'padding-function))))
-                           (overlay-put ov 'setup-fn))
-                         string)
-                (push (make-conn-dispatch-label :string string
-                                                :overlay ov
-                                                :prop (if (overlay-get ov 'display)
-                                                          'display
-                                                        'before-string)
-                                                :target-overlay tar)
-                      labels)))))))
+                               (conn--dispatch-setup-label-pixelwise
+                                ov str (overlay-get tar 'padding-function)))
+                           (lambda (str)
+                             (conn--dispatch-setup-label-charwise
+                              ov str (overlay-get tar 'padding-function))))
+                         (overlay-put ov 'setup-fn))
+                       string)
+              (push (make-conn-dispatch-label :string string
+                                              :overlay ov
+                                              :prop (if (overlay-get ov 'display)
+                                                        'display
+                                                      'before-string)
+                                              :target-overlay tar)
+                    labels))))))
     labels))
 
 (defun conn-dispatch--select-target (finder)
@@ -3906,7 +3910,7 @@ Target overlays may override this default by setting the
           (set-window-parameter win 'conn-dispatch-lines nil))))))
 
 
-;;;;; Dispatch target Finders
+;;;;; Dispatch target finders
 
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
@@ -4070,9 +4074,9 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not (invisible-p (1- (point)))))
               (if (= (point) (point-max))
                   ;; hack to get the label displayed on its own line
-                  (overlay-put (conn-make-target-overlay (point) 0)
-                               'after-string
-                               (propertize " " 'display '(space :width 0)))
+                  (when-let* ((ov (conn-make-target-overlay (point) 0)))
+                    (overlay-put ov 'after-string
+                                 (propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay
                  (point) 0 nil 'conn--right-justify-padding)))))))))
 
@@ -4093,9 +4097,9 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not (invisible-p (1- (point)))))
               (if (= (point-max) (point))
                   ;; hack to get the label displayed on its own line
-                  (overlay-put (conn-make-target-overlay (point) 0)
-                               'after-string
-                               (propertize " " 'display '(space :width 0)))
+                  (when-let* ((ov (conn-make-target-overlay (point) 0)))
+                    (overlay-put ov 'after-string
+                                 (propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay (point) 0)))))))))
 
 (defun conn--dispatch-inner-lines (&optional end)
