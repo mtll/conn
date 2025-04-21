@@ -3887,8 +3887,7 @@ Target overlays may override this default by setting the
     labels))
 
 (defun conn-dispatch--select-target (finder)
-  (when (or conn-targets (/= conn-target-count 0))
-    (conn-delete-targets))
+  (conn-delete-targets)
   (catch 'mouse-click
     (let ((conn-target-window-predicate conn-target-window-predicate)
           (conn-target-sort-function conn-target-sort-function)
