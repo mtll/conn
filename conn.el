@@ -694,7 +694,21 @@ be restricted to those before or after the current match inclusive."
           (when (or (null predicate)
                     (save-match-data
                       (funcall predicate (match-beginning 0) (match-end 0))))
-            (push (match-beginning 0) matches)))))
+            (push (cons (match-beginning 0) (match-end 0)) matches)))))
+    (nreverse matches)))
+
+(defun conn--visible-re-matches (regexp &optional predicate)
+  "Return all matches for REGEXP visible in the selected window."
+  (let (matches)
+    (save-excursion
+      (pcase-dolist (`(,beg . ,end)
+                     (conn--visible-regions (window-start) (window-end)))
+        (goto-char beg)
+        (while (re-search-forward regexp end t)
+          (when (or (null predicate)
+                    (save-match-data
+                      (funcall predicate (match-beginning 0) (match-end 0))))
+            (push (cons (match-beginning 0) (match-end 0)) matches)))))
     (nreverse matches)))
 
 (defun conn--read-from-with-preview (prompt bounds &optional regexp-flag)
@@ -1817,7 +1831,7 @@ themselves once the selection process has concluded."
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
-(defun conn--make-target-overlay (pt length &optional thing padding-function)
+(defun conn--make-target-overlay (pt length &optional thing padding-function window)
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
@@ -1848,51 +1862,39 @@ Optionally the overlay may have an associated THING."
                    (propertize (buffer-substring (overlay-start ov)
                                                  (overlay-end ov))
                                'face 'conn-target-overlay-face)))
-    (overlay-put ov 'window (selected-window))
+    (overlay-put ov 'window (or window (selected-window)))
     (overlay-put ov 'padding-function padding-function)
-    ov))
+    (push ov (window-parameter (or window (selected-window)) 'conn-targets))))
 
-(defun conn--string-preview-overlays-1 (win string &optional predicate)
-  (conn-protected-let* ((ovs nil (mapc #'delete-overlay ovs)))
+(defun conn-make-string-target-overlays (string &optional predicate)
+  (dolist (win (conn--get-target-windows))
     (with-selected-window win
-      (dolist (pt (conn--visible-matches string predicate))
-        (push (conn--make-target-overlay pt (length string)) ovs))
-      (funcall conn-target-sort-function ovs))))
+      (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
+        (conn--make-target-overlay beg (- end beg))))))
 
-(defun conn--string-preview-overlays (string &optional predicate)
-  (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-    (dolist (win (conn--get-target-windows))
-      (when-let* ((overlays (conn--string-preview-overlays-1 win string predicate)))
-        (push (cons win overlays) targets)))
-    (nreverse targets)))
-
-(defun conn--read-string-with-timeout-1 (&optional predicate)
-  "Read a string with preview overlays and timeout `conn-read-string-timeout'.
-
-Returns a cons of (STRING . OVERLAYS)."
-  (conn-with-input-method
-    (conn-protected-let*
-        ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-         (string (char-to-string (read-char prompt t)))
-         (targets
+(defun conn--read-string-with-timeout (&optional predicate ensure-targets)
+  (unwind-protect
+      (conn-with-input-method
+        (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+               (string (char-to-string (read-char prompt t)))
+               (success nil))
           (while-no-input
-            (conn--string-preview-overlays string predicate))
-          (conn-delete-targets targets)))
-      (while-let ((next-char (read-char (format (concat prompt "%s") string)
-                                        t conn-read-string-timeout)))
-        (setq string (concat string (char-to-string next-char)))
-        (conn-delete-targets targets)
-        (setq targets
-              (while-no-input
-                (conn--string-preview-overlays string predicate))))
-      (message nil)
-      (cons string targets))))
-
-(defun conn--read-string-with-timeout (&optional predicate)
-  (pcase-let ((`(,string . ,targets)
-               (conn--read-string-with-timeout-1 predicate)))
-    (conn-delete-targets targets)
-    string))
+            (conn-make-string-target-overlays string predicate)
+            (setq success t))
+          (while-let ((next-char (read-char (format (concat prompt "%s") string)
+                                            t conn-read-string-timeout)))
+            (setq string (concat string (char-to-string next-char))
+                  success nil)
+            (conn-delete-targets)
+            (while-no-input
+              (conn-make-string-target-overlays string predicate)
+              (setq success t)))
+          (unless (or success (not ensure-targets))
+            (conn-delete-targets)
+            (conn-make-string-target-overlays string predicate))
+          (message nil)
+          string))
+    (conn-delete-targets)))
 
 
 ;;;;; Window header-line labels
@@ -3232,8 +3234,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
     (setf conn--last-bounds-of-command
-          (delq conn--last-bounds-of-command
-                (assq (recursion-depth) conn--last-bounds-of-command)))
+          (delq (assq (recursion-depth) conn--last-bounds-of-command)
+                conn--last-bounds-of-command))
     (when (and conn-local-mode
                (eq (current-buffer) (marker-buffer conn-this-command-start)))
       (when (and conn-this-command-handler
@@ -3282,8 +3284,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :group 'conn-faces)
 
 (defvar conn-dispatch-default-target-finder
-  (lambda ()
-    (conn--dispatch-chars t))
+  'conn-dispatch-read-string-with-timeout
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -3354,7 +3355,7 @@ of a command.")
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
-  "h" `(conn-expand-remote conn--dispatch-chars)
+  "h" `(conn-expand-remote conn-dispatch-read-string-with-timeout)
   "n" 'conn-forward-defun
   "J" 'conn-forward-inner-line
   "L" 'conn-backward-inner-line
@@ -3369,7 +3370,7 @@ of a command.")
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
-  "." `(forward-sexp ,(lambda () (conn--string-preview-overlays "("))))
+  "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-dispatch-mover-state 'conn-dot-mode)
@@ -4513,15 +4514,16 @@ Target overlays may override this default by setting the
 (defun conn-target-sort-nearest (targets)
   (compat-call sort
                targets
-               :in-place t
                :lessp (lambda (a b)
                         (< (abs (- (overlay-end a) (point)))
                            (abs (- (overlay-end b) (point)))))))
 
-(defun conn-delete-targets (targets)
-  (unless (eq targets t)
-    (cl-loop for (_win . ovs) in targets
-             when ovs do (mapc #'delete-overlay ovs))))
+(defun conn-delete-targets ()
+  (cl-loop for win in (conn--get-target-windows)
+           for targets = (window-parameter win 'conn-targets)
+           do
+           (mapc #'delete-overlay targets)
+           (set-window-parameter win 'conn-targets nil)))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (catch 'char
@@ -4545,230 +4547,180 @@ Target overlays may override this default by setting the
 Returns a cons of (STRING . OVERLAYS)."
   (cl-assert (> N 0))
   (conn-with-input-method
-    (conn-protected-let*
-        ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
-         (string (char-to-string (conn-dispatch-read-event prompt t)))
-         (targets
-          (while-no-input
-            (conn--string-preview-overlays string predicate))
-          (conn-delete-targets targets)))
+    (let* ((prompt (propertize "chars: " 'face 'minibuffer-prompt))
+           (string (char-to-string (conn-dispatch-read-event prompt t)))
+           (success nil))
+      (while-no-input
+        (conn-make-string-target-overlays string predicate)
+        (setq success t))
       (dotimes (_ (1- N))
         (thread-last
           (conn-dispatch-read-event (format (concat prompt "%s") string) t)
           (char-to-string)
           (concat string)
           (setq string))
-        (conn-delete-targets targets)
-        (setq targets (while-no-input
-                        (conn--string-preview-overlays string))))
+        (setq success nil)
+        (conn-delete-targets)
+        (while-no-input
+          (conn-make-string-target-overlays string)
+          (setq success t)))
+      (unless success
+        (conn-make-string-target-overlays string))
       (message nil)
-      (cons string targets))))
+      string)))
 
 (defun conn-dispatch-read-string-with-timeout (&optional predicate)
   "Read a string with preview overlays and timeout `conn-read-string-timeout'.
 
 Returns a cons of (STRING . OVERLAYS)."
   (conn-with-input-method
-    (conn-protected-let*
-        ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-         (string (char-to-string (conn-dispatch-read-event prompt t)))
-         (targets
-          (while-no-input
-            (conn--string-preview-overlays string predicate))
-          (conn-delete-targets targets)))
+    (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+           (string (char-to-string (conn-dispatch-read-event prompt t)))
+           (success nil))
+      (while-no-input
+        (conn-make-string-target-overlays string predicate)
+        (setq success t))
       (while-let ((next-char (conn-dispatch-read-event
                               (format (concat prompt "%s") string) t
                               conn-read-string-timeout)))
-        (setq string (concat string (char-to-string next-char)))
-        (conn-delete-targets targets)
-        (setq targets
-              (while-no-input
-                (conn--string-preview-overlays string predicate))))
+        (setq string (concat string (char-to-string next-char))
+              success nil)
+        (conn-delete-targets)
+        (while-no-input
+          (conn-make-string-target-overlays string predicate)
+          (setq success t)))
+      (unless success
+        (conn-make-string-target-overlays string predicate))
       (message nil)
-      (cons string targets))))
-
-(defun conn--dispatch-chars ()
-  (cl-loop for targets = (cdr (conn-dispatch-read-string-with-timeout))
-           until targets finally return targets))
+      string)))
 
 (defun conn--dispatch-chars-in-thing (thing)
-  (cl-loop for targets = (cdr (conn-dispatch-read-string-with-timeout
-                               (lambda (beg _end)
-                                 (goto-char beg)
-                                 (ignore-errors
-                                   (bounds-of-thing-at-point thing)))))
-           until targets finally return targets))
-
-(defun conn--dispatch-2-chars ()
-  (cl-loop for targets = (cdr (conn-dispatch-read-n-chars 2))
-           until targets finally return targets))
+  (conn-dispatch-read-string-with-timeout
+   (lambda (beg _end)
+     (goto-char beg)
+     (ignore-errors
+       (bounds-of-thing-at-point thing)))))
 
 (defun conn--dispatch-all-things (thing)
-  (cl-labels ((window-things (window)
-                (with-selected-window window
-                  (conn-protected-let* ((start (point))
-                                        (ovs nil (mapc #'delete-overlay ovs)))
-                    (save-excursion
-                      (goto-char (window-end))
-                      (while (and (/= (point)
-                                      (progn
-                                        (forward-thing thing -1)
-                                        (point)))
-                                  (<= (window-start) (point)))
-                        (unless (or (= (point) start)
-                                    (and (= (point) (point-min))
-                                         (not (bounds-of-thing-at-point thing))))
-                          (push (conn--make-target-overlay (point) 0) ovs))))
-                    (funcall conn-target-sort-function ovs)))))
-    (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-      (dolist (win (conn--get-target-windows))
-        (when-let* ((window-targets (window-things win)))
-          (push (cons win window-targets) targets)))
-      (nreverse targets))))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (goto-char (window-end))
+        (while (and (/= (point)
+                        (progn
+                          (forward-thing thing -1)
+                          (point)))
+                    (<= (window-start) (point)))
+          (unless (and (= (point) (point-min))
+                       (not (bounds-of-thing-at-point thing)))
+            (conn--make-target-overlay (point) 0)))))))
 
 (defun conn--dispatch-all-buttons ()
-  (cl-labels ((window-buttons (win)
-                (conn-protected-let*
-                    ((buttons nil (conn-delete-targets buttons)))
-                  (with-selected-window win
-                    (with-restriction (window-start) (window-end)
-                      (save-excursion
-                        (goto-char (point-min))
-                        (when (button-at (point))
-                          (push (conn--make-target-overlay (point) 0 nil) buttons))
-                        (while (forward-button 1 nil nil t)
-                          (push (conn--make-target-overlay (point) 0 nil) buttons)))))
-                  (funcall conn-target-sort-function buttons))))
-    (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-      (dolist (win (conn--get-target-windows))
-        (push (cons win (window-buttons win)) targets))
-      (nreverse targets))))
-
-(defun conn--dispatch-re-matches (regexp)
-  (cl-labels ((window-matches (win)
-                (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-                  (with-selected-window win
-                    (save-excursion
-                      (goto-char (window-start))
-                      (while (re-search-forward regexp (window-end) t)
-                        (push (conn--make-target-overlay
-                               (match-beginning 0)
-                               (- (match-end 0) (match-beginning 0)))
-                              targets))))
-                  (funcall conn-target-sort-function targets))))
-    (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-      (dolist (win (conn--get-target-windows))
-        (when-let* ((matches (window-matches win)))
-          (push (cons win matches) targets)))
-      (nreverse targets))))
-
-(defun conn--dispatch-things-with-prefix (thing prefix-length)
-  (let ((predicate (lambda (beg _end)
-                     (save-excursion
-                       (goto-char beg)
-                       (pcase (ignore-errors (bounds-of-thing-at-point thing))
-                         (`(,tbeg . ,_tend) (= beg tbeg)))))))
-    (cl-loop for (_str . targets) = (conn-dispatch-read-n-chars
-                                     prefix-length predicate)
-             until targets
-             finally return targets)))
-
-(defun conn--dispatch-columns ()
-  (conn-protected-let* ((goal-column (or goal-column (current-column)))
-                        (ovs nil (mapc #'delete-overlay ovs)))
-    (save-excursion
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
       (with-restriction (window-start) (window-end)
         (save-excursion
-          (ignore-errors
-            (while (< (point) (point-max))
-              (line-move-visual 1)
-              (push (conn--make-target-overlay (point) 0) ovs))))
-        (save-excursion
-          (ignore-errors
-            (while (< (point-min) (point))
-              (line-move-visual -1)
-              (push (conn--make-target-overlay (point) 0) ovs))))))
-    (list (cons (selected-window)
-                (funcall conn-target-sort-function ovs)))))
+          (goto-char (point-min))
+          (when (button-at (point))
+            (conn--make-target-overlay (point) 0 nil))
+          (while (forward-button 1 nil nil t)
+            (conn--make-target-overlay (point) 0 nil)))))))
+
+(defun conn--dispatch-re-matches (regexp)
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (goto-char (window-start))
+        (pcase-dolist (`(,beg . ,end) (conn--visible-re-matches regexp))
+          (conn--make-target-overlay beg (- end beg)))))))
+
+(defun conn--dispatch-things-with-prefix (thing prefix-length)
+  (conn-dispatch-read-n-chars
+   prefix-length
+   (lambda (beg _end)
+     (save-excursion
+       (goto-char beg)
+       (pcase (ignore-errors (bounds-of-thing-at-point thing))
+         (`(,tbeg . ,_tend) (= beg tbeg)))))))
+
+(defun conn--dispatch-columns ()
+  (save-excursion
+    (with-restriction (window-start) (window-end)
+      (save-excursion
+        (ignore-errors
+          (while (< (point) (point-max))
+            (line-move-visual 1)
+            (conn--make-target-overlay (point) 0))))
+      (save-excursion
+        (ignore-errors
+          (while (< (point-min) (point))
+            (line-move-visual -1)
+            (conn--make-target-overlay (point) 0)))))))
 
 (defun conn--dispatch-lines ()
-  (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-    (dolist (win (conn--get-target-windows))
-      (push (list win) targets)
-      (with-selected-window win
-        (save-excursion
-          (with-restriction (window-start) (window-end)
-            (goto-char (point-min))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (when (and (bolp)
+                     (<= (+ (point) (window-hscroll)) (line-end-position))
+                     (goto-char (+ (point) (window-hscroll)))
+                     (not (invisible-p (point))))
+            (conn--make-target-overlay
+             (point) 0 nil 'conn--right-justify-padding))
+          (while (/= (point) (point-max))
+            (forward-line)
             (when (and (bolp)
-                       (<= (+ (point) (window-hscroll)) (line-end-position))
+                       (<= (+ (point) (window-hscroll))
+                           (line-end-position) (point-max))
                        (goto-char (+ (point) (window-hscroll)))
-                       (not (invisible-p (point))))
-              (push (conn--make-target-overlay
-                     (point) 0 nil 'conn--right-justify-padding)
-                    (cdar targets)))
-            (while (/= (point) (point-max))
-              (forward-line)
-              (when (and (bolp)
-                         (<= (+ (point) (window-hscroll))
-                             (line-end-position) (point-max))
-                         (goto-char (+ (point) (window-hscroll)))
-                         (not (invisible-p (point)))
-                         (not (invisible-p (1- (point)))))
-                (if (= (point) (point-max))
-                    (let ((ov (conn--make-target-overlay (point) 0)))
-                      ;; hack to get the label displayed on its own line
-                      (overlay-put ov 'after-string
-                                   (propertize " " 'display '(space :width 0)))
-                      (push ov (cdar targets)))
-                  (push (conn--make-target-overlay
-                         (point) 0 nil 'conn--right-justify-padding)
-                        (cdar targets)))))))))
-    (nreverse (seq-filter #'cdr targets))))
+                       (not (invisible-p (point)))
+                       (not (invisible-p (1- (point)))))
+              (if (= (point) (point-max))
+                  ;; hack to get the label displayed on its own line
+                  (overlay-put (conn--make-target-overlay (point) 0)
+                               'after-string
+                               (propertize " " 'display '(space :width 0)))
+                (conn--make-target-overlay
+                 (point) 0 nil 'conn--right-justify-padding)))))))))
 
 (defun conn--dispatch-lines-end ()
-  (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-    (dolist (win (conn--get-target-windows))
-      (push (list win) targets)
-      (with-selected-window win
-        (save-excursion
-          (with-restriction (window-start) (window-end)
-            (goto-char (point-min))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (move-end-of-line nil)
+          (when (and (eolp) (not (invisible-p (point))))
+            (conn--make-target-overlay (point) 0))
+          (while (/= (point) (point-max))
+            (forward-line)
             (move-end-of-line nil)
-            (when (and (eolp) (not (invisible-p (point))))
-              (push (conn--make-target-overlay (point) 0) (cdar targets)))
-            (while (/= (point) (point-max))
-              (forward-line)
-              (move-end-of-line nil)
-              (when (and (eolp)
-                         (not (invisible-p (point)))
-                         (not (invisible-p (1- (point)))))
-                (if (= (point-max) (point))
-                    (let ((ov (conn--make-target-overlay (point) 0)))
-                      ;; hack to get the label displayed on its own line
-                      (overlay-put ov 'after-string
-                                   (propertize " " 'display '(space :width 0)))
-                      (push ov (cdar targets)))
-                  (push (conn--make-target-overlay (point) 0) (cdar targets)))))))))
-    (nreverse (seq-filter #'cdr targets))))
+            (when (and (eolp)
+                       (not (invisible-p (point)))
+                       (not (invisible-p (1- (point)))))
+              (if (= (point-max) (point))
+                  ;; hack to get the label displayed on its own line
+                  (overlay-put (conn--make-target-overlay (point) 0)
+                               'after-string
+                               (propertize " " 'display '(space :width 0)))
+                (conn--make-target-overlay (point) 0)))))))))
 
 (defun conn--dispatch-inner-lines (&optional end)
-  (conn-protected-let* ((targets nil (conn-delete-targets targets)))
-    (dolist (win (conn--get-target-windows))
-      (push (list win) targets)
-      (with-selected-window win
-        (save-excursion
-          (with-restriction (window-start) (window-end)
-            (goto-char (point-max))
-            (while (let ((pt (point)))
-                     (forward-line -1)
-                     (if end
-                         (conn-end-of-inner-line)
-                       (conn-beginning-of-inner-line))
-                     (/= (point) pt))
-              (when (not (invisible-p (point)))
-                (push (conn--make-target-overlay (point) 0)
-                      (cdar targets))))))))
-    (nreverse (seq-filter #'cdr targets))))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-max))
+          (while (let ((pt (point)))
+                   (forward-line -1)
+                   (if end
+                       (conn-end-of-inner-line)
+                     (conn-beginning-of-inner-line))
+                   (/= (point) pt))
+            (when (not (invisible-p (point)))
+              (conn--make-target-overlay (point) 0))))))))
 
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
@@ -4804,25 +4756,31 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Dispatch Commands
 
+(defun conn--get-targets ()
+  (cl-loop for win in (conn--get-target-windows)
+           collect (cons win (funcall conn-target-sort-function
+                                      (window-parameter win 'conn-targets)))))
+
 (defun conn-dispatch--find-target (finder)
   (catch 'mouse-click
-    (let (targets labels)
+    (let (labels)
       (unwind-protect
           (progn
-            (setf targets (funcall finder)
-                  labels (conn--dispatch-labels
-                          (or (funcall
-                               conn-label-string-generator
-                               (let ((sum 0))
-                                 (dolist (p targets sum)
-                                   (setq sum (+ sum (length (cdr p)))))))
-                              (user-error "No matching candidates"))
-                          targets))
+            (funcall finder)
+            (let ((targets (conn--get-targets)))
+              (setf labels (conn--dispatch-labels
+                            (or (funcall
+                                 conn-label-string-generator
+                                 (let ((sum 0))
+                                   (dolist (p targets sum)
+                                     (setq sum (+ sum (length (cdr p)))))))
+                                (user-error "No matching candidates"))
+                            targets)))
             (let ((target (conn-label-select labels)))
               (list (overlay-start target)
                     (overlay-get target 'window)
                     (overlay-get target 'thing))))
-        (conn-delete-targets targets)
+        (conn-delete-targets)
         (mapc #'conn-label-delete labels)))))
 
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-extra-args
@@ -4952,7 +4910,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   "Jump to point defined by two characters and maybe a label."
   (interactive)
   (conn-dispatch-on-things nil nil
-                           'conn--dispatch-2-chars
+                           (lambda () (conn-dispatch-read-n-chars 2))
                            'conn-dispatch-jump nil))
 
 
@@ -5376,7 +5334,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'char
  :default-action 'conn-dispatch-jump
- :dispatch-target-finder (lambda () (conn--dispatch-chars )))
+ :dispatch-target-finder 'conn-dispatch-read-string-with-timeout)
 
 (conn-register-thing-commands
  'buffer 'conn-discrete-thing-handler
@@ -5449,7 +5407,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-register-thing
  'expansion
- :dispatch-target-finder 'conn--dispatch-chars)
+ :dispatch-target-finder 'conn-dispatch-read-string-with-timeout)
 
 (conn-register-thing-commands
  'expansion nil
