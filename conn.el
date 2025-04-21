@@ -8611,42 +8611,35 @@ Operates with the selected windows parent window."
   (conn-set-mode-property 'dired-mode :hide-mark-cursor t)
 
   (defun conn--dispatch-dired-lines ()
-    (conn-protected-let* ((dired-movement-style 'bounded)
-                          (ovs nil (mapc #'delete-overlay ovs)))
-                         (save-excursion
-                           (with-restriction (window-start) (window-end)
-                             (goto-char (point-min))
-                             (while (/= (point)
-                                        (progn
-                                          (dired-next-line 1)
-                                          (point)))
-                               (push (conn--make-target-overlay (point) 0) ovs))))
-                         ovs))
+    (let ((dired-movement-style 'bounded))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (while (/= (point)
+                     (progn
+                       (dired-next-line 1)
+                       (point)))
+            (conn--make-target-overlay (point) 0))))))
 
   (defun conn--dispatch-dired-dirline ()
-    (conn-protected-let* ((ovs nil (mapc #'delete-overlay ovs)))
-                         (save-excursion
-                           (with-restriction (window-start) (window-end)
-                             (goto-char (point-min))
-                             (while (/= (point)
-                                        (progn
-                                          (dired-next-dirline 1)
-                                          (point)))
-                               (push (conn--make-target-overlay (point) 0) ovs))))
-                         ovs))
+    (save-excursion
+      (with-restriction (window-start) (window-end)
+        (goto-char (point-min))
+        (while (/= (point)
+                   (progn
+                     (dired-next-dirline 1)
+                     (point)))
+          (conn--make-target-overlay (point) 0)))))
 
   (defun conn--dispatch-dired-subdir ()
-    (conn-protected-let* ((start (window-start))
-                          (end (window-end))
-                          (ovs nil (mapc #'delete-overlay ovs)))
-                         (save-excursion
-                           (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
-                             (when (<= start marker end)
-                               (goto-char marker)
-                               (push (conn--make-target-overlay
-                                      (+ 2 marker) (- (line-end-position) marker 2))
-                                     ovs)))
-                           ovs)))
+    (let ((start (window-start))
+          (end (window-end)))
+      (save-excursion
+        (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
+          (when (<= start marker end)
+            (goto-char marker)
+            (conn--make-target-overlay
+             (+ 2 marker) (- (line-end-position) marker 2)))))))
 
   (conn-register-thing
    'dired-line
@@ -8815,31 +8808,27 @@ Operates with the selected windows parent window."
   (declare-function ibuffer-backward-filter-group "ibuffer")
 
   (defun conn--dispatch-ibuffer-lines ()
-    (conn-protected-let* ((ibuffer-movement-cycle nil)
-                          (ovs nil (mapc #'delete-overlay ovs)))
-                         (save-excursion
-                           (with-restriction (window-start) (window-end)
-                             (goto-char (point-max))
-                             (while (/= (point)
-                                        (progn
-                                          (ibuffer-backward-line)
-                                          (point)))
-                               (unless (get-text-property (point) 'ibuffer-filter-group-name)
-                                 (push (conn--make-target-overlay (point) 0) ovs))))
-                           ovs)))
+    (let ((ibuffer-movement-cycle nil))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-max))
+          (while (/= (point)
+                     (progn
+                       (ibuffer-backward-line)
+                       (point)))
+            (unless (get-text-property (point) 'ibuffer-filter-group-name)
+              (conn--make-target-overlay (point) 0)))))))
 
   (defun conn--dispatch-ibuffer-filter-group ()
-    (conn-protected-let* ((ibuffer-movement-cycle nil)
-                          (ovs nil (mapc #'delete-overlay ovs)))
-                         (save-excursion
-                           (with-restriction (window-start) (window-end)
-                             (goto-char (point-max))
-                             (while (/= (point)
-                                        (progn
-                                          (ibuffer-backward-filter-group)
-                                          (point)))
-                               (push (conn--make-target-overlay (point) 0) ovs)))
-                           ovs)))
+    (let ((ibuffer-movement-cycle nil))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-max))
+          (while (/= (point)
+                     (progn
+                       (ibuffer-backward-filter-group)
+                       (point)))
+            (conn--make-target-overlay (point) 0))))))
 
   (conn-register-thing
    'ibuffer-line
@@ -8994,17 +8983,15 @@ Operates with the selected windows parent window."
     (conn-dispatch-on-things
      nil nil
      (lambda ()
-       (conn-protected-let* ((ovs nil (mapc #'delete-overlay ovs)))
-         (cl-loop for win in (conn--get-target-windows)
-                  do (with-selected-window win
-                       (save-excursion
-                         (let ((last-pt (goto-char (window-end))))
-                           (while (and (> last-pt (progn
-                                                    (Info-prev-reference)
-                                                    (setq last-pt (point))))
-                                       (<= (window-start) (point) (window-end)))
-                             (push (conn--make-target-overlay (point) 0 nil) ovs)))))
-                  finally return ovs)))
+       (dolist (win (conn--get-target-windows))
+         (with-selected-window win
+           (save-excursion
+             (let ((last-pt (goto-char (window-end))))
+               (while (and (> last-pt (progn
+                                        (Info-prev-reference)
+                                        (setq last-pt (point))))
+                           (<= (window-start) (point) (window-end)))
+                 (conn--make-target-overlay (point) 0 nil)))))))
      (lambda (win pt _thing _thing-arg)
        (select-window win)
        (goto-char pt)
