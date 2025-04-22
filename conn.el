@@ -3644,6 +3644,8 @@ Optionally the overlay may have an associated THING."
 
 ;;;;; Dispatch labels
 
+(defvar conn-dispatch-label-function 'conn-dispatch-labels)
+
 (defvar conn-default-label-padding-function 'conn--centered-padding
   "Default function for padding dispatch labels.
 
@@ -3847,7 +3849,7 @@ Target overlays may override this default by setting the
         (setq prev (point))))
     (set-window-parameter window 'conn-dispatch-lines lines)))
 
-(defun conn--dispatch-labels ()
+(defun conn-dispatch-labels ()
   (conn-protected-let* ((label-strings
                          (or (funcall conn-label-string-generator
                                       conn-target-count)
@@ -3895,7 +3897,7 @@ Target overlays may override this default by setting the
       (unwind-protect
           (progn
             (funcall finder)
-            (setf labels (conn--dispatch-labels))
+            (setf labels (funcall conn-dispatch-label-function))
             (let* ((prompt (concat "["
                                    (number-to-string conn-target-count)
                                    "] "))
