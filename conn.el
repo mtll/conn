@@ -1777,7 +1777,7 @@ returned.")
       (set-window-parameter window 'conn-label (substring string 1))
       label)))
 
-(defun conn-label-select (candidates &optional prompt-prefix)
+(defun conn-label-select (candidates &optional prompt)
   "Select a label from CANDIDATES.
 
 Prompts to user for prefix characters one at a time and narrows the
@@ -1790,14 +1790,10 @@ for the label to process and `conn-label-reset' is called when the user
 has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
-  (let* ((current candidates)
-         (init-prompt (propertize
-                       (concat prompt-prefix "char: ")
-                       'face 'minibuffer-prompt))
-         (no-matches (propertize
-                      (concat prompt-prefix "char: (no matches)")
-                      'face 'minibuffer-prompt))
-         (prompt init-prompt))
+  (let* ((prompt (propertize (or prompt "chars:") 'face 'minibuffer-prompt))
+         (current candidates)
+         (no-matches (concat prompt (propertize " (no matches)" 'face 'error)))
+         (init-prompt prompt))
     (cl-loop
      (pcase current
        ('nil
@@ -1968,17 +1964,16 @@ Bounds list is of the form ((BEG . END) . SUBREGIONS).  Commands may return
 multiple SUBREGIONS when it makes sense to do so.  For example
 `forward-sexp' with a ARG of 3 would return the BEG and END of the group
 of 3 sexps moved over as well as the bounds of each individual sexp."
-  (prog1
-      (if-let* ((forward (get cmd 'forward-op)))
-          (conn-bounds-of-command forward arg)
-        (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
-              (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                           (when (symbolp cmd)
-                             (alist-get (get cmd :conn-command-thing)
-                                        conn-bounds-of-command-alist))
-                           conn-bounds-of-command-default)
-                       cmd arg)))
-    (deactivate-mark t)))
+  (if-let* ((forward (get cmd 'forward-op)))
+      (conn-bounds-of-command forward arg)
+    (save-mark-and-excursion
+      (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
+            (funcall (or (alist-get cmd conn-bounds-of-command-alist)
+                         (when (symbolp cmd)
+                           (alist-get (get cmd :conn-command-thing)
+                                      conn-bounds-of-command-alist))
+                         conn-bounds-of-command-default)
+                     cmd arg)))))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -2096,6 +2091,7 @@ is read."
     (list bounds bounds)))
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
+  (deactivate-mark t)
   (let ((current-prefix-arg (when (> 0 (prefix-numeric-value arg)) '-))
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
                                        'conn-discrete-thing-handler))
@@ -2103,21 +2099,20 @@ is read."
         (this-command cmd)
         (conn-this-command-start (point-marker))
         (regions))
-    (save-mark-and-excursion
-      (catch 'done
-        (ignore-errors
-          (dotimes (_ (abs (prefix-numeric-value arg)))
-            (call-interactively cmd)
-            (unless (region-active-p)
-              (funcall conn-this-command-handler conn-this-command-start))
-            (move-marker conn-this-command-start (point))
-            (let ((reg (cons (region-beginning) (region-end))))
-              (if (equal reg (car regions))
-                  (throw 'done nil)
-                (push reg regions))))))
-      (cons (cons (seq-min (mapcar #'car regions))
-                  (seq-max (mapcar #'cdr regions)))
-            (nreverse regions)))))
+    (catch 'done
+      (ignore-errors
+        (dotimes (_ (abs (prefix-numeric-value arg)))
+          (call-interactively cmd)
+          (unless (region-active-p)
+            (funcall conn-this-command-handler conn-this-command-start))
+          (move-marker conn-this-command-start (point))
+          (let ((reg (cons (region-beginning) (region-end))))
+            (if (equal reg (car regions))
+                (throw 'done nil)
+              (push reg regions))))))
+    (cons (cons (seq-min (mapcar #'car regions))
+                (seq-max (mapcar #'cdr regions)))
+          (nreverse regions))))
 
 (defun conn--bounds-of-region (_cmd _arg)
   (cons (cons (region-beginning) (region-end))
@@ -2324,24 +2319,23 @@ BOUNDS is of the form returned by `region-bounds'."
 
 (defun conn--bounds-of-dots (&rest _)
   (conn-dot-mode 1)
-  (save-mark-and-excursion
-    (unwind-protect
-        (let ((dots
-               (cl-loop for dot in (progn (recursive-edit) conn--dots)
-                        when (overlay-buffer dot)
-                        collect (if (overlay-get dot 'point)
-                                    (cons (overlay-start dot)
-                                          (overlay-start dot))
+  (unwind-protect
+      (let ((dots
+             (cl-loop for dot in (progn (recursive-edit) conn--dots)
+                      when (overlay-buffer dot)
+                      collect (if (overlay-get dot 'point)
                                   (cons (overlay-start dot)
-                                        (overlay-end dot))))))
-          (if dots
-              (cl-loop for (b . e) in dots
-                       minimize b into beg
-                       maximize e into end
-                       finally return (cons (cons beg end) (nreverse dots)))
-            (list (cons (region-beginning) (region-end)))))
-      (conn-dot-mode -1)
-      (deactivate-mark t))))
+                                        (overlay-start dot))
+                                (cons (overlay-start dot)
+                                      (overlay-end dot))))))
+        (if dots
+            (cl-loop for (b . e) in dots
+                     minimize b into beg
+                     maximize e into end
+                     finally return (cons (cons beg end) (nreverse dots)))
+          (list (cons (region-beginning) (region-end)))))
+    (conn-dot-mode -1)
+    (deactivate-mark t)))
 
 
 ;;;; Kapply
@@ -3888,7 +3882,7 @@ Target overlays may override this default by setting the
                     labels))))))
     labels))
 
-(defun conn-dispatch--select-target (finder)
+(defun conn-dispatch--select-target (finder &optional prompt)
   (conn-delete-targets)
   (catch 'mouse-click
     (let ((conn-target-window-predicate conn-target-window-predicate)
@@ -3900,7 +3894,8 @@ Target overlays may override this default by setting the
             (setf labels (funcall conn-dispatch-label-function))
             (let* ((prompt (concat "["
                                    (number-to-string conn-target-count)
-                                   "] "))
+                                   "] "
+                                   prompt))
                    (target (conn-label-select labels prompt)))
               (list (overlay-start target)
                     (overlay-get target 'window)
@@ -3935,8 +3930,9 @@ Target overlays may override this default by setting the
          (when (and (funcall conn-target-window-predicate win)
                     (not (posn-area posn)))
            (throw 'mouse-click (list pt win nil))))
-        ((and ev (pred characterp))
-         (throw 'char ev))
+        ((and ev (pred characterp)) (throw 'char ev))
+        ((or 'escape 27) (throw 'end nil))
+        ((or 'backspace 127) (throw 'char #x200000))
         ('nil (throw 'char nil))))))
 
 (defun conn-dispatch-read-n-chars (N &optional predicate)
@@ -4526,7 +4522,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-copy-replace (window pt thing-cmd thing-arg)
-  :description "Copy Replace"
+  :description "Copy and Replace"
   :filter (lambda () (unless buffer-read-only 'this))
   (with-selected-window window
     (save-excursion
@@ -4593,19 +4589,21 @@ Returns a cons of (STRING . OVERLAYS)."
   :description "Goto"
   (select-window window)
   (unless (= pt (point))
-    (unless (region-active-p)
-      (push-mark nil t))
-    (goto-char pt)
-    (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-      (`(,beg . ,end)
-       (unless (region-active-p)
-         (if (= (point) end)
-             (conn--push-ephemeral-mark beg)
-           (conn--push-ephemeral-mark end)))
-       (unless (or (= pt beg) (= pt end))
-         (goto-char beg)))
-      (_ (user-error "Cannot find %s at point"
-                     (get thing-cmd :conn-command-thing))))))
+    (let ((forward (< (point) pt)))
+      (unless (region-active-p)
+        (push-mark nil t))
+      (goto-char pt)
+      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (`(,beg . ,end)
+         (if (region-active-p)
+             (goto-char (if forward end beg))
+           (if (= (point) end)
+               (conn--push-ephemeral-mark beg)
+             (conn--push-ephemeral-mark end))
+           (unless (or (= pt beg) (= pt end))
+             (goto-char beg))))
+        (_ (user-error "Cannot find %s at point"
+                       (get thing-cmd :conn-command-thing)))))))
 
 (conn-define-dispatch-action conn-dispatch-over (window pt thing-cmd thing-arg)
   :description "Over"
@@ -4813,14 +4811,14 @@ seconds."
                                      action action-extra-args
                                      predicate
                                      (xor invert-repeat repeat)))))
-  (let ((conn-target-window-predicate conn-target-window-predicate))
+  (let ((conn-target-window-predicate conn-target-window-predicate)
+        (prompt (if repeat "chars (ESC to end):" "chars:")))
     (when predicate
       (add-function :after-while conn-target-window-predicate predicate))
-    (ignore-error quit
+    (catch 'end
       (while
           (pcase-let* ((`(,pt ,window ,thing-override)
-                        (conn-dispatch--select-target finder)))
-            (conn--push-ephemeral-mark)
+                        (conn-dispatch--select-target finder prompt)))
             (prog1 repeat
               (apply action window pt
                      (or thing-override thing-cmd) thing-arg
@@ -4834,22 +4832,27 @@ seconds."
                (regions nil)
                (win (selected-window))
                (conn-target-window-predicate conn-target-window-predicate)
-               (conn-target-sort-function conn-target-sort-function))
+               (conn-target-sort-function conn-target-sort-function)
+               (prompt (if repeat "chars (ESC to end):" "chars:")))
     (add-function :before-while conn-target-window-predicate
                   (lambda (window) (eq win window)))
-    (save-mark-and-excursion
-      (ignore-error quit
-        (while
-            (prog1 repeat
-              (pcase-let ((`(,pt ,window ,thing) (conn-dispatch--select-target finder)))
-                (setf conn-this-command-thing
-                      (or thing (ignore-errors
-                                  (get thing-cmd :conn-command-thing))))
-                (apply action window pt thing-cmd thing-arg action-extra-args)
-                (push (cons (region-beginning) (region-end)) regions))))))
-    (setq regions (compat-call sort (conn--merge-regions regions t)
-                               :key #'car :in-place t))
-    (cons (cons (caar regions) (cdar (last regions))) regions)))
+    (catch 'end
+      (while
+          (prog1 repeat
+            (pcase-let ((`(,pt ,window ,thing-override)
+                         (conn-dispatch--select-target finder prompt))
+                        (mark-active nil))
+              (apply action window pt
+                     (or thing-override thing-cmd)
+                     thing-arg action-extra-args)
+              (push (cons (region-beginning) (region-end)) regions)))))
+    (unless regions (keyboard-quit))
+    (cl-loop for (b . e) in (compat-call sort
+                                         (conn--merge-regions regions t)
+                                         :key #'car :in-place t)
+             minimize b into beg
+             maximize e into end
+             finally return (cons (cons beg end) regions))))
 
 (defun conn-repeat-last-dispatch (_repeat)
   "Repeat the last dispatch command.
@@ -5068,20 +5071,20 @@ Expansions and contractions are provided by functions in
   "<t>" 'ignore)
 
 (defun conn--bounds-of-expansion (cmd arg)
-  (save-mark-and-excursion
-    (let ((current-prefix-arg arg))
-      (call-interactively cmd)
-      (let ((exit (set-transient-map
-                   conn-read-expand-region-map (lambda () t) nil
-                   (substitute-command-keys
-                    (concat "\\<conn-read-expand-region-map>"
-                            "Defining region. Press "
-                            "\\[exit-recursive-edit] to finish, "
-                            "\\[abort-recursive-edit] to abort.")))))
-        (unwind-protect
-            (recursive-edit)
-          (funcall exit)))
-      (list (cons (region-beginning) (region-end))))))
+  (deactivate-mark t)
+  (let ((current-prefix-arg arg))
+    (call-interactively cmd)
+    (let ((exit (set-transient-map
+                 conn-read-expand-region-map (lambda () t) nil
+                 (substitute-command-keys
+                  (concat "\\<conn-read-expand-region-map>"
+                          "Defining region. Press "
+                          "\\[exit-recursive-edit] to finish, "
+                          "\\[abort-recursive-edit] to abort.")))))
+      (unwind-protect
+          (recursive-edit)
+        (funcall exit)))
+    (list (cons (region-beginning) (region-end)))))
 
 
 ;;;;; Thing Definitions
@@ -5208,7 +5211,8 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'symbol
  :forward-op 'forward-symbol
- :dispatch-target-finder (lambda () (conn--dispatch-things-with-prefix 'symbol 1)))
+ :dispatch-target-finder (lambda ()
+                           (conn--dispatch-things-with-prefix 'symbol 1)))
 
 (conn-register-thing-commands
  'symbol 'conn-continuous-thing-handler
@@ -6691,6 +6695,9 @@ With a prefix arg prepend to a register instead."
             t)
            (list t)))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
+    (unless (and (<= beg (point) end)
+                 (<= beg (mark t) end))
+      (deactivate-mark))
     (conn--narrow-to-region-1 beg end record)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed"))))
@@ -9088,7 +9095,8 @@ Operates with the selected windows parent window."
 ;;;; compile mode
 
 (conn-set-mode-property 'compilation-mode :hide-mark-cursor t)
-(conn-set-mode-property 'grep-edit-mode :hide-mark-cursor nil)
+(static-if (<= 31 emacs-major-version)
+    (conn-set-mode-property 'grep-edit-mode :hide-mark-cursor nil))
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'compilation-mode)
   "h" 'conn-wincontrol-one-command
