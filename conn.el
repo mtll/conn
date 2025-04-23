@@ -1790,9 +1790,10 @@ for the label to process and `conn-label-reset' is called when the user
 has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
-  (let* ((prompt (propertize (or prompt "chars:") 'face 'minibuffer-prompt))
+  (let* ((prompt (propertize (concat (or prompt "chars") ": ")
+                             'face 'minibuffer-prompt))
          (current candidates)
-         (no-matches (concat prompt (propertize " (no matches)" 'face 'error)))
+         (no-matches (concat prompt (propertize "no matches" 'face 'error)))
          (init-prompt prompt))
     (cl-loop
      (pcase current
@@ -3238,6 +3239,8 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 The default may be overridden by setting the :conn-read-dispatch-state
 of a command.")
 
+(defvar conn-dispatch-repeat-flag nil)
+
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH"
@@ -3882,7 +3885,7 @@ Target overlays may override this default by setting the
                     labels))))))
     labels))
 
-(defun conn-dispatch--select-target (finder &optional prompt)
+(defun conn-dispatch--select-target (finder)
   (conn-delete-targets)
   (catch 'mouse-click
     (let ((conn-target-window-predicate conn-target-window-predicate)
@@ -3894,8 +3897,7 @@ Target overlays may override this default by setting the
             (setf labels (funcall conn-dispatch-label-function))
             (let* ((prompt (concat "["
                                    (number-to-string conn-target-count)
-                                   "] "
-                                   prompt))
+                                   "] chars"))
                    (target (conn-label-select labels prompt)))
               (list (overlay-start target)
                     (overlay-get target 'window)
@@ -3919,6 +3921,10 @@ Target overlays may override this default by setting the
         conn-target-count 0))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
+  (when conn-dispatch-repeat-flag
+    (setq prompt (concat (propertize "(ESC to finish repeating) "
+                                     'face 'minibuffer-prompt)
+                         prompt)))
   (catch 'char
     (while t
       (pcase (read-event prompt inherit-input-method seconds)
@@ -3930,10 +3936,15 @@ Target overlays may override this default by setting the
          (when (and (funcall conn-target-window-predicate win)
                     (not (posn-area posn)))
            (throw 'mouse-click (list pt win nil))))
-        ((and ev (pred characterp)) (throw 'char ev))
-        ((or 'escape 27) (throw 'end nil))
-        ((or 'backspace 127) (throw 'char #x200000))
-        ('nil (throw 'char nil))))))
+        ((and ev (pred characterp))
+         (throw 'char ev))
+        ((or 'escape 27)
+         (when conn-dispatch-repeat-flag
+           (throw 'end nil)))
+        ((or 'backspace 127)
+         (throw 'char #x200000))
+        ('nil
+         (throw 'char nil))))))
 
 (defun conn-dispatch-read-n-chars (N &optional predicate)
   "Read a string of N chars with preview overlays.
@@ -4812,13 +4823,13 @@ seconds."
                                      predicate
                                      (xor invert-repeat repeat)))))
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (prompt (if repeat "chars (ESC to end):" "chars:")))
+        (conn-dispatch-repeat-flag repeat))
     (when predicate
       (add-function :after-while conn-target-window-predicate predicate))
     (catch 'end
       (while
           (pcase-let* ((`(,pt ,window ,thing-override)
-                        (conn-dispatch--select-target finder prompt)))
+                        (conn-dispatch--select-target finder)))
             (prog1 repeat
               (apply action window pt
                      (or thing-override thing-cmd) thing-arg
@@ -4832,15 +4843,14 @@ seconds."
                (regions nil)
                (win (selected-window))
                (conn-target-window-predicate conn-target-window-predicate)
-               (conn-target-sort-function conn-target-sort-function)
-               (prompt (if repeat "chars (ESC to end):" "chars:")))
+               (conn-target-sort-function conn-target-sort-function))
     (add-function :before-while conn-target-window-predicate
                   (lambda (window) (eq win window)))
     (catch 'end
       (while
           (prog1 repeat
             (pcase-let ((`(,pt ,window ,thing-override)
-                         (conn-dispatch--select-target finder prompt))
+                         (conn-dispatch--select-target finder))
                         (mark-active nil))
               (apply action window pt
                      (or thing-override thing-cmd)
