@@ -3921,7 +3921,8 @@ Target overlays may override this default by setting the
         conn-target-count 0))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
-  (when conn-dispatch-repeat-flag
+  (when (and conn-dispatch-repeat-flag
+             (> conn-dispatch-repeat-flag 0))
     (setq prompt (concat (propertize "(ESC to finish repeating) "
                                      'face 'minibuffer-prompt)
                          prompt)))
@@ -3936,13 +3937,12 @@ Target overlays may override this default by setting the
          (when (and (funcall conn-target-window-predicate win)
                     (not (posn-area posn)))
            (throw 'mouse-click (list pt win nil))))
+        ((or 'escape 27)
+         (when (and conn-dispatch-repeat-flag
+                    (> conn-dispatch-repeat-flag 0))
+           (throw 'end nil)))
         ((and ev (pred characterp))
          (throw 'char ev))
-        ((or 'escape 27)
-         (when conn-dispatch-repeat-flag
-           (throw 'end nil)))
-        ((or 'backspace 127)
-         (throw 'char #x200000))
         ('nil
          (throw 'char nil))))))
 
@@ -3978,26 +3978,28 @@ Returns a cons of (STRING . OVERLAYS)."
   "Read a string with preview overlays and timeout `conn-read-string-timeout'.
 
 Returns a cons of (STRING . OVERLAYS)."
-  (conn-with-input-method
-    (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-           (string (char-to-string (conn-dispatch-read-event prompt t)))
-           (success nil))
-      (while-no-input
-        (conn-make-string-target-overlays string predicate)
-        (setq success t))
-      (while-let ((next-char (conn-dispatch-read-event
-                              (format (concat prompt "%s") string) t
-                              conn-read-string-timeout)))
-        (setq string (concat string (char-to-string next-char))
-              success nil)
-        (conn-delete-targets)
-        (while-no-input
-          (conn-make-string-target-overlays string predicate)
-          (setq success t)))
-      (unless success
-        (conn-make-string-target-overlays string predicate))
-      (message nil)
-      string)))
+  (cl-labels ((read-string ()
+                (conn-with-input-method
+                  (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+                         (string (char-to-string (conn-dispatch-read-event prompt t)))
+                         (success nil))
+                    (while-no-input
+                      (conn-make-string-target-overlays string predicate)
+                      (setq success t))
+                    (while-let ((next-char (conn-dispatch-read-event
+                                            (format (concat prompt "%s") string) t
+                                            conn-read-string-timeout)))
+                      (setq string (concat string (char-to-string next-char))
+                            success nil)
+                      (conn-delete-targets)
+                      (while-no-input
+                        (conn-make-string-target-overlays string predicate)
+                        (setq success t)))
+                    (unless success
+                      (conn-make-string-target-overlays string predicate))
+                    (message nil)))))
+    (while (= 0 conn-target-count)
+      (read-string))))
 
 (defun conn--dispatch-chars-in-thing (thing)
   (conn-dispatch-read-string-with-timeout
@@ -4823,7 +4825,7 @@ seconds."
                                      predicate
                                      (xor invert-repeat repeat)))))
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-flag repeat))
+        (conn-dispatch-repeat-flag (when repeat 0)))
     (when predicate
       (add-function :after-while conn-target-window-predicate predicate))
     (catch 'end
@@ -4834,6 +4836,7 @@ seconds."
               (apply action window pt
                      (or thing-override thing-cmd) thing-arg
                      action-extra-args)))
+        (cl-incf conn-dispatch-repeat-flag)
         (undo-boundary)))))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
@@ -4843,7 +4846,8 @@ seconds."
                (regions nil)
                (win (selected-window))
                (conn-target-window-predicate conn-target-window-predicate)
-               (conn-target-sort-function conn-target-sort-function))
+               (conn-target-sort-function conn-target-sort-function)
+               (conn-dispatch-repeat-flag (when repeat 0)))
     (add-function :before-while conn-target-window-predicate
                   (lambda (window) (eq win window)))
     (catch 'end
@@ -4855,7 +4859,8 @@ seconds."
               (apply action window pt
                      (or thing-override thing-cmd)
                      thing-arg action-extra-args)
-              (push (cons (region-beginning) (region-end)) regions)))))
+              (push (cons (region-beginning) (region-end)) regions)))
+        (cl-incf conn-dispatch-repeat-flag)))
     (unless regions (keyboard-quit))
     (cl-loop for (b . e) in (compat-call sort
                                          (conn--merge-regions regions t)
@@ -5013,19 +5018,14 @@ Expansions are provided by functions in `conn-expansion-functions'."
              (cl-loop for (_beg . end) in conn--current-expansions
                       when (> end (point)) return (goto-char end)
                       finally (user-error "No more expansions")))
-            (t
-             (pcase (catch 'found
-                      (pcase-dolist ((and cons `(,beg . ,end))
-                                     conn--current-expansions)
-                        (when (or (< beg (region-beginning))
-                                  (> end (region-end)))
-                          (throw 'found cons))))
-               (`(,beg . ,end)
-                (goto-char (if (= (point) (region-beginning)) beg end))
-                (conn--push-ephemeral-mark
-                 (if (= (point) (region-beginning)) end beg)))
-               ('nil
-                (user-error "No more expansions")))))))
+            ((cl-loop for (beg . end) in conn--current-expansions
+                      when (or (< beg (region-beginning))
+                               (> end (region-end)))
+                      return (progn
+                               (goto-char (if (= (point) (region-beginning)) beg end))
+                               (conn--push-ephemeral-mark
+                                (if (= (point) (region-beginning)) end beg)))
+                      finally (user-error "No more expansions"))))))
   (unless (or (region-active-p)
               (not conn-expand-pulse-region)
               executing-kbd-macro)
@@ -5053,18 +5053,13 @@ Expansions and contractions are provided by functions in
              (cl-loop for (_beg . end) in (reverse conn--current-expansions)
                       when (< end (point)) return (goto-char end)
                       finally (user-error "No more expansions")))
-            (t
-             (pcase (catch 'found
-                      (pcase-dolist ((and cons `(,beg . ,end))
-                                     (reverse conn--current-expansions))
-                        (when (or (> beg (region-beginning))
-                                  (< end (region-end)))
-                          (throw 'found cons))))
-               (`(,beg . ,end)
-                (goto-char (if (= (point) (region-beginning)) beg end))
-                (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
-               ('nil
-                (user-error "No more contractions")))))))
+            ((cl-loop for (beg . end) in (reverse conn--current-expansions)
+                      when (or (> beg (region-beginning))
+                               (< end (region-end)))
+                      return (progn
+                               (goto-char (if (= (point) (region-beginning)) beg end))
+                               (conn--push-ephemeral-mark (if (= (point) (region-end)) beg end)))
+                      finally (user-error "No more contractions"))))))
   (unless (or (region-active-p)
               (not conn-expand-pulse-region)
               executing-kbd-macro)
@@ -5616,6 +5611,8 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;; Commands
 
+(autoload 'kmacro-ring-head "kmacro")
+
 (defun conn-bind-last-kmacro-to-key ()
   "Like `kmacro-bind-to-key' but binds in `conn-get-overriding-map'.
 
@@ -5641,7 +5638,8 @@ execution."
                     key-seq
                     `(menu-item
                       "Keyboard Macro"
-                      (kmacro-ring-head)
+                      ,(let ((kmacro (kmacro-ring-head)))
+                         (lambda (arg) (funcall kmacro arg)))
                       :filter ,(lambda (cmd)
                                  (unless (or executing-kbd-macro
                                              defining-kbd-macro)
@@ -7926,27 +7924,25 @@ Operates with the selected windows parent window."
 (dolist (state '(conn-command-state conn-emacs-state))
   (keymap-set (conn-get-major-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
 
-(with-eval-after-load 'compilation-mode
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-movement-state 'compilation-mode)
-    "<" 'previous-error-no-select
-    ">" 'next-error-no-select))
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-movement-state 'compilation-mode)
+  "<" 'previous-error-no-select
+  ">" 'next-error-no-select)
 
-(with-eval-after-load 'rectangle-mark-mode
-  (define-keymap
-    :keymap (conn-get-mode-map 'conn-command-state 'rectangle-mark-mode)
-    "z" 'rectangle-exchange-point-and-mark
-    "C-y" 'conn-yank-replace-rectangle
-    "*" 'calc-grab-rectangle
-    "+" 'calc-grab-sum-down
-    "_" 'calc-grab-sum-across
-    "y" 'yank-rectangle
-    "DEL" 'clear-rectangle
-    "<backspace>" 'clear-rectangle
-    "d" 'open-rectangle
-    "C-d" 'delete-whitespace-rectangle
-    "#" 'rectangle-number-lines)
-  (conn-set-mode-map-depth 'conn-command-state 'rectangle-mark-mode -90))
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-command-state 'rectangle-mark-mode)
+  "z" 'rectangle-exchange-point-and-mark
+  "C-y" 'conn-yank-replace-rectangle
+  "*" 'calc-grab-rectangle
+  "+" 'calc-grab-sum-down
+  "_" 'calc-grab-sum-across
+  "y" 'yank-rectangle
+  "DEL" 'clear-rectangle
+  "<backspace>" 'clear-rectangle
+  "d" 'open-rectangle
+  "C-d" 'delete-whitespace-rectangle
+  "#" 'rectangle-number-lines)
+(conn-set-mode-map-depth 'conn-command-state 'rectangle-mark-mode -90)
 
 (defvar-keymap conn-isearch-map
   "M-Y" 'conn-isearch-yank-region
@@ -8179,7 +8175,6 @@ Operates with the selected windows parent window."
   :suppress t
   "H" 'conn-expand
   "b" (conn-remap-key "<conn-edit-map>")
-  "=" 'conntext-state
   "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-insert-state
@@ -8470,12 +8465,11 @@ Operates with the selected windows parent window."
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 
 
-;;;; Corfu
+;;;; Completion
 
-(with-eval-after-load 'corfu
-  (defun conn--exit-completion (_state)
-    (completion-in-region-mode -1))
-  (add-hook 'conn-exit-functions 'conn--exit-completion))
+(defun conn--exit-completion (_state)
+  (completion-in-region-mode -1))
+(add-hook 'conn-exit-functions 'conn--exit-completion)
 
 
 ;;;; Org
@@ -8519,84 +8513,83 @@ Operates with the selected windows parent window."
 
 ;;;; Outline
 
+(declare-function outline-mark-subtree "outline")
+(declare-function outline-next-heading "outline")
+(declare-function outline-previous-heading "outline")
+(declare-function outline-on-heading-p "outline")
+(declare-function outline-up-heading "outline")
+
+(conn-register-thing
+ 'heading
+ :dispatch-target-finder (lambda () (conn--dispatch-all-things 'heading))
+ :bounds-op (lambda ()
+              (save-mark-and-excursion
+                (outline-mark-subtree)
+                (cons (region-beginning) (region-end)))))
+
+(conn-register-thing-commands
+ 'heading 'conn-discrete-thing-handler
+ 'outline-up-heading
+ 'outline-next-heading
+ 'outline-next-visible-heading
+ 'outline-previous-visible-heading
+ 'outline-previous-heading
+ 'outline-forward-same-level
+ 'outline-backward-same-level)
+
 (define-minor-mode conntext-outline-mode
   "Minor mode for contextual bindings in outline-mode."
   :global t)
 
-(with-eval-after-load 'outline
-  (declare-function outline-mark-subtree "outline")
-  (declare-function outline-next-heading "outline")
-  (declare-function outline-previous-heading "outline")
-  (declare-function outline-on-heading-p "outline")
-  (declare-function outline-up-heading "outline")
+(defvar-keymap conntext-outline-map
+  "/ h" 'outline-hide-by-heading-regexp
+  "/ s" 'outline-show-by-heading-regexp
+  "<" 'outline-promote
+  ">" 'outline-demote
+  "I" 'outline-move-subtree-up
+  "K" 'outline-move-subtree-down
+  "RET" 'outline-insert-heading
+  "a" 'outline-show-all
+  "c" 'outline-hide-entry
+  "e" 'outline-show-entry
+  "f" 'outline-hide-other
+  "h" 'outline-hide-subtree
+  "i" 'outline-previous-visible-heading
+  "j" 'outline-backward-same-level
+  "k" 'outline-next-visible-heading
+  "b" 'outline-show-branches
+  "l" 'outline-forward-same-level
+  "v" 'outline-hide-leaves
+  "m" 'outline-mark-subtree
+  "o" 'outline-show-children
+  "q" 'outline-hide-sublevels
+  "s" 'outline-show-subtree
+  "t" 'outline-hide-body
+  "u" 'outline-up-heading)
 
-  (conn-register-thing
-   'heading
-   :dispatch-target-finder (lambda () (conn--dispatch-all-things 'heading))
-   :bounds-op (lambda ()
-                (save-mark-and-excursion
-                  (outline-mark-subtree)
-                  (cons (region-beginning) (region-end)))))
+(defvar-keymap conntext-outline-edit-repeat-map
+  :repeat t
+  "<" 'outline-promote
+  ">" 'outline-demote
+  "I" 'outline-move-subtree-up
+  "K" 'outline-move-subtree-down)
 
-  (conn-register-thing-commands
-   'heading 'conn-discrete-thing-handler
-   'outline-up-heading
-   'outline-next-heading
-   'outline-next-visible-heading
-   'outline-previous-visible-heading
-   'outline-previous-heading
-   'outline-forward-same-level
-   'outline-backward-same-level)
+(defvar-keymap conntext-outline-movement-repeat-map
+  :repeat t
+  "i" 'outline-previous-visible-heading
+  "j" 'outline-backward-same-level
+  "k" 'outline-next-visible-heading
+  "l" 'outline-forward-same-level
+  "u" 'outline-up-heading)
 
-  (defvar-keymap conntext-outline-map
-    "/ h" 'outline-hide-by-heading-regexp
-    "/ s" 'outline-show-by-heading-regexp
-    "<" 'outline-promote
-    ">" 'outline-demote
-    "I" 'outline-move-subtree-up
-    "K" 'outline-move-subtree-down
-    "RET" 'outline-insert-heading
-    "a" 'outline-show-all
-    "c" 'outline-hide-entry
-    "e" 'outline-show-entry
-    "f" 'outline-hide-other
-    "h" 'outline-hide-subtree
-    "i" 'outline-previous-visible-heading
-    "j" 'outline-backward-same-level
-    "k" 'outline-next-visible-heading
-    "b" 'outline-show-branches
-    "l" 'outline-forward-same-level
-    "v" 'outline-hide-leaves
-    "m" 'outline-mark-subtree
-    "o" 'outline-show-children
-    "q" 'outline-hide-sublevels
-    "s" 'outline-show-subtree
-    "t" 'outline-hide-body
-    "u" 'outline-up-heading)
+(define-keymap
+  :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
+  "b" (conntext-define conntext-outline-map
+        "Context outline map."
+        (when (and (looking-at-p outline-regexp) (bolp))
+          conntext-outline-map)))
 
-  (defvar-keymap conntext-outline-edit-repeat-map
-    :repeat t
-    "<" 'outline-promote
-    ">" 'outline-demote
-    "I" 'outline-move-subtree-up
-    "K" 'outline-move-subtree-down)
-
-  (defvar-keymap conntext-outline-movement-repeat-map
-    :repeat t
-    "i" 'outline-previous-visible-heading
-    "j" 'outline-backward-same-level
-    "k" 'outline-next-visible-heading
-    "l" 'outline-forward-same-level
-    "u" 'outline-up-heading)
-
-  (define-keymap
-    :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
-    "b" (conntext-define conntext-outline-map
-          "Context outline map."
-          (when (and (looking-at-p outline-regexp) (bolp))
-            conntext-outline-map)))
-
-  (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80))
+(conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80)
 
 
 ;;;; Dired
@@ -8611,195 +8604,193 @@ Operates with the selected windows parent window."
   (setq conn-state-for-read-dispatch 'conn-dired-dispatch-state)
   (conn-enter-state 'conn-emacs-state))
 
-(with-eval-after-load 'dired
-  (defvar dired-subdir-alist)
-  (defvar dired-movement-style)
-  (defvar dired-mode-map)
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dired-dispatch-state)
+  "f" 'conn-dispatch-dired-mark
+  "w" 'conn-dispatch-dired-kill-line
+  "d" 'conn-dispatch-dired-kill-subdir)
 
-  (declare-function dired-mark "dired")
-  (declare-function dired-unmark "dired")
-  (declare-function dired-next-line "dired")
-  (declare-function dired-next-dirline "dired")
-  (declare-function dired-marker-regexp "dired")
-  (declare-function dired-kill-subdir "dired-aux")
-  (declare-function dired-kill-line "dired-aux")
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "A" 'dired-find-alternate-file
+  "b" 'dired-up-directory
+  "k" 'dired-next-line
+  "i" 'dired-previous-line
+  "/" 'dired-undo
+  "I" 'dired-tree-up
+  "l" 'dired-next-dirline
+  "j" 'dired-prev-dirline
+  "m" 'dired-next-subdir
+  "n" 'dired-prev-subdir
+  ">" 'dired-next-marked-file
+  "<" 'dired-prev-marked-file
+  "K" 'dired-tree-down
+  "F" 'dired-create-empty-file
+  "TAB" 'dired-maybe-insert-subdir
+  "M-TAB" 'dired-kill-subdir
+  "w" 'dired-do-kill-lines
+  "s" (conn-remap-key "M-s" t)
+  "r" (conn-remap-key "%")
+  "," (conn-remap-key "*")
+  "x" (conn-remap-key "C-x" t)
+  "f" 'conn-dispatch-on-things
+  "M-SPC" 'dired-toggle-marks
+  "C-M-l" 'dired-do-redisplay
+  "z" 'dired-goto-file
+  ";" 'conn-wincontrol
+  "`" 'other-window
+  "SPC" 'scroll-up-command
+  "DEL" 'scroll-down-command
+  "v" 'dired-mark
+  "c" 'dired-unmark
+  "u" 'dired-do-delete
+  "M-w" 'dired-copy-filename-as-kill
+  "RET" 'dired-find-file
+  "o" 'dired-find-file-other-window
+  "M-o" 'conn-pop-mark-ring
+  "M-u" 'conn-unpop-mark-ring
+  "* p" 'dired-sort-toggle-or-edit
+  "* e" 'dired-mark-executables
+  "* l" 'dired-mark-symlinks
+  "* d" 'dired-mark-directories
+  "* r" 'dired-mark-files-regexp
+  "% c" 'dired-do-copy-regexp
+  "% h" 'dired-do-hardlink-regexp
+  "% s" 'dired-do-symlink-regexp
+  "% y" 'dired-do-relsymlink-regexp
+  "% t" 'dired-flag-garbage-files
+  "M-s s" 'dired-do-isearch
+  "M-s c" 'dired-do-isearch-regexp
+  "M-s q" 'dired-do-find-regexp
+  "M-s r" 'dired-do-find-regexp-and-replace)
 
-  (conn-set-mode-property 'dired-mode :hide-mark-cursor t)
+(defvar dired-subdir-alist)
+(defvar dired-movement-style)
+(defvar dired-mode-map)
 
-  (defun conn--dispatch-dired-lines ()
-    (let ((dired-movement-style 'bounded))
-      (save-excursion
-        (with-restriction (window-start) (window-end)
-          (goto-char (point-min))
-          (while (/= (point)
-                     (progn
-                       (dired-next-line 1)
-                       (point)))
-            (conn-make-target-overlay (point) 0))))))
+(declare-function dired-mark "dired")
+(declare-function dired-unmark "dired")
+(declare-function dired-next-line "dired")
+(declare-function dired-next-dirline "dired")
+(declare-function dired-marker-regexp "dired")
+(declare-function dired-kill-subdir "dired-aux")
+(declare-function dired-kill-line "dired-aux")
 
-  (defun conn--dispatch-dired-dirline ()
+(conn-set-mode-property 'dired-mode :hide-mark-cursor t)
+
+(defun conn--dispatch-dired-lines ()
+  (let ((dired-movement-style 'bounded))
     (save-excursion
       (with-restriction (window-start) (window-end)
         (goto-char (point-min))
         (while (/= (point)
                    (progn
-                     (dired-next-dirline 1)
+                     (dired-next-line 1)
                      (point)))
-          (conn-make-target-overlay (point) 0)))))
+          (conn-make-target-overlay (point) 0))))))
 
-  (defun conn--dispatch-dired-subdir ()
-    (let ((start (window-start))
-          (end (window-end)))
-      (save-excursion
-        (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
-          (when (<= start marker end)
-            (goto-char marker)
-            (conn-make-target-overlay
-             (+ 2 marker) (- (line-end-position) marker 2)))))))
+(defun conn--dispatch-dired-dirline ()
+  (save-excursion
+    (with-restriction (window-start) (window-end)
+      (goto-char (point-min))
+      (while (/= (point)
+                 (progn
+                   (dired-next-dirline 1)
+                   (point)))
+        (conn-make-target-overlay (point) 0)))))
 
-  (conn-register-thing
-   'dired-line
-   :dispatch-target-finder 'conn--dispatch-dired-lines
-   :default-action 'conn-dispatch-jump)
+(defun conn--dispatch-dired-subdir ()
+  (let ((start (window-start))
+        (end (window-end)))
+    (save-excursion
+      (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
+        (when (<= start marker end)
+          (goto-char marker)
+          (conn-make-target-overlay
+           (+ 2 marker) (- (line-end-position) marker 2)))))))
 
-  (conn-register-thing-commands
-   'dired-line nil
-   'dired-previous-line 'dired-next-line)
+(conn-register-thing
+ 'dired-line
+ :dispatch-target-finder 'conn--dispatch-dired-lines
+ :default-action 'conn-dispatch-jump)
 
-  (conn-register-thing
-   'dired-subdir
-   :dispatch-target-finder 'conn--dispatch-dired-subdir
-   :default-action 'conn-dispatch-jump)
+(conn-register-thing-commands
+ 'dired-line nil
+ 'dired-previous-line 'dired-next-line)
 
-  (conn-register-thing-commands
-   'dired-subdir nil
-   'dired-next-subdir 'dired-prev-subdir
-   'dired-tree-up 'dired-tree-down)
+(conn-register-thing
+ 'dired-subdir
+ :dispatch-target-finder 'conn--dispatch-dired-subdir
+ :default-action 'conn-dispatch-jump)
 
-  (conn-register-thing
-   'dired-dirline
-   :dispatch-target-finder 'conn--dispatch-dired-dirline
-   :default-action 'conn-dispatch-jump)
+(conn-register-thing-commands
+ 'dired-subdir nil
+ 'dired-next-subdir 'dired-prev-subdir
+ 'dired-tree-up 'dired-tree-down)
 
-  (conn-register-thing-commands
-   'dired-dirline nil
-   'dired-next-dirline 'dired-prev-dirline)
+(conn-register-thing
+ 'dired-dirline
+ :dispatch-target-finder 'conn--dispatch-dired-dirline
+ :default-action 'conn-dispatch-jump)
 
-  (conn-define-dispatch-action conn-dispatch-dired-mark (window pt _thing-cmd _thing-arg)
-    :description "Mark"
-    :window-predicate (lambda (win)
-                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                            'dired-mode))
-    (with-selected-window window
-      (save-excursion
-        (let ((regexp (dired-marker-regexp)))
-          (goto-char pt)
-          (goto-char (line-beginning-position))
-          (if (looking-at regexp)
-              (dired-unmark 1)
-            (dired-mark 1))))))
+(conn-register-thing-commands
+ 'dired-dirline nil
+ 'dired-next-dirline 'dired-prev-dirline)
 
-  (conn-define-dispatch-action conn-dispatch-dired-kill-line (window pt _thing-cmd _thing-arg)
-    :description "Kill Line"
-    :window-predicate (lambda (win)
-                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                            'dired-mode))
-    (with-selected-window window
-      (save-excursion
+(conn-define-dispatch-action conn-dispatch-dired-mark (window pt _thing-cmd _thing-arg)
+  :description "Mark"
+  :window-predicate (lambda (win)
+                      (eq (buffer-local-value 'major-mode (window-buffer win))
+                          'dired-mode))
+  (with-selected-window window
+    (save-excursion
+      (let ((regexp (dired-marker-regexp)))
         (goto-char pt)
-        (dired-kill-line))))
+        (goto-char (line-beginning-position))
+        (if (looking-at regexp)
+            (dired-unmark 1)
+          (dired-mark 1))))))
 
-  (conn-define-dispatch-action conn-dispatch-dired-kill-subdir (window pt _thing-cmd _thing-arg)
-    :description "Kill Subdir"
-    :window-predicate (lambda (win)
-                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                            'dired-mode))
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (dired-kill-subdir))))
+(conn-define-dispatch-action conn-dispatch-dired-kill-line (window pt _thing-cmd _thing-arg)
+  :description "Kill Line"
+  :window-predicate (lambda (win)
+                      (eq (buffer-local-value 'major-mode (window-buffer win))
+                          'dired-mode))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (dired-kill-line))))
 
-  (define-keymap
-    :keymap (conn-get-state-map 'conn-dired-dispatch-state)
-    "f" 'conn-dispatch-dired-mark
-    "w" 'conn-dispatch-dired-kill-line
-    "d" 'conn-dispatch-dired-kill-subdir)
-
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
-    "h" 'conn-wincontrol-one-command
-    "a" 'execute-extended-command
-    "A" 'dired-find-alternate-file
-    "b" 'dired-up-directory
-    "k" 'dired-next-line
-    "i" 'dired-previous-line
-    "/" 'dired-undo
-    "I" 'dired-tree-up
-    "l" 'dired-next-dirline
-    "j" 'dired-prev-dirline
-    "m" 'dired-next-subdir
-    "n" 'dired-prev-subdir
-    ">" 'dired-next-marked-file
-    "<" 'dired-prev-marked-file
-    "K" 'dired-tree-down
-    "F" 'dired-create-empty-file
-    "TAB" 'dired-maybe-insert-subdir
-    "M-TAB" 'dired-kill-subdir
-    "w" 'dired-do-kill-lines
-    "s" (conn-remap-key "M-s" t)
-    "r" (conn-remap-key "%")
-    "," (conn-remap-key "*")
-    "x" (conn-remap-key "C-x" t)
-    "f" 'conn-dispatch-on-things
-    "M-SPC" 'dired-toggle-marks
-    "C-M-l" 'dired-do-redisplay
-    "z" 'dired-goto-file
-    ";" 'conn-wincontrol
-    "`" 'other-window
-    "SPC" 'scroll-up-command
-    "DEL" 'scroll-down-command
-    "v" 'dired-mark
-    "c" 'dired-unmark
-    "u" 'dired-do-delete
-    "M-w" 'dired-copy-filename-as-kill
-    "RET" 'dired-find-file
-    "o" 'dired-find-file-other-window
-    "M-o" 'conn-pop-mark-ring
-    "M-u" 'conn-unpop-mark-ring
-    "* p" 'dired-sort-toggle-or-edit
-    "* e" 'dired-mark-executables
-    "* l" 'dired-mark-symlinks
-    "* d" 'dired-mark-directories
-    "* r" 'dired-mark-files-regexp
-    "% c" 'dired-do-copy-regexp
-    "% h" 'dired-do-hardlink-regexp
-    "% s" 'dired-do-symlink-regexp
-    "% y" 'dired-do-relsymlink-regexp
-    "% t" 'dired-flag-garbage-files
-    "M-s s" 'dired-do-isearch
-    "M-s c" 'dired-do-isearch-regexp
-    "M-s q" 'dired-do-find-regexp
-    "M-s r" 'dired-do-find-regexp-and-replace))
+(conn-define-dispatch-action conn-dispatch-dired-kill-subdir (window pt _thing-cmd _thing-arg)
+  :description "Kill Subdir"
+  :window-predicate (lambda (win)
+                      (eq (buffer-local-value 'major-mode (window-buffer win))
+                          'dired-mode))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (dired-kill-subdir))))
 
 
 ;;;; Magit
 
-(with-eval-after-load 'magit
-  (conn-set-mode-property 'magit-section-mode :hide-mark-cursor t)
+(conn-set-mode-property 'magit-section-mode :hide-mark-cursor t)
 
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
-    "h" 'conn-wincontrol-one-command
-    "," 'magit-dispatch
-    "<f8>" 'conn-command-state
-    "i" 'magit-section-backward
-    "k" 'magit-section-forward
-    "w" 'magit-delete-thing
-    "p" 'magit-reset-quickly
-    "n" 'magit-gitignore
-    "`" 'other-window
-    "@" 'magit-am
-    "x" (conn-remap-key "C-x" t)))
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
+  "h" 'conn-wincontrol-one-command
+  "," 'magit-dispatch
+  "<f8>" 'conn-command-state
+  "i" 'magit-section-backward
+  "k" 'magit-section-forward
+  "w" 'magit-delete-thing
+  "p" 'magit-reset-quickly
+  "n" 'magit-gitignore
+  "`" 'other-window
+  "@" 'magit-am
+  "x" (conn-remap-key "C-x" t))
 
 
 ;;;; Ibuffer
@@ -8811,247 +8802,239 @@ Operates with the selected windows parent window."
   :hide-mark-cursor t
   :suppress-input-method t)
 
-(with-eval-after-load 'ibuffer
-  (conn-set-mode-property 'ibuffer-mode :hide-mark-cursor t)
+(conn-set-mode-property 'ibuffer-mode :hide-mark-cursor t)
 
-  (defvar ibuffer-movement-cycle)
-  (defvar ibuffer-marked-char)
+(defvar ibuffer-movement-cycle)
+(defvar ibuffer-marked-char)
 
-  (declare-function ibuffer-backward-line "ibuffer")
-  (declare-function ibuffer-unmark-forward "ibuffer")
-  (declare-function ibuffer-mark-forward "ibuffer")
-  (declare-function ibuffer-current-mark "ibuffer")
-  (declare-function ibuffer-backward-filter-group "ibuffer")
+(declare-function ibuffer-backward-line "ibuffer")
+(declare-function ibuffer-unmark-forward "ibuffer")
+(declare-function ibuffer-mark-forward "ibuffer")
+(declare-function ibuffer-current-mark "ibuffer")
+(declare-function ibuffer-backward-filter-group "ibuffer")
 
-  (defun conn--dispatch-ibuffer-lines ()
-    (let ((ibuffer-movement-cycle nil))
-      (save-excursion
-        (with-restriction (window-start) (window-end)
-          (goto-char (point-max))
-          (while (/= (point)
-                     (progn
-                       (ibuffer-backward-line)
-                       (point)))
-            (unless (get-text-property (point) 'ibuffer-filter-group-name)
-              (conn-make-target-overlay (point) 0)))))))
+(defun conn--dispatch-ibuffer-lines ()
+  (let ((ibuffer-movement-cycle nil))
+    (save-excursion
+      (with-restriction (window-start) (window-end)
+        (goto-char (point-max))
+        (while (/= (point)
+                   (progn
+                     (ibuffer-backward-line)
+                     (point)))
+          (unless (get-text-property (point) 'ibuffer-filter-group-name)
+            (conn-make-target-overlay (point) 0)))))))
 
-  (defun conn--dispatch-ibuffer-filter-group ()
-    (let ((ibuffer-movement-cycle nil))
-      (save-excursion
-        (with-restriction (window-start) (window-end)
-          (goto-char (point-max))
-          (while (/= (point)
-                     (progn
-                       (ibuffer-backward-filter-group)
-                       (point)))
-            (conn-make-target-overlay (point) 0))))))
+(defun conn--dispatch-ibuffer-filter-group ()
+  (let ((ibuffer-movement-cycle nil))
+    (save-excursion
+      (with-restriction (window-start) (window-end)
+        (goto-char (point-max))
+        (while (/= (point)
+                   (progn
+                     (ibuffer-backward-filter-group)
+                     (point)))
+          (conn-make-target-overlay (point) 0))))))
 
-  (conn-register-thing
-   'ibuffer-line
-   :dispatch-target-finder 'conn--dispatch-ibuffer-lines
-   :default-action 'conn-dispatch-jump)
+(conn-register-thing
+ 'ibuffer-line
+ :dispatch-target-finder 'conn--dispatch-ibuffer-lines
+ :default-action 'conn-dispatch-jump)
 
-  (conn-register-thing-commands
-   'ibuffer-line nil
-   'ibuffer-backward-line 'ibuffer-forward-line)
+(conn-register-thing-commands
+ 'ibuffer-line nil
+ 'ibuffer-backward-line 'ibuffer-forward-line)
 
-  (conn-register-thing
-   'ibuffer-filter-group
-   :dispatch-target-finder 'conn--dispatch-ibuffer-filter-group
-   :default-action 'conn-dispatch-jump)
+(conn-register-thing
+ 'ibuffer-filter-group
+ :dispatch-target-finder 'conn--dispatch-ibuffer-filter-group
+ :default-action 'conn-dispatch-jump)
 
-  (conn-register-thing-commands
-   'ibuffer-filter-group nil
-   'ibuffer-forward-filter-group
-   'ibuffer-backward-filter-group)
+(conn-register-thing-commands
+ 'ibuffer-filter-group nil
+ 'ibuffer-forward-filter-group
+ 'ibuffer-backward-filter-group)
 
-  (conn-define-dispatch-action conn-dispatch-ibuffer-mark (window pt _thing-cmd _thing-arg)
-    :description "Mark"
-    :window-predicate (lambda (win)
-                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                            'ibuffer-mode))
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (if (or (null (ibuffer-current-mark))
-                (= (ibuffer-current-mark) ? ))
-            (ibuffer-mark-forward nil nil 1)
-          (ibuffer-unmark-forward nil nil 1)))))
+(conn-define-dispatch-action conn-dispatch-ibuffer-mark (window pt _thing-cmd _thing-arg)
+  :description "Mark"
+  :window-predicate (lambda (win)
+                      (eq (buffer-local-value 'major-mode (window-buffer win))
+                          'ibuffer-mode))
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (if (or (null (ibuffer-current-mark))
+              (= (ibuffer-current-mark) ? ))
+          (ibuffer-mark-forward nil nil 1)
+        (ibuffer-unmark-forward nil nil 1)))))
 
-  (keymap-set (conn-get-state-map 'conn-ibuffer-dispatch-state)
-              "f" 'conn-dispatch-ibuffer-mark)
+(keymap-set (conn-get-state-map 'conn-ibuffer-dispatch-state)
+            "f" 'conn-dispatch-ibuffer-mark)
 
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
-    "h" 'conn-wincontrol-one-command
-    "a" 'execute-extended-command
-    ";" 'conn-wincontrol
-    "/" 'ibuffer-do-revert
-    "`" 'other-window
-    "y" 'ibuffer-yank
-    "z" 'ibuffer-jump-to-buffer
-    "r" (conn-remap-key "%")
-    "," (conn-remap-key "*")
-    "l" 'ibuffer-forward-filter-group
-    "j" 'ibuffer-backward-filter-group
-    "m" 'ibuffer-jump-to-filter-group
-    "n" 'conn-ibuffer-filter-prefix
-    "f" 'conn-dispatch-on-things
-    "k" 'ibuffer-forward-line
-    "i" 'ibuffer-backward-line
-    "w" 'ibuffer-do-kill-lines
-    "u" 'ibuffer-do-kill-on-deletion-marks
-    "x" (conn-remap-key "C-x" t)
-    "s" (conn-remap-key "M-s" t)
-    "t a" 'ibuffer-do-sort-by-alphabetic
-    "t f" 'ibuffer-do-sort-by-filename/process
-    "t i" 'ibuffer-invert-sorting
-    "t m" 'ibuffer-do-sort-by-major-mode
-    "t s" 'ibuffer-do-sort-by-size
-    "t v" 'ibuffer-do-sort-by-recency
-    "M-s i r" 'ibuffer-do-isearch-regexp
-    "M-s i s" 'ibuffer-do-isearch
-    "M-s i o" 'ibuffer-do-occur
-    "M-w" 'ibuffer-copy-filename-as-kill
-    "<" 'ibuffer-forward-next-marked
-    ">" 'ibuffer-backwards-next-marked
-    "M-SPC" 'ibuffer-toggle-marks
-    "C-M-l" 'ibuffer-redisplay
-    "SPC" 'scroll-up-command
-    "DEL" 'scroll-down-command
-    "v" 'ibuffer-mark-forward
-    "c" 'ibuffer-unmark-forward
-    "C" 'ibuffer-unmark-backward
-    "o" 'ibuffer-visit-buffer-other-window
-    "RET" 'ibuffer-visit-buffer))
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  ";" 'conn-wincontrol
+  "/" 'ibuffer-do-revert
+  "`" 'other-window
+  "y" 'ibuffer-yank
+  "z" 'ibuffer-jump-to-buffer
+  "r" (conn-remap-key "%")
+  "," (conn-remap-key "*")
+  "l" 'ibuffer-forward-filter-group
+  "j" 'ibuffer-backward-filter-group
+  "m" 'ibuffer-jump-to-filter-group
+  "n" 'conn-ibuffer-filter-prefix
+  "f" 'conn-dispatch-on-things
+  "k" 'ibuffer-forward-line
+  "i" 'ibuffer-backward-line
+  "w" 'ibuffer-do-kill-lines
+  "u" 'ibuffer-do-kill-on-deletion-marks
+  "x" (conn-remap-key "C-x" t)
+  "s" (conn-remap-key "M-s" t)
+  "t a" 'ibuffer-do-sort-by-alphabetic
+  "t f" 'ibuffer-do-sort-by-filename/process
+  "t i" 'ibuffer-invert-sorting
+  "t m" 'ibuffer-do-sort-by-major-mode
+  "t s" 'ibuffer-do-sort-by-size
+  "t v" 'ibuffer-do-sort-by-recency
+  "M-s i r" 'ibuffer-do-isearch-regexp
+  "M-s i s" 'ibuffer-do-isearch
+  "M-s i o" 'ibuffer-do-occur
+  "M-w" 'ibuffer-copy-filename-as-kill
+  "<" 'ibuffer-forward-next-marked
+  ">" 'ibuffer-backwards-next-marked
+  "M-SPC" 'ibuffer-toggle-marks
+  "C-M-l" 'ibuffer-redisplay
+  "SPC" 'scroll-up-command
+  "DEL" 'scroll-down-command
+  "v" 'ibuffer-mark-forward
+  "c" 'ibuffer-unmark-forward
+  "C" 'ibuffer-unmark-backward
+  "o" 'ibuffer-visit-buffer-other-window
+  "RET" 'ibuffer-visit-buffer)
 
 
 ;;;; Markdown
 
-(with-eval-after-load 'markdown-mode
-  (conn-register-thing
-   'md-paragraph
-   :forward-op 'markdown-forward-paragraph
-   :modes '(markdown-mode))
+(conn-register-thing
+ 'md-paragraph
+ :forward-op 'markdown-forward-paragraph
+ :modes '(markdown-mode))
 
-  (conn-register-thing-commands
-   'md-paragraph 'conn-continuous-thing-handler
-   'markdown-forward-paragraph
-   'markdown-backward-paragraph)
+(conn-register-thing-commands
+ 'md-paragraph 'conn-continuous-thing-handler
+ 'markdown-forward-paragraph
+ 'markdown-backward-paragraph)
 
-  ;; TODO: other markdown things
-  )
+;; TODO: other markdown things
 
 
 ;;;; Treesit
 
 (static-if (<= 30 emacs-major-version)
-    (with-eval-after-load 'treesit
-      (conn-register-thing-commands
-       'defun 'conn-continuous-thing-handler
-       'treesit-end-of-defun
-       'treesit-beginning-of-defun)))
+    (conn-register-thing-commands
+     'defun 'conn-continuous-thing-handler
+     'treesit-end-of-defun
+     'treesit-beginning-of-defun))
 
 
 ;;;; Help
 
-(with-eval-after-load 'help-mode
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
-    "h" 'conn-wincontrol-one-command
-    "a" 'execute-extended-command
-    "b" 'beginning-of-buffer
-    "e" 'end-of-buffer
-    "j" 'backward-button
-    "l" 'forward-button
-    "i" 'scroll-down
-    "k" 'scroll-up
-    "f" 'conn-dispatch-on-buttons
-    "`" 'other-window
-    ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x" t)))
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "b" 'beginning-of-buffer
+  "e" 'end-of-buffer
+  "j" 'backward-button
+  "l" 'forward-button
+  "i" 'scroll-down
+  "k" 'scroll-up
+  "f" 'conn-dispatch-on-buttons
+  "`" 'other-window
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
 
-(with-eval-after-load 'helpful
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
-    "h" 'conn-wincontrol-one-command
-    "a" 'execute-extended-command
-    "b" 'beginning-of-buffer
-    "e" 'end-of-buffer
-    "j" 'backward-button
-    "l" 'forward-button
-    "i" 'scroll-down
-    "k" 'scroll-up
-    "f" 'conn-dispatch-on-buttons
-    "`" 'other-window
-    ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x" t)))
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "b" 'beginning-of-buffer
+  "e" 'end-of-buffer
+  "j" 'backward-button
+  "l" 'forward-button
+  "i" 'scroll-down
+  "k" 'scroll-up
+  "f" 'conn-dispatch-on-buttons
+  "`" 'other-window
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
 
 
 ;;;; Info
 
-(with-eval-after-load 'info
-  (declare-function Info-prev-reference "info")
-  (declare-function Info-follow-nearest-node "info")
+(declare-function Info-prev-reference "info")
+(declare-function Info-follow-nearest-node "info")
 
-  (defun dispatch-on-info-refs ()
-    (interactive)
-    (conn-dispatch-on-things
-     nil nil
-     (lambda ()
-       (dolist (win (conn--get-target-windows))
-         (with-selected-window win
-           (save-excursion
-             (let ((last-pt (goto-char (window-end))))
-               (while (and (> last-pt (progn
-                                        (Info-prev-reference)
-                                        (setq last-pt (point))))
-                           (<= (window-start) (point) (window-end)))
-                 (conn-make-target-overlay (point) 0 nil)))))))
-     (lambda (win pt _thing _thing-arg)
-       (select-window win)
-       (goto-char pt)
-       (Info-follow-nearest-node))
-     nil
-     (lambda (win)
-       (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
+(defun conn-dispatch-on-info-refs ()
+  (interactive)
+  (conn-dispatch-on-things
+   nil nil
+   (lambda ()
+     (dolist (win (conn--get-target-windows))
+       (with-selected-window win
+         (save-excursion
+           (let ((last-pt (goto-char (window-end))))
+             (while (and (> last-pt (progn
+                                      (Info-prev-reference)
+                                      (setq last-pt (point))))
+                         (<= (window-start) (point) (window-end)))
+               (conn-make-target-overlay (point) 0 nil)))))))
+   (lambda (win pt _thing _thing-arg)
+     (select-window win)
+     (goto-char pt)
+     (Info-follow-nearest-node))
+   nil
+   (lambda (win)
+     (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
 
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
-    "h" 'conn-wincontrol-one-command
-    "o" 'Info-history-back
-    "u" 'Info-history-forward
-    "m" 'Info-next
-    "n" 'Info-prev
-    "k" 'Info-scroll-up
-    "i" 'Info-scroll-down
-    "l" 'Info-forward-node
-    "j" 'Info-backward-node
-    "r" 'Info-up
-    "a" 'execute-extended-command
-    "p" 'Info-menu
-    "z" 'Info-toc
-    "f" 'dispatch-on-info-refs
-    "v" 'Info-index
-    "`" 'other-window
-    ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x" t)))
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
+  "h" 'conn-wincontrol-one-command
+  "o" 'Info-history-back
+  "u" 'Info-history-forward
+  "m" 'Info-next
+  "n" 'Info-prev
+  "k" 'Info-scroll-up
+  "i" 'Info-scroll-down
+  "l" 'Info-forward-node
+  "j" 'Info-backward-node
+  "r" 'Info-up
+  "a" 'execute-extended-command
+  "p" 'Info-menu
+  "z" 'Info-toc
+  "f" 'dispatch-on-info-refs
+  "v" 'Info-index
+  "`" 'other-window
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
 
 
 ;;;; treemacs
 
-(with-eval-after-load 'treemacs
-  (conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
-  (define-keymap
-    :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
-    "h" 'conn-wincontrol-one-command
-    "a" 'execute-extended-command
-    "`" 'treemacs-select-window
-    "i" 'treemacs-previous-line
-    "k" 'treemacs-next-line
-    "f" 'conn-dispatch-on-things
-    ";" 'conn-wincontrol
-    "x" (conn-remap-key "C-x" t)))
+(conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
+  "h" 'conn-wincontrol-one-command
+  "a" 'execute-extended-command
+  "`" 'treemacs-select-window
+  "i" 'treemacs-previous-line
+  "k" 'treemacs-next-line
+  "f" 'conn-dispatch-on-things
+  ";" 'conn-wincontrol
+  "x" (conn-remap-key "C-x" t))
 
 
 ;;;; Messages
