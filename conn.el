@@ -3978,28 +3978,26 @@ Returns a cons of (STRING . OVERLAYS)."
   "Read a string with preview overlays and timeout `conn-read-string-timeout'.
 
 Returns a cons of (STRING . OVERLAYS)."
-  (cl-labels ((read-string ()
-                (conn-with-input-method
-                  (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-                         (string (char-to-string (conn-dispatch-read-event prompt t)))
-                         (success nil))
-                    (while-no-input
-                      (conn-make-string-target-overlays string predicate)
-                      (setq success t))
-                    (while-let ((next-char (conn-dispatch-read-event
-                                            (format (concat prompt "%s") string) t
-                                            conn-read-string-timeout)))
-                      (setq string (concat string (char-to-string next-char))
-                            success nil)
-                      (conn-delete-targets)
-                      (while-no-input
-                        (conn-make-string-target-overlays string predicate)
-                        (setq success t)))
-                    (unless success
-                      (conn-make-string-target-overlays string predicate))
-                    (message nil)))))
+  (conn-with-input-method
     (while (= 0 conn-target-count)
-      (read-string))))
+      (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+             (string (char-to-string (conn-dispatch-read-event prompt t)))
+             (success nil))
+        (while-no-input
+          (conn-make-string-target-overlays string predicate)
+          (setq success t))
+        (while-let ((next-char (conn-dispatch-read-event
+                                (format (concat prompt "%s") string) t
+                                conn-read-string-timeout)))
+          (setq string (concat string (char-to-string next-char))
+                success nil)
+          (conn-delete-targets)
+          (while-no-input
+            (conn-make-string-target-overlays string predicate)
+            (setq success t)))
+        (unless success
+          (conn-make-string-target-overlays string predicate))
+        (message nil)))))
 
 (defun conn--dispatch-chars-in-thing (thing)
   (conn-dispatch-read-string-with-timeout
@@ -7879,13 +7877,13 @@ Operates with the selected windows parent window."
 (static-if (<= 31 emacs-major-version)
     (define-keymap
       :keymap conn-wincontrol-map
-      "\\" 'transpose-window-layout
+      "\\" 'window-layout-transpose
       "," 'rotate-windows-back
       "." 'rotate-windows
-      "<" 'rotate-window-layout-counterclockwise
-      ">" 'rotate-window-layout-clockwise
-      "|" 'flip-window-layout-horizontally
-      "_" 'flip-window-layout-vertically))
+      "<" 'window-layout-rotate-anticlockwise
+      ">" 'window-layout-rotate-clockwise
+      "|" 'window-layout-flip-leftright
+      "_" 'window-layout-flip-topdown))
 
 
 ;;;; Keymaps
