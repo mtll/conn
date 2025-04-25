@@ -431,26 +431,23 @@
   string window bufname overlay)
 
 ;;;###autoload
-(defun conn-posframe-window-labels (windows)
-  "Label WINDOWS using `head-line-format'."
-  (cl-loop for win in windows
-           for string = (window-parameter win 'conn-label)
-           for bufname = (format " *conn-label-posfame-%s*" string)
-           collect (with-selected-window win
-                     (posframe-show
-                      bufname
-                      :string (propertize string 'face 'conn-posframe-window-label-face)
-                      :poshandler conn-posframe-window-label-poshandler)
-                     (let ((overlay (make-overlay (window-start)
-                                                  (window-end)
-                                                  (current-buffer))))
-                       (overlay-put overlay 'window win)
-                       (overlay-put overlay 'face 'shadow)
-                       (make-conn-posframe-window-label
-                        :string string
-                        :window win
-                        :bufname bufname
-                        :overlay overlay)))))
+(defun conn-posframe-window-label (window string)
+  (let ((bufname (format " *conn-label-posfame-%s*" string)))
+    (with-selected-window window
+      (posframe-show
+       bufname
+       :string (propertize string 'face 'conn-posframe-window-label-face)
+       :poshandler conn-posframe-window-label-poshandler)
+      (let ((overlay (make-overlay (window-start)
+                                   (window-end)
+                                   (current-buffer))))
+        (overlay-put overlay 'window window)
+        (overlay-put overlay 'face 'shadow)
+        (make-conn-posframe-window-label
+         :string string
+         :window window
+         :bufname bufname
+         :overlay overlay)))))
 
 (cl-defmethod conn-label-delete ((label conn-posframe-window-label))
   (delete-overlay (conn-posframe-window-label-overlay label))

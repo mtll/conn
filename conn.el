@@ -1637,7 +1637,7 @@ By default `conn-emacs-state' does not bind anything."
 (defvar conn-label-string-generator 'conn-simple-labels
   "Function to create label strings for a number of elements.")
 
-(defvar conn-window-labeling-function 'conn-header-line-labels
+(defvar conn-window-labeling-function 'conn-header-line-label
   "Function to label windows for `conn-prompt-for-window'.
 
 The function should accept a single argument, the list of windows to be
@@ -1771,7 +1771,8 @@ returned.")
     (set-window-point window pt)
     (set-window-hscroll window hscroll)
     (set-window-vscroll window vscroll)
-    (set-window-parameter window 'conn-label string)))
+    (set-window-parameter window 'conn-label string)
+    (set-window-parameter window 'conn-window-labeled nil)))
 
 (cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
   (pcase-let* (((cl-struct conn-window-label window) label)
@@ -1818,7 +1819,7 @@ themselves once the selection process has concluded."
 
 ;;;;; Window header-line labels
 
-(defface conn-window-prompt-face
+(defface conn-window-label-face
   '((default (:height 2.5 :foreground "#d00000"))
     (((background light)) (:height 2.5 :foreground "#d00000"))
     (((background dark)) (:height 2.5 :foreground "#7c0000")))
@@ -1826,14 +1827,16 @@ themselves once the selection process has concluded."
   :group 'conn-faces)
 
 (defun conn--centered-header-label ()
-  (let* ((window-width (window-width nil t))
-         (label (window-parameter nil 'conn-label))
-         (label-width (string-pixel-width label))
-         (padding-width (floor (- window-width label-width) 2))
-         (padding (propertize " " 'display `(space :width (,padding-width)))))
-    (concat padding label)))
+  (when (window-parameter (selected-window) 'conn-window-labeled)
+    (let* ((window-width (window-width nil t))
+           (label (window-parameter nil 'conn-label))
+           (label-width (string-pixel-width label))
+           (padding-width (floor (- window-width label-width) 2))
+           (padding (propertize " " 'display `(space :width (,padding-width)))))
+      (concat padding label))))
 
-(defvar conn--window-label-pool (conn-simple-labels 30))
+(defvar conn--window-label-pool
+  (conn-simple-labels 30 'conn-window-label-face))
 
 (defun conn--ensure-window-labels ()
   (let* ((windows (conn--get-windows nil 'nomini t))
@@ -1852,25 +1855,22 @@ themselves once the selection process has concluded."
              finally (dolist (win unlabeled)
                        (set-window-parameter win 'conn-label (pop available))))))
 
-(defun conn-header-line-labels (windows)
+(defun conn-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
   (let ((header-line-label
          '(conn-mode (:eval (conn--centered-header-label)))))
-    (cl-loop for win in (conn--get-windows nil 'no-minibuff t)
-             for string = (window-parameter win 'conn-label)
-             when (memq win windows)
-             collect
-             (with-selected-window win
-               (unless (equal header-line-label (car header-line-format))
-                 (setq-local header-line-format
-                             `(,header-line-label (nil ,header-line-format))))
-               (prog1
-                   (make-conn-window-label :string string
-                                           :window win
-                                           :state (list (window-point win)
-                                                        (window-vscroll win)
-                                                        (window-hscroll win)))
-                 (goto-char (window-start)))))))
+    (set-window-parameter window 'conn-window-labeled t)
+    (with-selected-window window
+      (unless (equal header-line-label (car header-line-format))
+        (setq-local header-line-format
+                    `(,header-line-label (nil ,header-line-format))))
+      (prog1
+          (make-conn-window-label :string (propertize string 'face 'conn-window-label-face)
+                                  :window window
+                                  :state (list (window-point window)
+                                               (window-vscroll window)
+                                               (window-hscroll window)))
+        (goto-char (window-start))))))
 
 ;; From ace-window
 (defun conn--get-windows (&optional window minibuffer all-frames dedicated predicate)
@@ -1894,7 +1894,11 @@ themselves once the selection process has concluded."
     (car windows))
    (t
     (conn--ensure-window-labels)
-    (let ((labels (funcall conn-window-labeling-function windows)))
+    (let ((labels (mapcar (lambda (win)
+                            (funcall conn-window-labeling-function
+                                     win
+                                     (window-parameter win 'conn-label)))
+                          windows)))
       (unwind-protect
           (conn-label-select labels)
         (mapc #'conn-label-delete labels))))))
