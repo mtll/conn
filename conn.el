@@ -1759,7 +1759,7 @@ returned.")
 
 (cl-defmethod conn-label-reset ((label conn-window-label))
   (pcase-let (((cl-struct conn-window-label string window) label))
-    (set-window-parameter window 'conn-label string)))
+    (set-window-parameter window 'conn-label-string string)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
   (pcase-let* (((cl-struct conn-window-label window string state) label)
@@ -1771,15 +1771,15 @@ returned.")
     (set-window-point window pt)
     (set-window-hscroll window hscroll)
     (set-window-vscroll window vscroll)
-    (set-window-parameter window 'conn-label string)
-    (set-window-parameter window 'conn-window-labeled nil)))
+    (set-window-parameter window 'conn-label-string string)
+    (set-window-parameter window 'conn-window-labeled-p nil)))
 
 (cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
   (pcase-let* (((cl-struct conn-window-label window) label)
-               (string (window-parameter window 'conn-label)))
+               (string (window-parameter window 'conn-label-string)))
     (unless (or (length= string 0)
                 (not (eql prefix-char (aref string 0))))
-      (set-window-parameter window 'conn-label (substring string 1))
+      (set-window-parameter window 'conn-label-string (substring string 1))
       label)))
 
 (defun conn-label-select (candidates &optional prompt)
@@ -1827,9 +1827,9 @@ themselves once the selection process has concluded."
   :group 'conn-faces)
 
 (defun conn--centered-header-label ()
-  (when (window-parameter (selected-window) 'conn-window-labeled)
+  (when (window-parameter (selected-window) 'conn-window-labeled-p)
     (let* ((window-width (window-width nil t))
-           (label (window-parameter nil 'conn-label))
+           (label (window-parameter nil 'conn-label-string))
            (label-width (string-pixel-width label))
            (padding-width (floor (- window-width label-width) 2))
            (padding (propertize " " 'display `(space :width (,padding-width)))))
@@ -1846,20 +1846,21 @@ themselves once the selection process has concluded."
             (conn-simple-labels (* 2 window-count))))
     (cl-loop with available = (copy-sequence conn--window-label-pool)
              for win in windows
-             for label = (window-parameter win 'conn-label)
+             for label = (window-parameter win 'conn-label-string)
              unless (and label
                          (when (member label available)
                            (setq available (delete label available))
                            t))
              collect win into unlabeled
              finally (dolist (win unlabeled)
-                       (set-window-parameter win 'conn-label (pop available))))))
+                       (set-window-parameter win 'conn-label-string
+                                             (pop available))))))
 
 (defun conn-header-line-label (window string)
   "Label WINDOWS using `head-line-format'."
   (let ((header-line-label
          '(conn-mode (:eval (conn--centered-header-label)))))
-    (set-window-parameter window 'conn-window-labeled t)
+    (set-window-parameter window 'conn-window-labeled-p t)
     (with-selected-window window
       (unless (equal header-line-label (car header-line-format))
         (setq-local header-line-format
@@ -1894,11 +1895,12 @@ themselves once the selection process has concluded."
     (car windows))
    (t
     (conn--ensure-window-labels)
-    (let ((labels (mapcar (lambda (win)
-                            (funcall conn-window-labeling-function
-                                     win
-                                     (window-parameter win 'conn-label)))
-                          windows)))
+    (let ((labels
+           (mapcar (lambda (win)
+                     (funcall conn-window-labeling-function
+                              win
+                              (window-parameter win 'conn-label-string)))
+                   windows)))
       (unwind-protect
           (conn-label-select labels)
         (mapc #'conn-label-delete labels))))))
