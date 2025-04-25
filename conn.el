@@ -3223,7 +3223,8 @@ For the meaning of TARGET-FINDER see
 For the meaning of action function see `conn-define-dispatch-action'.")
 
 (defvar conn-dispatch-default-action-alist
-  '((conn-expand . conn-dispatch-jump))
+  '((conn-expand . conn-dispatch-jump)
+    (button . conn-dispatch-push-button))
   "Default action functions for things or commands.
 
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
@@ -3272,7 +3273,8 @@ of a command.")
   "J" 'conn-forward-inner-line
   "L" 'conn-backward-inner-line
   "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word)))
-  "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol))))
+  "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol)))
+  "b" `(button conn--dispatch-all-buttons))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
@@ -3333,9 +3335,9 @@ of a command.")
          (invalid nil)
          (handle nil)
          (saved-marker (save-mark-and-excursion--save))
-         (thing-arg (when initial-arg
-                      (abs (prefix-numeric-value initial-arg))))
-         (thing-sign (> 0 (prefix-numeric-value initial-arg)))
+         (arg (when initial-arg
+                (abs (prefix-numeric-value initial-arg))))
+         (sign (> 0 (prefix-numeric-value initial-arg)))
          (repeat nil)
          (success nil)
          (repeat-indicator
@@ -3360,8 +3362,12 @@ of a command.")
            (setq handle (prepare-change-group))
            (activate-change-group handle)
            (unwind-protect
-               (when-let* ((int (conn--action-extra-args action-struct)))
-                 (funcall int))
+               (let ((current-prefix-arg (* arg (if sign -1 1))))
+                 (prog1
+                     (when-let* ((int (conn--action-extra-args action-struct)))
+                       (funcall int))
+                   (setq arg nil
+                         sign nil)))
              (set-window-configuration window-conf)))
          (completing-read-command ()
            (unwind-protect
@@ -3392,9 +3398,9 @@ of a command.")
          (read-command ()
            (setq keys (read-key-sequence
                        (format prompt
-                               (format (if thing-arg "%s%s" "[%s1]")
-                                       (if thing-sign "-" "")
-                                       thing-arg)
+                               (format (if arg "%s%s" "[%s1]")
+                                       (if sign "-" "")
+                                       arg)
                                repeat-indicator
                                (cond
                                 (invalid
@@ -3426,8 +3432,8 @@ of a command.")
                                     (conn--dispatch-default-action thing))))
                   (cl-return-from read-dispatch
                     (list thing
-                          (when thing-arg
-                            (* (if thing-sign -1 1) (or thing-arg 1)))
+                          (when arg
+                            (* (if sign -1 1) (or arg 1)))
                           finder action action-extra-args
                           (conn--action-window-predicate action-struct)
                           repeat)))
@@ -3448,20 +3454,15 @@ of a command.")
                                             'eldoc-highlight-function-argument))))
                  ('digit-argument
                   (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                    (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
+                    (setq arg (if arg (+ (* 10 arg) digit) digit))))
                  ('backward-delete-arg
-                  (setq thing-arg (floor thing-arg 10)))
+                  (setq arg (floor arg 10)))
                  ('forward-delete-arg
-                  (setq thing-arg (when thing-arg
-                                    (thread-last
-                                      (log thing-arg 10)
-                                      floor
-                                      (expt 10)
-                                      (mod thing-arg)))))
+                  (setq arg (mod arg (expt 10 (floor (log arg 10))))))
                  ('reset-arg
-                  (setq thing-arg nil))
+                  (setq arg nil))
                  ('negative-argument
-                  (setq thing-sign (not thing-sign)))
+                  (setq sign (not sign)))
                  ('help
                   (throw 'continue (completing-read-command)))
                  ((and (let thing (or (alist-get cmd conn-bounds-of-command-alist)
@@ -3472,8 +3473,7 @@ of a command.")
                     (set-action (conn--dispatch-default-action cmd)))
                   (cl-return-from read-dispatch
                     (list cmd
-                          (when thing-arg
-                            (* (if thing-sign -1 1) (or thing-arg 1)))
+                          (when arg (* (if sign -1 1) (or arg 1)))
                           (conn--dispatch-target-finder cmd)
                           action action-extra-args
                           (conn--action-window-predicate action-struct)
@@ -4025,10 +4025,12 @@ Returns a cons of (STRING . OVERLAYS)."
       (with-restriction (window-start) (window-end)
         (save-excursion
           (goto-char (point-min))
-          (when (button-at (point))
+          (when (get-char-property (point) 'button)
             (conn-make-target-overlay (point) 0 nil))
-          (while (forward-button 1 nil nil t)
-            (conn-make-target-overlay (point) 0 nil)))))))
+          (while (not (eobp))
+            (goto-char (next-single-char-property-change (point) 'button))
+            (when (get-char-property (point) 'button)
+              (conn-make-target-overlay (point) 0 nil))))))))
 
 (defun conn--dispatch-re-matches (regexp)
   (dolist (win (conn--get-target-windows))
@@ -4198,6 +4200,14 @@ Returns a cons of (STRING . OVERLAYS)."
           (beginning-of-line)
           (looking-at "\\s)*\n"))
     (join-line)))
+
+(conn-define-dispatch-action conn-dispatch-push-button (window pt _thing-cmd _thing-arg)
+  :description "Push Button"
+  (select-window window)
+  (if (button-at pt)
+      (push-button pt)
+    (when (fboundp 'widget-apply-action)
+      (widget-apply-action (get-char-property pt 'button) pt))))
 
 (conn-define-dispatch-action conn-dispatch-yank-replace-to
     (window pt thing-cmd thing-arg str)
@@ -4729,7 +4739,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "w" 'conn-dispatch-remove-dot)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-dispatch-state)
+  :keymap (conn-get-overriding-map 'conn-read-dispatch-state)
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
@@ -4903,9 +4913,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-dispatch-on-things
    nil nil
    'conn--dispatch-all-buttons
-   (lambda (win pt _thing _thing-arg)
-     (select-window win)
-     (push-button pt))
+   'conn-dispatch-push-button
    nil))
 
 (defun conn-dispatch-isearch ()
