@@ -1650,7 +1650,7 @@ which see.")
 
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
-  string window)
+  string window state)
 
 (defun conn-simple-labels (count &optional face)
   "Return a list of label strings of length COUNT.
@@ -1762,11 +1762,15 @@ returned.")
     (set-window-parameter window 'conn-label string)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
-  (pcase-let (((cl-struct conn-window-label window string) label))
+  (pcase-let* (((cl-struct conn-window-label window string state) label)
+               (`(,pt ,vscroll ,hscroll) state))
     (with-current-buffer (window-buffer window)
       (when (eq (car-safe (car-safe header-line-format))
                 'conn-mode)
         (setq-local header-line-format (cadadr header-line-format))))
+    (set-window-point window pt)
+    (set-window-hscroll window hscroll)
+    (set-window-vscroll window vscroll)
     (set-window-parameter window 'conn-label string)))
 
 (cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
@@ -1829,15 +1833,14 @@ themselves once the selection process has concluded."
          (padding (propertize " " 'display `(space :width (,padding-width)))))
     (concat padding label)))
 
-(defvar conn--window-label-pool
-  (conn-simple-labels 30 'conn-window-prompt-face))
+(defvar conn--window-label-pool (conn-simple-labels 30))
 
 (defun conn--ensure-window-labels ()
   (let* ((windows (conn--get-windows nil 'nomini t))
          (window-count (length windows)))
     (when (length< conn--window-label-pool window-count)
       (setq conn--window-label-pool
-            (conn-simple-labels (* 2 window-count) 'conn-window-prompt-face)))
+            (conn-simple-labels (* 2 window-count))))
     (cl-loop with available = (copy-sequence conn--window-label-pool)
              for win in windows
              for label = (window-parameter win 'conn-label)
@@ -1861,7 +1864,13 @@ themselves once the selection process has concluded."
                (unless (equal header-line-label (car header-line-format))
                  (setq-local header-line-format
                              `(,header-line-label (nil ,header-line-format))))
-               (make-conn-window-label :string string :window win)))))
+               (prog1
+                   (make-conn-window-label :string string
+                                           :window win
+                                           :state (list (window-point win)
+                                                        (window-vscroll win)
+                                                        (window-hscroll win)))
+                 (goto-char (window-start)))))))
 
 ;; From ace-window
 (defun conn--get-windows (&optional window minibuffer all-frames dedicated predicate)
@@ -1879,31 +1888,16 @@ themselves once the selection process has concluded."
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (cond
-   ((length< windows 2)
-    nil)
-   ((and (length= windows 2)
+   ((null windows))
+   ((and (length= windows 1)
          (not always-prompt))
-    (if (eq (selected-window) (car windows))
-        (cadr windows)
-      (car windows)))
+    (car windows))
    (t
     (conn--ensure-window-labels)
-    (let ((window-state
-           (cl-loop for win in windows
-                    collect (list (window-point win)
-                                  (window-vscroll win)
-                                  (window-hscroll win))
-                    do (with-selected-window win
-                         (goto-char (window-start)))))
-          (labels (funcall conn-window-labeling-function windows)))
+    (let ((labels (funcall conn-window-labeling-function windows)))
       (unwind-protect
           (conn-label-select labels)
-        (mapc #'conn-label-delete labels)
-        (cl-loop for win in windows
-                 for (pt vscroll hscroll) in window-state
-                 do (progn (set-window-point win pt)
-                           (set-window-hscroll win hscroll)
-                           (set-window-vscroll win vscroll))))))))
+        (mapc #'conn-label-delete labels))))))
 
 
 ;;;; Read Things
@@ -3324,26 +3318,35 @@ of a command.")
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
+(defun conn--dispatch-get-prefix-arg ()
+  (error "Function only available during dispatch"))
+
 (defun conn--dispatch-read-thing (&optional default-action initial-arg)
-  (let* ((window-conf (current-window-configuration))
-         (prompt nil)
-         (action nil)
-         (action-struct nil)
-         (action-extra-args nil)
-         (keys nil)
-         (cmd nil)
-         (invalid nil)
-         (handle nil)
-         (saved-marker (save-mark-and-excursion--save))
-         (arg (when initial-arg
-                (abs (prefix-numeric-value initial-arg))))
-         (sign (> 0 (prefix-numeric-value initial-arg)))
-         (repeat nil)
-         (success nil)
-         (repeat-indicator
-          (propertize "repeatedly"
-                      'face (when repeat
-                              'eldoc-highlight-function-argument))))
+  (cl-letf* ((window-conf (current-window-configuration))
+             (prompt nil)
+             (action nil)
+             (action-struct nil)
+             (action-extra-args nil)
+             (keys nil)
+             (cmd nil)
+             (invalid nil)
+             (handle nil)
+             (saved-marker (save-mark-and-excursion--save))
+             (arg (when initial-arg
+                    (abs (prefix-numeric-value initial-arg))))
+             (sign (> 0 (prefix-numeric-value initial-arg)))
+             (repeat nil)
+             (success nil)
+             (repeat-indicator
+              (propertize "repeatedly"
+                          'face (when repeat
+                                  'eldoc-highlight-function-argument)))
+             ((symbol-function 'conn--dispatch-get-prefix-arg)
+              (lambda ()
+                (prog1 (cond (arg (* arg (if sign -1 1)))
+                             ((not sign) '-))
+                  (setq arg nil
+                        sign nil)))))
     (cl-labels
         ((action-description ()
            (if-let* ((desc (and action-struct
@@ -3362,12 +3365,8 @@ of a command.")
            (setq handle (prepare-change-group))
            (activate-change-group handle)
            (unwind-protect
-               (let ((current-prefix-arg (* arg (if sign -1 1))))
-                 (prog1
-                     (when-let* ((int (conn--action-extra-args action-struct)))
-                       (funcall int))
-                   (setq arg nil
-                         sign nil)))
+               (when-let* ((int (conn--action-extra-args action-struct)))
+                 (prog1 (funcall int)))
              (set-window-configuration window-conf)))
          (completing-read-command ()
            (unwind-protect
@@ -4361,7 +4360,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :description "Duplicate"
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda () (list (prefix-numeric-value current-prefix-arg)))
+  :extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4375,7 +4374,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :description "Duplicate and Comment"
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda () (list (prefix-numeric-value current-prefix-arg)))
+  :extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4419,7 +4418,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :extra-args (lambda ()
-                (list (when current-prefix-arg
+                (list (when (conn--dispatch-get-prefix-arg)
                         (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
@@ -4441,7 +4440,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :extra-args (lambda ()
-                (when current-prefix-arg
+                (when (conn--dispatch-get-prefix-arg)
                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
@@ -4465,7 +4464,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   :extra-args (lambda ()
-                (when current-prefix-arg
+                (when (conn--dispatch-get-prefix-arg)
                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
@@ -4488,7 +4487,7 @@ Returns a cons of (STRING . OVERLAYS)."
                      (format "Copy to Register <%c>" register)
                    "Copy As Kill"))
   :extra-args (lambda ()
-                (when current-prefix-arg
+                (when (conn--dispatch-get-prefix-arg)
                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
@@ -4507,7 +4506,7 @@ Returns a cons of (STRING . OVERLAYS)."
                      (format "Copy Append to Register <%c>" register)
                    "Copy Append"))
   :extra-args (lambda ()
-                (when current-prefix-arg
+                (when (conn--dispatch-get-prefix-arg)
                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
@@ -4528,7 +4527,7 @@ Returns a cons of (STRING . OVERLAYS)."
                      (format "Copy Prepend to Register <%c>" register)
                    "Copy Prepend"))
   :extra-args (lambda ()
-                (when current-prefix-arg
+                (when (conn--dispatch-get-prefix-arg)
                   (list (register-read-with-preview "Register: "))))
   (with-selected-window window
     (save-excursion
@@ -7181,7 +7180,7 @@ Current Window: `conn-this-window-prefix'"
   "Prompt for window and swap current window and other window."
   (interactive
    (list (conn-prompt-for-window
-          (conn--get-windows nil 'nomini 'visible))))
+          (delq (selected-window) (conn--get-windows nil 'nomini 'visible)))))
   (unless (eq window (selected-window))
     (if window
         (window-swap-states nil window)
@@ -7196,7 +7195,9 @@ Current Window: `conn-this-window-prefix'"
       (display-buffer
        buf
        (lambda (_ _)
-         (cons (conn-prompt-for-window (conn--get-windows nil 'nomini))
+         (cons (conn-prompt-for-window
+                (delq (selected-window)
+                      (conn--get-windows nil 'nomini)))
                'reuse))))))
 
 (defun conn-yank-window (window)
@@ -7205,7 +7206,8 @@ Current Window: `conn-this-window-prefix'"
 Currently selected window remains selected afterwards."
   (interactive
    (list (conn-prompt-for-window
-          (conn--get-windows nil 'nomini 'visible))))
+          (delq (selected-window)
+                (conn--get-windows nil 'nomini 'visible)))))
   (unless (eq window (selected-window))
     (if window
         (save-selected-window (window-swap-states nil window))
@@ -7486,6 +7488,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
   "h" 'kill-buffer-and-window
+  "<escape>" 'conn-wincontrol-exit
   "e" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
@@ -7744,7 +7747,8 @@ When called interactively N is `last-command-event'."
   "Prompt for a window and then select it."
   (interactive
    (list (conn-prompt-for-window
-          (conn--get-windows nil 'nomini 'visible))))
+          (delq (selected-window)
+                (conn--get-windows nil 'nomini 'visible)))))
   (select-window window))
 
 (defun conn-wincontrol-mru-window ()

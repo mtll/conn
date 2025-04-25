@@ -31,6 +31,8 @@
 (declare-function conn--kmacro-display "conn-transient")
 (declare-function kmacro--keys "kmacro")
 
+;;;; Posframe command displays
+
 (defgroup conn-posframe nil
   "Conn posframes."
   :prefix "conn-posframe-"
@@ -412,6 +414,72 @@
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)))
+
+;;;; Posframe window labels
+
+(defface conn-posframe-window-label-face
+  '((default (:height 4.0 :foreground "#d00000"))
+    (((background light)) (:height 4.0 :foreground "#d00000"))
+    (((background dark)) (:height 4.0 :foreground "#7c0000")))
+  "Face for conn window label posframe."
+  :group 'conn-faces)
+
+(defvar conn-posframe-window-label-poshandler 'posframe-poshandler-window-center)
+
+(cl-defstruct (conn-posframe-window-label)
+  "Store the state for a window label."
+  string window bufname overlay)
+
+;;;###autoload
+(defun conn-posframe-window-labels (windows)
+  "Label WINDOWS using `head-line-format'."
+  (cl-loop for win in windows
+           for string = (window-parameter win 'conn-label)
+           for bufname = (format " *conn-label-posfame-%s*" string)
+           collect (with-selected-window win
+                     (posframe-show
+                      bufname
+                      :string (propertize string 'face 'conn-posframe-window-label-face)
+                      :poshandler conn-posframe-window-label-poshandler)
+                     (let ((overlay (make-overlay (window-start)
+                                                  (window-end)
+                                                  (current-buffer))))
+                       (overlay-put overlay 'window win)
+                       (overlay-put overlay 'face 'shadow)
+                       (make-conn-posframe-window-label
+                        :string string
+                        :window win
+                        :bufname bufname
+                        :overlay overlay)))))
+
+(cl-defmethod conn-label-delete ((label conn-posframe-window-label))
+  (delete-overlay (conn-posframe-window-label-overlay label))
+  (posframe-hide (conn-posframe-window-label-bufname label)))
+
+(cl-defmethod conn-label-reset ((label conn-posframe-window-label))
+  (pcase-let (((cl-struct conn-posframe-window-label window string bufname overlay)
+               label))
+    (overlay-put overlay 'face 'shadow)
+    (with-selected-window window
+      (posframe-show
+       bufname
+       :string (propertize string 'face 'conn-posframe-window-label-face)
+       :poshandler conn-posframe-window-label-poshandler))))
+
+(cl-defmethod conn-label-payload ((label conn-posframe-window-label))
+  (conn-posframe-window-label-window label))
+
+(cl-defmethod conn-label-narrow ((label conn-posframe-window-label) prefix-char)
+  (pcase-let* (((cl-struct conn-posframe-window-label bufname overlay) label))
+    (with-current-buffer bufname
+      (goto-char 0)
+      (if (eql (char-after) prefix-char)
+          (progn
+            (delete-char 1)
+            label)
+        (posframe-hide bufname)
+        (overlay-put overlay 'face nil)
+        nil))))
 
 (provide 'conn-posframe)
 
