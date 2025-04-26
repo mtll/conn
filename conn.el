@@ -4432,9 +4432,13 @@ Returns a cons of (STRING . OVERLAYS)."
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
-         (if register
-             (copy-to-register register beg end t)
-           (kill-region beg end))
+         (cond ((and conn-dispatch-repeat-flag
+                     (> conn-dispatch-repeat-flag 0))
+                (conn-append-region beg end register t))
+               (register
+                (copy-to-register register beg end t))
+               (t
+                (kill-region beg end)))
          (conn--dispatch-fixup-whitespace)
          (message "Killed thing"))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
@@ -4502,9 +4506,13 @@ Returns a cons of (STRING . OVERLAYS)."
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
          (pulse-momentary-highlight-region beg end)
-         (if register
-             (copy-to-register register beg end)
-           (kill-new (filter-buffer-substring beg end))))
+         (cond ((and conn-dispatch-repeat-flag
+                     (> conn-dispatch-repeat-flag 0))
+                (conn-append-region beg end register nil))
+               (register
+                (copy-to-register register beg end))
+               (t
+                (kill-new (filter-buffer-substring beg end)))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (conn-define-dispatch-action conn-dispatch-copy-append (window pt thing-cmd thing-arg register)
@@ -4822,6 +4830,9 @@ during target finding."
   :global t
   :keymap (make-sparse-keymap))
 
+(oclosure-define (conn-mouse-dispatch)
+  (repeat-flag :mutable t))
+
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-extra-args
                                  &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
@@ -4836,7 +4847,6 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
-  ;; TODO: oclosures for descriptions and a ring
   (setf (symbol-function 'conn-repeat-last-dispatch)
         (lambda (invert-repeat)
           (interactive "P")
@@ -4846,17 +4856,22 @@ seconds."
                                      predicate
                                      (xor invert-repeat repeat))))
         (symbol-function 'conn-last-dispatch-at-mouse)
-        (lambda (event)
+        (oclosure-lambda (conn-mouse-dispatch
+                          (repeat-flag nil))
+            (event)
           (interactive "e")
           (cl-letf (((symbol-function 'conn-repeat-last-dispatch))
-                    (posn (event-start event)))
+                    (posn (event-start event))
+                    (conn-dispatch-repeat-flag repeat-flag))
             (apply action
                    (posn-window posn) (posn-point posn)
                    thing-cmd thing-arg
-                   action-extra-args))))
+                   action-extra-args)
+            (when conn-dispatch-repeat-flag
+              (cl-incf repeat-flag)))))
+  ;; TODO: oclosures for descriptions and a ring
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-flag (when repeat 0))
-        (conn--dispatch-last-mouse-event))
+        (conn-dispatch-repeat-flag (when repeat 0)))
     (when predicate
       (add-function :after-while conn-target-window-predicate predicate))
     (catch 'end
@@ -4880,9 +4895,14 @@ seconds."
                                         `(,@(event-modifiers type)
                                           down
                                           ,(event-basic-type type))))
-                               'ignore))))))
+                               'ignore)
+                   (throw 'end nil))))))
         (cl-incf conn-dispatch-repeat-flag)
-        (undo-boundary)))))
+        (undo-boundary)))
+    (setf (conn-mouse-dispatch--repeat-flag
+           (symbol-function 'conn-last-dispatch-at-mouse))
+          (when conn-dispatch-repeat-flag
+            (1+ conn-dispatch-repeat-flag)))))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
