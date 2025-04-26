@@ -3349,7 +3349,7 @@ of a command.")
              ((symbol-function 'conn--dispatch-get-prefix-arg)
               (lambda ()
                 (prog1 (cond (arg (* arg (if sign -1 1)))
-                             ((not sign) '-))
+                             (sign '-))
                   (setq arg nil
                         sign nil)))))
     (cl-labels
