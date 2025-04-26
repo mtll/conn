@@ -237,8 +237,6 @@ dynamically.")
 
 ;;;; Utilities
 
-(defconst conn--hash-key-missing (make-symbol "key-missing"))
-
 (eval-and-compile
   (defun conn--stringify (&rest symbols-or-strings)
     "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
@@ -593,11 +591,12 @@ If BUFFER is nil check `current-buffer'."
            when prop return prop))
 
 (defun conn-get-mode-property (mode propname)
-  (cl-loop for mode in (conn--derived-mode-all-parents mode)
-           for prop = (if-let* ((table (get mode :conn-properties)))
-                          (gethash propname table conn--hash-key-missing)
-                        conn--hash-key-missing)
-           unless (eq conn--hash-key-missing prop) return prop))
+  (cl-with-gensyms (key-missing)
+    (cl-loop for mode in (conn--derived-mode-all-parents mode)
+             for prop = (if-let* ((table (get mode :conn-properties)))
+                            (gethash propname table key-missing)
+                          key-missing)
+             unless (eq key-missing prop) return prop)))
 
 (defun conn-set-mode-property (mode prop value)
   (let ((table (or (get mode :conn-properties)
@@ -1213,10 +1212,11 @@ PROPERTY.  If no parent has that property either than nil is returned."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (cl-loop for parent in (conn--state-all-parents ,state)
-                for table = (aref (get parent :conn--state) 1)
-                for prop = (gethash ,property table conn--hash-key-missing)
-                unless (eq prop conn--hash-key-missing) return prop)))))
+       (cl-with-gensyms (key-missing)
+         (cl-loop for parent in (conn--state-all-parents ,state)
+                  for table = (aref (get parent :conn--state) 1)
+                  for prop = (gethash ,property table key-missing)
+                  unless (eq prop key-missing) return prop))))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1225,11 +1225,10 @@ PROPERTY.  If no parent has that property either than nil is returned."
   "Return t if PROPERTY is set for STATE."
   (inline-letevals (state property)
     (inline-quote
-     (progn
+     (cl-with-gensyms (key-missing)
        (cl-check-type ,state conn-state)
-       (not (eq (gethash ,property (aref (get ,state :conn--state) 1)
-                         conn--hash-key-missing)
-                conn--hash-key-missing))))))
+       (not (eq (gethash ,property (aref (get ,state :conn--state) 1) key-missing)
+                key-missing))))))
 
 (define-inline conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
@@ -8183,10 +8182,6 @@ Operates with the selected windows parent window."
   "C-5" (conn-remap-key "C-x 5" t))
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-emacs-state)
-  "<f8>" 'conn-command-state)
-
-(define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
   "H" 'conn-expand
@@ -8493,15 +8488,6 @@ Operates with the selected windows parent window."
 (with-eval-after-load 'org
   (require 'conn-org))
 
-;; FIXME: figure this out
-;; (with-eval-after-load 'polymode
-;;   (defvar polymode-move-these-vars-from-old-buffer)
-;;   (dolist (v '(conn--mark-cursor
-;;                conn-current-state
-;;                conn-command-state
-;;                conn-emacs-state))
-;;     (cl-pushnew v polymode-move-these-vars-from-old-buffer)))
-
 
 ;;;; Eldoc
 
@@ -8798,7 +8784,6 @@ Operates with the selected windows parent window."
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch
-  "<f8>" 'conn-command-state
   "i" 'magit-section-backward
   "k" 'magit-section-forward
   "w" 'magit-delete-thing
