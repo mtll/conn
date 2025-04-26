@@ -3933,12 +3933,14 @@ Target overlays may override this default by setting the
   (catch 'char
     (while t
       (pcase (read-event prompt inherit-input-method seconds)
-        ((and event
-              `(mouse-1 . ,_)
+        ((and event (guard (mouse-event-p (event-basic-type event)))
               (let posn (event-start event))
               (let win (posn-window posn))
-              (let pt (posn-point posn)))
-         (when (and (funcall conn-target-window-predicate win)
+              (let pt (posn-point posn))
+              (let modifiers (event-modifiers event)))
+         (when (and (not (memq 'down modifiers))
+                    (not (memq 'drag modifiers))
+                    (funcall conn-target-window-predicate win)
                     (not (posn-area posn)))
            (throw 'mouse-click (list pt win nil))))
         ((or 'escape 27)
@@ -4814,6 +4816,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Dispatch commands
 
+(define-minor-mode conn-dispatch-auto-bind-mouse-mode
+  "Automatically bind mouse buttons to the current dispatch when used
+during target finding."
+  :global t
+  :keymap (make-sparse-keymap))
+
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-extra-args
                                  &optional predicate repeat)
   "Begin dispatching ACTION on a THING.
@@ -4828,6 +4836,7 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
+  ;; TODO: oclosures for descriptions and a ring
   (setf (symbol-function 'conn-repeat-last-dispatch)
         (lambda (invert-repeat)
           (interactive "P")
@@ -4835,9 +4844,19 @@ seconds."
             (conn-dispatch-on-things thing-cmd thing-arg finder
                                      action action-extra-args
                                      predicate
-                                     (xor invert-repeat repeat)))))
+                                     (xor invert-repeat repeat))))
+        (symbol-function 'conn-last-dispatch-at-mouse)
+        (lambda (event)
+          (interactive "e")
+          (cl-letf (((symbol-function 'conn-repeat-last-dispatch))
+                    (posn (event-start event)))
+            (apply action
+                   (posn-window posn) (posn-point posn)
+                   thing-cmd thing-arg
+                   action-extra-args))))
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-flag (when repeat 0)))
+        (conn-dispatch-repeat-flag (when repeat 0))
+        (conn--dispatch-last-mouse-event))
     (when predicate
       (add-function :after-while conn-target-window-predicate predicate))
     (catch 'end
@@ -4847,7 +4866,21 @@ seconds."
             (prog1 repeat
               (apply action window pt
                      (or thing-override thing-cmd) thing-arg
-                     action-extra-args)))
+                     action-extra-args)
+              (when conn-dispatch-auto-bind-mouse-mode
+                (pcase last-input-event
+                  ((and `(,type . ,_)
+                        (guard (mouse-event-p type))
+                        (guard (not (eq 'mouse-1 type))))
+                   (define-key conn-dispatch-auto-bind-mouse-mode-map
+                               (vector type)
+                               (symbol-function 'conn-last-dispatch-at-mouse))
+                   (define-key conn-dispatch-auto-bind-mouse-mode-map
+                               (vector (event-convert-list
+                                        `(,@(event-modifiers type)
+                                          down
+                                          ,(event-basic-type type))))
+                               'ignore))))))
         (cl-incf conn-dispatch-repeat-flag)
         (undo-boundary)))))
 
@@ -4888,6 +4921,10 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive "P")
   ;; This is a stub, conn-dispatch-on-things will update the
   ;; symbol-function value after each call.
+  (user-error "No last dispatch command"))
+
+(defun conn-last-dispatch-at-mouse (_event)
+  (interactive "e")
   (user-error "No last dispatch command"))
 
 (defun conn-bind-last-dispatch-to-key ()
