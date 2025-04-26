@@ -3239,7 +3239,7 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 The default may be overridden by setting the :conn-read-dispatch-state
 of a command.")
 
-(defvar conn-dispatch-repeat-flag nil)
+(defvar conn-dispatch-repeat-count nil)
 
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
@@ -3925,8 +3925,8 @@ Target overlays may override this default by setting the
         conn-target-count 0))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
-  (when (and conn-dispatch-repeat-flag
-             (> conn-dispatch-repeat-flag 0))
+  (when (and conn-dispatch-repeat-count
+             (> conn-dispatch-repeat-count 0))
     (setq prompt (concat (propertize "(ESC to finish repeating) "
                                      'face 'minibuffer-prompt)
                          prompt)))
@@ -3944,8 +3944,8 @@ Target overlays may override this default by setting the
                     (not (posn-area posn)))
            (throw 'mouse-click (list pt win nil))))
         ((or 'escape 27)
-         (when (and conn-dispatch-repeat-flag
-                    (> conn-dispatch-repeat-flag 0))
+         (when (and conn-dispatch-repeat-count
+                    (> conn-dispatch-repeat-count 0))
            (throw 'end nil)))
         ((and ev (pred characterp))
          (throw 'char ev))
@@ -4172,28 +4172,28 @@ Returns a cons of (STRING . OVERLAYS)."
            (setq ,name ,menu-item))))))
 
 (defun conn-action-filter (action)
-  (conn--action-filter (get :conn--action action)))
+  (conn--action-filter (get action :conn--action)))
 
 (gv-define-setter conn-action-filter (val action)
-  `(setf (conn--action-filter (get :conn--action ,action)) ,val))
+  `(setf (conn--action-filter (get ,action :conn--action)) ,val))
 
 (defun conn-action-extra-args (action)
-  (conn--action-extra-args (get :conn--action action)))
+  (conn--action-extra-args (get action :conn--action)))
 
 (gv-define-setter conn-action-extra-args (val action)
-  `(setf (conn--action-extra-args (get :conn--action ,action)) ,val))
+  `(setf (conn--action-extra-args (get ,action :conn--action)) ,val))
 
 (defun conn-action-window-predicate (action)
-  (conn--action-window-predicate (get :conn--action action)))
+  (conn--action-window-predicate (get action :conn--action)))
 
 (gv-define-setter conn-action-window-predicate (val action)
-  `(setf (conn--action-window-predicate (get :conn--action ,action)) ,val))
+  `(setf (conn--action-window-predicate (get ,action :conn--action)) ,val))
 
 (defun conn-action-description (action)
-  (conn--action-description (get :conn--action action)))
+  (conn--action-description (get action :conn--action)))
 
 (gv-define-setter conn-action-description (val action)
-  `(setf (conn--action-description (get :conn--action ,action)) ,val))
+  `(setf (conn--action-description (get ,action :conn--action)) ,val))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -4432,8 +4432,8 @@ Returns a cons of (STRING . OVERLAYS)."
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
-         (cond ((and conn-dispatch-repeat-flag
-                     (> conn-dispatch-repeat-flag 0))
+         (cond ((and conn-dispatch-repeat-count
+                     (> conn-dispatch-repeat-count 0))
                 (conn-append-region beg end register t))
                (register
                 (copy-to-register register beg end t))
@@ -4506,8 +4506,8 @@ Returns a cons of (STRING . OVERLAYS)."
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
          (pulse-momentary-highlight-region beg end)
-         (cond ((and conn-dispatch-repeat-flag
-                     (> conn-dispatch-repeat-flag 0))
+         (cond ((and conn-dispatch-repeat-count
+                     (> conn-dispatch-repeat-count 0))
                 (conn-append-region beg end register nil))
                (register
                 (copy-to-register register beg end))
@@ -4824,14 +4824,46 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Dispatch commands
 
+(defvar conn-dispatch-ring nil)
+
+(defvar conn-dispatch-ring-max 8)
+
 (define-minor-mode conn-dispatch-auto-bind-mouse-mode
   "Automatically bind mouse buttons to the current dispatch when used
 during target finding."
   :global t
   :keymap (make-sparse-keymap))
 
-(oclosure-define (conn-mouse-dispatch)
-  (repeat-flag :mutable t))
+(oclosure-define (conn-dispatch
+                  (:predicate conn-dispatch-p))
+  (repeat-count :mutable t)
+  (description))
+
+(defun conn-dispatch-cycle-ring-previous ()
+  "Cycle backwards through `conn-dispatch-ring'."
+  (interactive)
+  (when conn-dispatch-ring
+    (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
+                           (symbol-function 'conn-last-dispatch-at-mouse)))
+                (`(,repeat . ,mouse) (pop conn-dispatch-ring)))
+      (setf conn-dispatch-ring (nconc conn-dispatch-ring (list old))
+            (symbol-function 'conn-repeat-last-dispatch) repeat
+            (symbol-function 'conn-last-dispatch-at-mouse) mouse)
+      (unless executing-kbd-macro
+        (message (conn-dispatch--description repeat))))))
+
+(defun conn-dispatch-cycle-ring-next ()
+  "Cycle forwards through `conn-dispatch-ring'."
+  (interactive)
+  (when conn-dispatch-ring
+    (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
+                           (symbol-function 'conn-last-dispatch-at-mouse)))
+                (`(,repeat . ,mouse) (car (last conn-dispatch-ring))))
+      (setf conn-dispatch-ring (cons old (butlast conn-dispatch-ring))
+            (symbol-function 'conn-repeat-last-dispatch) repeat
+            (symbol-function 'conn-last-dispatch-at-mouse) mouse)
+      (unless executing-kbd-macro
+        (message (conn-dispatch--description repeat))))))
 
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-extra-args
                                  &optional predicate repeat)
@@ -4847,31 +4879,50 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
-  (setf (symbol-function 'conn-repeat-last-dispatch)
-        (lambda (invert-repeat)
-          (interactive "P")
-          (cl-letf (((symbol-function 'conn-repeat-last-dispatch)))
-            (conn-dispatch-on-things thing-cmd thing-arg finder
-                                     action action-extra-args
-                                     predicate
-                                     (xor invert-repeat repeat))))
-        (symbol-function 'conn-last-dispatch-at-mouse)
-        (oclosure-lambda (conn-mouse-dispatch
-                          (repeat-flag nil))
-            (event)
-          (interactive "e")
-          (cl-letf (((symbol-function 'conn-repeat-last-dispatch))
-                    (posn (event-start event))
-                    (conn-dispatch-repeat-flag repeat-flag))
-            (apply action
-                   (posn-window posn) (posn-point posn)
-                   thing-cmd thing-arg
-                   action-extra-args)
-            (when conn-dispatch-repeat-flag
-              (cl-incf repeat-flag)))))
   ;; TODO: oclosures for descriptions and a ring
+  (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
+    (add-to-history 'conn-dispatch-ring
+                    (cons (symbol-function 'conn-repeat-last-dispatch)
+                          (symbol-function 'conn-last-dispatch-at-mouse))
+                    conn-dispatch-ring-max))
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-flag (when repeat 0)))
+        (conn-dispatch-repeat-count (when repeat 0))
+        (description (concat (if-let* ((action-desc
+                                        (when action
+                                          (conn-action-description action))))
+                                 (if (stringp action-desc)
+                                     (apply #'format action-desc action-extra-args)
+                                   (apply action-desc action-extra-args))
+                               (conn--dispatch-default-action thing-cmd))
+                             " @ "
+                             (symbol-name thing-cmd)
+                             (format " <%s>" thing-arg))))
+    (setf (symbol-function 'conn-repeat-last-dispatch)
+          (oclosure-lambda (conn-dispatch
+                            (repeat-count conn-dispatch-repeat-count)
+                            (description description))
+              (invert-repeat)
+            (interactive "P")
+            (cl-letf (((symbol-function 'conn-repeat-last-dispatch)))
+              (conn-dispatch-on-things thing-cmd thing-arg finder
+                                       action action-extra-args
+                                       predicate
+                                       (xor invert-repeat repeat-count))))
+          (symbol-function 'conn-last-dispatch-at-mouse)
+          (oclosure-lambda (conn-dispatch
+                            (repeat-count conn-dispatch-repeat-count)
+                            (description description))
+              (event)
+            (interactive "e")
+            (cl-letf (((symbol-function 'conn-repeat-last-dispatch))
+                      (posn (event-start event))
+                      (conn-dispatch-repeat-count repeat-count))
+              (apply action
+                     (posn-window posn) (posn-point posn)
+                     thing-cmd thing-arg
+                     action-extra-args)
+              (when conn-dispatch-repeat-count
+                (cl-incf repeat-count)))))
     (when predicate
       (add-function :after-while conn-target-window-predicate predicate))
     (catch 'end
@@ -4897,12 +4948,12 @@ seconds."
                                           ,(event-basic-type type))))
                                'ignore)
                    (throw 'end nil))))))
-        (cl-incf conn-dispatch-repeat-flag)
+        (cl-incf conn-dispatch-repeat-count)
         (undo-boundary)))
-    (setf (conn-mouse-dispatch--repeat-flag
+    (setf (conn-dispatch--repeat-count
            (symbol-function 'conn-last-dispatch-at-mouse))
-          (when conn-dispatch-repeat-flag
-            (1+ conn-dispatch-repeat-flag)))))
+          (when conn-dispatch-repeat-count
+            (1+ conn-dispatch-repeat-count)))))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
@@ -4912,7 +4963,7 @@ seconds."
                (win (selected-window))
                (conn-target-window-predicate conn-target-window-predicate)
                (conn-target-sort-function conn-target-sort-function)
-               (conn-dispatch-repeat-flag (when repeat 0)))
+               (conn-dispatch-repeat-count (when repeat 0)))
     (add-function :before-while conn-target-window-predicate
                   (lambda (window) (eq win window)))
     (catch 'end
@@ -4925,7 +4976,7 @@ seconds."
                      (or thing-override thing-cmd)
                      thing-arg action-extra-args)
               (push (cons (region-beginning) (region-end)) regions)))
-        (cl-incf conn-dispatch-repeat-flag)))
+        (cl-incf conn-dispatch-repeat-count)))
     (unless regions (keyboard-quit))
     (cl-loop for (b . e) in (compat-call sort
                                          (conn--merge-regions regions t)

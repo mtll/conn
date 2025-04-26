@@ -377,6 +377,34 @@
      :border-color conn-posframe-border-color)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
+(defun conn-posframe--dispatch-ring-display (&rest _)
+  (when (and (not executing-kbd-macro)
+             (when (symbolp this-command)
+               (cl-loop for fn in (cons this-command (function-alias-p this-command))
+                        thereis (advice-member-p 'conn-posframe--dispatch-ring-display fn)))
+             conn-dispatch-ring)
+    (posframe-show
+     " *conn-list-posframe*"
+     :string (concat
+              (propertize "Dispatch Ring\n"
+                          'face 'conn-posframe-header)
+              (propertize (concat (conn-dispatch--description
+                                   (symbol-function 'conn-repeat-last-dispatch))
+                                  "\n")
+                          'face 'conn-posframe-highlight)
+              (mapconcat (lambda (cons)
+                           (conn-dispatch--description (car cons)))
+                         conn-dispatch-ring
+                         "\n"))
+     :left-fringe 0
+     :right-fringe 0
+     :background-color (face-attribute 'menu :background)
+     :poshandler conn-posframe-tab-poshandler
+     :timeout conn-posframe-macro-timeout
+     :border-width conn-posframe-border-width
+     :border-color conn-posframe-border-color)
+    (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+
 ;;;###autoload
 (define-minor-mode conn-posframe-mode
   "Posframes for Conn."
@@ -403,7 +431,11 @@
         (advice-add 'tab-bar-switch-to-prev-tab :after
                     'conn-posframe--switch-tab-display)
         (advice-add 'tab-bar-close-tab :after
-                    'conn-posframe--switch-tab-display))
+                    'conn-posframe--switch-tab-display)
+        (advice-add 'conn-dispatch-cycle-ring-previous :after
+                    'conn-posframe--dispatch-ring-display)
+        (advice-add 'conn-dispatch-cycle-ring-next :after
+                    'conn-posframe--dispatch-ring-display))
     (advice-remove 'kmacro-cycle-ring-next 'conn-posframe--switch-kmacro-display)
     (advice-remove 'kmacro-cycle-ring-previous 'conn-posframe--switch-kmacro-display)
     (advice-remove 'previous-buffer 'conn-posframe--switch-buffer-display)
