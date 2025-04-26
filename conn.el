@@ -4842,28 +4842,30 @@ during target finding."
 (defun conn-dispatch-cycle-ring-previous ()
   "Cycle backwards through `conn-dispatch-ring'."
   (interactive)
-  (when conn-dispatch-ring
-    (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
-                           (symbol-function 'conn-last-dispatch-at-mouse)))
-                (`(,repeat . ,mouse) (pop conn-dispatch-ring)))
-      (setf conn-dispatch-ring (nconc conn-dispatch-ring (list old))
-            (symbol-function 'conn-repeat-last-dispatch) repeat
-            (symbol-function 'conn-last-dispatch-at-mouse) mouse)
-      (unless executing-kbd-macro
-        (message (conn-dispatch--description repeat))))))
+  (if conn-dispatch-ring
+      (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
+                             (symbol-function 'conn-last-dispatch-at-mouse)))
+                  (`(,repeat . ,mouse) (pop conn-dispatch-ring)))
+        (setf conn-dispatch-ring (nconc conn-dispatch-ring (list old))
+              (symbol-function 'conn-repeat-last-dispatch) repeat
+              (symbol-function 'conn-last-dispatch-at-mouse) mouse)
+        (unless executing-kbd-macro
+          (message (conn-dispatch--description repeat))))
+    (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle forwards through `conn-dispatch-ring'."
   (interactive)
-  (when conn-dispatch-ring
-    (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
-                           (symbol-function 'conn-last-dispatch-at-mouse)))
-                (`(,repeat . ,mouse) (car (last conn-dispatch-ring))))
-      (setf conn-dispatch-ring (cons old (butlast conn-dispatch-ring))
-            (symbol-function 'conn-repeat-last-dispatch) repeat
-            (symbol-function 'conn-last-dispatch-at-mouse) mouse)
-      (unless executing-kbd-macro
-        (message (conn-dispatch--description repeat))))))
+  (if conn-dispatch-ring
+      (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
+                             (symbol-function 'conn-last-dispatch-at-mouse)))
+                  (`(,repeat . ,mouse) (car (last conn-dispatch-ring))))
+        (setf conn-dispatch-ring (cons old (butlast conn-dispatch-ring))
+              (symbol-function 'conn-repeat-last-dispatch) repeat
+              (symbol-function 'conn-last-dispatch-at-mouse) mouse)
+        (unless executing-kbd-macro
+          (message (conn-dispatch--description repeat))))
+    (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-extra-args
                                  &optional predicate repeat)
@@ -8193,12 +8195,18 @@ Operates with the selected windows parent window."
 
 ;;;;; Global bindings
 
+(defvar-keymap conn-dispatch-cycle-map
+  :repeat t
+  "l" 'conn-dispatch-cycle-ring-next
+  "j" 'conn-dispatch-cycle-ring-previous)
+
 (defvar-keymap conn-local-mode-map
   ;; "M-j" 'conn-open-line-and-indent
   ;; "C-o" 'conn-open-line-above
   ;; "M-o" 'conn-open-line
   ;; "C-x l" 'next-buffer
   ;; "C-x j" 'previous-buffer
+  "C-x y" conn-dispatch-cycle-map
   "M-g o" 'conn-pop-mark-ring
   "M-g u" 'conn-unpop-mark-ring
   "C-S-w" 'delete-region
