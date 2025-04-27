@@ -3156,6 +3156,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (ignore-errors
           (funcall conn-this-command-handler conn-this-command-start)))
       (unless (or conn--movement-ring-rotating
+                  conn--movement-mark
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (conn-push-region conn-this-command-start conn--movement-mark)))))
@@ -3176,15 +3177,16 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 ;;;; Thing Dispatch
 
-;; Thing dispatch provides a method of jumping to, marking or acting
-;; on visible Things.
+(oclosure-define (conn-action
+                  (:predicate conn-action--p))
+  (extra-args)
+  (description)
+  (window-predicate))
 
-(cl-defstruct (conn--action)
-  extra-args description window-predicate filter)
-
-(defun conn-action-p (command)
-  "Return non-nil if COMMAND is a dispatch action."
-  (not (not (get command :conn--action))))
+(defun conn-action-p (action)
+  (conn-action--p (if (symbolp action)
+                      (symbol-function action)
+                    action)))
 
 (cl-deftype conn-action () '(satisfies conn-action-p))
 
@@ -3331,7 +3333,6 @@ of a command.")
   (cl-letf* ((window-conf (current-window-configuration))
              (prompt nil)
              (action nil)
-             (action-struct nil)
              (action-extra-args nil)
              (keys nil)
              (cmd nil)
@@ -3355,8 +3356,7 @@ of a command.")
                         sign nil)))))
     (cl-labels
         ((action-description ()
-           (if-let* ((desc (and action-struct
-                                (conn--action-description action-struct))))
+           (if-let* ((desc (and action (conn-action--description action))))
                (propertize
                 (if (stringp desc)
                     (apply #'format desc action-extra-args)
@@ -3371,8 +3371,8 @@ of a command.")
            (setq handle (prepare-change-group))
            (activate-change-group handle)
            (unwind-protect
-               (when-let* ((int (conn--action-extra-args action-struct)))
-                 (prog1 (funcall int)))
+               (when-let* ((arg-reader (conn-action--extra-args action)))
+                 (funcall arg-reader))
              (set-window-configuration window-conf)))
          (completing-read-command ()
            (unwind-protect
@@ -3420,11 +3420,9 @@ of a command.")
                  invalid nil))
          (set-action (cmd)
            (if cmd
-               (setq action cmd
-                     action-struct (get cmd :conn--action)
+               (setq action (if (symbolp cmd) (symbol-function cmd) cmd)
                      action-extra-args (read-action-extra-args))
              (setq action nil
-                   action-struct nil
                    action-extra-args nil)))
          (read-dispatch ()
            (read-command)
@@ -3440,7 +3438,7 @@ of a command.")
                           (when arg
                             (* (if sign -1 1) (or arg 1)))
                           finder action action-extra-args
-                          (conn--action-window-predicate action-struct)
+                          (conn-action--window-predicate action)
                           repeat)))
                  ('keyboard-quit
                   (keyboard-quit))
@@ -3481,7 +3479,7 @@ of a command.")
                           (when arg (* (if sign -1 1) (or arg 1)))
                           (conn--dispatch-target-finder cmd)
                           action action-extra-args
-                          (conn--action-window-predicate action-struct)
+                          (conn-action--window-predicate action)
                           repeat)))
                  ((and cmd (pred conn-action-p))
                   (set-action (unless (eq cmd action) cmd)))
@@ -4166,55 +4164,44 @@ Returns a cons of (STRING . OVERLAYS)."
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (cl-with-gensyms (struct menu-item desc)
-    (pcase-let* (((map :description :extra-args :filter :window-predicate)
-                  rest)
-                 (body (cl-loop for sublist on rest by #'cddr
-                                unless (keywordp (car sublist))
-                                do (cl-return sublist))))
-      `(progn
-         (defun ,name ,arglist ,@body)
-         (let* ((,desc ,(or description (symbol-name name)))
-                (,struct (make-conn--action
-                          :extra-args ,extra-args
-                          :description ,desc
-                          :window-predicate ,window-predicate
-                          :filter ,filter))
-                (,menu-item
-                 (list 'menu-item ,desc ',name
-                       :filter (lambda (_)
-                                 (if-let* ((fn (conn--action-filter ,struct)))
-                                     (pcase (funcall fn)
-                                       ('this ',name)
-                                       (res res))
-                                   ',name)))))
-           (put ',name :conn--action ,struct)
-           (defvar ,name)
-           (setq ,name ,menu-item))))))
-
-(defun conn-action-filter (action)
-  (conn--action-filter (get action :conn--action)))
-
-(gv-define-setter conn-action-filter (val action)
-  `(setf (conn--action-filter (get ,action :conn--action)) ,val))
+  (pcase-let* (((map :description :extra-args :filter :window-predicate)
+                rest)
+               (body (cl-loop for sublist on rest by #'cddr
+                              unless (keywordp (car sublist))
+                              do (cl-return sublist))))
+    `(progn
+       (defvar ,name)
+       (setq ,name (list 'menu-item
+                         ,(symbol-name name)
+                         ',name
+                         :filter (lambda (_)
+                                   ,(if filter
+                                        `(pcase (funcall ,filter)
+                                           ('this ',name)
+                                           (res res))
+                                      `',name))))
+       (defalias ',name
+         (oclosure-lambda (conn-action
+                           (extra-args ,(or extra-args ''ignore))
+                           (description ,(or description (symbol-name name)))
+                           (window-predicate ,window-predicate))
+             ,arglist
+           ,@body)))))
 
 (defun conn-action-extra-args (action)
-  (conn--action-extra-args (get action :conn--action)))
-
-(gv-define-setter conn-action-extra-args (val action)
-  `(setf (conn--action-extra-args (get ,action :conn--action)) ,val))
+  (conn-action--extra-args (if (symbolp action)
+                               (symbol-function action)
+                             action)))
 
 (defun conn-action-window-predicate (action)
-  (conn--action-window-predicate (get action :conn--action)))
-
-(gv-define-setter conn-action-window-predicate (val action)
-  `(setf (conn--action-window-predicate (get ,action :conn--action)) ,val))
+  (conn-action--window-predicate (if (symbolp action)
+                                     (symbol-function action)
+                                   action)))
 
 (defun conn-action-description (action)
-  (conn--action-description (get action :conn--action)))
-
-(gv-define-setter conn-action-description (val action)
-  `(setf (conn--action-description (get ,action :conn--action)) ,val))
+  (conn-action--description (if (symbolp action)
+                                (symbol-function action)
+                              action)))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -4257,7 +4244,7 @@ Returns a cons of (STRING . OVERLAYS)."
     (window pt thing-cmd thing-arg str)
   :description "Yank Replace To"
   :extra-args (lambda ()
-                 (list (read-from-kill-ring "Yank Replace To from kill-ring: ")))
+                (list (read-from-kill-ring "Yank Replace To from kill-ring: ")))
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4871,7 +4858,7 @@ during target finding."
               (symbol-function 'conn-repeat-last-dispatch) repeat
               (symbol-function 'conn-last-dispatch-at-mouse) mouse)
         (unless executing-kbd-macro
-          (message (conn-dispatch--description repeat))))
+          (message (funcall (conn-dispatch--description repeat)))))
     (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-cycle-ring-next ()
@@ -4885,7 +4872,7 @@ during target finding."
               (symbol-function 'conn-repeat-last-dispatch) repeat
               (symbol-function 'conn-last-dispatch-at-mouse) mouse)
         (unless executing-kbd-macro
-          (message (conn-dispatch--description repeat))))
+          (message (funcall (conn-dispatch--description repeat)))))
     (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-on-things ( thing-cmd thing-arg finder action action-extra-args
@@ -4910,16 +4897,15 @@ seconds."
                     conn-dispatch-ring-max))
   (let ((conn-target-window-predicate conn-target-window-predicate)
         (conn-dispatch-repeat-count (when repeat 0))
-        (description (concat (if-let* ((action-desc
-                                        (when action
-                                          (conn-action-description action))))
+        (action (or action (conn--dispatch-default-action thing-cmd)))
+        (description (lambda ()
+                       (concat (let ((action-desc (conn-action-description action)))
                                  (if (stringp action-desc)
                                      (apply #'format action-desc action-extra-args)
-                                   (apply action-desc action-extra-args))
-                               (conn--dispatch-default-action thing-cmd))
-                             " @ "
-                             (symbol-name thing-cmd)
-                             (format " <%s>" thing-arg))))
+                                   (apply action-desc action-extra-args)))
+                               " @ "
+                               (symbol-name thing-cmd)
+                               (format " <%s>" thing-arg)))))
     (setf (symbol-function 'conn-repeat-last-dispatch)
           (oclosure-lambda (conn-dispatch
                             (repeat-count conn-dispatch-repeat-count)

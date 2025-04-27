@@ -388,12 +388,12 @@
      :string (concat
               (propertize "Dispatch Ring\n"
                           'face 'conn-posframe-header)
-              (propertize (concat (conn-dispatch--description
-                                   (symbol-function 'conn-repeat-last-dispatch))
+              (propertize (concat (funcall (conn-dispatch--description
+                                            (symbol-function 'conn-repeat-last-dispatch)))
                                   "\n")
                           'face 'conn-posframe-highlight)
               (mapconcat (lambda (cons)
-                           (conn-dispatch--description (car cons)))
+                           (funcall (conn-dispatch--description (car cons))))
                          conn-dispatch-ring
                          "\n"))
      :left-fringe 0

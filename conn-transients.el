@@ -645,7 +645,6 @@ A zero means repeat until error."
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (let* ((macro nil)
-         (action-sym (make-symbol "action"))
          (pipeline (list 'conn--kapply-relocate-to-region
                          'conn--kapply-per-iteration-undo
                          (alist-get :restrictions args)
@@ -657,12 +656,20 @@ A zero means repeat until error."
                            ('conn--kmacro-apply
                             (lambda (iterator)
                               (conn--kmacro-apply iterator nil macro)))
-                           (kmacro kmacro)))))
-    (fset action-sym
+                           (kmacro kmacro))))
+         (action
           (if (alist-get :excursions args)
               ;; Surely there is a better way than having two
               ;; definitions of this function.
-              (lambda (window pt thing-cmd thing-arg)
+              (oclosure-lambda (conn-action
+                                (description
+                                 (lambda ()
+                                   (format "Kapply <%s>"
+                                           (if macro
+                                               (conn--kmacro-display
+                                                (kmacro--keys macro))
+                                             "unrecorded")))))
+                  (window pt thing-cmd thing-arg)
                 (with-selected-window window
                   (save-mark-and-excursion
                     (push-mark)
@@ -675,7 +682,15 @@ A zero means repeat until error."
                        (unless macro (setq macro (kmacro-ring-head))))
                       (_ (user-error "Cannot find %s at point"
                                      (get thing-cmd :conn-command-thing)))))))
-            (lambda (window pt thing-cmd thing-arg)
+            (oclosure-lambda (conn-action
+                              (description
+                               (lambda ()
+                                 (format "Kapply <%s>"
+                                         (if macro
+                                             (conn--kmacro-display
+                                              (kmacro--keys macro))
+                                           "unrecorded")))))
+                (window pt thing-cmd thing-arg)
               (with-selected-window window
                 (push-mark)
                 (goto-char pt)
@@ -686,18 +701,8 @@ A zero means repeat until error."
                           pipeline)
                    (unless macro (setq macro (kmacro-ring-head))))
                   (_ (user-error "Cannot find %s at point"
-                                 (get thing-cmd :conn-command-thing))))))))
-    (put action-sym :conn--action (make-conn--action :description "Kapply"))
-    (let* ((arg-form (funcall continuation action-sym))
-           (hist-form (mapcar (lambda (v)
-                                (if (eq v action-sym)
-                                    (symbol-function v)
-                                  (macroexp-quote v)))
-                              arg-form)))
-      (apply 'conn-dispatch-on-things arg-form)
-      (add-to-history 'command-history
-                      (cons 'conn-dispatch-on-things hist-form)
-                      nil t))))
+                                 (get thing-cmd :conn-command-thing)))))))))
+    (apply 'conn-dispatch-on-things (funcall continuation action))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
