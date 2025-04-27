@@ -3176,15 +3176,15 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 ;;;; Thing Dispatch
 
-;; Thing dispatch provides a method of jumping to, marking or acting
-;; on visible Things.
+(oclosure-define (conn-action
+                  (:predicate conn-action--p))
+  (extra-args :mutable t)
+  (description :mutable t)
+  (window-predicate :mutable t)
+  (filter :mutable t))
 
-(cl-defstruct (conn--action)
-  extra-args description window-predicate filter)
-
-(defun conn-action-p (command)
-  "Return non-nil if COMMAND is a dispatch action."
-  (not (not (get command :conn--action))))
+(defun conn-action-p (symbol)
+  (conn-action--p (symbol-function symbol)))
 
 (cl-deftype conn-action () '(satisfies conn-action-p))
 
@@ -3331,7 +3331,6 @@ of a command.")
   (cl-letf* ((window-conf (current-window-configuration))
              (prompt nil)
              (action nil)
-             (action-struct nil)
              (action-extra-args nil)
              (keys nil)
              (cmd nil)
@@ -3355,8 +3354,7 @@ of a command.")
                         sign nil)))))
     (cl-labels
         ((action-description ()
-           (if-let* ((desc (and action-struct
-                                (conn--action-description action-struct))))
+           (if-let* ((desc (and action (conn-action-description action))))
                (propertize
                 (if (stringp desc)
                     (apply #'format desc action-extra-args)
@@ -3371,7 +3369,7 @@ of a command.")
            (setq handle (prepare-change-group))
            (activate-change-group handle)
            (unwind-protect
-               (when-let* ((int (conn--action-extra-args action-struct)))
+               (when-let* ((int (conn-action-extra-args action)))
                  (prog1 (funcall int)))
              (set-window-configuration window-conf)))
          (completing-read-command ()
@@ -3421,10 +3419,8 @@ of a command.")
          (set-action (cmd)
            (if cmd
                (setq action cmd
-                     action-struct (get cmd :conn--action)
                      action-extra-args (read-action-extra-args))
              (setq action nil
-                   action-struct nil
                    action-extra-args nil)))
          (read-dispatch ()
            (read-command)
@@ -3440,7 +3436,7 @@ of a command.")
                           (when arg
                             (* (if sign -1 1) (or arg 1)))
                           finder action action-extra-args
-                          (conn--action-window-predicate action-struct)
+                          (conn-action-window-predicate action)
                           repeat)))
                  ('keyboard-quit
                   (keyboard-quit))
@@ -3481,7 +3477,7 @@ of a command.")
                           (when arg (* (if sign -1 1) (or arg 1)))
                           (conn--dispatch-target-finder cmd)
                           action action-extra-args
-                          (conn--action-window-predicate action-struct)
+                          (conn-action-window-predicate action)
                           repeat)))
                  ((and cmd (pred conn-action-p))
                   (set-action (unless (eq cmd action) cmd)))
@@ -4172,49 +4168,49 @@ Returns a cons of (STRING . OVERLAYS)."
                  (body (cl-loop for sublist on rest by #'cddr
                                 unless (keywordp (car sublist))
                                 do (cl-return sublist))))
-      `(progn
-         (defun ,name ,arglist ,@body)
-         (let* ((,desc ,(or description (symbol-name name)))
-                (,struct (make-conn--action
-                          :extra-args ,extra-args
-                          :description ,desc
-                          :window-predicate ,window-predicate
-                          :filter ,filter))
-                (,menu-item
-                 (list 'menu-item ,desc ',name
-                       :filter (lambda (_)
-                                 (if-let* ((fn (conn--action-filter ,struct)))
-                                     (pcase (funcall fn)
-                                       ('this ',name)
-                                       (res res))
-                                   ',name)))))
-           (put ',name :conn--action ,struct)
-           (defvar ,name)
-           (setq ,name ,menu-item))))))
+      `(let* ((,desc ,(or description (symbol-name name)))
+              (,struct (oclosure-lambda (conn-action
+                                         (extra-args ,extra-args)
+                                         (description ,desc)
+                                         (window-predicate ,window-predicate)
+                                         (filter ,filter))
+                           ,arglist
+                         ,@body))
+              (,menu-item
+               (list 'menu-item ,desc ',name
+                     :filter (lambda (_)
+                               (if-let* ((fn (conn-action--filter ,struct)))
+                                   (pcase (funcall fn)
+                                     ('this ',name)
+                                     (res res))
+                                 ',name)))))
+         (defvar ,name)
+         (setq ,name ,menu-item)
+         (defalias ',name ,struct)))))
 
 (defun conn-action-filter (action)
-  (conn--action-filter (get action :conn--action)))
+  (conn-action--filter (symbol-function action)))
 
 (gv-define-setter conn-action-filter (val action)
-  `(setf (conn--action-filter (get ,action :conn--action)) ,val))
+  `(setf (conn-action--filter (symbol-function ,action)) ,val))
 
 (defun conn-action-extra-args (action)
-  (conn--action-extra-args (get action :conn--action)))
+  (conn-action--extra-args (symbol-function action)))
 
 (gv-define-setter conn-action-extra-args (val action)
-  `(setf (conn--action-extra-args (get ,action :conn--action)) ,val))
+  `(setf (conn-action--extra-args (symbol-function ,action)) ,val))
 
 (defun conn-action-window-predicate (action)
-  (conn--action-window-predicate (get action :conn--action)))
+  (conn-action--window-predicate (symbol-function action)))
 
 (gv-define-setter conn-action-window-predicate (val action)
-  `(setf (conn--action-window-predicate (get ,action :conn--action)) ,val))
+  `(setf (conn-action--window-predicate ,action) ,val))
 
 (defun conn-action-description (action)
-  (conn--action-description (get action :conn--action)))
+  (conn-action--description (symbol-function action)))
 
 (gv-define-setter conn-action-description (val action)
-  `(setf (conn--action-description (get ,action :conn--action)) ,val))
+  `(setf (conn-action--description (symbol-function ,action)) ,val))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
