@@ -648,6 +648,7 @@ A zero means repeat until error."
          (pipeline (list 'conn--kapply-relocate-to-region
                          'conn--kapply-per-iteration-undo
                          (alist-get :restrictions args)
+                         (alist-get :excursions args)
                          (alist-get :state args)
                          (alist-get :regions args)
                          'conn--kapply-pulse-region
@@ -658,50 +659,27 @@ A zero means repeat until error."
                               (conn--kmacro-apply iterator nil macro)))
                            (kmacro kmacro))))
          (action
-          (if (alist-get :excursions args)
-              ;; Surely there is a better way than having two
-              ;; definitions of this function.
-              (oclosure-lambda (conn-action
-                                (description
-                                 (lambda ()
-                                   (format "Kapply <%s>"
-                                           (if macro
-                                               (conn--kmacro-display
-                                                (kmacro--keys macro))
-                                             "unrecorded")))))
-                  (window pt thing-cmd thing-arg)
-                (with-selected-window window
-                  (save-mark-and-excursion
-                    (push-mark)
-                    (goto-char pt)
-                    (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                      ((and reg (pred identity))
-                       (apply #'conn--kapply-compose-iterator
-                              (conn--kapply-region-iterator (list reg))
-                              pipeline)
-                       (unless macro (setq macro (kmacro-ring-head))))
-                      (_ (user-error "Cannot find %s at point"
-                                     (get thing-cmd :conn-command-thing)))))))
-            (oclosure-lambda (conn-action
-                              (description
-                               (lambda ()
-                                 (format "Kapply <%s>"
-                                         (if macro
-                                             (conn--kmacro-display
-                                              (kmacro--keys macro))
-                                           "unrecorded")))))
-                (window pt thing-cmd thing-arg)
-              (with-selected-window window
-                (push-mark)
-                (goto-char pt)
-                (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                  ((and reg (pred identity))
-                   (apply #'conn--kapply-compose-iterator
-                          (conn--kapply-region-iterator (list reg))
-                          pipeline)
-                   (unless macro (setq macro (kmacro-ring-head))))
-                  (_ (user-error "Cannot find %s at point"
-                                 (get thing-cmd :conn-command-thing)))))))))
+          (oclosure-lambda (conn-action
+                            (description
+                             (lambda ()
+                               (format "Kapply <%s>"
+                                       (if macro
+                                           (conn--kmacro-display
+                                            (kmacro--keys macro))
+                                         "unrecorded")))))
+              (window pt thing-cmd thing-arg)
+            (with-selected-window window
+              (apply #'conn--kapply-compose-iterator
+                     (conn--kapply-region-iterator
+                      (save-excursion
+                        (goto-char pt)
+                        (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                          ('nil (user-error "Cannot find %s at point"
+                                            (get thing-cmd :conn-command-thing)))
+                          (`(,region) (list region))
+                          (`(,_ . ,subregions) subregions))))
+                     pipeline))
+            (unless macro (setq macro (kmacro-ring-head))))))
     (apply 'conn-dispatch-on-things (funcall continuation action))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)

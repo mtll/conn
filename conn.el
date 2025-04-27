@@ -2755,10 +2755,14 @@ Possibilities: \\<query-replace-map>
                  (cons pt (save-mark-and-excursion--save))))
          (funcall iterator state))
         (:next
-         (prog1 (funcall iterator state)
-           (unless (alist-get (current-buffer) saved-excursions)
-             (setf (alist-get (current-buffer) saved-excursions)
-                   (cons (point-marker) (save-mark-and-excursion--save))))))))))
+         (if saved-excursions
+             (prog1 (funcall iterator state)
+               (unless (alist-get (current-buffer) saved-excursions)
+                 (setf (alist-get (current-buffer) saved-excursions)
+                       (cons (point-marker) (save-mark-and-excursion--save)))))
+           (setf (alist-get (current-buffer) saved-excursions)
+                 (cons (point-marker) (save-mark-and-excursion--save)))
+           (funcall iterator state)))))))
 
 (defun conn--kapply-ibuffer-overview (iterator)
   (let ((msg (substitute-command-keys
