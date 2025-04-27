@@ -4948,14 +4948,12 @@ seconds."
                                         `(,@(event-modifiers type)
                                           down
                                           ,(event-basic-type type))))
-                               'ignore)
-                   (throw 'end nil))))))
+                               'ignore))))))
         (cl-incf conn-dispatch-repeat-count)
         (undo-boundary)))
     (setf (conn-dispatch--repeat-count
            (symbol-function 'conn-last-dispatch-at-mouse))
-          (when conn-dispatch-repeat-count
-            (1+ conn-dispatch-repeat-count)))))
+          conn-dispatch-repeat-count)))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
