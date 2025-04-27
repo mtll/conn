@@ -149,18 +149,9 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-paren-state)
   :suppress t
-  "C-+" 'maximize-window
-  "C--" 'shrink-window-if-larger-than-buffer
-  "C-0" 'delete-window
-  "C-1" 'delete-other-windows
-  "C-2" 'split-window-below
-  "C-3" 'split-window-right
-  "C-8" 'conn-tab-to-register
-  "C-9" 'quit-window
-  "C-=" 'balance-windows
-  "C-M-0" 'kill-buffer-and-window
   "`" 'other-window
   "e" 'conn-previous-state
+  "<escape>" 'conn-previous-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun
   "o" 'sp-forward-symbol
@@ -168,9 +159,9 @@
   "O" 'forward-word
   "U" 'backward-word
   "i" 'sp-backward-up-sexp
-  "I" 'sp-backward-down-sexp
-  "K" 'sp-up-sexp
-  "k" 'sp-down-sexp
+  "I" 'sp-down-sexp
+  "K" 'sp-backward-down-sexp
+  "k" 'sp-up-sexp
   "," 'sp-beginning-of-sexp
   "." 'sp-end-of-sexp
   ")" 'sp-splice-sexp-killing-forward

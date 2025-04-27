@@ -30,6 +30,7 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'oclosure)
 (static-if (<= 31 emacs-major-version)
     (require 'subr-x)
   (eval-when-compile
@@ -4056,16 +4057,17 @@ Returns a cons of (STRING . OVERLAYS)."
          (`(,tbeg . ,_tend) (= beg tbeg)))))))
 
 (defun conn--dispatch-columns ()
-  (let ((goal-column (or goal-column (current-column))))
+  (let ((line-move-visual nil)
+        (goal-column (or goal-column (current-column))))
     (save-excursion
       (with-restriction (window-start) (window-end)
         (save-excursion
           (while (and (< (point) (point-max))
-                      (line-move-visual 1 t))
+                      (line-move-1 1 t))
             (conn-make-target-overlay (point) 0)))
         (save-excursion
           (while (and (< (point-min) (point))
-                      (line-move-visual -1 t))
+                      (line-move -1 t))
             (conn-make-target-overlay (point) 0)))))))
 
 (defun conn--dispatch-lines ()
@@ -4132,6 +4134,25 @@ Returns a cons of (STRING . OVERLAYS)."
                    (/= (point) pt))
             (when (not (invisible-p (point)))
               (conn-make-target-overlay (point) 0))))))))
+
+(defun conn--dispatch-visual-lines ()
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (goto-char (window-start))
+        (vertical-motion 0)
+        (conn-make-target-overlay
+         (point) 0 'char 'conn--right-justify-padding)
+        (vertical-motion 1)
+        (while (<= (point) (window-end))
+          (if (= (point) (point-max))
+              ;; hack to get the label displayed on its own line
+              (when-let* ((ov (conn-make-target-overlay (point) 0 'char)))
+                (overlay-put ov 'after-string
+                             (propertize " " 'display '(space :width 0))))
+            (conn-make-target-overlay
+             (point) 0 'char 'conn--right-justify-padding))
+          (vertical-motion 1))))))
 
 (defun conn--dispatch-inner-lines-end ()
   (conn--dispatch-inner-lines t))
@@ -5284,9 +5305,10 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-register-thing
  'visual-line
+ :dispatch-target-finder 'conn--dispatch-visual-lines
  :forward-op (lambda (&optional N)
                (let ((line-move-visual t))
-                 (beginning-of-visual-line)
+                 (vertical-motion 0)
                  (line-move N t))))
 
 (conn-define-mark-command conn-mark-visual-line visual-line)
@@ -7265,13 +7287,13 @@ Current Window: `conn-this-window-prefix'"
                '((?w "window")
                  (?f "frame")
                  (?t "tab")
-                 (?g "prompt")
-                 (?c "current window"))))
+                 (?c "current window")
+                 (?g "prompt"))))
     (?w (other-window-prefix))
     (?f (other-frame-prefix))
     (?t (other-tab-prefix))
-    (?g (conn-other-window-prompt-prefix))
-    (?c (conn-this-window-prefix))))
+    (?c (conn-this-window-prefix))
+    (?g (conn-other-window-prompt-prefix))))
 
 (defun conn-other-window-prompt-prefix ()
   "Display next buffer in a window selected by `conn-prompt-for-window'."
@@ -8199,11 +8221,6 @@ Operates with the selected windows parent window."
   "j" 'conn-dispatch-cycle-ring-previous)
 
 (defvar-keymap conn-local-mode-map
-  ;; "M-j" 'conn-open-line-and-indent
-  ;; "C-o" 'conn-open-line-above
-  ;; "M-o" 'conn-open-line
-  ;; "C-x l" 'next-buffer
-  ;; "C-x j" 'previous-buffer
   "C-x y" conn-dispatch-cycle-map
   "M-g o" 'conn-pop-mark-ring
   "M-g u" 'conn-unpop-mark-ring
@@ -8308,7 +8325,7 @@ Operates with the selected windows parent window."
   ":" 'conn-wincontrol-one-command
   "`" 'other-window
   "|" 'conn-shell-command-on-region
-  "'" 'repeat
+  "'" 'conntext-state
   "." 'conn-other-place-prefix
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
