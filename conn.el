@@ -30,7 +30,6 @@
 ;;;; Requires
 
 (require 'compat)
-(require 'oclosure)
 (static-if (<= 31 emacs-major-version)
     (require 'subr-x)
   (eval-when-compile
@@ -3419,11 +3418,12 @@ of a command.")
                  cmd (key-binding keys t)
                  invalid nil))
          (set-action (cmd)
-           (if cmd
-               (setq action (if (symbolp cmd) (symbol-function cmd) cmd)
-                     action-extra-args (read-action-extra-args))
-             (setq action nil
-                   action-extra-args nil)))
+           (let ((fn (if (and cmd (symbolp cmd)) (symbol-function cmd) cmd)))
+             (if (or (null fn) (eq fn action))
+                 (setq action nil
+                       action-extra-args nil)
+               (setq action fn
+                     action-extra-args (read-action-extra-args)))))
          (read-dispatch ()
            (read-command)
            (while t
@@ -3482,7 +3482,7 @@ of a command.")
                           (conn-action--window-predicate action)
                           repeat)))
                  ((and cmd (pred conn-action-p))
-                  (set-action (unless (eq cmd action) cmd)))
+                  (set-action cmd))
                  (_
                   (setq invalid t)))
                (read-command))))
