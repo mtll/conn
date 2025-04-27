@@ -662,8 +662,7 @@ A zero means repeat until error."
           (if (alist-get :excursions args)
               ;; Surely there is a better way than having two
               ;; definitions of this function.
-              (oclosure-lambda (conn-action (description "Kapply"))
-                  (window pt thing-cmd thing-arg)
+              (lambda (window pt thing-cmd thing-arg)
                 (with-selected-window window
                   (save-mark-and-excursion
                     (push-mark)
@@ -676,8 +675,7 @@ A zero means repeat until error."
                        (unless macro (setq macro (kmacro-ring-head))))
                       (_ (user-error "Cannot find %s at point"
                                      (get thing-cmd :conn-command-thing)))))))
-            (oclosure-lambda (conn-action (description "Kapply"))
-                (window pt thing-cmd thing-arg)
+            (lambda (window pt thing-cmd thing-arg)
               (with-selected-window window
                 (push-mark)
                 (goto-char pt)
@@ -689,6 +687,7 @@ A zero means repeat until error."
                    (unless macro (setq macro (kmacro-ring-head))))
                   (_ (user-error "Cannot find %s at point"
                                  (get thing-cmd :conn-command-thing))))))))
+    (put action-sym :conn--action (make-conn--action :description "Kapply"))
     (let* ((arg-form (funcall continuation action-sym))
            (hist-form (mapcar (lambda (v)
                                 (if (eq v action-sym)
