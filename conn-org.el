@@ -24,6 +24,59 @@
 (require 'org-element)
 (require 'org-agenda)
 
+(define-keymap
+  :keymap (conn-get-state-map 'conn-org-edit-state)
+  :suppress t
+  "e" 'conn-previous-state
+  "<escape>" 'conn-previous-state
+  "SPC" 'conn-scroll-up
+  "<backspace>" 'conn-scroll-down
+  "DEL" 'conn-scroll-down
+  "." 'point-to-register
+  "/" (conn-remap-key conn-undo-keys t)
+  "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
+  "*" 'conn-org-edit-insert-heading
+  "<" 'org-drag-element-backward
+  ">" 'org-drag-element-forward
+  "?" (conn-remap-key conn-undo-redo-keys t)
+  "f" 'conn-dispatch-on-things
+  "C" 'org-toggle-comment
+  "b" (conn-remap-key "C-c C-v")
+  "c" (conn-remap-key "C-c")
+  "r" (conn-remap-key "C-c C-x")
+  "d" 'org-down-element
+  "g" (conn-remap-keymap "M-g" t)
+  "i" 'org-backward-heading-same-level
+  "I" 'org-metaup
+  "J" 'org-metaleft
+  "j" 'org-previous-visible-heading
+  "k" 'org-forward-heading-same-level
+  "K" 'org-metadown
+  "L" 'org-metaright
+  "l" 'org-next-visible-heading
+  "M" 'org-mark-subtree
+  "m" 'org-forward-element
+  "n" 'org-backward-element
+  "N" 'org-toggle-narrow-to-subtree
+  "O" 'org-next-block
+  "p" 'conn-register-load
+  "s" (conn-remap-keymap "M-s" t)
+  "T" 'org-todo
+  "t" 'org-sparse-tree
+  "U" 'org-previous-block
+  "u" 'org-up-element
+  "W" 'widen
+  "w" 'org-refile
+  "x" (conn-remap-key "C-x" t)
+  "z" 'conn-exchange-mark-command)
+
+;;;###autoload
+(defun conn-org-edit-state ()
+  "A `conn-mode' state for structural editing of `org-mode' buffers."
+  (interactive)
+  (conn-enter-state 'conn-org-edit-state))
+
 ;;;###autoload
 (define-minor-mode conntext-org-mode
   "Conntext keys for org mode."
@@ -205,15 +258,19 @@
 (defun conn-org-speed-next-heading ()
   (interactive)
   (org-speed-move-safe 'org-next-visible-heading))
+
 (defun conn-org-speed-previous-heading ()
   (interactive)
   (org-speed-move-safe 'org-previous-visible-heading))
+
 (defun conn-org-speed-forward-heading ()
   (interactive)
   (org-speed-move-safe 'org-forward-heading-same-level))
+
 (defun conn-org-speed-backward-heading ()
   (interactive)
   (org-speed-move-safe 'org-backward-heading-same-level))
+
 (defun conn-org-speed-up-heading ()
   (interactive)
   (org-speed-move-safe 'outline-up-heading))
@@ -228,13 +285,15 @@
  'conn-org-speed-next-block
  'conn-org-speed-previous-block)
 
-(defun conntext-org-edit-state ()
-  'conn-org-edit-state)
-
 (defun conntext-edit-special ()
   (when (or (org-babel-where-is-src-block-head)
             (org-inside-LaTeX-fragment-p (org-element-context)))
-    'org-edit-special))
+    (org-edit-special)
+    t))
+
+(defun conntext-org-edit-state ()
+  (conn-org-edit-state)
+  t)
 
 (defun conntext-org-hook ()
   (add-hook 'conntext-state-hook 'conntext-edit-special -20 t)

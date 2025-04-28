@@ -140,14 +140,14 @@
                      'sp-backward-sexp
                      'sp-forward-sexp))
 
-(conn-define-state conn-paren-state ()
+(conn-define-state conntext-paren-state ()
   "State for editing parens."
   :cursor '(hbar . 5)
   :suppress-input-method t
   :lighter " ()")
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-paren-state)
+  :keymap (conn-get-state-map 'conntext-paren-state)
   :suppress t
   "`" 'other-window
   "e" 'conn-previous-state
@@ -185,7 +185,9 @@
   "?" 'undo-redo
   "x" (conn-remap-key "C-x"))
 
-(defun conn-paren-state () 'conn-paren-state)
+(defun conntext-paren-state ()
+  (conn-enter-state 'conntext-paren-state)
+  t)
 
 ;;;###autoload
 (define-minor-mode conntext-smartparens-mode
@@ -198,8 +200,8 @@
 
 (defun conntext-smartparens--turn-on ()
   (if conntext-smartparens-mode
-      (add-hook 'conntext-state-hook 'conn-paren-state 95 t)
-    (remove-hook 'conntext-state-hook 'conn-paren-state t)))
+      (add-hook 'conntext-state-hook 'conntext-paren-state 95 t)
+    (remove-hook 'conntext-state-hook 'conntext-paren-state t)))
 
 (conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
 

@@ -7378,17 +7378,11 @@ Currently selected window remains selected afterwards."
 
 (defun conntext-state ()
   (interactive)
-  (when-let* ((state (run-hook-with-args-until-success 'conntext-state-hook)))
-    (conn-enter-state state)))
+  (run-hook-with-args-until-success 'conntext-state-hook))
 
 (defun conn-previous-state ()
   (interactive)
   (conn-enter-state conn-previous-state))
-
-(defun conn-org-edit-state ()
-  "A `conn-mode' state for structural editing of `org-mode' buffers."
-  (interactive)
-  (conn-enter-state 'conn-org-edit-state))
 
 (defun conn-insert-state ()
   "Enter insert state for the current buffer."
@@ -8379,52 +8373,6 @@ Operates with the selected windows parent window."
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
   "y" 'conn-yank
-  "z" 'conn-exchange-mark-command)
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-org-edit-state)
-  :suppress t
-  "e" 'conn-previous-state
-  "SPC" 'conn-scroll-up
-  "<backspace>" 'conn-scroll-down
-  "DEL" 'conn-scroll-down
-  "." 'point-to-register
-  "/" (conn-remap-key conn-undo-keys t)
-  "a" 'execute-extended-command
-  "A" 'execute-extended-command-for-buffer
-  "*" 'conn-org-edit-insert-heading
-  "<" 'org-drag-element-backward
-  ">" 'org-drag-element-forward
-  "?" (conn-remap-key conn-undo-redo-keys t)
-  "f" 'conn-dispatch-on-things
-  "C" 'org-toggle-comment
-  "b" (conn-remap-key "C-c C-v")
-  "c" (conn-remap-key "C-c")
-  "r" (conn-remap-key "C-c C-x")
-  "d" 'org-down-element
-  "g" (conn-remap-keymap "M-g" t)
-  "i" 'org-backward-heading-same-level
-  "I" 'org-metaup
-  "J" 'org-metaleft
-  "j" 'org-previous-visible-heading
-  "k" 'org-forward-heading-same-level
-  "K" 'org-metadown
-  "L" 'org-metaright
-  "l" 'org-next-visible-heading
-  "M" 'org-mark-subtree
-  "m" 'org-forward-element
-  "n" 'org-backward-element
-  "N" 'org-toggle-narrow-to-subtree
-  "O" 'org-next-block
-  "p" 'conn-register-load
-  "s" (conn-remap-keymap "M-s" t)
-  "T" 'org-todo
-  "t" 'org-sparse-tree
-  "U" 'org-previous-block
-  "u" 'org-up-element
-  "W" 'widen
-  "w" 'org-refile
-  "x" (conn-remap-key "C-x" t)
   "z" 'conn-exchange-mark-command)
 
 
