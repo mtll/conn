@@ -5274,18 +5274,17 @@ DEFAULT-ACTION is the default action for THING in
 
 \(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP)"
   (intern (symbol-name thing))
-  (when-let* ((target-finder (plist-get rest :dispatch-target-finder)))
-    (setf (alist-get thing conn-dispatch-target-finders-alist) target-finder))
-  (when-let* ((action (plist-get rest :default-action)))
-    (setf (alist-get thing conn-dispatch-default-action-alist) action))
-  (when-let* ((forward (plist-get rest :forward-op)))
-    (put thing 'forward-op forward))
-  (when-let* ((beg (plist-get rest :beg-op)))
-    (put thing 'beginning-op beg))
-  (when-let* ((end (plist-get rest :end-op)))
-    (put thing 'end-op end))
-  (when-let* ((bounds (plist-get rest :bounds-op)))
-    (put thing 'bounds-of-thing-at-point bounds)))
+  (cl-loop for (prop val) on rest by #'cddr
+           do (pcase prop
+                (:dispatch-target-finder
+                 (setf (alist-get thing conn-dispatch-target-finders-alist) val))
+                (:default-action
+                 (setf (alist-get thing conn-dispatch-default-action-alist) val))
+                (:forward-op (put thing 'forward-op val))
+                (:beg-op (put thing 'beginning-op val))
+                (:end-op (put thing 'end-op val))
+                (:bounds-op (put thing 'bounds-of-thing-at-point val))
+                (_ (error "Unknown property: %s" prop)))))
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER.
@@ -9083,8 +9082,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing
  'md-paragraph
- :forward-op 'markdown-forward-paragraph
- :modes '(markdown-mode))
+ :forward-op 'markdown-forward-paragraph)
 
 (conn-register-thing-commands
  'md-paragraph 'conn-continuous-thing-handler
