@@ -4877,7 +4877,6 @@ during target finding."
 
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p))
-  (repeat-count :mutable t :type integer)
   (description :type (memq (string function))))
 
 (defun conn-dispatch-cycle-ring-previous ()
@@ -4927,32 +4926,31 @@ seconds."
                     (cons (symbol-function 'conn-repeat-last-dispatch)
                           (symbol-function 'conn-last-dispatch-at-mouse))
                     conn-dispatch-ring-max))
-  (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-count (when repeat 0))
-        (action (or action (conn--dispatch-default-action thing-cmd)))
-        (description (lambda ()
-                       (concat (let ((action-desc (conn-action-description action)))
-                                 (if (stringp action-desc)
-                                     (apply #'format action-desc action-extra-args)
-                                   (apply action-desc action-extra-args)))
-                               " @ "
-                               (symbol-name thing-cmd)
-                               (format " <%s>" thing-arg)))))
+  (let* ((conn-target-window-predicate conn-target-window-predicate)
+         (conn-dispatch-repeat-count (when repeat 0))
+         (repeat-count conn-dispatch-repeat-count)
+         (action (or action (conn--dispatch-default-action thing-cmd)))
+         (description (lambda ()
+                        (concat (let ((action-desc (conn-action-description action)))
+                                  (if (stringp action-desc)
+                                      (apply #'format action-desc action-extra-args)
+                                    (apply action-desc action-extra-args)))
+                                " @ "
+                                (symbol-name thing-cmd)
+                                (format " <%s>" thing-arg)))))
     (setf (symbol-function 'conn-repeat-last-dispatch)
-          (oclosure-lambda (conn-dispatch
-                            (repeat-count conn-dispatch-repeat-count)
-                            (description description))
+          (oclosure-lambda (conn-dispatch (description description))
               (invert-repeat)
             (interactive "P")
-            (cl-letf (((symbol-function 'conn-repeat-last-dispatch)))
+            (cl-letf ((conn-dispatch-repeat-count repeat-count)
+                      ((symbol-function 'conn-repeat-last-dispatch)))
               (conn-dispatch-on-things thing-cmd thing-arg finder
                                        action action-extra-args
                                        predicate
-                                       (xor invert-repeat repeat-count))))
+                                       (xor invert-repeat repeat-count))
+              (setq repeat-count conn-dispatch-repeat-count)))
           (symbol-function 'conn-last-dispatch-at-mouse)
-          (oclosure-lambda (conn-dispatch
-                            (repeat-count conn-dispatch-repeat-count)
-                            (description description))
+          (oclosure-lambda (conn-dispatch (description description))
               (event)
             (interactive "e")
             (cl-letf (((symbol-function 'conn-repeat-last-dispatch))
@@ -4990,9 +4988,7 @@ seconds."
                                'ignore))))))
         (cl-incf conn-dispatch-repeat-count)
         (undo-boundary)))
-    (setf (conn-dispatch--repeat-count
-           (symbol-function 'conn-last-dispatch-at-mouse))
-          conn-dispatch-repeat-count)))
+    (setf repeat-count conn-dispatch-repeat-count)))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
