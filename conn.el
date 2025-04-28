@@ -4220,11 +4220,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-yank-read-replace-to
   (oclosure-lambda (conn-action
                     (description "Yank Replace To")
-                    (extra-args (lambda ()
-                                  (list (read-from-kill-ring "Yank Replace To from kill-ring: "))))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (extra-args
+                     (lambda ()
+                       (list (read-from-kill-ring "Yank Replace To from kill-ring: "))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd thing-arg str)
     (with-selected-window window
       (save-excursion
@@ -4240,11 +4242,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-yank-to
   (oclosure-lambda (conn-action
                     (description "Yank To")
-                    (extra-args (lambda ()
-                                  (list (funcall region-extract-function nil))))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (extra-args
+                     (lambda ()
+                       (list (funcall region-extract-function nil))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt _thing-cmd _thing-arg str)
     (with-selected-window window
       (save-excursion
@@ -4256,10 +4260,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-yank-read-to
   (oclosure-lambda (conn-action
                     (description "Yank To")
-                    (extra-args (lambda () (list (read-from-kill-ring "Yank To from kill-ring: "))))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (extra-args
+                     (lambda ()
+                       (list (read-from-kill-ring "Yank To from kill-ring: "))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt _thing-cmd _thing-arg str)
     (with-selected-window window
       (save-excursion
@@ -4271,11 +4278,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-throw
   (oclosure-lambda (conn-action
                     (description "Throw")
-                    (extra-args (lambda ()
-                                  (list (funcall region-extract-function t))))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (extra-args
+                     (lambda ()
+                       (list (funcall region-extract-function t))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt _thing-cmd _thing-arg str)
     (with-selected-window window
       (save-excursion
@@ -4306,9 +4315,10 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-downcase
   (oclosure-lambda (conn-action
                     (description "Downcase")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-mark-and-excursion
@@ -4320,8 +4330,10 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-upcase
   (oclosure-lambda (conn-action
                     (description "Upcase")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-mark-and-excursion
@@ -4333,9 +4345,10 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-capitalize
   (oclosure-lambda (conn-action
                     (description "Capitalize")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-mark-and-excursion
@@ -4359,9 +4372,10 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-comment
   (oclosure-lambda (conn-action
                     (description "Comment")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-excursion
@@ -4375,10 +4389,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-duplicate
   (oclosure-lambda (conn-action
                     (description "Duplicate")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win)))))
-                    (extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win)))))
+                    (extra-args
+                     (lambda ()
+                       (list (conn--dispatch-get-prefix-arg)))))
       (window pt thing-cmd thing-arg arg)
     (with-selected-window window
       (save-excursion
@@ -4392,9 +4409,12 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-duplicate-and-comment
   (oclosure-lambda (conn-action
                     (description "Duplicate and Comment")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only (window-buffer win)))))
-                    (extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only (window-buffer win)))))
+                    (extra-args
+                     (lambda ()
+                       (list (conn--dispatch-get-prefix-arg)))))
       (window pt thing-cmd thing-arg arg)
     (with-selected-window window
       (save-excursion
@@ -4408,8 +4428,9 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-register
   (oclosure-lambda (conn-action
                     (description "Register <%c>")
-                    (extra-args (lambda ()
-                                  (list (register-read-with-preview "Register: ")))))
+                    (extra-args
+                     (lambda ()
+                       (list (register-read-with-preview "Register: ")))))
       (window pt _thing-cmd _thing-arg register)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
@@ -4422,7 +4443,9 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-register-replace
   (oclosure-lambda (conn-action
                     (description "Register Replace <%c>")
-                    (extra-args (lambda () (list (register-read-with-preview "Register: ")))))
+                    (extra-args
+                     (lambda ()
+                       (list (register-read-with-preview "Register: ")))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
@@ -4438,16 +4461,19 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defalias 'conn-dispatch-kill
   (oclosure-lambda (conn-action
-                    (description (lambda (&optional register)
-                                   (if register
-                                       (format "Kill to Register <%c>" register)
-                                     "Kill")))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win)))))
-                    (extra-args (lambda ()
-                                  (list (when (conn--dispatch-get-prefix-arg)
-                                          (register-read-with-preview "Register: "))))))
+                    (description
+                     (lambda (&optional register)
+                       (if register
+                           (format "Kill to Register <%c>" register)
+                         "Kill")))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win)))))
+                    (extra-args
+                     (lambda ()
+                       (list (when (conn--dispatch-get-prefix-arg)
+                               (register-read-with-preview "Register: "))))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
@@ -4467,16 +4493,19 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defalias 'conn-dispatch-kill-append
   (oclosure-lambda (conn-action
-                    (description (lambda (&optional register)
-                                   (if register
-                                       (format "Kill Append Register <%c>" register)
-                                     "Kill Append")))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win)))))
-                    (extra-args (lambda ()
-                                  (when (conn--dispatch-get-prefix-arg)
-                                    (list (register-read-with-preview "Register: "))))))
+                    (description
+                     (lambda (&optional register)
+                       (if register
+                           (format "Kill Append Register <%c>" register)
+                         "Kill Append")))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win)))))
+                    (extra-args
+                     (lambda ()
+                       (when (conn--dispatch-get-prefix-arg)
+                         (list (register-read-with-preview "Register: "))))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
@@ -4494,15 +4523,18 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defalias 'conn-dispatch-kill-prepend
   (oclosure-lambda (conn-action
-                    (description (lambda (&optional register)
-                                   (if register
-                                       (format "Kill Prepend Register <%c>" register)
-                                     "Kill Prepend")))
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only (window-buffer win)))))
-                    (extra-args (lambda ()
-                                  (when (conn--dispatch-get-prefix-arg)
-                                    (list (register-read-with-preview "Register: "))))))
+                    (description
+                     (lambda (&optional register)
+                       (if register
+                           (format "Kill Prepend Register <%c>" register)
+                         "Kill Prepend")))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only (window-buffer win)))))
+                    (extra-args
+                     (lambda ()
+                       (when (conn--dispatch-get-prefix-arg)
+                         (list (register-read-with-preview "Register: "))))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
@@ -4520,13 +4552,15 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defalias 'conn-dispatch-copy-as-kill
   (oclosure-lambda (conn-action
-                    (description (lambda (&optional register)
-                                   (if register
-                                       (format "Copy to Register <%c>" register)
-                                     "Copy As Kill")))
-                    (extra-args (lambda ()
-                                  (when (conn--dispatch-get-prefix-arg)
-                                    (list (register-read-with-preview "Register: "))))))
+                    (description
+                     (lambda (&optional register)
+                       (if register
+                           (format "Copy to Register <%c>" register)
+                         "Copy As Kill")))
+                    (extra-args
+                     (lambda ()
+                       (when (conn--dispatch-get-prefix-arg)
+                         (list (register-read-with-preview "Register: "))))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
@@ -4545,13 +4579,15 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defalias 'conn-dispatch-copy-append
   (oclosure-lambda (conn-action
-                    (description (lambda (&optional register)
-                                   (if register
-                                       (format "Copy Append to Register <%c>" register)
-                                     "Copy Append")))
-                    (extra-args (lambda ()
-                                  (when (conn--dispatch-get-prefix-arg)
-                                    (list (register-read-with-preview "Register: "))))))
+                    (description
+                     (lambda (&optional register)
+                       (if register
+                           (format "Copy Append to Register <%c>" register)
+                         "Copy Append")))
+                    (extra-args
+                     (lambda ()
+                       (when (conn--dispatch-get-prefix-arg)
+                         (list (register-read-with-preview "Register: "))))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
@@ -4568,13 +4604,15 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defalias 'conn-dispatch-copy-prepend
   (oclosure-lambda (conn-action
-                    (description (lambda (&optional register)
-                                   (if register
-                                       (format "Copy Prepend to Register <%c>" register)
-                                     "Copy Prepend")))
-                    (extra-args (lambda ()
-                                  (when (conn--dispatch-get-prefix-arg)
-                                    (list (register-read-with-preview "Register: "))))))
+                    (description
+                     (lambda (&optional register)
+                       (if register
+                           (format "Copy Prepend to Register <%c>" register)
+                         "Copy Prepend")))
+                    (extra-args
+                     (lambda ()
+                       (when (conn--dispatch-get-prefix-arg)
+                         (list (register-read-with-preview "Register: "))))))
       (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
@@ -4608,9 +4646,10 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-cut-replace
   (oclosure-lambda (conn-action
                     (description "Cut Replace")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-excursion
@@ -4642,8 +4681,9 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-cut
   (oclosure-lambda (conn-action
                     (description "Cut")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-excursion
@@ -4728,9 +4768,10 @@ Returns a cons of (STRING . OVERLAYS)."
 (defalias 'conn-dispatch-transpose
   (oclosure-lambda (conn-action
                     (description "Transpose")
-                    (window-predicate (lambda (win)
-                                        (not (buffer-local-value 'buffer-read-only
-                                                                 (window-buffer win))))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
       (window pt thing-cmd _thing-arg)
     (if (eq (current-buffer) (window-buffer window))
         (pcase (if (region-active-p)
@@ -8845,9 +8886,10 @@ Operates with the selected windows parent window."
 (defalias 'conn-dispatch-dired-mark
   (oclosure-lambda (conn-action
                     (description "Mark")
-                    (window-predicate (lambda (win)
-                                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                                            'dired-mode))))
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode (window-buffer win))
+                           'dired-mode))))
       (window pt _thing-cmd _thing-arg)
     (with-selected-window window
       (save-excursion
@@ -8861,9 +8903,10 @@ Operates with the selected windows parent window."
 (defalias 'conn-dispatch-dired-kill-line
   (oclosure-lambda (conn-action
                     (description "Kill Line")
-                    (window-predicate (lambda (win)
-                                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                                            'dired-mode))))
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode (window-buffer win))
+                           'dired-mode))))
       (window pt _thing-cmd _thing-arg)
     (with-selected-window window
       (save-excursion
@@ -8873,9 +8916,10 @@ Operates with the selected windows parent window."
 (defalias 'conn-dispatch-dired-kill-subdir
   (oclosure-lambda (conn-action
                     (description "Kill Subdir")
-                    (window-predicate (lambda (win)
-                                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                                            'dired-mode))))
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode (window-buffer win))
+                           'dired-mode))))
       (window pt _thing-cmd _thing-arg)
     (with-selected-window window
       (save-excursion
@@ -8966,9 +9010,10 @@ Operates with the selected windows parent window."
 (defalias 'conn-dispatch-ibuffer-mark
   (oclosure-lambda (conn-action
                     (description "Mark")
-                    (window-predicate (lambda (win)
-                                        (eq (buffer-local-value 'major-mode (window-buffer win))
-                                            'ibuffer-mode))))
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode (window-buffer win))
+                           'ibuffer-mode))))
       (window pt _thing-cmd _thing-arg)
     (with-selected-window window
       (save-excursion
