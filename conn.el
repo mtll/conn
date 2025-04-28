@@ -3159,7 +3159,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
         (ignore-errors
           (funcall conn-this-command-handler conn-this-command-start)))
       (unless (or conn--movement-ring-rotating
-                  conn--movement-mark
+                  (null conn--movement-mark)
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (conn-push-region conn-this-command-start conn--movement-mark)))))
@@ -3223,9 +3223,7 @@ For the meaning of TARGET-FINDER see
 `conn-dispatch-default-target-finder'.")
 
 (defvar conn-dispatch-action-default 'conn-dispatch-goto
-  "Default action function for `conn-dispatch-on-things'.
-
-For the meaning of action function see `conn-define-dispatch-action'.")
+  "Default action function for `conn-dispatch-on-things'.")
 
 (defvar conn-dispatch-default-action-alist
   '((conn-expand . conn-dispatch-jump)
@@ -3235,9 +3233,7 @@ For the meaning of action function see `conn-define-dispatch-action'.")
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
 determining the default action for a command in `conn-read-dispatch-state'
 actions associated with a command have higher precedence than actions
-associated with a command's thing.
-
-For the meaning of ACTION see `conn-define-dispatch-action'.")
+associated with a command's thing.")
 
 (defvar-local conn-state-for-read-dispatch 'conn-read-dispatch-state
   "Default state for performing `conn--dispatch-read-thing'.
@@ -4162,36 +4158,6 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Dispatch actions
 
-(defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key ARGS DESCRIPTION FILTER WINDOW-PREDICATE STATE &body BODY)"
-  (declare (debug ( name lambda-expr
-                    [&rest keywordp form]
-                    def-body))
-           (indent 2))
-  (pcase-let* (((map :description :extra-args :filter :window-predicate)
-                rest)
-               (body (cl-loop for sublist on rest by #'cddr
-                              unless (keywordp (car sublist))
-                              do (cl-return sublist))))
-    `(progn
-       (defvar ,name)
-       (setq ,name (list 'menu-item
-                         ,(symbol-name name)
-                         ',name
-                         :filter (lambda (_)
-                                   ,(if filter
-                                        `(pcase (funcall ,filter)
-                                           ('this ',name)
-                                           (res res))
-                                      `',name))))
-       (defalias ',name
-         (oclosure-lambda (conn-action
-                           (extra-args ,(or extra-args ''ignore))
-                           (description ,(or description (symbol-name name)))
-                           (window-predicate ,window-predicate))
-             ,arglist
-           ,@body)))))
-
 (defun conn-action-extra-args (action)
   (conn-action--extra-args (if (symbolp action)
                                (symbol-function action)
@@ -4219,545 +4185,608 @@ Returns a cons of (STRING . OVERLAYS)."
           (looking-at "\\s)*\n"))
     (join-line)))
 
-(conn-define-dispatch-action conn-dispatch-push-button (window pt _thing-cmd _thing-arg)
-  :description "Push Button"
-  (select-window window)
-  (if (button-at pt)
-      (push-button pt)
-    (when (fboundp 'widget-apply-action)
-      (widget-apply-action (get-char-property pt 'button) pt))))
+(defalias 'conn-dispatch-push-button
+  (oclosure-lambda (conn-action
+                    (description "Push Button"))
+      (window pt _thing-cmd _thing-arg)
+    (select-window window)
+    (if (button-at pt)
+        (push-button pt)
+      (when (fboundp 'widget-apply-action)
+        (widget-apply-action (get-char-property pt 'button) pt)))))
 
-(conn-define-dispatch-action conn-dispatch-yank-replace-to
-    (window pt thing-cmd thing-arg str)
-  :description "Yank Replace To"
-  :extra-args (lambda () (list (funcall region-extract-function nil)))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (delete-region beg end)
-         (insert-for-yank str)
-         (unless executing-kbd-macro
-           (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-yank-read-replace-to
-    (window pt thing-cmd thing-arg str)
-  :description "Yank Replace To"
-  :extra-args (lambda ()
-                (list (read-from-kill-ring "Yank Replace To from kill-ring: ")))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (delete-region beg end)
-         (insert-for-yank str)
-         (unless executing-kbd-macro
-           (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-yank-to
-    (window pt _thing-cmd _thing-arg str)
-  :description "Yank To"
-  :extra-args (lambda () (list (funcall region-extract-function nil)))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (insert-for-yank str)
-      (unless executing-kbd-macro
-        (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
-
-(conn-define-dispatch-action conn-dispatch-yank-read-to
-    (window pt _thing-cmd _thing-arg str)
-  :description "Yank To"
-  :extra-args (lambda () (list (read-from-kill-ring "Yank To from kill-ring: ")))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (insert-for-yank str)
-      (unless executing-kbd-macro
-        (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
-
-(conn-define-dispatch-action conn-dispatch-throw
-    (window pt _thing-cmd _thing-arg str)
-  :description "Throw"
-  :extra-args (lambda () (list (funcall region-extract-function t)))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (insert-for-yank str)
-      (unless executing-kbd-macro
-        (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
-
-(conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
-  :description "Dot"
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (when beg (conn--create-dot beg end)))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-remove-dot
-    (window pt _thing-cmd _thing-arg)
-  :description "Remove Dot"
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (conn-delete-dots))))
-
-(conn-define-dispatch-action conn-dispatch-downcase (window pt thing-cmd thing-arg)
-  :description "Downcase"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-mark-and-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end) (downcase-region beg end))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-upcase (window pt thing-cmd thing-arg)
-  :description "Upcase"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-mark-and-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end) (upcase-region beg end))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-capitalize (window pt thing-cmd thing-arg)
-  :description "Capitalize"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-mark-and-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end) (capitalize-region beg end))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-narrow-indirect (window pt thing-cmd thing-arg)
-  :description "Narrow Indirect"
-  (with-current-buffer (window-buffer window)
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (conn--narrow-indirect beg end))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-comment (window pt thing-cmd thing-arg)
-  :description "Comment"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (comment-or-uncomment-region beg end)
-         (message "Commented %s" thing-cmd))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-duplicate (window pt thing-cmd thing-arg arg)
-  :description "Duplicate"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (conn-duplicate-region beg end arg)
-         (message "Duplicated %s" thing-cmd))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-duplicate-and-comment (window pt thing-cmd thing-arg arg)
-  :description "Duplicate and Comment"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (conn-duplicate-and-comment-region beg end arg)
-         (message "Duplicated and commented %s" thing-cmd))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-register (window pt _thing-cmd _thing-arg register)
-  :description "Register <%c>"
-  :extra-args (lambda () (list (register-read-with-preview "Register: ")))
-  (with-selected-window window
-    ;; If there is a keyboard macro in the register we would like to
-    ;; amalgamate the undo
-    (with-undo-amalgamate
-      (save-excursion
-        (goto-char pt)
-        (conn-register-load register)))))
-
-(conn-define-dispatch-action conn-dispatch-register-replace (window pt thing-cmd thing-arg register)
-  :description "Register Replace <%c>"
-  :extra-args (lambda () (list (register-read-with-preview "Register: ")))
-  (with-selected-window window
-    ;; If there is a keyboard macro in the register we would like to
-    ;; amalgamate the undo
-    (with-undo-amalgamate
+(defalias 'conn-dispatch-yank-replace-to
+  (oclosure-lambda (conn-action
+                    (description "Yank Replace To")
+                    (extra-args
+                     (lambda ()
+                       (list (funcall region-extract-function nil))))
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
+      (window pt thing-cmd thing-arg str)
+    (with-selected-window window
       (save-excursion
         (goto-char pt)
         (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
           (`(,beg . ,end)
            (delete-region beg end)
-           (conn-register-load register))
+           (insert-for-yank str)
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-kill (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Kill to Register <%c>" register)
-                   "Kill"))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda ()
-                (list (when (conn--dispatch-get-prefix-arg)
-                        (register-read-with-preview "Register: "))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (cond ((and conn-dispatch-repeat-count
-                     (> conn-dispatch-repeat-count 0))
-                (conn-append-region beg end register t))
-               (register
-                (copy-to-register register beg end t))
-               (t
-                (kill-region beg end)))
-         (conn--dispatch-fixup-whitespace)
-         (message "Killed thing"))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+(defalias 'conn-dispatch-yank-read-replace-to
+  (oclosure-lambda (conn-action
+                    (description "Yank Replace To")
+                    (extra-args (lambda ()
+                                  (list (read-from-kill-ring "Yank Replace To from kill-ring: "))))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt thing-cmd thing-arg str)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (delete-region beg end)
+           (insert-for-yank str)
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-kill-append (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Kill Append Register <%c>" register)
-                   "Kill Append"))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda ()
-                (when (conn--dispatch-get-prefix-arg)
-                  (list (register-read-with-preview "Register: "))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (if register
-               (copy-to-register register beg end t)
-             (kill-append str nil)
-             (delete-region beg end))
+(defalias 'conn-dispatch-yank-to
+  (oclosure-lambda (conn-action
+                    (description "Yank To")
+                    (extra-args (lambda ()
+                                  (list (funcall region-extract-function nil))))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt _thing-cmd _thing-arg str)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (insert-for-yank str)
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region (- (point) (length str)) (point)))))))
+
+(defalias 'conn-dispatch-yank-read-to
+  (oclosure-lambda (conn-action
+                    (description "Yank To")
+                    (extra-args (lambda () (list (read-from-kill-ring "Yank To from kill-ring: "))))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt _thing-cmd _thing-arg str)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (insert-for-yank str)
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region (- (point) (length str)) (point)))))))
+
+(defalias 'conn-dispatch-throw
+  (oclosure-lambda (conn-action
+                    (description "Throw")
+                    (extra-args (lambda ()
+                                  (list (funcall region-extract-function t))))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt _thing-cmd _thing-arg str)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (insert-for-yank str)
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region (- (point) (length str)) (point)))))))
+
+(defalias 'conn-dispatch-dot
+  (oclosure-lambda (conn-action (description "Dot"))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (when beg (conn--create-dot beg end)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-remove-dot
+  (oclosure-lambda (conn-action (description "Remove Dot"))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (conn-delete-dots)))))
+
+(defalias 'conn-dispatch-downcase
+  (oclosure-lambda (conn-action
+                    (description "Downcase")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-mark-and-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end) (downcase-region beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-upcase
+  (oclosure-lambda (conn-action
+                    (description "Upcase")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-mark-and-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end) (upcase-region beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-capitalize
+  (oclosure-lambda (conn-action
+                    (description "Capitalize")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-mark-and-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end) (capitalize-region beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-narrow-indirect
+  (oclosure-lambda (conn-action
+                    (description "Narrow Indirect"))
+      (window pt thing-cmd thing-arg)
+    (with-current-buffer (window-buffer window)
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (conn--narrow-indirect beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-comment
+  (oclosure-lambda (conn-action
+                    (description "Comment")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (comment-or-uncomment-region beg end)
+           (message "Commented %s" thing-cmd))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-duplicate
+  (oclosure-lambda (conn-action
+                    (description "Duplicate")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win)))))
+                    (extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))))
+      (window pt thing-cmd thing-arg arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (conn-duplicate-region beg end arg)
+           (message "Duplicated %s" thing-cmd))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-duplicate-and-comment
+  (oclosure-lambda (conn-action
+                    (description "Duplicate and Comment")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only (window-buffer win)))))
+                    (extra-args (lambda () (list (conn--dispatch-get-prefix-arg)))))
+      (window pt thing-cmd thing-arg arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (conn-duplicate-and-comment-region beg end arg)
+           (message "Duplicated and commented %s" thing-cmd))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+
+(defalias 'conn-dispatch-register
+  (oclosure-lambda (conn-action
+                    (description "Register <%c>")
+                    (extra-args (lambda ()
+                                  (list (register-read-with-preview "Register: ")))))
+      (window pt _thing-cmd _thing-arg register)
+    (with-selected-window window
+      ;; If there is a keyboard macro in the register we would like to
+      ;; amalgamate the undo
+      (with-undo-amalgamate
+        (save-excursion
+          (goto-char pt)
+          (conn-register-load register))))))
+
+(defalias 'conn-dispatch-register-replace
+  (oclosure-lambda (conn-action
+                    (description "Register Replace <%c>")
+                    (extra-args (lambda () (list (register-read-with-preview "Register: ")))))
+      (window pt thing-cmd thing-arg register)
+    (with-selected-window window
+      ;; If there is a keyboard macro in the register we would like to
+      ;; amalgamate the undo
+      (with-undo-amalgamate
+        (save-excursion
+          (goto-char pt)
+          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+            (`(,beg . ,end)
+             (delete-region beg end)
+             (conn-register-load register))
+            (_ (user-error "Cannot find %s at point" thing-cmd))))))))
+
+(defalias 'conn-dispatch-kill
+  (oclosure-lambda (conn-action
+                    (description (lambda (&optional register)
+                                   (if register
+                                       (format "Kill to Register <%c>" register)
+                                     "Kill")))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win)))))
+                    (extra-args (lambda ()
+                                  (list (when (conn--dispatch-get-prefix-arg)
+                                          (register-read-with-preview "Register: "))))))
+      (window pt thing-cmd thing-arg register)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (cond ((and conn-dispatch-repeat-count
+                       (> conn-dispatch-repeat-count 0))
+                  (conn-append-region beg end register t))
+                 (register
+                  (copy-to-register register beg end t))
+                 (t
+                  (kill-region beg end)))
            (conn--dispatch-fixup-whitespace)
-           (message "Appended: %s" str)))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+           (message "Killed thing"))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-kill-prepend (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Kill Prepend Register <%c>" register)
-                   "Kill Prepend"))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  :extra-args (lambda ()
-                (when (conn--dispatch-get-prefix-arg)
-                  (list (register-read-with-preview "Register: "))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (if register
-               (prepend-to-register register beg end t)
-             (kill-append str t)
-             (delete-region beg end))
-           (conn--dispatch-fixup-whitespace)
-           (message "Prepended: %s" str)))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+(defalias 'conn-dispatch-kill-append
+  (oclosure-lambda (conn-action
+                    (description (lambda (&optional register)
+                                   (if register
+                                       (format "Kill Append Register <%c>" register)
+                                     "Kill Append")))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win)))))
+                    (extra-args (lambda ()
+                                  (when (conn--dispatch-get-prefix-arg)
+                                    (list (register-read-with-preview "Register: "))))))
+      (window pt thing-cmd thing-arg register)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (copy-to-register register beg end t)
+               (kill-append str nil)
+               (delete-region beg end))
+             (conn--dispatch-fixup-whitespace)
+             (message "Appended: %s" str)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-copy-as-kill
-    (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Copy to Register <%c>" register)
-                   "Copy As Kill"))
-  :extra-args (lambda ()
-                (when (conn--dispatch-get-prefix-arg)
-                  (list (register-read-with-preview "Register: "))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (pulse-momentary-highlight-region beg end)
-         (cond ((and conn-dispatch-repeat-count
-                     (> conn-dispatch-repeat-count 0))
-                (conn-append-region beg end register nil))
-               (register
-                (copy-to-register register beg end))
-               (t
-                (kill-new (filter-buffer-substring beg end)))))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
+(defalias 'conn-dispatch-kill-prepend
+  (oclosure-lambda (conn-action
+                    (description (lambda (&optional register)
+                                   (if register
+                                       (format "Kill Prepend Register <%c>" register)
+                                     "Kill Prepend")))
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only (window-buffer win)))))
+                    (extra-args (lambda ()
+                                  (when (conn--dispatch-get-prefix-arg)
+                                    (list (register-read-with-preview "Register: "))))))
+      (window pt thing-cmd thing-arg register)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (prepend-to-register register beg end t)
+               (kill-append str t)
+               (delete-region beg end))
+             (conn--dispatch-fixup-whitespace)
+             (message "Prepended: %s" str)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-copy-append (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Copy Append to Register <%c>" register)
-                   "Copy Append"))
-  :extra-args (lambda ()
-                (when (conn--dispatch-get-prefix-arg)
-                  (list (register-read-with-preview "Register: "))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (if register
-               (append-to-register register beg end)
-             (kill-append str nil))
-           (message "Copy Appended: %s" str)))
-        (_ (user-error "Cannot find %s at point"
-                       (get thing-cmd :conn-command-thing)))))))
-
-(conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Copy Prepend to Register <%c>" register)
-                   "Copy Prepend"))
-  :extra-args (lambda ()
-                (when (conn--dispatch-get-prefix-arg)
-                  (list (register-read-with-preview "Register: "))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (let ((str (filter-buffer-substring beg end)))
-           (if register
-               (prepend-to-register register beg end)
-             (kill-append str t))
-           (message "Copy Prepended: %s" str)))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-copy-replace (window pt thing-cmd thing-arg)
-  :description "Copy and Replace"
-  :filter (lambda () (unless buffer-read-only 'this))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (pulse-momentary-highlight-region beg end)
-         (copy-region-as-kill beg end)
-         (conn--dispatch-fixup-whitespace))
-        (_ (user-error "Cannot find %s at point"
-                       (get thing-cmd :conn-command-thing))))))
-  (delete-region (region-beginning) (region-end))
-  (yank))
-
-(conn-define-dispatch-action conn-dispatch-cut-replace (window pt thing-cmd thing-arg)
-  :description "Cut Replace"
-  :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (kill-region beg end)
-         (conn--dispatch-fixup-whitespace))
-        (_ (user-error "Cannot find %s at point" thing-cmd)))))
-  (delete-region (region-beginning) (region-end))
-  (yank))
-
-(conn-define-dispatch-action conn-dispatch-copy (window pt thing-cmd thing-arg)
-  :description "Copy"
-  :filter (lambda () (unless buffer-read-only 'this))
-  (let (str)
+(defalias 'conn-dispatch-copy-as-kill
+  (oclosure-lambda (conn-action
+                    (description (lambda (&optional register)
+                                   (if register
+                                       (format "Copy to Register <%c>" register)
+                                     "Copy As Kill")))
+                    (extra-args (lambda ()
+                                  (when (conn--dispatch-get-prefix-arg)
+                                    (list (register-read-with-preview "Register: "))))))
+      (window pt thing-cmd thing-arg register)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
         (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
-           (setq str (filter-buffer-substring beg end))))))
-    (if str
-        (insert-for-yank str)
-      (user-error "Cannot find %s at point"
-                  (get thing-cmd :conn-command-thing)))))
+           (cond ((and conn-dispatch-repeat-count
+                       (> conn-dispatch-repeat-count 0))
+                  (conn-append-region beg end register nil))
+                 (register
+                  (copy-to-register register beg end))
+                 (t
+                  (kill-new (filter-buffer-substring beg end)))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-cut (window pt thing-cmd thing-arg)
-  :description "Cut"
-  :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (kill-region beg end)
-         (conn--dispatch-fixup-whitespace))
-        (_ (user-error "Cannot find %s at point"
-                       (get thing-cmd :conn-command-thing))))))
-  (yank))
+(defalias 'conn-dispatch-copy-append
+  (oclosure-lambda (conn-action
+                    (description (lambda (&optional register)
+                                   (if register
+                                       (format "Copy Append to Register <%c>" register)
+                                     "Copy Append")))
+                    (extra-args (lambda ()
+                                  (when (conn--dispatch-get-prefix-arg)
+                                    (list (register-read-with-preview "Register: "))))))
+      (window pt thing-cmd thing-arg register)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (append-to-register register beg end)
+               (kill-append str nil))
+             (message "Copy Appended: %s" str)))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))))
 
-(conn-define-dispatch-action conn-dispatch-goto (window pt thing-cmd thing-arg)
-  :description "Goto"
-  (select-window window)
-  (unless (= pt (point))
-    (let ((forward (< (point) pt)))
-      (unless (region-active-p)
-        (push-mark nil t))
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (if (region-active-p)
-             (goto-char (if forward end beg))
-           (if (= (point) end)
-               (conn--push-ephemeral-mark beg)
-             (conn--push-ephemeral-mark end))
-           (unless (or (= pt beg) (= pt end))
-             (goto-char beg))))
-        (_ (user-error "Cannot find %s at point"
-                       (get thing-cmd :conn-command-thing)))))))
+(defalias 'conn-dispatch-copy-prepend
+  (oclosure-lambda (conn-action
+                    (description (lambda (&optional register)
+                                   (if register
+                                       (format "Copy Prepend to Register <%c>" register)
+                                     "Copy Prepend")))
+                    (extra-args (lambda ()
+                                  (when (conn--dispatch-get-prefix-arg)
+                                    (list (register-read-with-preview "Register: "))))))
+      (window pt thing-cmd thing-arg register)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (prepend-to-register register beg end)
+               (kill-append str t))
+             (message "Copy Prepended: %s" str)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(conn-define-dispatch-action conn-dispatch-over (window pt thing-cmd thing-arg)
-  :description "Over"
-  (when (and (eq (window-buffer window) (current-buffer))
-             (/= pt (point)))
-    (unless (region-active-p)
-      (push-mark nil t))
-    (pcase (alist-get thing-cmd conn-dispatch-default-action-alist)
-      ((or 'conn-dispatch-goto 'nil)
-       (pcase (cons (or (bounds-of-thing-at-point
-                         (get thing-cmd :conn-command-thing))
-                        (point))
-                    (progn
-                      (goto-char pt)
-                      (bounds-of-thing-at-point
-                       (get thing-cmd :conn-command-thing))))
-         ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
-               (or (guard (<= beg1 end1 beg2 end2))
-                   (guard (>= end1 beg1 end2 beg2))
-                   (guard (and (= beg1 beg2) (= end1 end2)))))
-          (if (> beg2 end1)
-              (progn
-                (conn--push-ephemeral-mark beg1)
-                (goto-char end2))
-            (conn--push-ephemeral-mark end1)
-            (goto-char beg2)))
-         ((and `(,point . (,beg . ,end))
-               (guard (integerp point)))
-          (cond ((<= point beg end)
-                 (goto-char end))
-                ((<= beg point end)
-                 (goto-char beg)
-                 (conn--push-ephemeral-mark end))
-                ((<= beg end point)
-                 (goto-char beg))))))
-      ('conn-dispatch-jump (conn-dispatch-jump window pt thing-cmd thing-arg))
-      (_ (error "Can't jump to %s" thing-cmd)))))
+(defalias 'conn-dispatch-copy-replace
+  (oclosure-lambda (conn-action
+                    (description "Copy and Replace"))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (pulse-momentary-highlight-region beg end)
+           (copy-region-as-kill beg end)
+           (conn--dispatch-fixup-whitespace))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))
+    (delete-region (region-beginning) (region-end))
+    (yank)))
 
-(conn-define-dispatch-action conn-dispatch-jump (window pt _thing-cmd _thing-arg)
-  :description "Jump"
-  (with-current-buffer (window-buffer window)
+(defalias 'conn-dispatch-cut-replace
+  (oclosure-lambda (conn-action
+                    (description "Cut Replace")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (kill-region beg end)
+           (conn--dispatch-fixup-whitespace))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))
+    (delete-region (region-beginning) (region-end))
+    (yank)))
+
+(defalias 'conn-dispatch-copy
+  (oclosure-lambda (conn-action (description "Copy"))
+      (window pt thing-cmd thing-arg)
+    (let (str)
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+            (`(,beg . ,end)
+             (pulse-momentary-highlight-region beg end)
+             (setq str (filter-buffer-substring beg end))))))
+      (if str
+          (insert-for-yank str)
+        (user-error "Cannot find %s at point"
+                    (get thing-cmd :conn-command-thing))))))
+
+(defalias 'conn-dispatch-cut
+  (oclosure-lambda (conn-action
+                    (description "Cut")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (kill-region beg end)
+           (conn--dispatch-fixup-whitespace))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))
+    (yank)))
+
+(defalias 'conn-dispatch-goto
+  (oclosure-lambda (conn-action (description "Goto"))
+      (window pt thing-cmd thing-arg)
+    (select-window window)
     (unless (= pt (point))
+      (let ((forward (< (point) pt)))
+        (unless (region-active-p)
+          (push-mark nil t))
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (if (region-active-p)
+               (goto-char (if forward end beg))
+             (if (= (point) end)
+                 (conn--push-ephemeral-mark beg)
+               (conn--push-ephemeral-mark end))
+             (unless (or (= pt beg) (= pt end))
+               (goto-char beg))))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))))
+
+(defalias 'conn-dispatch-over
+  (oclosure-lambda (conn-action (description "Over"))
+      (window pt thing-cmd thing-arg)
+    (when (and (eq (window-buffer window) (current-buffer))
+               (/= pt (point)))
       (unless (region-active-p)
         (push-mark nil t))
-      (select-window window)
-      (goto-char pt))))
-
-(conn-define-dispatch-action conn-dispatch-transpose (window pt thing-cmd _thing-arg)
-  :description "Transpose"
-  :filter (lambda () (unless buffer-read-only 'this))
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (if (eq (current-buffer) (window-buffer window))
-      (pcase (if (region-active-p)
-                 (cons (region-beginning) (region-end))
-               (bounds-of-thing-at-point
-                (get thing-cmd :conn-command-thing)))
-        (`(,beg1 . ,end1)
-         (pcase (save-excursion
-                  (goto-char pt)
-                  (bounds-of-thing-at-point
-                   (get thing-cmd :conn-command-thing)))
-           (`(,beg2 . ,end2)
-            (if (and (or (<= beg1 end1 beg2 end2)
-                         (<= beg2 end2 beg1 end1))
-                     (/= beg1 end1)
-                     (/= beg2 end2)
-                     (<= (point-min) (min beg2 end2 beg1 end1))
-                     (> (point-max) (max beg2 end2 beg1 end1)))
+      (pcase (alist-get thing-cmd conn-dispatch-default-action-alist)
+        ((or 'conn-dispatch-goto 'nil)
+         (pcase (cons (or (bounds-of-thing-at-point
+                           (get thing-cmd :conn-command-thing))
+                          (point))
+                      (progn
+                        (goto-char pt)
+                        (bounds-of-thing-at-point
+                         (get thing-cmd :conn-command-thing))))
+           ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
+                 (or (guard (<= beg1 end1 beg2 end2))
+                     (guard (>= end1 beg1 end2 beg2))
+                     (guard (and (= beg1 beg2) (= end1 end2)))))
+            (if (> beg2 end1)
                 (progn
-                  (goto-char pt)
-                  (transpose-regions beg1 end1 beg2 end2))
-              (user-error "Invalid regions")))
-           (_ (user-error "Cannot find %s at point" thing-cmd))))
-        (_ (user-error "Cannot find %s at point" thing-cmd)))
-    (let ((cg1 (prepare-change-group))
-          (cg2 (with-current-buffer (window-buffer window)
-                 (prepare-change-group)))
-          str1 str2 success)
-      (unwind-protect
-          (progn
-            (pcase (if (region-active-p)
-                       (cons (region-beginning) (region-end))
-                     (bounds-of-thing-at-point
-                      (get thing-cmd :conn-command-thing)))
-              (`(,beg . ,end)
-               (setq str1 (filter-buffer-substring beg end)))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))
-            (with-selected-window window
-              (save-excursion
-                (goto-char pt)
-                (pcase (bounds-of-thing-at-point
-                        (get thing-cmd :conn-command-thing))
-                  (`(,beg . ,end)
-                   (setq str2 (filter-buffer-substring beg end))
-                   (delete-region beg end)
-                   (insert str1))
-                  (_ (user-error "Cannot find %s at point" thing-cmd)))))
-            (delete-region (region-beginning) (region-end))
-            (insert str2)
-            (setq success t))
-        (if success
+                  (conn--push-ephemeral-mark beg1)
+                  (goto-char end2))
+              (conn--push-ephemeral-mark end1)
+              (goto-char beg2)))
+           ((and `(,point . (,beg . ,end))
+                 (guard (integerp point)))
+            (cond ((<= point beg end)
+                   (goto-char end))
+                  ((<= beg point end)
+                   (goto-char beg)
+                   (conn--push-ephemeral-mark end))
+                  ((<= beg end point)
+                   (goto-char beg))))))
+        ('conn-dispatch-jump (conn-dispatch-jump window pt thing-cmd thing-arg))
+        (_ (error "Can't jump to %s" thing-cmd))))))
+
+(defalias 'conn-dispatch-jump
+  (oclosure-lambda (conn-action (description "Jump"))
+      (window pt _thing-cmd _thing-arg)
+    (with-current-buffer (window-buffer window)
+      (unless (= pt (point))
+        (unless (region-active-p)
+          (push-mark nil t))
+        (select-window window)
+        (goto-char pt)))))
+
+(defalias 'conn-dispatch-transpose
+  (oclosure-lambda (conn-action
+                    (description "Transpose")
+                    (window-predicate (lambda (win)
+                                        (not (buffer-local-value 'buffer-read-only
+                                                                 (window-buffer win))))))
+      (window pt thing-cmd _thing-arg)
+    (if (eq (current-buffer) (window-buffer window))
+        (pcase (if (region-active-p)
+                   (cons (region-beginning) (region-end))
+                 (bounds-of-thing-at-point
+                  (get thing-cmd :conn-command-thing)))
+          (`(,beg1 . ,end1)
+           (pcase (save-excursion
+                    (goto-char pt)
+                    (bounds-of-thing-at-point
+                     (get thing-cmd :conn-command-thing)))
+             (`(,beg2 . ,end2)
+              (if (and (or (<= beg1 end1 beg2 end2)
+                           (<= beg2 end2 beg1 end1))
+                       (/= beg1 end1)
+                       (/= beg2 end2)
+                       (<= (point-min) (min beg2 end2 beg1 end1))
+                       (> (point-max) (max beg2 end2 beg1 end1)))
+                  (progn
+                    (goto-char pt)
+                    (transpose-regions beg1 end1 beg2 end2))
+                (user-error "Invalid regions")))
+             (_ (user-error "Cannot find %s at point" thing-cmd))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))
+      (let ((cg1 (prepare-change-group))
+            (cg2 (with-current-buffer (window-buffer window)
+                   (prepare-change-group)))
+            str1 str2 success)
+        (unwind-protect
             (progn
-              (accept-change-group cg1)
-              (accept-change-group cg2))
-          (cancel-change-group cg1)
-          (cancel-change-group cg2))))))
+              (pcase (if (region-active-p)
+                         (cons (region-beginning) (region-end))
+                       (bounds-of-thing-at-point
+                        (get thing-cmd :conn-command-thing)))
+                (`(,beg . ,end)
+                 (setq str1 (filter-buffer-substring beg end)))
+                (_ (user-error "Cannot find %s at point" thing-cmd)))
+              (with-selected-window window
+                (save-excursion
+                  (goto-char pt)
+                  (pcase (bounds-of-thing-at-point
+                          (get thing-cmd :conn-command-thing))
+                    (`(,beg . ,end)
+                     (setq str2 (filter-buffer-substring beg end))
+                     (delete-region beg end)
+                     (insert str1))
+                    (_ (user-error "Cannot find %s at point" thing-cmd)))))
+              (delete-region (region-beginning) (region-end))
+              (insert str2)
+              (setq success t))
+          (if success
+              (progn
+                (accept-change-group cg1)
+                (accept-change-group cg2))
+            (cancel-change-group cg1)
+            (cancel-change-group cg2)))))))
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-read-dispatch-state 'conn-dot-mode)
@@ -4893,7 +4922,6 @@ the THING at the location selected is acted upon.
 The string is read with an idle timeout of `conn-read-string-timeout'
 seconds."
   (interactive (conn--dispatch-read-thing))
-  ;; TODO: oclosures for descriptions and a ring
   (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
     (add-to-history 'conn-dispatch-ring
                     (cons (symbol-function 'conn-repeat-last-dispatch)
@@ -5007,6 +5035,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (defun conn-last-dispatch-at-mouse (_event)
   (interactive "e")
+  ;; This is a stub, conn-dispatch-on-things will update the
+  ;; symbol-function value after each call.
   (user-error "No last dispatch command"))
 
 (defun conn-bind-last-dispatch-to-key ()
@@ -8576,7 +8606,6 @@ Operates with the selected windows parent window."
                               (eval-when-compile
                                 (regexp-opt
                                  '("conn-define-state"
-                                   "conn-define-dispatch-action"
                                    "conn-define-mark-command")
                                  t))
                               "\\s-+\\(" lisp-mode-symbol-regexp "\\)")
@@ -8862,39 +8891,45 @@ Operates with the selected windows parent window."
  'dired-dirline nil
  'dired-next-dirline 'dired-prev-dirline)
 
-(conn-define-dispatch-action conn-dispatch-dired-mark (window pt _thing-cmd _thing-arg)
-  :description "Mark"
-  :window-predicate (lambda (win)
-                      (eq (buffer-local-value 'major-mode (window-buffer win))
-                          'dired-mode))
-  (with-selected-window window
-    (save-excursion
-      (let ((regexp (dired-marker-regexp)))
+(defalias 'conn-dispatch-dired-mark
+  (oclosure-lambda (conn-action
+                    (description "Mark")
+                    (window-predicate (lambda (win)
+                                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                                            'dired-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (let ((regexp (dired-marker-regexp)))
+          (goto-char pt)
+          (goto-char (line-beginning-position))
+          (if (looking-at regexp)
+              (dired-unmark 1)
+            (dired-mark 1)))))))
+
+(defalias 'conn-dispatch-dired-kill-line
+  (oclosure-lambda (conn-action
+                    (description "Kill Line")
+                    (window-predicate (lambda (win)
+                                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                                            'dired-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
         (goto-char pt)
-        (goto-char (line-beginning-position))
-        (if (looking-at regexp)
-            (dired-unmark 1)
-          (dired-mark 1))))))
+        (dired-kill-line)))))
 
-(conn-define-dispatch-action conn-dispatch-dired-kill-line (window pt _thing-cmd _thing-arg)
-  :description "Kill Line"
-  :window-predicate (lambda (win)
-                      (eq (buffer-local-value 'major-mode (window-buffer win))
-                          'dired-mode))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (dired-kill-line))))
-
-(conn-define-dispatch-action conn-dispatch-dired-kill-subdir (window pt _thing-cmd _thing-arg)
-  :description "Kill Subdir"
-  :window-predicate (lambda (win)
-                      (eq (buffer-local-value 'major-mode (window-buffer win))
-                          'dired-mode))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (dired-kill-subdir))))
+(defalias 'conn-dispatch-dired-kill-subdir
+  (oclosure-lambda (conn-action
+                    (description "Kill Subdir")
+                    (window-predicate (lambda (win)
+                                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                                            'dired-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (dired-kill-subdir)))))
 
 
 ;;;; Magit
@@ -8977,18 +9012,20 @@ Operates with the selected windows parent window."
  'ibuffer-forward-filter-group
  'ibuffer-backward-filter-group)
 
-(conn-define-dispatch-action conn-dispatch-ibuffer-mark (window pt _thing-cmd _thing-arg)
-  :description "Mark"
-  :window-predicate (lambda (win)
-                      (eq (buffer-local-value 'major-mode (window-buffer win))
-                          'ibuffer-mode))
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (if (or (null (ibuffer-current-mark))
-              (= (ibuffer-current-mark) ? ))
-          (ibuffer-mark-forward nil nil 1)
-        (ibuffer-unmark-forward nil nil 1)))))
+(defalias 'conn-dispatch-ibuffer-mark
+  (oclosure-lambda (conn-action
+                    (description "Mark")
+                    (window-predicate (lambda (win)
+                                        (eq (buffer-local-value 'major-mode (window-buffer win))
+                                            'ibuffer-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (if (or (null (ibuffer-current-mark))
+                (= (ibuffer-current-mark) ? ))
+            (ibuffer-mark-forward nil nil 1)
+          (ibuffer-unmark-forward nil nil 1))))))
 
 (keymap-set (conn-get-state-map 'conn-ibuffer-dispatch-state)
             "f" 'conn-dispatch-ibuffer-mark)
