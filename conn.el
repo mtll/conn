@@ -4865,19 +4865,39 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Dispatch commands
 
+(defvar conn-post-dispatch-hook nil)
+
 (defvar conn-dispatch-ring nil)
 
 (defvar conn-dispatch-ring-max 8)
+
+(oclosure-define (conn-dispatch
+                  (:predicate conn-dispatch-p))
+  (description :type (memq (string function))))
+
+(defun conn--dispatch-auto-bind-mouse ()
+  (pcase last-input-event
+    ((and `(,type . ,_)
+          (guard (mouse-event-p type))
+          (guard (not (eq 'mouse-1 type))))
+     (define-key conn-dispatch-auto-bind-mouse-mode-map
+                 (vector type)
+                 (symbol-function 'conn-last-dispatch-at-mouse))
+     (define-key conn-dispatch-auto-bind-mouse-mode-map
+                 (vector (event-convert-list
+                          `(,@(event-modifiers type)
+                            down
+                            ,(event-basic-type type))))
+                 'ignore))))
 
 (define-minor-mode conn-dispatch-auto-bind-mouse-mode
   "Automatically bind mouse buttons to the current dispatch when used
 during target finding."
   :global t
-  :keymap (make-sparse-keymap))
-
-(oclosure-define (conn-dispatch
-                  (:predicate conn-dispatch-p))
-  (description :type (memq (string function))))
+  :keymap (make-sparse-keymap)
+  (if conn-dispatch-auto-bind-mouse-mode
+      (add-hook 'conn-post-dispatch-hook #'conn--dispatch-auto-bind-mouse)
+    (remove-hook 'conn-post-dispatch-hook #'conn--dispatch-auto-bind-mouse)))
 
 (defun conn-dispatch-cycle-ring-previous ()
   "Cycle backwards through `conn-dispatch-ring'."
@@ -4929,7 +4949,6 @@ seconds."
   (let* ((conn-target-window-predicate conn-target-window-predicate)
          (conn-dispatch-repeat-count (when repeat 0))
          (repeat-count conn-dispatch-repeat-count)
-         (action (or action (conn--dispatch-default-action thing-cmd)))
          (description (lambda ()
                         (concat (let ((action-desc (conn-action-description action)))
                                   (if (stringp action-desc)
@@ -4972,20 +4991,7 @@ seconds."
               (apply action window pt
                      (or thing-override thing-cmd) thing-arg
                      action-extra-args)
-              (when conn-dispatch-auto-bind-mouse-mode
-                (pcase last-input-event
-                  ((and `(,type . ,_)
-                        (guard (mouse-event-p type))
-                        (guard (not (eq 'mouse-1 type))))
-                   (define-key conn-dispatch-auto-bind-mouse-mode-map
-                               (vector type)
-                               (symbol-function 'conn-last-dispatch-at-mouse))
-                   (define-key conn-dispatch-auto-bind-mouse-mode-map
-                               (vector (event-convert-list
-                                        `(,@(event-modifiers type)
-                                          down
-                                          ,(event-basic-type type))))
-                               'ignore))))))
+              (run-hooks 'conn-post-dispatch-hook)))
         (cl-incf conn-dispatch-repeat-count)
         (undo-boundary)))
     (setf repeat-count conn-dispatch-repeat-count)))

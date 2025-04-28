@@ -658,29 +658,29 @@ A zero means repeat until error."
                             (lambda (iterator)
                               (conn--kmacro-apply iterator nil macro)))
                            (kmacro kmacro))))
-         (action
-          (oclosure-lambda (conn-action
-                            (description
-                             (lambda ()
-                               (format "Kapply <%s>"
-                                       (if macro
-                                           (conn--kmacro-display
-                                            (kmacro--keys macro))
-                                         "unrecorded")))))
-              (window pt thing-cmd thing-arg)
-            (with-selected-window window
-              (apply #'conn--kapply-compose-iterator
-                     (conn--kapply-region-iterator
-                      (save-excursion
-                        (goto-char pt)
-                        (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                          ('nil (user-error "Cannot find %s at point"
-                                            (get thing-cmd :conn-command-thing)))
-                          (`(,region) (list region))
-                          (`(,_ . ,subregions) subregions))))
-                     pipeline))
-            (unless macro (setq macro (kmacro-ring-head))))))
-    (apply 'conn-dispatch-on-things (funcall continuation action))))
+         (desc
+          (lambda ()
+            (format "Kapply <%s>"
+                    (if macro
+                        (conn--kmacro-display (kmacro--keys macro))
+                      "unrecorded")))))
+    (thread-last
+      (oclosure-lambda (conn-action (description desc))
+          (window pt thing-cmd thing-arg)
+        (with-selected-window window
+          (apply #'conn--kapply-compose-iterator
+                 (conn--kapply-region-iterator
+                  (save-excursion
+                    (goto-char pt)
+                    (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                      ('nil (user-error "Cannot find %s at point"
+                                        (get thing-cmd :conn-command-thing)))
+                      (`(,region) (list region))
+                      (`(,_ . ,subregions) subregions))))
+                 pipeline))
+        (unless macro (setq macro (kmacro-ring-head))))
+      (funcall continuation)
+      (apply 'conn-dispatch-on-things))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
