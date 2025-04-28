@@ -159,9 +159,9 @@
   "O" 'forward-word
   "U" 'backward-word
   "i" 'sp-backward-up-sexp
-  "I" 'sp-down-sexp
+  "k" 'sp-down-sexp
+  "I" 'sp-up-sexp
   "K" 'sp-backward-down-sexp
-  "k" 'sp-up-sexp
   "," 'sp-beginning-of-sexp
   "." 'sp-end-of-sexp
   ")" 'sp-splice-sexp-killing-forward
@@ -178,7 +178,6 @@
   "l" 'sp-forward-slurp-sexp
   "L" 'sp-backward-barf-sexp
   "J" 'sp-backward-slurp-sexp
-  "t" 'transpose-sexps
   "h" 'sp-join-sexp
   "n" 'sp-backward-sexp
   "m" 'sp-forward-sexp

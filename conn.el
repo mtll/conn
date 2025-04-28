@@ -3182,9 +3182,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (oclosure-define (conn-action
                   (:predicate conn-action--p))
-  (extra-args)
-  (description)
-  (window-predicate))
+  (extra-args :type (memq (nil function)))
+  (description :type (memq (string function)))
+  (window-predicate :type (memq (nil function))))
 
 (defun conn-action-p (action)
   (conn-action--p (if (symbolp action)
@@ -4877,8 +4877,8 @@ during target finding."
 
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p))
-  (repeat-count :mutable t)
-  (description))
+  (repeat-count :mutable t :type integer)
+  (description :type (memq (string function))))
 
 (defun conn-dispatch-cycle-ring-previous ()
   "Cycle backwards through `conn-dispatch-ring'."
@@ -7321,7 +7321,9 @@ Current Window: `conn-this-window-prefix'"
   (display-buffer-override-next-command
    (lambda (_ _)
      (cons (conn-prompt-for-window (conn--get-windows nil 'nomini) t)
-           'reuse))))
+           'reuse))
+   nil "[select]")
+  (message "Display next command in selected buffer…"))
 
 (defun conn-this-window-prefix ()
   "Display next buffer in the currently selected window."
