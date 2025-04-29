@@ -4894,7 +4894,7 @@ during target finding."
     (remove-hook 'conn-post-dispatch-hook #'conn--dispatch-auto-bind-mouse)))
 
 (defun conn-dispatch-cycle-ring-previous ()
-  "Cycle backwards through `conn-dispatch-ring'."
+  "Cycle forwards through `conn-dispatch-ring'."
   (interactive)
   (if conn-dispatch-ring
       (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
@@ -4908,7 +4908,7 @@ during target finding."
     (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-cycle-ring-next ()
-  "Cycle forwards through `conn-dispatch-ring'."
+  "Cycle backwards through `conn-dispatch-ring'."
   (interactive)
   (if conn-dispatch-ring
       (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
@@ -4950,7 +4950,10 @@ seconds."
                                     (apply action-desc action-extra-args)))
                                 " @ "
                                 (symbol-name thing-cmd)
-                                (format " <%s>" thing-arg)))))
+                                (format " %s" (pcase thing-arg
+                                                  ('nil "[1]")
+                                                  ('- "[-1]")
+                                                  (_ thing-arg)))))))
     (setf (symbol-function 'conn-repeat-last-dispatch)
           (oclosure-lambda (conn-dispatch (description description))
               (invert-repeat)
@@ -8230,8 +8233,8 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-dispatch-cycle-map
   :repeat t
-  "l" 'conn-dispatch-cycle-ring-next
-  "j" 'conn-dispatch-cycle-ring-previous)
+  "l" 'conn-dispatch-cycle-ring-previous
+  "j" 'conn-dispatch-cycle-ring-next)
 
 (defvar-keymap conn-local-mode-map
   "C-x y" conn-dispatch-cycle-map
