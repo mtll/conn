@@ -665,20 +665,21 @@ A zero means repeat until error."
                         (conn--kmacro-display (kmacro--keys macro))
                       "unrecorded")))))
     (thread-last
-      (oclosure-lambda (conn-action (description desc))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (apply #'conn--kapply-compose-iterator
-                 (conn--kapply-region-iterator
-                  (save-excursion
-                    (goto-char pt)
-                    (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                      ('nil (user-error "Cannot find %s at point"
-                                        (get thing-cmd :conn-command-thing)))
-                      (`(,region) (list region))
-                      (`(,_ . ,subregions) subregions))))
-                 pipeline))
-        (unless macro (setq macro (kmacro-ring-head))))
+      (make-conn-action
+       :description desc
+       :body (lambda (window pt thing-cmd thing-arg)
+               (with-selected-window window
+                 (apply #'conn--kapply-compose-iterator
+                        (conn--kapply-region-iterator
+                         (save-excursion
+                           (goto-char pt)
+                           (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                             ('nil (user-error "Cannot find %s at point"
+                                               (get thing-cmd :conn-command-thing)))
+                             (`(,region) (list region))
+                             (`(,_ . ,subregions) subregions))))
+                        pipeline))
+               (unless macro (setq macro (kmacro-ring-head)))))
       (funcall continuation)
       (apply 'conn-dispatch-on-things))))
 
