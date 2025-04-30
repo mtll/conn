@@ -637,6 +637,9 @@ A zero means repeat until error."
    (alist-get :ibuffer args)
    (alist-get :kmacro args)))
 
+(oclosure-define (conn-dispatch-kapply
+                  (:parent conn-action)))
+
 (transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
   "Apply keyboard macro on dispatch targets."
   :transient 'transient--do-exit
@@ -665,21 +668,21 @@ A zero means repeat until error."
                         (conn--kmacro-display (kmacro--keys macro))
                       "unrecorded")))))
     (thread-last
-      (make-conn-action
-       :description desc
-       :body (lambda (window pt thing-cmd thing-arg)
-               (with-selected-window window
-                 (apply #'conn--kapply-compose-iterator
-                        (conn--kapply-region-iterator
-                         (save-excursion
-                           (goto-char pt)
-                           (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                             ('nil (user-error "Cannot find %s at point"
-                                               (get thing-cmd :conn-command-thing)))
-                             (`(,region) (list region))
-                             (`(,_ . ,subregions) subregions))))
-                        pipeline))
-               (unless macro (setq macro (kmacro-ring-head)))))
+      (oclosure-lambda (conn-dispatch-kapply
+                        (describer desc))
+          (window pt thing-cmd thing-arg)
+        (with-selected-window window
+          (apply #'conn--kapply-compose-iterator
+                 (conn--kapply-region-iterator
+                  (save-excursion
+                    (goto-char pt)
+                    (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                      ('nil (user-error "Cannot find %s at point"
+                                        (get thing-cmd :conn-command-thing)))
+                      (`(,region) (list region))
+                      (`(,_ . ,subregions) subregions))))
+                 pipeline))
+        (unless macro (setq macro (kmacro-ring-head))))
       (funcall continuation)
       (apply 'conn-dispatch-on-things))))
 

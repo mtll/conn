@@ -158,14 +158,13 @@
  'org-paragraph 'conn-continuous-thing-handler
  'org-forward-paragraph 'org-backward-paragraph)
 
-(defvar conn-open-org-link
-  (make-conn-action
-   :description "Open Link"
-   :body (lambda (window pt _thing-cmd _thing-arg)
-           (with-selected-window window
-             (save-excursion
-               (goto-char pt)
-               (org-open-at-point-global))))))
+(conn-define-dispatch-action conn-open-org-link
+    (window pt _thing-cmd _thing-arg)
+  :description "Open Link"
+  (with-selected-window window
+    (save-excursion
+      (goto-char pt)
+      (org-open-at-point-global))))
 
 (setf (alist-get 'org-link conn-dispatch-default-action-alist)
       'conn-open-org-link)
