@@ -3332,7 +3332,7 @@ of a command.")
 (defun conn--dispatch-get-prefix-arg ()
   (error "Function only available during dispatch"))
 
-(defun conn-dispatch-command-loop (function &optional initial-arg)
+(defun conn-dispatch-command-loop (callback &optional initial-arg)
   (cl-letf* ((window-conf (current-window-configuration))
              (prompt nil)
              (action nil)
@@ -3406,40 +3406,33 @@ of a command.")
                                 (t ""))))
                  cmd (key-binding keys t)
                  invalid nil))
-         (set-action (new-action)
-           (conn-action-cancel action)
-           (setq action nil)
-           (unless (or (null new-action)
-                       (cl-typep new-action (cl-type-of action)))
-             (setq action new-action)
-             (conn-action-init-args action))
-           (set-window-configuration window-conf))
          (read-dispatch ()
            (read-command)
            (while t
              (catch 'loop-continue
                (pcase cmd
                  (`(,thing ,finder . ,default-action)
-                  (unless action
-                    (set-action (or default-action
-                                    (conn-action
-                                     (conn--dispatch-default-action thing)))))
                   (cl-return-from read-dispatch
-                    (funcall function
-                             action finder
+                    (funcall callback
+                             (or action
+                                 (conn-action
+                                  (or default-action
+                                      (conn--dispatch-default-action thing))))
+                             finder
                              thing (when arg
                                      (* (if sign -1 1) (or arg 1)))
                              repeat)))
                  ('keyboard-quit
                   (keyboard-quit))
                  ('kapply
-                  (throw 'continuation
-                         (conn--with-state (conn-enter-state conn-previous-state)
-                           (conn-dispatch-kapply-prefix
-                            (lambda (action)
-                              (set-window-configuration window-conf)
-                              (set-action action)
-                              (body))))))
+                  (throw 'kapply-continuation
+                         (let ((wconf (current-window-configuration)))
+                           (conn--with-state (conn-enter-state conn-previous-state)
+                             (conn-dispatch-kapply-prefix
+                              (lambda (kapply)
+                                (setq action kapply)
+                                (set-window-configuration wconf)
+                                (body)))))))
                  ('repeat-dispatch
                   (setq repeat (not repeat)
                         repeat-indicator
@@ -3463,17 +3456,20 @@ of a command.")
                                       (when (symbolp cmd)
                                         (get cmd :conn-command-thing))))
                        (guard thing))
-                  (unless action
-                    (set-action (conn-action
-                                 (conn--dispatch-default-action cmd))))
                   (cl-return-from read-dispatch
-                    (funcall function action
+                    (funcall callback
+                             (or action
+                                 (conn-action
+                                  (conn--dispatch-default-action thing)))
                              (conn--dispatch-target-finder thing)
                              thing (when arg
                                      (* (if sign -1 1) (or arg 1)))
                              repeat)))
                  ((and cmd (pred conn--action-type-p))
-                  (set-action (conn-action cmd)))
+                  (conn-action-cancel action)
+                  (if (cl-typep action cmd)
+                      (setq action nil)
+                    (setq action (conn-action cmd))))
                  (_
                   (setq invalid t)))
                (read-command))))
@@ -4152,9 +4148,6 @@ Returns a cons of (STRING . OVERLAYS)."
   (window-predicate)
   (undo-handle :mutable t))
 
-(oclosure-define (conn-action-undo-handle
-                  (:predicate conn-action-undo-handle--p)))
-
 (defun conn--action-type-p (symbol)
   (memq 'conn-action (ignore-errors
                        (oclosure--class-allparents
@@ -4165,14 +4158,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defgeneric conn-action-description (action))
 
-(cl-defgeneric conn-action-init-args (action)
+(cl-defgeneric conn-action-initialize (action)
   (:method ((_ conn-action)) "Noop" nil))
 
-(cl-defmethod conn-action-init-args :around ((action conn-action))
-  (pcase (cl-call-next-method)
-    ((and handle (pred conn-action-undo-handle--p))
-     (setf (oref action undo-handle) handle)))
-  action)
+(cl-defmethod conn-action-initialize :around (_action)
+  (let ((wconf (current-window-configuration)))
+    (unwind-protect
+        (cl-call-next-method)
+      (set-window-configuration wconf))))
 
 (defun conn-action-accept (action)
   (when-let* ((handle (and action (oref action undo-handle))))
@@ -4201,12 +4194,15 @@ Returns a cons of (STRING . OVERLAYS)."
                     collect `(,arg :mutable t)))
 
        (cl-defmethod conn-action ((_action (eql ',name)))
-         (oclosure-lambda (,name
-                           ,@(cl-loop for arg in (drop 4 arglist)
-                                      collect `(,arg nil))
-                           (window-predicate ,window-predicate))
-             (window pt thing-cmd thing-arg)
-           (,name window pt thing-cmd thing-arg ,@(drop 4 arglist))))
+         (let ((instance
+                (oclosure-lambda (,name
+                                  ,@(cl-loop for arg in (drop 4 arglist)
+                                             collect `(,arg nil))
+                                  (window-predicate ,window-predicate))
+                    (window pt thing-cmd thing-arg)
+                  (,name window pt thing-cmd thing-arg ,@(drop 4 arglist)))))
+           (conn-action-initialize instance)
+           instance))
 
        ,(when description
           (cl-check-type description string
@@ -4222,8 +4218,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (saved-mark (save-mark-and-excursion--save))
         (buffer (current-buffer)))
     (activate-change-group handle)
-    (oclosure-lambda (conn-action-undo-handle)
-        (state)
+    (lambda (state)
       (with-current-buffer buffer
         (pcase state
           (:accept
@@ -4289,7 +4284,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (pulse-momentary-highlight-region (- (point) (length str)) (point))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-yank-replace-to))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-replace-to))
   (setf (oref action str) (funcall region-extract-function nil)))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-replace-to
@@ -4308,7 +4303,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (pulse-momentary-highlight-region (- (point) (length str)) (point))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-yank-read-replace-to))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-read-replace-to))
   (setf (oref action str)
         (read-from-kill-ring "Yank Replace To from kill-ring: ")))
 
@@ -4324,7 +4319,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (unless executing-kbd-macro
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-yank-to))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-to))
   (setf (oref action str) (funcall region-extract-function nil)))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-to
@@ -4339,7 +4334,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (unless executing-kbd-macro
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-yank-read-to))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-read-to))
   (setf (oref action str)
         (read-from-kill-ring "Yank To from kill-ring: ")))
 
@@ -4355,9 +4350,9 @@ Returns a cons of (STRING . OVERLAYS)."
       (unless executing-kbd-macro
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-throw))
-  (prog1 (conn--action-undo-handler)
-    (setf (oref action str) (funcall region-extract-function t))))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-throw))
+  (setf (oref action undo-handle) (conn--action-undo-handler)
+        (oref action str) (funcall region-extract-function t)))
 
 (conn-define-dispatch-action conn-dispatch-throw-replace
     (window pt thing-cmd thing-arg str)
@@ -4375,9 +4370,9 @@ Returns a cons of (STRING . OVERLAYS)."
            (pulse-momentary-highlight-region (- (point) (length str)) (point))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-throw-replace))
-  (prog1 (conn--action-undo-handler)
-    (setf (oref action str) (funcall region-extract-function t))))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-throw-replace))
+  (setf (oref action undo-handle) (conn--action-undo-handler)
+        (oref action str) (funcall region-extract-function t)))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
@@ -4466,7 +4461,7 @@ Returns a cons of (STRING . OVERLAYS)."
          (message "Duplicated %s" thing-cmd))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-duplicate))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate))
   (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
 
 (conn-define-dispatch-action conn-dispatch-duplicate-and-comment (window pt thing-cmd thing-arg arg)
@@ -4482,7 +4477,7 @@ Returns a cons of (STRING . OVERLAYS)."
          (message "Duplicated and commented %s" thing-cmd))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-duplicate-and-comment))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate-and-comment))
   (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
 
 (conn-define-dispatch-action conn-dispatch-register (window pt _thing-cmd _thing-arg register)
@@ -4494,7 +4489,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (goto-char pt)
         (conn-register-load register)))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-register))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-register))
   (setf (oref action register) (register-read-with-preview "Register: ")))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-register))
@@ -4514,7 +4509,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (conn-register-load register))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-register-replace))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-register-replace))
   (setf (oref action register) (register-read-with-preview "Register: ")))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-register-replace))
@@ -4540,7 +4535,7 @@ Returns a cons of (STRING . OVERLAYS)."
          (message "Killed thing"))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-kill))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-kill))
   (setf (oref action register)
         (when (conn--dispatch-get-prefix-arg)
           (register-read-with-preview "Register: "))))
@@ -4568,7 +4563,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Appended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-kill-append))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-kill-append))
   (setf (oref action register)
         (when (conn--dispatch-get-prefix-arg)
           (register-read-with-preview "Register: "))))
@@ -4596,7 +4591,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Prepended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-kill-prepend))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-kill-prepend))
   (setf (oref action args)
         (when (conn--dispatch-get-prefix-arg)
           (register-read-with-preview "Register: "))))
@@ -4624,7 +4619,7 @@ Returns a cons of (STRING . OVERLAYS)."
                 (kill-new (filter-buffer-substring beg end)))))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-copy-as-kill))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-copy-as-kill))
   (setf (oref action register)
         (when (conn--dispatch-get-prefix-arg)
           (register-read-with-preview "Register: "))))
@@ -4648,7 +4643,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point"
                        (get thing-cmd :conn-command-thing)))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-copy-append))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-copy-append))
   (setf (oref action args)
         (when (conn--dispatch-get-prefix-arg)
           (register-read-with-preview "Register: "))))
@@ -4671,7 +4666,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Copy Prepended: %s" str)))
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
-(cl-defmethod conn-action-init-args ((action conn-dispatch-copy-prepend))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-copy-prepend))
   (setf (oref action args)
         (when (conn--dispatch-get-prefix-arg)
           (register-read-with-preview "Register: "))))
@@ -4997,7 +4992,7 @@ during target finding."
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (catch 'continuation
+  (catch 'kapply-continuation
     (conn-dispatch-command-loop 'conn-perform-dispatch initial-arg)))
 
 (defun conn-perform-dispatch ( action finder thing-cmd thing-arg
@@ -5005,10 +5000,7 @@ during target finding."
   (pcase action
     ((pred conn-action-p))
     ((pred conn--action-type-p)
-     (setq action (thread-first
-                    (conn-action action)
-                    (conn-action-init-args)
-                    (conn-action-accept))))
+     (setq action (conn-action-accept (conn-action action))))
     (_ (error "Unknown action %s" action)))
   (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
     (add-to-history 'conn-dispatch-ring
