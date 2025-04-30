@@ -662,29 +662,27 @@ A zero means repeat until error."
                          (alist-get :regions args)
                          'conn--kapply-pulse-region
                          (alist-get :window-conf args))))
-    (thread-last
-      (oclosure-lambda (conn-dispatch-kapply
-                        (macro nil))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (apply #'conn--kapply-compose-iterator
-                 (conn--kapply-region-iterator
-                  (save-excursion
-                    (goto-char pt)
-                    (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                      ('nil (user-error "Cannot find %s at point"
-                                        (get thing-cmd :conn-command-thing)))
-                      (`(,region) (list region))
-                      (`(,_ . ,subregions) subregions))))
-                 `(,@pipeline
-                   ,(pcase (alist-get :kmacro args)
-                      ('conn--kmacro-apply
-                       (lambda (iterator)
-                         (conn--kmacro-apply iterator nil macro)))
-                      (kmacro kmacro)))))
-        (unless macro (setq macro (kmacro-ring-head))))
-      (funcall continuation)
-      (apply 'conn-dispatch-on-things))))
+    (funcall continuation
+             (oclosure-lambda (conn-dispatch-kapply
+                               (macro nil))
+                 (window pt thing-cmd thing-arg)
+               (with-selected-window window
+                 (apply #'conn--kapply-compose-iterator
+                        (conn--kapply-region-iterator
+                         (save-excursion
+                           (goto-char pt)
+                           (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                             ('nil (user-error "Cannot find %s at point"
+                                               (get thing-cmd :conn-command-thing)))
+                             (`(,region) (list region))
+                             (`(,_ . ,subregions) subregions))))
+                        `(,@pipeline
+                          ,(pcase (alist-get :kmacro args)
+                             ('conn--kmacro-apply
+                              (lambda (iterator)
+                                (conn--kmacro-apply iterator nil macro)))
+                             (kmacro kmacro)))))
+               (unless macro (setq macro (kmacro-ring-head)))))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."

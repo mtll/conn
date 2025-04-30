@@ -40,7 +40,7 @@
   "<" 'org-drag-element-backward
   ">" 'org-drag-element-forward
   "?" (conn-remap-key conn-undo-redo-keys t)
-  "f" 'conn-dispatch-on-things
+  "f" 'conn-dispatch-state
   "C" 'org-toggle-comment
   "b" (conn-remap-key "C-c C-v")
   "c" (conn-remap-key "C-c")
