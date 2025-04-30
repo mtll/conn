@@ -30,6 +30,8 @@
 ;;;; Requires
 
 (require 'compat)
+(require 'eieio)
+(require 'oclosure)
 (static-if (<= 31 emacs-major-version)
     (require 'subr-x)
   (eval-when-compile
@@ -3355,7 +3357,7 @@ of a command.")
                   (setq arg nil
                         sign nil)))))
     (cl-labels
-        ((action-p (sym)
+        ((action-type-p (sym)
            (memq 'conn-action (ignore-errors
                                 (oclosure--class-allparents
                                  (cl--find-class sym)))))
@@ -3397,7 +3399,7 @@ of a command.")
                                    ('help)
                                    ((pred functionp)
                                     (or (get sym :conn-command-thing)
-                                        (action-p sym)))
+                                        (action-type-p sym)))
                                    (`(,cmd ,_ . ,_)
                                     (or (get cmd :conn-mark-handler)
                                         (get cmd 'forward-op)))))
@@ -3487,7 +3489,7 @@ of a command.")
                     (list cmd (when arg (* (if sign -1 1) (or arg 1)))
                           (conn--dispatch-target-finder cmd)
                           action repeat)))
-                 ((and cmd (pred action-p))
+                 ((and cmd (pred action-type-p))
                   (set-action (conn-action cmd)))
                  (_
                   (setq invalid t)))
@@ -4176,7 +4178,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (:method (_) "Noop" nil))
 
 (defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &body BODY)"
+  "\(fn NAME ARGLIST &key DESCRIPTION WINDOW-PREDICATE &body BODY)"
   (declare (debug ( name lambda-expr
                     [&rest keywordp form]
                     def-body))
@@ -4198,7 +4200,9 @@ Returns a cons of (STRING . OVERLAYS)."
              (window pt thing-cmd thing-arg)
            (,name window pt thing-cmd thing-arg ,@(drop 4 arglist))))
 
-       ,(when description
+       ,(when (and description
+                   (cl-check-type description string
+                                  "Description must be a string"))
           `(cl-defmethod conn-action-description ((_action ,name))
              ,description))
 
