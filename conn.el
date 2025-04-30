@@ -3362,8 +3362,7 @@ of a command.")
          (action-description ()
            (if action
                (propertize
-                (apply (conn-action--describer action)
-                       (conn-action-get-args action))
+                (conn-action-description action)
                 'face 'eldoc-highlight-function-argument)
              ""))
          (read-action-extra-args ()
@@ -4166,15 +4165,12 @@ Returns a cons of (STRING . OVERLAYS)."
 ;;;;; Dispatch actions
 
 (oclosure-define (conn-action)
-  (window-predicate)
-  (args :mutable t)
-  (describer))
+  (window-predicate))
 
 (cl-defgeneric conn-action (action)
   (:method (_) "Noop" nil))
 
-(cl-defgeneric conn-action-get-args (action)
-  (:method (action) (oref action args)))
+(cl-defgeneric conn-action-description (action))
 
 (cl-defgeneric conn-action-init-args (action)
   (:method (_) "Noop" nil))
@@ -4190,19 +4186,21 @@ Returns a cons of (STRING . OVERLAYS)."
                               unless (keywordp (car sublist))
                               do (cl-return sublist))))
     `(progn
-       (oclosure-define (,name (:parent conn-action)))
+       (oclosure-define (,name (:parent conn-action))
+         ,@(cl-loop for arg in (drop 4 arglist)
+                    collect `(,arg :mutable t)))
 
        (cl-defmethod conn-action ((_action (eql ',name)))
          (oclosure-lambda (,name
-                           (args)
-                           (window-predicate ,window-predicate)
-                           (describer
-                            ,(pcase description
-                               ((pred stringp) (lambda () description))
-                               ('nil (lambda () (symbol-name name)))
-                               (_ description))))
+                           ,@(cl-loop for arg in (drop 4 arglist)
+                                      collect `(,arg nil))
+                           (window-predicate ,window-predicate))
              (window pt thing-cmd thing-arg)
-           (apply ',name window pt thing-cmd thing-arg args)))
+           (,name window pt thing-cmd thing-arg ,@(drop 4 arglist))))
+
+       ,(when description
+          `(cl-defmethod conn-action-description ((_action ,name))
+             ,description))
 
        (defun ,name ,arglist ,@body))))
 
@@ -4262,8 +4260,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-yank-replace-to))
-  (setf (oref action args)
-        (list (funcall region-extract-function nil))))
+  (setf (oref action str) (funcall region-extract-function nil)))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-replace-to
     (window pt thing-cmd thing-arg str)
@@ -4282,8 +4279,8 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-yank-read-replace-to))
-  (setf (oref action args)
-        (list (read-from-kill-ring "Yank Replace To from kill-ring: "))))
+  (setf (oref action str)
+        (read-from-kill-ring "Yank Replace To from kill-ring: ")))
 
 (conn-define-dispatch-action conn-dispatch-yank-to
     (window pt _thing-cmd _thing-arg str)
@@ -4298,8 +4295,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-yank-to))
-  (setf (oref action args)
-        (list (funcall region-extract-function nil))))
+  (setf (oref action str) (funcall region-extract-function nil)))
 
 (conn-define-dispatch-action conn-dispatch-yank-read-to
     (window pt _thing-cmd _thing-arg str)
@@ -4314,8 +4310,8 @@ Returns a cons of (STRING . OVERLAYS)."
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-yank-read-to))
-  (setf (oref action args)
-        (list (read-from-kill-ring "Yank To from kill-ring: "))))
+  (setf (oref action str)
+        (read-from-kill-ring "Yank To from kill-ring: ")))
 
 (conn-define-dispatch-action conn-dispatch-throw
     (window pt _thing-cmd _thing-arg str)
@@ -4330,8 +4326,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-throw))
-  (setf (oref action args)
-        (list (funcall region-extract-function t))))
+  (setf (oref action str) (funcall region-extract-function t)))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
@@ -4421,7 +4416,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-duplicate))
-  (setf (oref action args) (list (conn--dispatch-get-prefix-arg))))
+  (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
 
 (conn-define-dispatch-action conn-dispatch-duplicate-and-comment (window pt thing-cmd thing-arg arg)
   :description "Duplicate and Comment"
@@ -4437,10 +4432,9 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-duplicate-and-comment))
-  (setf (oref action args) (list (conn--dispatch-get-prefix-arg))))
+  (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
 
 (conn-define-dispatch-action conn-dispatch-register (window pt _thing-cmd _thing-arg register)
-  :description "Register <%c>"
   (with-selected-window window
     ;; If there is a keyboard macro in the register we would like to
     ;; amalgamate the undo
@@ -4450,7 +4444,10 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-register-load register)))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-register))
-  (setf (oref action args) (list (register-read-with-preview "Register: "))))
+  (setf (oref action register) (register-read-with-preview "Register: ")))
+
+(cl-defmethod conn-action-description ((action conn-dispatch-register))
+  (format "Register <%c>" (oref action register)))
 
 (conn-define-dispatch-action conn-dispatch-register-replace (window pt thing-cmd thing-arg register)
   :description "Register Replace <%c>"
@@ -4467,14 +4464,13 @@ Returns a cons of (STRING . OVERLAYS)."
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-register-replace))
-  (setf (oref action args) (list (register-read-with-preview "Register: "))))
+  (setf (oref action register) (register-read-with-preview "Register: ")))
+
+(cl-defmethod conn-action-description ((action conn-dispatch-register-replace))
+  (format "Register Replace <%c>" (oref action register)))
 
 (conn-define-dispatch-action conn-dispatch-kill
-    (window pt thing-cmd thing-arg &optional register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Kill to Register <%c>" register)
-                   "Kill"))
+    (window pt thing-cmd thing-arg register)
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4494,16 +4490,17 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-kill))
-  (setf (oref action args)
-        (list (when (conn--dispatch-get-prefix-arg)
-                (register-read-with-preview "Register: ")))))
+  (setf (oref action register)
+        (when (conn--dispatch-get-prefix-arg)
+          (register-read-with-preview "Register: "))))
 
-(conn-define-dispatch-action conn-dispatch-kill-append (window pt thing-cmd thing-arg
-                                                               &optional register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Kill Append Register <%c>" register)
-                   "Kill Append"))
+(cl-defmethod conn-action-description ((action conn-dispatch-kill))
+  (if-let* ((register (oref action register)))
+      (format "Kill to Register <%c>" register)
+    "Kill"))
+
+(conn-define-dispatch-action conn-dispatch-kill-append
+    (window pt thing-cmd thing-arg register)
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4521,16 +4518,17 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-kill-append))
-  (setf (oref action args)
+  (setf (oref action register)
         (when (conn--dispatch-get-prefix-arg)
-          (list (register-read-with-preview "Register: ")))))
+          (register-read-with-preview "Register: "))))
+
+(cl-defmethod conn-action-description ((action conn-dispatch-kill-append))
+  (if-let* ((register (oref action register)))
+      (format "Kill Append Register <%c>" register)
+    "Kill Append"))
 
 (conn-define-dispatch-action conn-dispatch-kill-prepend
     (window pt thing-cmd thing-arg &optional register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Kill Prepend Register <%c>" register)
-                   "Kill Prepend"))
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4552,12 +4550,13 @@ Returns a cons of (STRING . OVERLAYS)."
         (when (conn--dispatch-get-prefix-arg)
           (list (register-read-with-preview "Register: ")))))
 
+(cl-defmethod conn-action-description ((action conn-dispatch-kill-prepend))
+  (if-let* ((register (oref action register)))
+      (format "Kill Prepend Register <%c>" register)
+    "Kill Prepend"))
+
 (conn-define-dispatch-action conn-dispatch-copy-as-kill
     (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Copy to Register <%c>" register)
-                   "Copy As Kill"))
   :extra-args (lambda ())
   (with-selected-window window
     (save-excursion
@@ -4575,15 +4574,16 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-init-args ((action conn-dispatch-copy-as-kill))
-  (setf (oref action args)
+  (setf (oref action register)
         (when (conn--dispatch-get-prefix-arg)
-          (list (register-read-with-preview "Register: ")))))
+          (register-read-with-preview "Register: "))))
+
+(cl-defmethod conn-action-description ((action conn-dispatch-copy-as-kill))
+  (if-let* ((register (oref action register)))
+      (format "Copy to Register <%c>" register)
+    "Copy As Kill"))
 
 (conn-define-dispatch-action conn-dispatch-copy-append (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Copy Append to Register <%c>" register)
-                   "Copy Append"))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4602,11 +4602,12 @@ Returns a cons of (STRING . OVERLAYS)."
         (when (conn--dispatch-get-prefix-arg)
           (list (register-read-with-preview "Register: ")))))
 
+(cl-defmethod conn-action-description ((action conn-dispatch-copy-append))
+  (if-let* ((register (oref action register)))
+      (format "Copy Append to Register <%c>" register)
+    "Copy Append"))
+
 (conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing-cmd thing-arg register)
-  :description (lambda (&optional register)
-                 (if register
-                     (format "Copy Prepend to Register <%c>" register)
-                   "Copy Prepend"))
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4623,6 +4624,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (setf (oref action args)
         (when (conn--dispatch-get-prefix-arg)
           (list (register-read-with-preview "Register: ")))))
+
+(cl-defmethod conn-action-description ((action conn-dispatch-copy-prepend))
+  (if-let* ((register (oref action register)))
+      (format "Copy Prepend to Register <%c>" register)
+    "Copy Prepend"))
 
 (conn-define-dispatch-action conn-dispatch-copy-replace (window pt thing-cmd thing-arg)
   :description "Copy and Replace"
@@ -4957,8 +4963,7 @@ seconds."
         (conn-dispatch-repeat-count (when repeat 0))
         (description (lambda ()
                        (concat
-                        (apply (conn-action--describer action)
-                               (conn-action-get-args action))
+                        (conn-action-description action)
                         " @ "
                         (symbol-name thing-cmd)
                         (format " <%s>" thing-arg)))))
@@ -9087,6 +9092,12 @@ Operates with the selected windows parent window."
 (declare-function Info-prev-reference "info")
 (declare-function Info-follow-nearest-node "info")
 
+(oclosure-define (conn-action-info-ref
+                  (:parent conn-action)))
+
+(cl-defmethod conn-action-description ((_ conn-action-info-ref))
+  "Info Refs")
+
 (defun conn-dispatch-on-info-refs ()
   (interactive)
   (conn-dispatch-on-things
@@ -9101,8 +9112,7 @@ Operates with the selected windows parent window."
                                       (setq last-pt (point))))
                          (<= (window-start) (point) (window-end)))
                (conn-make-target-overlay (point) 0 nil)))))))
-   (oclosure-lambda (conn-action
-                     (describer (lambda () "Info Refs"))
+   (oclosure-lambda (conn-action-info-ref
                      (window-predicate
                       (lambda (win)
                         (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))

@@ -638,7 +638,14 @@ A zero means repeat until error."
    (alist-get :kmacro args)))
 
 (oclosure-define (conn-dispatch-kapply
-                  (:parent conn-action)))
+                  (:parent conn-action))
+  (macro :mutable t))
+
+(cl-defmethod conn-action-description ((action conn-dispatch-kapply))
+  (format "Kapply <%s>"
+          (if-let* ((macro (oref action macro)))
+              (conn--kmacro-display (kmacro--keys macro))
+            "unrecorded")))
 
 (transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
   "Apply keyboard macro on dispatch targets."
@@ -647,29 +654,17 @@ A zero means repeat until error."
   :description "Resume"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (let* ((macro nil)
-         (pipeline (list 'conn--kapply-relocate-to-region
+  (let* ((pipeline (list 'conn--kapply-relocate-to-region
                          'conn--kapply-per-iteration-undo
                          (alist-get :restrictions args)
                          (alist-get :excursions args)
                          (alist-get :state args)
                          (alist-get :regions args)
                          'conn--kapply-pulse-region
-                         (alist-get :window-conf args)
-                         (pcase (alist-get :kmacro args)
-                           ('conn--kmacro-apply
-                            (lambda (iterator)
-                              (conn--kmacro-apply iterator nil macro)))
-                           (kmacro kmacro))))
-         (desc
-          (lambda ()
-            (format "Kapply <%s>"
-                    (if macro
-                        (conn--kmacro-display (kmacro--keys macro))
-                      "unrecorded")))))
+                         (alist-get :window-conf args))))
     (thread-last
       (oclosure-lambda (conn-dispatch-kapply
-                        (describer desc))
+                        (macro nil))
           (window pt thing-cmd thing-arg)
         (with-selected-window window
           (apply #'conn--kapply-compose-iterator
@@ -681,7 +676,12 @@ A zero means repeat until error."
                                         (get thing-cmd :conn-command-thing)))
                       (`(,region) (list region))
                       (`(,_ . ,subregions) subregions))))
-                 pipeline))
+                 `(,@pipeline
+                   ,(pcase (alist-get :kmacro args)
+                      ('conn--kmacro-apply
+                       (lambda (iterator)
+                         (conn--kmacro-apply iterator nil macro)))
+                      (kmacro kmacro)))))
         (unless macro (setq macro (kmacro-ring-head))))
       (funcall continuation)
       (apply 'conn-dispatch-on-things))))
