@@ -3182,18 +3182,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 ;;;; Thing Dispatch
 
-;; Thing dispatch provides a method of jumping to, marking or acting
-;; on visible Things.
-
-;; (cl-defstruct (conn--action)
-;;   extra-args description window-predicate filter)
-;; 
-;; (defun conn-action-p (command)
-;;   "Return non-nil if COMMAND is a dispatch action."
-;;   (not (not (get command :conn--action))))
-;; 
-;; (cl-deftype conn-action () '(satisfies conn-action-p))
-
 ;;;;; Dispatch read thing
 
 (defface conn-dispatch-mode-line-face
@@ -3332,7 +3320,7 @@ of a command.")
 (defun conn--dispatch-get-prefix-arg ()
   (error "Function only available during dispatch"))
 
-(defun conn-dispatch-command-loop (callback &optional initial-arg)
+(defun conn--dispatch-command-loop (callback &optional initial-arg)
   (cl-letf* ((window-conf (current-window-configuration))
              (prompt nil)
              (action nil)
@@ -4153,8 +4141,7 @@ Returns a cons of (STRING . OVERLAYS)."
                        (oclosure--class-allparents
                         (cl--find-class symbol)))))
 
-(cl-defgeneric conn-action (action)
-  (:method (_) "Noop" nil))
+(cl-defgeneric conn-action (action-type))
 
 (cl-defgeneric conn-action-description (action))
 
@@ -4193,7 +4180,7 @@ Returns a cons of (STRING . OVERLAYS)."
          ,@(cl-loop for arg in (drop 4 arglist)
                     collect `(,arg :mutable t)))
 
-       (cl-defmethod conn-action ((_action (eql ',name)))
+       (cl-defmethod conn-action ((_type (eql ',name)))
          (let ((instance
                 (oclosure-lambda (,name
                                   ,@(cl-loop for arg in (drop 4 arglist)
@@ -4932,11 +4919,11 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p))
-  (description :type (memq (string function)))
+  (description :type function)
   (repeat-count :mutable t))
 
 (defun conn-describe-dispatch (dispatch)
-  (funcall (conn-dispatch--description dispatch)))
+  (funcall (oref dispatch description)))
 
 (defun conn--dispatch-auto-bind-mouse ()
   (pcase last-input-event
@@ -4973,7 +4960,7 @@ during target finding."
               (symbol-function 'conn-repeat-last-dispatch) repeat
               (symbol-function 'conn-last-dispatch-at-mouse) mouse)
         (unless executing-kbd-macro
-          (message (funcall (conn-dispatch--description repeat)))))
+          (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-cycle-ring-next ()
@@ -4987,13 +4974,13 @@ during target finding."
               (symbol-function 'conn-repeat-last-dispatch) repeat
               (symbol-function 'conn-last-dispatch-at-mouse) mouse)
         (unless executing-kbd-macro
-          (message (funcall (conn-dispatch--description repeat)))))
+          (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
   (catch 'kapply-continuation
-    (conn-dispatch-command-loop 'conn-perform-dispatch initial-arg)))
+    (conn--dispatch-command-loop 'conn-perform-dispatch initial-arg)))
 
 (defun conn-perform-dispatch ( action finder thing-cmd thing-arg
                                &optional repeat)
@@ -5058,7 +5045,7 @@ during target finding."
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
                (regions nil))
-    (conn-dispatch-command-loop
+    (conn--dispatch-command-loop
      (lambda (action finder thing-cmd thing-arg repeat)
        (let ((win (selected-window))
              (conn-target-window-predicate conn-target-window-predicate)
@@ -6759,7 +6746,7 @@ region after a `recursive-edit'."
     ('conn-dispatch-state
      (let ((conn-state-for-read-dispatch 'conn-read-transpose-state)
            (conn-dispatch-action-default 'conn-dispatch-transpose))
-       (conn-dispatch-command-loop 'conn-perform-dispatch)))
+       (conn--dispatch-command-loop 'conn-perform-dispatch)))
     ((let 0 arg)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
