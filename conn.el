@@ -1939,18 +1939,19 @@ themselves once the selection process has concluded."
 (defvar conn--read-thing-command-invalid nil)
 (defvar conn--read-thing-mark-flag nil)
 
-(cl-defgeneric conn--read-thing-loop-body (command)
-  ( :method (command)
-    (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
-                         (when (symbolp command)
-                           (get command :conn-command-thing)))))
-        (progn
-          (setq conn--read-thing-command command
-                conn--dispatch-target-finder (conn--dispatch-target-finder command))
-          (when (null conn--dispatch-action)
-            (setq conn--dispatch-action
-                  (conn-action (conn--dispatch-default-action thing)))))
-      (setq conn--read-thing-command-invalid t))))
+(cl-defgeneric conn--read-thing-command-case (command))
+
+(cl-defmethod conn--read-thing-command-case (command)
+  (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
+                       (when (symbolp command)
+                         (get command :conn-command-thing)))))
+      (progn
+        (setq conn--read-thing-command command
+              conn--dispatch-target-finder (conn--dispatch-target-finder command))
+        (when (null conn--dispatch-action)
+          (setq conn--dispatch-action
+                (conn-action (conn--dispatch-default-action thing)))))
+    (setq conn--read-thing-command-invalid t)))
 
 (defun conn--read-thing-command-loop (callback prompt &optional initial-arg)
   (cl-letf* ((conn--read-thing-command nil)
@@ -1966,7 +1967,7 @@ themselves once the selection process has concluded."
            (while (not conn--read-thing-command)
              (setq conn--read-thing-command-keys (read-key-sequence (funcall prompt))
                    conn--read-thing-command-invalid nil)
-             (conn--read-thing-loop-body
+             (conn--read-thing-command-case
               (key-binding conn--read-thing-command-keys t)))
            (funcall callback
                     conn--read-thing-command
@@ -2022,34 +2023,34 @@ are read."
                      ""))))
        arg))))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql digit-argument)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument)))
   (let ((digit (- (logand (elt conn--read-thing-command-keys 0) ?\177) ?0)))
     (setq conn--read-thing-arg (if (integerp conn--read-thing-arg)
                                    (+ (* 10 conn--read-thing-arg) digit)
                                  digit))))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql forward-delete-arg)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql forward-delete-arg)))
   (setq conn--read-thing-arg (mod conn--read-thing-arg
                                 (expt 10 (floor (log conn--read-thing-arg 10))))))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql backward-delete-arg)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql backward-delete-arg)))
   (setq conn--read-thing-arg (floor conn--read-thing-arg 10)))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql reset-arg)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql reset-arg)))
   (setq conn--read-thing-arg nil))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql negative-argument)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql negative-argument)))
   (setq conn--read-thing-arg-sign (not conn--read-thing-arg-sign)))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql keyboard-quit)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql keyboard-quit)))
   (keyboard-quit))
 
-(cl-defmethod conn--read-thing-loop-body
+(cl-defmethod conn--read-thing-command-case
   ((_command (eql conn-set-mark-command))
    &context (conn-current-state (conn-substate conn-read-mover-state)))
   (setq conn--read-thing-mark-flag (not conn--read-thing-mark-flag)))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql help)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql help)))
   (save-window-excursion
     (setq conn--read-thing-command
           (condition-case _
@@ -3439,7 +3440,7 @@ of a command.")
                            conn--read-thing-arg-sign nil)))))
         (body)))))
 
-(cl-defmethod conn--read-thing-loop-body ((command (head conn-dispatch-command)))
+(cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command)))
   (pcase-let ((`(,_ ,thing ,finder ,default-action)
                command))
     (setq conn--read-thing-command thing)
@@ -3449,7 +3450,7 @@ of a command.")
             (conn-action (or default-action
                              (conn--dispatch-default-action thing)))))))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql kapply)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql kapply)))
   (throw 'kapply-continuation
          (let ((wconf (current-window-configuration))
                (continuation (conn--dispatch-continuation)))
@@ -3460,14 +3461,14 @@ of a command.")
                 (set-window-configuration wconf)
                 (funcall continuation)))))))
 
-(cl-defmethod conn--read-thing-loop-body ((_command (eql repeat-dispatch)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql repeat-dispatch)))
   (setq conn--dispatch-repeat (not conn--dispatch-repeat)))
 
-(cl-defmethod conn--read-thing-loop-body
+(cl-defmethod conn--read-thing-command-case
   ((_command (eql help))
    &context (conn-current-state (conn-substate conn-read-dispatch-state)))
   (let ((conn--read-thing-command-keys nil))
-    (conn--read-thing-loop-body
+    (conn--read-thing-command-case
      (condition-case _
          (intern
           (completing-read
@@ -4141,8 +4142,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-action
                   (:predicate conn-action-p))
-  (window-predicate)
-  (undo-handle :mutable t))
+  (window-predicate))
 
 (defun conn--action-type-p (symbol)
   (memq 'conn-action (ignore-errors
@@ -4162,44 +4162,40 @@ Returns a cons of (STRING . OVERLAYS)."
         (cl-call-next-method)
       (set-window-configuration wconf))))
 
-(defun conn-action-accept (action)
-  (when-let* ((handle (and action (oref action undo-handle))))
-    (funcall handle :accept)
-    (setf (oref action undo-handle) nil))
-  action)
+(cl-defgeneric conn-action-accept (action)
+  (:method ((_ conn-action)) "Noop" nil))
 
-(defun conn-action-cancel (action)
-  (when-let* ((handle (and action (oref action undo-handle))))
-    (funcall handle :cancel)
-    (setf (oref action undo-handle) nil)))
+(cl-defgeneric conn-action-cancel (action)
+  (:method ((_ conn-action)) "Noop" nil))
 
-(defmacro conn-define-dispatch-action (name arglist &rest rest)
-  "\(fn NAME ARGLIST &key DESCRIPTION WINDOW-PREDICATE &body BODY)"
+(defmacro conn-define-dispatch-action (name arg-slots &rest rest)
+  "\(fn NAME ARG-SLOTS &key DESCRIPTION WINDOW-PREDICATE EXTRA-SLOTS &body BODY)"
   (declare (debug ( name lambda-expr
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :description :window-predicate) rest)
+  (pcase-let* (((map :extra-slots :description :window-predicate) rest)
                (body (cl-loop for sublist on rest by #'cddr
                               unless (keywordp (car sublist))
-                              do (cl-return sublist))))
+                              do (cl-return sublist)))
+               (slots (drop 4 (cl--arglist-args arg-slots))))
     `(progn
        (oclosure-define (,name (:parent conn-action))
-         ,@(cl-loop for arg in (drop 4 arglist)
-                    collect `(,arg :mutable t)))
+         ,@(cl-loop for slot in (append slots extra-slots)
+                    collect `(,slot :mutable t)))
 
        (cl-defmethod conn-action ((_type (eql ,name)))
          (let ((instance
                 (oclosure-lambda (,name
-                                  ,@(cl-loop for arg in (drop 4 arglist)
-                                             collect `(,arg nil))
+                                  ,@(cl-loop for slot in (append slots extra-slots)
+                                             collect `(,slot nil))
                                   (window-predicate ,window-predicate))
                     (window pt thing-cmd thing-arg)
-                  (,name window pt thing-cmd thing-arg ,@(drop 4 arglist)))))
+                  (,name window pt thing-cmd thing-arg ,@slots))))
            (conn-action-initialize instance)
            instance))
 
-       (cl-defmethod conn--read-thing-loop-body
+       (cl-defmethod conn--read-thing-command-case
          ((type (eql ,name))
           &context (conn-current-state (conn-substate conn-read-dispatch-state)))
          (conn-action-cancel conn--dispatch-action)
@@ -4213,23 +4209,22 @@ Returns a cons of (STRING . OVERLAYS)."
           `(cl-defmethod conn-action-description ((_action ,name))
              ,description))
 
-       (defun ,name ,arglist ,@body))))
+       (defun ,name ,arg-slots ,@body))))
 
-(defun conn--action-undo-handler ()
-  (let ((handle (prepare-change-group))
-        (saved-point (point))
-        (saved-mark (save-mark-and-excursion--save))
-        (buffer (current-buffer)))
-    (activate-change-group handle)
-    (lambda (state)
-      (with-current-buffer buffer
-        (pcase state
-          (:accept
-           (accept-change-group handle))
-          (:cancel
-           (cancel-change-group handle)
-           (save-mark-and-excursion--restore saved-mark)
-           (goto-char saved-point)))))))
+(defun conn--action-buffer-change-group ()
+  (let ((change-group (prepare-change-group)))
+    (activate-change-group change-group)
+    (list change-group (point) (save-mark-and-excursion--save))))
+
+(defun conn--action-cancel-change-group (change-group)
+  (pcase-let ((`(,handle ,_saved-point ,_saved-mark) change-group))
+    (accept-change-group handle)))
+
+(defun conn--action-accept-change-group (change-group)
+  (pcase-let ((`(,handle ,saved-point ,saved-mark) change-group))
+    (cancel-change-group handle)
+    (goto-char saved-point)
+    (save-mark-and-excursion--restore saved-mark)))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
@@ -4343,6 +4338,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (conn-define-dispatch-action conn-dispatch-throw
     (window pt _thing-cmd _thing-arg str)
+  :extra-slots (change-group)
   :description "Throw"
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
@@ -4354,12 +4350,20 @@ Returns a cons of (STRING . OVERLAYS)."
         (pulse-momentary-highlight-region (- (point) (length str)) (point))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-throw))
-  (setf (oref action undo-handle) (conn--action-undo-handler)
+  (setf (oref action change-group) (conn--action-buffer-change-group)
         (oref action str) (funcall region-extract-function t)))
+
+(cl-defmethod conn-action-accept ((action conn-dispatch-throw))
+  (conn--action-accept-change-group (oref action change-group))
+  action)
+
+(cl-defmethod conn-action-cancel ((action conn-dispatch-throw))
+  (conn--action-cancel-change-group (oref action change-group)))
 
 (conn-define-dispatch-action conn-dispatch-throw-replace
     (window pt thing-cmd thing-arg str)
   :description "Throw Replace"
+  :extra-slots (change-group)
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4374,8 +4378,15 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-throw-replace))
-  (setf (oref action undo-handle) (conn--action-undo-handler)
+  (setf (oref action change-group) (conn--action-buffer-change-group)
         (oref action str) (funcall region-extract-function t)))
+
+(cl-defmethod conn-action-accept ((action conn-dispatch-throw-replace))
+  (conn--action-accept-change-group (oref action change-group))
+  action)
+
+(cl-defmethod conn-action-cancel ((action conn-dispatch-throw-replace))
+  (conn--action-cancel-change-group (oref action change-group)))
 
 (conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
   :description "Dot"
@@ -4467,7 +4478,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate))
   (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
 
-(conn-define-dispatch-action conn-dispatch-duplicate-and-comment (window pt thing-cmd thing-arg arg)
+(conn-define-dispatch-action conn-dispatch-duplicate-and-comment
+    (window pt thing-cmd thing-arg &optional arg)
   :description "Duplicate and Comment"
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
@@ -4483,7 +4495,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate-and-comment))
   (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
 
-(conn-define-dispatch-action conn-dispatch-register (window pt _thing-cmd _thing-arg register)
+(conn-define-dispatch-action conn-dispatch-register
+    (window pt _thing-cmd _thing-arg register)
   (with-selected-window window
     ;; If there is a keyboard macro in the register we would like to
     ;; amalgamate the undo
@@ -4498,7 +4511,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-description ((action conn-dispatch-register))
   (format "Register <%c>" (oref action register)))
 
-(conn-define-dispatch-action conn-dispatch-register-replace (window pt thing-cmd thing-arg register)
+(conn-define-dispatch-action conn-dispatch-register-replace
+    (window pt thing-cmd thing-arg register)
   :description "Register Replace <%c>"
   (with-selected-window window
     ;; If there is a keyboard macro in the register we would like to
@@ -4519,7 +4533,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (format "Register Replace <%c>" (oref action register)))
 
 (conn-define-dispatch-action conn-dispatch-kill
-    (window pt thing-cmd thing-arg register)
+    (window pt thing-cmd thing-arg &optional register)
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4549,7 +4563,7 @@ Returns a cons of (STRING . OVERLAYS)."
     "Kill"))
 
 (conn-define-dispatch-action conn-dispatch-kill-append
-    (window pt thing-cmd thing-arg register)
+    (window pt thing-cmd thing-arg &optional register)
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (with-selected-window window
@@ -4605,7 +4619,7 @@ Returns a cons of (STRING . OVERLAYS)."
     "Kill Prepend"))
 
 (conn-define-dispatch-action conn-dispatch-copy-as-kill
-    (window pt thing-cmd thing-arg register)
+    (window pt thing-cmd thing-arg &optional register)
   :extra-args (lambda ())
   (with-selected-window window
     (save-excursion
@@ -4632,7 +4646,8 @@ Returns a cons of (STRING . OVERLAYS)."
       (format "Copy to Register <%c>" register)
     "Copy As Kill"))
 
-(conn-define-dispatch-action conn-dispatch-copy-append (window pt thing-cmd thing-arg register)
+(conn-define-dispatch-action conn-dispatch-copy-append
+    (window pt thing-cmd thing-arg &optional register)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
@@ -4656,7 +4671,8 @@ Returns a cons of (STRING . OVERLAYS)."
       (format "Copy Append to Register <%c>" register)
     "Copy Append"))
 
-(conn-define-dispatch-action conn-dispatch-copy-prepend (window pt thing-cmd thing-arg register)
+(conn-define-dispatch-action conn-dispatch-copy-prepend
+    (window pt thing-cmd thing-arg &optional register)
   (with-selected-window window
     (save-excursion
       (goto-char pt)
