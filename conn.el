@@ -1951,7 +1951,7 @@ themselves once the selection process has concluded."
     (* (if (oref continuation arg-sign) -1 1)
        (oref continuation arg))))
 
-(defun conn--read-thing-prompt (continuation)
+(defun conn--read-mover-message-function (continuation)
   (let ((prompt (substitute-command-keys
                  (concat (propertize "Thing Mover" 'face 'minibuffer-prompt)
                          " (arg: "
@@ -2009,8 +2009,10 @@ themselves once the selection process has concluded."
       (setf (oref continuation arg-sign) (> 0 val)
             (oref continuation arg) (abs val)))))
 
-(defun conn--with-state-command-loop (message-function continuation)
-  (cl-check-type continuation conn--state-command-loop-continuation)
+(cl-defgeneric conn--with-state-command-loop (message-function continuation))
+
+(cl-defmethod conn--with-state-command-loop (message-function
+                                             (continuation conn--state-command-loop-continuation))
   (conn--command-loop-setup-arg continuation)
   (let* ((conn--suspend-state-command-loop nil)
          (conn--state-command-loop-invalid nil)
@@ -2024,7 +2026,7 @@ themselves once the selection process has concluded."
                    (set-window-configuration wconf))))
          (message (lambda ()
                     (unless conn--suspend-state-command-loop
-                      (message (funcall message-function continuation))))))
+                      (funcall message-function continuation)))))
     (add-hook 'pre-command-hook case -99)
     (add-hook 'post-command-hook message 90)
     (unwind-protect
@@ -2047,12 +2049,11 @@ are read."
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
       (conn--with-state-command-loop
-       'conn--read-thing-prompt
+       'conn--read-mover-message-function
        (oclosure-lambda (conn--read-mover-continuation
                          (recursive-edit recursive-edit)
                          (mark-flag (region-active-p))
-                         (arg (when arg (abs (prefix-numeric-value arg))))
-                         (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
+                         (arg arg))
            ()
          (unless (eq mark-flag (region-active-p))
            (if (region-active-p)
@@ -2073,11 +2074,10 @@ are read."
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
       (conn--with-state-command-loop
-       'conn--read-thing-prompt
+       'conn--read-mover-message-function
        (oclosure-lambda (conn--read-mover-continuation
                          (mark-flag (region-active-p))
-                         (arg (when arg (abs (prefix-numeric-value arg))))
-                         (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
+                         (arg arg))
            ()
          (unless (eq mark-flag (region-active-p))
            (if (region-active-p)
@@ -3445,7 +3445,7 @@ of a command.")
 (defun conn--dispatch-consume-prefix-arg ()
   (error "Function only available during dispatch command loop"))
 
-(defun conn--dispatch-prompt-function (continuation)
+(defun conn--dispatch-message-function (continuation)
   (let ((prompt (substitute-command-keys
                  (concat (propertize "Targets" 'face 'minibuffer-prompt)
                          " (arg: "
@@ -3460,25 +3460,26 @@ of a command.")
                       'face 'eldoc-highlight-function-argument)
                      " ")
            "")))
-    (format prompt
-            (format (if (oref continuation arg) "%s%s" "[%s1]")
-                    (if (oref continuation arg-sign) "-" "")
-                    (oref continuation arg))
-            (propertize
-             "repeatedly"
-             'face (when (oref continuation repeat)
-                     'eldoc-highlight-function-argument))
-            (concat
-             action-description
-             (if conn--state-command-loop-invalid
-                 (propertize
-                  (format "%s is not a valid thing command"
-                          (oref continuation command))
-                  'face 'error)
-               "")))))
+    (message
+     (format prompt
+             (format (if (oref continuation arg) "%s%s" "[%s1]")
+                     (if (oref continuation arg-sign) "-" "")
+                     (oref continuation arg))
+             (propertize
+              "repeatedly"
+              'face (when (oref continuation repeat)
+                      'eldoc-highlight-function-argument))
+             (concat
+              action-description
+              (if conn--state-command-loop-invalid
+                  (propertize
+                   (format "%s is not a valid thing command"
+                           (oref continuation command))
+                   'face 'error)
+                ""))))))
 
-(defun conn--with-dispatch-command-loop (message-function continuation)
-  (cl-check-type continuation conn--dispatch-continuation)
+(cl-defmethod conn--with-state-command-loop (_message-function
+                                             (continuation conn--dispatch-continuation))
   (let ((success nil))
     (cl-letf (((symbol-function 'conn--dispatch-consume-prefix-arg)
                (lambda ()
@@ -3487,22 +3488,21 @@ of a command.")
                    (setf (oref continuation arg) nil
                          (oref continuation arg-sign) nil)))))
       (unwind-protect
-          (conn--with-state
-              (conn-enter-state
-               (or (conn--command-property :conn-read-dispatch-state)
-                   conn-state-for-read-dispatch))
-            (prog1 (conn--with-state-command-loop message-function continuation)
-              (setq success t)))
+          (prog1 (cl-call-next-method)
+            (setq success t))
         (unless success
           (conn-action-cancel (oref continuation action)))))))
 
 (defun conn-read-dispatch (&optional arg)
-  (conn--with-dispatch-command-loop
-   'conn--dispatch-prompt-function
-   (oclosure-lambda (conn--dispatch-continuation
-                     (arg arg))
-       ()
-     (conn-perform-dispatch action target-finder command arg repeat))))
+  (conn--with-state
+      (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
+                            conn-state-for-read-dispatch))
+    (conn--with-state-command-loop
+     'conn--dispatch-message-function
+     (oclosure-lambda (conn--dispatch-continuation
+                       (arg arg))
+         ()
+       (conn-perform-dispatch action target-finder command arg repeat)))))
 
 (cl-defmethod conn--state-command-loop-case (command
                                              (continuation conn--dispatch-continuation))
@@ -5162,34 +5162,36 @@ during target finding."
 (defun conn-bounds-of-dispatch (_cmd arg)
   (let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
          (regions nil))
-    (conn--with-dispatch-command-loop
-     'conn--dispatch-prompt-function
-     (oclosure-lambda (conn--dispatch-continuation
-                       (arg (when arg (abs (prefix-numeric-value arg))))
-                       (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
-         ()
-       (let ((win (selected-window))
-             (conn-target-window-predicate conn-target-window-predicate)
-             (conn-target-sort-function conn-target-sort-function)
-             (conn-dispatch-repeat-count (when repeat 0)))
-         (add-function :before-while conn-target-window-predicate
-                       (lambda (window) (eq win window)))
-         (catch 'end
-           (while
-               (prog1 repeat
-                 (pcase-let ((`(,pt ,window ,thing-override)
-                              (conn-dispatch--select-target target-finder))
-                             (mark-active nil))
-                   (funcall action window pt (or thing-override command) arg)
-                   (push (cons (region-beginning) (region-end)) regions)))
-             (cl-incf conn-dispatch-repeat-count)))
-         (unless regions (keyboard-quit))
-         (cl-loop for (b . e) in (compat-call sort
-                                              (conn--merge-regions regions t)
-                                              :key #'car :in-place t)
-                  minimize b into beg
-                  maximize e into end
-                  finally return (cons (cons beg end) regions)))))))
+    (conn--with-state
+        (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
+                              conn-state-for-read-dispatch))
+      (conn--with-state-command-loop
+       'conn--dispatch-message-function
+       (oclosure-lambda (conn--dispatch-continuation
+                         (arg arg))
+           ()
+         (let ((win (selected-window))
+               (conn-target-window-predicate conn-target-window-predicate)
+               (conn-target-sort-function conn-target-sort-function)
+               (conn-dispatch-repeat-count (when repeat 0)))
+           (add-function :before-while conn-target-window-predicate
+                         (lambda (window) (eq win window)))
+           (catch 'end
+             (while
+                 (prog1 repeat
+                   (pcase-let ((`(,pt ,window ,thing-override)
+                                (conn-dispatch--select-target target-finder))
+                               (mark-active nil))
+                     (funcall action window pt (or thing-override command) arg)
+                     (push (cons (region-beginning) (region-end)) regions)))
+               (cl-incf conn-dispatch-repeat-count)))
+           (unless regions (keyboard-quit))
+           (cl-loop for (b . e) in (compat-call sort
+                                                (conn--merge-regions regions t)
+                                                :key #'car :in-place t)
+                    minimize b into beg
+                    maximize e into end
+                    finally return (cons (cons beg end) regions))))))))
 
 (defun conn-repeat-last-dispatch (_repeat)
   "Repeat the last dispatch command.
