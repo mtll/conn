@@ -1934,30 +1934,30 @@ themselves once the selection process has concluded."
 
 (defvar conn--suspend-state-command-loop nil)
 
-(oclosure-define conn--state-command-callback
+(oclosure-define conn--state-command-loop-continuation
   (command :mutable t)
   (command-invalid :mutable t)
   (arg :mutable t)
   (arg-sign :mutable t)
   (prompt))
 
-(oclosure-define (conn--read-mover-callback
-                  (:parent conn--state-command-callback))
+(oclosure-define (conn--read-mover-continuation
+                  (:parent conn--state-command-loop-continuation))
   (recursive-edit)
   (mark-flag :mutable t))
 
-(defun conn--state-command-loop-arg (cb)
-  (when (oref cb arg)
-    (* (if (oref cb arg-sign) -1 1)
-       (oref cb arg))))
+(defun conn--state-command-loop-arg (continuation)
+  (when (oref continuation arg)
+    (* (if (oref continuation arg-sign) -1 1)
+       (oref continuation arg))))
 
-(defun conn--read-thing-prompt (cb)
+(defun conn--read-thing-prompt (continuation)
   (let ((prompt (substitute-command-keys
                  (concat (propertize "Thing Mover" 'face 'minibuffer-prompt)
                          " (arg: "
                          (propertize "%s" 'face 'read-multiple-choice-face)
                          "; \\[reset-arg] reset arg; \\[help] commands"
-                         (if (oref cb recursive-edit)
+                         (if (oref continuation recursive-edit)
                              (concat "; \\[recursive-edit] "
                                      "recursive edit)")
                            ")")
@@ -1965,57 +1965,58 @@ themselves once the selection process has concluded."
         (mark-indicator
          (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
     (format prompt
-            (format (if (oref cb arg) "%s%s" "[%s1]")
-                    (if (oref cb arg-sign) "-" "")
-                    (oref cb arg))
-            (if (oref cb mark-flag) mark-indicator "")
-            (if (oref cb command-invalid)
+            (format (if (oref continuation arg) "%s%s" "[%s1]")
+                    (if (oref continuation arg-sign) "-" "")
+                    (oref continuation arg))
+            (if (oref continuation mark-flag) mark-indicator "")
+            (if (oref continuation command-invalid)
                 (propertize
                  (format " %s is not a valid thing command"
-                         (oref cb command))
+                         (oref continuation command))
                  'face 'error)
               ""))))
 
-(cl-defgeneric conn--state-command-loop-case (command cb))
+(cl-defgeneric conn--state-command-loop-case (command continuation))
 
-(cl-defmethod conn--state-command-loop-case (command cb)
+(cl-defmethod conn--state-command-loop-case (command continuation)
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
                        (when (symbolp command)
                          (get command :conn-command-thing)))))
       (progn
         (setf this-command command
-              prefix-arg (conn--state-command-loop-arg cb))
+              prefix-arg (conn--state-command-loop-arg continuation))
         (letrec ((hook (lambda ()
                          (remove-hook 'post-command-hook hook)
                          (exit-recursive-edit))))
           (add-hook 'post-command-hook hook 89)))
-    (setf (oref cb command-invalid) t)))
+    (setf (oref continuation command-invalid) t)))
 
-(cl-defmethod conn--state-command-loop-case ((_cmd (eql recursive-edit)) cb)
-  (if (oref cb recursive-edit)
+(cl-defmethod conn--state-command-loop-case ((_cmd (eql recursive-edit))
+                                             continuation)
+  (if (oref continuation recursive-edit)
       (exit-recursive-edit)
-    (setf (oref cb command-invalid) t)))
+    (setf (oref continuation command-invalid) t)))
 
-(defun conn--command-loop-setup-arg (callback)
-  (when (oref callback arg)
-    (let ((val (prefix-numeric-value (oref callback arg))))
-      (setf (oref callback arg-sign) (> 0 val)
-            (oref callback arg) (abs val)))))
+(defun conn--command-loop-setup-arg (continuation)
+  (when (oref continuation arg)
+    (let ((val (prefix-numeric-value (oref continuation arg))))
+      (setf (oref continuation arg-sign) (> 0 val)
+            (oref continuation arg) (abs val)))))
 
-(defun conn--with-state-command-loop (callback)
-  (conn--command-loop-setup-arg callback)
+(defun conn--with-state-command-loop (continuation)
+  (conn--command-loop-setup-arg continuation)
   (let* ((conn--suspend-state-command-loop nil)
          (wconf (current-window-configuration))
          (case (lambda ()
                  (unless conn--suspend-state-command-loop
-                   (setf (oref callback command-invalid) nil
-                         (oref callback command) this-command)
-                   (conn--state-command-loop-case this-command callback)
+                   (setf (oref continuation command-invalid) nil
+                         (oref continuation command) this-command)
+                   (conn--state-command-loop-case this-command continuation)
                    (setq this-command 'ignore)
                    (set-window-configuration wconf))))
          (message (lambda ()
                     (unless conn--suspend-state-command-loop
-                      (message (funcall (oref callback prompt) callback))))))
+                      (message (funcall (oref continuation prompt) continuation))))))
     (add-hook 'pre-command-hook case -99)
     (add-hook 'post-command-hook message 90)
     (unwind-protect
@@ -2023,8 +2024,8 @@ themselves once the selection process has concluded."
       (remove-hook 'pre-command-hook case)
       (remove-hook 'post-command-hook message)
       (message nil))
-    (setf (oref callback arg) (conn--state-command-loop-arg callback))
-    (funcall callback)))
+    (setf (oref continuation arg) (conn--state-command-loop-arg continuation))
+    (funcall continuation)))
 
 (defun conn-read-thing-mover (&optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -2038,7 +2039,7 @@ are read."
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
       (conn--with-state-command-loop
-       (oclosure-lambda (conn--read-mover-callback
+       (oclosure-lambda (conn--read-mover-continuation
                          (recursive-edit recursive-edit)
                          (mark-flag (region-active-p))
                          (prompt 'conn--read-thing-prompt)
@@ -2064,7 +2065,7 @@ are read."
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
       (conn--with-state-command-loop
-       (oclosure-lambda (conn--read-mover-callback
+       (oclosure-lambda (conn--read-mover-continuation
                          (mark-flag (region-active-p))
                          (prompt 'conn--read-thing-prompt)
                          (arg (when arg (abs (prefix-numeric-value arg))))
@@ -2080,33 +2081,40 @@ are read."
                  (cons (cons (region-beginning) (region-end))
                        (region-bounds)))))))))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql digit-argument)) cb)
+(cl-defmethod conn--state-command-loop-case ((_command (eql digit-argument))
+                                             continuation)
   (let ((digit (- (logand (elt (this-command-keys) 0) ?\177) ?0)))
-    (setf (oref cb arg) (if (integerp (oref cb arg))
-                            (+ (* 10 (oref cb arg)) digit)
-                          digit))))
+    (setf (oref continuation arg)
+          (if (integerp (oref continuation arg))
+              (+ (* 10 (oref continuation arg)) digit)
+            digit))))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql forward-delete-arg)) cb)
-  (setf (oref cb arg) (mod (oref cb arg)
-                           (expt 10 (floor (log (oref cb arg) 10))))))
+(cl-defmethod conn--state-command-loop-case ((_command (eql forward-delete-arg))
+                                             continuation)
+  (setf (oref continuation arg)
+        (mod (oref continuation arg)
+             (expt 10 (floor (log (oref continuation arg) 10))))))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql backward-delete-arg)) cb)
-  (setf (oref cb arg) (floor (oref cb arg) 10)))
+(cl-defmethod conn--state-command-loop-case ((_command (eql backward-delete-arg))
+                                             continuation)
+  (setf (oref continuation arg) (floor (oref continuation arg) 10)))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql reset-arg)) cb)
-  (setf (oref cb arg) nil))
+(cl-defmethod conn--state-command-loop-case ((_command (eql reset-arg))
+                                             continuation)
+  (setf (oref continuation arg) nil))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql negative-argument)) cb)
-  (setf (oref cb arg-sign) (not (oref cb arg-sign))))
+(cl-defmethod conn--state-command-loop-case ((_command (eql negative-argument))
+                                             continuation)
+  (setf (oref continuation arg-sign) (not (oref continuation arg-sign))))
 
 (cl-defmethod conn--state-command-loop-case ((_command (eql keyboard-quit)) _cb)
   (abort-recursive-edit))
 
 (cl-defmethod conn--state-command-loop-case ((_command (eql conn-set-mark-command))
-                                             (cb conn--read-mover-callback))
-  (setf (oref cb mark-flag) (not (oref cb mark-flag))))
+                                             (continuation conn--read-mover-continuation))
+  (setf (oref continuation mark-flag) (not (oref continuation mark-flag))))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql help)) cb)
+(cl-defmethod conn--state-command-loop-case ((_command (eql help)) continuation)
   (save-window-excursion
     (conn--state-command-loop-case
      (condition-case _
@@ -2126,7 +2134,7 @@ are read."
                   (conn-thing-command-p sym)))
            t))
        (quit nil))
-     cb)))
+     continuation)))
 
 
 ;;;; Bounds of command
@@ -3413,8 +3421,8 @@ of a command.")
 
 ;;;;; Dispatch command loop
 
-(oclosure-define (conn--dispatch-callback
-                  (:parent conn--state-command-callback))
+(oclosure-define (conn--dispatch-continuation
+                  (:parent conn--state-command-loop-continuation))
   (action :mutable t)
   (repeat :mutable t)
   (target-finder :mutable t))
@@ -3422,7 +3430,7 @@ of a command.")
 (defun conn--dispatch-get-prefix-arg ()
   (error "Function only available during dispatch command loop"))
 
-(defun conn--dispatch-prompt-function (cb)
+(defun conn--dispatch-prompt-function (continuation)
   (let ((prompt (substitute-command-keys
                  (concat (propertize "Targets" 'face 'minibuffer-prompt)
                          " (arg: "
@@ -3431,97 +3439,98 @@ of a command.")
                          "\\[repeat-dispatch] %s; "
                          "\\[help] commands): %s")))
         (action-description
-         (if (oref cb action)
+         (if (oref continuation action)
              (concat (propertize
-                      (conn-action-description (oref cb action))
+                      (conn-action-description (oref continuation action))
                       'face 'eldoc-highlight-function-argument)
                      " ")
            "")))
     (format prompt
-            (format (if (oref cb arg) "%s%s" "[%s1]")
-                    (if (oref cb arg-sign) "-" "")
-                    (oref cb arg))
+            (format (if (oref continuation arg) "%s%s" "[%s1]")
+                    (if (oref continuation arg-sign) "-" "")
+                    (oref continuation arg))
             (propertize
              "repeatedly"
-             'face (when (oref cb repeat)
+             'face (when (oref continuation repeat)
                      'eldoc-highlight-function-argument))
             (concat
              action-description
-             (if (oref cb command-invalid)
+             (if (oref continuation command-invalid)
                  (propertize
                   (format "%s is not a valid thing command"
-                          (oref cb command))
+                          (oref continuation command))
                   'face 'error)
                "")))))
 
-(defun conn--with-dispatch-command-loop (callback)
+(defun conn--with-dispatch-command-loop (continuation)
   (let ((success nil))
     (cl-letf (((symbol-function 'conn--dispatch-get-prefix-arg)
                (lambda ()
-                 (prog1 (cond ((oref callback arg)
-                               (* (oref callback arg)
-                                  (if (oref callback arg-sign) -1 1)))
-                              ((oref callback arg-sign) '-))
-                   (setf (oref callback arg) nil
-                         (oref callback arg-sign) nil)))))
+                 (prog1 (cond ((oref continuation arg)
+                               (* (oref continuation arg)
+                                  (if (oref continuation arg-sign) -1 1)))
+                              ((oref continuation arg-sign) '-))
+                   (setf (oref continuation arg) nil
+                         (oref continuation arg-sign) nil)))))
       (unwind-protect
           (conn--with-state
               (conn-enter-state
                (or (conn--command-property :conn-read-dispatch-state)
                    conn-state-for-read-dispatch))
-            (prog1 (conn--with-state-command-loop callback)
+            (prog1 (conn--with-state-command-loop continuation)
               (setq success t)))
         (unless success
-          (conn-action-cancel (oref callback action)))))))
+          (conn-action-cancel (oref continuation action)))))))
 
 (defun conn-read-dispatch (&optional arg)
   (with-slots (action target-finder command arg repeat)
       (conn--with-dispatch-command-loop
-       (oclosure-lambda (conn--dispatch-callback
+       (oclosure-lambda (conn--dispatch-continuation
                          (prompt 'conn--dispatch-prompt-function)
                          (arg arg))
            ()
          (conn-perform-dispatch action target-finder command arg repeat)))))
 
-(cl-defmethod conn--state-command-loop-case (command (cb conn--dispatch-callback))
+(cl-defmethod conn--state-command-loop-case (command
+                                             (continuation conn--dispatch-continuation))
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
                        (when (symbolp command)
                          (get command :conn-command-thing)))))
       (progn
-        (setf (oref cb target-finder) (conn--dispatch-target-finder command))
-        (when (null (oref cb action))
-          (setf (oref cb action)
+        (setf (oref continuation target-finder) (conn--dispatch-target-finder command))
+        (when (null (oref continuation action))
+          (setf (oref continuation action)
                 (conn-action (conn--dispatch-default-action thing))))
         (exit-recursive-edit))
-    (setf (oref cb command-invalid) t)))
+    (setf (oref continuation command-invalid) t)))
 
 (cl-defmethod conn--state-command-loop-case ((_command (eql kapply))
-                                             (cb conn--dispatch-callback))
+                                             (continuation conn--dispatch-continuation))
   (conn--with-state (conn-enter-state conn-previous-state)
     (setf conn--suspend-state-command-loop t)
     (conn-dispatch-kapply-prefix
      (lambda (kapply)
        (setf conn--suspend-state-command-loop nil
-             (oref cb command-invalid) nil
-             (oref cb action) kapply)))))
+             (oref continuation command-invalid) nil
+             (oref continuation action) kapply)))))
 
 (cl-defmethod conn--state-command-loop-case ((command (head conn-dispatch-command))
-                                             (cb conn--dispatch-callback))
+                                             (continuation conn--dispatch-continuation))
   (pcase-let ((`(,_ ,thing ,finder ,default-action)
                command))
-    (setf (oref cb command) thing
-          (oref cb target-finder) finder)
-    (when (null (oref cb action))
-      (setf (oref cb action)
+    (setf (oref continuation command) thing
+          (oref continuation target-finder) finder)
+    (when (null (oref continuation action))
+      (setf (oref continuation action)
             (conn-action (or default-action
                              (conn--dispatch-default-action thing)))))))
 
 (cl-defmethod conn--state-command-loop-case ((_command (eql repeat-dispatch))
-                                             (cb conn--dispatch-callback))
-  (setf (oref cb repeat) (not (oref cb repeat))))
+                                             (continuation conn--dispatch-continuation))
+  (setf (oref continuation repeat) (not (oref continuation repeat))))
 
 (cl-defmethod conn--state-command-loop-case ((_command (eql help))
-                                             (cb conn--dispatch-callback))
+                                             (continuation conn--dispatch-continuation))
   (conn--state-command-loop-case
    (condition-case _
        (intern
@@ -3545,7 +3554,7 @@ of a command.")
                   (get cmd 'forward-op)))))
          t))
      (quit nil))
-   cb))
+   continuation))
 
 
 ;;;;; Dispatch window filtering
@@ -4251,11 +4260,11 @@ Returns a cons of (STRING . OVERLAYS)."
            instance))
 
        (cl-defmethod conn--state-command-loop-case ((type (eql ,name))
-                                                    (cb conn--dispatch-callback))
-         (conn-action-cancel (oref cb action))
-         (if (cl-typep (oref cb action) ',name)
-             (setf (oref cb action) nil)
-           (setf (oref cb action) (conn-action type))))
+                                                    (continuation conn--dispatch-continuation))
+         (conn-action-cancel (oref continuation action))
+         (if (cl-typep (oref continuation action) ',name)
+             (setf (oref continuation action) nil)
+           (setf (oref continuation action) (conn-action type))))
 
        ,(when description
           (cl-check-type description string
@@ -5134,7 +5143,7 @@ during target finding."
   (let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
          (regions nil))
     (conn--with-dispatch-command-loop
-     (oclosure-lambda (conn--dispatch-callback
+     (oclosure-lambda (conn--dispatch-continuation
                        (arg (when arg (abs (prefix-numeric-value arg))))
                        (arg-sign (> 0 (abs (prefix-numeric-value arg))))
                        (prompt 'conn--dispatch-prompt-function))
