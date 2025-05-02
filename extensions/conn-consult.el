@@ -30,59 +30,6 @@
 
 (declare-function conn-regions-kapply-prefix "conn-transient")
 
-;; TODO: do this with treesit
-;; (defmacro conn--each-thing (thing beg end &rest body)
-;;   "Iterate over each THING in buffer.
-;; THING BEG and END are bound in BODY."
-;;   (declare (debug (form form form body))
-;;            (indent 3))
-;;   (cl-with-gensyms (max bounds)
-;;     `(save-excursion
-;;        (let ((,max (point-max)))
-;;          (goto-char (point-min))
-;;          (unless (bounds-of-thing-at-point ,thing)
-;;            (forward-thing ,thing 1))
-;;          (while (< (point) ,max)
-;;            (let* ((,bounds (bounds-of-thing-at-point ,thing))
-;;                   (,beg (car ,bounds))
-;;                   (,end (cdr ,bounds)))
-;;              ,@body
-;;              (forward-thing ,thing 1)))))))
-
-;; (defun conn--thing-candidates (thing)
-;;   "Return list of thing candidates."
-;;   (consult--forbid-minibuffer)
-;;   (consult--fontify-all)
-;;   (let* ((buffer (current-buffer))
-;;          default-cand candidates)
-;;     (conn--each-thing thing beg end
-;;       (let ((line (line-number-at-pos)))
-;;         (push (consult--location-candidate
-;;                (consult--buffer-substring beg end)
-;;                (cons buffer beg) line line)
-;;               candidates))
-;;       (when (not default-cand)
-;;         (setq default-cand candidates)))
-;;     (unless candidates
-;;       (user-error "No lines"))
-;;     (nreverse candidates)))
-
-;; ;;;###autoload
-;; (defun conn-consult-thing (thing)
-;;   (interactive
-;;    (list (get (car (conn-read-thing-mover "Thing")) :conn-command-thing)))
-;;   (let ((candidates (conn--thing-candidates thing)))
-;;     (consult--read
-;;      candidates
-;;      :prompt "Go to thing: "
-;;      :annotate (consult--line-prefix)
-;;      :category 'consult-location
-;;      :sort nil
-;;      :require-match t
-;;      :lookup #'consult--line-match
-;;      :add-history (thing-at-point 'symbol)
-;;      :state (consult--location-state candidates))))
-
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)

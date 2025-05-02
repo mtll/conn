@@ -1941,12 +1941,38 @@ themselves once the selection process has concluded."
 
 (oclosure-define (conn--read-mover-callback
                   (:parent conn--read-thing-common-callback))
+  (recursive-edit)
   (mark-flag :mutable t))
 
 (defun conn--read-thing-arg-value (cb)
   (when (oref cb arg)
     (* (if (oref cb arg-sign) -1 1)
        (oref cb arg))))
+
+(defun conn--read-thing-prompt (cb)
+  (let ((prompt (substitute-command-keys
+                 (concat (propertize "Thing Mover" 'face 'minibuffer-prompt)
+                         " (arg: "
+                         (propertize "%s" 'face 'read-multiple-choice-face)
+                         "; \\[reset-arg] reset arg; \\[help] commands"
+                         (if (oref cb recursive-edit)
+                             (concat "; \\[recursive-edit] "
+                                     "recursive edit)")
+                           ")")
+                         ": %s%s")))
+        (mark-indicator
+         (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
+    (format prompt
+            (format (if (oref cb arg) "%s%s" "[%s1]")
+                    (if (oref cb arg-sign) "-" "")
+                    (oref cb arg))
+            (if (oref cb mark-flag) mark-indicator "")
+            (if (oref cb command-invalid)
+                (propertize
+                 (format " %s is not a valid thing command"
+                         (oref cb command))
+                 'face 'error)
+              ""))))
 
 (cl-defgeneric conn--read-thing-command-case (command cb))
 
@@ -1963,6 +1989,11 @@ themselves once the selection process has concluded."
                          (remove-hook 'post-command-hook hook)
                          (exit-recursive-edit))))
           (add-hook 'post-command-hook hook 89)))
+    (setf (oref cb command-invalid) t)))
+
+(cl-defmethod conn--read-thing-command-case ((_cmd (eql recursive-edit)) cb)
+  (if (oref cb recursive-edit)
+      (exit-recursive-edit)
     (setf (oref cb command-invalid) t)))
 
 (defun conn--read-thing-command-loop (callback)
@@ -1985,7 +2016,7 @@ themselves once the selection process has concluded."
     (setf (oref callback arg) (conn--read-thing-arg-value callback))
     (funcall callback)))
 
-(defun conn-read-thing-mover (prompt &optional arg recursive-edit)
+(defun conn-read-thing-mover (&optional arg recursive-edit)
   "Interactively read a thing command and arg.
 
 PROMPT is the prompt that will be displayed to the user.
@@ -1993,49 +2024,25 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (let* ((prompt-fn
-          (lambda (cb)
-            (let ((prompt (substitute-command-keys
-                           (concat (propertize prompt 'face 'minibuffer-prompt)
-                                   " (arg: "
-                                   (propertize "%s" 'face 'read-multiple-choice-face)
-                                   "; \\[reset-arg] reset arg; \\[help] commands"
-                                   (if recursive-edit
-                                       (concat "; \\[recursive-edit] "
-                                               "recursive edit)")
-                                     ")")
-                                   ": %s%s")))
-                  (mark-indicator
-                   (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
-              (format prompt
-                      (format (if (oref cb arg) "%s%s" "[%s1]")
-                              (if (oref cb arg-sign) "-" "")
-                              (oref cb arg))
-                      (if (oref cb mark-flag) mark-indicator "")
-                      (if (oref cb command-invalid)
-                          (propertize
-                           (format " %s is not a valid thing command"
-                                   (oref cb command))
-                           'face 'error)
-                        ""))))))
-    (save-mark-and-excursion
-      (conn--with-state (conn-enter-state
-                         (or (conn--command-property :conn-read-state)
-                             conn-state-for-read-mover))
-        (conn--read-thing-command-loop
-         (oclosure-lambda (conn--read-mover-callback
-                           (mark-flag (region-active-p))
-                           (prompt prompt-fn)
-                           (arg (when arg (abs (prefix-numeric-value arg))))
-                           (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
-             ()
-           (unless (eq mark-flag (region-active-p))
-             (if (region-active-p)
-                 (deactivate-mark t)
-               (push-mark nil t t)))
-           (list command arg)))))))
+  (save-mark-and-excursion
+    (conn--with-state (conn-enter-state
+                       (or (conn--command-property :conn-read-state)
+                           conn-state-for-read-mover))
+      (conn--read-thing-command-loop
+       (oclosure-lambda (conn--read-mover-callback
+                         (recursive-edit recursive-edit)
+                         (mark-flag (region-active-p))
+                         (prompt 'conn--read-thing-prompt)
+                         (arg (when arg (abs (prefix-numeric-value arg))))
+                         (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
+           ()
+         (unless (eq mark-flag (region-active-p))
+           (if (region-active-p)
+               (deactivate-mark t)
+             (push-mark nil t t)))
+         (list command arg))))))
 
-(defun conn-read-thing-region (prompt &optional arg recursive-edit)
+(defun conn-read-thing-region (&optional arg)
   "Interactively read a thing command and arg.
 
 PROMPT is the prompt that will be displayed to the user.
@@ -2043,51 +2050,26 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (let* ((prompt-fn
-          (lambda (cb)
-            (let ((prompt (substitute-command-keys
-                           (concat (propertize prompt 'face 'minibuffer-prompt)
-                                   " (arg: "
-                                   (propertize "%s" 'face 'read-multiple-choice-face)
-                                   "; \\[reset-arg] reset arg; \\[help] commands"
-                                   (if recursive-edit
-                                       (concat "; \\[recursive-edit] "
-                                               "recursive edit)")
-                                     ")")
-                                   ": %s%s")))
-                  (mark-indicator
-                   (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
-              (format prompt
-                      (format (if (oref cb arg) "%s%s" "[%s1]")
-                              (if (oref cb arg-sign) "-" "")
-                              (oref cb arg))
-                      (if (oref cb mark-flag) mark-indicator "")
-                      (if (oref cb command-invalid)
-                          (propertize
-                           (format " %s is not a valid thing command"
-                                   (oref cb command))
-                           'face 'error)
-                        ""))))))
-    (save-mark-and-excursion
-      (conn--with-state (conn-enter-state
-                         (or (conn--command-property :conn-read-state)
-                             conn-state-for-read-mover))
-        (conn--read-thing-command-loop
-         (oclosure-lambda (conn--read-mover-callback
-                           (mark-flag (region-active-p))
-                           (prompt prompt-fn)
-                           (arg (when arg (abs (prefix-numeric-value arg))))
-                           (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
-             ()
-           (unless (eq mark-flag (region-active-p))
-             (if (region-active-p)
-                 (deactivate-mark t)
-               (push-mark nil t t)))
-           (if-let* ((bounds-op (alist-get command conn-bounds-of-command-alist)))
-               (funcall bounds-op)
-             (cons (get command :conn-command-thing)
-                   (cons (cons (region-beginning) (region-end))
-                         (region-bounds))))))))))
+  (save-mark-and-excursion
+    (conn--with-state (conn-enter-state
+                       (or (conn--command-property :conn-read-state)
+                           conn-state-for-read-mover))
+      (conn--read-thing-command-loop
+       (oclosure-lambda (conn--read-mover-callback
+                         (mark-flag (region-active-p))
+                         (prompt 'conn--read-thing-prompt)
+                         (arg (when arg (abs (prefix-numeric-value arg))))
+                         (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
+           ()
+         (unless (eq mark-flag (region-active-p))
+           (if (region-active-p)
+               (deactivate-mark t)
+             (push-mark nil t t)))
+         (if-let* ((bounds-op (alist-get command conn-bounds-of-command-alist)))
+             (funcall bounds-op)
+           (cons (get command :conn-command-thing)
+                 (cons (cons (region-beginning) (region-end))
+                       (region-bounds)))))))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument))
                                              cb)
@@ -2364,7 +2346,7 @@ BOUNDS is of the form returned by `region-bounds'."
 
 (defun conn-thing-to-dot (thing-cmd thing-arg)
   "Create dots at thing command region."
-  (interactive (conn-read-thing-mover "Mover"))
+  (interactive (conn-read-thing-mover))
   (pcase-dolist (`(,beg . ,end) (cdr (conn-bounds-of-command thing-cmd thing-arg)))
     (conn--create-dot beg end))
   (deactivate-mark t))
@@ -5808,7 +5790,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register outer)
   "Prepend thing regions to narrow register."
   (interactive
-   (append (conn-read-thing-mover "Mover")
+   (append (conn-read-thing-mover)
            (list
             (register-read-with-preview "Push region to register: ")
             current-prefix-arg)))
@@ -5832,7 +5814,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional outer)
   "Push thing regions to narrow ring."
   (interactive
-   (append (conn-read-thing-mover "Mover")
+   (append (conn-read-thing-mover)
            (list current-prefix-arg)))
   (pcase-let* ((`((,beg . ,end) . ,regions)
                 (conn-bounds-of-command thing-cmd thing-arg)))
@@ -6309,7 +6291,7 @@ instances of from-string.")
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn-read-thing-mover "Thing Mover" nil t))
+                 (conn-read-thing-mover nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (conn--replace-read-args
@@ -6352,7 +6334,7 @@ instances of from-string.")
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn-read-thing-mover "Thing Mover" nil t))
+                 (conn-read-thing-mover nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (conn--replace-read-args
@@ -6545,14 +6527,14 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg &optional regexp)
   "Isearch forward within the bounds of a thing."
   (interactive
-   (append (conn-read-thing-mover "Thing" nil t)
+   (append (conn-read-thing-mover nil t)
            (list current-prefix-arg)))
   (conn--isearch-in-thing thing-cmd thing-arg nil regexp))
 
 (defun conn-isearch-backward-in-thing (thing-cmd thing-arg &optional regexp)
   "Isearch backward within the bounds of a thing."
   (interactive
-   (append (conn-read-thing-mover "Thing" nil t)
+   (append (conn-read-thing-mover nil t)
            (list current-prefix-arg)))
   (conn--isearch-in-thing thing-cmd thing-arg t regexp))
 
@@ -6561,7 +6543,7 @@ Exiting the recursive edit will resume the isearch."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (append (conn-read-thing-mover "Thing" nil t)
+   (append (conn-read-thing-mover nil t)
            (list current-prefix-arg)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
@@ -6576,7 +6558,7 @@ Interactively `region-beginning' and `region-end'."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (append (conn-read-thing-mover "Thing" nil t)
+   (append (conn-read-thing-mover nil t)
            (list current-prefix-arg)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
@@ -6821,7 +6803,6 @@ If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-read-thing-mover
-    "Mover"
     (when current-prefix-arg
       (prefix-numeric-value current-prefix-arg))
     t))
@@ -6901,7 +6882,7 @@ With arg N, insert N newlines."
 
 (defun conn-join-lines-in-thing (thing-mover thing-arg)
   "`delete-indentation' in region from START and END."
-  (interactive (conn-read-thing-mover "Thing Mover"))
+  (interactive (conn-read-thing-mover))
   (save-mark-and-excursion
     (pcase (conn-bounds-of-command thing-mover thing-arg)
       (`((,beg . ,end) . ,_)
@@ -6984,7 +6965,7 @@ With a prefix arg prepend to a register instead."
 (defun conn-copy-thing (thing-mover arg &optional register)
   "Copy THING at point."
   (interactive
-   (append (conn-read-thing-mover "Thing Mover")
+   (append (conn-read-thing-mover)
            (when current-prefix-arg
              (list (register-read-with-preview "Register: ")))))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
@@ -7003,7 +6984,6 @@ With a prefix arg prepend to a register instead."
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
    (append (conn-read-thing-mover
-            "Thing Mover"
             (when current-prefix-arg
               (prefix-numeric-value current-prefix-arg))
             t)
@@ -7023,7 +7003,6 @@ Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
    (append (conn-read-thing-mover
-            "Thing Mover"
             (when current-prefix-arg
               (prefix-numeric-value current-prefix-arg))
             t)
@@ -7276,7 +7255,7 @@ With prefix arg N duplicate region N times."
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
-  (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
+  (interactive (append (conn-read-thing-mover nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     (`((,beg . ,end) . ,_)
@@ -7310,7 +7289,7 @@ With prefix arg N duplicate region N times."
   "Duplicate and comment the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
-  (interactive (append (conn-read-thing-mover "Thing Mover" nil t)
+  (interactive (append (conn-read-thing-mover nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     ((and `((,beg . ,end) . ,_)
@@ -7387,7 +7366,7 @@ of `conn-recenter-positions'."
 
 (defun conn-comment-or-uncomment-thing (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
-  (interactive (conn-read-thing-mover "Thing Mover"))
+  (interactive (conn-read-thing-mover))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
     (if (comment-only-p beg end)
         (uncomment-region beg end)

@@ -554,7 +554,7 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover "Thing Mover" nil t))
+  (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover nil t))
                (`(,_outer . ,regions) (conn-bounds-of-command cmd arg)))
     (conn--kapply-compose-iterator
      (conn--kapply-region-iterator regions)
@@ -579,7 +579,7 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,cmd ,n) (conn-read-thing-mover "Thing")))
+  (pcase-let ((`(,cmd ,n) (conn-read-thing-mover)))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
      'conn--kapply-relocate-to-region
