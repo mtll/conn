@@ -3427,7 +3427,7 @@ of a command.")
   (repeat :mutable t)
   (target-finder :mutable t))
 
-(defun conn--dispatch-get-prefix-arg ()
+(defun conn--dispatch-consume-prefix-arg ()
   (error "Function only available during dispatch command loop"))
 
 (defun conn--dispatch-prompt-function (continuation)
@@ -3464,12 +3464,10 @@ of a command.")
 
 (defun conn--with-dispatch-command-loop (continuation)
   (let ((success nil))
-    (cl-letf (((symbol-function 'conn--dispatch-get-prefix-arg)
+    (cl-letf (((symbol-function 'conn--dispatch-consume-prefix-arg)
                (lambda ()
-                 (prog1 (cond ((oref continuation arg)
-                               (* (oref continuation arg)
-                                  (if (oref continuation arg-sign) -1 1)))
-                              ((oref continuation arg-sign) '-))
+                 (prog1
+                     (conn--state-command-loop-arg continuation)
                    (setf (oref continuation arg) nil
                          (oref continuation arg-sign) nil)))))
       (unwind-protect
@@ -4539,7 +4537,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate))
-  (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
+  (setf (oref action arg) (conn--dispatch-consume-prefix-arg)))
 
 (conn-define-dispatch-action conn-dispatch-duplicate-and-comment
     (window pt thing-cmd thing-arg &optional arg)
@@ -4556,7 +4554,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (_ (user-error "Cannot find %s at point" thing-cmd))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate-and-comment))
-  (setf (oref action arg) (conn--dispatch-get-prefix-arg)))
+  (setf (oref action arg) (conn--dispatch-consume-prefix-arg)))
 
 (conn-define-dispatch-action conn-dispatch-register
     (window pt _thing-cmd _thing-arg register)
@@ -4617,7 +4615,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-kill))
   (setf (oref action register)
-        (when (conn--dispatch-get-prefix-arg)
+        (when (conn--dispatch-consume-prefix-arg)
           (register-read-with-preview "Register: "))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-kill))
@@ -4645,7 +4643,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-kill-append))
   (setf (oref action register)
-        (when (conn--dispatch-get-prefix-arg)
+        (when (conn--dispatch-consume-prefix-arg)
           (register-read-with-preview "Register: "))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-kill-append))
@@ -4673,7 +4671,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-kill-prepend))
   (setf (oref action args)
-        (when (conn--dispatch-get-prefix-arg)
+        (when (conn--dispatch-consume-prefix-arg)
           (register-read-with-preview "Register: "))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-kill-prepend))
@@ -4701,7 +4699,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-copy-as-kill))
   (setf (oref action register)
-        (when (conn--dispatch-get-prefix-arg)
+        (when (conn--dispatch-consume-prefix-arg)
           (register-read-with-preview "Register: "))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-copy-as-kill))
@@ -4726,7 +4724,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-copy-append))
   (setf (oref action args)
-        (when (conn--dispatch-get-prefix-arg)
+        (when (conn--dispatch-consume-prefix-arg)
           (register-read-with-preview "Register: "))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-copy-append))
@@ -4750,7 +4748,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-copy-prepend))
   (setf (oref action args)
-        (when (conn--dispatch-get-prefix-arg)
+        (when (conn--dispatch-consume-prefix-arg)
           (register-read-with-preview "Register: "))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-copy-prepend))
@@ -5163,13 +5161,13 @@ during target finding."
                    (funcall action window pt (or thing-override command) arg)
                    (push (cons (region-beginning) (region-end)) regions)))
              (cl-incf conn-dispatch-repeat-count)))
-         (unless regions (keyboard-quit)))))
-    (cl-loop for (b . e) in (compat-call sort
-                                         (conn--merge-regions regions t)
-                                         :key #'car :in-place t)
-             minimize b into beg
-             maximize e into end
-             finally return (cons (cons beg end) regions))))
+         (unless regions (keyboard-quit))
+         (cl-loop for (b . e) in (compat-call sort
+                                              (conn--merge-regions regions t)
+                                              :key #'car :in-place t)
+                  minimize b into beg
+                  maximize e into end
+                  finally return (cons (cons beg end) regions)))))))
 
 (defun conn-repeat-last-dispatch (_repeat)
   "Repeat the last dispatch command.
