@@ -1939,6 +1939,15 @@ themselves once the selection process has concluded."
 (defvar conn--read-thing-command-invalid nil)
 (defvar conn--read-thing-mark-flag nil)
 
+(defmacro conn--with-read-thing-vars (&rest body)
+  (declare (indent 0))
+  `(let ((conn--read-thing-command nil)
+         (conn--read-thing-arg nil)
+         (conn--read-thing-arg-sign nil)
+         (conn--read-thing-command-keys nil)
+         (conn--read-thing-command-invalid nil))
+     ,@body))
+
 (cl-defgeneric conn--read-thing-command-case (command))
 
 (cl-defmethod conn--read-thing-command-case (command)
@@ -1954,29 +1963,22 @@ themselves once the selection process has concluded."
     (setq conn--read-thing-command-invalid t)))
 
 (defun conn--read-thing-command-loop (callback prompt &optional initial-arg)
-  (cl-letf* ((conn--read-thing-command nil)
-             (conn--read-thing-arg
-              (when initial-arg
-                (abs (prefix-numeric-value initial-arg))))
-             (conn--read-thing-arg-sign
-              (> 0 (prefix-numeric-value initial-arg)))
-             (conn--read-thing-command-keys nil)
-             (conn--read-thing-command-invalid nil))
-    (cl-labels
-        ((command-loop ()
-           (while (not conn--read-thing-command)
-             (setq conn--read-thing-command-keys (read-key-sequence (funcall prompt))
-                   conn--read-thing-command-invalid nil)
-             (conn--read-thing-command-case
-              (key-binding conn--read-thing-command-keys t)))
-           (funcall callback
-                    conn--read-thing-command
-                    (when conn--read-thing-arg
-                      (* (if conn--read-thing-arg-sign -1 1)
-                         conn--read-thing-arg)))))
-      (unwind-protect
-          (command-loop)
-        (message nil)))))
+  (unwind-protect
+      (progn
+        (when initial-arg
+          (setq conn--read-thing-arg (abs (prefix-numeric-value initial-arg))
+                conn--read-thing-arg (> 0 (prefix-numeric-value initial-arg))))
+        (while (not conn--read-thing-command)
+          (setq conn--read-thing-command-keys (read-key-sequence (funcall prompt))
+                conn--read-thing-command-invalid nil)
+          (conn--read-thing-command-case
+           (key-binding conn--read-thing-command-keys t)))
+        (funcall callback
+                 conn--read-thing-command
+                 (when conn--read-thing-arg
+                   (* (if conn--read-thing-arg-sign -1 1)
+                      conn--read-thing-arg))))
+    (message nil)))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -1992,36 +1994,37 @@ are read."
     (conn--with-state (conn-enter-state
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
-      (conn--read-thing-command-loop
-       (lambda (cmd arg)
-         (unless (eq conn--read-thing-mark-flag (region-active-p))
-           (if (region-active-p)
-               (deactivate-mark t)
-             (push-mark nil t t)))
-         (list cmd arg))
-       (let ((prompt (substitute-command-keys
-                      (concat (propertize prompt 'face 'minibuffer-prompt)
-                              " (arg: "
-                              (propertize "%s" 'face 'read-multiple-choice-face)
-                              "; \\[reset-arg] reset arg; \\[help] commands"
-                              (if recursive-edit
-                                  (concat "; \\[recursive-edit] "
-                                          "recursive edit)")
-                                ")")
-                              ": %s%s"))))
-         (lambda ()
-           (format prompt
-                   (format (if conn--read-thing-arg "%s%s" "[%s1]")
-                           (if conn--read-thing-arg-sign "-" "")
-                           conn--read-thing-arg)
-                   (if conn--read-thing-mark-flag mark-indicator "")
-                   (if conn--read-thing-command-invalid
-                       (propertize
-                        (format " %s is not a valid thing command"
-                                conn--read-thing-command)
-                        'face 'error)
-                     ""))))
-       arg))))
+      (conn--with-read-thing-vars
+        (conn--read-thing-command-loop
+         (lambda (cmd arg)
+           (unless (eq conn--read-thing-mark-flag (region-active-p))
+             (if (region-active-p)
+                 (deactivate-mark t)
+               (push-mark nil t t)))
+           (list cmd arg))
+         (let ((prompt (substitute-command-keys
+                        (concat (propertize prompt 'face 'minibuffer-prompt)
+                                " (arg: "
+                                (propertize "%s" 'face 'read-multiple-choice-face)
+                                "; \\[reset-arg] reset arg; \\[help] commands"
+                                (if recursive-edit
+                                    (concat "; \\[recursive-edit] "
+                                            "recursive edit)")
+                                  ")")
+                                ": %s%s"))))
+           (lambda ()
+             (format prompt
+                     (format (if conn--read-thing-arg "%s%s" "[%s1]")
+                             (if conn--read-thing-arg-sign "-" "")
+                             conn--read-thing-arg)
+                     (if conn--read-thing-mark-flag mark-indicator "")
+                     (if conn--read-thing-command-invalid
+                         (propertize
+                          (format " %s is not a valid thing command"
+                                  conn--read-thing-command)
+                          'face 'error)
+                       ""))))
+         arg)))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument)))
   (let ((digit (- (logand (elt conn--read-thing-command-keys 0) ?\177) ?0)))
@@ -3369,10 +3372,40 @@ of a command.")
 (defvar conn--dispatch-repeat nil)
 (defvar conn--dispatch-target-finder nil)
 
+(defmacro conn--with-dispatch-vars (&rest body)
+  (declare (indent 0))
+  `(let ((conn--dispatch-action nil)
+         (conn--dispatch-repeat nil)
+         (conn--dispatch-target-finder nil))
+     (conn--with-read-thing-vars
+       ,@body)))
+
+(defun conn--dispatch-vars-save ()
+  (list conn--read-thing-command
+        conn--read-thing-arg
+        conn--read-thing-arg-sign
+        conn--read-thing-command-keys
+        conn--read-thing-command-invalid
+        conn--dispatch-action
+        conn--dispatch-repeat
+        conn--dispatch-target-finder))
+
+(defun conn--dispatch-vars-restore (state)
+  (pcase-let ((`(,command ,arg ,sign ,keys ,invalid ,action ,repeat ,finder)
+               state))
+    (setq conn--read-thing-command command
+          conn--read-thing-arg arg
+          conn--read-thing-arg-sign sign
+          conn--read-thing-command-keys keys
+          conn--read-thing-command-invalid invalid
+          conn--dispatch-action action
+          conn--dispatch-repeat repeat
+          conn--dispatch-target-finder finder)))
+
 (defun conn--dispatch-get-prefix-arg ()
   (error "Function only available during dispatch command loop"))
 
-(defun conn--dispatch-continuation ()
+(defun conn--dispatch-continuation (_)
   (error "Function only available during dispatch command loop"))
 
 (defun conn--dispatch-prompt-function ()
@@ -3404,41 +3437,54 @@ of a command.")
                               'face 'error)))))))
 
 (defun conn--read-dispatch (callback &optional initial-arg)
-  (cl-letf* ((success nil)
-             (conn--dispatch-action nil)
-             (conn--dispatch-repeat nil)
-             (conn--dispatch-target-finder nil))
+  (let ((success nil))
     (cl-labels
         ((body ()
-           (unwind-protect
-               (conn--with-state
-                   (conn-enter-state
-                    (or (conn--command-property :conn-read-dispatch-state)
-                        conn-state-for-read-dispatch))
-                 (conn--read-thing-command-loop
-                  (lambda (cmd arg)
-                    (conn-action-accept conn--dispatch-action)
-                    (setq success t)
-                    (funcall callback
-                             conn--dispatch-action
-                             conn--dispatch-target-finder
-                             cmd arg
-                             conn--dispatch-repeat))
-                  (conn--dispatch-prompt-function)
-                  initial-arg))
-             (unless success
-               (conn-action-cancel conn--dispatch-action)))))
-      (cl-letf (((symbol-function 'conn--dispatch-continuation)
-                 (lambda () (lambda () (body))))
-                ((symbol-function 'conn--dispatch-get-prefix-arg)
-                 (lambda ()
-                   (prog1 (cond (conn--read-thing-arg
-                                 (* conn--read-thing-arg
-                                    (if conn--read-thing-arg-sign -1 1)))
-                                (conn--read-thing-arg-sign '-))
-                     (setq conn--read-thing-arg nil
-                           conn--read-thing-arg-sign nil)))))
-        (body)))))
+           (cl-letf (((symbol-function 'conn--dispatch-continuation)
+                      (lambda (fn)
+                        (let ((state (conn--dispatch-vars-save)))
+                          (lambda (&rest args)
+                            (conn--with-dispatch-vars
+                              (conn--dispatch-vars-restore state)
+                              (apply fn args)
+                              (body))))))
+                     ((symbol-function 'conn--dispatch-get-prefix-arg)
+                      (lambda ()
+                        (prog1 (cond (conn--read-thing-arg
+                                      (* conn--read-thing-arg
+                                         (if conn--read-thing-arg-sign -1 1)))
+                                     (conn--read-thing-arg-sign '-))
+                          (setq conn--read-thing-arg nil
+                                conn--read-thing-arg-sign nil)))))
+             (unwind-protect
+                 (conn--with-state
+                     (conn-enter-state
+                      (or (conn--command-property :conn-read-dispatch-state)
+                          conn-state-for-read-dispatch))
+                   (conn--read-thing-command-loop
+                    (lambda (cmd arg)
+                      (conn-action-accept conn--dispatch-action)
+                      (setq success t)
+                      (funcall callback
+                               conn--dispatch-action
+                               conn--dispatch-target-finder
+                               cmd arg
+                               conn--dispatch-repeat))
+                    (conn--dispatch-prompt-function)
+                    initial-arg))
+               (unless success
+                 (conn-action-cancel conn--dispatch-action))))))
+      (conn--with-dispatch-vars (body)))))
+
+(cl-defmethod conn--read-thing-command-case ((_command (eql kapply)))
+  (throw 'kapply-continuation
+         (let ((wconf (current-window-configuration)))
+           (conn--with-state (conn-enter-state conn-previous-state)
+             (conn-dispatch-kapply-prefix
+              (conn--dispatch-continuation
+               (lambda (kapply)
+                 (setq conn--dispatch-action kapply)
+                 (set-window-configuration wconf))))))))
 
 (cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command)))
   (pcase-let ((`(,_ ,thing ,finder ,default-action)
@@ -3449,17 +3495,6 @@ of a command.")
       (setq conn--dispatch-action
             (conn-action (or default-action
                              (conn--dispatch-default-action thing)))))))
-
-(cl-defmethod conn--read-thing-command-case ((_command (eql kapply)))
-  (throw 'kapply-continuation
-         (let ((wconf (current-window-configuration))
-               (continuation (conn--dispatch-continuation)))
-           (conn--with-state (conn-enter-state conn-previous-state)
-             (conn-dispatch-kapply-prefix
-              (lambda (kapply)
-                (setq conn--dispatch-action kapply)
-                (set-window-configuration wconf)
-                (funcall continuation)))))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql repeat-dispatch)))
   (setq conn--dispatch-repeat (not conn--dispatch-repeat)))
@@ -3908,7 +3943,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (when (and conn-dispatch-repeat-count
              (> conn-dispatch-repeat-count 0))
-    (setq prompt (concat (propertize "(ESC to finish repeating) "
+    (setq prompt (concat (propertize "(RET to finish repeating) "
                                      'face 'minibuffer-prompt)
                          prompt)))
   (catch 'char
@@ -3924,7 +3959,7 @@ Target overlays may override this default by setting the
                     (funcall conn-target-window-predicate win)
                     (not (posn-area posn)))
            (throw 'mouse-click (list pt win nil))))
-        ((or 'escape 27)
+        ((or 'return 13)
          (when (and conn-dispatch-repeat-count
                     (> conn-dispatch-repeat-count 0))
            (throw 'end nil)))
@@ -4166,7 +4201,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (:method ((_ conn-action)) "Noop" nil))
 
 (cl-defgeneric conn-action-cancel (action)
-  (:method ((_ conn-action)) "Noop" nil))
+  (:method (_) "Noop" nil))
 
 (defmacro conn-define-dispatch-action (name arg-slots &rest rest)
   "\(fn NAME ARG-SLOTS &key DESCRIPTION WINDOW-PREDICATE EXTRA-SLOTS &body BODY)"
