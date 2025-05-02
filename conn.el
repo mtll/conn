@@ -1933,7 +1933,7 @@ themselves once the selection process has concluded."
 ;;;;; Read thing command loop
 
 (cl-defstruct (conn--read-thing-common-ctx)
-  command command-keys command-invalid arg arg-sign callback prompt)
+  command command-invalid arg arg-sign callback prompt)
 
 (cl-defstruct (conn--read-mover-ctx
                (:include conn--read-thing-common-ctx))
@@ -1958,9 +1958,10 @@ themselves once the selection process has concluded."
 (defun conn--read-thing-command-loop (context)
   (let* ((wconf (current-window-configuration))
          (hook (lambda ()
-                 (setf (oref context command-keys) (this-command-keys)
-                       (oref context command-invalid) nil)
-                 (conn--read-thing-command-case this-command context)
+                 (setf (oref context command-invalid) nil)
+                 (let ((command this-command))
+                   (setq this-command 'ignore)
+                   (conn--read-thing-command-case command context))
                  (set-window-configuration wconf)))
          (message (lambda ()
                     (message (funcall (oref context prompt) context)))))
@@ -2025,7 +2026,7 @@ are read."
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument))
                                              ctx)
-  (let ((digit (- (logand (elt (oref ctx command-keys) 0) ?\177) ?0)))
+  (let ((digit (- (logand (elt (this-command-keys) 0) ?\177) ?0)))
     (setf (oref ctx arg) (if (integerp (oref ctx arg))
                              (+ (* 10 (oref ctx arg)) digit)
                            digit))))
@@ -2057,7 +2058,6 @@ are read."
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql help)) ctx)
   (save-window-excursion
-    (setf (oref ctx command-keys) nil)
     (conn--read-thing-command-case
      (condition-case _
          (intern
@@ -3486,7 +3486,6 @@ of a command.")
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql help))
                                              (ctx conn--dispatch-ctx))
-  (setf (oref ctx command-keys) nil)
   (conn--read-thing-command-case
    (condition-case _
        (intern
