@@ -31,7 +31,6 @@
 
 (require 'compat)
 (require 'eieio)
-(require 'oclosure)
 (static-if (<= 31 emacs-major-version)
     (require 'subr-x)
   (eval-when-compile
@@ -1340,7 +1339,7 @@ These match if the argument is a substate of STATE."
   15 (lambda (state) `(and (conn-state-p ,state) 'conn-state))
   (lambda (tag &rest _) (when tag (list tag))))
 
-(cl-defmethod cl-generic-generalizers ((_specializer (eql 'conn-state)))
+(cl-defmethod cl-generic-generalizers ((_specializer (eql conn-state)))
   "Support for conn-state specializers.
 These match if the argument is a conn-state."
   (list conn--state-generalizer))
@@ -1931,6 +1930,146 @@ themselves once the selection process has concluded."
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
+;;;;; Read thing command loop
+
+(defvar conn--read-thing-command nil)
+(defvar conn--read-thing-arg nil)
+(defvar conn--read-thing-arg-sign nil)
+(defvar conn--read-thing-command-keys nil)
+(defvar conn--read-thing-command-invalid nil)
+(defvar conn--read-thing-mark-flag nil)
+
+(cl-defgeneric conn--read-thing-loop-body (command)
+  ( :method (command)
+    (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
+                         (when (symbolp command)
+                           (get command :conn-command-thing)))))
+        (progn
+          (setq conn--read-thing-command command
+                conn--dispatch-target-finder (conn--dispatch-target-finder command))
+          (when (null conn--dispatch-action)
+            (setq conn--dispatch-action
+                  (conn-action (conn--dispatch-default-action thing)))))
+      (setq conn--read-thing-command-invalid t))))
+
+(defun conn--read-thing-command-loop (callback prompt &optional initial-arg)
+  (cl-letf* ((conn--read-thing-command nil)
+             (conn--read-thing-arg
+              (when initial-arg
+                (abs (prefix-numeric-value initial-arg))))
+             (conn--read-thing-arg-sign
+              (> 0 (prefix-numeric-value initial-arg)))
+             (conn--read-thing-command-keys nil)
+             (conn--read-thing-command-invalid nil))
+    (cl-labels
+        ((command-loop ()
+           (while (not conn--read-thing-command)
+             (setq conn--read-thing-command-keys (read-key-sequence (funcall prompt))
+                   conn--read-thing-command-invalid nil)
+             (conn--read-thing-loop-body
+              (key-binding conn--read-thing-command-keys t)))
+           (funcall callback
+                    conn--read-thing-command
+                    (when conn--read-thing-arg
+                      (* (if conn--read-thing-arg-sign -1 1)
+                         conn--read-thing-arg)))))
+      (unwind-protect
+          (command-loop)
+        (message nil)))))
+
+(defun conn-read-thing-mover (prompt &optional arg recursive-edit)
+  "Interactively read a thing command and arg.
+
+PROMPT is the prompt that will be displayed to the user.
+ARG is the initial value for the arg to be returned.
+RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
+command.  See `conn-dot-mode' for how bounds of `recursive-edit'
+are read."
+  (let* ((conn--read-thing-mark-flag (region-active-p))
+         (mark-indicator
+          (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
+    (conn--with-state (conn-enter-state
+                       (or (conn--command-property :conn-read-state)
+                           conn-state-for-read-mover))
+      (conn--read-thing-command-loop
+       (lambda (cmd arg)
+         (unless (eq conn--read-thing-mark-flag (region-active-p))
+           (if (region-active-p)
+               (deactivate-mark t)
+             (push-mark nil t t)))
+         (list cmd arg))
+       (let ((prompt (substitute-command-keys
+                      (concat (propertize prompt 'face 'minibuffer-prompt)
+                              " (arg: "
+                              (propertize "%s" 'face 'read-multiple-choice-face)
+                              "; \\[reset-arg] reset arg; \\[help] commands"
+                              (if recursive-edit
+                                  (concat "; \\[recursive-edit] "
+                                          "recursive edit)")
+                                ")")
+                              ": %s%s"))))
+         (lambda ()
+           (format prompt
+                   (format (if conn--read-thing-arg "%s%s" "[%s1]")
+                           (if conn--read-thing-arg-sign "-" "")
+                           conn--read-thing-arg)
+                   (if conn--read-thing-mark-flag mark-indicator "")
+                   (if conn--read-thing-command-invalid
+                       (propertize
+                        (format " %s is not a valid thing command"
+                                conn--read-thing-command)
+                        'face 'error)
+                     ""))))
+       arg))))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql digit-argument)))
+  (let ((digit (- (logand (elt conn--read-thing-command-keys 0) ?\177) ?0)))
+    (setq conn--read-thing-arg (if (integerp conn--read-thing-arg)
+                                   (+ (* 10 conn--read-thing-arg) digit)
+                                 digit))))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql forward-delete-arg)))
+  (setq conn--read-thing-arg (mod conn--read-thing-arg
+                                (expt 10 (floor (log conn--read-thing-arg 10))))))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql backward-delete-arg)))
+  (setq conn--read-thing-arg (floor conn--read-thing-arg 10)))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql reset-arg)))
+  (setq conn--read-thing-arg nil))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql negative-argument)))
+  (setq conn--read-thing-arg-sign (not conn--read-thing-arg-sign)))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql keyboard-quit)))
+  (keyboard-quit))
+
+(cl-defmethod conn--read-thing-loop-body
+  ((_command (eql conn-set-mark-command))
+   &context (conn-current-state (conn-substate conn-read-mover-state)))
+  (setq conn--read-thing-mark-flag (not conn--read-thing-mark-flag)))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql help)))
+  (save-window-excursion
+    (setq conn--read-thing-command
+          (condition-case _
+              (intern
+               (completing-read
+                "Command: "
+                (lambda (string pred action)
+                  (if (eq action 'metadata)
+                      `(metadata
+                        ,(cons 'affixation-function
+                               (conn--dispatch-make-command-affixation))
+                        (category . conn-dispatch-command))
+                    (complete-with-action action obarray string pred)))
+                (lambda (sym)
+                  (and (functionp sym)
+                       (not (eq sym 'help))
+                       (conn-thing-command-p sym)))
+                t))
+            (quit nil)))))
+
 
 ;;;; Bounds of command
 
@@ -1976,104 +2115,6 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                                       conn-bounds-of-command-alist))
                          conn-bounds-of-command-default)
                      cmd arg)))))
-
-(defun conn-read-thing-mover (prompt &optional arg recursive-edit)
-  "Interactively read a thing command and arg.
-
-PROMPT is the prompt that will be displayed to the user.
-ARG is the initial value for the arg to be returned.
-RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
-command.  See `conn-dot-mode' for how bounds of `recursive-edit'
-are read."
-  (let* ((thing-arg (when arg (abs (prefix-numeric-value arg))))
-         (thing-sign (when arg (> 0 arg)))
-         (mark-flag (region-active-p))
-         (mark-indicator
-          (propertize "Mark Active" 'face 'eldoc-highlight-function-argument))
-         invalid keys cmd)
-    (cl-flet
-        ((read-command ()
-           (setq keys (read-key-sequence
-                       (format prompt
-                               (format (if thing-arg "%s%s" "[%s1]")
-                                       (if thing-sign "-" "")
-                                       thing-arg)
-                               (if mark-flag mark-indicator "")
-                               (if invalid
-                                   (propertize
-                                    (format " %s is not a valid thing command"
-                                            cmd)
-                                    'face 'error)
-                                 "")))
-                 cmd (key-binding keys t)))
-         (completing-read-command ()
-           (save-window-excursion
-             (setq cmd (condition-case _
-                           (intern
-                            (completing-read
-                             "Command: "
-                             (lambda (string pred action)
-                               (if (eq action 'metadata)
-                                   `(metadata
-                                     ,(cons 'affixation-function
-                                            (conn--dispatch-make-command-affixation))
-                                     (category . conn-dispatch-command))
-                                 (complete-with-action action obarray string pred)))
-                             (lambda (sym)
-                               (and (functionp sym)
-                                    (not (eq sym 'help))
-                                    (conn-thing-command-p sym)))
-                             t))
-                         (quit nil))))))
-      (conn--with-state (conn-enter-state
-                         (or (conn--command-property :conn-read-state)
-                             conn-state-for-read-mover))
-        (setq prompt (substitute-command-keys
-                      (concat (propertize prompt 'face 'minibuffer-prompt)
-                              " (arg: "
-                              (propertize "%s" 'face 'read-multiple-choice-face)
-                              "; \\[reset-arg] reset arg; \\[help] commands"
-                              (if recursive-edit
-                                  (concat "; \\[recursive-edit] "
-                                          "recursive edit)")
-                                ")")
-                              ": %s%s")))
-        (read-command)
-        (unwind-protect
-            (prog1
-                (cl-loop
-                 (pcase cmd
-                   ('conn-set-mark-command
-                    (setq mark-flag (not mark-flag)))
-                   ('keyboard-quit (keyboard-quit))
-                   ('help (completing-read-command))
-                   ('digit-argument
-                    (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                      (setq thing-arg (if thing-arg (+ (* 10 thing-arg) digit) digit))))
-                   ('reset-arg
-                    (setq thing-arg nil))
-                   ('backward-delete-arg
-                    (setq thing-arg (floor thing-arg 10)))
-                   ('forward-delete-arg
-                    (setq thing-arg (thread-last
-                                      (log thing-arg 10)
-                                      (floor)
-                                      (expt 10)
-                                      (mod thing-arg))))
-                   ('negative-argument
-                    (setq thing-sign (not thing-sign)))
-                   ((guard (or (conn-thing-command-p cmd)
-                               (alist-get cmd conn-bounds-of-command-alist)))
-                    (cl-return
-                     (list cmd (cond (thing-arg (* thing-arg (if thing-sign -1 1)))
-                                     (thing-sign '-)))))
-                   (_ (setq invalid t)))
-                 (read-command))
-              (unless (eq mark-flag (region-active-p))
-                (if (region-active-p)
-                    (deactivate-mark t)
-                  (push-mark nil t t))))
-          (message nil))))))
 
 (defun conn-read-thing-region (prompt &optional arg)
   "Interactively read a thing region from the user.
@@ -3261,13 +3302,17 @@ of a command.")
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
-  "h" `(conn-expand-remote conn-dispatch-read-string-with-timeout)
+  "h" '(conn-dispatch-command
+        conn-expand-remote conn-dispatch-read-string-with-timeout)
   "n" 'conn-forward-defun
   "J" 'conn-forward-inner-line
   "L" 'conn-backward-inner-line
-  "O" `(forward-word ,(lambda () (conn--dispatch-all-things 'word)))
-  "U" `(forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol)))
-  "b" `(button conn--dispatch-all-buttons))
+  "O" `(conn-dispatch-command
+        forward-word ,(lambda () (conn--dispatch-all-things 'word)))
+  "U" `(conn-dispatch-command
+        forward-symbol ,(lambda () (conn--dispatch-all-things 'symbol)))
+  "b" '(conn-dispatch-command
+        button conn--dispatch-all-buttons))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
@@ -3317,171 +3362,134 @@ of a command.")
                                     'face 'completions-annotations thing)
                  (list command-name "" (concat thing binding)))))))
 
-(defun conn--dispatch-get-prefix-arg ()
-  (error "Function only available during dispatch"))
+;;;;; Dispatch command loop
 
-(defun conn--dispatch-command-loop (callback &optional initial-arg)
-  (cl-letf* ((window-conf (current-window-configuration))
-             (prompt nil)
-             (action nil)
-             (keys nil)
-             (cmd nil)
-             (invalid nil)
-             (handle nil)
-             (arg (when initial-arg
-                    (abs (prefix-numeric-value initial-arg))))
-             (sign (> 0 (prefix-numeric-value initial-arg)))
-             (repeat nil)
-             (success nil)
-             (repeat-indicator
-              (propertize "repeatedly"
-                          'face (when repeat
-                                  'eldoc-highlight-function-argument)))
-             ((symbol-function 'conn--dispatch-get-prefix-arg)
-              (lambda ()
-                (prog1 (cond (arg (* arg (if sign -1 1)))
-                             (sign '-))
-                  (setq arg nil
-                        sign nil)))))
+(defvar conn--dispatch-action nil)
+(defvar conn--dispatch-repeat nil)
+(defvar conn--dispatch-target-finder nil)
+
+(defun conn--dispatch-get-prefix-arg ()
+  (error "Function only available during dispatch command loop"))
+
+(defun conn--dispatch-continuation ()
+  (error "Function only available during dispatch command loop"))
+
+(defun conn--dispatch-prompt-function ()
+  (let ((prompt (substitute-command-keys
+                 (concat (propertize "Targets" 'face 'minibuffer-prompt)
+                         " (arg: "
+                         (propertize "%s" 'face 'read-multiple-choice-face)
+                         "; \\[reset-arg] reset arg; "
+                         "\\[repeat-dispatch] %s; "
+                         "\\[help] commands): %s"))))
+    (lambda ()
+      (let ((action-description
+             (if conn--dispatch-action
+                 (propertize
+                  (conn-action-description conn--dispatch-action)
+                  'face 'eldoc-highlight-function-argument)
+               "")))
+        (format prompt
+                (format (if conn--read-thing-arg "%s%s" "[%s1]")
+                        (if conn--read-thing-arg-sign "-" "")
+                        conn--read-thing-arg)
+                (propertize
+                 "repeatedly"
+                 'face (when conn--dispatch-repeat
+                         'eldoc-highlight-function-argument))
+                action-description " "
+                (when conn--read-thing-command-invalid
+                  (propertize "Not a valid thing command"
+                              'face 'error)))))))
+
+(defun conn--read-dispatch (callback &optional initial-arg)
+  (cl-letf* ((success nil)
+             (conn--dispatch-action nil)
+             (conn--dispatch-repeat nil)
+             (conn--dispatch-target-finder nil))
     (cl-labels
-        ((action-description ()
-           (if action
-               (propertize
-                (conn-action-description action)
-                'face 'eldoc-highlight-function-argument)
-             ""))
-         (completing-read-command ()
+        ((body ()
            (unwind-protect
-               (setq keys nil
-                     cmd (condition-case _
-                             (intern
-                              (completing-read
-                               "Command: "
-                               (lambda (string pred action)
-                                 (if (eq action 'metadata)
-                                     `(metadata
-                                       ,(cons 'affixation-function
-                                              (conn--dispatch-make-command-affixation))
-                                       (category . conn-dispatch-command))
-                                   (complete-with-action action obarray string pred)))
-                               (lambda (sym)
-                                 (pcase sym
-                                   ('help)
-                                   ((pred functionp)
-                                    (or (get sym :conn-command-thing)
-                                        (conn--action-type-p sym)))
-                                   (`(,cmd ,_ . ,_)
-                                    (or (get cmd :conn-mark-handler)
-                                        (get cmd 'forward-op)))))
-                               t))
-                           (quit nil)))
-             (set-window-configuration window-conf)))
-         (read-command ()
-           (setq keys (read-key-sequence
-                       (format prompt
-                               (format (if arg "%s%s" "[%s1]")
-                                       (if sign "-" "")
-                                       arg)
-                               repeat-indicator
-                               (cond
-                                (invalid
-                                 (concat
-                                  (action-description)
-                                  " "
-                                  (propertize "Not a valid thing command"
-                                              'face 'error)))
-                                (action (action-description))
-                                (t ""))))
-                 cmd (key-binding keys t)
-                 invalid nil))
-         (read-dispatch ()
-           (read-command)
-           (while t
-             (catch 'loop-continue
-               (pcase cmd
-                 (`(,thing ,finder . ,default-action)
-                  (cl-return-from read-dispatch
+               (conn--with-state
+                   (conn-enter-state
+                    (or (conn--command-property :conn-read-dispatch-state)
+                        conn-state-for-read-dispatch))
+                 (conn--read-thing-command-loop
+                  (lambda (cmd arg)
+                    (conn-action-accept conn--dispatch-action)
+                    (setq success t)
                     (funcall callback
-                             (or action
-                                 (conn-action
-                                  (or default-action
-                                      (conn--dispatch-default-action thing))))
-                             finder
-                             thing (when arg
-                                     (* (if sign -1 1) (or arg 1)))
-                             repeat)))
-                 ('keyboard-quit
-                  (keyboard-quit))
-                 ('kapply
-                  (throw 'kapply-continuation
-                         (let ((wconf (current-window-configuration)))
-                           (conn--with-state (conn-enter-state conn-previous-state)
-                             (conn-dispatch-kapply-prefix
-                              (lambda (kapply)
-                                (setq action kapply)
-                                (set-window-configuration wconf)
-                                (body)))))))
-                 ('repeat-dispatch
-                  (setq repeat (not repeat)
-                        repeat-indicator
-                        (propertize repeat-indicator
-                                    'face (when repeat
-                                            'eldoc-highlight-function-argument))))
-                 ('digit-argument
-                  (let ((digit (- (logand (elt keys 0) ?\177) ?0)))
-                    (setq arg (if arg (+ (* 10 arg) digit) digit))))
-                 ('backward-delete-arg
-                  (setq arg (floor arg 10)))
-                 ('forward-delete-arg
-                  (setq arg (mod arg (expt 10 (floor (log arg 10))))))
-                 ('reset-arg
-                  (setq arg nil))
-                 ('negative-argument
-                  (setq sign (not sign)))
-                 ('help
-                  (throw 'loop-continue (completing-read-command)))
-                 ((and (let thing (or (alist-get cmd conn-bounds-of-command-alist)
-                                      (when (symbolp cmd)
-                                        (get cmd :conn-command-thing))))
-                       (guard thing))
-                  (cl-return-from read-dispatch
-                    (funcall callback
-                             (or action
-                                 (conn-action
-                                  (conn--dispatch-default-action thing)))
-                             (conn--dispatch-target-finder thing)
-                             thing (when arg
-                                     (* (if sign -1 1) (or arg 1)))
-                             repeat)))
-                 ((and cmd (pred conn--action-type-p))
-                  (conn-action-cancel action)
-                  (if (cl-typep action cmd)
-                      (setq action nil)
-                    (setq action (conn-action cmd))))
-                 (_
-                  (setq invalid t)))
-               (read-command))))
-         (body ()
-           (unwind-protect
-               (conn--with-state (conn-enter-state
-                                  (or (conn--command-property :conn-read-dispatch-state)
-                                      conn-state-for-read-dispatch))
-                 (setq prompt (substitute-command-keys
-                               (concat (propertize "Targets" 'face 'minibuffer-prompt)
-                                       " (arg: "
-                                       (propertize "%s" 'face 'read-multiple-choice-face)
-                                       "; \\[reset-arg] reset arg; "
-                                       "\\[repeat-dispatch] %s; "
-                                       "\\[help] commands): %s")))
-                 (prog1 (read-dispatch)
-                   (setq success t)))
-             (when handle
-               (if success
-                   (conn-action-accept action)
-                 (conn-action-cancel action))
-               (setq handle nil))
-             (message nil))))
-      (body))))
+                             conn--dispatch-action
+                             conn--dispatch-target-finder
+                             cmd arg
+                             conn--dispatch-repeat))
+                  (conn--dispatch-prompt-function)
+                  initial-arg))
+             (unless success
+               (conn-action-cancel conn--dispatch-action)))))
+      (cl-letf (((symbol-function 'conn--dispatch-continuation)
+                 (lambda () (lambda () (body))))
+                ((symbol-function 'conn--dispatch-get-prefix-arg)
+                 (lambda ()
+                   (prog1 (cond (conn--read-thing-arg
+                                 (* conn--read-thing-arg
+                                    (if conn--read-thing-arg-sign -1 1)))
+                                (conn--read-thing-arg-sign '-))
+                     (setq conn--read-thing-arg nil
+                           conn--read-thing-arg-sign nil)))))
+        (body)))))
+
+(cl-defmethod conn--read-thing-loop-body ((command (head conn-dispatch-command)))
+  (pcase-let ((`(,_ ,thing ,finder ,default-action)
+               command))
+    (setq conn--read-thing-command thing)
+    (setq conn--dispatch-target-finder finder)
+    (when (null conn--dispatch-action)
+      (setq conn--dispatch-action
+            (conn-action (or default-action
+                             (conn--dispatch-default-action thing)))))))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql kapply)))
+  (throw 'kapply-continuation
+         (let ((wconf (current-window-configuration))
+               (continuation (conn--dispatch-continuation)))
+           (conn--with-state (conn-enter-state conn-previous-state)
+             (conn-dispatch-kapply-prefix
+              (lambda (kapply)
+                (setq conn--dispatch-action kapply)
+                (set-window-configuration wconf)
+                (funcall continuation)))))))
+
+(cl-defmethod conn--read-thing-loop-body ((_command (eql repeat-dispatch)))
+  (setq conn--dispatch-repeat (not conn--dispatch-repeat)))
+
+(cl-defmethod conn--read-thing-loop-body
+  ((_command (eql help))
+   &context (conn-current-state (conn-substate conn-read-dispatch-state)))
+  (let ((conn--read-thing-command-keys nil))
+    (conn--read-thing-loop-body
+     (condition-case _
+         (intern
+          (completing-read
+           "Command: "
+           (lambda (string pred action)
+             (if (eq action 'metadata)
+                 `(metadata
+                   ,(cons 'affixation-function
+                          (conn--dispatch-make-command-affixation))
+                   (category . conn-dispatch-command))
+               (complete-with-action action obarray string pred)))
+           (lambda (sym)
+             (pcase sym
+               ('help)
+               ((pred functionp)
+                (or (get sym :conn-command-thing)
+                    (conn--action-type-p sym)))
+               (`(,cmd ,_ . ,_)
+                (or (get cmd :conn-mark-handler)
+                    (get cmd 'forward-op)))))
+           t))
+       (quit nil)))))
 
 
 ;;;;; Dispatch window filtering
@@ -4180,7 +4188,7 @@ Returns a cons of (STRING . OVERLAYS)."
          ,@(cl-loop for arg in (drop 4 arglist)
                     collect `(,arg :mutable t)))
 
-       (cl-defmethod conn-action ((_type (eql ',name)))
+       (cl-defmethod conn-action ((_type (eql ,name)))
          (let ((instance
                 (oclosure-lambda (,name
                                   ,@(cl-loop for arg in (drop 4 arglist)
@@ -4190,6 +4198,14 @@ Returns a cons of (STRING . OVERLAYS)."
                   (,name window pt thing-cmd thing-arg ,@(drop 4 arglist)))))
            (conn-action-initialize instance)
            instance))
+
+       (cl-defmethod conn--read-thing-loop-body
+         ((type (eql ,name))
+          &context (conn-current-state (conn-substate conn-read-dispatch-state)))
+         (conn-action-cancel conn--dispatch-action)
+         (if (cl-typep conn--dispatch-action ',name)
+             (setq conn--dispatch-action nil)
+           (setq conn--dispatch-action (conn-action type))))
 
        ,(when description
           (cl-check-type description string
@@ -4977,11 +4993,6 @@ during target finding."
           (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
-(defun conn-dispatch-state (&optional initial-arg)
-  (interactive "P")
-  (catch 'kapply-continuation
-    (conn--dispatch-command-loop 'conn-perform-dispatch initial-arg)))
-
 (defun conn-perform-dispatch ( action finder thing-cmd thing-arg
                                &optional repeat)
   (pcase action
@@ -5042,10 +5053,15 @@ during target finding."
            (symbol-function 'conn-last-dispatch-at-mouse))
           conn-dispatch-repeat-count)))
 
+(defun conn-dispatch-state (&optional initial-arg)
+  (interactive "P")
+  (catch 'kapply-continuation
+    (conn--read-dispatch 'conn-perform-dispatch initial-arg)))
+
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
                (regions nil))
-    (conn--dispatch-command-loop
+    (conn--read-dispatch
      (lambda (action finder thing-cmd thing-arg repeat)
        (let ((win (selected-window))
              (conn-target-window-predicate conn-target-window-predicate)
@@ -5113,7 +5129,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   "Dispatch on buttons."
   (interactive)
   (conn-perform-dispatch
-   (conn-action 'conn-dispatch-push-button)
+   'conn-dispatch-push-button
    'conn--dispatch-all-buttons
    nil nil))
 
@@ -6746,7 +6762,7 @@ region after a `recursive-edit'."
     ('conn-dispatch-state
      (let ((conn-state-for-read-dispatch 'conn-read-transpose-state)
            (conn-dispatch-action-default 'conn-dispatch-transpose))
-       (conn--dispatch-command-loop 'conn-perform-dispatch)))
+       (conn--read-dispatch 'conn-perform-dispatch)))
     ((let 0 arg)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
