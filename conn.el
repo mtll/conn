@@ -3407,7 +3407,7 @@ of a command.")
                            (conn--read-thing-arg-value ctx)
                            repeat)))
 
-(defun conn--read-dispatch (context)
+(defun conn--read-dispatch-command-loop (context)
   (let ((success nil))
     (cl-letf (((symbol-function 'conn--dispatch-get-prefix-arg)
                (lambda ()
@@ -3425,6 +3425,14 @@ of a command.")
             (conn--read-thing-command-loop context))
         (unless success
           (conn-action-cancel (oref context action)))))))
+
+(defun conn-read-dispatch (&optional arg)
+  (conn--read-dispatch-command-loop
+   (make-conn--dispatch-ctx
+    :callback 'conn--perform-dispatch-callback
+    :prompt 'conn--dispatch-prompt-function
+    :arg (when arg (abs (prefix-numeric-value arg)))
+    :arg-sign (when arg (> 0 (prefix-numeric-value arg))))))
 
 (cl-defmethod conn--read-thing-command-case (command (ctx conn--dispatch-ctx))
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
@@ -3446,7 +3454,7 @@ of a command.")
               (lambda (kapply)
                 (setf (oref ctx action) kapply)
                 (set-window-configuration wconf)
-                (conn--read-dispatch ctx)))))))
+                (conn--read-dispatch-command-loop ctx)))))))
 
 (cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command))
                                              (ctx conn--dispatch-ctx))
@@ -4949,7 +4957,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p))
   (description :type function)
-  (repeat-count :mutable t))
+  (repeat-count :mutable t)
+  (state))
 
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
@@ -5028,14 +5037,16 @@ during target finding."
                         (format " <%s>" thing-arg)))))
     (setf (symbol-function 'conn-repeat-last-dispatch)
           (oclosure-lambda (conn-dispatch
+                            (state conn-current-state)
                             (repeat-count conn-dispatch-repeat-count)
                             (description description))
               (invert-repeat)
             (interactive "P")
             (cl-letf (((symbol-function 'conn-repeat-last-dispatch)))
-              (conn-perform-dispatch finder action
-                                     thing-cmd thing-arg
-                                     (xor invert-repeat repeat-count))))
+              (conn--with-state (conn-enter-state state)
+                (conn-perform-dispatch action finder
+                                       thing-cmd thing-arg
+                                       (xor invert-repeat repeat-count)))))
           (symbol-function 'conn-last-dispatch-at-mouse)
           (oclosure-lambda (conn-dispatch
                             (repeat-count conn-dispatch-repeat-count)
@@ -5069,17 +5080,12 @@ during target finding."
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
   (catch 'kapply-continuation
-    (conn--read-dispatch
-     (make-conn--dispatch-ctx
-      :callback 'conn--perform-dispatch-callback
-      :prompt 'conn--dispatch-prompt-function
-      :arg (when initial-arg (abs (prefix-numeric-value initial-arg)))
-      :arg-sign (> 0 (abs (prefix-numeric-value initial-arg)))))))
+    (conn-read-dispatch initial-arg)))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
                (regions nil))
-    (conn--read-dispatch
+    (conn--read-dispatch-command-loop
      (make-conn--dispatch-ctx
       :arg (when arg (abs (prefix-numeric-value arg)))
       :arg-sign (> 0 (abs (prefix-numeric-value arg)))
@@ -6785,12 +6791,7 @@ region after a `recursive-edit'."
     ('conn-dispatch-state
      (let ((conn-state-for-read-dispatch 'conn-read-transpose-state)
            (conn-dispatch-action-default 'conn-dispatch-transpose))
-       (conn--read-dispatch
-        (make-conn--dispatch-ctx
-         :arg (when arg (abs (prefix-numeric-value arg)))
-         :arg-sign (> 0 (abs (prefix-numeric-value arg)))
-         :callback 'conn--perform-dispatch-callback
-         :prompt 'conn--dispatch-prompt-function))))
+       (conn-read-dispatch arg)))
     ((let 0 arg)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
