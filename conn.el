@@ -1978,6 +1978,9 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn--state-command-loop-case (command continuation))
 
+(cl-defmethod conn--state-command-loop-case ((_command (eql nil)) _continuation)
+  nil)
+
 (cl-defmethod conn--state-command-loop-case (command continuation)
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
                        (when (symbolp command)
@@ -2114,7 +2117,7 @@ are read."
                                              (continuation conn--read-mover-continuation))
   (setf (oref continuation mark-flag) (not (oref continuation mark-flag))))
 
-(cl-defmethod conn--state-command-loop-case ((_command (eql help)) continuation)
+(defun conn--read-mover-command (continuation)
   (save-window-excursion
     (conn--state-command-loop-case
      (condition-case _
@@ -2135,6 +2138,13 @@ are read."
            t))
        (quit nil))
      continuation)))
+
+(cl-defmethod conn--state-command-loop-case ((_command (eql execute-extended-command))
+                                             continuation)
+  (conn--dispatch-read-command continuation))
+
+(cl-defmethod conn--state-command-loop-case ((_command (eql help)) continuation)
+  (conn--dispatch-read-command continuation))
 
 
 ;;;; Bounds of command
@@ -3481,13 +3491,12 @@ of a command.")
           (conn-action-cancel (oref continuation action)))))))
 
 (defun conn-read-dispatch (&optional arg)
-  (with-slots (action target-finder command arg repeat)
-      (conn--with-dispatch-command-loop
-       (oclosure-lambda (conn--dispatch-continuation
-                         (prompt 'conn--dispatch-prompt-function)
-                         (arg arg))
-           ()
-         (conn-perform-dispatch action target-finder command arg repeat)))))
+  (conn--with-dispatch-command-loop
+   (oclosure-lambda (conn--dispatch-continuation
+                     (prompt 'conn--dispatch-prompt-function)
+                     (arg arg))
+       ()
+     (conn-perform-dispatch action target-finder command arg repeat))))
 
 (cl-defmethod conn--state-command-loop-case (command
                                              (continuation conn--dispatch-continuation))
@@ -3514,8 +3523,7 @@ of a command.")
 
 (cl-defmethod conn--state-command-loop-case ((command (head conn-dispatch-command))
                                              (continuation conn--dispatch-continuation))
-  (pcase-let ((`(,_ ,thing ,finder ,default-action)
-               command))
+  (pcase-let ((`(,_ ,thing ,finder ,default-action) command))
     (setf (oref continuation command) thing
           (oref continuation target-finder) finder)
     (when (null (oref continuation action))
@@ -3527,32 +3535,40 @@ of a command.")
                                              (continuation conn--dispatch-continuation))
   (setf (oref continuation repeat) (not (oref continuation repeat))))
 
+(defun conn--dispatch-read-command (continuation)
+  (let ((conn--suspend-state-command-loop t))
+    (conn--state-command-loop-case
+     (condition-case _
+         (intern
+          (completing-read
+           "Command: "
+           (lambda (string pred action)
+             (if (eq action 'metadata)
+                 `(metadata
+                   ,(cons 'affixation-function
+                          (conn--dispatch-make-command-affixation))
+                   (category . conn-dispatch-command))
+               (complete-with-action action obarray string pred)))
+           (lambda (sym)
+             (pcase sym
+               ('help)
+               ((pred functionp)
+                (or (get sym :conn-command-thing)
+                    (conn--action-type-p sym)))
+               (`(,cmd ,_ . ,_)
+                (or (get cmd :conn-mark-handler)
+                    (get cmd 'forward-op)))))
+           t))
+       (quit nil))
+     continuation)))
+
 (cl-defmethod conn--state-command-loop-case ((_command (eql help))
                                              (continuation conn--dispatch-continuation))
-  (conn--state-command-loop-case
-   (condition-case _
-       (intern
-        (completing-read
-         "Command: "
-         (lambda (string pred action)
-           (if (eq action 'metadata)
-               `(metadata
-                 ,(cons 'affixation-function
-                        (conn--dispatch-make-command-affixation))
-                 (category . conn-dispatch-command))
-             (complete-with-action action obarray string pred)))
-         (lambda (sym)
-           (pcase sym
-             ('help)
-             ((pred functionp)
-              (or (get sym :conn-command-thing)
-                  (conn--action-type-p sym)))
-             (`(,cmd ,_ . ,_)
-              (or (get cmd :conn-mark-handler)
-                  (get cmd 'forward-op)))))
-         t))
-     (quit nil))
-   continuation))
+  (conn--dispatch-read-command continuation))
+
+(cl-defmethod conn--state-command-loop-case ((_command (eql execute-extended-command))
+                                             (continuation conn--dispatch-continuation))
+  (conn--dispatch-read-command continuation))
 
 
 ;;;;; Dispatch window filtering
