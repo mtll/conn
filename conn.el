@@ -3365,6 +3365,8 @@ of a command.")
 
 ;;;;; Dispatch command loop
 
+(defvar conn--dispatch-kapply nil)
+
 (cl-defstruct (conn--dispatch-ctx
                (:include conn--read-thing-common-ctx))
   action repeat target-finder)
@@ -3446,7 +3448,8 @@ of a command.")
                 (conn-action (conn--dispatch-default-action thing)))))
     (setf (oref ctx command-invalid) t)))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql kapply)) ctx)
+(cl-defmethod conn--read-thing-command-case ((_command (eql kapply)) ctx
+                                             &context (conn--dispatch-kapply (eql t)))
   (throw 'kapply-continuation
          (let ((wconf (current-window-configuration)))
            (conn--with-state (conn-enter-state conn-previous-state)
@@ -5079,8 +5082,9 @@ during target finding."
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (catch 'kapply-continuation
-    (conn-read-dispatch initial-arg)))
+  (let ((conn--dispatch-kapply t))
+    (catch 'kapply-continuation
+      (conn-read-dispatch initial-arg))))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
