@@ -1932,6 +1932,8 @@ themselves once the selection process has concluded."
 
 ;;;;; Read thing command loop
 
+(defvar conn--read-thing-suspend nil)
+
 (oclosure-define conn--read-thing-common-callback
   (command :mutable t)
   (command-invalid :mutable t)
@@ -1982,9 +1984,7 @@ themselves once the selection process has concluded."
                          (get command :conn-command-thing)))))
       (progn
         (setf this-command command
-              prefix-arg (when (oref cb arg)
-                           (* (if (oref cb arg-sign) -1 1)
-                              (oref cb arg))))
+              prefix-arg (conn--read-thing-arg-value cb))
         (letrec ((hook (lambda ()
                          (remove-hook 'post-command-hook hook)
                          (exit-recursive-edit))))
@@ -1996,17 +1996,27 @@ themselves once the selection process has concluded."
       (exit-recursive-edit)
     (setf (oref cb command-invalid) t)))
 
-(defun conn--read-thing-command-loop (callback)
-  (let* ((wconf (current-window-configuration))
+(defun conn--command-loop-setup-arg (callback)
+  (when (oref callback arg)
+    (let ((val (prefix-numeric-value (oref callback arg))))
+      (setf (oref callback arg-sign) (> 0 val)
+            (oref callback arg) (abs val)))))
+
+(defun conn--with-command-loop (callback)
+  (conn--command-loop-setup-arg callback)
+  (let* ((conn--read-thing-suspend nil)
+         (wconf (current-window-configuration))
          (case (lambda ()
-                 (setf (oref callback command-invalid) nil
-                       (oref callback command) this-command)
-                 (conn--read-thing-command-case this-command callback)
-                 (setq this-command 'ignore)
-                 (set-window-configuration wconf)))
+                 (unless conn--read-thing-suspend
+                   (setf (oref callback command-invalid) nil
+                         (oref callback command) this-command)
+                   (conn--read-thing-command-case this-command callback)
+                   (setq this-command 'ignore)
+                   (set-window-configuration wconf))))
          (message (lambda ()
-                    (message (funcall (oref callback prompt) callback)))))
-    (add-hook 'pre-command-hook case -95)
+                    (unless conn--read-thing-suspend
+                      (message (funcall (oref callback prompt) callback))))))
+    (add-hook 'pre-command-hook case -99)
     (add-hook 'post-command-hook message 90)
     (unwind-protect
         (recursive-edit)
@@ -2019,7 +2029,6 @@ themselves once the selection process has concluded."
 (defun conn-read-thing-mover (&optional arg recursive-edit)
   "Interactively read a thing command and arg.
 
-PROMPT is the prompt that will be displayed to the user.
 ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
@@ -2028,7 +2037,7 @@ are read."
     (conn--with-state (conn-enter-state
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
-      (conn--read-thing-command-loop
+      (conn--with-command-loop
        (oclosure-lambda (conn--read-mover-callback
                          (recursive-edit recursive-edit)
                          (mark-flag (region-active-p))
@@ -2054,7 +2063,7 @@ are read."
     (conn--with-state (conn-enter-state
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
-      (conn--read-thing-command-loop
+      (conn--with-command-loop
        (oclosure-lambda (conn--read-mover-callback
                          (mark-flag (region-active-p))
                          (prompt 'conn--read-thing-prompt)
@@ -2071,36 +2080,30 @@ are read."
                  (cons (cons (region-beginning) (region-end))
                        (region-bounds)))))))))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument))
-                                             cb)
+(cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument)) cb)
   (let ((digit (- (logand (elt (this-command-keys) 0) ?\177) ?0)))
     (setf (oref cb arg) (if (integerp (oref cb arg))
-                             (+ (* 10 (oref cb arg)) digit)
-                           digit))))
+                            (+ (* 10 (oref cb arg)) digit)
+                          digit))))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql forward-delete-arg))
-                                             cb)
+(cl-defmethod conn--read-thing-command-case ((_command (eql forward-delete-arg)) cb)
   (setf (oref cb arg) (mod (oref cb arg)
-                            (expt 10 (floor (log (oref cb arg) 10))))))
+                           (expt 10 (floor (log (oref cb arg) 10))))))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql backward-delete-arg))
-                                             cb)
+(cl-defmethod conn--read-thing-command-case ((_command (eql backward-delete-arg)) cb)
   (setf (oref cb arg) (floor (oref cb arg) 10)))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql reset-arg))
-                                             cb)
+(cl-defmethod conn--read-thing-command-case ((_command (eql reset-arg)) cb)
   (setf (oref cb arg) nil))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql negative-argument))
-                                             cb)
+(cl-defmethod conn--read-thing-command-case ((_command (eql negative-argument)) cb)
   (setf (oref cb arg-sign) (not (oref cb arg-sign))))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql keyboard-quit))
-                                             _cb)
+(cl-defmethod conn--read-thing-command-case ((_command (eql keyboard-quit)) _cb)
   (abort-recursive-edit))
 
-(cl-defmethod conn--read-thing-command-case
-  ((_command (eql conn-set-mark-command)) (cb conn--read-mover-callback))
+(cl-defmethod conn--read-thing-command-case ((_command (eql conn-set-mark-command))
+                                             (cb conn--read-mover-callback))
   (setf (oref cb mark-flag) (not (oref cb mark-flag))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql help)) cb)
@@ -3451,33 +3454,32 @@ of a command.")
                   'face 'error)
                "")))))
 
-(defun conn--read-dispatch-command-loop (context)
+(defun conn--with-dispatch-command-loop (callback)
   (let ((success nil))
     (cl-letf (((symbol-function 'conn--dispatch-get-prefix-arg)
                (lambda ()
-                 (prog1 (cond ((oref context arg)
-                               (* (oref context arg)
-                                  (if (oref context arg-sign) -1 1)))
-                              ((oref context arg-sign) '-))
-                   (setf (oref context arg) nil
-                         (oref context arg-sign) nil)))))
+                 (prog1 (cond ((oref callback arg)
+                               (* (oref callback arg)
+                                  (if (oref callback arg-sign) -1 1)))
+                              ((oref callback arg-sign) '-))
+                   (setf (oref callback arg) nil
+                         (oref callback arg-sign) nil)))))
       (unwind-protect
           (conn--with-state
               (conn-enter-state
                (or (conn--command-property :conn-read-dispatch-state)
                    conn-state-for-read-dispatch))
-            (prog1 (conn--read-thing-command-loop context)
+            (prog1 (conn--with-command-loop callback)
               (setq success t)))
         (unless success
-          (conn-action-cancel (oref context action)))))))
+          (conn-action-cancel (oref callback action)))))))
 
 (defun conn-read-dispatch (&optional arg)
   (with-slots (action target-finder command arg repeat)
-      (conn--read-dispatch-command-loop
+      (conn--with-dispatch-command-loop
        (oclosure-lambda (conn--dispatch-callback
                          (prompt 'conn--dispatch-prompt-function)
-                         (arg (when arg (abs (prefix-numeric-value arg))))
-                         (arg-sign (when arg (> 0 (prefix-numeric-value arg)))))
+                         (arg arg))
            ()
          (conn-perform-dispatch action target-finder command arg repeat)))))
 
@@ -3496,9 +3498,12 @@ of a command.")
 (cl-defmethod conn--read-thing-command-case ((_command (eql kapply))
                                              (cb conn--dispatch-callback))
   (conn--with-state (conn-enter-state conn-previous-state)
+    (setf conn--read-thing-suspend t)
     (conn-dispatch-kapply-prefix
      (lambda (kapply)
-       (setf (oref cb action) kapply)))))
+       (setf conn--read-thing-suspend nil
+             (oref cb command-invalid) nil
+             (oref cb action) kapply)))))
 
 (cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command))
                                              (cb conn--dispatch-callback))
@@ -5128,7 +5133,7 @@ during target finding."
 (defun conn-bounds-of-dispatch (_cmd arg)
   (let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
          (regions nil))
-    (conn--read-dispatch-command-loop
+    (conn--with-dispatch-command-loop
      (oclosure-lambda (conn--dispatch-callback
                        (arg (when arg (abs (prefix-numeric-value arg))))
                        (arg-sign (> 0 (abs (prefix-numeric-value arg))))
