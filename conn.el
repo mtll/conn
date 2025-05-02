@@ -1951,7 +1951,9 @@ themselves once the selection process has concluded."
     (* (if (oref continuation arg-sign) -1 1)
        (oref continuation arg))))
 
-(defun conn--read-mover-message-function (continuation)
+(cl-defgeneric conn--state-command-loop-message-function (continuation))
+
+(cl-defmethod conn--state-command-loop-message-function ((continuation conn--read-mover-continuation))
   (let ((prompt (substitute-command-keys
                  (concat (propertize "Thing Mover" 'face 'minibuffer-prompt)
                          " (arg: "
@@ -2009,10 +2011,9 @@ themselves once the selection process has concluded."
       (setf (oref continuation arg-sign) (> 0 val)
             (oref continuation arg) (abs val)))))
 
-(cl-defgeneric conn--with-state-command-loop (message-function continuation))
+(cl-defgeneric conn--with-state-command-loop (continuation))
 
-(cl-defmethod conn--with-state-command-loop (message-function
-                                             (continuation conn--state-command-loop-continuation))
+(cl-defmethod conn--with-state-command-loop ((continuation conn--state-command-loop-continuation))
   (conn--command-loop-setup-arg continuation)
   (let* ((conn--suspend-state-command-loop nil)
          (conn--state-command-loop-invalid nil)
@@ -2026,7 +2027,7 @@ themselves once the selection process has concluded."
                    (set-window-configuration wconf))))
          (message (lambda ()
                     (unless conn--suspend-state-command-loop
-                      (funcall message-function continuation)))))
+                      (conn--state-command-loop-message-function continuation)))))
     (add-hook 'pre-command-hook case -99)
     (add-hook 'post-command-hook message 90)
     (unwind-protect
@@ -2049,7 +2050,6 @@ are read."
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
       (conn--with-state-command-loop
-       'conn--read-mover-message-function
        (oclosure-lambda (conn--read-mover-continuation
                          (recursive-edit recursive-edit)
                          (mark-flag (region-active-p))
@@ -2074,7 +2074,6 @@ are read."
                        (or (conn--command-property :conn-read-state)
                            conn-state-for-read-mover))
       (conn--with-state-command-loop
-       'conn--read-mover-message-function
        (oclosure-lambda (conn--read-mover-continuation
                          (mark-flag (region-active-p))
                          (arg arg))
@@ -3445,7 +3444,7 @@ of a command.")
 (defun conn--dispatch-consume-prefix-arg ()
   (error "Function only available during dispatch command loop"))
 
-(defun conn--dispatch-message-function (continuation)
+(cl-defmethod conn--state-command-loop-message-function ((continuation conn--dispatch-continuation))
   (let ((prompt (substitute-command-keys
                  (concat (propertize "Targets" 'face 'minibuffer-prompt)
                          " (arg: "
@@ -3478,27 +3477,25 @@ of a command.")
                    'face 'error)
                 ""))))))
 
-(cl-defmethod conn--with-state-command-loop (_message-function
-                                             (continuation conn--dispatch-continuation))
-  (let ((success nil))
-    (cl-letf (((symbol-function 'conn--dispatch-consume-prefix-arg)
-               (lambda ()
-                 (prog1
-                     (conn--state-command-loop-arg continuation)
-                   (setf (oref continuation arg) nil
-                         (oref continuation arg-sign) nil)))))
-      (unwind-protect
-          (prog1 (cl-call-next-method)
-            (setq success t))
-        (unless success
-          (conn-action-cancel (oref continuation action)))))))
+(cl-defmethod conn--with-state-command-loop ((continuation conn--dispatch-continuation))
+  (cl-letf ((success nil)
+            ((symbol-function 'conn--dispatch-consume-prefix-arg)
+             (lambda ()
+               (prog1
+                   (conn--state-command-loop-arg continuation)
+                 (setf (oref continuation arg) nil
+                       (oref continuation arg-sign) nil)))))
+    (unwind-protect
+        (prog1 (cl-call-next-method)
+          (setq success t))
+      (unless success
+        (conn-action-cancel (oref continuation action))))))
 
 (defun conn-read-dispatch (&optional arg)
   (conn--with-state
       (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
                             conn-state-for-read-dispatch))
     (conn--with-state-command-loop
-     'conn--dispatch-message-function
      (oclosure-lambda (conn--dispatch-continuation
                        (arg arg))
          ()
@@ -5166,7 +5163,6 @@ during target finding."
         (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
                               conn-state-for-read-dispatch))
       (conn--with-state-command-loop
-       'conn--dispatch-message-function
        (oclosure-lambda (conn--dispatch-continuation
                          (arg arg))
            ()
