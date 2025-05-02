@@ -3371,6 +3371,12 @@ of a command.")
                (:include conn--read-thing-common-ctx))
   action repeat target-finder)
 
+(defmacro conn--dispatch-with-kapply (&rest body)
+  (declare (indent 0))
+  `(let ((conn--dispatch-kapply t))
+     (catch 'kapply-continuation
+       ,@body)))
+
 (defun conn--dispatch-get-prefix-arg ()
   (error "Function only available during dispatch command loop"))
 
@@ -3457,7 +3463,8 @@ of a command.")
               (lambda (kapply)
                 (setf (oref ctx action) kapply)
                 (set-window-configuration wconf)
-                (conn--read-dispatch-command-loop ctx)))))))
+                (conn--dispatch-with-kapply
+                  (conn--read-dispatch-command-loop ctx))))))))
 
 (cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command))
                                              (ctx conn--dispatch-ctx))
@@ -5082,9 +5089,8 @@ during target finding."
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (let ((conn--dispatch-kapply t))
-    (catch 'kapply-continuation
-      (conn-read-dispatch initial-arg))))
+  (conn--dispatch-with-kapply
+    (conn-read-dispatch initial-arg)))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
