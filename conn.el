@@ -1978,6 +1978,9 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn--state-command-loop-case (command continuation))
 
+(cl-defmethod conn--state-command-loop-case :extra "Invalid" (_command continuation)
+  (setf (oref continuation command-invalid) t))
+
 (cl-defmethod conn--state-command-loop-case ((_command (eql nil)) _continuation)
   nil)
 
@@ -1992,7 +1995,7 @@ themselves once the selection process has concluded."
                          (remove-hook 'post-command-hook hook)
                          (exit-recursive-edit))))
           (add-hook 'post-command-hook hook 89)))
-    (setf (oref continuation command-invalid) t)))
+    (cl-call-next-method)))
 
 (cl-defmethod conn--state-command-loop-case ((_cmd (eql recursive-edit))
                                              continuation)
@@ -2007,6 +2010,7 @@ themselves once the selection process has concluded."
             (oref continuation arg) (abs val)))))
 
 (defun conn--with-state-command-loop (continuation)
+  (cl-check-type continuation conn--state-command-loop-continuation)
   (conn--command-loop-setup-arg continuation)
   (let* ((conn--suspend-state-command-loop nil)
          (wconf (current-window-configuration))
@@ -3473,6 +3477,7 @@ of a command.")
                "")))))
 
 (defun conn--with-dispatch-command-loop (continuation)
+  (cl-check-type continuation conn--dispatch-continuation)
   (let ((success nil))
     (cl-letf (((symbol-function 'conn--dispatch-consume-prefix-arg)
                (lambda ()
@@ -3509,17 +3514,17 @@ of a command.")
           (setf (oref continuation action)
                 (conn-action (conn--dispatch-default-action thing))))
         (exit-recursive-edit))
-    (setf (oref continuation command-invalid) t)))
+    (cl-call-next-method)))
 
 (cl-defmethod conn--state-command-loop-case ((_command (eql kapply))
                                              (continuation conn--dispatch-continuation))
   (conn--with-state (conn-enter-state conn-previous-state)
     (setf conn--suspend-state-command-loop t)
     (conn-dispatch-kapply-prefix
-     (lambda (kapply)
+     (lambda (kapply-action)
        (setf conn--suspend-state-command-loop nil
              (oref continuation command-invalid) nil
-             (oref continuation action) kapply)))))
+             (oref continuation action) kapply-action)))))
 
 (cl-defmethod conn--state-command-loop-case ((command (head conn-dispatch-command))
                                              (continuation conn--dispatch-continuation))
