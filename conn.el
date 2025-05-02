@@ -1932,12 +1932,16 @@ themselves once the selection process has concluded."
 
 ;;;;; Read thing command loop
 
-(cl-defstruct (conn--read-thing-common-ctx)
-  command command-invalid arg arg-sign callback prompt)
+(oclosure-define conn--read-thing-common-callback
+  (command :mutable t)
+  (command-invalid :mutable t)
+  (arg :mutable t)
+  (arg-sign :mutable t)
+  (prompt))
 
-(cl-defstruct (conn--read-mover-ctx
-               (:include conn--read-thing-common-ctx))
-  mark-flag)
+(oclosure-define (conn--read-mover-callback
+                  (:parent conn--read-thing-common-callback))
+  (mark-flag :mutable t))
 
 (defun conn--read-thing-arg-value (ctx)
   (when (oref ctx arg)
@@ -1951,8 +1955,15 @@ themselves once the selection process has concluded."
                        (when (symbolp command)
                          (get command :conn-command-thing)))))
       (progn
-        (setf (oref ctx command) command)
-        (exit-recursive-edit))
+        (setf this-command command
+              prefix-arg (when (oref ctx arg)
+                           (* (if (oref ctx arg-sign) -1 1)
+                              (oref ctx arg)))
+              (oref ctx command) command)
+        (letrec ((hook (lambda ()
+                         (remove-hook 'post-command-hook hook)
+                         (exit-recursive-edit))))
+          (add-hook 'post-command-hook hook 90)))
     (setf (oref ctx command-invalid) t)))
 
 (defun conn--read-thing-command-loop (context)
@@ -1972,7 +1983,8 @@ themselves once the selection process has concluded."
       (remove-hook 'pre-command-hook hook)
       (remove-hook 'post-command-hook message)
       (message nil))
-    (funcall (oref context callback) context)))
+    (setf (oref context arg) (conn--read-thing-arg-value context))
+    (funcall context)))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -1982,47 +1994,101 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command.  See `conn-dot-mode' for how bounds of `recursive-edit'
 are read."
-  (let ((prompt-fn
-         (lambda (ctx)
-           (let ((prompt (substitute-command-keys
-                          (concat (propertize prompt 'face 'minibuffer-prompt)
-                                  " (arg: "
-                                  (propertize "%s" 'face 'read-multiple-choice-face)
-                                  "; \\[reset-arg] reset arg; \\[help] commands"
-                                  (if recursive-edit
-                                      (concat "; \\[recursive-edit] "
-                                              "recursive edit)")
-                                    ")")
-                                  ": %s%s")))
-                 (mark-indicator
-                  (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
-             (format prompt
-                     (format (if (oref ctx arg) "%s%s" "[%s1]")
-                             (if (oref ctx arg-sign) "-" "")
-                             (oref ctx arg))
-                     (if (oref ctx mark-flag) mark-indicator "")
-                     (if (oref ctx command-invalid)
-                         (propertize
-                          (format " %s is not a valid thing command"
-                                  (oref ctx command))
-                          'face 'error)
-                       ""))))))
-    (conn--with-state (conn-enter-state
-                       (or (conn--command-property :conn-read-state)
-                           conn-state-for-read-mover))
-      (conn--read-thing-command-loop
-       (make-conn--read-mover-ctx
-        :mark-flag (region-active-p)
-        :callback (lambda (ctx)
-                    (unless (eq (oref ctx mark-flag) (region-active-p))
-                      (if (region-active-p)
-                          (deactivate-mark t)
-                        (push-mark nil t t)))
-                    (list (oref ctx command)
-                          (conn--read-thing-arg-value ctx)))
-        :prompt prompt-fn
-        :arg (when arg (abs (prefix-numeric-value arg)))
-        :arg-sign (> 0 (abs (prefix-numeric-value arg))))))))
+  (let* ((prompt-fn
+          (lambda (ctx)
+            (let ((prompt (substitute-command-keys
+                           (concat (propertize prompt 'face 'minibuffer-prompt)
+                                   " (arg: "
+                                   (propertize "%s" 'face 'read-multiple-choice-face)
+                                   "; \\[reset-arg] reset arg; \\[help] commands"
+                                   (if recursive-edit
+                                       (concat "; \\[recursive-edit] "
+                                               "recursive edit)")
+                                     ")")
+                                   ": %s%s")))
+                  (mark-indicator
+                   (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
+              (format prompt
+                      (format (if (oref ctx arg) "%s%s" "[%s1]")
+                              (if (oref ctx arg-sign) "-" "")
+                              (oref ctx arg))
+                      (if (oref ctx mark-flag) mark-indicator "")
+                      (if (oref ctx command-invalid)
+                          (propertize
+                           (format " %s is not a valid thing command"
+                                   (oref ctx command))
+                           'face 'error)
+                        ""))))))
+    (save-mark-and-excursion
+      (conn--with-state (conn-enter-state
+                         (or (conn--command-property :conn-read-state)
+                             conn-state-for-read-mover))
+        (conn--read-thing-command-loop
+         (oclosure-lambda (conn--read-mover-callback
+                           (mark-flag (region-active-p))
+                           (prompt prompt-fn)
+                           (arg (when arg (abs (prefix-numeric-value arg))))
+                           (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
+             ()
+           (unless (eq mark-flag (region-active-p))
+             (if (region-active-p)
+                 (deactivate-mark t)
+               (push-mark nil t t)))
+           (list command arg)))))))
+
+(defun conn-read-thing-region (prompt &optional arg recursive-edit)
+  "Interactively read a thing command and arg.
+
+PROMPT is the prompt that will be displayed to the user.
+ARG is the initial value for the arg to be returned.
+RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
+command.  See `conn-dot-mode' for how bounds of `recursive-edit'
+are read."
+  (let* ((prompt-fn
+          (lambda (ctx)
+            (let ((prompt (substitute-command-keys
+                           (concat (propertize prompt 'face 'minibuffer-prompt)
+                                   " (arg: "
+                                   (propertize "%s" 'face 'read-multiple-choice-face)
+                                   "; \\[reset-arg] reset arg; \\[help] commands"
+                                   (if recursive-edit
+                                       (concat "; \\[recursive-edit] "
+                                               "recursive edit)")
+                                     ")")
+                                   ": %s%s")))
+                  (mark-indicator
+                   (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
+              (format prompt
+                      (format (if (oref ctx arg) "%s%s" "[%s1]")
+                              (if (oref ctx arg-sign) "-" "")
+                              (oref ctx arg))
+                      (if (oref ctx mark-flag) mark-indicator "")
+                      (if (oref ctx command-invalid)
+                          (propertize
+                           (format " %s is not a valid thing command"
+                                   (oref ctx command))
+                           'face 'error)
+                        ""))))))
+    (save-mark-and-excursion
+      (conn--with-state (conn-enter-state
+                         (or (conn--command-property :conn-read-state)
+                             conn-state-for-read-mover))
+        (conn--read-thing-command-loop
+         (oclosure-lambda (conn--read-mover-callback
+                           (mark-flag (region-active-p))
+                           (prompt prompt-fn)
+                           (arg (when arg (abs (prefix-numeric-value arg))))
+                           (arg-sign (> 0 (abs (prefix-numeric-value arg)))))
+             ()
+           (unless (eq mark-flag (region-active-p))
+             (if (region-active-p)
+                 (deactivate-mark t)
+               (push-mark nil t t)))
+           (if-let* ((bounds-op (alist-get command conn-bounds-of-command-alist)))
+               (funcall bounds-op)
+             (cons (get command :conn-command-thing)
+                   (cons (cons (region-beginning) (region-end))
+                         (region-bounds))))))))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql digit-argument))
                                              ctx)
@@ -2053,7 +2119,7 @@ are read."
   (abort-recursive-edit))
 
 (cl-defmethod conn--read-thing-command-case
-  ((_command (eql conn-set-mark-command)) (ctx conn--read-mover-ctx))
+  ((_command (eql conn-set-mark-command)) (ctx conn--read-mover-callback))
   (setf (oref ctx mark-flag) (not (oref ctx mark-flag))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql help)) ctx)
@@ -2123,15 +2189,6 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
                                       conn-bounds-of-command-alist))
                          conn-bounds-of-command-default)
                      cmd arg)))))
-
-(defun conn-read-thing-region (prompt &optional arg)
-  "Interactively read a thing region from the user.
-
-See `conn-read-thing-mover' and `conn-bounds-of-command' for the region
-is read."
-  (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover prompt arg t)))
-    (cons (get cmd :conn-command-thing)
-          (conn-bounds-of-command cmd arg))))
 
 
 ;;;;; bounds-of-command providers
@@ -3372,17 +3429,11 @@ of a command.")
 
 ;;;;; Dispatch command loop
 
-(defvar conn--dispatch-kapply nil)
-
-(cl-defstruct (conn--dispatch-ctx
-               (:include conn--read-thing-common-ctx))
-  action repeat target-finder)
-
-(defmacro conn--dispatch-with-kapply (&rest body)
-  (declare (indent 0))
-  `(let ((conn--dispatch-kapply t))
-     (catch 'kapply-continuation
-       ,@body)))
+(oclosure-define (conn--dispatch-callback
+                  (:parent conn--read-thing-common-callback))
+  (action :mutable t)
+  (repeat :mutable t)
+  (target-finder :mutable t))
 
 (defun conn--dispatch-get-prefix-arg ()
   (error "Function only available during dispatch command loop"))
@@ -3414,14 +3465,6 @@ of a command.")
               (propertize "Not a valid thing command"
                           'face 'error)))))
 
-(defun conn--perform-dispatch-callback (ctx)
-  (with-slots (action target-finder command repeat) ctx
-    (conn-perform-dispatch action
-                           target-finder
-                           command
-                           (conn--read-thing-arg-value ctx)
-                           repeat)))
-
 (defun conn--read-dispatch-command-loop (context)
   (let ((success nil))
     (cl-letf (((symbol-function 'conn--dispatch-get-prefix-arg)
@@ -3437,20 +3480,22 @@ of a command.")
               (conn-enter-state
                (or (conn--command-property :conn-read-dispatch-state)
                    conn-state-for-read-dispatch))
-            (conn--read-thing-command-loop context)
-            (setq success t))
+            (prog1 (conn--read-thing-command-loop context)
+              (setq success t)))
         (unless success
           (conn-action-cancel (oref context action)))))))
 
 (defun conn-read-dispatch (&optional arg)
-  (conn--read-dispatch-command-loop
-   (make-conn--dispatch-ctx
-    :callback 'conn--perform-dispatch-callback
-    :prompt 'conn--dispatch-prompt-function
-    :arg (when arg (abs (prefix-numeric-value arg)))
-    :arg-sign (when arg (> 0 (prefix-numeric-value arg))))))
+  (with-slots (action target-finder command arg repeat)
+      (conn--read-dispatch-command-loop
+       (oclosure-lambda (conn--dispatch-callback
+                         (prompt 'conn--dispatch-prompt-function)
+                         (arg (when arg (abs (prefix-numeric-value arg))))
+                         (arg-sign (when arg (> 0 (prefix-numeric-value arg)))))
+           ()
+         (conn-perform-dispatch action target-finder command arg repeat)))))
 
-(cl-defmethod conn--read-thing-command-case (command (ctx conn--dispatch-ctx))
+(cl-defmethod conn--read-thing-command-case (command (ctx conn--dispatch-callback))
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
                        (when (symbolp command)
                          (get command :conn-command-thing)))))
@@ -3463,15 +3508,15 @@ of a command.")
         (exit-recursive-edit))
     (setf (oref ctx command-invalid) t)))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql kapply)) ctx
-                                             &context (conn--dispatch-kapply (eql t)))
+(cl-defmethod conn--read-thing-command-case ((_command (eql kapply))
+                                             (ctx conn--dispatch-callback))
   (conn--with-state (conn-enter-state conn-previous-state)
     (conn-dispatch-kapply-prefix
      (lambda (kapply)
        (setf (oref ctx action) kapply)))))
 
 (cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command))
-                                             (ctx conn--dispatch-ctx))
+                                             (ctx conn--dispatch-callback))
   (pcase-let ((`(,_ ,thing ,finder ,default-action)
                command))
     (setf (oref ctx command) thing
@@ -3481,11 +3526,12 @@ of a command.")
             (conn-action (or default-action
                              (conn--dispatch-default-action thing)))))))
 
-(cl-defmethod conn--read-thing-command-case ((_command (eql repeat-dispatch)) ctx)
+(cl-defmethod conn--read-thing-command-case ((_command (eql repeat-dispatch))
+                                             (ctx conn--dispatch-callback))
   (setf (oref ctx repeat) (not (oref ctx repeat))))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql help))
-                                             (ctx conn--dispatch-ctx))
+                                             (ctx conn--dispatch-callback))
   (conn--read-thing-command-case
    (condition-case _
        (intern
@@ -4215,7 +4261,7 @@ Returns a cons of (STRING . OVERLAYS)."
            instance))
 
        (cl-defmethod conn--read-thing-command-case ((type (eql ,name))
-                                                    (ctx conn--dispatch-ctx))
+                                                    (ctx conn--dispatch-callback))
          (conn-action-cancel (oref ctx action))
          (if (cl-typep (oref ctx action) ',name)
              (setf (oref ctx action) nil)
@@ -5092,38 +5138,33 @@ during target finding."
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn--dispatch-with-kapply
-    (conn-read-dispatch initial-arg)))
+  (conn-read-dispatch initial-arg))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
-  (pcase-let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
-               (regions nil))
+  (let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
+         (regions nil))
     (conn--read-dispatch-command-loop
-     (make-conn--dispatch-ctx
-      :arg (when arg (abs (prefix-numeric-value arg)))
-      :arg-sign (> 0 (abs (prefix-numeric-value arg)))
-      :prompt 'conn--dispatch-prompt-function
-      :callback
-      (lambda (ctx)
-        (with-slots (action target-finder command repeat) ctx
-          (let ((win (selected-window))
-                (conn-target-window-predicate conn-target-window-predicate)
-                (conn-target-sort-function conn-target-sort-function)
-                (conn-dispatch-repeat-count (when repeat 0)))
-            (add-function :before-while conn-target-window-predicate
-                          (lambda (window) (eq win window)))
-            (catch 'end
-              (while
-                  (prog1 repeat
-                    (pcase-let ((`(,pt ,window ,thing-override)
-                                 (conn-dispatch--select-target target-finder))
-                                (mark-active nil))
-                      (funcall action window pt
-                               (or thing-override command)
-                               (conn--read-thing-arg-value ctx))
-                      (push (cons (region-beginning) (region-end)) regions)))
-                (cl-incf conn-dispatch-repeat-count)))
-            (unless regions (keyboard-quit)))))))
+     (oclosure-lambda (conn--dispatch-callback
+                       (arg (when arg (abs (prefix-numeric-value arg))))
+                       (arg-sign (> 0 (abs (prefix-numeric-value arg))))
+                       (prompt 'conn--dispatch-prompt-function))
+         ()
+       (let ((win (selected-window))
+             (conn-target-window-predicate conn-target-window-predicate)
+             (conn-target-sort-function conn-target-sort-function)
+             (conn-dispatch-repeat-count (when repeat 0)))
+         (add-function :before-while conn-target-window-predicate
+                       (lambda (window) (eq win window)))
+         (catch 'end
+           (while
+               (prog1 repeat
+                 (pcase-let ((`(,pt ,window ,thing-override)
+                              (conn-dispatch--select-target target-finder))
+                             (mark-active nil))
+                   (funcall action window pt (or thing-override command) arg)
+                   (push (cons (region-beginning) (region-end)) regions)))
+             (cl-incf conn-dispatch-repeat-count)))
+         (unless regions (keyboard-quit)))))
     (cl-loop for (b . e) in (compat-call sort
                                          (conn--merge-regions regions t)
                                          :key #'car :in-place t)
