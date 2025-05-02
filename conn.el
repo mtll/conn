@@ -1950,21 +1950,28 @@ themselves once the selection process has concluded."
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
                        (when (symbolp command)
                          (get command :conn-command-thing)))))
-      (setf (oref ctx command) command)
+      (progn
+        (setf (oref ctx command) command)
+        (exit-recursive-edit))
     (setf (oref ctx command-invalid) t)))
 
 (defun conn--read-thing-command-loop (context)
-  (unwind-protect
-      (progn
-        (while (not (oref context command))
-          (setf (oref context command-keys) (read-key-sequence
-                                             (funcall (oref context prompt) context))
-                (oref context command-invalid) nil)
-          (conn--read-thing-command-case
-           (key-binding (oref context command-keys) t)
-           context))
-        (funcall (oref context callback) context))
-    (message nil)))
+  (let* ((wconf (current-window-configuration))
+         (hook (lambda ()
+                 (setf (oref context command-keys) (this-command-keys)
+                       (oref context command-invalid) nil)
+                 (conn--read-thing-command-case this-command context)
+                 (set-window-configuration wconf)))
+         (message (lambda ()
+                    (message (funcall (oref context prompt) context)))))
+    (add-hook 'pre-command-hook hook -95)
+    (add-hook 'post-command-hook message 90)
+    (unwind-protect
+        (recursive-edit)
+      (remove-hook 'pre-command-hook hook)
+      (remove-hook 'post-command-hook message)
+      (message nil))
+    (funcall (oref context callback) context)))
 
 (defun conn-read-thing-mover (prompt &optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -2042,7 +2049,7 @@ are read."
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql keyboard-quit))
                                              _ctx)
-  (keyboard-quit))
+  (abort-recursive-edit))
 
 (cl-defmethod conn--read-thing-command-case
   ((_command (eql conn-set-mark-command)) (ctx conn--read-mover-ctx))
@@ -3430,7 +3437,8 @@ of a command.")
               (conn-enter-state
                (or (conn--command-property :conn-read-dispatch-state)
                    conn-state-for-read-dispatch))
-            (conn--read-thing-command-loop context))
+            (conn--read-thing-command-loop context)
+            (setq success t))
         (unless success
           (conn-action-cancel (oref context action)))))))
 
@@ -3451,20 +3459,16 @@ of a command.")
               (oref ctx target-finder) (conn--dispatch-target-finder command))
         (when (null (oref ctx action))
           (setf (oref ctx action)
-                (conn-action (conn--dispatch-default-action thing)))))
+                (conn-action (conn--dispatch-default-action thing))))
+        (exit-recursive-edit))
     (setf (oref ctx command-invalid) t)))
 
 (cl-defmethod conn--read-thing-command-case ((_command (eql kapply)) ctx
                                              &context (conn--dispatch-kapply (eql t)))
-  (throw 'kapply-continuation
-         (let ((wconf (current-window-configuration)))
-           (conn--with-state (conn-enter-state conn-previous-state)
-             (conn-dispatch-kapply-prefix
-              (lambda (kapply)
-                (setf (oref ctx action) kapply)
-                (set-window-configuration wconf)
-                (conn--dispatch-with-kapply
-                  (conn--read-dispatch-command-loop ctx))))))))
+  (conn--with-state (conn-enter-state conn-previous-state)
+    (conn-dispatch-kapply-prefix
+     (lambda (kapply)
+       (setf (oref ctx action) kapply)))))
 
 (cl-defmethod conn--read-thing-command-case ((command (head conn-dispatch-command))
                                              (ctx conn--dispatch-ctx))
