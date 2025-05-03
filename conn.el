@@ -3455,24 +3455,6 @@ of a command.")
         (conn--state-command-loop-exit))
     (cl-call-next-method)))
 
-(cl-defmethod conn--dispatch-command-case ((_command (eql kapply)) continuation)
-  (if (cl-typep (oref continuation action) 'conn-dispatch-kapply)
-      (setf (oref continuation action) nil)
-    (letrec ((wconf (current-window-configuration))
-             (setup (lambda ()
-                      (conn--with-state (conn-enter-state conn-previous-state)
-                        (conn-dispatch-kapply-prefix
-                         (lambda (kapply-action)
-                           (setf (oref continuation action) kapply-action))))
-                      (remove-hook 'post-command-hook setup))))
-      (add-hook 'post-command-hook setup -99)
-      (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
-      (unwind-protect
-          (recursive-edit)
-        (set-window-configuration wconf)
-        (remove-hook 'post-command-hook setup)
-        (remove-hook 'transient-post-exit-hook 'exit-recursive-edit)))))
-
 (cl-defmethod conn--dispatch-command-case ((command (head conn-dispatch-command))
                                            continuation)
   (pcase-let ((`(,_ ,thing ,finder ,default-action) command))
@@ -3881,7 +3863,7 @@ Target overlays may override this default by setting the
                         (labels nil (mapc #'conn-label-delete labels)))
     (pcase-dolist (`(,window . ,targets) conn-targets)
       (setq targets (seq-sort conn-target-sort-function targets))
-      (with-current-buffer (window-buffer window)
+      (with-selected-window window
         (conn--dispatch-window-lines window)
         (let ((window-pixelwise
                (funcall conn-pixelwise-labels-window-predicate window targets)))
