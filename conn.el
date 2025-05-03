@@ -1906,41 +1906,12 @@ themselves once the selection process has concluded."
         (mapc #'conn-label-delete labels))))))
 
 
-;;;; Read Things
-
-;;;;; Read mover state
-
-(defvar-local conn-state-for-read-mover 'conn-read-mover-state)
-
-(conn-define-state conn-read-mover-state (conn-read-thing-common-state)
-  "A state for reading things."
-  :lighter " MOVER")
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-read-mover-state)
-  "DEL" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
-  "M-DEL" 'reset-arg
-  "M-<backspace>" 'reset-arg
-  "<remap> <conn-forward-char>" 'forward-char
-  "<remap> <conn-backward-char>" 'backward-char
-  "C-h" 'help
-  "," (conn-remap-key "<conn-thing-map>")
-  "r" 'recursive-edit)
-
-(put 'reset-arg :advertised-binding (key-parse "M-DEL"))
-
-;;;;; Read thing command loop
+;;;; State command loops
 
 (oclosure-define conn--state-command-loop-continuation
   (command :mutable t)
   (arg :mutable t)
   (arg-sign :mutable t))
-
-(oclosure-define (conn--read-mover-continuation
-                  (:parent conn--state-command-loop-continuation))
-  (recursive-edit)
-  (mark-flag :mutable t))
 
 (defun conn--state-command-loop-arg (continuation)
   (when (oref continuation arg)
@@ -1953,39 +1924,14 @@ themselves once the selection process has concluded."
 (defun conn--state-command-loop-abort ()
   (keyboard-quit))
 
-(defun conn--read-mover-message (continuation)
-  (let ((prompt (substitute-command-keys
-                 (concat (propertize "Thing Mover" 'face 'minibuffer-prompt)
-                         " (arg: "
-                         (propertize "%s" 'face 'read-multiple-choice-face)
-                         "; \\[reset-arg] reset arg; \\[help] commands"
-                         (if (oref continuation recursive-edit)
-                             (concat "; \\[recursive-edit] "
-                                     "recursive edit)")
-                           ")")
-                         ": %s%s")))
-        (mark-indicator
-         (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
-    (format prompt
-            (format (if (oref continuation arg) "%s%s" "[%s1]")
-                    (if (oref continuation arg-sign) "-" "")
-                    (oref continuation arg))
-            (if (oref continuation mark-flag) mark-indicator "")
-            (if (eq (oref continuation command) :invalid-command)
-                (propertize "invalid command" 'face 'error)
-              ""))))
-
-(defun conn--command-loop-setup-arg (continuation)
-  (when (oref continuation arg)
-    (let ((val (prefix-numeric-value (oref continuation arg))))
-      (setf (oref continuation arg-sign) (> 0 val)
-            (oref continuation arg) (abs val)))))
-
 (cl-defgeneric conn--with-state-command-loop (continuation case-function message-function))
 
 (cl-defmethod conn--with-state-command-loop ((continuation conn--state-command-loop-continuation)
                                              case-function message-function)
-  (conn--command-loop-setup-arg continuation)
+  (when (oref continuation arg)
+    (let ((val (prefix-numeric-value (oref continuation arg))))
+      (setf (oref continuation arg-sign) (> 0 val)
+            (oref continuation arg) (abs val))))
   (catch 'conn-exit
     (while t
       (pcase (setf (oref continuation command)
@@ -2016,6 +1962,60 @@ themselves once the selection process has concluded."
   (message nil)
   (setf (oref continuation arg) (conn--state-command-loop-arg continuation))
   (funcall continuation))
+
+
+;;;; Read Things
+
+;;;;; Read mover state
+
+(defvar-local conn-state-for-read-mover 'conn-read-mover-state)
+
+(conn-define-state conn-read-mover-state (conn-read-thing-common-state)
+  "A state for reading things."
+  :lighter " MOVER")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-read-mover-state)
+  "DEL" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
+  "C-h" 'help
+  "," (conn-remap-key "<conn-thing-map>")
+  "r" 'recursive-edit)
+
+(put 'reset-arg :advertised-binding (key-parse "M-DEL"))
+
+;;;;; Read thing command loop
+
+(oclosure-define (conn--read-mover-continuation
+                  (:parent conn--state-command-loop-continuation))
+  (recursive-edit)
+  (mark-flag :mutable t))
+
+(defun conn--read-mover-message (continuation)
+  (let ((prompt (substitute-command-keys
+                 (concat (propertize "Thing Mover" 'face 'minibuffer-prompt)
+                         " (arg: "
+                         (propertize "%s" 'face 'read-multiple-choice-face)
+                         "; \\[reset-arg] reset arg; \\[help] commands"
+                         (if (oref continuation recursive-edit)
+                             (concat "; \\[recursive-edit] "
+                                     "recursive edit)")
+                           ")")
+                         ": %s%s")))
+        (mark-indicator
+         (propertize "Mark Active" 'face 'eldoc-highlight-function-argument)))
+    (format prompt
+            (format (if (oref continuation arg) "%s%s" "[%s1]")
+                    (if (oref continuation arg-sign) "-" "")
+                    (oref continuation arg))
+            (if (oref continuation mark-flag) mark-indicator "")
+            (if (eq (oref continuation command) :invalid-command)
+                (propertize "invalid command" 'face 'error)
+              ""))))
 
 (defun conn-read-thing-mover (&optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -3438,18 +3438,6 @@ of a command.")
       (unless success
         (conn-action-cancel (oref continuation action))))))
 
-(defun conn-read-dispatch (&optional arg)
-  (conn--with-state
-      (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
-                            conn-state-for-read-dispatch))
-    (conn--with-state-command-loop
-     (oclosure-lambda (conn--dispatch-continuation
-                       (arg arg))
-         ()
-       (conn-perform-dispatch action target-finder command arg repeat))
-     'conn--dispatch-command-case
-     'conn--dispatch-message)))
-
 (cl-defmethod conn--dispatch-command-case :extra "Invalid" (_command continuation)
   (setf (oref continuation command) :invalid-command))
 
@@ -3529,6 +3517,18 @@ of a command.")
 (cl-defmethod conn--dispatch-command-case ((_command (eql execute-extended-command))
                                            continuation)
   (conn--dispatch-read-command continuation))
+
+(defun conn-read-dispatch (&optional arg)
+  (conn--with-state
+      (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
+                            conn-state-for-read-dispatch))
+    (conn--with-state-command-loop
+     (oclosure-lambda (conn--dispatch-continuation
+                       (arg arg))
+         ()
+       (conn-perform-dispatch action target-finder command arg repeat))
+     'conn--dispatch-command-case
+     'conn--dispatch-message)))
 
 
 ;;;;; Dispatch window filtering
