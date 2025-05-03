@@ -2038,7 +2038,7 @@ are read."
              (deactivate-mark t)
            (push-mark nil t t)))
        (list command arg))
-     'conn--read-mover-case
+     'conn--read-mover-command-case
      'conn--read-mover-message)))
 
 (defun conn-read-thing-region (&optional arg)
@@ -2046,33 +2046,35 @@ are read."
     (cons (get cmd :conn-command-thing)
           (conn-bounds-of-command cmd arg))))
 
-(cl-defgeneric conn--read-mover-case (command continuation))
+(cl-defgeneric conn--read-mover-command-case (command continuation))
 
-(cl-defmethod conn--read-mover-case :extra "Invalid" (_command continuation)
+(cl-defmethod conn--read-mover-command-case :extra "Invalid" (_command continuation)
   (setf (oref continuation command) :invalid-command))
 
-(cl-defmethod conn--read-mover-case (command _continuation)
+(cl-defmethod conn--read-mover-command-case (command _continuation)
   (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
                        (when (symbolp command)
                          (get command :conn-command-thing)))))
       (conn--state-command-loop-exit)
     (cl-call-next-method)))
 
-(cl-defmethod conn--read-mover-case ((_command (eql nil)) _continuation)
+(cl-defmethod conn--read-mover-command-case ((_command (eql nil))
+                                             _continuation)
   nil)
 
-(cl-defmethod conn--read-mover-case ((_cmd (eql recursive-edit)) continuation)
+(cl-defmethod conn--read-mover-command-case ((_cmd (eql recursive-edit))
+                                             continuation)
   (if (oref continuation recursive-edit)
       (exit-recursive-edit)
     (setf (oref continuation command) :invalid-command)))
 
-(cl-defmethod conn--read-mover-case ((_command (eql conn-set-mark-command))
-                                     continuation)
+(cl-defmethod conn--read-mover-command-case ((_command (eql conn-set-mark-command))
+                                             continuation)
   (setf (oref continuation mark-flag) (not (oref continuation mark-flag))))
 
 (defun conn--read-mover-command (continuation)
   (save-window-excursion
-    (conn--state-command-loop-case
+    (conn--read-mover-command-case
      (condition-case _
          (intern
           (completing-read
@@ -2092,11 +2094,11 @@ are read."
        (quit nil))
      continuation)))
 
-(cl-defmethod conn--read-mover-case ((_command (eql execute-extended-command))
-                                     continuation)
+(cl-defmethod conn--read-mover-command-case ((_command (eql execute-extended-command))
+                                             continuation)
   (conn--dispatch-read-command continuation))
 
-(cl-defmethod conn--read-mover-case ((_command (eql help)) continuation)
+(cl-defmethod conn--read-mover-command-case ((_command (eql help)) continuation)
   (conn--dispatch-read-command continuation))
 
 
@@ -3485,7 +3487,7 @@ of a command.")
   (setf (oref continuation repeat) (not (oref continuation repeat))))
 
 (defun conn--dispatch-read-command (continuation)
-  (conn--state-command-loop-case
+  (conn--dispatch-command-case
    (setf (oref continuation command)
          (condition-case _
              (intern
@@ -4233,8 +4235,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (conn-action-initialize instance)
            instance))
 
-       (cl-defmethod conn--state-command-loop-case ((type (eql ,name))
-                                                    (continuation conn--dispatch-continuation))
+       (cl-defmethod conn--dispatch-command-case ((type (eql ,name)) continuation)
          (conn-action-cancel (oref continuation action))
          (if (cl-typep (oref continuation action) ',name)
              (setf (oref continuation action) nil)
