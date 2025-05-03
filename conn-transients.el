@@ -313,7 +313,7 @@ Begins the keyboard macro by deleting the string at each match."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`((,beg . ,end) . ,regions)
-                 (cdr (conn-read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region)))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -345,7 +345,7 @@ Begins the keyboard macro in `conn-insert-state'."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`((,beg . ,end) . ,regions)
-                 (cdr (conn-read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region)))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -376,7 +376,7 @@ Begins the keyboard macro in `conn-command-state'."
   (conn--kapply-compose-iterator
    (pcase-let* ((delimited (oref transient-current-prefix scope))
                 (`((,beg . ,end) . ,regions)
-                 (cdr (conn-read-thing-region "Define Region")))
+                 (cdr (conn-read-thing-region)))
                 (string (filter-buffer-substring
                          (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -481,7 +481,7 @@ Begins the keyboard macro in `conn-command-state'."
   (deactivate-mark)
   (pcase-let* ((delimited (oref transient-current-prefix scope))
                (`((,beg . ,end) . ,regions)
-                (cdr (conn-read-thing-region "Define Region")))
+                (cdr (conn-read-thing-region)))
                (conn-query-flag conn-query-flag)
                (string (minibuffer-with-setup-hook
                            (lambda ()
@@ -517,7 +517,7 @@ Begins the keyboard macro in `conn-command-state'."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((delimited (oref transient-current-prefix scope))
                (`((,beg . ,end) . ,regions)
-                (cdr (conn-read-thing-region "Define Region")))
+                (cdr (conn-read-thing-region)))
                (conn-query-flag conn-query-flag)
                (regexp (minibuffer-with-setup-hook
                            (lambda ()
@@ -738,7 +738,7 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,beg . ,end)
                (when (alist-get :in-thing args)
-                 (nth 1 (conn-read-thing-region "Thing Mover")))))
+                 (nth 1 (conn-read-thing-region)))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
