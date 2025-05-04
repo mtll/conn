@@ -673,58 +673,62 @@ A zero means repeat until error."
         (success nil))
     (unwind-protect
         (progn
-          (conn-with-dispatch-event-handler
-              ((lambda ()
-                 (when (> conn-dispatch-repeat-count 0)
-                   (concat (propertize "RET" 'face 'read-multiple-choice-face)
-                           (propertize " to finish repeating"
-                                       'face 'minibuffer-prompt))))
-               (or 'return 13)
-               (if (> conn-dispatch-repeat-count 0)
-                   (conn-dispatch-handle-event)
-                 (conn-dispatch-ignore-event)))
-            (while
-                (prog1 repeat
-                  (conn-with-dispatch-event-handler
-                      ((lambda ()
-                         (when targets
-                           (concat (propertize "C-/" 'face 'read-multiple-choice-face)
-                                   (propertize " to undo" 'face 'minibuffer-prompt))))
-                       (and ?\C-/
-                            (let (and (pred identity) to-delete)
-                              (car targets)))
-                       (pulse-momentary-highlight-region (overlay-start to-delete)
-                                                         (overlay-end to-delete))
-                       (delete-overlay (pop targets))
-                       (conn-dispatch-handle-event))
-                    (let* ((target (conn-dispatch--select-target target-finder))
-                           (thing (or (overlay-get target 'thing) thing-cmd))
-                           (pt (overlay-start target))
-                           (end (overlay-end target))
-                           (win (overlay-get target 'window)))
-                      (delete-overlay target)
-                      (with-current-buffer (window-buffer win)
-                        (if-let* ((to-delete
-                                   (conn--overlays-at pt end win 'kapply-target)))
-                            (progn
-                              (setf targets (delq to-delete targets))
-                              (pulse-momentary-highlight-region
-                               (overlay-start to-delete)
-                               (overlay-end to-delete))
-                              (delete-overlay to-delete))
-                          (save-mark-and-excursion
-                            (goto-char pt)
-                            (pcase (car (conn-bounds-of-command thing thing-arg))
-                              (`(,beg . ,end)
-                               (let ((new (make-overlay beg end nil t)))
-                                 (overlay-put new 'category 'kapply-target)
-                                 (overlay-put new 'point (conn--create-marker pt nil t))
-                                 (overlay-put new 'face 'lazy-highlight)
-                                 (overlay-put new 'thing thing)
-                                 (overlay-put new 'window win)
-                                 (overlay-put new 'display nil)
-                                 (push new targets))))))))))
-              (setf conn-dispatch-repeat-count 1)))
+          (conn-with-dispatch-event-handlers
+              (((lambda ()
+                  (when (> conn-dispatch-repeat-count 0)
+                    (concat (propertize "RET" 'face 'read-multiple-choice-face)
+                            (propertize " finish"
+                                        'face 'minibuffer-prompt))))
+                (or 'return 13)
+                (if (> conn-dispatch-repeat-count 0)
+                    (conn-dispatch-handle-event)
+                  (conn-dispatch-ignore-event)))
+               ((lambda ()
+                  (when targets
+                    (concat (propertize "C-/" 'face 'read-multiple-choice-face)
+                            (propertize " undo" 'face 'minibuffer-prompt))))
+                (and ?\C-/
+                     (let (and (pred identity) to-delete)
+                       (car targets)))
+                (pulse-momentary-highlight-region (overlay-start to-delete)
+                                                  (overlay-end to-delete))
+                (delete-overlay (pop targets))
+                (conn-dispatch-handle-event)))
+            (while t
+              (conn-dispatch--select-target
+               target-finder
+               (lambda (target)
+                 (let* ((thing (or (overlay-get target 'thing) thing-cmd))
+                        (pt (overlay-start target))
+                        (end (overlay-end target))
+                        (win (overlay-get target 'window)))
+                   (with-current-buffer (window-buffer win)
+                     (if-let* ((to-delete
+                                (conn--overlays-at pt end win 'kapply-target)))
+                         (progn
+                           (setf targets (delq to-delete targets))
+                           (overlay-put target 'hide nil)
+                           (pulse-momentary-highlight-region
+                            (overlay-start to-delete)
+                            (overlay-end to-delete))
+                           (delete-overlay to-delete))
+                       (overlay-put target 'hide t)
+                       (overlay-put target 'display nil)
+                       (overlay-put target 'after-string nil)
+                       (save-mark-and-excursion
+                         (goto-char pt)
+                         (pcase (car (conn-bounds-of-command thing thing-arg))
+                           (`(,beg . ,end)
+                            (let ((new (make-overlay beg end nil t)))
+                              (overlay-put new 'category 'kapply-target)
+                              (overlay-put new 'point (conn--create-marker pt nil t))
+                              (overlay-put new 'face 'lazy-highlight)
+                              (overlay-put new 'thing thing)
+                              (overlay-put new 'window win)
+                              (overlay-put new 'display nil)
+                              (push new targets))))))))
+                 (setf conn-dispatch-repeat-count (length targets))
+                 repeat))))
           (setf conn-dispatch-repeat-count 0)
           (dolist (target (reverse targets))
             (let ((pt (overlay-get target 'point))

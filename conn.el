@@ -1722,11 +1722,12 @@ returned.")
   (pcase-let (((cl-struct conn-dispatch-label string overlay target-overlay)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (overlay-put target-overlay 'display
-                   (propertize (buffer-substring
-                                (overlay-start target-overlay)
-                                (overlay-end target-overlay))
-                               'face 'conn-target-overlay-face))
+      (unless (overlay-get target-overlay 'hide)
+        (overlay-put target-overlay 'display
+                     (propertize (buffer-substring
+                                  (overlay-start target-overlay)
+                                  (overlay-end target-overlay))
+                                 'face 'conn-target-overlay-face)))
       (funcall (overlay-get overlay 'setup-fn) string))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
@@ -3902,7 +3903,7 @@ Target overlays may override this default by setting the
                     labels))))))
     labels))
 
-(defun conn-dispatch--select-target (finder)
+(defun conn-dispatch--select-target (finder &optional collector)
   (conn-delete-targets)
   (conn-with-dispatch-event-handler
       (nil
@@ -3922,6 +3923,7 @@ Target overlays may override this default by setting the
     (let ((conn-target-window-predicate conn-target-window-predicate)
           (conn-target-sort-function conn-target-sort-function)
           (conn--dispatch-event-message-error nil)
+          (delable t)
           labels)
       (unwind-protect
           (catch 'return
@@ -3929,9 +3931,12 @@ Target overlays may override this default by setting the
               (funcall finder)
               (if (setf labels (funcall conn-dispatch-label-function))
                   (conn-with-dispatch-event-handler
-                      ((concat (propertize "DEL" 'face 'read-multiple-choice-face)
-                               (propertize " to restart" 'face 'minibuffer-prompt))
-                       (or 8 'backspace)
+                      ((lambda ()
+                         (when delable
+                           (concat (propertize "DEL" 'face 'read-multiple-choice-face)
+                                   (propertize " restart" 'face 'minibuffer-prompt))))
+                       (and (or 8 'backspace)
+                            (guard delable))
                        (conn-delete-targets)
                        (mapc #'conn-label-delete labels)
                        (conn-dispatch-handle-event))
@@ -3939,8 +3944,16 @@ Target overlays may override this default by setting the
                     (let* ((prompt (concat "["
                                            (number-to-string conn-target-count)
                                            "] chars")))
-                      (throw 'return
-                             (copy-overlay (conn-label-select labels prompt)))))
+                      (if collector
+                          (progn
+                            (while (and
+                                    (funcall collector (conn-label-select labels prompt))
+                                    (length> labels 1))
+                              (setf delable nil)
+                              (mapc #'conn-label-reset labels))
+                            (throw 'return collector))
+                        (throw 'return
+                               (copy-overlay (conn-label-select labels prompt))))))
                 (setf conn--dispatch-event-message-error "No matching candidates"))))
         (conn-delete-targets)
         (mapc #'conn-label-delete labels)
@@ -3994,6 +4007,15 @@ Target overlays may override this default by setting the
                ,(car handler)
                conn--dispatch-event-message-prefixes)))
          ,@body))))
+
+(defmacro conn-with-dispatch-event-handlers (handlers &rest body)
+  "\(fn ((DESCRIPTION &rest CASE) ...) &body BODY)"
+  (declare (indent 1))
+  (if (cdr handlers)
+      `(conn-with-dispatch-event-handler
+           ,(car handlers)
+         (conn-with-dispatch-event-handlers ,(cdr handlers) ,@body))
+    `(conn-with-dispatch-event-handler ,(car handlers) ,@body)))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (setq prompt
