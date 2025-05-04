@@ -675,8 +675,7 @@ A zero means repeat until error."
         (progn
           (conn-with-dispatch-event-handler
               ((lambda ()
-                 (when (and conn-dispatch-repeat-count
-                            (> conn-dispatch-repeat-count 0))
+                 (when (> conn-dispatch-repeat-count 0)
                    (concat (propertize "RET" 'face 'read-multiple-choice-face)
                            (propertize " to finish repeating"
                                        'face 'minibuffer-prompt))))
@@ -689,14 +688,15 @@ A zero means repeat until error."
                   (conn-with-dispatch-event-handler
                       ((lambda ()
                          (when targets
-                           (concat (propertize "/" 'face 'read-multiple-choice-face)
+                           (concat (propertize "C-/" 'face 'read-multiple-choice-face)
                                    (propertize " to undo" 'face 'minibuffer-prompt))))
-                       ?/
-                       (let ((to-delete (pop targets)))
-                         (pulse-momentary-highlight-region (overlay-start to-delete)
-                                                           (overlay-end to-delete))
-                         (delete-overlay to-delete)
-                         (conn-dispatch-handle-event)))
+                       (and ?\C-/
+                            (let (and (pred identity) to-delete)
+                              (car targets)))
+                       (pulse-momentary-highlight-region (overlay-start to-delete)
+                                                         (overlay-end to-delete))
+                       (delete-overlay (pop targets))
+                       (conn-dispatch-handle-event))
                     (let* ((target (conn-dispatch--select-target target-finder))
                            (thing (or (overlay-get target 'thing) thing-cmd))
                            (pt (overlay-start target))
@@ -726,7 +726,7 @@ A zero means repeat until error."
                                  (push new targets))))))))))
               (setf conn-dispatch-repeat-count 1)))
           (setf conn-dispatch-repeat-count 0)
-          (dolist (target (nreverse targets))
+          (dolist (target (reverse targets))
             (let ((pt (overlay-get target 'point))
                   (win (overlay-get target 'window))
                   (thing (overlay-get target 'thing)))
@@ -736,7 +736,11 @@ A zero means repeat until error."
                       (prepare-change-group (window-buffer win))))
               (let ((conn-kapply-suppress-message t))
                 (with-selected-window win
-                  (funcall action win pt thing thing-arg)))
+                  (while (condition-case err
+                             (progn
+                               (funcall action win pt thing thing-arg)
+                               nil)
+                           (user-error (message (cadr err)) t)))))
               (set-marker pt nil)
               (cl-incf conn-dispatch-repeat-count)))
           (message "Kapply completed successfully after %s iterations"
