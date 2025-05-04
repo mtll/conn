@@ -4623,8 +4623,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (goto-char pt)
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
-         (cond ((and conn-dispatch-repeat-count
-                     (> conn-dispatch-repeat-count 0))
+         (cond ((> conn-dispatch-repeat-count 0)
                 (conn-append-region beg end register t))
                (register
                 (copy-to-register register beg end t))
@@ -4709,8 +4708,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
         (`(,beg . ,end)
          (pulse-momentary-highlight-region beg end)
-         (cond ((and conn-dispatch-repeat-count
-                     (> conn-dispatch-repeat-count 0))
+         (cond ((> conn-dispatch-repeat-count 0)
                 (conn-append-region beg end register nil))
                (register
                 (copy-to-register register beg end))
@@ -5068,7 +5066,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
-(defun conn-dispatch-push-history (action finder thing-cmd thing-arg)
+(defun conn-dispatch-push-history (action finder thing-cmd thing-arg repeat)
   (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
     (add-to-history 'conn-dispatch-ring
                     (cons (symbol-function 'conn-repeat-last-dispatch)
@@ -5087,28 +5085,26 @@ Returns a cons of (STRING . OVERLAYS)."
                             (description description))
               (invert-repeat)
             (interactive "P")
-            (cl-letf (((symbol-function 'conn-repeat-last-dispatch)))
+            (cl-letf ((conn-dispatch-repeat-count repeat-count)
+                      ((symbol-function 'conn-repeat-last-dispatch)))
               (conn--with-state (conn-enter-state state)
                 (conn-perform-dispatch action finder
                                        thing-cmd thing-arg
-                                       (xor invert-repeat repeat-count)))))
+                                       (xor invert-repeat repeat)))
+              (setf repeat-count conn-dispatch-repeat-count)))
           (symbol-function 'conn-last-dispatch-at-mouse)
           (oclosure-lambda (conn-dispatch
                             (repeat-count conn-dispatch-repeat-count)
                             (description description))
               (event)
             (interactive "e")
-            (cl-letf (((symbol-function 'conn-repeat-last-dispatch))
-                      (posn (event-start event))
-                      (conn-dispatch-repeat-count repeat-count))
+            (cl-letf ((posn (event-start event))
+                      (conn-dispatch-repeat-count repeat-count)
+                      ((symbol-function 'conn-repeat-last-dispatch)))
               (funcall action
                        (posn-window posn) (posn-point posn)
                        thing-cmd thing-arg)
-              (when conn-dispatch-repeat-count
-                (cl-incf repeat-count))))
-          (conn-dispatch--repeat-count
-           (symbol-function 'conn-last-dispatch-at-mouse))
-          conn-dispatch-repeat-count)))
+              (setf repeat-count conn-dispatch-repeat-count))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                        &optional repeat))
@@ -5116,11 +5112,11 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
                                               &optional repeat)
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-count (when repeat 0)))
+        (conn-dispatch-repeat-count 0))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (cl-call-next-method)
-    (conn-dispatch-push-history action target-finder thing-cmd thing-arg)))
+    (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat)))
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat)
@@ -5129,13 +5125,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (cl-assert (conn-action-p action))
   (conn-with-dispatch-event-handler
       ((lambda ()
-         (when (and conn-dispatch-repeat-count
-                    (> conn-dispatch-repeat-count 0))
+         (when (> conn-dispatch-repeat-count 0)
            (concat (propertize "RET" 'face 'help-key-binding)
                    (propertize " to finish repeating" 'face 'minibuffer-prompt))))
        (or 'return 13)
-       (if (and conn-dispatch-repeat-count
-                (> conn-dispatch-repeat-count 0))
+       (if (> conn-dispatch-repeat-count 0)
            (conn-dispatch-handle-event)
          (conn-dispatch-ignore-event)))
     (while
