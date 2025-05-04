@@ -2108,7 +2108,6 @@ are read."
   `((conn-dispatch-state . conn-bounds-of-dispatch)
     (conn-toggle-mark-command . conn--bounds-of-region)
     (conn-expand-remote . conn--bounds-of-remote-expansion)
-    (conn-expand . conn--bounds-of-expansion)
     (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
     (dot . conn--bounds-of-dot)
@@ -3324,8 +3323,10 @@ of a command.")
   "l" 'forward-line
   "u" 'forward-symbol
   "j" 'forward-char
-  "h" '(conn-dispatch-command
-        conn-expand-remote conn-dispatch-read-string-with-timeout)
+  "<remap> <conn-expand>" '(conn-dispatch-command
+                            conn-expand-remote conn-dispatch-read-string-with-timeout)
+  "<remap> <conn-contract>" '(conn-dispatch-command
+                              conn-expand-remote conn-dispatch-read-string-with-timeout)
   "n" 'conn-forward-defun
   "J" 'conn-forward-inner-line
   "L" 'conn-backward-inner-line
@@ -5136,17 +5137,21 @@ Returns a cons of (STRING . OVERLAYS)."
         (let* ((conn--dispatch-event-message-prefixes
                 (if thing-cmd
                     (append conn--dispatch-event-message-prefixes
-                            (list (propertize (format "'%s <%s>" thing-cmd thing-arg)
-                                              'face 'minibuffer-prompt)))
+                            (list (propertize
+                                   (concat
+                                    (format "'%s" thing-cmd)
+                                    (when thing-arg
+                                      (format " <%s>" thing-arg)))
+                                   'face 'minibuffer-prompt)))
                   conn--dispatch-event-message-prefixes))
-               (target (conn-dispatch--select-target target-finder)))
+               (target (conn-dispatch--select-target target-finder))
+               (win (overlay-get target 'window))
+               (pt (overlay-start target))
+               (thing (or (overlay-get target 'thing) thing-cmd)))
+          (delete-overlay target)
           (unwind-protect
               (prog1 repeat
-                (funcall action
-                         (overlay-get target 'window)
-                         (overlay-start target)
-                         (or (overlay-get target 'thing) thing-cmd)
-                         thing-arg))
+                (funcall action win pt thing thing-arg))
             (delete-overlay target)))
       (cl-incf conn-dispatch-repeat-count)
       (undo-boundary))))
@@ -5394,10 +5399,14 @@ Expansions and contractions are provided by functions in
 ;;;;; Bounds of expansion
 
 (defvar-keymap conn-read-expand-region-map
-  :parent conn-expand-repeat-map
+  "z" 'conn-expand-exchange
+  "j" 'conn-contract
+  "h" 'conn-expand
   "v" 'conn-toggle-mark-command
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit
+  "C-]" 'abort-recursive-edit
+  "C-g" 'abort-recursive-edit
   "<t>" 'ignore)
 
 (defun conn--bounds-of-expansion (cmd arg)
@@ -5408,11 +5417,14 @@ Expansions and contractions are provided by functions in
                  conn-read-expand-region-map (lambda () t) nil
                  (substitute-command-keys
                   (concat "\\<conn-read-expand-region-map>"
-                          "Defining region. Press "
-                          "\\[exit-recursive-edit] to finish, "
-                          "\\[abort-recursive-edit] to abort.")))))
+                          "Press "
+                          "\\[conn-expand] to expand, "
+                          "\\[conn-contract] to contract, "
+                          "\\[conn-toggle-mark-command] to toggle mark, "
+                          "\\[exit-recursive-edit] to finish")))))
       (unwind-protect
-          (recursive-edit)
+          (conn--with-state (conn-enter-state conn-previous-state)
+            (recursive-edit))
         (funcall exit)))
     (list (cons (region-beginning) (region-end)))))
 
