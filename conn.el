@@ -5133,7 +5133,13 @@ Returns a cons of (STRING . OVERLAYS)."
            (conn-dispatch-handle-event)
          (conn-dispatch-ignore-event)))
     (while
-        (let ((target (conn-dispatch--select-target target-finder)))
+        (let* ((conn--dispatch-event-message-prefixes
+                (if thing-cmd
+                    (append conn--dispatch-event-message-prefixes
+                            (list (propertize (format "'%s <%s>" thing-cmd thing-arg)
+                                              'face 'minibuffer-prompt)))
+                  conn--dispatch-event-message-prefixes))
+               (target (conn-dispatch--select-target target-finder)))
           (unwind-protect
               (prog1 repeat
                 (funcall action
