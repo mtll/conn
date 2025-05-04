@@ -668,22 +668,71 @@ A zero means repeat until error."
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
                                      &optional repeat)
-  (let ((targets nil))
+  (let ((targets nil)
+        (undo-handles nil)
+        (success nil)
+        (conn-dispatch-read-event-handlers conn-dispatch-read-event-handlers))
+    (add-hook 'conn-dispatch-read-event-handlers
+              (lambda (ev)
+                (when (eql ev ?/)
+                  (let ((to-delete (pop targets)))
+                    (pulse-momentary-highlight-region (overlay-start to-delete)
+                                                      (overlay-end to-delete))
+                    (delete-overlay to-delete)
+                    (throw 'undo nil)))))
     (unwind-protect
         (progn
           (catch 'end-repeat
             (while
                 (prog1 repeat
-                  (push (conn-dispatch--select-target target-finder) targets))
+                  (catch 'undo
+                    (let* ((target (conn-dispatch--select-target target-finder))
+                           (thing (or (overlay-get target 'thing) thing-cmd))
+                           (pt (overlay-start target))
+                           (end (overlay-end target))
+                           (win (overlay-get target 'window)))
+                      (delete-overlay target)
+                      (with-current-buffer (window-buffer win)
+                        (if-let* ((to-delete (conn--overlays-at pt end win 'kapply-target)))
+                            (progn
+                              (setf targets (delq to-delete targets))
+                              (pulse-momentary-highlight-region
+                               (overlay-start to-delete)
+                               (overlay-end to-delete))
+                              (delete-overlay to-delete))
+                          (save-mark-and-excursion
+                            (goto-char pt)
+                            (pcase (car (conn-bounds-of-command thing thing-arg))
+                              (`(,beg . ,end)
+                               (let ((new (make-overlay beg end nil t)))
+                                 (overlay-put new 'category 'kapply-target)
+                                 (overlay-put new 'point pt)
+                                 (overlay-put new 'face 'lazy-highlight)
+                                 (overlay-put new 'thing thing)
+                                 (overlay-put new 'window win)
+                                 (overlay-put new 'display nil)
+                                 (push new targets))))))))))
+              (setf conn-dispatch-repeat-count 1)))
+          (setf conn-dispatch-repeat-count 0)
+          (dolist (target (nreverse targets))
+            (let ((pt (overlay-get target 'point))
+                  (win (overlay-get target 'window))
+                  (thing (overlay-get target 'thing)))
+              (delete-overlay target)
+              (unless (alist-get (window-buffer win) undo-handles)
+                (setf (alist-get (window-buffer win) undo-handles)
+                      (prepare-change-group (window-buffer win))))
+              (with-selected-window win
+                (funcall action win pt thing thing-arg))
               (cl-incf conn-dispatch-repeat-count)))
-          (with-undo-amalgamate
-            (dolist (target (nreverse targets))
-              (let ((pt (overlay-start target))
-                    (win (overlay-get target 'window))
-                    (thing (or (overlay-get target 'thing) thing-cmd)))
-                (delete-overlay target)
-                (funcall action win pt thing thing-arg)))))
-      (mapc #'delete-overlay targets))))
+          (setf success t))
+      (mapc #'delete-overlay targets)
+      (if success
+          (pcase-dolist (`(_ . ,handle) undo-handles)
+            (accept-change-group handle)
+            (undo-amalgamate-change-group handle))
+        (pcase-dolist (`(_ . ,handle) undo-handles)
+          (cancel-change-group handle))))))
 
 (transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
   "Apply keyboard macro on dispatch targets."
@@ -693,7 +742,6 @@ A zero means repeat until error."
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
   (let* ((pipeline (list 'conn--kapply-relocate-to-region
-                         'conn--kapply-per-iteration-undo
                          (alist-get :restrictions args)
                          (alist-get :excursions args)
                          (alist-get :state args)
@@ -705,21 +753,22 @@ A zero means repeat until error."
                                (macro nil))
                  (window pt thing-cmd thing-arg)
                (with-selected-window window
-                 (apply #'conn--kapply-compose-iterator
-                        (conn--kapply-region-iterator
-                         (save-excursion
-                           (goto-char pt)
-                           (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                             ('nil (user-error "Cannot find %s at point"
-                                               (get thing-cmd :conn-command-thing)))
-                             (`(,region) (list region))
-                             (`(,_ . ,subregions) subregions))))
-                        `(,@pipeline
-                          ,(pcase (alist-get :kmacro args)
-                             ('conn--kmacro-apply
-                              (lambda (iterator)
-                                (conn--kmacro-apply iterator nil macro)))
-                             (kmacro kmacro)))))
+                 (with-undo-amalgamate
+                   (apply #'conn--kapply-compose-iterator
+                          (conn--kapply-region-iterator
+                           (save-excursion
+                             (goto-char pt)
+                             (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                               ('nil (user-error "Cannot find %s at point"
+                                                 (get thing-cmd :conn-command-thing)))
+                               (`(,region) (list region))
+                               (`(,_ . ,subregions) subregions))))
+                          `(,@pipeline
+                            ,(pcase (alist-get :kmacro args)
+                               ('conn--kmacro-apply
+                                (lambda (iterator)
+                                  (conn--kmacro-apply iterator nil macro)))
+                               (kmacro kmacro))))))
                (unless macro (setq macro (kmacro-ring-head)))))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)

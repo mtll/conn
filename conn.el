@@ -3566,15 +3566,19 @@ be ignored by during dispatch.")
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
+(defun conn--overlays-at (beg end window category)
+  (cl-loop for ov in (overlays-in beg end)
+           when (and (eq (overlay-get ov 'category) category)
+                     (eq (overlay-get ov 'window) window))
+           return ov))
+
 (defun conn-make-target-overlay (pt length &optional thing padding-function window)
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
   (unless window
     (setq window (selected-window)))
-  (unless (cl-loop for ov in (overlays-in pt (+ pt length))
-                   thereis (and (eq (overlay-get ov 'category) 'conn-target-overlay)
-                                (eq (overlay-get ov 'window) window)))
+  (unless (conn--overlays-at pt (+ pt length) window 'conn-target-overlay)
     (conn-protected-let* ((line-bounds
                            (save-excursion
                              (goto-char pt)
@@ -3858,9 +3862,8 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-labels ()
   (conn-protected-let* ((label-strings
-                         (or (funcall conn-label-string-generator
-                                      conn-target-count)
-                             (user-error "No matching candidates")))
+                         (funcall conn-label-string-generator
+                                  conn-target-count))
                         (labels nil (mapc #'conn-label-delete labels)))
     (pcase-dolist (`(,window . ,targets) conn-targets)
       (setq targets (seq-sort conn-target-sort-function targets))
@@ -3902,13 +3905,15 @@ Target overlays may override this default by setting the
           (conn-target-sort-function conn-target-sort-function)
           labels)
       (unwind-protect
-          (progn
+          (while t
             (funcall finder)
-            (setf labels (funcall conn-dispatch-label-function))
-            (let* ((prompt (concat "["
-                                   (number-to-string conn-target-count)
-                                   "] chars")))
-              (copy-overlay (conn-label-select labels prompt))))
+            (if (setf labels (funcall conn-dispatch-label-function))
+                (let* ((prompt (concat "["
+                                       (number-to-string conn-target-count)
+                                       "] chars")))
+                  (throw 'mouse-click
+                         (copy-overlay (conn-label-select labels prompt))))
+              (conn-dispatch-message "No targets found")))
         (conn-delete-targets)
         (mapc #'conn-label-delete labels)
         (dolist (win (conn--get-target-windows))
@@ -3927,35 +3932,50 @@ Target overlays may override this default by setting the
   (setq conn-targets nil
         conn-target-count 0))
 
+(defvar conn--dispatch-read-message "")
+
+(defun conn-dispatch-message (format-string &rest args)
+  (setf conn--dispatch-read-message (format format-string args)))
+
+(defvar conn-dispatch-read-event-handlers nil)
+
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
-  (when (and conn-dispatch-repeat-count
-             (> conn-dispatch-repeat-count 0))
-    (setq prompt (concat (propertize "(RET to finish repeating) "
-                                     'face 'minibuffer-prompt)
-                         prompt)))
+  (setq prompt (concat
+                (when (and conn-dispatch-repeat-count
+                           (> conn-dispatch-repeat-count 0))
+                  (propertize "(RET to finish repeating) "
+                              'face 'minibuffer-prompt))
+                prompt
+                (when conn--dispatch-read-message
+                  (propertize
+                   (concat "[" conn--dispatch-read-message "]")
+                   'face 'minibuffer-prompt)))
+        conn--dispatch-read-message nil)
   (catch 'char
     (while t
-      (pcase (read-event prompt inherit-input-method seconds)
-        ((and event (guard (mouse-event-p (event-basic-type event)))
-              (let posn (event-start event))
-              (let win (posn-window posn))
-              (let pt (posn-point posn))
-              (let modifiers (event-modifiers event)))
-         (when (and (not (memq 'down modifiers))
-                    (not (memq 'drag modifiers))
-                    (funcall conn-target-window-predicate win)
-                    (not (posn-area posn)))
-           (throw 'mouse-click
-                  (let ((conn-targets nil))
-                    (conn-make-target-overlay pt 1 nil nil win)))))
-        ((or 'return 13)
-         (when (and conn-dispatch-repeat-count
-                    (> conn-dispatch-repeat-count 0))
-           (throw 'end-repeat nil)))
-        ((and ev (pred characterp))
-         (throw 'char ev))
-        ('nil
-         (throw 'char nil))))))
+      (let ((ev (read-event prompt inherit-input-method seconds)))
+        (run-hook-with-args 'conn-dispatch-read-event-handlers ev)
+        (pcase ev
+          ((and event (guard (mouse-event-p (event-basic-type event)))
+                (let posn (event-start event))
+                (let win (posn-window posn))
+                (let pt (posn-point posn))
+                (let modifiers (event-modifiers event)))
+           (when (and (not (memq 'down modifiers))
+                      (not (memq 'drag modifiers))
+                      (funcall conn-target-window-predicate win)
+                      (not (posn-area posn)))
+             (throw 'mouse-click
+                    (let ((conn-targets nil))
+                      (conn-make-target-overlay pt 1 nil nil win)))))
+          ((or 'return 13)
+           (when (and conn-dispatch-repeat-count
+                      (> conn-dispatch-repeat-count 0))
+             (throw 'end-repeat nil)))
+          ((and ev (pred characterp))
+           (throw 'char ev))
+          ('nil
+           (throw 'char nil)))))))
 
 (defun conn-dispatch-read-n-chars (N &optional predicate)
   "Read a string of N chars with preview overlays.
