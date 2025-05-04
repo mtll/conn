@@ -670,10 +670,11 @@ A zero means repeat until error."
   (let ((targets nil))
     (unwind-protect
         (progn
-          (while
-              (prog1 repeat
-                (push (conn-dispatch--select-target target-finder) targets))
-            (cl-incf conn-dispatch-repeat-count))
+          (catch 'end-repeat
+            (while
+                (prog1 repeat
+                  (push (conn-dispatch--select-target target-finder) targets))
+              (cl-incf conn-dispatch-repeat-count)))
           (with-undo-amalgamate
             (dolist (target (nreverse targets))
               (let ((pt (overlay-start target))

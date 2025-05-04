@@ -3945,11 +3945,13 @@ Target overlays may override this default by setting the
                     (not (memq 'drag modifiers))
                     (funcall conn-target-window-predicate win)
                     (not (posn-area posn)))
-           (throw 'mouse-click (list pt win nil))))
+           (throw 'mouse-click
+                  (let ((conn-targets nil))
+                    (conn-make-target-overlay pt 1 nil nil win)))))
         ((or 'return 13)
          (when (and conn-dispatch-repeat-count
                     (> conn-dispatch-repeat-count 0))
-           (throw 'end nil)))
+           (throw 'end-repeat nil)))
         ((and ev (pred characterp))
          (throw 'char ev))
         ('nil
@@ -5032,19 +5034,20 @@ during target finding."
 (cl-defgeneric conn-dispatch-apply-action (action target-finder thing-cmd thing-arg repeat))
 
 (cl-defmethod conn-dispatch-apply-action (action target-finder thing-cmd thing-arg repeat)
-  (while
-      (let ((target (conn-dispatch--select-target target-finder)))
-        (unwind-protect
-            (prog1 repeat
-              (funcall action
-                       (overlay-get target 'window)
-                       (overlay-start target)
-                       (or (overlay-get target 'thing) thing-cmd)
-                       thing-arg)
-              (run-hooks 'conn-post-dispatch-hook))
-          (delete-overlay target)))
-    (cl-incf conn-dispatch-repeat-count)
-    (undo-boundary)))
+  (catch 'end-repeat
+    (while
+        (let ((target (conn-dispatch--select-target target-finder)))
+          (unwind-protect
+              (prog1 repeat
+                (funcall action
+                         (overlay-get target 'window)
+                         (overlay-start target)
+                         (or (overlay-get target 'thing) thing-cmd)
+                         thing-arg)
+                (run-hooks 'conn-post-dispatch-hook))
+            (delete-overlay target)))
+      (cl-incf conn-dispatch-repeat-count)
+      (undo-boundary))))
 
 (defun conn-perform-dispatch ( action finder thing-cmd thing-arg
                                &optional repeat)
