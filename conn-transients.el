@@ -737,6 +737,7 @@ A zero means repeat until error."
                       (prepare-change-group (window-buffer win))))
               (with-selected-window win
                 (funcall action win pt thing thing-arg))
+              (set-marker pt nil)
               (cl-incf conn-dispatch-repeat-count)))
           (setf success t))
       (mapc #'delete-overlay targets)
