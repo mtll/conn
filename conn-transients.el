@@ -665,6 +665,24 @@ A zero means repeat until error."
         (remove-hook 'post-command-hook setup)
         (remove-hook 'transient-post-exit-hook 'exit-recursive-edit)))))
 
+(cl-defmethod conn-dispatch-apply-action ((action conn-dispatch-kapply)
+                                          target-finder thing-cmd thing-arg repeat)
+  (let ((targets nil))
+    (unwind-protect
+        (progn
+          (while
+              (prog1 repeat
+                (push (conn-dispatch--select-target target-finder) targets))
+            (cl-incf conn-dispatch-repeat-count))
+          (with-undo-amalgamate
+            (dolist (target (nreverse targets))
+              (let ((pt (overlay-start target))
+                    (win (overlay-get target 'window))
+                    (thing (or (overlay-get target 'thing) thing-cmd)))
+                (delete-overlay target)
+                (funcall action win pt thing thing-arg)))))
+      (mapc #'delete-overlay targets))))
+
 (transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
   "Apply keyboard macro on dispatch targets."
   :transient 'transient--do-exit

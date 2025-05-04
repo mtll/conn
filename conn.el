@@ -3426,6 +3426,7 @@ of a command.")
 
 (cl-defmethod conn--with-state-command-loop ((continuation conn--dispatch-continuation)
                                              _case-function _message-function)
+  (require 'conn-transients)
   (cl-letf ((success nil)
             ((symbol-function 'conn--dispatch-consume-prefix-arg)
              (lambda ()
@@ -3906,11 +3907,8 @@ Target overlays may override this default by setting the
             (setf labels (funcall conn-dispatch-label-function))
             (let* ((prompt (concat "["
                                    (number-to-string conn-target-count)
-                                   "] chars"))
-                   (target (conn-label-select labels prompt)))
-              (list (overlay-start target)
-                    (overlay-get target 'window)
-                    (overlay-get target 'thing))))
+                                   "] chars")))
+              (copy-overlay (conn-label-select labels prompt))))
         (conn-delete-targets)
         (mapc #'conn-label-delete labels)
         (dolist (win (conn--get-target-windows))
@@ -5031,6 +5029,23 @@ during target finding."
           (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
+(cl-defgeneric conn-dispatch-apply-action (action target-finder thing-cmd thing-arg repeat))
+
+(cl-defmethod conn-dispatch-apply-action (action target-finder thing-cmd thing-arg repeat)
+  (while
+      (let ((target (conn-dispatch--select-target target-finder)))
+        (unwind-protect
+            (prog1 repeat
+              (funcall action
+                       (overlay-get target 'window)
+                       (overlay-start target)
+                       (or (overlay-get target 'thing) thing-cmd)
+                       thing-arg)
+              (run-hooks 'conn-post-dispatch-hook))
+          (delete-overlay target)))
+    (cl-incf conn-dispatch-repeat-count)
+    (undo-boundary)))
+
 (defun conn-perform-dispatch ( action finder thing-cmd thing-arg
                                &optional repeat)
   (pcase action
@@ -5079,16 +5094,8 @@ during target finding."
                 (cl-incf repeat-count)))))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
-    (catch 'end
-      (while
-          (pcase-let* ((`(,pt ,window ,thing-override)
-                        (conn-dispatch--select-target finder)))
-            (prog1 repeat
-              (funcall action window pt
-                       (or thing-override thing-cmd) thing-arg)
-              (run-hooks 'conn-post-dispatch-hook)))
-        (cl-incf conn-dispatch-repeat-count)
-        (undo-boundary)))
+    (conn-dispatch-apply-action
+     action finder thing-cmd thing-arg repeat)
     (setf (conn-dispatch--repeat-count
            (symbol-function 'conn-last-dispatch-at-mouse))
           conn-dispatch-repeat-count)))
@@ -5113,15 +5120,14 @@ during target finding."
                (conn-dispatch-repeat-count (when repeat 0)))
            (add-function :before-while conn-target-window-predicate
                          (lambda (window) (eq win window)))
-           (catch 'end
-             (while
-                 (prog1 repeat
-                   (pcase-let ((`(,pt ,window ,thing-override)
-                                (conn-dispatch--select-target target-finder))
-                               (mark-active nil))
-                     (funcall action window pt (or thing-override command) arg)
-                     (push (cons (region-beginning) (region-end)) regions)))
-               (cl-incf conn-dispatch-repeat-count)))
+           (conn-dispatch-apply-action
+            (lambda (_win pt thing-cmd thing-arg)
+              (save-mark-and-excursion
+                (goto-char pt)
+                (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+                  ('nil nil)
+                  (reg (push reg regions)))))
+            target-finder command arg repeat)
            (unless regions (keyboard-quit))
            (cl-loop for (b . e) in (compat-call sort
                                                 (conn--merge-regions regions t)
@@ -5179,14 +5185,16 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (let ((pt (car
-             (conn-dispatch--select-target
-              (lambda ()
-                (with-restriction (window-start) (window-end)
-                  (cl-loop for (beg . end) in (conn--isearch-matches)
-                           do (conn-make-target-overlay beg (- end beg)))))))))
-    (isearch-done)
-    (goto-char pt)))
+  (let ((target (conn-dispatch--select-target
+                 (lambda ()
+                   (with-restriction (window-start) (window-end)
+                     (cl-loop for (beg . end) in (conn--isearch-matches)
+                              do (conn-make-target-overlay beg (- end beg))))))))
+    (unwind-protect
+        (progn
+          (isearch-done)
+          (goto-char (overlay-start target)))
+      (delete-overlay target))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
