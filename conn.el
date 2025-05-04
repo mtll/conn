@@ -2962,6 +2962,8 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Applier definitions
 
+(defvar conn-kapply-suppress-message nil)
+
 (defmacro conn--define-kapply (name arglist &rest body)
   "Define a macro application function.
 The iterator must be the first argument in ARGLIST.
@@ -3001,7 +3003,8 @@ The iterator must be the first argument in ARGLIST.
                  (advice-add 'kmacro-loop-setup-function :before-while ,iterator)
                  ,@body
                  (setq success t)
-                 (message "Kapply completed successfully after %s iterations" ,iterations))
+                 (unless conn-kapply-suppress-message
+                   (message "Kapply completed successfully after %s iterations" ,iterations)))
              (let ((conn-kmacro-apply-error (not success)))
                (funcall ,iterator :finalize)
                (run-hook-wrapped 'conn-kmacro-apply-end-hook
@@ -3926,7 +3929,7 @@ Target overlays may override this default by setting the
               (funcall finder)
               (if (setf labels (funcall conn-dispatch-label-function))
                   (conn-with-dispatch-event-handler
-                      ((concat (propertize "DEL" 'face 'help-key-binding)
+                      ((concat (propertize "DEL" 'face 'read-multiple-choice-face)
                                (propertize " to restart" 'face 'minibuffer-prompt))
                        (or 8 'backspace)
                        (conn-delete-targets)
@@ -3946,8 +3949,6 @@ Target overlays may override this default by setting the
 
 
 ;;;;; Dispatch target finders
-
-(defvar conn-dispatch-read-event-message-prefix nil)
 
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
@@ -5113,7 +5114,17 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
                                               &optional repeat)
   (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-count 0))
+        (conn-dispatch-repeat-count 0)
+        (conn--dispatch-event-message-prefixes
+         (if thing-cmd
+             (append conn--dispatch-event-message-prefixes
+                     (list (propertize
+                            (concat
+                             (format "'%s" thing-cmd)
+                             (when thing-arg
+                               (format " <%s>" thing-arg)))
+                            'face 'minibuffer-prompt)))
+           conn--dispatch-event-message-prefixes)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (cl-call-next-method)
@@ -5127,24 +5138,14 @@ Returns a cons of (STRING . OVERLAYS)."
   (conn-with-dispatch-event-handler
       ((lambda ()
          (when (> conn-dispatch-repeat-count 0)
-           (concat (propertize "RET" 'face 'help-key-binding)
+           (concat (propertize "RET" 'face 'read-multiple-choice-face)
                    (propertize " to finish repeating" 'face 'minibuffer-prompt))))
        (or 'return 13)
        (if (> conn-dispatch-repeat-count 0)
            (conn-dispatch-handle-event)
          (conn-dispatch-ignore-event)))
     (while
-        (let* ((conn--dispatch-event-message-prefixes
-                (if thing-cmd
-                    (append conn--dispatch-event-message-prefixes
-                            (list (propertize
-                                   (concat
-                                    (format "'%s" thing-cmd)
-                                    (when thing-arg
-                                      (format " <%s>" thing-arg)))
-                                   'face 'minibuffer-prompt)))
-                  conn--dispatch-event-message-prefixes))
-               (target (conn-dispatch--select-target target-finder))
+        (let* ((target (conn-dispatch--select-target target-finder))
                (win (overlay-get target 'window))
                (pt (overlay-start target))
                (thing (or (overlay-get target 'thing) thing-cmd)))

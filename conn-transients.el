@@ -677,21 +677,19 @@ A zero means repeat until error."
               ((lambda ()
                  (when (and conn-dispatch-repeat-count
                             (> conn-dispatch-repeat-count 0))
-                   (concat (propertize "RET" 'face 'help-key-binding)
+                   (concat (propertize "RET" 'face 'read-multiple-choice-face)
                            (propertize " to finish repeating"
                                        'face 'minibuffer-prompt))))
                (or 'return 13)
-               (if (and conn-dispatch-repeat-count
-                        (> conn-dispatch-repeat-count 0))
+               (if (> conn-dispatch-repeat-count 0)
                    (conn-dispatch-handle-event)
                  (conn-dispatch-ignore-event)))
             (while
                 (prog1 repeat
                   (conn-with-dispatch-event-handler
                       ((lambda ()
-                         (when (and conn-dispatch-repeat-count
-                                    (> conn-dispatch-repeat-count 0))
-                           (concat (propertize "/" 'face 'help-key-binding)
+                         (when targets
+                           (concat (propertize "/" 'face 'read-multiple-choice-face)
                                    (propertize " to undo" 'face 'minibuffer-prompt))))
                        ?/
                        (let ((to-delete (pop targets)))
@@ -706,7 +704,8 @@ A zero means repeat until error."
                            (win (overlay-get target 'window)))
                       (delete-overlay target)
                       (with-current-buffer (window-buffer win)
-                        (if-let* ((to-delete (conn--overlays-at pt end win 'kapply-target)))
+                        (if-let* ((to-delete
+                                   (conn--overlays-at pt end win 'kapply-target)))
                             (progn
                               (setf targets (delq to-delete targets))
                               (pulse-momentary-highlight-region
@@ -735,10 +734,13 @@ A zero means repeat until error."
               (unless (alist-get (window-buffer win) undo-handles)
                 (setf (alist-get (window-buffer win) undo-handles)
                       (prepare-change-group (window-buffer win))))
-              (with-selected-window win
-                (funcall action win pt thing thing-arg))
+              (let ((conn-kapply-suppress-message t))
+                (with-selected-window win
+                  (funcall action win pt thing thing-arg)))
               (set-marker pt nil)
               (cl-incf conn-dispatch-repeat-count)))
+          (message "Kapply completed successfully after %s iterations"
+                   conn-dispatch-repeat-count)
           (setf success t))
       (mapc #'delete-overlay targets)
       (if success
