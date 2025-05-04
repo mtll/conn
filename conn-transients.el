@@ -670,22 +670,35 @@ A zero means repeat until error."
                                      &optional repeat)
   (let ((targets nil)
         (undo-handles nil)
-        (success nil)
-        (conn-dispatch-read-event-handlers conn-dispatch-read-event-handlers))
-    (add-hook 'conn-dispatch-read-event-handlers
-              (lambda (ev)
-                (when (eql ev ?/)
-                  (let ((to-delete (pop targets)))
-                    (pulse-momentary-highlight-region (overlay-start to-delete)
-                                                      (overlay-end to-delete))
-                    (delete-overlay to-delete)
-                    (throw 'undo nil)))))
+        (success nil))
     (unwind-protect
         (progn
-          (catch 'end-repeat
+          (conn-with-dispatch-event-handler
+              ((lambda ()
+                 (when (and conn-dispatch-repeat-count
+                            (> conn-dispatch-repeat-count 0))
+                   (concat (propertize "RET" 'face 'help-key-binding)
+                           (propertize " to finish repeating"
+                                       'face 'minibuffer-prompt))))
+               (or 'return 13)
+               (if (and conn-dispatch-repeat-count
+                        (> conn-dispatch-repeat-count 0))
+                   (conn-dispatch-handle-event)
+                 (conn-dispatch-ignore-event)))
             (while
                 (prog1 repeat
-                  (catch 'undo
+                  (conn-with-dispatch-event-handler
+                      ((lambda ()
+                         (when (and conn-dispatch-repeat-count
+                                    (> conn-dispatch-repeat-count 0))
+                           (concat (propertize "/" 'face 'help-key-binding)
+                                   (propertize " to undo" 'face 'minibuffer-prompt))))
+                       ?/
+                       (let ((to-delete (pop targets)))
+                         (pulse-momentary-highlight-region (overlay-start to-delete)
+                                                           (overlay-end to-delete))
+                         (delete-overlay to-delete)
+                         (conn-dispatch-handle-event)))
                     (let* ((target (conn-dispatch--select-target target-finder))
                            (thing (or (overlay-get target 'thing) thing-cmd))
                            (pt (overlay-start target))

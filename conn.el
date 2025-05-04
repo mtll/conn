@@ -3900,20 +3900,44 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch--select-target (finder)
   (conn-delete-targets)
-  (catch 'mouse-click
+  (conn-with-dispatch-event-handler
+      (nil
+       (and event (guard (mouse-event-p (event-basic-type event)))
+            (let posn (event-start event))
+            (let win (posn-window posn))
+            (let pt (posn-point posn))
+            (let modifiers (event-modifiers event)))
+       (if (and (not (memq 'down modifiers))
+                (not (memq 'drag modifiers))
+                (funcall conn-target-window-predicate win)
+                (not (posn-area posn)))
+           (conn-dispatch-handle-event
+            (let ((conn-targets nil))
+              (conn-make-target-overlay pt 1 nil nil win)))
+         (conn-dispatch-ignore-event)))
     (let ((conn-target-window-predicate conn-target-window-predicate)
           (conn-target-sort-function conn-target-sort-function)
+          (conn--dispatch-event-message-error nil)
           labels)
       (unwind-protect
-          (while t
-            (funcall finder)
-            (if (setf labels (funcall conn-dispatch-label-function))
-                (let* ((prompt (concat "["
-                                       (number-to-string conn-target-count)
-                                       "] chars")))
-                  (throw 'mouse-click
-                         (copy-overlay (conn-label-select labels prompt))))
-              (conn-dispatch-message "No targets found")))
+          (catch 'return
+            (while t
+              (funcall finder)
+              (if (setf labels (funcall conn-dispatch-label-function))
+                  (conn-with-dispatch-event-handler
+                      ((concat (propertize "DEL" 'face 'help-key-binding)
+                               (propertize " to restart" 'face 'minibuffer-prompt))
+                       (or 8 'backspace)
+                       (conn-delete-targets)
+                       (mapc #'conn-label-delete labels)
+                       (conn-dispatch-handle-event))
+                    (setf conn--dispatch-event-message-error nil)
+                    (let* ((prompt (concat "["
+                                           (number-to-string conn-target-count)
+                                           "] chars")))
+                      (throw 'return
+                             (copy-overlay (conn-label-select labels prompt)))))
+                (setf conn--dispatch-event-message-error "No matching candidates"))))
         (conn-delete-targets)
         (mapc #'conn-label-delete labels)
         (dolist (win (conn--get-target-windows))
@@ -3921,6 +3945,8 @@ Target overlays may override this default by setting the
 
 
 ;;;;; Dispatch target finders
+
+(defvar conn-dispatch-read-event-message-prefix nil)
 
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
@@ -3932,50 +3958,66 @@ Target overlays may override this default by setting the
   (setq conn-targets nil
         conn-target-count 0))
 
-(defvar conn--dispatch-read-message "")
-
-(defun conn-dispatch-message (format-string &rest args)
-  (setf conn--dispatch-read-message (format format-string args)))
-
 (defvar conn-dispatch-read-event-handlers nil)
 
+(defvar conn--dispatch-event-message-prefixes nil)
+
+(defvar conn--dispatch-event-message-error nil)
+
+(defun conn-dispatch-ignore-event ()
+  (error "Function only available in conn-with-dispatch-event-handler"))
+
+(defun conn-dispatch-handle-event (&rest _body)
+  (error "Function only available in conn-with-dispatch-event-handler"))
+
+(defmacro conn-with-dispatch-event-handler (handler &rest body)
+  "\(fn (DESCRIPTION CASE) &body BODY)"
+  (declare (indent 1))
+  (cl-with-gensyms (return handle event)
+    `(catch ',handle
+       (let ((conn-dispatch-read-event-handlers
+              (cons (lambda (,event)
+                      (catch ',return
+                        (cl-macrolet
+                            (( conn-dispatch-ignore-event ()
+                               `(throw ',',return t))
+                             ( conn-dispatch-handle-event (&rest body)
+                               `(throw ',',handle ,,'(macroexp-progn body))))
+                          (pcase ,event
+                            ,(cdr handler))
+                          nil)))
+                    conn-dispatch-read-event-handlers))
+             (conn--dispatch-event-message-prefixes
+              (cons
+               ,(car handler)
+               conn--dispatch-event-message-prefixes)))
+         ,@body))))
+
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
-  (setq prompt (concat
-                (when (and conn-dispatch-repeat-count
-                           (> conn-dispatch-repeat-count 0))
-                  (propertize "(RET to finish repeating) "
-                              'face 'minibuffer-prompt))
-                prompt
-                (when conn--dispatch-read-message
-                  (propertize
-                   (concat "[" conn--dispatch-read-message "]")
-                   'face 'minibuffer-prompt)))
-        conn--dispatch-read-message nil)
+  (setq prompt
+        (let ((prefix
+               (delq nil (mapcar (lambda (pfx)
+                                   (pcase pfx
+                                     ((pred functionp) (funcall pfx))
+                                     ((pred stringp) pfx)))
+                                 conn--dispatch-event-message-prefixes))))
+          (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
+                  (mapconcat 'identity prefix (propertize "; " 'face 'minibuffer-prompt))
+                  (when prefix (propertize ") " 'face 'minibuffer-prompt))
+                  prompt
+                  (when conn--dispatch-event-message-error
+                    (concat
+                     (propertize " [" 'face 'minibuffer-prompt)
+                     (propertize conn--dispatch-event-message-error 'face 'error)
+                     (propertize "]" 'face 'minibuffer-prompt))))))
   (catch 'char
     (while t
       (let ((ev (read-event prompt inherit-input-method seconds)))
-        (run-hook-with-args 'conn-dispatch-read-event-handlers ev)
         (pcase ev
-          ((and event (guard (mouse-event-p (event-basic-type event)))
-                (let posn (event-start event))
-                (let win (posn-window posn))
-                (let pt (posn-point posn))
-                (let modifiers (event-modifiers event)))
-           (when (and (not (memq 'down modifiers))
-                      (not (memq 'drag modifiers))
-                      (funcall conn-target-window-predicate win)
-                      (not (posn-area posn)))
-             (throw 'mouse-click
-                    (let ((conn-targets nil))
-                      (conn-make-target-overlay pt 1 nil nil win)))))
-          ((or 'return 13)
-           (when (and conn-dispatch-repeat-count
-                      (> conn-dispatch-repeat-count 0))
-             (throw 'end-repeat nil)))
-          ((and ev (pred characterp))
-           (throw 'char ev))
-          ('nil
-           (throw 'char nil)))))))
+          ((guard (cl-loop for handler in conn-dispatch-read-event-handlers
+                           thereis (funcall handler ev))))
+          ((or 'nil (pred characterp))
+           (throw 'char ev)))))))
 
 (defun conn-dispatch-read-n-chars (N &optional predicate)
   "Read a string of N chars with preview overlays.
@@ -4010,25 +4052,24 @@ Returns a cons of (STRING . OVERLAYS)."
 
 Returns a cons of (STRING . OVERLAYS)."
   (conn-with-input-method
-    (while (= 0 conn-target-count)
-      (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
-             (string (char-to-string (conn-dispatch-read-event prompt t)))
-             (success nil))
+    (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+           (string (char-to-string (conn-dispatch-read-event prompt t)))
+           (success nil))
+      (while-no-input
+        (conn-make-string-target-overlays string predicate)
+        (setq success t))
+      (while-let ((next-char (conn-dispatch-read-event
+                              (format (concat prompt "%s") string) t
+                              conn-read-string-timeout)))
+        (setq string (concat string (char-to-string next-char))
+              success nil)
+        (conn-delete-targets)
         (while-no-input
           (conn-make-string-target-overlays string predicate)
-          (setq success t))
-        (while-let ((next-char (conn-dispatch-read-event
-                                (format (concat prompt "%s") string) t
-                                conn-read-string-timeout)))
-          (setq string (concat string (char-to-string next-char))
-                success nil)
-          (conn-delete-targets)
-          (while-no-input
-            (conn-make-string-target-overlays string predicate)
-            (setq success t)))
-        (unless success
-          (conn-make-string-target-overlays string predicate))
-        (message nil)))))
+          (setq success t)))
+      (unless success
+        (conn-make-string-target-overlays string predicate))
+      (message nil))))
 
 (defun conn--dispatch-chars-in-thing (thing)
   (conn-dispatch-read-string-with-timeout
@@ -4999,30 +5040,6 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
 
-(defun conn--dispatch-auto-bind-mouse ()
-  (pcase last-input-event
-    ((and `(,type . ,_)
-          (guard (mouse-event-p type))
-          (guard (not (eq 'mouse-1 type))))
-     (define-key conn-dispatch-auto-bind-mouse-mode-map
-                 (vector type)
-                 (symbol-function 'conn-last-dispatch-at-mouse))
-     (define-key conn-dispatch-auto-bind-mouse-mode-map
-                 (vector (event-convert-list
-                          `(,@(event-modifiers type)
-                            down
-                            ,(event-basic-type type))))
-                 'ignore))))
-
-(define-minor-mode conn-dispatch-auto-bind-mouse-mode
-  "Automatically bind mouse buttons to the current dispatch when used
-during target finding."
-  :global t
-  :keymap (make-sparse-keymap)
-  (if conn-dispatch-auto-bind-mouse-mode
-      (add-hook 'conn-post-dispatch-hook #'conn--dispatch-auto-bind-mouse)
-    (remove-hook 'conn-post-dispatch-hook #'conn--dispatch-auto-bind-mouse)))
-
 (defun conn-dispatch-cycle-ring-previous ()
   "Cycle forwards through `conn-dispatch-ring'."
   (interactive)
@@ -5110,7 +5127,17 @@ during target finding."
   (when (conn--action-type-p action)
     (setq action (conn-action-accept (conn-action action))))
   (cl-assert (conn-action-p action))
-  (catch 'end-repeat
+  (conn-with-dispatch-event-handler
+      ((lambda ()
+         (when (and conn-dispatch-repeat-count
+                    (> conn-dispatch-repeat-count 0))
+           (concat (propertize "RET" 'face 'help-key-binding)
+                   (propertize " to finish repeating" 'face 'minibuffer-prompt))))
+       (or 'return 13)
+       (if (and conn-dispatch-repeat-count
+                (> conn-dispatch-repeat-count 0))
+           (conn-dispatch-handle-event)
+         (conn-dispatch-ignore-event)))
     (while
         (let ((target (conn-dispatch--select-target target-finder)))
           (unwind-protect
@@ -5119,8 +5146,7 @@ during target finding."
                          (overlay-get target 'window)
                          (overlay-start target)
                          (or (overlay-get target 'thing) thing-cmd)
-                         thing-arg)
-                (run-hooks 'conn-post-dispatch-hook))
+                         thing-arg))
             (delete-overlay target)))
       (cl-incf conn-dispatch-repeat-count)
       (undo-boundary))))
