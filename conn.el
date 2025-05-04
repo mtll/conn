@@ -3971,7 +3971,7 @@ Target overlays may override this default by setting the
   (error "Function only available in conn-with-dispatch-event-handler"))
 
 (defmacro conn-with-dispatch-event-handler (handler &rest body)
-  "\(fn (DESCRIPTION CASE) &body BODY)"
+  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
   (declare (indent 1))
   (cl-with-gensyms (return handle event)
     `(catch ',handle

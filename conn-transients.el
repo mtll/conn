@@ -719,7 +719,7 @@ A zero means repeat until error."
                               (`(,beg . ,end)
                                (let ((new (make-overlay beg end nil t)))
                                  (overlay-put new 'category 'kapply-target)
-                                 (overlay-put new 'point pt)
+                                 (overlay-put new 'point (conn--create-marker pt nil t))
                                  (overlay-put new 'face 'lazy-highlight)
                                  (overlay-put new 'thing thing)
                                  (overlay-put new 'window win)
