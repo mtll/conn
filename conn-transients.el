@@ -665,8 +665,9 @@ A zero means repeat until error."
         (remove-hook 'post-command-hook setup)
         (remove-hook 'transient-post-exit-hook 'exit-recursive-edit)))))
 
-(cl-defmethod conn-dispatch-apply-action ((action conn-dispatch-kapply)
-                                          target-finder thing-cmd thing-arg repeat)
+(cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
+                                     target-finder thing-cmd thing-arg
+                                     &optional repeat)
   (let ((targets nil))
     (unwind-protect
         (progn

@@ -5031,39 +5031,13 @@ during target finding."
           (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
-(cl-defgeneric conn-dispatch-apply-action (action target-finder thing-cmd thing-arg repeat))
-
-(cl-defmethod conn-dispatch-apply-action (action target-finder thing-cmd thing-arg repeat)
-  (catch 'end-repeat
-    (while
-        (let ((target (conn-dispatch--select-target target-finder)))
-          (unwind-protect
-              (prog1 repeat
-                (funcall action
-                         (overlay-get target 'window)
-                         (overlay-start target)
-                         (or (overlay-get target 'thing) thing-cmd)
-                         thing-arg)
-                (run-hooks 'conn-post-dispatch-hook))
-            (delete-overlay target)))
-      (cl-incf conn-dispatch-repeat-count)
-      (undo-boundary))))
-
-(defun conn-perform-dispatch ( action finder thing-cmd thing-arg
-                               &optional repeat)
-  (pcase action
-    ((pred conn-action-p))
-    ((pred conn--action-type-p)
-     (setq action (conn-action-accept (conn-action action))))
-    (_ (error "Unknown action %s" action)))
+(defun conn-dispatch-push-history (action finder thing-cmd thing-arg)
   (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
     (add-to-history 'conn-dispatch-ring
                     (cons (symbol-function 'conn-repeat-last-dispatch)
                           (symbol-function 'conn-last-dispatch-at-mouse))
                     conn-dispatch-ring-max))
-  (let ((conn-target-window-predicate conn-target-window-predicate)
-        (conn-dispatch-repeat-count (when repeat 0))
-        (description (lambda ()
+  (let ((description (lambda ()
                        (concat
                         (conn-action-description action)
                         " @ "
@@ -5094,14 +5068,42 @@ during target finding."
                        (posn-window posn) (posn-point posn)
                        thing-cmd thing-arg)
               (when conn-dispatch-repeat-count
-                (cl-incf repeat-count)))))
-    (when-let* ((predicate (conn-action--window-predicate action)))
-      (add-function :after-while conn-target-window-predicate predicate))
-    (conn-dispatch-apply-action
-     action finder thing-cmd thing-arg repeat)
-    (setf (conn-dispatch--repeat-count
+                (cl-incf repeat-count))))
+          (conn-dispatch--repeat-count
            (symbol-function 'conn-last-dispatch-at-mouse))
           conn-dispatch-repeat-count)))
+
+(cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
+                                       &optional repeat))
+
+(cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
+                                              &optional repeat)
+  (let ((conn-target-window-predicate conn-target-window-predicate)
+        (conn-dispatch-repeat-count (when repeat 0)))
+    (when-let* ((predicate (conn-action--window-predicate action)))
+      (add-function :after-while conn-target-window-predicate predicate))
+    (cl-call-next-method)
+    (conn-dispatch-push-history action target-finder thing-cmd thing-arg)))
+
+(cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
+                                      &optional repeat)
+  (when (conn--action-type-p action)
+    (setq action (conn-action-accept (conn-action action))))
+  (cl-assert (conn-action-p action))
+  (catch 'end-repeat
+    (while
+        (let ((target (conn-dispatch--select-target target-finder)))
+          (unwind-protect
+              (prog1 repeat
+                (funcall action
+                         (overlay-get target 'window)
+                         (overlay-start target)
+                         (or (overlay-get target 'thing) thing-cmd)
+                         thing-arg)
+                (run-hooks 'conn-post-dispatch-hook))
+            (delete-overlay target)))
+      (cl-incf conn-dispatch-repeat-count)
+      (undo-boundary))))
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
@@ -5117,27 +5119,26 @@ during target finding."
        (oclosure-lambda (conn--dispatch-continuation
                          (arg arg))
            ()
-         (let ((win (selected-window))
-               (conn-target-window-predicate conn-target-window-predicate)
-               (conn-target-sort-function conn-target-sort-function)
-               (conn-dispatch-repeat-count (when repeat 0)))
-           (add-function :before-while conn-target-window-predicate
-                         (lambda (window) (eq win window)))
-           (conn-dispatch-apply-action
-            (lambda (_win pt thing-cmd thing-arg)
-              (save-mark-and-excursion
-                (goto-char pt)
-                (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                  ('nil nil)
-                  (reg (push reg regions)))))
-            target-finder command arg repeat)
-           (unless regions (keyboard-quit))
-           (cl-loop for (b . e) in (compat-call sort
-                                                (conn--merge-regions regions t)
-                                                :key #'car :in-place t)
-                    minimize b into beg
-                    maximize e into end
-                    finally return (cons (cons beg end) regions))))
+         (conn-perform-dispatch
+          (oclosure-lambda (conn-action
+                            (window-predicate
+                             (let ((win (selected-window)))
+                               (lambda (window)
+                                 (eq win window)))))
+              (_win pt thing-cmd thing-arg)
+            (save-mark-and-excursion
+              (goto-char pt)
+              (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+                ('nil nil)
+                (reg (push reg regions)))))
+          target-finder command arg repeat)
+         (unless regions (keyboard-quit))
+         (cl-loop for (b . e) in (compat-call sort
+                                              (conn--merge-regions regions t)
+                                              :key #'car :in-place t)
+                  minimize b into beg
+                  maximize e into end
+                  finally return (cons (cons beg end) regions)))
        'conn--dispatch-command-case
        'conn--dispatch-message))))
 
