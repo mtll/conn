@@ -1630,7 +1630,7 @@ By default `conn-emacs-state' does not bind anything."
   :type '(list integer))
 
 (defface conn-dispatch-label-face
-  '((t (:inherit default :background "#ff8bd1" :foreground "black" :bold t)))
+  '((t (:inherit highlight :bold t)))
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
@@ -1822,9 +1822,7 @@ themselves once the selection process has concluded."
 ;;;;; Window header-line labels
 
 (defface conn-window-label-face
-  '((default (:height 2.5 :foreground "#d00000"))
-    (((background light)) (:height 2.5 :foreground "#d00000"))
-    (((background dark)) (:height 2.5 :foreground "#7c0000")))
+  '((t (:inherit help-key-binding :height 2.5)))
   "Face for conn window prompt overlay."
   :group 'conn-faces)
 
@@ -2029,8 +2027,7 @@ themselves once the selection process has concluded."
 
 ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
-command.  See `conn-dot-mode' for how bounds of `recursive-edit'
-are read."
+command."
   (conn--with-state (conn-enter-state
                      (or (conn--command-property :conn-read-state)
                          conn-state-for-read-mover))
@@ -2117,13 +2114,12 @@ are read."
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
-    (dot . conn--bounds-of-dot)
     (char . ,(lambda (_cmd arg)
                (list (cons (point) (+ (point) (prefix-numeric-value arg)))
                      (cons (point) (+ (point) (prefix-numeric-value arg))))))
     (conn-expand . conn--bounds-of-expansion)
     (conn-contract . conn--bounds-of-expansion)
-    (recursive-edit . conn--bounds-of-dots))
+    (recursive-edit . conn--bounds-of-recursive-edit))
   "Alist of bounds-op functions for things or commands.
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
@@ -2192,6 +2188,33 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
   (cons (cons (region-beginning) (region-end))
         (region-bounds)))
 
+(defvar-keymap conn-bounds-of-recursive-edit-mode-map
+  "e" 'exit-recursive-edit
+  "q" 'abort-recursive-edit)
+
+(define-minor-mode conn-bounds-of-recursive-edit-mode
+  "Minor mode for creating dots when finding the bounds of a recursive-edit."
+  :global t
+  :lighter ""
+  :interactive nil
+  (if conn-bounds-of-recursive-edit-mode
+      (progn
+        (internal-push-keymap conn-bounds-of-recursive-edit-mode-map
+                              'overriding-terminal-local-map)
+        (setq buffer-read-only t))
+    (internal-pop-keymap conn-bounds-of-recursive-edit-mode-map
+                         'overriding-terminal-local-map)
+    (setq buffer-read-only nil)))
+
+(defun conn--bounds-of-recursive-edit (_cmd _arg)
+  (progn
+    (conn-bounds-of-recursive-edit-mode 1)
+    (unwind-protect
+        (recursive-edit)
+      (conn-bounds-of-recursive-edit-mode -1))
+    (cons (cons (region-beginning) (region-end))
+          (region-bounds))))
+
 (defun conn--bounds-of-window (_cmd _arg)
   (list (cons (window-start) (window-end))))
 
@@ -2248,169 +2271,6 @@ BOUNDS is of the form returned by `region-bounds', which see."
                             (forward-thing thing 1)
                             t))
                finally return regions))))
-
-
-;;;;; Dots
-
-(defface conn-dot-face-1
-  '((default (:inherit match)))
-  "Face for dots."
-  :group 'conn-faces)
-
-(defface conn-dot-face-2
-  '((default (:inherit highlight)))
-  "Face for dots."
-  :group 'conn-faces)
-
-(defface conn-dot-face-3
-  '((default (:inherit isearch)))
-  "Face for dots."
-  :group 'conn-faces)
-
-(defcustom conn-dot-faces
-  (list 'conn-dot-face-1 'conn-dot-face-2 'conn-dot-face-3)
-  "List of faces for dots."
-  :group 'conn
-  :type '(list symbol))
-
-(defvar conn--dots nil)
-
-(put 'conn--dot-overlay 'conn-overlay t)
-(put 'conn--dot-overlay 'evaporate t)
-
-(defun conn--create-dot (beg end &optional buffer point)
-  (with-current-buffer (or buffer (current-buffer))
-    (cl-loop for ov in (overlays-in beg end)
-             do (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
-                  (let ((b (overlay-start ov))
-                        (e (overlay-end ov)))
-                    (when (or (< beg b end) (< beg e end))
-                      (setq beg (min beg (overlay-start ov))
-                            end (max end (overlay-end ov)))
-                      (delete-overlay ov)))))
-    (let ((dot (make-overlay beg end buffer))
-          (faces
-           (cl-loop for ov in (append (overlays-at (1- beg)) (overlays-at end))
-                    when (eq 'conn--dot-overlay (overlay-get ov 'category))
-                    collect (overlay-get ov 'face) into faces
-                    finally return (seq-difference conn-dot-faces faces))))
-      (overlay-put dot 'category 'conn--dot-overlay)
-      (overlay-put dot 'point point)
-      (overlay-put dot 'face (car faces))
-      (push dot conn--dots))))
-
-(defun conn--bounds-of-dot (_cmd _arg)
-  (catch 'found
-    (dolist (ov (overlays-at (point)))
-      (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
-        (throw 'found (list (conn--overlay-bounds-markers ov)))))))
-
-
-;;;;;; Dot commands
-
-(defun conn-mouse-click-dot (event)
-  "Create dot at mouse click event."
-  (interactive "e")
-  (let* ((posn (event-start event))
-         (point (posn-point posn)))
-    (conn--create-dot point (1+ point) (window-buffer (posn-window posn)) t)))
-
-(defun conn-point-to-dot (point)
-  "Create dot at point."
-  (interactive (list (point)))
-  (conn--create-dot point (1+ point) nil t))
-
-(defun conn-region-to-dot (bounds)
-  "Create dot covering region BOUNDS.
-
-BOUNDS is of the form returned by `region-bounds'."
-  (interactive (list (region-bounds)))
-  (pcase-dolist (`(,beg . ,end) bounds)
-    (conn--create-dot beg end))
-  (deactivate-mark t))
-
-(defun conn-thing-to-dot (thing-cmd thing-arg)
-  "Create dots at thing command region."
-  (interactive (conn-read-thing-mover))
-  (pcase-dolist (`(,beg . ,end) (cdr (conn-bounds-of-command thing-cmd thing-arg)))
-    (conn--create-dot beg end))
-  (deactivate-mark t))
-
-(defun conn-delete-dot-at-click (event)
-  "Delete dot at mouse click event."
-  (interactive "e")
-  (let* ((posn (event-start event))
-         (point (posn-point posn)))
-    (with-current-buffer (window-buffer (posn-window posn))
-      (dolist (ov (overlays-at point))
-        (when (eq (overlay-get ov 'category) 'conn--dot-overlay)
-          (delete-overlay ov))))))
-
-(defun conn-delete-dots ()
-  "Delete dots at point or if the region is active then within region."
-  (interactive)
-  (cl-flet ((get-dots (ovs)
-              (cl-loop for ov in ovs
-                       when (eq (overlay-get ov 'category) 'conn--dot-overlay)
-                       collect ov)))
-    (dolist (ov (if (use-region-p)
-                    (get-dots (overlays-in (region-beginning) (region-end)))
-                  (or (get-dots (overlays-at (point)))
-                      (get-dots (overlays-at (1- (point)))))))
-      (delete-overlay ov))
-    (deactivate-mark t)))
-
-
-;;;;;; Dot mode
-
-(defvar-keymap conn-dot-mode-map
-  "C-w" 'conn-region-to-dot
-  "C-d" 'conn-point-to-dot
-  "t" 'conn-thing-to-dot
-  "S-<mouse-1>" 'conn-mouse-click-dot
-  "S-<down-mouse-1>" 'conn-mouse-click-dot
-  "S-<drag-mouse-1>" 'conn-mouse-click-dot
-  "S-<mouse-3>" 'conn-delete-dot-at-click
-  "S-<down-mouse-3>" 'conn-delete-dot-at-click
-  "DEL" 'conn-delete-dots
-  "e" 'exit-recursive-edit
-  "q" 'abort-recursive-edit)
-
-(define-minor-mode conn-dot-mode
-  "Minor mode for creating dots when finding the bounds of a recursive-edit."
-  :global t
-  :lighter " DOT"
-  :interactive nil
-  (if conn-dot-mode
-      (progn
-        (internal-push-keymap conn-dot-mode-map 'overriding-terminal-local-map)
-        (setq conn--dots nil
-              buffer-read-only t))
-    (internal-pop-keymap conn-dot-mode-map 'overriding-terminal-local-map)
-    (mapc #'delete-overlay conn--dots)
-    (setq conn--dots nil
-          buffer-read-only nil)))
-
-(defun conn--bounds-of-dots (&rest _)
-  (conn-dot-mode 1)
-  (unwind-protect
-      (let ((dots
-             (cl-loop for dot in (progn (recursive-edit) conn--dots)
-                      when (overlay-buffer dot)
-                      collect (if (overlay-get dot 'point)
-                                  (cons (overlay-start dot)
-                                        (overlay-start dot))
-                                (cons (overlay-start dot)
-                                      (overlay-end dot))))))
-        (if dots
-            (cl-loop for (b . e) in dots
-                     minimize b into beg
-                     maximize e into end
-                     finally return (cons (cons beg end) (nreverse dots)))
-          (list (cons (region-beginning) (region-end)))))
-    (conn-dot-mode -1)
-    (deactivate-mark t)))
-
 
 ;;;; Kapply
 
@@ -3359,16 +3219,6 @@ of a command.")
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
-
-(define-keymap
-  :keymap (conn-get-mode-map 'conn-dispatch-mover-state 'conn-dot-mode)
-  "k" `(dot ,(lambda ()
-               (mapcar (lambda (ov)
-                         (conn-make-target-overlay
-                          (overlay-start ov)
-                          (- (overlay-end ov)
-                             (overlay-start ov))))
-                       conn--dots))))
 
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
@@ -4496,24 +4346,6 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-cancel ((action conn-dispatch-throw-replace))
   (conn--action-cancel-change-group (oref action change-group)))
 
-(conn-define-dispatch-action conn-dispatch-dot (window pt thing-cmd thing-arg)
-  :description "Dot"
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-        (`(,beg . ,end)
-         (when beg (conn--create-dot beg end)))
-        (_ (user-error "Cannot find %s at point" thing-cmd))))))
-
-(conn-define-dispatch-action conn-dispatch-remove-dot
-    (window pt _thing-cmd _thing-arg)
-  :description "Remove Dot"
-  (with-selected-window window
-    (save-excursion
-      (goto-char pt)
-      (conn-delete-dots))))
-
 (conn-define-dispatch-action conn-dispatch-downcase (window pt thing-cmd thing-arg)
   :description "Downcase"
   :window-predicate (lambda (win)
@@ -4970,11 +4802,6 @@ Returns a cons of (STRING . OVERLAYS)."
               (accept-change-group cg2))
           (cancel-change-group cg1)
           (cancel-change-group cg2))))))
-
-(define-keymap
-  :keymap (conn-get-mode-map 'conn-read-dispatch-state 'conn-dot-mode)
-  "d" 'conn-dispatch-dot
-  "w" 'conn-dispatch-remove-dot)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
@@ -5540,10 +5367,6 @@ order to mark the region that should be defined by any of COMMANDS."
  :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
 (conn-register-thing
- 'dots
- :bounds-op (lambda () (cons (region-beginning) (region-end))))
-
-(conn-register-thing
  'buffer-after-point
  :bounds-op (lambda () (cons (point) (point-max))))
 
@@ -5569,11 +5392,6 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing-commands
  'region nil
  'conn-toggle-mark-command)
-
-(conn-register-thing-commands
- 'dots nil
- 'conn-set-mark-command
- 'set-mark-command)
 
 (conn-register-thing
  'symbol

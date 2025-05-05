@@ -450,9 +450,7 @@
 ;;;; Posframe window labels
 
 (defface conn-posframe-window-label-face
-  '((default (:height 4.0 :foreground "#d00000"))
-    (((background light)) (:height 4.0 :foreground "#d00000"))
-    (((background dark)) (:height 4.0 :foreground "#7c0000")))
+  '((t (:inherit help-key-binding :height 4)))
   "Face for conn window label posframe."
   :group 'conn-faces)
 
