@@ -693,7 +693,7 @@ A zero means repeat until error."
                         (win (overlay-get target 'window)))
                    (with-current-buffer (window-buffer win)
                      (if-let* ((to-delete
-                                (conn--overlays-at pt end win 'kapply-target)))
+                                (conn--overlays-in-of-type pt end win 'kapply-target)))
                          (progn
                            (setf targets (delq to-delete targets))
                            (conn-unhide-target-overlay target)

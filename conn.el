@@ -3575,7 +3575,7 @@ be ignored by during dispatch.")
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
-(defun conn--overlays-at (beg end window category)
+(defun conn--overlays-in-of-type (beg end window category)
   (cl-loop for ov in (overlays-in beg end)
            when (and (eq (overlay-get ov 'category) category)
                      (eq (overlay-get ov 'window) window))
@@ -3587,7 +3587,7 @@ be ignored by during dispatch.")
 Optionally the overlay may have an associated THING."
   (unless window
     (setq window (selected-window)))
-  (unless (conn--overlays-at pt (+ pt length) window 'conn-target-overlay)
+  (unless (conn--overlays-in-of-type pt (+ pt length) window 'conn-target-overlay)
     (conn-protected-let* ((line-bounds
                            (save-excursion
                              (goto-char pt)
@@ -4005,14 +4005,14 @@ Target overlays may override this default by setting the
        (let ((conn-dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        (cl-macrolet
-                            (( conn-dispatch-ignore-event ()
-                               `(throw ',',return t))
-                             ( conn-dispatch-handle-event (&rest body)
-                               `(throw ',',handle ,,'(macroexp-progn body))))
-                          (pcase ,event
-                            ,(cdr handler))
-                          nil)))
+                        ,(macroexpand-all
+                          `(progn (pcase ,event ,(cdr handler)) nil)
+			  `((conn-dispatch-ignore-event
+                             . ,(lambda () `(throw ',return t)))
+                            (conn-dispatch-handle-event
+                             . ,(lambda (&rest body)
+                                  `(throw ',handle ,(macroexp-progn body))))
+			    ,@macroexpand-all-environment))))
                     conn-dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
               (cons
