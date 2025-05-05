@@ -668,55 +668,36 @@ A zero means repeat until error."
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
                                      &optional repeat)
-  (let ((targets nil)
-        (undo-handles nil)
-        (success nil))
+  (let ((undo-handles nil)
+        (success nil)
+        (targets (conn-dispatch-select-targets
+                  target-finder
+                  (when repeat
+                    (lambda (target)
+                      (let ((selected (conn-target-selected-p target)))
+                        (if selected
+                            (cl-decf conn-dispatch-repeat-count)
+                          (cl-incf conn-dispatch-repeat-count))
+                        (not selected)))))))
     (unwind-protect
         (progn
-          (conn-with-dispatch-event-handler
-              ((lambda ()
-                 (when (> conn-dispatch-repeat-count 0)
-                   (concat (propertize "RET" 'face 'read-multiple-choice-face)
-                           (propertize " finish"
-                                       'face 'minibuffer-prompt))))
-               (or 'return 13)
-               (if (> conn-dispatch-repeat-count 0)
-                   (conn-dispatch-handle-event)
-                 (conn-dispatch-ignore-event)))
-            (while t
-              (conn-dispatch-select-target
-               target-finder
-               (lambda (target)
-                 (if-let* ((to-delete (assq target targets)))
-                     (progn
-                       (conn-unselect-target-overlay target)
-                       (setf targets (delq to-delete targets))
-                       (delete-overlay (cdr to-delete)))
-                   (conn-select-target-overlay target)
-                   (push (cons target (copy-overlay target)) targets))
-                 (setf conn-dispatch-repeat-count (length targets))
-                 repeat))))
           (setf conn-dispatch-repeat-count 0)
-          (pcase-dolist (`(,_ . ,target) (reverse targets))
-            (let ((pt (overlay-start target))
-                  (win (overlay-get target 'window))
-                  (thing (or (overlay-get target 'thing) thing-cmd)))
-              (delete-overlay target)
-              (unless (alist-get (window-buffer win) undo-handles)
-                (setf (alist-get (window-buffer win) undo-handles)
-                      (prepare-change-group (window-buffer win))))
-              (let ((conn-kapply-suppress-message t))
-                (while (condition-case err
-                           (progn
-                             (funcall action win pt thing thing-arg)
-                             nil)
-                         (user-error (message (cadr err)) t))))
-              (cl-incf conn-dispatch-repeat-count)))
+          (pcase-dolist (`(,pt ,win ,thing) (reverse targets))
+            (unless (alist-get (window-buffer win) undo-handles)
+              (setf (alist-get (window-buffer win) undo-handles)
+                    (prepare-change-group (window-buffer win))))
+            (let ((conn-kapply-suppress-message t))
+              (while (condition-case err
+                         (progn
+                           (funcall action win pt
+                                    (or thing thing-cmd) thing-arg)
+                           nil)
+                       (user-error (message (cadr err)) t))))
+            (cl-incf conn-dispatch-repeat-count))
           (message "Kapply completed successfully after %s iterations"
                    conn-dispatch-repeat-count)
           (setf success t))
-      (pcase-dolist (`(,_ . ,target) targets)
-        (delete-overlay target))
+      (mapc #'delete-overlay targets)
       (if success
           (pcase-dolist (`(_ . ,handle) undo-handles)
             (accept-change-group handle)
