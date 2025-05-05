@@ -668,42 +668,20 @@ A zero means repeat until error."
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
                                      &optional repeat)
-  (let ((undo-handles nil)
-        (success nil)
-        (targets (conn-dispatch-select-targets
-                  target-finder
-                  (when repeat
-                    (lambda (target)
-                      (let ((selected (conn-target-selected-p target)))
-                        (if selected
-                            (cl-decf conn-dispatch-repeat-count)
-                          (cl-incf conn-dispatch-repeat-count))
-                        (not selected)))))))
-    (unwind-protect
-        (progn
-          (setf conn-dispatch-repeat-count 0)
-          (pcase-dolist (`(,pt ,win ,thing) (reverse targets))
-            (unless (alist-get (window-buffer win) undo-handles)
-              (setf (alist-get (window-buffer win) undo-handles)
-                    (prepare-change-group (window-buffer win))))
-            (let ((conn-kapply-suppress-message t))
-              (while (condition-case err
-                         (progn
-                           (funcall action win pt
-                                    (or thing thing-cmd) thing-arg)
-                           nil)
-                       (user-error (message (cadr err)) t))))
-            (cl-incf conn-dispatch-repeat-count))
-          (message "Kapply completed successfully after %s iterations"
-                   conn-dispatch-repeat-count)
-          (setf success t))
-      (mapc #'delete-overlay targets)
-      (if success
-          (pcase-dolist (`(_ . ,handle) undo-handles)
-            (accept-change-group handle)
-            (undo-amalgamate-change-group handle))
-        (pcase-dolist (`(_ . ,handle) undo-handles)
-          (cancel-change-group handle))))))
+  (let ((conn-label-select-always-prompt t))
+    (conn-perform-dispatch-loop repeat
+      (pcase-let* ((`(,pt ,win ,thing)
+                    (conn-dispatch-select-target target-finder))
+                   (thing (or thing thing-cmd)))
+        (let ((conn-kapply-suppress-message t))
+          (while
+              (condition-case err
+                  (progn
+                    (funcall action win pt thing thing-arg)
+                    nil)
+                (user-error (message (cadr err)) t)))))))
+  (message "Kapply completed successfully after %s iterations"
+           conn-dispatch-repeat-count))
 
 (transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
   "Apply keyboard macro on dispatch targets."
