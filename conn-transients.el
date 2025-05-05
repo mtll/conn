@@ -673,27 +673,16 @@ A zero means repeat until error."
         (success nil))
     (unwind-protect
         (progn
-          (conn-with-dispatch-event-handlers
-              (((lambda ()
-                  (when (> conn-dispatch-repeat-count 0)
-                    (concat (propertize "RET" 'face 'read-multiple-choice-face)
-                            (propertize " finish"
-                                        'face 'minibuffer-prompt))))
-                (or 'return 13)
-                (if (> conn-dispatch-repeat-count 0)
-                    (conn-dispatch-handle-event)
-                  (conn-dispatch-ignore-event)))
-               ((lambda ()
-                  (when targets
-                    (concat (propertize "C-/" 'face 'read-multiple-choice-face)
-                            (propertize " undo" 'face 'minibuffer-prompt))))
-                (and ?\C-/
-                     (let (and (pred identity) to-delete)
-                       (car targets)))
-                (pulse-momentary-highlight-region (overlay-start to-delete)
-                                                  (overlay-end to-delete))
-                (delete-overlay (pop targets))
-                (conn-dispatch-handle-event)))
+          (conn-with-dispatch-event-handler
+              ((lambda ()
+                 (when (> conn-dispatch-repeat-count 0)
+                   (concat (propertize "RET" 'face 'read-multiple-choice-face)
+                           (propertize " finish"
+                                       'face 'minibuffer-prompt))))
+               (or 'return 13)
+               (if (> conn-dispatch-repeat-count 0)
+                   (conn-dispatch-handle-event)
+                 (conn-dispatch-ignore-event)))
             (while t
               (conn-dispatch--select-target
                target-finder
@@ -707,19 +696,14 @@ A zero means repeat until error."
                                 (conn--overlays-at pt end win 'kapply-target)))
                          (progn
                            (setf targets (delq to-delete targets))
-                           (overlay-put target 'hide nil)
-                           (pulse-momentary-highlight-region
-                            (overlay-start to-delete)
-                            (overlay-end to-delete))
+                           (conn-unhide-target-overlay target)
                            (delete-overlay to-delete))
-                       (overlay-put target 'hide t)
-                       (overlay-put target 'display nil)
-                       (overlay-put target 'after-string nil)
+                       (conn-hide-target-overlay target)
                        (save-mark-and-excursion
                          (goto-char pt)
                          (pcase (car (conn-bounds-of-command thing thing-arg))
-                           (`(,beg . ,end)
-                            (let ((new (make-overlay beg end nil t)))
+                           (`(,b . ,e)
+                            (let ((new (make-overlay (min b pt) (max e end) nil t)))
                               (overlay-put new 'category 'kapply-target)
                               (overlay-put new 'point (conn--create-marker pt nil t))
                               (overlay-put new 'face 'lazy-highlight)

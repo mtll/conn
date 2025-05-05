@@ -1722,12 +1722,13 @@ returned.")
   (pcase-let (((cl-struct conn-dispatch-label string overlay target-overlay)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (unless (overlay-get target-overlay 'hide)
-        (overlay-put target-overlay 'display
-                     (propertize (buffer-substring
-                                  (overlay-start target-overlay)
-                                  (overlay-end target-overlay))
-                                 'face 'conn-target-overlay-face)))
+      (let ((hidep (overlay-get target-overlay 'hide)))
+        (unless (if (functionp hidep) (funcall hidep) hidep)
+          (overlay-put target-overlay 'display
+                       (propertize (buffer-substring
+                                    (overlay-start target-overlay)
+                                    (overlay-end target-overlay))
+                                   'face 'conn-target-overlay-face))))
       (funcall (overlay-get overlay 'setup-fn) string))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
@@ -2112,8 +2113,11 @@ are read."
     (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
     (dot . conn--bounds-of-dot)
-    (conn-expand . ,(lambda (arg) (conn--bounds-of-expansion 'conn-expand arg)))
-    (conn-contract . ,(lambda (arg) (conn--bounds-of-expansion 'conn-contract arg)))
+    (char . ,(lambda (_cmd arg)
+               (list (cons (point) (+ (point) (prefix-numeric-value arg)))
+                     (cons (point) (+ (point) (prefix-numeric-value arg))))))
+    (conn-expand . conn--bounds-of-expansion)
+    (conn-contract . conn--bounds-of-expansion)
     (recursive-edit . conn--bounds-of-dots))
   "Alist of bounds-op functions for things or commands.
 
@@ -3640,6 +3644,14 @@ Optionally the overlay may have an associated THING."
       (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
         (conn-make-target-overlay beg (- end beg))))))
 
+(defun conn-hide-target-overlay (overlay)
+  (overlay-put overlay 'hide t)
+  (overlay-put overlay 'display nil)
+  (overlay-put overlay 'after-string nil))
+
+(defun conn-unhide-target-overlay (overlay)
+  (overlay-put overlay 'hide nil))
+
 (defun conn--read-string-with-timeout (&optional predicate)
   (unwind-protect
       (conn-with-input-method
@@ -3935,8 +3947,8 @@ Target overlays may override this default by setting the
                          (when delable
                            (concat (propertize "DEL" 'face 'read-multiple-choice-face)
                                    (propertize " restart" 'face 'minibuffer-prompt))))
-                       (and (or 8 'backspace)
-                            (guard delable))
+                       (and (guard delable)
+                            (or 8 'backspace))
                        (conn-delete-targets)
                        (mapc #'conn-label-delete labels)
                        (conn-dispatch-handle-event))
@@ -4007,15 +4019,6 @@ Target overlays may override this default by setting the
                ,(car handler)
                conn--dispatch-event-message-prefixes)))
          ,@body))))
-
-(defmacro conn-with-dispatch-event-handlers (handlers &rest body)
-  "\(fn ((DESCRIPTION &rest CASE) ...) &body BODY)"
-  (declare (indent 1))
-  (if (cdr handlers)
-      `(conn-with-dispatch-event-handler
-           ,(car handlers)
-         (conn-with-dispatch-event-handlers ,(cdr handlers) ,@body))
-    `(conn-with-dispatch-event-handler ,(car handlers) ,@body)))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (setq prompt
@@ -5161,7 +5164,7 @@ Returns a cons of (STRING . OVERLAYS)."
       ((lambda ()
          (when (> conn-dispatch-repeat-count 0)
            (concat (propertize "RET" 'face 'read-multiple-choice-face)
-                   (propertize " to finish repeating" 'face 'minibuffer-prompt))))
+                   (propertize " finish" 'face 'minibuffer-prompt))))
        (or 'return 13)
        (if (> conn-dispatch-repeat-count 0)
            (conn-dispatch-handle-event)
