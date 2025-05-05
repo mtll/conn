@@ -4603,7 +4603,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate-and-comment))
   (setf (oref action arg) (conn-state-loop-consume-prefix-arg action)))
 
-(conn-define-dispatch-action conn-dispatch-register
+(conn-define-dispatch-action conn-dispatch-register-load
     (window pt _thing-cmd _thing-arg register)
   (with-selected-window window
     ;; If there is a keyboard macro in the register we would like to
@@ -4613,10 +4613,10 @@ Returns a cons of (STRING . OVERLAYS)."
         (goto-char pt)
         (conn-register-load register)))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-register))
+(cl-defmethod conn-action-initialize ((action conn-dispatch-register-load))
   (setf (oref action register) (register-read-with-preview "Register: ")))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-register))
+(cl-defmethod conn-action-description ((action conn-dispatch-register-load))
   (format "Register <%c>" (oref action register)))
 
 (conn-define-dispatch-action conn-dispatch-register-replace
@@ -5001,7 +5001,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "r ;" 'conn-dispatch-comment
   "r e" 'conn-dispatch-duplicate
   "r d" 'conn-dispatch-duplicate-and-comment
-  "p" 'conn-dispatch-register
+  "p" 'conn-dispatch-register-load
   "P" 'conn-dispatch-register-replace
   "w" 'conn-dispatch-kill
   "]" 'conn-dispatch-kill-append
