@@ -1112,7 +1112,7 @@ Called when the inheritance hierarchy for STATE changes."
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
-  ;; Ensure conn-local-mode is t since this can be run by conn--with-state
+  ;; Ensure conn-local-mode is t since this can be run by conn-with-state
   ;; in buffers without conn-local-mode enabled.
   (when conn-local-mode
     (let (input-method-activate-hook
@@ -1297,7 +1297,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
 
-(defmacro conn--with-state (transition-form &rest body)
+(defmacro conn-with-state (transition-form &rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
@@ -2028,9 +2028,9 @@ themselves once the selection process has concluded."
 ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command."
-  (conn--with-state (conn-enter-state
-                     (or (conn--command-property :conn-read-state)
-                         conn-state-for-read-mover))
+  (conn-with-state (conn-enter-state
+                    (or (conn--command-property :conn-read-state)
+                        conn-state-for-read-mover))
     (conn-with-state-loop
      (oclosure-lambda (conn-read-mover-continuation
                        (recursive-edit recursive-edit)
@@ -3151,8 +3151,7 @@ For the meaning of TARGET-FINDER see
 For the meaning of action function see `conn-define-dispatch-action'.")
 
 (defvar conn-dispatch-default-action-alist
-  '((conn-expand . 'conn-dispatch-jump)
-    (button . conn-dispatch-push-button))
+  (list (cons 'button 'conn-dispatch-push-button))
   "Default action functions for things or commands.
 
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
@@ -3361,7 +3360,7 @@ of a command.")
   (conn--completing-read-dispatch continuation))
 
 (defun conn-read-dispatch (&optional arg)
-  (conn--with-state
+  (conn-with-state
       (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
                             conn-state-for-read-dispatch))
     (conn-with-state-loop
@@ -4940,7 +4939,7 @@ Returns a cons of (STRING . OVERLAYS)."
             (interactive "P")
             (cl-letf ((conn-dispatch-repeat-count repeat-count)
                       ((symbol-function 'conn-repeat-last-dispatch)))
-              (conn--with-state (conn-enter-state state)
+              (conn-with-state (conn-enter-state state)
                 (conn-perform-dispatch action finder
                                        thing-cmd thing-arg
                                        (xor invert-repeat repeat)))
@@ -5015,7 +5014,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn-bounds-of-dispatch (_cmd arg)
   (let* ((conn-state-for-read-dispatch 'conn-dispatch-mover-state)
          (regions nil))
-    (conn--with-state
+    (conn-with-state
         (conn-enter-state (or (conn--command-property :conn-read-dispatch-state)
                               conn-state-for-read-dispatch))
       (conn-with-state-loop
@@ -5275,7 +5274,7 @@ Expansions and contractions are provided by functions in
                           "\\[conn-toggle-mark-command] to toggle mark, "
                           "\\[exit-recursive-edit] to finish")))))
       (unwind-protect
-          (conn--with-state (conn-enter-state conn-previous-state)
+          (conn-with-state (conn-enter-state conn-previous-state)
             (recursive-edit))
         (funcall exit)))
     (list (cons (region-beginning) (region-end)))))
@@ -7578,7 +7577,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
-  "o" 'conn-wincontrol-next-window)
+  "o" 'conn-wincontrol-next-window
+  "u" 'conn-wincontrol-previous-window)
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
@@ -8584,7 +8584,7 @@ Operates with the selected windows parent window."
   (declare-function calc-dispatch "calc")
 
   (defun conn--calc-dispatch-ad (&rest app)
-    (conn--with-state (conn-enter-state 'conn-null-state)
+    (conn-with-state (conn-enter-state 'conn-null-state)
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 

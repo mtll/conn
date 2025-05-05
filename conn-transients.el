@@ -652,7 +652,7 @@ A zero means repeat until error."
       (setf (oref continuation action) nil)
     (letrec ((wconf (current-window-configuration))
              (setup (lambda ()
-                      (conn--with-state (conn-enter-state conn-previous-state)
+                      (conn-with-state (conn-enter-state conn-previous-state)
                         (conn-dispatch-kapply-prefix
                          (lambda (kapply-action)
                            (setf (oref continuation action) kapply-action))))
