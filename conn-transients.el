@@ -687,54 +687,36 @@ A zero means repeat until error."
               (conn-dispatch-select-target
                target-finder
                (lambda (target)
-                 (let* ((thing (or (overlay-get target 'thing) thing-cmd))
-                        (pt (overlay-start target))
-                        (end (overlay-end target))
-                        (win (overlay-get target 'window)))
-                   (with-current-buffer (window-buffer win)
-                     (if-let* ((to-delete
-                                (conn--overlays-in-of-type pt end win 'kapply-target)))
-                         (progn
-                           (setf targets (delq to-delete targets))
-                           (conn-unhide-target-overlay target)
-                           (delete-overlay to-delete))
-                       (conn-hide-target-overlay target)
-                       (save-mark-and-excursion
-                         (goto-char pt)
-                         (pcase (car (conn-bounds-of-command thing thing-arg))
-                           (`(,b . ,e)
-                            (let ((new (make-overlay (min b pt) (max e end) nil t)))
-                              (overlay-put new 'category 'kapply-target)
-                              (overlay-put new 'point (conn--create-marker pt nil t))
-                              (overlay-put new 'face 'lazy-highlight)
-                              (overlay-put new 'thing thing)
-                              (overlay-put new 'window win)
-                              (overlay-put new 'display nil)
-                              (push new targets))))))))
+                 (if-let* ((to-delete (assq target targets)))
+                     (progn
+                       (conn-unselect-target-overlay target)
+                       (setf targets (delq to-delete targets))
+                       (delete-overlay (cdr to-delete)))
+                   (conn-select-target-overlay target)
+                   (push (cons target (copy-overlay target)) targets))
                  (setf conn-dispatch-repeat-count (length targets))
                  repeat))))
           (setf conn-dispatch-repeat-count 0)
-          (dolist (target (reverse targets))
-            (let ((pt (overlay-get target 'point))
+          (pcase-dolist (`(,_ . ,target) (reverse targets))
+            (let ((pt (overlay-start target))
                   (win (overlay-get target 'window))
-                  (thing (overlay-get target 'thing)))
+                  (thing (or (overlay-get target 'thing) thing-cmd)))
               (delete-overlay target)
               (unless (alist-get (window-buffer win) undo-handles)
                 (setf (alist-get (window-buffer win) undo-handles)
                       (prepare-change-group (window-buffer win))))
               (let ((conn-kapply-suppress-message t))
-                (with-selected-window win
-                  (while (condition-case err
-                             (progn
-                               (funcall action win pt thing thing-arg)
-                               nil)
-                           (user-error (message (cadr err)) t)))))
-              (set-marker pt nil)
+                (while (condition-case err
+                           (progn
+                             (funcall action win pt thing thing-arg)
+                             nil)
+                         (user-error (message (cadr err)) t))))
               (cl-incf conn-dispatch-repeat-count)))
           (message "Kapply completed successfully after %s iterations"
                    conn-dispatch-repeat-count)
           (setf success t))
-      (mapc #'delete-overlay targets)
+      (pcase-dolist (`(,_ . ,target) targets)
+        (delete-overlay target))
       (if success
           (pcase-dolist (`(_ . ,handle) undo-handles)
             (accept-change-group handle)

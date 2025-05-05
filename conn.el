@@ -1634,6 +1634,11 @@ By default `conn-emacs-state' does not bind anything."
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
+(defface conn-dispatch-label-selected-face
+  '((t (:inherit lazy-highlight :bold t)))
+  "Face for group in dispatch lead overlay."
+  :group 'conn-faces)
+
 (defvar conn-label-string-generator 'conn-simple-labels
   "Function to create label strings for a number of elements.")
 
@@ -1729,7 +1734,10 @@ returned.")
                                     (overlay-start target-overlay)
                                     (overlay-end target-overlay))
                                    'face 'conn-target-overlay-face))))
-      (funcall (overlay-get overlay 'setup-fn) string))))
+      (funcall (overlay-get overlay 'setup-fn)
+               (if (overlay-get target-overlay 'selected)
+                   (propertize string 'face 'conn-dispatch-label-selected-face)
+                 string)))))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
@@ -3480,13 +3488,11 @@ Optionally the overlay may have an associated THING."
       (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
         (conn-make-target-overlay beg (- end beg))))))
 
-(defun conn-hide-target-overlay (overlay)
-  (overlay-put overlay 'hide t)
-  (overlay-put overlay 'display nil)
-  (overlay-put overlay 'after-string nil))
+(defun conn-select-target-overlay (overlay)
+  (overlay-put overlay 'selected t))
 
-(defun conn-unhide-target-overlay (overlay)
-  (overlay-put overlay 'hide nil))
+(defun conn-unselect-target-overlay (overlay)
+  (overlay-put overlay 'selected nil))
 
 (defun conn--read-string-with-timeout (&optional predicate)
   (unwind-protect
@@ -3731,6 +3737,7 @@ Target overlays may override this default by setting the
               (overlay-put ov 'category 'conn-label-overlay)
               (overlay-put ov 'window window)
               (overlay-put ov 'target-overlay tar)
+              (overlay-put tar 'label-overlay ov)
               (funcall (thread-last
                          (if (and window-pixelwise
                                   (funcall conn-pixelwise-labels-target-predicate ov))
@@ -3777,32 +3784,35 @@ Target overlays may override this default by setting the
           (catch 'return
             (while t
               (funcall finder)
-              (if (setf labels (funcall conn-dispatch-label-function))
-                  (conn-with-dispatch-event-handler
-                      ((lambda ()
-                         (when delable
-                           (concat (propertize "DEL" 'face 'read-multiple-choice-face)
-                                   (propertize " restart" 'face 'minibuffer-prompt))))
-                       (and (guard delable)
-                            (or 8 'backspace))
-                       (conn-delete-targets)
-                       (mapc #'conn-label-delete labels)
-                       (conn-dispatch-handle-event))
-                    (setf conn--dispatch-event-message-error nil)
-                    (let* ((prompt (concat "["
-                                           (number-to-string conn-target-count)
-                                           "] chars")))
-                      (if collector
-                          (progn
-                            (while (and
-                                    (funcall collector (conn-label-select labels prompt))
-                                    (length> labels 1))
-                              (setf delable nil)
-                              (mapc #'conn-label-reset labels))
-                            (throw 'return collector))
+              (if (null (setf labels (funcall conn-dispatch-label-function)))
+                  (setf conn--dispatch-event-message-error
+                        "No matching candidates")
+                (conn-with-dispatch-event-handler
+                    ((lambda ()
+                       (when delable
+                         (concat
+                          (propertize "DEL" 'face 'read-multiple-choice-face)
+                          (propertize " restart" 'face 'minibuffer-prompt))))
+                     (and (guard delable)
+                          (or 8 'backspace))
+                     (conn-delete-targets)
+                     (mapc #'conn-label-delete labels)
+                     (conn-dispatch-handle-event))
+                  (setf conn--dispatch-event-message-error nil)
+                  (let* ((prompt (concat
+                                  "["
+                                  (number-to-string conn-target-count)
+                                  "] chars")))
+                    (if (null collector)
                         (throw 'return
-                               (copy-overlay (conn-label-select labels prompt))))))
-                (setf conn--dispatch-event-message-error "No matching candidates"))))
+                               (copy-overlay (conn-label-select labels prompt)))
+                      (while
+                          (and
+                           (funcall collector (conn-label-select labels prompt))
+                           (length> labels 1))
+                        (setf delable nil)
+                        (mapc #'conn-label-reset labels))
+                      (throw 'return collector)))))))
         (conn-delete-targets)
         (mapc #'conn-label-delete labels)
         (dolist (win (conn--get-target-windows))
@@ -3874,7 +3884,7 @@ Target overlays may override this default by setting the
                               (pcase pfx
                                 ((pred functionp) (funcall pfx))
                                 ((pred stringp) pfx)))
-                            conn--dispatch-event-message-prefixes)))
+                            (reverse conn--dispatch-event-message-prefixes))))
          (prompt
           (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
                   (mapconcat 'identity prefix (propertize "; " 'face 'minibuffer-prompt))
@@ -4967,13 +4977,13 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-dispatch-repeat-count 0)
         (conn--dispatch-event-message-prefixes
          (if thing-cmd
-             (append conn--dispatch-event-message-prefixes
-                     (list (propertize
-                            (concat
-                             (format "'%s" thing-cmd)
-                             (when thing-arg
-                               (format " <%s>" thing-arg)))
-                            'face 'minibuffer-prompt)))
+             (cons (propertize
+                    (concat
+                     (format "'%s" thing-cmd)
+                     (when thing-arg
+                       (format " <%s>" thing-arg)))
+                    'face 'minibuffer-prompt)
+                   conn--dispatch-event-message-prefixes)
            conn--dispatch-event-message-prefixes)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
