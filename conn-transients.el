@@ -647,7 +647,7 @@ A zero means repeat until error."
               (conn--kmacro-display (kmacro--keys macro))
             "unrecorded")))
 
-(cl-defmethod conn--dispatch-command-case ((_command (eql kapply)) continuation)
+(cl-defmethod conn-dispatch-command-case ((_command (eql kapply)) continuation)
   (if (cl-typep (oref continuation action) 'conn-dispatch-kapply)
       (setf (oref continuation action) nil)
     (letrec ((wconf (current-window-configuration))
@@ -684,7 +684,7 @@ A zero means repeat until error."
                    (conn-dispatch-handle-event)
                  (conn-dispatch-ignore-event)))
             (while t
-              (conn-dispatch--select-target
+              (conn-dispatch-select-target
                target-finder
                (lambda (target)
                  (let* ((thing (or (overlay-get target 'thing) thing-cmd))
