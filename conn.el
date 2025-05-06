@@ -6579,6 +6579,12 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
                      collect (nth (seq-position old-list elem #'eq) new-list)))
       (setf conn-mark-ring new-ring))))
 
+(defun conn-delete-mark-ring ()
+  (when (conn-ring-p conn-mark-ring)
+    (mapc (conn-ring-cleanup conn-mark-ring)
+          (conn-ring-list conn-mark-ring))
+    (setf conn-mark-ring nil)))
+
 (defun conn--push-mark-ring (location &optional back)
   (when (not conn-mark-ring)
     (setq conn-mark-ring
@@ -6644,6 +6650,12 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                      for elem in (conn-ring-history new-ring)
                      collect (nth (seq-position old-list elem #'eq) new-list))
             conn-movement-ring new-ring))))
+
+(defun conn-delete-movement-ring ()
+  (when (conn-ring-p conn-movement-ring)
+    (mapc (conn-ring-cleanup conn-movement-ring)
+          (conn-ring-list conn-movement-ring))
+    (setf conn-movement-ring nil)))
 
 (defun conn-push-region (point mark &optional back)
   (when (not conn-movement-ring)
@@ -8593,6 +8605,8 @@ Operates with the selected windows parent window."
     ;; conn-exit-state this prevents an infinite loop.
     (when conn-current-state
       (conn-exit-state conn-current-state))
+    (conn-delete-movement-ring)
+    (conn-delete-mark-ring)
     (conn--clear-overlays)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
@@ -8622,7 +8636,9 @@ Operates with the selected windows parent window."
       (when (eq (keymap-lookup minibuffer-mode-map "M-Y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "M-Y"))
-      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook))))
+      (remove-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook)
+      (remove-hook 'clone-buffer-hook 'conn-copy-movement-ring)
+      (remove-hook 'clone-buffer-hook 'conn-copy-mark-ring))))
 
 (provide 'conn)
 
