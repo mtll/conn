@@ -360,13 +360,21 @@
                                         kmacro-initial-counter-value)
                                       (format "[%s]" kmacro-counter)))
                           'face 'conn-posframe-header)
+              (mapconcat
+               (lambda (km)
+                 (conn--kmacro-display (kmacro--keys km)))
+               (take (min 4 (floor (length kmacro-ring) 2))
+                     (reverse kmacro-ring))
+               "\n")
+              (when (length> kmacro-ring 1) "\n")
               (propertize (concat (conn--kmacro-display last-kbd-macro)
                                   "\n")
                           'face 'conn-posframe-highlight)
               (mapconcat
                (lambda (km)
                  (conn--kmacro-display (kmacro--keys km)))
-               kmacro-ring
+               (take (min 4 (ceiling (length kmacro-ring) 2))
+                     kmacro-ring)
                "\n"))
      :left-fringe 0
      :right-fringe 0
@@ -388,13 +396,20 @@
      :string (concat
               (propertize "Dispatch Ring\n"
                           'face 'conn-posframe-header)
+              (mapconcat (lambda (cons)
+                           (conn-describe-dispatch (car cons)))
+                         (take (min 4 (floor (length conn-dispatch-ring) 2))
+                               (reverse conn-dispatch-ring))
+                         "\n")
+              (when (length> conn-dispatch-ring 1) "\n")
               (propertize (concat (conn-describe-dispatch
                                    (symbol-function 'conn-repeat-last-dispatch))
                                   "\n")
                           'face 'conn-posframe-highlight)
               (mapconcat (lambda (cons)
                            (conn-describe-dispatch (car cons)))
-                         conn-dispatch-ring
+                         (take (min 4 (ceiling (length conn-dispatch-ring) 2))
+                               conn-dispatch-ring)
                          "\n"))
      :left-fringe 0
      :right-fringe 0
