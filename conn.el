@@ -343,21 +343,17 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 ;; Expects no two items added to the ring to be eq to one another.  This
 ;; works well enough for now but maybe it should be fixed.
 (cl-defstruct (conn-ring
-               (:constructor conn--make-ring (capacity cleanup buffer)))
+               (:constructor conn--make-ring (capacity cleanup))
+               (:copier nil)
+               (:copier conn--copy-ring))
   "A ring that removes elements in least recently visited order."
-  buffer list history capacity cleanup
+  list history capacity cleanup
   (size 0))
 
-(cl-defun conn-ring (capacity &key cleanup buffer)
+(cl-defun conn-ring (capacity &key cleanup)
   (cl-assert (and (integerp capacity)
                   (> capacity 0)))
-  (conn--make-ring capacity cleanup (or buffer (current-buffer))))
-
-(defun conn-copy-ring (ring)
-  (setf ring (copy-conn-ring ring)
-        (conn-ring-list ring) (copy-sequence (conn-ring-list ring))
-        (conn-ring-history ring) (copy-sequence (conn-ring-history ring)))
-  ring)
+  (conn--make-ring capacity cleanup))
 
 (define-inline conn-ring--visit (ring item)
   (inline-quote
@@ -6571,12 +6567,23 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
 (defvar conn-mark-ring-max 40
   "Maximum length of `conn-mark-ring'.")
 
+(defun conn-copy-mark-ring ()
+  (when (conn-ring-p conn-mark-ring)
+    (let ((new-ring (conn--copy-ring conn-mark-ring)))
+      (setf (conn-ring-list new-ring) (mapcar 'copy-marker
+                                              (conn-ring-list new-ring))
+            (conn-ring-history new-ring)
+            (cl-loop with old-list = (conn-ring-list conn-mark-ring)
+                     with new-list = (conn-ring-list new-ring)
+                     for elem in (conn-ring-history new-ring)
+                     collect (nth (seq-position old-list elem #'eq) new-list)))
+      (setf conn-mark-ring new-ring))))
+
 (defun conn--push-mark-ring (location &optional back)
-  (cond ((not conn-mark-ring)
-         (setq conn-mark-ring (conn-ring conn-mark-ring-max)))
-        ((not (eq (current-buffer) (conn-ring-buffer conn-mark-ring)))
-         (setf conn-mark-ring (conn-copy-ring conn-mark-ring)
-               (conn-ring-buffer conn-mark-ring) (current-buffer))))
+  (when (not conn-mark-ring)
+    (setq conn-mark-ring
+          (conn-ring conn-mark-ring-max
+                     :cleanup (lambda (mk) (set-marker mk nil)))))
   (pcase-let ((ptb (conn-ring-back conn-mark-ring))
               (ptf (conn-ring-front conn-mark-ring)))
     (cond
@@ -6624,13 +6631,27 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 (defvar conn-movement-ring-max 10
   "Maximum length of `conn-movement-ring'.")
 
+(defun conn-copy-movement-ring ()
+  (when (conn-ring-p conn-movement-ring)
+    (let ((new-ring (conn--copy-ring conn-movement-ring)))
+      (setf (conn-ring-list new-ring)
+            (cl-loop for (pt . mk) in (conn-ring-list new-ring)
+                     collect (cons (copy-marker pt)
+                                   (copy-marker mk)))
+            (conn-ring-history new-ring)
+            (cl-loop with old-list = (conn-ring-list conn-mark-ring)
+                     with new-list = (conn-ring-list new-ring)
+                     for elem in (conn-ring-history new-ring)
+                     collect (nth (seq-position old-list elem #'eq) new-list))
+            conn-movement-ring new-ring))))
+
 (defun conn-push-region (point mark &optional back)
-  (cond ((not conn-movement-ring)
-         (setq conn-movement-ring
-               (conn-ring conn-movement-ring-max)))
-        ((not (eq (current-buffer) (conn-ring-buffer conn-mark-ring)))
-         (setf conn-movement-ring (conn-copy-ring conn-movement-ring)
-               (conn-ring-buffer conn-movement-ring) (current-buffer))))
+  (when (not conn-movement-ring)
+    (setq conn-movement-ring
+          (conn-ring conn-movement-ring-max
+                     :cleanup (pcase-lambda (`(,pt . ,mk))
+                                (set-marker pt nil)
+                                (set-marker mk nil)))))
   (pcase-let ((`(,ptf . ,mkf) (conn-ring-front conn-movement-ring))
               (`(,ptb . ,mkb) (conn-ring-back conn-movement-ring)))
     (cond
@@ -8595,7 +8616,9 @@ Operates with the selected windows parent window."
         (progn
           ;; TODO: don't do this unconditionally
           (keymap-set minibuffer-mode-map "M-Y" 'conn-yank-region-to-minibuffer)
-          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50))
+          (add-hook 'minibuffer-setup-hook 'conn--yank-region-to-minibuffer-hook -50)
+          (add-hook 'clone-buffer-hook 'conn-copy-movement-ring)
+          (add-hook 'clone-buffer-hook 'conn-copy-mark-ring))
       (when (eq (keymap-lookup minibuffer-mode-map "M-Y")
                 'conn-yank-region-to-minibuffer)
         (keymap-unset minibuffer-mode-map "M-Y"))
