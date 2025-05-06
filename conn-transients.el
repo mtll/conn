@@ -668,18 +668,18 @@ A zero means repeat until error."
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
                                      &optional repeat)
-  (let ((conn-label-select-always-prompt t))
+  (let ((conn-label-select-always-prompt t)
+        (conn-kapply-suppress-message t))
     (conn-perform-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,thing)
                     (conn-dispatch-select-target target-finder))
                    (thing (or thing thing-cmd)))
-        (let ((conn-kapply-suppress-message t))
-          (while
-              (condition-case err
-                  (progn
-                    (funcall action win pt thing thing-arg)
-                    nil)
-                (user-error (message (cadr err)) t)))))))
+        (while
+            (condition-case err
+                (progn
+                  (funcall action win pt thing thing-arg)
+                  nil)
+              (user-error (message (cadr err)) t))))))
   (message "Kapply completed successfully after %s iterations"
            conn-dispatch-repeat-count))
 
