@@ -5302,7 +5302,9 @@ Expansions and contractions are provided by functions in
            "\\[conn-expand] expand; "
            "\\[conn-contract] contract; "
            "\\[conn-toggle-mark-command] toggle mark; "
-           "\\[exit-recursive-edit] finish): ")))
+           "\\[exit-recursive-edit] finish): "
+           (when (eq :invalid-command (oref cont command))
+             (propertize "invalid command" 'face 'error)))))
 
 (defun conn--bounds-of-expansion (cmd arg)
   (call-interactively cmd)
