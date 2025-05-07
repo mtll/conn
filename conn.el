@@ -5267,9 +5267,7 @@ Expansions and contractions are provided by functions in
 ;;;;; Bounds of expansion
 
 (oclosure-define (conn-recursive-edit-bounds-continuation
-                  (:parent conn-state-loop-continuation))
-  (point :mutable t)
-  (mark :mutable t))
+                  (:parent conn-state-loop-continuation)))
 
 (defvar-keymap conn-read-expand-map
   "z" 'conn-expand-exchange
@@ -5287,39 +5285,36 @@ Expansions and contractions are provided by functions in
     ('conn-contract (conn-contract (conn-state-loop-consume-prefix-arg)))
     ('conn-expand (conn-expand (conn-state-loop-consume-prefix-arg)))
     ('conn-toggle-mark-command (conn-toggle-mark-command))
-    ('exit-recursive-edit
-     (setf (oref cont point) (point)
-           (oref cont mark) (mark t))
-     (conn-state-loop-exit))
+    ('exit-recursive-edit (conn-state-loop-exit))
     ('abort-recursive-edit (conn-state-loop-abort))
     (_ (setf (oref cont command) :invalid-command))))
 
 (defun conn--read-expand-message (cont)
   (substitute-command-keys
    (concat "\\<conn-read-expand-map>"
-           "Press "
+           (propertize "Expansion: " 'face 'minibuffer-prompt)
+           "(arg: "
            (propertize (format (if (oref cont arg) "%s%s" "[%s1]")
                                (if (oref cont arg-sign) "-" "")
                                (oref cont arg))
                        'face 'read-multiple-choice-face)
-           ": "
+           "; "
            "\\[conn-expand] expand; "
            "\\[conn-contract] contract; "
            "\\[conn-toggle-mark-command] toggle mark; "
-           "\\[exit-recursive-edit] finish")))
+           "\\[exit-recursive-edit] finish): ")))
 
 (defun conn--bounds-of-expansion (cmd arg)
   (call-interactively cmd)
   (let ((exit (set-transient-map conn-read-expand-map (lambda () t))))
     (unwind-protect
-        (conn-with-state (conn-enter-state conn-state-for-command)
-          (conn-with-state-loop
-           (oclosure-lambda (conn-recursive-edit-bounds-continuation
-                             (arg arg))
-               ()
-             (list (cons (min point mark) (max point mark))))
-           :message-function 'conn--read-expand-message
-           :case-function 'conn--read-expand-case))
+        (conn-with-state-loop
+         (oclosure-lambda (conn-recursive-edit-bounds-continuation
+                           (arg arg))
+             ()
+           (region-bounds))
+         :message-function 'conn--read-expand-message
+         :case-function 'conn--read-expand-case)
       (funcall exit))))
 
 
