@@ -5266,7 +5266,12 @@ Expansions and contractions are provided by functions in
 
 ;;;;; Bounds of expansion
 
-(defvar-keymap conn-read-expand-region-map
+(oclosure-define (conn-recursive-edit-bounds-continuation
+                  (:parent conn-state-loop-continuation))
+  (point :mutable t)
+  (mark :mutable t))
+
+(defvar-keymap conn-read-expand-map
   "z" 'conn-expand-exchange
   "j" 'conn-contract
   "h" 'conn-expand
@@ -5274,27 +5279,48 @@ Expansions and contractions are provided by functions in
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit
   "C-]" 'abort-recursive-edit
-  "C-g" 'abort-recursive-edit
-  "<t>" 'ignore)
+  "C-g" 'abort-recursive-edit)
+
+(defun conn--read-expand-case (command cont)
+  (pcase command
+    ('conn-expand-exchange (conn-expand-exchange))
+    ('conn-contract (conn-contract (conn-state-loop-consume-prefix-arg)))
+    ('conn-expand (conn-expand (conn-state-loop-consume-prefix-arg)))
+    ('conn-toggle-mark-command (conn-toggle-mark-command))
+    ('exit-recursive-edit
+     (setf (oref cont point) (point)
+           (oref cont mark) (mark t))
+     (conn-state-loop-exit))
+    ('abort-recursive-edit (conn-state-loop-abort))
+    (_ (setf (oref cont command) :invalid-command))))
+
+(defun conn--read-expand-message (cont)
+  (substitute-command-keys
+   (concat "\\<conn-read-expand-map>"
+           "Press "
+           (propertize (format (if (oref cont arg) "%s%s" "[%s1]")
+                               (if (oref cont arg-sign) "-" "")
+                               (oref cont arg))
+                       'face 'read-multiple-choice-face)
+           ": "
+           "\\[conn-expand] expand; "
+           "\\[conn-contract] contract; "
+           "\\[conn-toggle-mark-command] toggle mark; "
+           "\\[exit-recursive-edit] finish")))
 
 (defun conn--bounds-of-expansion (cmd arg)
-  (deactivate-mark t)
-  (let ((current-prefix-arg arg))
-    (call-interactively cmd)
-    (let ((exit (set-transient-map
-                 conn-read-expand-region-map (lambda () t) nil
-                 (substitute-command-keys
-                  (concat "\\<conn-read-expand-region-map>"
-                          "Press: "
-                          "\\[conn-expand] expand; "
-                          "\\[conn-contract] contract; "
-                          "\\[conn-toggle-mark-command] toggle mark; "
-                          "\\[exit-recursive-edit] finish")))))
-      (unwind-protect
-          (conn-with-state (conn-enter-state conn-previous-state)
-            (recursive-edit))
-        (funcall exit)))
-    (list (cons (region-beginning) (region-end)))))
+  (call-interactively cmd)
+  (let ((exit (set-transient-map conn-read-expand-map (lambda () t))))
+    (unwind-protect
+        (conn-with-state (conn-enter-state conn-state-for-command)
+          (conn-with-state-loop
+           (oclosure-lambda (conn-recursive-edit-bounds-continuation
+                             (arg arg))
+               ()
+             (list (cons (min point mark) (max point mark))))
+           :message-function 'conn--read-expand-message
+           :case-function 'conn--read-expand-case))
+      (funcall exit))))
 
 
 ;;;;; Thing Definitions
