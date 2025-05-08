@@ -46,6 +46,7 @@
 (defvar conn-mode)
 (defvar conn-local-mode)
 (defvar conn-target-window-predicate)
+(defvar conn-bounds-of-command-alist)
 
 (defvar-local conn--hide-mark-cursor nil)
 
@@ -832,8 +833,8 @@ of highlighting."
   "Alist of the form ((CONDITION . STATE-SETUP-FN) ...).
 
 Elements specify a STATE-SETUP-FN that should enter the default state
-and optionally set any of the state variables `conn-state-for-emacs' and
-`conn-state-for-command' for buffers matching CONDITION.  For the
+and optionally set any of the state variables `'conn-emacs-state' and
+`'conn-command-state' for buffers matching CONDITION.  For the
 meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
@@ -842,10 +843,6 @@ meaning of CONDITION see `buffer-match-p'."
   '((t (:inherit mode-line :inverse-video t)))
   "Face for mode-line in a read-thing state."
   :group 'conn-faces)
-
-(defvar-local conn-state-for-emacs 'conn-emacs-state)
-
-(defvar-local conn-state-for-command 'conn-command-state)
 
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
@@ -906,20 +903,17 @@ The returned list is not fresh, don't modify it."
      (memq ,parent (conn--state-all-parents ,state)))))
 
 (defun conn-setup-minibuffer-state ()
-  (setq-local conn-state-for-emacs 'conn-minibuffer-state)
-  (conn-enter-state 'conn-minibuffer-state)
+  (conn-enter-state 'conn-emacs-state)
   (letrec ((hook (lambda ()
                    (conn--push-ephemeral-mark)
                    (remove-hook 'minibuffer-setup-hook hook))))
     (add-hook 'minibuffer-setup-hook hook)))
 
 (defun conn-setup-null-state ()
-  (setq-local conn-state-for-emacs 'conn-null-state
-              conn-state-for-command 'conn-null-state)
   (conn-enter-state 'conn-null-state))
 
 (defun conn-setup-command-state ()
-  (conn-enter-state conn-state-for-command))
+  (conn-enter-state 'conn-command-state))
 
 
 ;;;;; State keymaps
@@ -1296,7 +1290,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
 
-(defmacro conn-with-state (transition-form &rest body)
+(defmacro conn-with-state (state &rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
@@ -1308,8 +1302,9 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (,saved-cursor-type cursor-type))
        (unwind-protect
            (progn
-             ,(or transition-form
-                  '(conn-exit-state conn-current-state))
+             ,(if state
+                  `(conn-enter-state ,state)
+                '(conn-exit-state conn-current-state))
              ,@body)
          (with-current-buffer ,buffer
            (if ,saved-curr-state
@@ -1570,27 +1565,10 @@ By default `conn-emacs-state' does not bind anything."
   :lighter " Emacs"
   :cursor '(bar . 4))
 
-(conn-define-state conn-minibuffer-state (conn-emacs-state)
-  "Default state for the minibuffer."
-  :hide-mark-cursor t
-  :cursor '(bar . 4))
-
 (conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
   :lighter " Move"
   :suppress-input-method t)
-
-(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state))
-                                &key &allow-other-keys)
-  (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf (alist-get 'mode-line face-remapping-alist) face))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
-  (setf face-remapping-alist
-        (delq (assq 'mode-line face-remapping-alist)
-              face-remapping-alist))
-  (cl-call-next-method))
 
 (conn-define-state conn-menu-state ()
   "A `conn-mode' state for remapping key menus.")
@@ -1603,10 +1581,22 @@ By default `conn-emacs-state' does not bind anything."
   :cursor 'box)
 
 (conn-define-state conn-read-thing-common-state (conn-command-state)
-  "Common elements of reading thing states."
+  "Common elements of thing reading states."
   :suppress-input-method t
   :transient t
   :mode-line-face 'conn-read-thing-mode-line-face)
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state))
+                                &key &allow-other-keys)
+  (when-let* ((face (conn-state-get state :mode-line-face)))
+    (setf (alist-get 'mode-line face-remapping-alist) face))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
+  (setf face-remapping-alist
+        (delq (assq 'mode-line face-remapping-alist)
+              face-remapping-alist))
+  (cl-call-next-method))
 
 (conn-define-state conn-org-edit-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
@@ -1993,8 +1983,6 @@ themselves once the selection process has concluded."
 
 ;;;;; Read mover state
 
-(defvar-local conn-state-for-read-mover 'conn-read-mover-state)
-
 (conn-define-state conn-read-mover-state (conn-read-thing-common-state)
   "A state for reading things."
   :lighter " MOVER")
@@ -2058,9 +2046,7 @@ themselves once the selection process has concluded."
 ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command."
-  (conn-with-state (conn-enter-state
-                    (or (conn--command-property :conn-read-state)
-                        conn-state-for-read-mover))
+  (conn-with-state 'conn-read-mover-state
     (conn-with-state-loop
      (oclosure-lambda (conn-read-mover-continuation
                        (recursive-edit recursive-edit)
@@ -2235,7 +2221,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
     (unwind-protect
         (progn
           (add-hook 'pre-command-hook pre)
-          (conn-with-state (conn-enter-state 'conn-bounds-of-recursive-edit-state)
+          (conn-with-state 'conn-bounds-of-recursive-edit-state
             (funcall pre)
             (recursive-edit))
           (cons (cons (region-beginning) (region-end))
@@ -4946,7 +4932,7 @@ Returns a cons of (STRING . OVERLAYS)."
             (interactive "P")
             (cl-letf ((conn-dispatch-repeat-count repeat-count)
                       ((symbol-function 'conn-repeat-last-dispatch)))
-              (conn-with-state (conn-enter-state state)
+              (conn-with-state state
                 (conn-perform-dispatch action finder
                                        thing-cmd thing-arg
                                        (xor invert-repeat repeat)))
@@ -5035,7 +5021,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn-with-state (conn-enter-state 'conn-read-dispatch-state)
+  (conn-with-state 'conn-read-dispatch-state
     (conn-with-state-loop
      (oclosure-lambda (conn-dispatch-continuation
                        (repeatable t))
@@ -5045,7 +5031,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (let ((regions nil))
-    (conn-with-state (conn-enter-state 'conn-dispatch-mover-state)
+    (conn-with-state 'conn-dispatch-mover-state
       (conn-with-state-loop
        (oclosure-lambda (conn-dispatch-continuation
                          (repeatable t))
@@ -5285,9 +5271,6 @@ Expansions and contractions are provided by functions in
   "State for expanding."
   :lighter " EXPAND")
 
-(oclosure-define (conn-expansion-bounds-continuation
-                  (:parent conn-state-loop-continuation)))
-
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)
   "z" 'conn-expand-exchange
@@ -5295,7 +5278,6 @@ Expansions and contractions are provided by functions in
   "h" 'conn-expand
   "v" 'conn-toggle-mark-command
   "e" 'end
-  "q" 'quit
   "C-]" 'quit
   "C-g" 'quit)
 
@@ -5311,8 +5293,7 @@ Expansions and contractions are provided by functions in
 
 (defun conn--read-expand-message (_cont error-message)
   (substitute-command-keys
-   (concat "\\<conn-read-expand-map>"
-           (propertize "Expansion: " 'face 'minibuffer-prompt)
+   (concat (propertize "Expansion: " 'face 'minibuffer-prompt)
            "(arg: "
            (propertize (conn-state-loop-format-prefix-arg)
                        'face 'read-multiple-choice-face)
@@ -5320,7 +5301,7 @@ Expansions and contractions are provided by functions in
            "\\[conn-expand] expand; "
            "\\[conn-contract] contract; "
            "\\[conn-toggle-mark-command] toggle mark; "
-           "\\[exit-recursive-edit] finish): "
+           "\\[end] finish): "
            (propertize error-message 'face 'error))))
 
 (defun conn--bounds-of-expansion (cmd arg)
@@ -5328,9 +5309,9 @@ Expansions and contractions are provided by functions in
   (internal-push-keymap (conn-get-state-map 'conn-expand-state)
                         'overriding-terminal-local-map)
   (unwind-protect
-      (conn-with-state (conn-enter-state 'conn-expand-state)
+      (conn-with-state 'conn-expand-state
         (conn-with-state-loop
-         (oclosure-lambda (conn-expansion-bounds-continuation)
+         (oclosure-lambda (conn-state-loop-continuation)
              ()
            (region-bounds))
          :message-function 'conn--read-expand-message
@@ -6792,7 +6773,7 @@ With argument ARG 0, exchange the things at point and mark.
 If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
-   (conn-with-state (conn-enter-state 'conn-read-transpose-state)
+   (conn-with-state 'conn-read-transpose-state
      (conn-with-state-loop
       (oclosure-lambda (conn-read-mover-continuation
                         (recursive-edit t)
@@ -6828,7 +6809,7 @@ region after a `recursive-edit'."
     ('conn-dispatch-state
      (while
          (condition-case err
-             (conn-with-state (conn-enter-state 'conn-read-transpose-state)
+             (conn-with-state 'conn-read-transpose-state
                (conn-with-state-loop
                 (oclosure-lambda (conn-dispatch-continuation
                                   (repeatable nil)
@@ -7522,18 +7503,18 @@ Currently selected window remains selected afterwards."
 (defun conn-insert-state ()
   "Enter insert state for the current buffer."
   (interactive)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-command-state ()
   "Enter command state for the current buffer."
   (interactive)
-  (conn-enter-state conn-state-for-command))
+  (conn-enter-state 'conn-command-state))
 
 (defun conn-emacs-state-at-mark ()
   "Exchange point and mark then enter `conn-emacs-state'."
   (interactive)
   (conn-exchange-mark-command)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-change-whole-line (&optional arg)
   "`kill-whole-line' and enter `conn-emacs-state'."
@@ -7541,13 +7522,13 @@ Currently selected window remains selected afterwards."
   (kill-whole-line arg)
   (open-line 1)
   (indent-according-to-mode)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-change-line ()
   "`kill-line' and enter `conn-emacs-state'."
   (interactive)
   (call-interactively (keymap-lookup nil conn-kill-line-keys t))
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
   "Open line above and enter `conn-emacs-state'.
@@ -7560,7 +7541,7 @@ If ARG is non-nil move up ARG lines before opening line."
   (forward-line -1)
   ;; FIXME: see crux smart open line
   (indent-according-to-mode)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line (&optional arg)
   "Open line and enter `conn-emacs-state'.
@@ -7569,7 +7550,7 @@ If ARG is non-nil move down ARG lines before opening line."
   (interactive "p")
   (move-end-of-line arg)
   (newline-and-indent)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-overwrite (&optional arg)
   "Enter emacs state in `overwrite-mode'.
@@ -7577,7 +7558,7 @@ If ARG is non-nil move down ARG lines before opening line."
 `overwrite-mode' will be turned off when when emacs state is exited.
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
-  (conn-enter-state conn-state-for-emacs)
+  (conn-enter-state 'conn-emacs-state)
   (letrec ((hook (lambda (_state)
                    (overwrite-mode -1)
                    (remove-hook 'conn-state-exit-functions hook))))
@@ -7608,36 +7589,36 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (funcall (conn--without-conn-maps
                     (keymap-lookup nil conn-kill-region-keys t))
                   start end)
-         (conn-enter-state conn-state-for-emacs))
+         (conn-enter-state 'conn-emacs-state))
         (t
          (funcall (conn--without-conn-maps
                     (keymap-lookup nil conn-delete-region-keys t))
                   start end)
-         (conn-enter-state conn-state-for-emacs))))
+         (conn-enter-state 'conn-emacs-state))))
 
 (defun conn-emacs-state-eol (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (end-of-line N)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-bol (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (beginning-of-line N)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-eoil (&optional N)
   "Move point to end of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-end-of-inner-line N)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-emacs-state-boil (&optional N)
   "Move point to beginning of line and enter `conn-emacs-state'."
   (interactive "P")
   (conn-beginning-of-inner-line N)
-  (conn-enter-state conn-state-for-emacs))
+  (conn-enter-state 'conn-emacs-state))
 
 
 ;;;; WinControl
@@ -8644,8 +8625,16 @@ Operates with the selected windows parent window."
                     conn--local-override-map (list (list 'conn-local-mode))
                     conn--local-major-mode-map (list (list 'conn-local-mode)))
         (add-function :before-until
-                      query-replace-read-from-default
+                      (local 'query-replace-read-from-default)
                       'conn-replace-read-default)
+        ;; It would be nice to be able to do this, but
+        ;; query-replace-read-from-regexp-default is passed as the
+        ;; DEFAULT argument to read-regexp which expects either nil, a
+        ;; string, a list of strings or a symbol with a function
+        ;; definition.
+        ;; (add-function :before-until
+        ;;               (local 'query-replace-read-from-regexp-default)
+        ;;               'conn-replace-read-regexp-default)
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
@@ -8657,14 +8646,14 @@ Operates with the selected windows parent window."
                    (alist-get (current-buffer) conn-buffer-state-setup-alist
                               nil nil #'buffer-match-p)))
             (funcall setup-fn)
-          (conn-enter-state conn-state-for-emacs)))
+          (conn-enter-state 'conn-emacs-state)))
     ;; conn-exit-state sets conn-current-state to nil before
     ;; anything else, so if we got here after an error in
     ;; conn-exit-state this prevents an infinite loop.
     (when conn-current-state
       (conn-exit-state conn-current-state))
     (conn--clear-overlays)
-    (remove-function query-replace-read-from-default
+    (remove-function (local 'query-replace-read-from-default)
                      'conn-replace-read-default)
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
@@ -8723,7 +8712,7 @@ Operates with the selected windows parent window."
   (declare-function calc-dispatch "calc")
 
   (defun conn--calc-dispatch-ad (&rest app)
-    (conn-with-state (conn-enter-state 'conn-null-state)
+    (conn-with-state 'conn-null-state
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 
@@ -8856,7 +8845,7 @@ Operates with the selected windows parent window."
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn-with-state (conn-enter-state 'conn-dired-dispatch-state)
+  (conn-with-state 'conn-dired-dispatch-state
     (conn-with-state-loop
      (oclosure-lambda (conn-dispatch-continuation
                        (repeatable t))

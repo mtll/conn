@@ -328,7 +328,7 @@ Begins the keyboard macro by deleting the string at each match."
    (alist-get :excursions args)
    'conn--kapply-change-region
    (lambda (iterator)
-     (conn--kapply-with-state iterator conn-state-for-emacs))
+     (conn--kapply-with-state iterator 'conn-emacs-state))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -359,7 +359,7 @@ Begins the keyboard macro in `conn-insert-state'."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    (lambda (iterator)
-     (conn--kapply-with-state iterator conn-state-for-emacs))
+     (conn--kapply-with-state iterator 'conn-emacs-state))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -390,7 +390,7 @@ Begins the keyboard macro in `conn-command-state'."
    (alist-get :restrictions args)
    (alist-get :excursions args)
    (lambda (iterator)
-     (conn--kapply-with-state iterator conn-state-for-command))
+     (conn--kapply-with-state iterator 'conn-command-state))
    'conn--kapply-pulse-region
    (alist-get :window-conf args)
    (alist-get :kmacro args)))
@@ -415,7 +415,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :excursions args)
      'conn--kapply-change-region
      (lambda (iterator)
-       (conn--kapply-with-state iterator conn-state-for-emacs))
+       (conn--kapply-with-state iterator 'conn-emacs-state))
      'conn--kapply-pulse-region
      (alist-get :window-conf args)
      (alist-get :kmacro args))))
@@ -439,7 +439,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :restrictions args)
      (alist-get :excursions args)
      (lambda (iterator)
-       (conn--kapply-with-state iterator conn-state-for-emacs))
+       (conn--kapply-with-state iterator 'conn-emacs-state))
      (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region
@@ -465,7 +465,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :restrictions args)
      (alist-get :excursions args)
      (lambda (iterator)
-       (conn--kapply-with-state iterator conn-state-for-command))
+       (conn--kapply-with-state iterator 'conn-command-state))
      (when (> (point) (caar regions))
        'conn--kapply-at-end)
      'conn--kapply-pulse-region
@@ -652,7 +652,7 @@ A zero means repeat until error."
       (setf (oref continuation action) nil)
     (letrec ((wconf (current-window-configuration))
              (setup (lambda ()
-                      (conn-with-state (conn-enter-state conn-previous-state)
+                      (conn-with-state conn-previous-state
                         (conn-dispatch-kapply-prefix
                          (lambda (kapply-action)
                            (setf (oref continuation action) kapply-action))))
