@@ -1912,29 +1912,32 @@ themselves once the selection process has concluded."
 
 ;;;; State command loops
 
+(defvar conn--loop-prefix-mag nil)
+(defvar conn--loop-prefix-sign nil)
+(defvar conn--loop-error-message nil)
+
 (oclosure-define conn-state-loop-continuation)
 
-(defvar conn--loop-arg-mag nil)
-(defvar conn--loop-arg-sign nil)
-(defvar conn--loop-error nil)
-
 (defun conn-state-loop-format-prefix-arg ()
-  (cond (conn--loop-arg-mag
+  (cond (conn--loop-prefix-mag
          (number-to-string
-          (* (if conn--loop-arg-sign -1 1)
-             conn--loop-arg-mag)))
-        (conn--loop-arg-sign "[-1]")
+          (* (if conn--loop-prefix-sign -1 1)
+             conn--loop-prefix-mag)))
+        (conn--loop-prefix-sign "[-1]")
         (t "[1]")))
+
+(defun conn-state-loop-prefix-arg ()
+  (cond (conn--loop-prefix-mag
+         (* (if conn--loop-prefix-sign -1 1) conn--loop-prefix-mag))
+        (conn--loop-prefix-sign -1)))
 
 (defun conn-state-loop-consume-prefix-arg ()
   (prog1 (conn-state-loop-prefix-arg)
-    (setf conn--loop-arg-mag nil
-          conn--loop-arg-sign nil)))
+    (setf conn--loop-prefix-mag nil
+          conn--loop-prefix-sign nil)))
 
-(defun conn-state-loop-prefix-arg ()
-  (cond (conn--loop-arg-mag
-         (* (if conn--loop-arg-sign -1 1) conn--loop-arg-mag))
-        (conn--loop-arg-sign -1)))
+(defun conn-state-loop-error (string)
+  (setf conn--loop-error-message string))
 
 (defun conn-state-loop-exit ()
   (throw 'state-loop-exit nil))
@@ -1942,38 +1945,42 @@ themselves once the selection process has concluded."
 (defun conn-state-loop-abort ()
   (keyboard-quit))
 
-(defun conn-state-loop-error (string)
-  (setf conn--loop-error string))
-
 (cl-defgeneric conn-with-state-loop (cont &key case-function message-function initial-arg))
 
 (cl-defmethod conn-with-state-loop ((cont conn-state-loop-continuation)
                                     &key case-function message-function initial-arg)
-  (cl-letf* ((conn--loop-arg-mag (when initial-arg (abs initial-arg)))
-             (conn--loop-arg-sign (when initial-arg (> 0 initial-arg)))
-             (conn--loop-error ""))
+  (let ((conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
+        (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
+        (conn--loop-error-message ""))
     (catch 'state-loop-exit
       (while t
         (pcase (prog1 (thread-first
-                        (funcall message-function cont conn--loop-error)
+                        (funcall message-function cont conn--loop-error-message)
                         (read-key-sequence)
                         (key-binding t))
-                 (setf conn--loop-error ""))
+                 (setf conn--loop-error-message ""))
           ('nil nil)
           ('digit-argument
-           (let ((digit (- (logand last-input-event ?\177) ?0)))
-             (setf conn--loop-arg-mag (if (integerp conn--loop-arg-mag)
-                                          (+ (* 10 conn--loop-arg-mag) digit)
-                                        (when (/= 0 digit) digit)))))
+           (let* ((char (if (integerp last-input-event)
+		            last-input-event
+		          (get last-input-event 'ascii-character)))
+	          (digit (- (logand char ?\177) ?0)))
+             (setf conn--loop-prefix-mag
+                   (if (integerp conn--loop-prefix-mag)
+                       (+ (* 10 conn--loop-prefix-mag) digit)
+                     (when (/= 0 digit) digit)))))
           ('forward-delete-arg
-           (when conn--loop-arg-mag
-             (setf conn--loop-arg-mag (mod conn--loop-arg-mag (expt 10 (floor (log conn--loop-arg-mag 10)))))))
+           (when conn--loop-prefix-mag
+             (setf conn--loop-prefix-mag
+                   (mod conn--loop-prefix-mag
+                        (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
           ('backward-delete-arg
-           (when conn--loop-arg-mag (setf conn--loop-arg-mag (floor conn--loop-arg-mag 10))))
+           (when conn--loop-prefix-mag
+             (setf conn--loop-prefix-mag (floor conn--loop-prefix-mag 10))))
           ('reset-arg
-           (setf conn--loop-arg-mag nil))
+           (setf conn--loop-prefix-mag nil))
           ('negative-argument
-           (setf conn--loop-arg-sign (not conn--loop-arg-sign)))
+           (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
           ('keyboard-quit
            (conn-state-loop-abort))
           (cmd
