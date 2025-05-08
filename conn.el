@@ -7915,16 +7915,17 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (interactive)
   (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
 
-(defun conn-wincontrol-digit-argument (N)
-  "Append N to wincontrol prefix arg.
-
-When called interactively N is `last-command-event'."
-  (interactive (list (- (logand last-command-event ?\177) ?0)))
-  (if conn--wincontrol-arg
-      (setq conn--wincontrol-arg
-            (+ (if (>= (or conn--wincontrol-arg 1) 0) N (- N))
-               (* 10 (or conn--wincontrol-arg 1))))
-    (setq conn--wincontrol-arg N))
+(defun conn-wincontrol-digit-argument ()
+  (interactive)
+  (let* ((char (if (integerp last-command-event)
+		   last-command-event
+		 (get last-command-event 'ascii-character)))
+	 (digit (- (logand char ?\177) ?0)))
+    (if conn--wincontrol-arg
+        (setq conn--wincontrol-arg
+              (+ (if (>= (or conn--wincontrol-arg 1) 0) digit (- digit))
+                 (* 10 (or conn--wincontrol-arg 1))))
+      (setq conn--wincontrol-arg digit)))
   (setq this-command 'conn-wincontrol-digit-argument))
 
 (defun conn-wincontrol-invert-argument ()
