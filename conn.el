@@ -3762,10 +3762,9 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-select-target (target-finder)
   (conn-with-dispatch-event-handler
       ((lambda ()
-         (when (where-is-internal 'act conn-dispatch-targeting-map)
+         (when-let* ((binding (where-is-internal 'act conn-dispatch-targeting-map t)))
            (concat
-            (propertize (substitute-command-keys
-                         "\\<conn-dispatch-targeting-map>\\[act]" t)
+            (propertize (key-description binding)
                         'face 'read-multiple-choice-face)
             (propertize " act" 'face 'minibuffer-prompt))))
        (and event `(,type . ,_)
@@ -4963,15 +4962,12 @@ Returns a cons of (STRING . OVERLAYS)."
   (cl-once-only (repeat)
     `(conn-with-dispatch-event-handler
          ((lambda ()
-            (when (and (> conn-dispatch-repeat-count 0)
-                       (where-is-internal
-                        'finish conn-dispatch-targeting-map t))
-              (concat (propertize
-                       (substitute-command-keys
-                        "\\<conn-dispatch-targeting-map>\\[finish]" t)
-                       'face 'read-multiple-choice-face)
-                      (propertize " finish"
-                                  'face 'minibuffer-prompt))))
+            (when-let* ((binding (and (> conn-dispatch-repeat-count 0)
+                                      (where-is-internal
+                                       'finish conn-dispatch-targeting-map t))))
+              (concat (propertize (key-description binding)
+                                  'face 'read-multiple-choice-face)
+                      (propertize " finish" 'face 'minibuffer-prompt))))
           (and key (let 'finish
                      (lookup-key conn-dispatch-targeting-map
                                  (vector key))))
@@ -4982,14 +4978,12 @@ Returns a cons of (STRING . OVERLAYS)."
            (let ((conn--dispatch-current-targeter nil))
              (conn-with-dispatch-event-handler
                  ((lambda ()
-                    (when (and conn--dispatch-current-targeter
-                               (where-is-internal
-                                'retarget conn-dispatch-targeting-map t))
+                    (when-let* ((binding (and conn--dispatch-current-targeter
+                                              (where-is-internal
+                                               'retarget conn-dispatch-targeting-map t))))
                       (concat
-                       (propertize
-                        (substitute-command-keys
-                         "\\<conn-dispatch-targeting-map>\\[retarget]" t)
-                        'face 'read-multiple-choice-face)
+                       (propertize (key-description binding)
+                                   'face 'read-multiple-choice-face)
                        (propertize " retarget" 'face 'minibuffer-prompt))))
                   (and (guard conn--dispatch-current-targeter)
                        key (let 'retarget
