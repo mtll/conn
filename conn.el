@@ -839,6 +839,8 @@ meaning of CONDITION see `buffer-match-p'."
   :type '(list (cons string symbol))
   :group 'conn-states)
 
+(defvar-local conn-hide-mark-alist nil)
+
 (defface conn-read-thing-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
   "Face for mode-line in a read-thing state."
@@ -903,6 +905,7 @@ The returned list is not fresh, don't modify it."
      (memq ,parent (conn--state-all-parents ,state)))))
 
 (defun conn-setup-minibuffer-state ()
+  (setf (alist-get 'conn-emacs-state conn-hide-mark-alist) t)
   (conn-enter-state 'conn-emacs-state)
   (letrec ((hook (lambda ()
                    (conn--push-ephemeral-mark)
@@ -1432,7 +1435,8 @@ and specializes the method on all conn states."
              conn-lighter (or (conn-state-get state :lighter)
                               (default-value 'conn-lighter))
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
-             conn--hide-mark-cursor (or (conn-get-mode-property major-mode :hide-mark-cursor)
+             conn--hide-mark-cursor (or (alist-get state conn-hide-mark-alist)
+                                        (conn-get-mode-property major-mode :hide-mark-cursor)
                                         (conn-state-get state :hide-mark-cursor))
              cursor-type (or (conn-state-get state :cursor) t))
             (conn--activate-input-method)
@@ -1993,8 +1997,6 @@ themselves once the selection process has concluded."
   "C-d" 'forward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
-  "<remap> <conn-forward-char>" 'forward-char
-  "<remap> <conn-backward-char>" 'backward-char
   "C-h" 'help
   "," (conn-remap-key "<conn-thing-map>")
   "r" 'recursive-edit)
@@ -3187,32 +3189,29 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
+(defvar-keymap conn-dispatch-targeting-map
+  "DEL" 'retarget
+  "<mouse-1>" 'act
+  "<escape>" 'finish)
+
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   "C-h" 'help
   "M-DEL" 'reset-arg
   "TAB" 'repeat-dispatch
-  "'" 'repeat-dispatch
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over
-  "i" 'forward-line
   "," (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
-  "l" 'forward-line
-  "u" 'forward-symbol
-  "j" 'forward-char
   "<remap> <conn-expand>" '(conn-dispatch-command
                             conn-expand-remote
                             conn-dispatch-read-string-with-timeout)
   "<remap> <conn-contract>" '(conn-dispatch-command
                               conn-expand-remote
                               conn-dispatch-read-string-with-timeout)
-  "n" 'conn-forward-defun
-  "J" 'conn-forward-inner-line
-  "L" 'conn-backward-inner-line
   "O" `(conn-dispatch-command
         forward-word ,(lambda () (conn-dispatch-all-things 'word)))
   "U" `(conn-dispatch-command
@@ -3762,9 +3761,17 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-select-target (target-finder)
   (conn-with-dispatch-event-handler
-      ((concat (propertize "<mouse-1>" 'face 'read-multiple-choice-face)
-               (propertize " act" 'face 'minibuffer-prompt))
-       (and event `(mouse-1 . ,_)
+      ((lambda ()
+         (when (where-is-internal 'act conn-dispatch-targeting-map)
+           (concat
+            (propertize (substitute-command-keys
+                         "\\<conn-dispatch-targeting-map>\\[act]" t)
+                        'face 'read-multiple-choice-face)
+            (propertize " act" 'face 'minibuffer-prompt))))
+       (and event `(,type . ,_)
+            (let 'act
+              (lookup-key conn-dispatch-targeting-map
+                          (vector type)))
             (let posn (event-start event))
             (let win (posn-window posn))
             (let pt (posn-point posn)))
@@ -4956,11 +4963,18 @@ Returns a cons of (STRING . OVERLAYS)."
   (cl-once-only (repeat)
     `(conn-with-dispatch-event-handler
          ((lambda ()
-            (when (> conn-dispatch-repeat-count 0)
-              (concat (propertize "ESC" 'face 'read-multiple-choice-face)
+            (when (and (> conn-dispatch-repeat-count 0)
+                       (where-is-internal
+                        'finish conn-dispatch-targeting-map t))
+              (concat (propertize
+                       (substitute-command-keys
+                        "\\<conn-dispatch-targeting-map>\\[finish]" t)
+                       'face 'read-multiple-choice-face)
                       (propertize " finish"
                                   'face 'minibuffer-prompt))))
-          (or 'escape 27)
+          (and key (let 'finish
+                     (lookup-key conn-dispatch-targeting-map
+                                 (vector key))))
           (if (> conn-dispatch-repeat-count 0)
               (conn-dispatch-handle-event)
             (conn-dispatch-ignore-event)))
@@ -4968,12 +4982,19 @@ Returns a cons of (STRING . OVERLAYS)."
            (let ((conn--dispatch-current-targeter nil))
              (conn-with-dispatch-event-handler
                  ((lambda ()
-                    (when conn--dispatch-current-targeter
+                    (when (and conn--dispatch-current-targeter
+                               (where-is-internal
+                                'retarget conn-dispatch-targeting-map t))
                       (concat
-                       (propertize "DEL" 'face 'read-multiple-choice-face)
+                       (propertize
+                        (substitute-command-keys
+                         "\\<conn-dispatch-targeting-map>\\[retarget]" t)
+                        'face 'read-multiple-choice-face)
                        (propertize " retarget" 'face 'minibuffer-prompt))))
-                  (and (or 8 'backspace)
-                       (guard conn--dispatch-current-targeter))
+                  (and (guard conn--dispatch-current-targeter)
+                       key (let 'retarget
+                             (lookup-key conn-dispatch-targeting-map
+                                         (vector key))))
                   (setq conn--dispatch-current-targeter nil)
                   (conn-dispatch-handle-event t))
                (while
@@ -5866,7 +5887,6 @@ execution."
                                    cmd))))
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
-
 ;;;;; Movement
 
 (defun conn-forward-defun (N)
@@ -7630,14 +7650,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   :prefix "conn-wincontrol-"
   :group 'conn)
 
-(defcustom conn-wincontrol-initial-help 'window-1
-  "Initial help message printed during `conn-wincontrol-mode'."
-  :group 'conn-wincontrol
-  :type '(choice (const :tag "Window" window-1)
-                 (const :tag "Frame" frame)
-                 (const :tag "Tab" tab)
-                 (const :tag "Short" nil)))
-
 (defface conn-wincontrol-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
   "Face for mode-line in a `conn-wincontrol-mode'."
@@ -7875,17 +7887,17 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
-  (letrec ((pre-hook (lambda ()
-                       (unless (memq this-command
-                                     '(conn-wincontrol-forward-delete-arg
-                                       conn-wincontrol-backward-delete-arg
-                                       conn-wincontrol-digit-argument-reset
-                                       conn-wincontrol-invert-argument
-                                       conn-wincontrol-digit-argument
-                                       conn-wincontrol-universal-arg))
-                         (remove-hook 'pre-command-hook pre-hook)
-                         (conn-wincontrol-exit)))))
-    (add-hook 'pre-command-hook pre-hook 90))
+  (letrec ((pre (lambda ()
+                  (unless (memq this-command
+                                '(conn-wincontrol-forward-delete-arg
+                                  conn-wincontrol-backward-delete-arg
+                                  conn-wincontrol-digit-argument-reset
+                                  conn-wincontrol-invert-argument
+                                  conn-wincontrol-digit-argument
+                                  conn-wincontrol-universal-arg))
+                    (remove-hook 'pre-command-hook pre)
+                    (conn-wincontrol-exit)))))
+    (add-hook 'pre-command-hook pre 99))
   (conn-wincontrol))
 
 
@@ -8352,8 +8364,8 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-dispatch-cycle-map
   :repeat t
-  "l" 'conn-dispatch-cycle-ring-previous
-  "j" 'conn-dispatch-cycle-ring-next)
+  "l" 'conn-dispatch-cycle-ring-next
+  "j" 'conn-dispatch-cycle-ring-previous)
 
 (defvar-keymap conn-local-mode-map
   "C-x y" conn-dispatch-cycle-map
@@ -8406,6 +8418,13 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  "<remap> <conn-forward-char>" 'forward-char
+  "<remap> <conn-backward-char>" 'backward-char
+  "j" 'conn-forward-inner-line
+  "i" 'forward-line
+  "n" 'conn-forward-defun
+  "u" 'forward-symbol
+  "y" 'forward-paragraph
   "h" 'conn-expand
   "," (conn-remap-key "<conn-thing-map>")
   "e" 'end-of-buffer)
