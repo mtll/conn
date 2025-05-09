@@ -2106,7 +2106,7 @@ command."
              (if (eq action 'metadata)
                  `(metadata
                    ,(cons 'affixation-function
-                          (conn--dispatch-make-command-affixation))
+                          'conn--dispatch-command-affixation)
                    (category . conn-dispatch-command))
                (complete-with-action action obarray string pred)))
            (lambda (sym)
@@ -3246,23 +3246,22 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
       (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
       conn-dispatch-action-default))
 
-(defun conn--dispatch-make-command-affixation ()
-  (lambda (command-names)
-    (with-selected-window (or (minibuffer-selected-window) (selected-window))
-      (cl-loop
-       for command-name in command-names
-       collect (let* ((fun (and (stringp command-name) (intern-soft command-name)))
-                      (binding (where-is-internal fun nil t))
-                      (binding (if (and binding (not (stringp binding)))
-                                   (format " {%s}" (key-description binding))
-                                 ""))
-                      (thing (format " (%s)" (or (get fun :conn-command-thing)
-                                                 "action"))))
-                 (put-text-property 0 (length binding)
-                                    'face 'help-key-binding binding)
-                 (put-text-property 0 (length thing)
-                                    'face 'completions-annotations thing)
-                 (list command-name "" (concat thing binding)))))))
+(defun conn--dispatch-command-affixation (command-names)
+  (with-selected-window (or (minibuffer-selected-window) (selected-window))
+    (cl-loop
+     for command-name in command-names
+     collect (let* ((fun (and (stringp command-name) (intern-soft command-name)))
+                    (binding (where-is-internal fun nil t))
+                    (binding (if (and binding (not (stringp binding)))
+                                 (format " {%s}" (key-description binding))
+                               ""))
+                    (thing (format " (%s)" (or (get fun :conn-command-thing)
+                                               "action"))))
+               (put-text-property 0 (length binding)
+                                  'face 'help-key-binding binding)
+               (put-text-property 0 (length thing)
+                                  'face 'completions-annotations thing)
+               (list command-name "" (concat thing binding))))))
 
 ;;;;; Dispatch command loop
 
@@ -3375,7 +3374,7 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
            (if (eq action 'metadata)
                `(metadata
                  ,(cons 'affixation-function
-                        (conn--dispatch-make-command-affixation))
+                        'conn--dispatch-command-affixation)
                  (category . conn-dispatch-command))
              (complete-with-action action obarray string pred)))
          (lambda (sym)
@@ -3657,12 +3656,9 @@ Target overlays may override this default by setting the
                                    (/= (overlay-end target)
                                        (overlay-end ov))))
                       (setq end pt))))
-                 ;; If a composition starts here then skip to the
-                 ;; end of the composition.
                  ((get-text-property pt 'composition)
                   (setq pt (next-single-property-change
                             pt 'composition nil line-end)))
-                 ;; Move forward one character
                  (t (cl-incf pt))))
               (move-overlay overlay (overlay-start overlay) end)))
           (cond
@@ -3844,15 +3840,13 @@ Target overlays may override this default by setting the
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        (pcase ,event
-                          ,(macroexpand-all
-                            (cdr handler)
-			    `((conn-dispatch-ignore-event
-                               . ,(lambda () `(throw ',return t)))
-                              (conn-dispatch-handle-event
-                               . ,(lambda (&rest body)
-                                    `(throw ',handle ,(macroexp-progn body))))
-			      ,@macroexpand-all-environment)))
+                        ,(macroexpand-all
+                          `(pcase ,event ,(cdr handler))
+			  `((conn-dispatch-ignore-event
+                             . ,(lambda () `(throw ',return t)))
+                            (conn-dispatch-handle-event
+                             . ,(lambda (&rest body)
+                                  `(throw ',handle ,(macroexp-progn body))))))
                         nil))
                     conn--dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
