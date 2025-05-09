@@ -771,16 +771,10 @@ of highlighting."
   (cons (conn--overlay-start-marker ov)
         (conn--overlay-end-marker ov)))
 
-(defun conn-overlay-p (overlay)
-  "Return t if OVERLAY is an overlay created by conn."
-  (overlay-get overlay 'conn-overlay))
-
-(defun conn--clear-overlays (&optional buffer)
+(defun conn--clear-overlays ()
   "Delete all conn overlays in BUFFER."
   (without-restriction
-    (cl-loop for ov being the overlays of buffer
-             when (conn-overlay-p ov)
-             do (delete-overlay ov))))
+    (remove-overlays nil nil 'conn-overlay t)))
 
 
 ;;;;; Append/prepend keymaps
@@ -802,9 +796,9 @@ of highlighting."
 ;;;;; Thing command type
 
 (defun conn-thing-command-p (cmd)
-  "Return non-nil if CMD is a dispatch action."
   (and (symbolp cmd)
-       (not (not (get cmd :conn-command-thing)))))
+       (not (and (not (alist-get cmd conn-bounds-of-command-alist))
+                 (not (get cmd :conn-command-thing))))))
 
 (cl-deftype conn-thing-command () '(satisfies conn-thing-command-p))
 
@@ -1887,7 +1881,7 @@ themselves once the selection process has concluded."
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
   (cond
-   ((null windows))
+   ((null windows) nil)
    ((and (length= windows 1)
          (not always-prompt))
     (car windows))
@@ -2068,15 +2062,25 @@ command."
 
 (cl-defgeneric conn-read-mover-command-case (command cont))
 
-(cl-defmethod conn-read-mover-command-case (command cont)
-  (if-let* ((thing (or (alist-get command conn-bounds-of-command-alist)
-                       (when (symbolp command)
-                         (get command :conn-command-thing)))))
-      (progn
+(static-if (>= emacs-major-version 31)
+    (progn
+      (cl-defmethod conn-read-mover-command-case (command cont)
+        (conn-state-loop-error "Invalid command"))
+
+      (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) cont)
         (setf (oref cont thing-cmd) command
               (oref cont thing-arg) (conn-state-loop-prefix-arg))
-        (conn-state-loop-exit))
-    (conn-state-loop-error "Invalid command")))
+        (conn-state-loop-exit)))
+
+  (cl-defmethod conn-read-mover-command-case (command cont)
+    (if (or (alist-get command conn-bounds-of-command-alist)
+            (when (symbolp command)
+              (get command :conn-command-thing)))
+        (progn
+          (setf (oref cont thing-cmd) command
+                (oref cont thing-arg) (conn-state-loop-prefix-arg))
+          (conn-state-loop-exit))
+      (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-read-mover-command-case ((command (eql recursive-edit))
                                             cont)
@@ -3316,19 +3320,33 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
       (unless success
         (conn-action-cancel (oref cont action))))))
 
-(cl-defmethod conn-dispatch-command-case (command cont)
-  (if (or (alist-get command conn-bounds-of-command-alist)
-          (when (symbolp command)
-            (get command :conn-command-thing)))
-      (progn
+(static-if (>= emacs-major-version 31)
+    (progn
+      (cl-defmethod conn-read-mover-command-case (command cont)
+        (conn-state-loop-error "Invalid command"))
+
+      (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) cont)
         (setf (oref cont target-finder) (conn--dispatch-target-finder command)
               (oref cont thing-cmd) command
               (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
         (when (null (oref cont action))
           (setf (oref cont action)
                 (conn-action (conn--dispatch-default-action command))))
-        (conn-state-loop-exit))
-    (conn-state-loop-error "Invalid command")))
+        (conn-state-loop-exit)))
+
+  (cl-defmethod conn-dispatch-command-case (command cont)
+    (if (or (alist-get command conn-bounds-of-command-alist)
+            (when (symbolp command)
+              (get command :conn-command-thing)))
+        (progn
+          (setf (oref cont target-finder) (conn--dispatch-target-finder command)
+                (oref cont thing-cmd) command
+                (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
+          (when (null (oref cont action))
+            (setf (oref cont action)
+                  (conn-action (conn--dispatch-default-action command))))
+          (conn-state-loop-exit))
+      (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-dispatch-command-case ((command (head conn-dispatch-command))
                                           cont)
@@ -8076,7 +8094,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
    (list (conn-prompt-for-window
           (delq (selected-window)
                 (conn--get-windows nil 'nomini 'visible)))))
-  (select-window window))
+  (if (null window)
+      (user-error "No other windows available to select")
+    (select-window window)))
 
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
@@ -8519,6 +8539,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "+" 'conn-set-register-seperator
   "H" 'conn-expand
   "b" (conn-remap-key "<conn-edit-map>")
   "Z" 'pop-to-mark-command
