@@ -465,7 +465,7 @@
 ;;;; Posframe window labels
 
 (defface conn-posframe-window-label-face
-  '((t (:inherit help-key-binding :height 4)))
+  '((t (:inherit help-key-binding :height 4.5)))
   "Face for conn window label posframe."
   :group 'conn-faces)
 
