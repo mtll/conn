@@ -2064,7 +2064,7 @@ command."
 
 (static-if (>= emacs-major-version 31)
     (progn
-      (cl-defmethod conn-read-mover-command-case (command cont)
+      (cl-defmethod conn-read-mover-command-case (_command _cont)
         (conn-state-loop-error "Invalid command"))
 
       (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) cont)
@@ -3322,7 +3322,7 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 
 (static-if (>= emacs-major-version 31)
     (progn
-      (cl-defmethod conn-read-mover-command-case (command cont)
+      (cl-defmethod conn-read-mover-command-case (_command _cont)
         (conn-state-loop-error "Invalid command"))
 
       (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) cont)
