@@ -3192,6 +3192,7 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 
 (defvar-keymap conn-dispatch-targeting-map
   "DEL" 'retarget
+  "<backspace>" 'retarget
   "<mouse-1>" 'act
   "<escape>" 'finish)
 
@@ -8444,7 +8445,9 @@ Operates with the selected windows parent window."
   "<conn-thing-map> v" 'conn-mark-visible
   "<conn-thing-map> L" 'forward-line
   "<conn-thing-map> )" 'forward-list
-  "<conn-thing-map> (" 'backward-list)
+  "<conn-thing-map> (" 'backward-list
+  "<conn-thing-map> a" 'beginning-of-buffer
+  "<conn-thing-map> e" 'end-of-buffer)
 
 (static-if (<= 30 emacs-major-version)
     (progn
