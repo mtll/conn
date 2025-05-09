@@ -342,8 +342,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 ;;;;; Rings
 
-;; Expects no two items added to the ring to be eq to one another.  This
-;; works well enough for now but maybe it should be fixed.
 (cl-defstruct (conn-ring
                (:constructor conn--make-ring (capacity cleanup)))
   "A ring that removes elements in least recently visited order."
@@ -358,16 +356,17 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (define-inline conn-ring--visit (ring item)
   (inline-quote
    (setf (conn-ring-history ,ring)
-         (cons ,item (delq ,item (conn-ring-history ,ring))))))
+         (cons ,item (delete ,item (conn-ring-history ,ring))))))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (push item (conn-ring-list ring))
+  (setf (conn-ring-list ring)
+        (cons item (delete item (conn-ring-list ring))))
   (conn-ring--visit ring item)
   (if (= (conn-ring-size ring) (conn-ring-capacity ring))
       (let ((old (car (last (conn-ring-history ring)))))
-        (setf (conn-ring-list ring) (delq old (conn-ring-list ring))
-              (conn-ring-history ring) (delq old (conn-ring-history ring)))
+        (setf (conn-ring-list ring) (delete old (conn-ring-list ring))
+              (conn-ring-history ring) (delete old (conn-ring-history ring)))
         (when-let* ((cleanup (conn-ring-cleanup ring)))
           (funcall cleanup old)))
     (cl-incf (conn-ring-size ring))))
@@ -5654,6 +5653,8 @@ order to mark the region that should be defined by any of COMMANDS."
 (defvar-local conn-narrow-ring nil
   "Ring of recent narrowed regions.")
 
+(defvar conn-narrow-ring-max 14)
+
 (cl-defstruct (conn-narrow-register
                (:constructor conn--make-narrow-register (narrow-ring)))
   (narrow-ring nil))
@@ -5740,7 +5741,12 @@ order to mark the region that should be defined by any of COMMANDS."
   (let ((narrowing (cons (conn--create-marker beg)
                          (conn--create-marker end))))
     (setq conn-narrow-ring
-          (cons narrowing (delete narrowing conn-narrow-ring)))))
+          (cons narrowing (delete narrowing conn-narrow-ring)))
+    (when-let* ((old (drop conn-narrow-ring-max conn-narrow-ring)))
+      (setf conn-narrow-ring (take conn-narrow-ring-max conn-narrow-ring))
+      (cl-loop for (beg . end) in old do
+               (set-marker beg nil)
+               (set-marker end nil)))))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
@@ -5796,6 +5802,12 @@ order to mark the region that should be defined by any of COMMANDS."
        (widen))
      (set-marker beg nil)
      (set-marker end nil))))
+
+(defun conn-copy-narrow-ring ()
+  (setq conn-narrow-ring
+        (cl-loop for (beg . end) in conn-narrow-ring
+                 collect (cons (copy-marker (marker-position beg) t)
+                               (copy-marker (marker-position end))))))
 
 
 ;;;;; Bounds of narrow ring
@@ -8634,6 +8646,7 @@ Operates with the selected windows parent window."
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
+  (conn-copy-narrow-ring)
   (conn-copy-movement-ring)
   (conn-copy-mark-ring))
 
