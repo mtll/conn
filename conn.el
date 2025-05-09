@@ -36,6 +36,7 @@
   (eval-when-compile
     (require 'subr-x)))
 (eval-when-compile
+  (require 'pcase)
   (require 'inline)
   (require 'cl-lib)
   (require 'map))
@@ -3871,7 +3872,8 @@ Target overlays may override this default by setting the
                             (reverse conn--dispatch-event-message-prefixes))))
          (prompt
           (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
-                  (mapconcat 'identity prefix (propertize "; " 'face 'minibuffer-prompt))
+                  (mapconcat 'identity prefix
+                             (propertize "; " 'face 'minibuffer-prompt))
                   (when prefix (propertize ") " 'face 'minibuffer-prompt))
                   prompt)))
     (catch 'char
