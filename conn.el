@@ -4145,11 +4145,6 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defgeneric conn-action-cancel (action)
   (:method (_) "Noop" nil))
 
-(cl-defmethod conn-dispatch-command-case :before (command cont)
-  (when (or (conn--action-type-p command)
-            (conn-action-p command))
-    (conn-action-cancel (oref cont action))))
-
 (defmacro conn-define-dispatch-action (name arg-slots &rest rest)
   "\(fn NAME ARG-SLOTS &key DESCRIPTION WINDOW-PREDICATE EXTRA-SLOTS &body BODY)"
   (declare (debug ( name lambda-expr
@@ -4179,6 +4174,7 @@ Returns a cons of (STRING . OVERLAYS)."
            instance))
 
        (cl-defmethod conn-dispatch-command-case ((type (eql ,name)) cont)
+         (conn-action-cancel (oref cont action))
          (if (cl-typep (oref cont action) ',name)
              (setf (oref cont action) nil)
            (setf (oref cont action) (conn-action type))))
