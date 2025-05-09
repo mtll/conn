@@ -218,7 +218,7 @@ BEFORE means only those matches before, and including, the current match."
   :key "g"
   :keyword :state
   :choices '(("command" . conn-command-state)
-             ("emacs" . conn-insert-state))
+             ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
                 (with-slots (choices value) obj
                   (setf value (rassq (or conn-current-state 'conn-command-state)
@@ -336,7 +336,7 @@ Begins the keyboard macro by deleting the string at each match."
 (transient-define-suffix conn--kapply-emacs-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
 
-Begins the keyboard macro in `conn-insert-state'."
+Begins the keyboard macro in `conn-emacs-state'."
   :transient 'transient--do-exit
   :key "e"
   :description "Emacs"
@@ -421,7 +421,7 @@ Begins the keyboard macro in `conn-command-state'."
      (alist-get :kmacro args))))
 
 (transient-define-suffix conn--kapply-emacs-rectangle-suffix (args)
-  "Apply keyboard macro in `conn-insert-state' to a rectangle."
+  "Apply keyboard macro in `conn-emacs-state' to a rectangle."
   :transient 'transient--do-exit
   :key "e"
   :description "Emacs"
