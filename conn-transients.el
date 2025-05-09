@@ -279,7 +279,7 @@ before each iteration."
 (transient-define-argument conn--kapply-merge-undo-infix ()
   "Merge all macro iterations into a single undo in each buffer."
   :class 'conn-transient-lisp-choices
-  :key "u"
+  :key "/"
   :keyword :undo
   :description "Merge Undo Per"
   :choices '(("buffer atomic" . conn--kapply-per-buffer-atomic-undo)
@@ -512,7 +512,7 @@ Begins the keyboard macro in `conn-command-state'."
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   "Apply keyboard macro to occurrence of a regex within a region."
   :transient 'transient--do-exit
-  :key "r"
+  :key "u"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((delimited (oref transient-current-prefix scope))

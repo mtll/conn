@@ -4856,15 +4856,6 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
   (princ "Dispatch Register"))
 
-(static-if (<= 30 emacs-major-version)
-    (cl-defmethod register-command-info ((_command (eql conn-last-dispatch-to-register)))
-      (make-register-preview-info
-       :types '(all)
-       :msg "Copy dispatch to register `%s'"
-       :act 'set
-       :noconfirm (memq register-use-preview '(nil never))
-       :smatch t)))
-
 (defun conn-last-dispatch-to-register (register)
   "Store last dispatch command in REGISTER."
   (interactive (list (register-read-with-preview "Dispatch to register: ")))
@@ -5689,28 +5680,10 @@ order to mark the region that should be defined by any of COMMANDS."
     (format "Narrowings In:  %s")
     (princ)))
 
-(static-if (<= 30 emacs-major-version)
-    (cl-defmethod register-command-info ((_command (eql conn-narrow-ring-to-register)))
-      (make-register-preview-info
-       :types '(all)
-       :msg "Copy narrow ring to register `%s'"
-       :act 'set
-       :noconfirm (memq register-use-preview '(nil never))
-       :smatch t)))
-
 (defun conn-narrow-ring-to-register (register)
   "Store narrow ring in REGISTER."
   (interactive (list (register-read-with-preview "Narrow ring to register: ")))
   (set-register register (conn--narrow-ring-to-register)))
-
-(static-if (<= 30 emacs-major-version)
-    (cl-defmethod register-command-info ((_command (eql conn-push-region-to-narrow-register)))
-      (make-register-preview-info
-       :types '(all)
-       :msg "Push region to narrow register `%s'"
-       :act 'set
-       :noconfirm (memq register-use-preview '(nil never))
-       :smatch t)))
 
 (defun conn-push-region-to-narrow-register (beg end register)
   "Prepend region to narrow register."
@@ -6313,6 +6286,89 @@ instances of from-string.")
         (perform-replace from-string to-string query-flag t
                          delimited nil nil beg end backward)))))
 
+(defun conn-replace-in-region ( from-string to-string
+                                &optional delimited backward query-flag)
+  "Perform a `replace-string' within the bounds of a thing."
+  (interactive
+   (conn--replace-read-args
+    (concat "Replace"
+            (if current-prefix-arg
+                (if (eq current-prefix-arg '-) " backward" " word")
+              ""))
+    nil (region-bounds) nil))
+  (save-excursion
+    (let ((regions (region-bounds)))
+      (deactivate-mark t)
+      (if (cdr regions)
+          (let* ((regions (conn--merge-regions regions t))
+                 (bounds (cl-loop for (b . e) in regions
+                                  minimize b into beg
+                                  maximize e into end
+                                  finally return (cons beg end)))
+                 (region-extract-function
+                  (lambda (method)
+                    (pcase method
+                      ('nil
+                       (cl-loop for (beg . end) in regions
+                                collect (buffer-substring beg end)))
+                      ('delete-only
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end)))
+                      ('bounds regions)
+                      (_
+                       (prog1
+                           (cl-loop for (beg . end) in regions
+                                    collect (filter-buffer-substring beg end method))
+                         (cl-loop for (beg . end) in regions
+                                  do (delete-region beg end))))))))
+            (perform-replace from-string to-string query-flag nil
+                             delimited nil nil (car bounds) (cdr bounds)
+                             backward t))
+        (perform-replace from-string to-string query-flag nil
+                         delimited nil nil (caar regions) (cdar regions)
+                         backward)))))
+
+(defun conn-regexp-replace-in-region ( from-string to-string
+                                       &optional delimited backward query-flag)
+  "Perform a `regexp-replace' within the bounds of a thing."
+  (interactive
+   (conn--replace-read-args
+    (concat "Replace"
+            (if current-prefix-arg
+                (if (eq current-prefix-arg '-) " backward" " word")
+              ""))
+    t (region-bounds) nil))
+  (save-excursion
+    (let ((regions (region-bounds)))
+      (deactivate-mark t)
+      (if (cdr regions)
+          (let* ((bounds (cl-loop for (b . e) in regions
+                                  minimize b into beg
+                                  maximize e into end
+                                  finally return (cons beg end)))
+                 (region-extract-function
+                  (lambda (method)
+                    (pcase method
+                      ('nil
+                       (cl-loop for (beg . end) in regions
+                                collect (buffer-substring beg end)))
+                      ('delete-only
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end)))
+                      ('bounds regions)
+                      (_
+                       (prog1
+                           (cl-loop for (beg . end) in regions
+                                    collect (filter-buffer-substring beg end method))
+                         (cl-loop for (beg . end) in regions
+                                  do (delete-region beg end))))))))
+            (perform-replace from-string to-string query-flag t
+                             delimited nil nil (car bounds) (cdr bounds)
+                             backward t))
+        (perform-replace from-string to-string query-flag t
+                         delimited nil nil (caar regions) (cdar regions)
+                         backward)))))
+
 
 ;;;;; Command Registers
 
@@ -6328,15 +6384,6 @@ instances of from-string.")
 (cl-defmethod register-val-describe ((val conn-command-register) _arg)
   (princ (format "Command:  %s"
                  (car (conn-command-register-command val)))))
-
-(static-if (<= 30 emacs-major-version)
-    (cl-defmethod register-command-info ((_command (eql conn-command-to-register)))
-      (make-register-preview-info
-       :types '(all)
-       :msg "Command to register `%s'"
-       :act 'set
-       :noconfirm (memq register-use-preview '(nil never))
-       :smatch t)))
 
 (defun conn-command-to-register (register)
   "Store command in REGISTER."
@@ -6396,15 +6443,6 @@ instances of from-string.")
                            (propertize "*CURRENT TAB*" 'face 'error)
                          (alist-get 'name tab)))
                    "on another frame"))))
-
-(static-if (<= 30 emacs-major-version)
-    (cl-defmethod register-command-info ((_command (eql conn-tab-to-register)))
-      (make-register-preview-info
-       :types '(all)
-       :msg "Tab to register `%s'"
-       :act 'set
-       :noconfirm (memq register-use-preview '(nil never))
-       :smatch t)))
 
 (defun conn-tab-to-register (register)
   "Store tab in REGISTER."
@@ -8242,13 +8280,15 @@ Operates with the selected windows parent window."
 ;;;;; Top-level command state maps
 
 (defvar-keymap conn-default-region-map
+  "q" 'conn-replace-in-region
+  "u" 'conn-regexp-replace-in-region
   "\\" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
   "e" 'conn-duplicate-region
-  "d" 'conn-duplicate-and-comment-region
+  ;; "d" 'conn-duplicate-and-comment-region
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -8260,7 +8300,7 @@ Operates with the selected windows parent window."
   "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "u" 'conn-join-lines-in-region
+  "RET" 'conn-join-lines-in-region
   "I" 'indent-rigidly
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
@@ -8315,12 +8355,12 @@ Operates with the selected windows parent window."
   "z" 'conn-emacs-state-at-mark
   "v" 'diff-buffer-with-file
   "F" 'conn-bind-last-dispatch-to-key
-  "RET" 'whitespace-cleanup
+  "SPC" 'whitespace-cleanup
   "q" 'conn-replace-in-thing
-  "r" 'conn-regexp-replace-in-thing
+  "u" 'conn-regexp-replace-in-thing
   "m" 'conn-narrow-indirect-to-thing
   "n" 'conn-narrow-to-thing
-  "u" 'conn-join-lines-in-thing
+  "RET" 'conn-join-lines-in-thing
   "f" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
