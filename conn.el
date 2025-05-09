@@ -31,7 +31,6 @@
 
 (require 'compat)
 (require 'eieio)
-(require 'pcase)
 (static-if (<= 31 emacs-major-version)
     (require 'subr-x)
   (eval-when-compile
@@ -3190,6 +3189,8 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
+;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
+;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
   "DEL" 'retarget
   "<backspace>" 'retarget
@@ -3825,14 +3826,15 @@ Target overlays may override this default by setting the
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        ,(macroexpand-all
-                          `(pcase ,event ,(cdr handler))
-			  `((conn-dispatch-ignore-event
-                             . ,(lambda () `(throw ',return t)))
-                            (conn-dispatch-handle-event
-                             . ,(lambda (&rest body)
-                                  `(throw ',handle ,(macroexp-progn body))))
-			    ,@macroexpand-all-environment))
+                        (pcase ,event
+                          ,(macroexpand-all
+                            (cdr handler)
+			    `((conn-dispatch-ignore-event
+                               . ,(lambda () `(throw ',return t)))
+                              (conn-dispatch-handle-event
+                               . ,(lambda (&rest body)
+                                    `(throw ',handle ,(macroexp-progn body))))
+			      ,@macroexpand-all-environment)))
                         nil))
                     conn--dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
