@@ -31,12 +31,12 @@
 
 (require 'compat)
 (require 'eieio)
+(require 'pcase)
 (static-if (<= 31 emacs-major-version)
     (require 'subr-x)
   (eval-when-compile
     (require 'subr-x)))
 (eval-when-compile
-  (require 'pcase)
   (require 'inline)
   (require 'cl-lib)
   (require 'map))
@@ -1436,6 +1436,7 @@ and specializes the method on all conn states."
                               (default-value 'conn-lighter))
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
              conn--hide-mark-cursor (or (alist-get state conn-hide-mark-alist)
+                                        (alist-get t conn-hide-mark-alist)
                                         (conn-get-mode-property major-mode :hide-mark-cursor)
                                         (conn-state-get state :hide-mark-cursor))
              cursor-type (or (conn-state-get state :cursor) t))
@@ -3767,10 +3768,10 @@ Target overlays may override this default by setting the
             (propertize (key-description binding)
                         'face 'read-multiple-choice-face)
             (propertize " act" 'face 'minibuffer-prompt))))
-       (and event `(,type . ,_)
+       (and event `(,event-type . ,_)
             (let 'act
               (lookup-key conn-dispatch-targeting-map
-                          (vector type)))
+                          (vector event-type)))
             (let posn (event-start event))
             (let win (posn-window posn))
             (let pt (posn-point posn)))
