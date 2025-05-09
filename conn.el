@@ -4766,40 +4766,35 @@ Returns a cons of (STRING . OVERLAYS)."
               (user-error "Invalid regions")))
            (_ (user-error "Cannot find %s at point" thing-cmd))))
         (_ (user-error "Cannot find %s at point" thing-cmd)))
-    (let ((cg1 (prepare-change-group))
-          (cg2 (with-current-buffer (window-buffer window)
-                 (prepare-change-group)))
-          str1 str2 success)
-      (unwind-protect
-          (progn
-            (pcase (if (region-active-p)
-                       (cons (region-beginning) (region-end))
-                     (bounds-of-thing-at-point
-                      (or (get thing-cmd :conn-command-thing)
-                          thing-cmd)))
-              (`(,beg . ,end)
-               (setq str1 (filter-buffer-substring beg end)))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))
-            (with-selected-window window
-              (save-excursion
-                (goto-char pt)
-                (pcase (bounds-of-thing-at-point
-                        (or (get thing-cmd :conn-command-thing)
-                            thing-cmd))
-                  (`(,beg . ,end)
-                   (setq str2 (filter-buffer-substring beg end))
-                   (delete-region beg end)
-                   (insert str1))
-                  (_ (user-error "Cannot find %s at point" thing-cmd)))))
-            (delete-region (region-beginning) (region-end))
-            (insert str2)
-            (setq success t))
-        (if success
-            (progn
-              (accept-change-group cg1)
-              (accept-change-group cg2))
-          (cancel-change-group cg1)
-          (cancel-change-group cg2))))))
+    (conn-protected-let* ((cg (nconc (prepare-change-group)
+                                     (prepare-change-group
+                                      (window-buffer window)))
+                              (cancel-change-group cg))
+                          (str1)
+                          (str2))
+      (activate-change-group cg)
+      (pcase (if (region-active-p)
+                 (cons (region-beginning) (region-end))
+               (bounds-of-thing-at-point
+                (or (get thing-cmd :conn-command-thing)
+                    thing-cmd)))
+        (`(,beg . ,end)
+         (setq str1 (filter-buffer-substring beg end)))
+        (_ (user-error "Cannot find %s at point" thing-cmd)))
+      (with-current-buffer (window-buffer window)
+        (save-excursion
+          (goto-char pt)
+          (pcase (bounds-of-thing-at-point
+                  (or (get thing-cmd :conn-command-thing)
+                      thing-cmd))
+            (`(,beg . ,end)
+             (setq str2 (filter-buffer-substring beg end))
+             (delete-region beg end)
+             (insert str1))
+            (_ (user-error "Cannot find %s at point" thing-cmd)))))
+      (delete-region (region-beginning) (region-end))
+      (insert str2)
+      (accept-change-group cg))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
