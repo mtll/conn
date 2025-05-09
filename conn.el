@@ -744,9 +744,9 @@ of highlighting."
               (read-regexp (format-prompt prompt default)
                            (regexp-quote default)
                            'minibuffer-history)
-            (let ((from (read-from-minibuffer
+            (let ((from (read-string
                          (format-prompt prompt default)
-                         nil nil nil nil
+                         nil nil
                          (if default
                              (delete-dups
                               (cons default (query-replace-read-from-suggestions)))
