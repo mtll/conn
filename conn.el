@@ -3322,10 +3322,10 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
 
 (static-if (>= emacs-major-version 31)
     (progn
-      (cl-defmethod conn-read-mover-command-case (_command _cont)
+      (cl-defmethod conn-dispatch-command-case (_command _cont)
         (conn-state-loop-error "Invalid command"))
 
-      (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) cont)
+      (cl-defmethod conn-dispatch-command-case ((command conn-thing-command) cont)
         (setf (oref cont target-finder) (conn--dispatch-target-finder command)
               (oref cont thing-cmd) command
               (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
