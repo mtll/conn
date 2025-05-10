@@ -1178,17 +1178,19 @@ mouse-3: Describe current input method")
   "Run BODY ensuring `conn--input-method' is active."
   (declare (debug (body))
            (indent 0))
-  `(if conn--input-method
+  (cl-with-gensyms (input-method-p)
+    `(let ((,input-method-p conn--input-method))
        (unwind-protect
            (progn
-             (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
-             (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
-             (activate-input-method conn--input-method)
+             (when ,input-method-p
+               (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
+               (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
+               (activate-input-method conn--input-method))
              ,@body)
-         (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
-         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-         (conn--activate-input-method))
-     ,@body))
+         (when ,input-method-p
+           (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
+           (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
+           (conn--activate-input-method))))))
 
 
 ;;;;; State properties
