@@ -3221,6 +3221,10 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   "<remap> <conn-contract>" '(conn-dispatch-command
                               conn-expand-remote
                               conn-dispatch-read-string-with-timeout)
+  "L" `(conn-dispatch-command
+        conn-backward-inner-line ,(lambda () (conn-dispatch-inner-lines t)))
+  "<conn-thing-map> e" 'move-end-of-line
+  "<conn-thing-map> a" 'move-beginning-of-line
   "O" `(conn-dispatch-command
         forward-word ,(lambda () (conn-dispatch-all-things 'word)))
   "U" `(conn-dispatch-command
@@ -6141,10 +6145,12 @@ If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
 will query before replacing from-string, otherwise just replace all
 instances of from-string.")
 
-(defvar-keymap conn-replace-map
-  "C-RET" 'conn-query-replace
-  "C-<return>" 'conn-query-replace
+(defvar-keymap conn-replace-from-map
   "C-M-;" 'conn-replace-insert-separator)
+
+(defvar-keymap conn-replace-to-map
+  "C-RET" 'conn-query-replace
+  "C-<return>" 'conn-query-replace)
 
 (defun conn-query-replace ()
   "Invert value of `conn-query-flag' and exit minibuffer."
@@ -6213,11 +6219,13 @@ instances of from-string.")
                            (lambda ()
                              (thread-last
                                (current-local-map)
-                               (make-composed-keymap conn-replace-map)
+                               (make-composed-keymap conn-replace-from-map)
                                (use-local-map)))
                          (if regexp-flag
                              (let ((query-replace-read-from-regexp-default
-                                    (conn-replace-read-regexp-default)))
+                                    (if-let* ((def (conn-replace-read-regexp-default)))
+                                        def
+                                      query-replace-read-from-regexp-default)))
                                (query-replace-read-from prompt regexp-flag))
                            (query-replace-read-from prompt regexp-flag)))))
                (to (if (consp from)
@@ -6226,7 +6234,7 @@ instances of from-string.")
                          (lambda ()
                            (thread-last
                              (current-local-map)
-                             (make-composed-keymap conn-replace-map)
+                             (make-composed-keymap conn-replace-to-map)
                              (use-local-map)))
                        (query-replace-read-to from prompt regexp-flag)))))
           (list from to
@@ -6251,33 +6259,40 @@ instances of from-string.")
                             ""))
                   nil (or (cdr regions) regions) nil)))
      (append (list thing-mover arg) common)))
-  (save-excursion
-    (pcase-let ((`((,beg . ,end) . ,regions)
-                 (or (conn--last-bounds-of-command)
-                     (conn-bounds-of-command thing-mover arg))))
-      (deactivate-mark t)
-      (if regions
-          (let* ((regions (conn--merge-regions regions t))
-                 (region-extract-function
-                  (lambda (method)
-                    (pcase method
-                      ('nil
-                       (cl-loop for (beg . end) in regions
-                                collect (buffer-substring beg end)))
-                      ('delete-only
-                       (cl-loop for (beg . end) in regions
-                                do (delete-region beg end)))
-                      ('bounds regions)
-                      (_
-                       (prog1
-                           (cl-loop for (beg . end) in regions
-                                    collect (filter-buffer-substring beg end method))
+  (pcase-let ((`((,beg . ,end) . ,regions)
+               (or (conn--last-bounds-of-command)
+                   (conn-bounds-of-command thing-mover arg))))
+    (deactivate-mark t)
+    (if regions
+        (let* ((regions (conn--merge-regions regions t))
+               (region-extract-function
+                (lambda (method)
+                  (pcase method
+                    ('nil
+                     (cl-loop for (beg . end) in regions
+                              collect (buffer-substring beg end)))
+                    ('delete-only
+                     (cl-loop for (beg . end) in regions
+                              do (delete-region beg end)))
+                    ('bounds regions)
+                    (_
+                     (prog1
                          (cl-loop for (beg . end) in regions
-                                  do (delete-region beg end))))))))
-            (perform-replace from-string to-string query-flag nil
-                             delimited nil nil beg end backward t))
-        (perform-replace from-string to-string query-flag nil
-                         delimited nil nil beg end backward)))))
+                                  collect (filter-buffer-substring beg end method))
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end))))))))
+          (if conn-query-flag
+              (perform-replace from-string to-string query-flag nil
+                               delimited nil nil beg end backward t)
+            (save-excursion
+              (perform-replace from-string to-string query-flag nil
+                               delimited nil nil beg end backward t))))
+      (if conn-query-flag
+          (perform-replace from-string to-string query-flag nil
+                           delimited nil nil beg end backward)
+        (save-excursion
+          (perform-replace from-string to-string query-flag nil
+                           delimited nil nil beg end backward))))))
 
 (defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
                                       &optional delimited backward query-flag)
@@ -6294,33 +6309,40 @@ instances of from-string.")
                             ""))
                   t (or (cdr regions) regions) nil)))
      (append (list thing-mover arg) common)))
-  (save-excursion
-    (pcase-let ((`((,beg . ,end) . ,regions)
-                 (or (conn--last-bounds-of-command)
-                     (conn-bounds-of-command thing-mover arg))))
-      (deactivate-mark t)
-      (if regions
-          (let* ((regions (conn--merge-regions regions t))
-                 (region-extract-function
-                  (lambda (method)
-                    (pcase method
-                      ('nil
-                       (cl-loop for (beg . end) in regions
-                                collect (buffer-substring beg end)))
-                      ('delete-only
-                       (cl-loop for (beg . end) in regions
-                                do (delete-region beg end)))
-                      ('bounds regions)
-                      (_
-                       (prog1
-                           (cl-loop for (beg . end) in regions
-                                    collect (filter-buffer-substring beg end method))
+  (pcase-let ((`((,beg . ,end) . ,regions)
+               (or (conn--last-bounds-of-command)
+                   (conn-bounds-of-command thing-mover arg))))
+    (deactivate-mark t)
+    (if regions
+        (let* ((regions (conn--merge-regions regions t))
+               (region-extract-function
+                (lambda (method)
+                  (pcase method
+                    ('nil
+                     (cl-loop for (beg . end) in regions
+                              collect (buffer-substring beg end)))
+                    ('delete-only
+                     (cl-loop for (beg . end) in regions
+                              do (delete-region beg end)))
+                    ('bounds regions)
+                    (_
+                     (prog1
                          (cl-loop for (beg . end) in regions
-                                  do (delete-region beg end))))))))
-            (perform-replace from-string to-string query-flag t
-                             delimited nil nil beg end backward t))
-        (perform-replace from-string to-string query-flag t
-                         delimited nil nil beg end backward)))))
+                                  collect (filter-buffer-substring beg end method))
+                       (cl-loop for (beg . end) in regions
+                                do (delete-region beg end))))))))
+          (if conn-query-flag
+              (perform-replace from-string to-string query-flag t
+                               delimited nil nil beg end backward t)
+            (save-excursion
+              (perform-replace from-string to-string query-flag t
+                               delimited nil nil beg end backward t))))
+      (if conn-query-flag
+          (perform-replace from-string to-string query-flag t
+                           delimited nil nil beg end backward)
+        (save-excursion
+          (perform-replace from-string to-string query-flag t
+                           delimited nil nil beg end backward))))))
 
 (defun conn-replace-in-region ( from-string to-string
                                 &optional delimited backward query-flag)
@@ -6332,37 +6354,16 @@ instances of from-string.")
                 (if (eq current-prefix-arg '-) " backward" " word")
               ""))
     nil (region-bounds) nil))
-  (save-excursion
-    (let ((regions (region-bounds)))
-      (deactivate-mark t)
-      (if (cdr regions)
-          (let* ((regions (conn--merge-regions regions t))
-                 (bounds (cl-loop for (b . e) in regions
-                                  minimize b into beg
-                                  maximize e into end
-                                  finally return (cons beg end)))
-                 (region-extract-function
-                  (lambda (method)
-                    (pcase method
-                      ('nil
-                       (cl-loop for (beg . end) in regions
-                                collect (buffer-substring beg end)))
-                      ('delete-only
-                       (cl-loop for (beg . end) in regions
-                                do (delete-region beg end)))
-                      ('bounds regions)
-                      (_
-                       (prog1
-                           (cl-loop for (beg . end) in regions
-                                    collect (filter-buffer-substring beg end method))
-                         (cl-loop for (beg . end) in regions
-                                  do (delete-region beg end))))))))
-            (perform-replace from-string to-string query-flag nil
-                             delimited nil nil (car bounds) (cdr bounds)
-                             backward t))
-        (perform-replace from-string to-string query-flag nil
-                         delimited nil nil (caar regions) (cdar regions)
-                         backward)))))
+  (if conn-query-flag
+      (perform-replace from-string to-string query-flag t
+                       delimited nil nil
+                       (region-beginning) (region-end)
+                       backward (region-noncontiguous-p))
+    (save-excursion
+      (perform-replace from-string to-string query-flag t
+                       delimited nil nil
+                       (region-beginning) (region-end)
+                       backward (region-noncontiguous-p)))))
 
 (defun conn-regexp-replace-in-region ( from-string to-string
                                        &optional delimited backward query-flag)
@@ -6374,36 +6375,16 @@ instances of from-string.")
                 (if (eq current-prefix-arg '-) " backward" " word")
               ""))
     t (region-bounds) nil))
-  (save-excursion
-    (let ((regions (region-bounds)))
-      (deactivate-mark t)
-      (if (cdr regions)
-          (let* ((bounds (cl-loop for (b . e) in regions
-                                  minimize b into beg
-                                  maximize e into end
-                                  finally return (cons beg end)))
-                 (region-extract-function
-                  (lambda (method)
-                    (pcase method
-                      ('nil
-                       (cl-loop for (beg . end) in regions
-                                collect (buffer-substring beg end)))
-                      ('delete-only
-                       (cl-loop for (beg . end) in regions
-                                do (delete-region beg end)))
-                      ('bounds regions)
-                      (_
-                       (prog1
-                           (cl-loop for (beg . end) in regions
-                                    collect (filter-buffer-substring beg end method))
-                         (cl-loop for (beg . end) in regions
-                                  do (delete-region beg end))))))))
-            (perform-replace from-string to-string query-flag t
-                             delimited nil nil (car bounds) (cdr bounds)
-                             backward t))
-        (perform-replace from-string to-string query-flag t
-                         delimited nil nil (caar regions) (cdar regions)
-                         backward)))))
+  (if conn-query-flag
+      (perform-replace from-string to-string query-flag t
+                       delimited nil nil
+                       (region-beginning) (region-end)
+                       backward (region-noncontiguous-p))
+    (save-excursion
+      (perform-replace from-string to-string query-flag t
+                       delimited nil nil
+                       (region-beginning) (region-end)
+                       backward (region-noncontiguous-p)))))
 
 
 ;;;;; Command Registers
@@ -8719,17 +8700,18 @@ Operates with the selected windows parent window."
                     conn--local-state-map (list (list 'conn-local-mode))
                     conn--local-override-map (list (list 'conn-local-mode))
                     conn--local-major-mode-map (list (list 'conn-local-mode)))
-        (add-function :before-until
-                      (local 'query-replace-read-from-default)
-                      'conn-replace-read-default)
-        ;; It would be nice to be able to do this, but
-        ;; query-replace-read-from-regexp-default is passed as the
-        ;; DEFAULT argument to read-regexp which expects either nil, a
-        ;; string, a list of strings or a symbol with a function
-        ;; definition.
-        ;; (add-function :before-until
-        ;;               (local 'query-replace-read-from-regexp-default)
-        ;;               'conn-replace-read-regexp-default)
+        ;; We would like to be able to do the same to
+        ;; query-replace-read-from-regexp-default but it must be
+        ;; either nil, a string, a list of strings, or a symbol with a
+        ;; function definition.
+        (if query-replace-read-from-default
+            (add-function :around
+                          (local 'query-replace-read-from-default)
+                          (lambda (fn &rest args)
+                            (or (conn-replace-read-default)
+                                (when fn (apply fn args))))
+                          `((name . conn-replace-default)))
+          (setq query-replace-read-from-default 'conn-replace-read-default))
         (unless (mark t)
           (conn--push-ephemeral-mark (point) t nil))
         (add-hook 'change-major-mode-hook #'conn--clear-overlays nil t)
@@ -8748,8 +8730,10 @@ Operates with the selected windows parent window."
     (when conn-current-state
       (conn-exit-state conn-current-state))
     (conn--clear-overlays)
-    (remove-function (local 'query-replace-read-from-default)
-                     'conn-replace-read-default)
+    (if (eq 'conn-replace-read-default query-replace-read-from-default)
+        (setq query-replace-read-from-default 'conn-replace-read-default)
+      (remove-function (local 'query-replace-read-from-default)
+                       'conn-replace-default))
     (remove-hook 'change-major-mode-hook #'conn--clear-overlays t)
     (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
     (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)

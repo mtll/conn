@@ -487,7 +487,7 @@ Begins the keyboard macro in `conn-command-state'."
                            (lambda ()
                              (thread-last
                                (current-local-map)
-                               (make-composed-keymap conn-replace-map)
+                               (make-composed-keymap conn-replace-to-map)
                                (use-local-map)))
                          (conn--read-from-with-preview
                           "String" (or regions (list (cons beg end))) nil))))
