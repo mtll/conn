@@ -1890,11 +1890,9 @@ themselves once the selection process has concluded."
    (t
     (conn--ensure-window-labels)
     (let ((labels
-           (mapcar (lambda (win)
-                     (funcall conn-window-labeling-function
-                              win
-                              (window-parameter win 'conn-label-string)))
-                   windows)))
+           (cl-loop for win in windows
+                    collect (funcall conn-window-labeling-function
+                                     win (window-parameter win 'conn-label-string)))))
       (unwind-protect
           (conn-label-select labels)
         (mapc #'conn-label-delete labels))))))
@@ -3846,14 +3844,11 @@ Target overlays may override this default by setting the
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        ,(macroexpand-all
-                          `(pcase ,event ,(cdr handler))
-			  `((conn-dispatch-ignore-event
-                             . ,(lambda ()
-                                  `(throw ',return t)))
-                            (conn-dispatch-handle-event
-                             . ,(lambda (&rest body)
-                                  `(throw ',handle ,(macroexp-progn body))))))
+                        (cl-macrolet ((conn-dispatch-ignore-event ()
+                                        `(throw ',',return t))
+                                      (conn-dispatch-handle-event (&rest body)
+                                        `(throw ',',handle ,,'(macroexp-progn body))))
+                          (pcase ,event ,(cdr handler)))
                         nil))
                     conn--dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
@@ -5177,6 +5172,7 @@ potential expansions.  Functions may return invalid expansions
 (e.g. nil, invalid regions, etc.) and they will be filtered out.")
 
 (defvar-local conn--current-expansions nil)
+(defvar-local conn--current-expansions-tick nil)
 
 (defvar-keymap conn-expand-repeat-map
   :repeat t
@@ -5186,37 +5182,39 @@ potential expansions.  Functions may return invalid expansions
 
 (defun conn--expand-filter-regions (regions)
   (let (result)
-    (pcase-dolist ((and reg `(,beg . ,end)) regions)
+    (pcase-dolist ((and reg `(,beg . ,end))
+                   (delete-dups regions))
       (when (and beg end
                  (/= beg end)
                  (<= beg (region-beginning))
                  (>= end (region-end)))
-        (cl-pushnew reg result :test #'equal)))
+        (push reg result)))
     result))
 
-(defun conn--expand-create-expansions ()
-  (letrec ((hook (lambda (&rest _)
-                   (setq conn--current-expansions nil)
-                   (remove-hook 'after-change-functions hook t))))
-    (add-hook 'after-change-functions hook nil t))
-  (thread-last
-    (mapcan #'funcall conn-expansion-functions)
-    (cons (cons (region-beginning) (region-end)))
-    (conn--expand-filter-regions)
-    (seq-sort (pcase-lambda (`(,b1 . ,e1) `(,b2 . ,e2))
-                (or (> b1 b2) (< e1 e2))))))
-
 (defun conn--valid-expansions-p ()
-  (or (and conn--current-expansions
-           (region-active-p)
-           (seq-find (pcase-lambda (`(,beg . _))
-                       (= beg (region-beginning)))
-                     conn--current-expansions)
-           (seq-find (pcase-lambda (`(_ . ,end))
-                       (= end (region-end)))
-                     conn--current-expansions))
-      (member (cons (region-beginning) (region-end))
-              conn--current-expansions)))
+  (and (eql conn--current-expansions-tick (buffer-chars-modified-tick))
+       (or (and conn--current-expansions
+                (region-active-p)
+                (cl-loop for (beg . end) in conn--current-expansions
+                         when (or (= beg (region-beginning))
+                                  (= end (region-end)))
+                         return t))
+           (member (cons (region-beginning) (region-end))
+                   conn--current-expansions))))
+
+(defun conn--expand-create-expansions ()
+  (unless (conn--valid-expansions-p)
+    (setq conn--current-expansions-tick (buffer-chars-modified-tick)
+          conn--current-expansions
+          (compat-call sort
+                       (thread-last
+                         (mapcan #'funcall conn-expansion-functions)
+                         (cons (cons (region-beginning) (region-end)))
+                         (conn--expand-filter-regions))
+                       :lessp (lambda (a b)
+                                (or (> (car a) (car b))
+                                    (< (cdr a) (cdr b))))
+                       :in-place t))))
 
 (defun conn-expand-exchange ()
   "Move point to the other end of the current expansion."
@@ -5235,8 +5233,7 @@ Expansions are provided by functions in `conn-expansion-functions'."
     (conn--push-ephemeral-mark)
     (setq arg (log (prefix-numeric-value arg) 4)))
   (setq arg (prefix-numeric-value arg))
-  (unless (conn--valid-expansions-p)
-    (setq conn--current-expansions (conn--expand-create-expansions)))
+  (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-contract (- arg))
     (dotimes (_ arg)
@@ -5270,8 +5267,7 @@ If the region is active only the `point' is moved.
 Expansions and contractions are provided by functions in
 `conn-expansion-functions'."
   (interactive "p")
-  (unless (conn--valid-expansions-p)
-    (setq conn--current-expansions (conn--expand-create-expansions)))
+  (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-expand (- arg))
     (dotimes (_ arg)
@@ -5310,9 +5306,7 @@ Expansions and contractions are provided by functions in
   "j" 'conn-contract
   "h" 'conn-expand
   "v" 'conn-toggle-mark-command
-  "e" 'end
-  "C-]" 'quit
-  "C-g" 'quit)
+  "e" 'end)
 
 (defun conn--read-expand-case (command _cont)
   (pcase command
@@ -5320,8 +5314,10 @@ Expansions and contractions are provided by functions in
     ('conn-contract (conn-contract (conn-state-loop-consume-prefix-arg)))
     ('conn-expand (conn-expand (conn-state-loop-consume-prefix-arg)))
     ('conn-toggle-mark-command (conn-toggle-mark-command))
-    ('end (conn-state-loop-exit))
-    ('quit (conn-state-loop-abort))
+    ((or 'end 'exit-recursive-edit)
+     (conn-state-loop-exit))
+    ((or 'quit 'keyboard-quit 'abort-recursive-edit)
+     (conn-state-loop-abort))
     (_ (conn-state-loop-error "Invalid command"))))
 
 (defun conn--read-expand-message (_cont error-message)
@@ -5339,19 +5335,14 @@ Expansions and contractions are provided by functions in
 
 (defun conn--bounds-of-expansion (cmd arg)
   (call-interactively cmd)
-  (internal-push-keymap (conn-get-state-map 'conn-expand-state)
-                        'overriding-terminal-local-map)
-  (unwind-protect
-      (conn-with-state 'conn-expand-state
-        (conn-with-state-loop
-         (oclosure-lambda (conn-state-loop-continuation)
-             ()
-           (region-bounds))
-         :message-function 'conn--read-expand-message
-         :case-function 'conn--read-expand-case
-         :initial-arg arg))
-    (internal-pop-keymap (conn-get-state-map 'conn-expand-state)
-                         'overriding-terminal-local-map)))
+  (conn-with-state 'conn-expand-state
+    (conn-with-state-loop
+     (oclosure-lambda (conn-state-loop-continuation)
+         ()
+       (region-bounds))
+     :message-function 'conn--read-expand-message
+     :case-function 'conn--read-expand-case
+     :initial-arg arg)))
 
 
 ;;;;; Thing Definitions
