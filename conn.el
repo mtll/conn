@@ -3795,9 +3795,10 @@ Target overlays may override this default by setting the
             (let posn (event-start event))
             (let win (posn-window posn))
             (let pt (posn-point posn)))
-       (when (and (funcall conn-target-window-predicate win)
-                  (not (posn-area posn)))
-         (conn-dispatch-handle-event (list pt win nil))))
+       (if (and (not (posn-area posn))
+                (funcall conn-target-window-predicate win))
+           (conn-dispatch-handle-event (list pt win nil))
+         (conn-dispatch-ignore-event)))
     (let ((retarget-flag nil))
       (if conn--dispatch-current-targeter
           (progn
@@ -3867,19 +3868,6 @@ Target overlays may override this default by setting the
                ,@body))
          body)))
 
-(defun conn-target-sort-nearest (a b)
-  (< (abs (- (overlay-end a) (point)))
-     (abs (- (overlay-end b) (point)))))
-
-(defun conn-delete-targets ()
-  (pcase-dolist (`(_ . ,targets) conn-targets)
-    (dolist (target targets)
-      (conn-label-delete (overlay-get target 'label))
-      (delete-overlay target)))
-  (setq conn-targets nil
-        conn-last-target-count conn-target-count
-        conn-target-count 0))
-
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (let* ((prefix
           (delq nil (mapcar (lambda (pfx)
@@ -3899,6 +3887,19 @@ Target overlays may override this default by setting the
          ((cl-loop for handler in conn--dispatch-read-event-handlers
                    thereis (funcall handler ev)))
          ((characterp ev) (throw 'char ev)))))))
+
+(defun conn-target-sort-nearest (a b)
+  (< (abs (- (overlay-end a) (point)))
+     (abs (- (overlay-end b) (point)))))
+
+(defun conn-delete-targets ()
+  (pcase-dolist (`(_ . ,targets) conn-targets)
+    (dolist (target targets)
+      (conn-label-delete (overlay-get target 'label))
+      (delete-overlay target)))
+  (setq conn-targets nil
+        conn-last-target-count conn-target-count
+        conn-target-count 0))
 
 (defun conn-dispatch-read-n-chars (N &optional predicate)
   "Read a string of N chars with preview overlays.
