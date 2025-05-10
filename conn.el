@@ -3120,7 +3120,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (with-demoted-errors "Error in Movement Ring: %s"
-          (conn-push-region conn-this-command-start conn--movement-mark))))))
+          (conn-push-region (point-marker) (mark-marker)))))))
 
 (defun conn--setup-mark ()
   (if conn-mode
