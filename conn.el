@@ -3843,7 +3843,8 @@ Target overlays may override this default by setting the
                         ,(macroexpand-all
                           `(pcase ,event ,(cdr handler))
 			  `((conn-dispatch-ignore-event
-                             . ,(lambda () `(throw ',return t)))
+                             . ,(lambda ()
+                                  `(throw ',return t)))
                             (conn-dispatch-handle-event
                              . ,(lambda (&rest body)
                                   `(throw ',handle ,(macroexp-progn body))))))
@@ -3892,13 +3893,11 @@ Target overlays may override this default by setting the
                   (when prefix (propertize ") " 'face 'minibuffer-prompt))
                   prompt)))
     (catch 'char
-      (while t
-        (let ((ev (read-event prompt inherit-input-method seconds)))
-          (pcase ev
-            ((guard (cl-loop for handler in conn--dispatch-read-event-handlers
-                             thereis (funcall handler ev))))
-            ((or 'nil (pred characterp))
-             (throw 'char ev))))))))
+      (while-let ((ev (read-event prompt inherit-input-method seconds)))
+        (cond
+         ((cl-loop for handler in conn--dispatch-read-event-handlers
+                   thereis (funcall handler ev)))
+         ((characterp ev) (throw 'char ev)))))))
 
 (defun conn-dispatch-read-n-chars (N &optional predicate)
   "Read a string of N chars with preview overlays.
@@ -3996,7 +3995,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (pcase-dolist (`(,beg . ,end) (conn--visible-re-matches regexp))
           (conn-make-target-overlay beg (- end beg)))))))
 
-(defun conn-dispatch-things-with-prefix (thing prefix-length)
+(defun conn-dispatch-things-read-prefix (thing prefix-length)
   (conn-dispatch-read-n-chars
    prefix-length
    (lambda (beg _end)
@@ -4004,6 +4003,29 @@ Returns a cons of (STRING . OVERLAYS)."
        (goto-char beg)
        (pcase (ignore-errors (bounds-of-thing-at-point thing))
          (`(,tbeg . ,_tend) (= beg tbeg)))))))
+
+(defun conn-dispatch-things-with-prefix (thing prefix-string)
+  (conn-make-string-target-overlays
+   prefix-string
+   (lambda (beg _end)
+     (save-excursion
+       (goto-char beg)
+       (pcase (ignore-errors (bounds-of-thing-at-point thing))
+         (`(,tbeg . ,_tend) (= beg tbeg)))))))
+
+(defun conn-dispatch-things-matching-re (thing regexp)
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (pcase-dolist (`(,beg . ,end)
+                     (conn--visible-re-matches
+                      regexp
+                      (lambda (beg end)
+                        (save-excursion
+                          (goto-char beg)
+                          (pcase (ignore-errors (bounds-of-thing-at-point thing))
+                            (`(,tbeg . ,tend)
+                             (and (<= tbeg beg) (<= tend end))))))))
+        (conn-make-target-overlay beg (- end beg))))))
 
 (defun conn-dispatch-columns ()
   (let ((line-move-visual nil)
@@ -5006,16 +5028,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (let ((conn-target-window-predicate conn-target-window-predicate)
         (conn-target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
-        (conn--dispatch-event-message-prefixes
-         (if thing-cmd
-             (cons (propertize
-                    (concat
-                     (format "'%s" thing-cmd)
-                     (when thing-arg
-                       (format " <%s>" thing-arg)))
-                    'face 'minibuffer-prompt)
-                   conn--dispatch-event-message-prefixes)
-           conn--dispatch-event-message-prefixes)))
+        (conn--dispatch-event-message-prefixes conn--dispatch-event-message-prefixes))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (unwind-protect
@@ -5451,7 +5464,7 @@ order to mark the region that should be defined by any of COMMANDS."
  'symbol
  :forward-op 'forward-symbol
  :dispatch-target-finder (lambda ()
-                           (conn-dispatch-things-with-prefix 'symbol 1)))
+                           (conn-dispatch-things-read-prefix 'symbol 1)))
 
 (conn-register-thing-commands
  'symbol 'conn-continuous-thing-handler
@@ -5476,7 +5489,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'word
  :forward-op 'forward-word
- :dispatch-target-finder (lambda () (conn-dispatch-things-with-prefix 'word 1)))
+ :dispatch-target-finder (lambda () (conn-dispatch-things-read-prefix 'word 1)))
 
 (conn-register-thing-commands
  'word 'conn-symbol-handler
@@ -5487,7 +5500,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'sexp
  :forward-op 'forward-sexp
- :dispatch-target-finder (lambda () (conn-dispatch-things-with-prefix 'sexp 1)))
+ :dispatch-target-finder (lambda () (conn-dispatch-things-read-prefix 'sexp 1)))
 
 (conn-register-thing-commands
  'sexp 'conn-continuous-thing-handler
