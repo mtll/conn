@@ -5325,7 +5325,8 @@ Expansions and contractions are provided by functions in
   "j" 'conn-contract
   "h" 'conn-expand
   "v" 'conn-toggle-mark-command
-  "e" 'end)
+  "e" 'end
+  "<escape>" 'end)
 
 (defun conn--read-expand-case (command _cont)
   (pcase command
@@ -7748,13 +7749,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
-  "b" 'conn-wincontrol-quit-other-window-for-scrolling
+  "e" 'conn-wincontrol-quit-other-window-for-scrolling
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
   "h" 'kill-buffer-and-window
   "<escape>" 'conn-wincontrol-exit
-  "e" 'conn-wincontrol-exit
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
   "g" 'delete-other-windows
@@ -7767,7 +7767,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "k" 'tab-previous
   "l" 'next-buffer
   "L" 'unbury-buffer
-  "M" 'tab-bar-move-window-to-tab
+  "b" 'tab-bar-move-window-to-tab
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-prefix
