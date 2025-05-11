@@ -420,6 +420,14 @@ If ring is (1 2 3 4) 4 would be returned."
                           #'eq)))
      ,(macroexp-progn body)))
 
+(defvar conn-demap-key
+  `(menu-item
+    "Demap key"
+    nil
+    :filter ,(lambda (_real-binding)
+               (conn--without-conn-maps
+                 (key-binding (vector last-input-event) t)))))
+
 (defun conn-remap-key (from-keys &optional without-conn-maps)
   "Map to whatever is bound at FROM-KEYS.
 
@@ -8902,6 +8910,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "A" 'dired-find-alternate-file
@@ -8931,8 +8940,6 @@ Operates with the selected windows parent window."
   "z" 'dired-goto-file
   ";" 'conn-wincontrol
   "`" 'other-window
-  "SPC" 'scroll-up-command
-  "DEL" 'scroll-down-command
   "v" 'dired-mark
   "c" 'dired-unmark
   "u" 'dired-do-delete
@@ -9073,6 +9080,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch
   "i" 'magit-section-backward
@@ -9166,6 +9174,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'ibuffer-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   ";" 'conn-wincontrol
@@ -9200,8 +9209,6 @@ Operates with the selected windows parent window."
   ">" 'ibuffer-backwards-next-marked
   "M-SPC" 'ibuffer-toggle-marks
   "C-M-l" 'ibuffer-redisplay
-  "SPC" 'scroll-up-command
-  "DEL" 'scroll-down-command
   "v" 'ibuffer-mark-forward
   "c" 'ibuffer-unmark-forward
   "C" 'ibuffer-unmark-backward
@@ -9236,6 +9243,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'help-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -9251,6 +9259,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'helpful-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -9301,6 +9310,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "o" 'Info-history-back
   "u" 'Info-history-forward
@@ -9326,6 +9336,7 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'treemacs-mode :hide-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'treemacs-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'treemacs-select-window
@@ -9341,6 +9352,7 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'messages-buffer-mode :hide-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'messages-buffer-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
@@ -9358,6 +9370,7 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'debugger-mode :hide-mark-cursor t)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'debugger-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'other-window
@@ -9374,6 +9387,7 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'occur-edit-mode :hide-mark-cursor nil)
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'occur-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'other-window
@@ -9391,6 +9405,7 @@ Operates with the selected windows parent window."
     (conn-set-mode-property 'grep-edit-mode :hide-mark-cursor nil))
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'compilation-mode)
+  "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
   "`" 'other-window
