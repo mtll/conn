@@ -7657,30 +7657,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                   start end)
          (conn-enter-state 'conn-emacs-state))))
 
-(defun conn-emacs-state-eol (&optional N)
-  "Move point to end of line and enter `conn-emacs-state'."
-  (interactive "P")
-  (end-of-line N)
-  (conn-enter-state 'conn-emacs-state))
-
-(defun conn-emacs-state-bol (&optional N)
-  "Move point to beginning of line and enter `conn-emacs-state'."
-  (interactive "P")
-  (beginning-of-line N)
-  (conn-enter-state 'conn-emacs-state))
-
-(defun conn-emacs-state-eoil (&optional N)
-  "Move point to end of line and enter `conn-emacs-state'."
-  (interactive "P")
-  (conn-end-of-inner-line N)
-  (conn-enter-state 'conn-emacs-state))
-
-(defun conn-emacs-state-boil (&optional N)
-  "Move point to beginning of line and enter `conn-emacs-state'."
-  (interactive "P")
-  (conn-beginning-of-inner-line N)
-  (conn-enter-state 'conn-emacs-state))
-
 
 ;;;; WinControl
 
@@ -8379,10 +8355,6 @@ Operates with the selected windows parent window."
   "h" 'conn-change-line
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
-  "l" 'conn-emacs-state-eoil
-  "e" 'conn-emacs-state-eol
-  "j" 'conn-emacs-state-boil
-  "a" 'conn-emacs-state-bol
   "g" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
   "x" 'conn-narrow-ring-prefix
