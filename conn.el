@@ -5311,10 +5311,14 @@ Expansions and contractions are provided by functions in
 
 (defun conn--read-expand-case (command _cont)
   (pcase command
-    ('conn-expand-exchange (conn-expand-exchange))
-    ('conn-contract (conn-contract (conn-state-loop-consume-prefix-arg)))
-    ('conn-expand (conn-expand (conn-state-loop-consume-prefix-arg)))
-    ('conn-toggle-mark-command (conn-toggle-mark-command))
+    ('conn-expand-exchange
+     (conn-expand-exchange))
+    ('conn-contract
+     (conn-contract (conn-state-loop-consume-prefix-arg)))
+    ('conn-expand
+     (conn-expand (conn-state-loop-consume-prefix-arg)))
+    ('conn-toggle-mark-command
+     (conn-toggle-mark-command))
     ((or 'end 'exit-recursive-edit)
      (conn-state-loop-exit))
     ((or 'quit 'keyboard-quit 'abort-recursive-edit)
@@ -5691,7 +5695,10 @@ order to mark the region that should be defined by any of COMMANDS."
   (let ((ring (conn-narrow-register-narrow-ring val)))
     (unless (eq (current-buffer) (marker-buffer (caar ring)))
       (user-error "Markers do not point to this buffer"))
-    (setq conn-narrow-ring ring)))
+    (setq conn-narrow-ring
+          (cl-loop for (beg . end) in ring
+                   collect (cons (copy-marker beg)
+                                 (copy-marker end))))))
 
 (cl-defmethod register-val-describe ((val conn-narrow-register) _arg)
   (thread-last
@@ -5808,7 +5815,8 @@ order to mark the region that should be defined by any of COMMANDS."
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
   (cl-loop for (beg . end) in conn-narrow-ring
-           do (set-marker beg nil)
+           do
+           (set-marker beg nil)
            (set-marker end nil))
   (setq conn-narrow-ring nil))
 
@@ -7134,16 +7142,6 @@ for the meaning of prefix ARG."
 
 (defvar-local conn--minibuffer-initial-region nil)
 
-(defun conn-yank (&optional register)
-  "Like `yank' but with a prefix argument `conn-register-load' instead."
-  (interactive
-   (list (when current-prefix-arg
-           (register-read-with-preview "Register: "))))
-  (if register
-      (conn-register-load register)
-    (funcall (conn--without-conn-maps
-               (keymap-lookup nil conn-yank-keys t)))))
-
 (defun conn--yank-region-to-minibuffer-hook ()
   (setq conn--minibuffer-initial-region
         (with-minibuffer-selected-window
@@ -7454,12 +7452,6 @@ Interactively `region-beginning' and `region-end'."
                                     (regexp-quote (buffer-substring-no-properties beg end))
                                     'grep-regexp-history)))
     (occur search-string)))
-
-(defun conn-org-edit-insert-heading ()
-  "Insert org heading."
-  (interactive)
-  (forward-char 1)
-  (call-interactively 'org-insert-heading-respect-content))
 
 
 ;;;;; Window Commands
@@ -8360,7 +8352,7 @@ Operates with the selected windows parent window."
   "k" 'conn-emacs-state-open-line
   "g" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
-  "x" 'conn-narrow-ring-prefix
+  "j" 'conn-narrow-ring-prefix
   "d" 'duplicate-dwim
   "w j" 'conn-kill-prepend-region
   "w l" 'conn-kill-append-region
@@ -8492,6 +8484,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "P" 'conn-register-load
   "+" 'conn-set-register-seperator
   "H" 'conn-expand
   "b" (conn-remap-key "<conn-edit-map>")
@@ -8533,7 +8526,7 @@ Operates with the selected windows parent window."
   "W" 'widen
   "X" 'conn-narrow-ring-prefix
   "Y" 'yank-from-kill-ring
-  "y" 'conn-yank
+  "y" (conn-remap-key "C-y" t)
   "z" 'conn-exchange-mark-command)
 
 

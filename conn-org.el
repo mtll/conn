@@ -83,6 +83,12 @@
   :global t
   :group 'conn)
 
+(defun conn-org-edit-insert-heading ()
+  "Insert org heading."
+  (interactive)
+  (forward-char 1)
+  (call-interactively 'org-insert-heading-respect-content))
+
 (conn-register-thing
  'org-inner-math
  :bounds-op (lambda ()
