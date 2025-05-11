@@ -261,33 +261,33 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
 
 CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
-  (cl-with-gensyms (success)
-    (let (setf-forms)
-      `(let* ((,success nil)
-              ,@(mapcar (lambda (form)
-                          (if (and (consp form)
-                                   (cddr form))
-                              (progn
-                                (when (cadr form)
-                                  (push `(setf ,(car form) ,(cadr form)) setf-forms))
-                                (take 1 form))
-                            form))
-                        varlist))
+  (cl-with-gensyms (success unbound)
+    (let (setf-forms
+          let-forms
+          unwind-body)
+      (dolist (form varlist)
+        (pcase form
+          ((and `(,var ,binding . ,cleanup)
+                (guard cleanup))
+           (push `(setf ,var ,binding) setf-forms)
+           (setq unwind-body (if unwind-body
+                                 `(unwind-protect
+                                      ,unwind-body
+                                    (unless (eq ',unbound ,var)
+                                      ,@cleanup))
+                               `(unless (eq ',unbound ,var)
+                                  ,@cleanup)))
+           (push `(,var ',unbound) let-forms))
+          (_ (push form let-forms))))
+      `(let* (,@(nreverse let-forms)
+              (,success nil))
          (unwind-protect
              (prog2
                  ,(macroexp-progn (reverse setf-forms))
                  ,(macroexp-progn body)
                (setq ,success t))
            (unless ,success
-             ,(cl-loop with body = nil
-                       for form in (reverse varlist)
-                       when (cddr form)
-                       do (setq body (if body
-                                         `(unwind-protect
-                                              ,body
-                                            ,@(drop 2 form))
-                                       (macroexp-progn (drop 2 form))))
-                       finally return body)))))))
+             ,unwind-body))))))
 
 (defmacro conn-make-thing-command (name region-fn &rest body)
   (declare (indent 2))
