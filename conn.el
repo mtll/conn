@@ -344,8 +344,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (cl-defstruct (conn-ring
                (:constructor conn--make-ring (capacity cleanup)))
   "A ring that removes elements in least recently visited order."
-  list history capacity cleanup
-  (size 0))
+  list history capacity cleanup)
 
 (cl-defun conn-ring (capacity &key cleanup)
   (cl-assert (and (integerp capacity)
@@ -362,13 +361,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (setf (conn-ring-list ring)
         (cons item (delete item (conn-ring-list ring))))
   (conn-ring--visit ring item)
-  (if (= (conn-ring-size ring) (conn-ring-capacity ring))
-      (let ((old (car (last (conn-ring-history ring)))))
-        (setf (conn-ring-list ring) (delete old (conn-ring-list ring))
-              (conn-ring-history ring) (delete old (conn-ring-history ring)))
-        (when-let* ((cleanup (conn-ring-cleanup ring)))
-          (funcall cleanup old)))
-    (cl-incf (conn-ring-size ring))))
+  (dolist (old (drop (conn-ring-capacity ring) (conn-ring-history ring)))
+    (setf (conn-ring-list ring) (delete old (conn-ring-list ring))
+          (conn-ring-history ring) (delete old (conn-ring-history ring)))
+    (when-let* ((cleanup (conn-ring-cleanup ring)))
+      (funcall cleanup old))))
 
 (defun conn-ring-insert-back (ring item)
   "Insert ITEM into back of RING."
