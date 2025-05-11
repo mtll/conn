@@ -7679,8 +7679,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
-  "o" 'conn-wincontrol-next-window
-  "u" 'conn-wincontrol-previous-window)
+  "o" 'other-window)
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
@@ -7761,7 +7760,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
-  "e" 'conn-wincontrol-quit-other-window-for-scrolling
+  "e" 'conn-wincontrol-exit
+  "E" 'conn-wincontrol-quit-other-window-for-scrolling
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
@@ -8192,9 +8192,9 @@ Operates with the selected windows parent window."
   "o" 'conn-pop-mark-ring
   "u" 'conn-unpop-mark-ring)
 
-(defvar-keymap conn-other-window-repeat-map
+(defvar-keymap conn-mru-window-repeat-map
   :repeat t
-  "`" 'other-window)
+  "`" 'conn-wincontrol-mru-window)
 
 (defvar-keymap conn-other-buffer-repeat-map
   :repeat t
@@ -8481,7 +8481,7 @@ Operates with the selected windows parent window."
   "E" 'conn-dispatch-on-buttons
   "t" 'conn-change
   ":" 'conn-wincontrol-one-command
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-region
   "'" 'conntext-state
   "." 'conn-other-place-prefix
@@ -8906,7 +8906,7 @@ Operates with the selected windows parent window."
   "C-M-l" 'dired-do-redisplay
   "z" 'dired-goto-file
   ";" 'conn-wincontrol
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "v" 'dired-mark
   "c" 'dired-unmark
   "u" 'dired-do-delete
@@ -9055,7 +9055,7 @@ Operates with the selected windows parent window."
   "w" 'magit-delete-thing
   "p" 'magit-reset-quickly
   "n" 'magit-gitignore
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "@" 'magit-am
   "x" (conn-remap-key "C-x" t))
 
@@ -9146,7 +9146,7 @@ Operates with the selected windows parent window."
   "a" 'execute-extended-command
   ";" 'conn-wincontrol
   "/" 'ibuffer-do-revert
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "y" 'ibuffer-yank
   "z" 'ibuffer-jump-to-buffer
   "r" (conn-remap-key "%")
@@ -9220,7 +9220,7 @@ Operates with the selected windows parent window."
   "i" 'scroll-down
   "k" 'scroll-up
   "f" 'conn-dispatch-on-buttons
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
@@ -9236,7 +9236,7 @@ Operates with the selected windows parent window."
   "i" 'scroll-down
   "k" 'scroll-up
   "f" 'conn-dispatch-on-buttons
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
@@ -9293,7 +9293,7 @@ Operates with the selected windows parent window."
   "z" 'Info-toc
   "f" 'dispatch-on-info-refs
   "v" 'Info-index
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
 
@@ -9324,7 +9324,7 @@ Operates with the selected windows parent window."
   "a" 'execute-extended-command
   "b" 'beginning-of-buffer
   "e" 'end-of-buffer
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "i" 'scroll-down
   "k" 'scroll-up
   "f" 'conn-dispatch-state
@@ -9340,7 +9340,7 @@ Operates with the selected windows parent window."
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "i" 'scroll-down
   "k" 'scroll-up
   "f" 'conn-dispatch-state
@@ -9357,7 +9357,7 @@ Operates with the selected windows parent window."
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
   "f" 'conn-dispatch-state
@@ -9375,7 +9375,7 @@ Operates with the selected windows parent window."
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
-  "`" 'other-window
+  "`" 'conn-wincontrol-mru-window
   "k" 'next-error-no-select
   "i" 'previous-error-no-select
   "f" 'conn-dispatch-state
