@@ -2136,7 +2136,11 @@ command."
                      (cons (point) (+ (point) (prefix-numeric-value arg))))))
     (conn-expand . conn--bounds-of-expansion)
     (conn-contract . conn--bounds-of-expansion)
-    (recursive-edit . conn--bounds-of-recursive-edit))
+    (recursive-edit . conn--bounds-of-recursive-edit)
+    (isearch-forward . conn--bounds-of-isearch)
+    (isearch-backward . conn--bounds-of-isearch)
+    (isearch-forward-regexp . conn--bounds-of-isearch)
+    (isearch-backward-regexp . conn--bounds-of-isearch))
   "Alist of bounds-op functions for things or commands.
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
@@ -2238,6 +2242,20 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
 (defun conn--bounds-of-remote-expansion (_cmd arg)
   (conn--push-ephemeral-mark)
   (conn--bounds-of-expansion 'conn-expand arg))
+
+(defun conn--bounds-of-isearch (cmd _arg)
+  (let ((start (point))
+        (name (symbol-name cmd))
+        (quit (lambda ()
+                (when isearch-mode-end-hook-quit
+                  (abort-recursive-edit)))))
+    (add-hook 'isearch-mode-end-hook quit)
+    (unwind-protect
+        (isearch-mode (not (string-match-p "backward" name))
+                      (string-match-p "regexp" name)
+                      nil t)
+      (remove-hook 'isearch-mode-end-hook quit))
+    (list (cons (min start (point)) (max start (point))))))
 
 
 ;;;; Bounds of Things in Region
@@ -6527,6 +6545,13 @@ Interactively `region-beginning' and `region-end'."
   (isearch-done)
   (conn--push-ephemeral-mark isearch-other-end))
 
+(defun conn-isearch-exit-other-end ()
+  (interactive)
+  (if isearch-forward
+      (isearch-repeat-backward)
+    (isearch-repeat-forward))
+  (isearch-done))
+
 
 ;;;;; Mark Commands
 
@@ -8200,6 +8225,7 @@ Operates with the selected windows parent window."
 (defvar-keymap conn-isearch-map
   "M-Y" 'conn-isearch-yank-region
   "M-<return>" 'conn-isearch-exit-and-mark
+  "C-<return>" 'conn-isearch-exit-other-end
   "M-RET" 'conn-isearch-exit-and-mark
   "M-\\" 'conn-isearch-kapply-prefix
   "C-," 'conn-dispatch-isearch
@@ -8379,6 +8405,10 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  "C-s" 'isearch-forward
+  "C-r" 'isearch-backward
+  "C-M-s" 'isearch-forward-regexp
+  "C-M-r" 'isearch-backward-regexp
   "j" 'conn-forward-inner-line
   "i" 'forward-line
   "n" 'conn-forward-defun
