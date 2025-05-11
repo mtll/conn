@@ -5491,10 +5491,6 @@ order to mark the region that should be defined by any of COMMANDS."
  'char nil
  'forward-char 'backward-char)
 
-(conn-register-thing-commands
- 'char 'conn--goto-string-handler
- 'conn-forward-char 'conn-backward-char)
-
 (conn-register-thing
  'word
  :forward-op 'forward-word
@@ -5941,26 +5937,6 @@ Pulses line that was the last visible line before scrolling."
       (pulse-momentary-highlight-one-line (1- end)))))
 (put 'conn-scroll-up 'scroll-command t)
 
-(defun conn-backward-char (string arg)
-  "Behaves like `backward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-
-If `current-prefix-arg' is 1 prompt for STRING and search backward for nearest
-occurrence of STRING.  STRING will finish reading after
-`conn-read-string-timeout' seconds.
-This command should only be called interactively."
-  (declare (interactive-only t))
-  (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4))
-                        (let ((conn-target-window-predicate nil)
-                              (pt (point)))
-                          (conn--read-string-with-timeout
-                           (lambda (beg _end) (< (window-start) beg pt))))))
-                     (prefix-numeric-value current-prefix-arg)))
-  (if (null string)
-      (backward-char arg)
-    (setq this-command 'conn-goto-string-backward)
-    (conn-goto-string-backward string)))
-
 (defun conn-goto-string-backward (string)
   "Go to the first visible occurrence backward of STRING in buffer.
 
@@ -5982,27 +5958,6 @@ When called interactively reads STRING with timeout
                            (user-error "\"%s\" not found." string))))
         (goto-char pos)))))
 
-(defun conn-forward-char (string arg)
-  "Behaves like `forward-char' except when `current-prefix-arg' is 1 or \\[universal-argument].
-
-If `current-prefix-arg' is 1 prompt for STRING and search forward for nearest
-occurrence of STRING.  STRING will finish reading after
-`conn-read-string-timeout' seconds.
-This command should only be called interactively."
-  (declare (interactive-only t))
-  (interactive (list (pcase current-prefix-arg
-                       ((or '1 '(4))
-                        (let ((conn-target-window-predicate nil)
-                              (pt (point)))
-                          (conn--read-string-with-timeout
-                           (lambda (beg _end)
-                             (< pt beg (window-end)))))))
-                     (prefix-numeric-value current-prefix-arg)))
-  (if (null string)
-      (forward-char arg)
-    (setq this-command 'conn-goto-string-forward)
-    (conn-goto-string-forward string)))
-
 (defun conn-goto-string-forward (string)
   "Go to the first visible occurrence forward of STRING in buffer.
 
@@ -6023,13 +5978,6 @@ When called interactively reads STRING with timeout
                                       return (match-beginning 0)))
                            (user-error "\"%s\" not found." string))))
         (goto-char pos)))))
-
-(defun conn--goto-string-handler (beg)
-  (when (and (not (region-active-p))
-             (memq this-command '(conn-goto-string-forward
-                                  conn-goto-string-backward))
-             (not (eq this-command last-command)))
-    (push-mark beg t)))
 
 (defun conn-backward-line (N)
   "`forward-line' by N but backward."
@@ -8439,8 +8387,6 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
-  "<remap> <conn-forward-char>" 'forward-char
-  "<remap> <conn-backward-char>" 'backward-char
   "j" 'conn-forward-inner-line
   "i" 'forward-line
   "n" 'conn-forward-defun
