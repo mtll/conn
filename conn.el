@@ -7556,6 +7556,7 @@ Currently selected window remains selected afterwards."
 (defun conn-change-line ()
   "`kill-line' and enter `conn-emacs-state'."
   (interactive)
+  (beginning-of-line)
   (call-interactively (keymap-lookup nil conn-kill-line-keys t))
   (conn-enter-state 'conn-emacs-state))
 
@@ -8275,7 +8276,7 @@ Operates with the selected windows parent window."
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
   "n" 'conn-narrow-to-region
-  "m" 'conn-narrow-indirect-to-region)
+  "N" 'conn-narrow-indirect-to-region)
 
 (defvar-keymap conn-search-map
   "h \\" 'conn-kapply-hightlight-prefix
@@ -8323,7 +8324,7 @@ Operates with the selected windows parent window."
   "SPC" 'whitespace-cleanup
   "q" 'conn-replace-in-thing
   "u" 'conn-regexp-replace-in-thing
-  "m" 'conn-narrow-indirect-to-thing
+  "N" 'conn-narrow-indirect-to-thing
   "n" 'conn-narrow-to-thing
   "RET" 'conn-join-lines-in-thing
   "f" 'conn-fill-prefix
@@ -8332,12 +8333,12 @@ Operates with the selected windows parent window."
   "L" 'clone-indirect-buffer
   "," 'conn-duplicate-thing
   "D" 'conn-duplicate-and-comment-thing
-  "h" 'conn-change-line
-  "i" 'conn-emacs-state-open-line-above
-  "k" 'conn-emacs-state-open-line
+  "k" 'conn-change-line
+  "o" 'conn-emacs-state-open-line-above
+  "j" 'conn-emacs-state-open-line
   "g" 'conn-emacs-state-overwrite
   "b" 'conn-emacs-state-overwrite-binary
-  "j" 'conn-narrow-ring-prefix
+  "m" 'conn-narrow-ring-prefix
   "d" 'duplicate-dwim
   "w j" 'conn-kill-prepend-region
   "w l" 'conn-kill-append-region
