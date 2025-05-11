@@ -3845,11 +3845,13 @@ Target overlays may override this default by setting the
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        (cl-macrolet ((conn-dispatch-ignore-event ()
-                                        `(throw ',',return t))
-                                      (conn-dispatch-handle-event (&rest body)
-                                        `(throw ',',handle ,,'(macroexp-progn body))))
-                          (pcase ,event ,(cdr handler)))
+                        (pcase ,event
+                          (,(nth 1 handler)
+                           (cl-macrolet ((conn-dispatch-ignore-event ()
+                                           `(throw ',',return t))
+                                         (conn-dispatch-handle-event (&rest body)
+                                           `(throw ',',handle ,,'(macroexp-progn body))))
+                             ,@(drop 2 handler))))
                         nil))
                     conn--dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
