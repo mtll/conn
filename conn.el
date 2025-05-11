@@ -7762,7 +7762,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
   "e" 'conn-wincontrol-exit
-  "E" 'conn-wincontrol-quit-other-window-for-scrolling
+  "m" 'conn-wincontrol-quit-other-window-for-scrolling
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
@@ -7771,7 +7771,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
   "g" 'delete-other-windows
-  "m" 'conn-wincontrol-mru-window
+  "M" 'tab-swith
   "I" 'tab-new
   "i" 'tab-next
   "j" 'previous-buffer
@@ -7789,7 +7789,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
   "s" conn-window-resize-map
-  "`" 'tab-switch
+  "`" 'conn-wincontrol-mru-window
   "w" 'conn-throw-buffer
   "u" 'conn-wincontrol-previous-window
   "U" 'tab-bar-detach-tab
