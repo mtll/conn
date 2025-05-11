@@ -7314,12 +7314,15 @@ With prefix arg N duplicate region N times."
     (`((,beg . ,end) . ,_)
      (if (use-region-p)
          (duplicate-dwim)
-       (let ((end (set-marker (make-marker) end)))
+       (let ((end (set-marker (make-marker) end))
+             (len (- end beg))
+             (start (point))
+             (mark (mark t)))
          (unwind-protect
              (dotimes (_ N)
                (conn--duplicate-region-1 beg end))
-           (goto-char end)
-           (indent-region beg (point))
+           (goto-char (+ start (* len N)))
+           (conn--push-ephemeral-mark (+ mark (* len N)))
            (set-marker end nil)))))))
 
 (defun conn-duplicate-and-comment-region (beg end &optional arg)
@@ -8275,7 +8278,7 @@ Operates with the selected windows parent window."
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
   "e" 'conn-duplicate-region
-  ;; "d" 'conn-duplicate-and-comment-region
+  "D" 'conn-duplicate-and-comment-region
   "a c" 'align-current
   "a e" 'align-entire
   "a h" 'align-highlight-rule
@@ -8283,8 +8286,6 @@ Operates with the selected windows parent window."
   "a r" 'align-regexp
   "a u" 'align-unhighlight-rule
   "b" 'conn-comment-or-uncomment-thing
-  "'" 'conn-duplicate-and-comment-thing
-  "," 'conn-duplicate-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
   "RET" 'conn-join-lines-in-region
@@ -8351,7 +8352,9 @@ Operates with the selected windows parent window."
   "f" 'conn-fill-prefix
   "TAB" 'indent-for-tab-command
   "DEL" 'conn-change-whole-line
-  "," 'clone-indirect-buffer
+  "L" 'clone-indirect-buffer
+  "," 'conn-duplicate-thing
+  "D" 'conn-duplicate-and-comment-thing
   "h" 'conn-change-line
   "i" 'conn-emacs-state-open-line-above
   "k" 'conn-emacs-state-open-line
