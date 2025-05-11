@@ -461,14 +461,6 @@ the original binding.  Also see `conn-remap-key'."
                                   (key-binding from-keys t))))
                    (if (keymapp binding) binding real-binding))))))
 
-(defmacro conntext-define (name &rest body)
-  (declare (indent 1))
-  `(progn
-     (defun ,name () ,@body)
-     (declare-function ,name nil)
-     (list 'menu-item ,(symbol-name name) :conntext-key
-           :filter (lambda (_) (,name)))))
-
 (defun conntext-binding-form (conntext-function)
   (cl-check-type conntext-function symbol)
   `(menu-item (symbol-name ,conntext-function) :conntext-key
@@ -8716,12 +8708,6 @@ Operates with the selected windows parent window."
 (add-hook 'conn-state-exit-functions 'conn--exit-completion)
 
 
-;;;; Org
-
-(with-eval-after-load 'org
-  (require 'conn-org))
-
-
 ;;;; Eldoc
 
 (with-eval-after-load 'eldoc
@@ -8816,13 +8802,6 @@ Operates with the selected windows parent window."
   "k" 'outline-next-visible-heading
   "l" 'outline-forward-same-level
   "u" 'outline-up-heading)
-
-(define-keymap
-  :keymap (conn-get-mode-map 'conn-command-state 'conntext-outline-mode)
-  "b" (conntext-define conntext-outline-map
-        "Context outline map."
-        (when (and (looking-at-p outline-regexp) (bolp))
-          conntext-outline-map)))
 
 (conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80)
 
