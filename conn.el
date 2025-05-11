@@ -7694,6 +7694,18 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "z" 'text-scale-decrease
   "Z" 'text-scale-increase)
 
+(defvar-keymap conn-wincontrol-tab-repeat-map
+  :repeat t
+  "C" 'tab-bar-duplicate-tab
+  "c" 'tab-bar-duplicate-tab
+  "I" 'tab-new
+  "i" 'tab-next
+  "K" 'tab-close
+  "k" 'tab-previous
+  "b" 'tab-bar-move-window-to-tab
+  "U" 'tab-bar-detach-tab
+  "u" 'tab-bar-detach-tab)
+
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
