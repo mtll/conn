@@ -36,6 +36,7 @@
   (eval-when-compile
     (require 'subr-x)))
 (eval-when-compile
+  (require 'pcase)
   (require 'inline)
   (require 'cl-lib)
   (require 'map))
@@ -8260,8 +8261,7 @@ Operates with the selected windows parent window."
   "w j" 'conn-kill-prepend-region
   "w l" 'conn-kill-append-region
   "c j" 'conn-append-region
-  "c l" 'conn-append-region
-  "c v" 'conn-copy-thing)
+  "c l" 'conn-append-region)
 
 (defvar-keymap conn-default-edit-map
   "\\" 'conn-kapply-on-thing-prefix
@@ -8276,6 +8276,7 @@ Operates with the selected windows parent window."
   "o" 'conn-emacs-state-open-line-above
   "j" 'conn-emacs-state-open-line
   "g" 'conn-emacs-state-overwrite
+  "d" 'duplicate-line
   "b" 'conn-emacs-state-overwrite-binary
   "c" 'copy-from-above-command
   "y" 'yank-in-context
@@ -8399,13 +8400,13 @@ Operates with the selected windows parent window."
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
-  "n" 'conn-forward-defun
-  "u" 'forward-symbol
-  "j" 'conn-forward-inner-line
+  "d" 'conn-forward-defun
+  "s" 'forward-symbol
+  "t" 'conn-forward-inner-line
   "i" 'conn-backward-line
   "k" 'forward-line
   "h" 'conn-expand
-  "y" 'forward-paragraph
+  "p" 'forward-paragraph
   "," (conn-remap-key "<conn-thing-map>")
   "e" 'end-of-buffer)
 
@@ -8450,7 +8451,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
-  "D" 'duplicate-dwim
+  "D" 'conn-duplicate-region
   "P" 'conn-register-load
   "+" 'conn-set-register-seperator
   "H" 'conn-expand
@@ -8460,7 +8461,6 @@ Operates with the selected windows parent window."
   "e" 'conn-insert-state
   "E" 'conn-emacs-state-at-mark
   "t" 'conn-change
-  ":" 'conn-wincontrol-one-command
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-region
   "'" 'conntext-state
@@ -8486,8 +8486,7 @@ Operates with the selected windows parent window."
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
   "r" (conn-remap-key "<conn-region-map>")
-  "R" 'conn-rectangle-mark
-  "V" 'conn-narrow-to-thing
+  "V" 'conn-rectangle-mark
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
   "W" 'widen
