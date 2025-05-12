@@ -3248,8 +3248,6 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over
-  "n" 'conn-forward-defun
-  "u" 'forward-symbol
   "," (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
@@ -8401,10 +8399,13 @@ Operates with the selected windows parent window."
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
+  "n" 'conn-forward-defun
+  "u" 'forward-symbol
   "j" 'conn-forward-inner-line
   "i" 'conn-backward-line
   "k" 'forward-line
   "h" 'conn-expand
+  "y" 'forward-paragraph
   "," (conn-remap-key "<conn-thing-map>")
   "e" 'end-of-buffer)
 
