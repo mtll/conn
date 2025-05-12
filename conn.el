@@ -3042,6 +3042,9 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   "Face for conn mark cursor."
   :group 'conn-faces)
 
+(defvar-local conn--mark-cursor nil)
+(put 'conn--mark-cursor 'permanent-local t)
+
 (defvar conn--prev-mark-even-if-inactive nil
   "Previous value of `mark-even-if-inactive'.
 
@@ -3049,13 +3052,44 @@ Used to restore previous value when `conn-mode' is disabled.")
 
 (defvar-local conn--ephemeral-mark nil)
 
-(put 'conn--mark-cursor 'permanent-local t)
 (put 'conn--mark-cursor 'face 'conn-mark-face)
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 (put 'conn--mark-cursor 'conn-overlay t)
 
-(defun conn--mark-cursor-p (ov)
-  (eq (overlay-get ov 'category) 'conn--mark-cursor))
+(defun conn--mark-cursor-redisplay (_win)
+  (if (or (not conn-local-mode)
+          conn--hide-mark-cursor
+          (null (mark t)))
+      (progn
+        (when conn--mark-cursor
+          (delete-overlay conn--mark-cursor))
+        (setf conn--mark-cursor nil))
+    (unless conn--mark-cursor
+      (setf conn--mark-cursor (make-overlay (mark t) (1+ (mark t)) nil t))
+      (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
+    (cond ((= (point-max) (mark t) (point))
+           (when (overlay-get conn--mark-cursor 'after-string)
+             (overlay-put conn--mark-cursor 'after-string nil))
+           (unless (eql (overlay-start conn--mark-cursor)
+                        (overlay-end conn--mark-cursor))
+             (move-overlay conn--mark-cursor (point-max) (point-max))))
+          ((and (eql (overlay-start conn--mark-cursor) (mark t))
+                (eql (overlay-end conn--mark-cursor) (1+ (mark t)))))
+          ((and (eql (char-after (mark t)) ?\t)
+                (< 1 (save-excursion
+                       (goto-char (mark t))
+                       (let ((col (current-column)))
+                         (- (indent-next-tab-stop col) col)))))
+           (move-overlay conn--mark-cursor (mark t) (mark t))
+           (overlay-put conn--mark-cursor 'after-string
+                        (propertize " " 'face 'conn-mark-face)))
+          ((= (mark t) (point-max))
+           (move-overlay conn--mark-cursor (point-max) (point-max))
+           (overlay-put conn--mark-cursor 'after-string
+                        (propertize " " 'face 'conn-mark-face)))
+          (t
+           (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
+           (overlay-put conn--mark-cursor 'after-string nil)))))
 
 (defun conn--push-ephemeral-mark (&optional location msg activate)
   "Push a mark at LOCATION that will not be added to `mark-ring'.
@@ -3066,44 +3100,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (push-mark location (not msg) activate)
     (setq conn--ephemeral-mark t)
     nil))
-
-(defun conn--mark-cursor-redisplay (win)
-  (let ((cursor (window-parameter win 'conn-mark-cursor)))
-    (if (or (not conn-local-mode)
-            conn--hide-mark-cursor
-            (null (mark t)))
-        (progn
-          (when cursor (delete-overlay cursor))
-          (set-window-parameter win 'conn-mark-cursor nil))
-      (unless cursor
-        (setq cursor (set-window-parameter
-                      win 'conn-mark-cursor
-                      (make-overlay (mark t) (1+ (mark t)) nil t)))
-        (overlay-put cursor 'category 'conn--mark-cursor)
-        (overlay-put cursor 'window win))
-      (cond ((= (point-max) (mark t) (point))
-             (when (overlay-get cursor 'after-string)
-               (overlay-put cursor 'after-string nil))
-             (unless (eql (overlay-start cursor) (overlay-end cursor))
-               (move-overlay cursor (point-max) (point-max) (window-buffer win))))
-            ((and (eql (overlay-buffer cursor) (current-buffer))
-                  (eql (overlay-start cursor) (mark t))
-                  (eql (overlay-end cursor) (1+ (mark t)))))
-            ((and (eql (char-after (mark t)) ?\t)
-                  (< 1 (save-excursion
-                         (goto-char (mark t))
-                         (let ((col (current-column)))
-                           (- (indent-next-tab-stop col) col)))))
-             (move-overlay cursor (mark t) (mark t) (window-buffer win))
-             (overlay-put cursor 'after-string
-                          (propertize " " 'face 'conn-mark-face)))
-            ((= (mark t) (point-max))
-             (move-overlay cursor (point-max) (point-max) (window-buffer win))
-             (overlay-put cursor 'after-string
-                          (propertize " " 'face 'conn-mark-face)))
-            (t
-             (move-overlay cursor (mark t) (1+ (mark t)) (window-buffer win))
-             (overlay-put cursor 'after-string nil))))))
 
 (defvar conn--movement-ring-rotating nil)
 (defvar conn--movement-tick nil)
@@ -3468,18 +3464,18 @@ be ignored by during dispatch.")
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
-(defun conn--overlays-in-of-type (beg end window category)
+(defun conn--overlays-in-of-type (beg end category &optional window)
   (cl-loop for ov in (overlays-in beg end)
            when (and (eq (overlay-get ov 'category) category)
                      (eq (overlay-get ov 'window) window))
-           return ov))
+           collect ov))
 
 (defun conn-make-target-overlay (pt length &optional thing padding-function window)
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
   (unless window (setq window (selected-window)))
-  (unless (conn--overlays-in-of-type pt (+ pt length) window 'conn-target-overlay)
+  (unless (conn--overlays-in-of-type pt (+ pt length) 'conn-target-overlay window)
     (conn-protected-let*
         ((line-bounds
           (save-excursion
@@ -8607,6 +8603,11 @@ Operates with the selected windows parent window."
 ;;;; Mode Definition
 
 (defun conn--clone-buffer-setup ()
+  (setq conn--mark-cursor nil)
+  (dolist (ov (when (mark t)
+                (conn--overlays-in-of-type (mark t) (1+ (mark t))
+                                           'conn--mark-cursor)))
+    (delete-overlay ov))
   (conn-copy-narrow-ring)
   (conn-copy-movement-ring)
   (conn-copy-mark-ring))
