@@ -3085,7 +3085,7 @@ Used to restore previous value when `conn-mode' is disabled.")
           conn--hide-mark-cursor
           (null (mark t))
           (and (window-minibuffer-p win)
-               (not (eq win (minibuffer-selected-window)))))
+               (not (eq win (active-minibuffer-window)))))
       (progn
         (when conn--mark-cursor
           (delete-overlay conn--mark-cursor))
@@ -3249,6 +3249,9 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over
+  "u" 'forward-symbol
+  "k" 'next-line
+  "n" 'end-of-defun
   "," (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
@@ -4893,22 +4896,18 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <capitalize-word>" 'conn-dispatch-capitalize
   "<remap> <capitalize-region>" 'conn-dispatch-capitalize
   "<remap> <capitalize-dwim>" 'conn-dispatch-capitalize
-  "r N" 'conn-dispatch-narrow-indirect
-  "r n" 'conn-dispatch-narrow-indirect
-  "X" 'conn-dispatch-narrow-indirect
-  ";" 'conn-dispatch-comment
-  "M-;" 'conn-dispatch-comment
-  "r ;" 'conn-dispatch-comment
-  "r e" 'conn-dispatch-duplicate
-  "r d" 'conn-dispatch-duplicate-and-comment
-  "p" 'conn-dispatch-register-load
+  "<remap> <conn-narrow-indirect>" 'conn-dispatch-narrow-indirect
+  "<remap> <comment-or-uncomment-region>" 'conn-dispatch-comment
+  "<remap> <conn-duplicate>" 'conn-dispatch-duplicate
+  "<remap> <conn-duplicate-and-comment>" 'conn-dispatch-duplicate
+  "<remap> <conn-register-prefix>" 'conn-dispatch-register-load
   "P" 'conn-dispatch-register-replace
   "w" 'conn-dispatch-kill
-  "]" 'conn-dispatch-kill-append
-  "[" 'conn-dispatch-kill-prepend
-  "a" 'conn-dispatch-copy-as-kill
-  "{" 'conn-dispatch-copy-prepend
-  "}" 'conn-dispatch-copy-append
+  "<remap> <conn-kill-append>" 'conn-dispatch-kill-append
+  "<remap> <conn-kill-prepend>" 'conn-dispatch-kill-prepend
+  "C" 'conn-dispatch-copy-as-kill
+  "<remap> <conn-copy-append>" 'conn-dispatch-copy-append
+  "<remap> <conn-copy-prepend>" 'conn-dispatch-copy-prepend
   "e" 'conn-dispatch-copy-replace
   "d" 'conn-dispatch-cut-replace
   "c" 'conn-dispatch-copy
@@ -6151,7 +6150,7 @@ With a non-nil prefix arg go `forward-line' by -N instead."
 (defvar conn-query-flag nil
   "Default value for conn-query-flag.
 
-If flag is t then `conn-replace-in-thing' and `conn-regexp-replace-in-thing'
+If flag is t then `conn-replace' and `conn-regexp-replace'
 will query before replacing from-string, otherwise just replace all
 instances of from-string.")
 
@@ -6255,8 +6254,8 @@ instances of from-string.")
                 (and current-prefix-arg (eq current-prefix-arg '-))
                 conn-query-flag)))))
 
-(defun conn-replace-in-thing ( thing-mover arg from-string to-string
-                               &optional delimited backward query-flag)
+(defun conn-replace ( thing-mover arg from-string to-string
+                      &optional delimited backward query-flag)
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
@@ -6298,8 +6297,8 @@ instances of from-string.")
         (perform-replace from-string to-string query-flag nil
                          delimited nil nil beg end backward)))))
 
-(defun conn-regexp-replace-in-thing ( thing-mover arg from-string to-string
-                                      &optional delimited backward query-flag)
+(defun conn-regexp-replace ( thing-mover arg from-string to-string
+                             &optional delimited backward query-flag)
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
@@ -6475,14 +6474,14 @@ Exiting the recursive edit will resume the isearch."
         (isearch-backward regexp t)
       (isearch-forward regexp t))))
 
-(defun conn-isearch-forward-in-thing (thing-cmd thing-arg &optional regexp)
+(defun conn-isearch-forward (thing-cmd thing-arg &optional regexp)
   "Isearch forward within the bounds of a thing."
   (interactive
    (append (conn-read-thing-mover-dwim nil t)
            (list current-prefix-arg)))
   (conn--isearch-in-thing thing-cmd thing-arg nil regexp))
 
-(defun conn-isearch-backward-in-thing (thing-cmd thing-arg &optional regexp)
+(defun conn-isearch-backward (thing-cmd thing-arg &optional regexp)
   "Isearch backward within the bounds of a thing."
   (interactive
    (append (conn-read-thing-mover-dwim nil t)
@@ -6902,7 +6901,7 @@ With arg N, insert N newlines."
   (delete-indentation nil beg end)
   (indent-according-to-mode))
 
-(defun conn-join-lines-in-thing (thing-mover thing-arg)
+(defun conn-join-lines (thing-mover thing-arg)
   "`delete-indentation' in region from START and END."
   (interactive (conn-read-thing-mover-dwim))
   (save-mark-and-excursion
@@ -7018,7 +7017,7 @@ With a prefix arg prepend to a register instead."
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed"))))
 
-(defun conn-narrow-indirect-to-thing (thing-mover arg &optional interactive)
+(defun conn-narrow-indirect (thing-mover arg &optional interactive)
   "Narrow to THING at point.
 
 Interactively prompt for the keybinding of a command and use THING
@@ -7041,16 +7040,6 @@ associated with that command (see `conn-register-thing')."
   (conn--narrow-to-region-1 beg end record)
   (when (called-interactively-p 'interactive)
     (message "Buffer narrowed")))
-
-(defun conn-narrow-indirect-to-region (beg end &optional record)
-  "Narrow to THING at point.
-
-Interactively prompt for the keybinding of a command and use THING
-associated with that command (see `conn-register-thing')."
-  (interactive (list (region-beginning) (region-end) (list t)))
-  (conn--narrow-indirect beg end record)
-  (when (called-interactively-p 'interactive)
-    (message "Buffer narrowed indirect")))
 
 
 ;;;;; Register Setting and Loading
@@ -7263,7 +7252,7 @@ With prefix arg N duplicate region N times."
         (set-marker end nil)
         (indent-region (region-beginning) (region-end))))))
 
-(defun conn-duplicate-thing (thing-mover thing-arg N)
+(defun conn-duplicate (thing-mover thing-arg N)
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
@@ -7300,7 +7289,7 @@ With prefix arg N duplicate region N times."
       (setq end (point)))
     (goto-char (+ origin (* (length region) arg) arg))))
 
-(defun conn-duplicate-and-comment-thing (thing-mover thing-arg N)
+(defun conn-duplicate-and-comment (thing-mover thing-arg N)
   "Duplicate and comment the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
@@ -7379,7 +7368,7 @@ of `conn-recenter-positions'."
 
 ;;;;; Misc Commands
 
-(defun conn-comment-or-uncomment-thing (thing-mover arg)
+(defun conn-comment-or-uncomment (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
   (interactive (conn-read-thing-mover-dwim))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
@@ -8236,19 +8225,19 @@ Operates with the selected windows parent window."
 ;;;;; Top-level Command State Maps
 
 (defvar-keymap conn-default-region-map
-  "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing
+  "q" 'conn-replace
+  "u" 'conn-regexp-replace
   "\\" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  "e" 'conn-duplicate-thing
-  "D" 'conn-duplicate-and-comment-thing
-  "b" 'conn-comment-or-uncomment-thing
+  "e" 'conn-duplicate
+  "D" 'conn-duplicate-and-comment
+  "b" 'conn-comment-or-uncomment
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "RET" 'conn-join-lines-in-thing
+  "RET" 'conn-join-lines
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
   "h" 'vc-region-history
@@ -8256,7 +8245,7 @@ Operates with the selected windows parent window."
   "r" 'conn-isearch-region-backward
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
-  "N" 'conn-narrow-indirect-to-thing
+  "N" 'conn-narrow-indirect
   "n" 'conn-narrow-to-thing
   "w j" 'conn-kill-prepend-region
   "w l" 'conn-kill-append-region
@@ -8289,8 +8278,8 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-search-map
   "h \\" 'conn-kapply-hightlight-prefix
-  "s" 'conn-isearch-forward-in-thing
-  "r" 'conn-isearch-backward-in-thing
+  "s" 'conn-isearch-forward
+  "r" 'conn-isearch-backward
   "o" 'occur
   "l" 'locate
   "m B" 'multi-isearch-buffers-regexp
@@ -8300,14 +8289,11 @@ Operates with the selected windows parent window."
   "m f" 'multi-isearch-files)
 
 (defvar-keymap conn-goto-map
-  "p" 'pop-global-mark
   "r" 'xref-find-references
   "d" 'xref-find-definitions
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward
-  "y" 'imenu
-  "b" 'goto-line
   "j" 'conn-unpop-movement-ring
   "l" 'conn-pop-movement-ring)
 
@@ -8451,6 +8437,8 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "C-<return>" 'conn-join-lines
+  "T" 'conn-copy-thing
   "D" 'conn-duplicate-region
   "P" 'conn-register-load
   "+" 'conn-set-register-seperator
