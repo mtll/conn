@@ -8383,11 +8383,12 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-common-state)
   "C-s" 'isearch-forward
+  "s" 'isearch-forward
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
   "d" 'conn-forward-defun
-  "s" 'forward-symbol
+  "y" 'forward-symbol
   "t" 'conn-forward-inner-line
   "i" 'conn-backward-line
   "k" 'forward-line
