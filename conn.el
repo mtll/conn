@@ -2053,8 +2053,26 @@ command."
      (list thing-cmd thing-arg))
    :initial-arg arg))
 
+(defun conn-read-thing-mover-dwim (&optional arg recursive-edit)
+  "Interactively read a thing command and arg.
+
+ARG is the initial value for the arg to be returned.
+RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
+command.
+
+If `use-region-p' returns non-nil this will always return
+`conn-toggle-mark-command' as the mover."
+  (if (use-region-p)
+      (list 'conn-toggle-mark-command nil)
+    (conn-read-thing-mover arg recursive-edit)))
+
 (defun conn-read-thing-region (&optional arg)
   (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover arg t)))
+    (cons (get cmd :conn-command-thing)
+          (conn-bounds-of-command cmd arg))))
+
+(defun conn-read-thing-region-dwim (&optional arg)
+  (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover-dwim arg t)))
     (cons (get cmd :conn-command-thing)
           (conn-bounds-of-command cmd arg))))
 
@@ -3046,7 +3064,7 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :group 'conn-faces)
 
 (defvar-local conn--mark-cursor nil)
-(put 'conn--mark-cursor 'permanent-local t)
+(put 'conn--mark-cursor 'permanent-local nil)
 
 (defvar conn--prev-mark-even-if-inactive nil
   "Previous value of `mark-even-if-inactive'.
@@ -3058,40 +3076,44 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--mark-cursor 'face 'conn-mark-face)
 (put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
 (put 'conn--mark-cursor 'conn-overlay t)
+(put 'conn--mark-cursor 'overlay-after-string
+     (propertize " " 'face 'conn-mark-face))
 
-(defun conn--mark-cursor-redisplay (_win)
+(defun conn--mark-cursor-redisplay (win)
   (if (or (not conn-local-mode)
           conn--hide-mark-cursor
-          (null (mark t)))
+          (null (mark t))
+          (and (window-minibuffer-p win)
+               (not (eq win (minibuffer-selected-window)))))
       (progn
         (when conn--mark-cursor
           (delete-overlay conn--mark-cursor))
         (setf conn--mark-cursor nil))
     (unless conn--mark-cursor
-      (setf conn--mark-cursor (make-overlay (mark t) (1+ (mark t)) nil t))
+      (setf conn--mark-cursor (make-overlay (mark t) (1+ (mark t))))
       (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
     (cond ((= (point-max) (mark t) (point))
            (when (overlay-get conn--mark-cursor 'after-string)
              (overlay-put conn--mark-cursor 'after-string nil))
-           (unless (= (overlay-start conn--mark-cursor)
-                      (overlay-end conn--mark-cursor))
+           (unless (eql (overlay-start conn--mark-cursor)
+                        (overlay-end conn--mark-cursor))
              (move-overlay conn--mark-cursor (point-max) (point-max))))
-          ((and (= (overlay-start conn--mark-cursor) (mark t))
-                (or (= (overlay-end conn--mark-cursor) (1+ (mark t)))
-                    (and (= (overlay-start conn--mark-cursor) (point-max))
+          ((and (eql (overlay-start conn--mark-cursor) (mark t))
+                (or (eql (overlay-end conn--mark-cursor) (1+ (mark t)))
+                    (and (eql (overlay-start conn--mark-cursor) (point-max))
                          (overlay-get conn--mark-cursor 'after-string)))))
           ((= (mark t) (point-max))
            (move-overlay conn--mark-cursor (point-max) (point-max))
            (overlay-put conn--mark-cursor 'after-string
-                        (propertize " " 'face 'conn-mark-face)))
-          ((and (= (char-after (mark t)) ?\t)
+                        (get 'conn--mark-cursor 'overlay-after-string)))
+          ((and (eql (char-after (mark t)) ?\t)
                 (< 1 (save-excursion
                        (goto-char (mark t))
                        (let ((col (current-column)))
                          (- (indent-next-tab-stop col) col)))))
            (move-overlay conn--mark-cursor (mark t) (mark t))
            (overlay-put conn--mark-cursor 'after-string
-                        (propertize " " 'face 'conn-mark-face)))
+                        (get 'conn--mark-cursor 'overlay-after-string)))
           (t
            (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
            (overlay-put conn--mark-cursor 'after-string nil)))))
@@ -3226,6 +3248,8 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over
+  "n" 'conn-forward-defun
+  "u" 'forward-symbol
   "," (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
@@ -5501,8 +5525,12 @@ order to mark the region that should be defined by any of COMMANDS."
  'page 'conn-discrete-thing-handler
  'forward-page 'backward-page)
 
+(defun conn-char-mark-handler (beg)
+  (when current-prefix-arg
+    (conn--push-ephemeral-mark beg)))
+
 (conn-register-thing-commands
- 'char nil
+ 'char 'conn-char-mark-handler
  'forward-char 'backward-char)
 
 (conn-register-thing
@@ -5620,7 +5648,8 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing-commands
  'line 'conn-continuous-thing-handler
  'forward-line 'conn-backward-line
- 'conn-line-forward-op)
+ 'conn-line-forward-op
+ 'conn-goto-line)
 
 (conn-register-thing
  'line-column
@@ -5751,7 +5780,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register outer)
   "Prepend thing regions to narrow register."
   (interactive
-   (append (conn-read-thing-mover)
+   (append (conn-read-thing-mover-dwim)
            (list
             (register-read-with-preview "Push region to register: ")
             current-prefix-arg)))
@@ -5775,7 +5804,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional outer)
   "Push thing regions to narrow ring."
   (interactive
-   (append (conn-read-thing-mover)
+   (append (conn-read-thing-mover-dwim)
            (list current-prefix-arg)))
   (pcase-let* ((`((,beg . ,end) . ,regions)
                 (conn-bounds-of-command thing-cmd thing-arg)))
@@ -5912,6 +5941,13 @@ execution."
         (message "Keyboard macro bound to %s" (format-kbd-macro key-seq))))))
 
 ;;;;; Movement
+
+(defun conn-goto-line (line)
+  (interactive "p")
+  (if (> 0 line)
+      (goto-char (point-max))
+    (goto-char (point-min)))
+  (forward-line line))
 
 (defun conn-forward-defun (N)
   "Move forward by defuns.
@@ -6218,7 +6254,7 @@ instances of from-string.")
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn-read-thing-mover nil t))
+                 (conn-read-thing-mover-dwim nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (conn--replace-read-args
@@ -6268,7 +6304,7 @@ instances of from-string.")
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg)
-                 (conn-read-thing-mover nil t))
+                 (conn-read-thing-mover-dwim nil t))
                 (regions (conn-bounds-of-command thing-mover arg))
                 (common
                  (conn--replace-read-args
@@ -6492,14 +6528,14 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-forward-in-thing (thing-cmd thing-arg &optional regexp)
   "Isearch forward within the bounds of a thing."
   (interactive
-   (append (conn-read-thing-mover nil t)
+   (append (conn-read-thing-mover-dwim nil t)
            (list current-prefix-arg)))
   (conn--isearch-in-thing thing-cmd thing-arg nil regexp))
 
 (defun conn-isearch-backward-in-thing (thing-cmd thing-arg &optional regexp)
   "Isearch backward within the bounds of a thing."
   (interactive
-   (append (conn-read-thing-mover nil t)
+   (append (conn-read-thing-mover-dwim nil t)
            (list current-prefix-arg)))
   (conn--isearch-in-thing thing-cmd thing-arg t regexp))
 
@@ -6918,7 +6954,7 @@ With arg N, insert N newlines."
 
 (defun conn-join-lines-in-thing (thing-mover thing-arg)
   "`delete-indentation' in region from START and END."
-  (interactive (conn-read-thing-mover))
+  (interactive (conn-read-thing-mover-dwim))
   (save-mark-and-excursion
     (pcase (conn-bounds-of-command thing-mover thing-arg)
       (`((,beg . ,end) . ,_)
@@ -7001,7 +7037,7 @@ With a prefix arg prepend to a register instead."
 (defun conn-copy-thing (thing-mover arg &optional register)
   "Copy THING at point."
   (interactive
-   (append (conn-read-thing-mover)
+   (append (conn-read-thing-mover-dwim)
            (when current-prefix-arg
              (list (register-read-with-preview "Register: ")))))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
@@ -7019,7 +7055,7 @@ With a prefix arg prepend to a register instead."
 (defun conn-narrow-to-thing (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (append (conn-read-thing-mover
+   (append (conn-read-thing-mover-dwim
             (when current-prefix-arg
               (prefix-numeric-value current-prefix-arg))
             t)
@@ -7038,7 +7074,7 @@ With a prefix arg prepend to a register instead."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (append (conn-read-thing-mover
+   (append (conn-read-thing-mover-dwim
             (when current-prefix-arg
               (prefix-numeric-value current-prefix-arg))
             t)
@@ -7281,7 +7317,7 @@ With prefix arg N duplicate region N times."
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
-  (interactive (append (conn-read-thing-mover nil t)
+  (interactive (append (conn-read-thing-mover-dwim nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     (`((,beg . ,end) . ,_)
@@ -7318,7 +7354,7 @@ With prefix arg N duplicate region N times."
   "Duplicate and comment the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
-  (interactive (append (conn-read-thing-mover nil t)
+  (interactive (append (conn-read-thing-mover-dwim nil t)
                        (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     ((and `((,beg . ,end) . ,_)
@@ -7395,7 +7431,7 @@ of `conn-recenter-positions'."
 
 (defun conn-comment-or-uncomment-thing (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
-  (interactive (conn-read-thing-mover))
+  (interactive (conn-read-thing-mover-dwim))
   (pcase-let ((`((,beg . ,end) . ,_) (conn-bounds-of-command thing-mover arg)))
     (if (comment-only-p beg end)
         (uncomment-region beg end)
@@ -8250,26 +8286,19 @@ Operates with the selected windows parent window."
 ;;;;; Top-level Command State Maps
 
 (defvar-keymap conn-default-region-map
-  "q" 'conn-replace-in-region
-  "u" 'conn-regexp-replace-in-region
+  "q" 'conn-replace-in-thing
+  "u" 'conn-regexp-replace-in-thing
   "\\" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  "e" 'conn-duplicate-region
-  "D" 'conn-duplicate-and-comment-region
-  "a c" 'align-current
-  "a e" 'align-entire
-  "a h" 'align-highlight-rule
-  "a n" 'align-newline-and-indent
-  "a r" 'align-regexp
-  "a u" 'align-unhighlight-rule
+  "e" 'conn-duplicate-thing
+  "D" 'conn-duplicate-and-comment-thing
   "b" 'conn-comment-or-uncomment-thing
   "g" 'conn-rgrep-region
   "k" 'delete-region
-  "RET" 'conn-join-lines-in-region
-  "I" 'indent-rigidly
+  "RET" 'conn-join-lines-in-thing
   "p" 'conn-sort-prefix
   "o" 'conn-occur-region
   "h" 'vc-region-history
@@ -8277,8 +8306,36 @@ Operates with the selected windows parent window."
   "r" 'conn-isearch-region-backward
   "y" 'yank-rectangle
   "DEL" 'clear-rectangle
-  "n" 'conn-narrow-to-region
-  "N" 'conn-narrow-indirect-to-region)
+  "N" 'conn-narrow-indirect-to-thing
+  "n" 'conn-narrow-to-thing
+  "w j" 'conn-kill-prepend-region
+  "w l" 'conn-kill-append-region
+  "c j" 'conn-append-region
+  "c l" 'conn-append-region
+  "c v" 'conn-copy-thing)
+
+(defvar-keymap conn-default-edit-map
+  "\\" 'conn-kapply-on-thing-prefix
+  "v" 'diff-buffer-with-file
+  "F" 'conn-bind-last-dispatch-to-key
+  "SPC" 'whitespace-cleanup
+  "f" 'conn-fill-prefix
+  "TAB" 'indent-for-tab-command
+  "DEL" 'conn-change-whole-line
+  "L" 'clone-indirect-buffer
+  "k" 'conn-change-line
+  "o" 'conn-emacs-state-open-line-above
+  "j" 'conn-emacs-state-open-line
+  "g" 'conn-emacs-state-overwrite
+  "b" 'conn-emacs-state-overwrite-binary
+  "c" 'copy-from-above-command
+  "y" 'yank-in-context
+  "a c" 'align-current
+  "a e" 'align-entire
+  "a h" 'align-highlight-rule
+  "a n" 'align-newline-and-indent
+  "a r" 'align-regexp
+  "a u" 'align-unhighlight-rule)
 
 (defvar-keymap conn-search-map
   "h \\" 'conn-kapply-hightlight-prefix
@@ -8317,38 +8374,6 @@ Operates with the selected windows parent window."
   :repeat t
   "l" 'previous-error
   "j" 'next-error)
-
-(defvar-keymap conn-default-edit-map
-  "\\" 'conn-kapply-on-thing-prefix
-  "z" 'conn-emacs-state-at-mark
-  "v" 'diff-buffer-with-file
-  "F" 'conn-bind-last-dispatch-to-key
-  "SPC" 'whitespace-cleanup
-  "q" 'conn-replace-in-thing
-  "u" 'conn-regexp-replace-in-thing
-  "N" 'conn-narrow-indirect-to-thing
-  "n" 'conn-narrow-to-thing
-  "RET" 'conn-join-lines-in-thing
-  "f" 'conn-fill-prefix
-  "TAB" 'indent-for-tab-command
-  "DEL" 'conn-change-whole-line
-  "L" 'clone-indirect-buffer
-  "," 'conn-duplicate-thing
-  "D" 'conn-duplicate-and-comment-thing
-  "k" 'conn-change-line
-  "o" 'conn-emacs-state-open-line-above
-  "j" 'conn-emacs-state-open-line
-  "g" 'conn-emacs-state-overwrite
-  "b" 'conn-emacs-state-overwrite-binary
-  "m" 'conn-narrow-ring-prefix
-  "d" 'duplicate-dwim
-  "w j" 'conn-kill-prepend-region
-  "w l" 'conn-kill-append-region
-  "c j" 'conn-append-region
-  "c l" 'conn-append-region
-  "c v" 'conn-copy-thing
-  "c i" 'copy-from-above-command
-  "y" 'yank-in-context)
 
 
 ;;;;; Misc Maps
@@ -8425,10 +8450,8 @@ Operates with the selected windows parent window."
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
   "j" 'conn-forward-inner-line
-  "i" 'forward-line
-  "n" 'conn-forward-defun
-  "u" 'forward-symbol
-  "y" 'forward-paragraph
+  "i" 'conn-backward-line
+  "k" 'forward-line
   "h" 'conn-expand
   "," (conn-remap-key "<conn-thing-map>")
   "e" 'end-of-buffer)
@@ -8474,6 +8497,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "D" 'duplicate-dwim
   "P" 'conn-register-load
   "+" 'conn-set-register-seperator
   "H" 'conn-expand
@@ -8481,7 +8505,7 @@ Operates with the selected windows parent window."
   "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-insert-state
-  "E" 'conn-dispatch-on-buttons
+  "E" 'conn-emacs-state-at-mark
   "t" 'conn-change
   ":" 'conn-wincontrol-one-command
   "`" 'conn-wincontrol-mru-window

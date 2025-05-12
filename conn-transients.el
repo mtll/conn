@@ -774,7 +774,7 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,beg . ,end)
                (when (alist-get :in-thing args)
-                 (nth 1 (conn-read-thing-region)))))
+                 (nth 1 (conn-read-thing-region-dwim)))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
