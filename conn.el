@@ -3492,6 +3492,12 @@ dispatch.
 Each function should take a window and return nil if the window should
 be ignored by during dispatch.")
 
+(defvar conn-target-predicate
+  (lambda (pt length window)
+    (not (conn--overlays-in-of-type pt (+ pt length)
+                                    'conn-target-overlay
+                                    window))))
+
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
@@ -3507,7 +3513,7 @@ be ignored by during dispatch.")
 
 Optionally the overlay may have an associated THING."
   (unless window (setq window (selected-window)))
-  (unless (conn--overlays-in-of-type pt (+ pt length) 'conn-target-overlay window)
+  (when (funcall conn-target-predicate pt length window)
     (conn-protected-let*
         ((line-bounds
           (save-excursion
@@ -3878,7 +3884,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-ignore-event ()
   (error "Function only available in dispatch event handler"))
 
-(defun conn-dispatch-handle-event (&rest _body)
+(defun conn-dispatch-handle-event (_result)
   (error "Function only available in dispatch event handler"))
 
 (defmacro conn-with-dispatch-event-handler (handler &rest body)
@@ -3889,13 +3895,12 @@ Target overlays may override this default by setting the
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        (pcase ,event
-                          (,(nth 1 handler)
-                           (cl-macrolet ((conn-dispatch-ignore-event ()
-                                           `(throw ',',return t))
-                                         (conn-dispatch-handle-event (&rest body)
-                                           `(throw ',',handle ,,'(macroexp-progn body))))
-                             ,@(drop 2 handler))))
+                        (cl-flet ((conn-dispatch-ignore-event ()
+                                    (throw ',return t))
+                                  (conn-dispatch-handle-event (result)
+                                    (throw ',handle result)))
+                          (pcase ,event
+                            ,(cdr handler)))
                         nil))
                     conn--dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
@@ -4182,7 +4187,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-action
                   (:predicate conn-action-p))
-  (window-predicate))
+  (window-predicate)
+  (target-predicate))
 
 (defun conn--action-type-p (symbol)
   (memq 'conn-action (ignore-errors
@@ -4215,7 +4221,7 @@ Returns a cons of (STRING . OVERLAYS)."
                     [&rest keywordp form]
                     def-body))
            (indent 2))
-  (pcase-let* (((map :extra-slots :description :window-predicate) rest)
+  (pcase-let* (((map :extra-slots :description :window-predicate :target-predicate) rest)
                (body (cl-loop for sublist on rest by #'cddr
                               unless (keywordp (car sublist))
                               do (cl-return sublist)))
@@ -4231,7 +4237,8 @@ Returns a cons of (STRING . OVERLAYS)."
                 (oclosure-lambda (,name
                                   ,@(cl-loop for slot in (append slots extra-slots)
                                              collect `(,slot nil))
-                                  (window-predicate ,window-predicate))
+                                  (window-predicate ,window-predicate)
+                                  (target-predicate ,target-predicate))
                     (window pt thing-cmd thing-arg)
                   (,name window pt thing-cmd thing-arg ,@slots))))
            (conn-action-initialize instance)
@@ -5070,11 +5077,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
                                               &optional repeat)
   (let ((conn-target-window-predicate conn-target-window-predicate)
+        (conn-target-predicate conn-target-predicate)
         (conn-target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
         (conn--dispatch-event-message-prefixes conn--dispatch-event-message-prefixes))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
+    (when-let* ((predicate (conn-action--target-predicate action)))
+      (add-function :after-while conn-target-predicate predicate))
     (unwind-protect
         (cl-call-next-method)
       (conn-delete-targets))
@@ -8187,10 +8197,12 @@ Operates with the selected windows parent window."
 ;;;;; Mode Keymaps
 
 (dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-major-mode-map state 'occur-mode) "C-c e" 'occur-edit-mode))
+  (keymap-set (conn-get-major-mode-map state 'occur-mode)
+              "C-c e" 'occur-edit-mode))
 
 (dolist (state '(conn-command-state conn-emacs-state))
-  (keymap-set (conn-get-major-mode-map state 'occur-edit-mode) "C-c e" 'occur-cease-edit))
+  (keymap-set (conn-get-major-mode-map state 'occur-edit-mode)
+              "C-c e" 'occur-cease-edit))
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-movement-state 'compilation-mode)
