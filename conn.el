@@ -3033,6 +3033,9 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
 (defcustom conn-mark-overlay-priority 2000
   "Priority of mark overlay."
   :type 'integer
+  :set (lambda (sym val)
+         (set sym val)
+         (put 'conn--mark-cursor 'priority val))
   :group 'conn)
 
 (defface conn-mark-face
