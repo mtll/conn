@@ -5945,8 +5945,11 @@ execution."
 (defun conn-goto-line (line)
   (interactive "p")
   (if (> 0 line)
-      (goto-char (point-max))
-    (goto-char (point-min)))
+      (progn
+        (goto-char (point-max))
+        (cl-incf line))
+    (goto-char (point-min))
+    (cl-decf line))
   (forward-line line))
 
 (defun conn-forward-defun (N)
@@ -8416,6 +8419,7 @@ Operates with the selected windows parent window."
   "<conn-region-map>" conn-default-region-map
   "<conn-edit-map>" conn-default-edit-map
   "<conn-thing-map> V" 'conn-mark-visual-line
+  "<conn-thing-map> ," 'conn-goto-line
   "<conn-thing-map> <" 'conn-mark-before-point
   "<conn-thing-map> >" 'conn-mark-after-point
   "<conn-thing-map> /" 'conn-mark-filename
