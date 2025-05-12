@@ -274,7 +274,6 @@
              (when (symbolp this-command)
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
                         thereis (advice-member-p 'conn-posframe--switch-buffer-display fn))))
-    (message "This command: %s" (cons this-command (function-alias-p this-command)))
     (let* ((header (with-temp-buffer
                      (insert (when (fboundp 'nerd-icons-faicon)
                                (concat conn-posframe--padding
