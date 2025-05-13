@@ -3884,7 +3884,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-ignore-event ()
   (error "Function only available in dispatch event handler"))
 
-(defun conn-dispatch-handle-event (_result)
+(defun conn-dispatch-handle-event (&optional _result)
   (error "Function only available in dispatch event handler"))
 
 (defmacro conn-with-dispatch-event-handler (handler &rest body)
@@ -3895,10 +3895,10 @@ Target overlays may override this default by setting the
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        (cl-flet ((conn-dispatch-ignore-event ()
-                                    (throw ',return t))
-                                  (conn-dispatch-handle-event (result)
-                                    (throw ',handle result)))
+                        (cl-letf (((symbol-function 'conn-dispatch-ignore-event)
+                                   (lambda () (throw ',return t)))
+                                  ((symbol-function 'conn-dispatch-handle-event)
+                                   (lambda (&optional result) (throw ',handle result))))
                           (pcase ,event
                             ,(cdr handler)))
                         nil))
@@ -4832,7 +4832,7 @@ Returns a cons of (STRING . OVERLAYS)."
   :window-predicate (lambda (win)
                       (not (buffer-local-value 'buffer-read-only (window-buffer win))))
   (if (eq (current-buffer) (window-buffer window))
-      (pcase (if (region-active-p)
+      (pcase (if (use-region-p)
                  (cons (region-beginning) (region-end))
                (bounds-of-thing-at-point
                 (or (get thing-cmd :conn-command-thing)
@@ -4863,7 +4863,7 @@ Returns a cons of (STRING . OVERLAYS)."
                           (str1)
                           (str2))
       (activate-change-group cg)
-      (pcase (if (region-active-p)
+      (pcase (if (use-region-p)
                  (cons (region-beginning) (region-end))
                (bounds-of-thing-at-point
                 (or (get thing-cmd :conn-command-thing)
