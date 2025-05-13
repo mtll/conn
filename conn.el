@@ -5034,6 +5034,7 @@ Returns a cons of (STRING . OVERLAYS)."
             (interactive "e")
             (cl-letf ((posn (event-start event))
                       (conn-dispatch-repeat-count repeat-count)
+                      (conn-kapply-suppress-message t)
                       ((symbol-function 'conn-repeat-last-dispatch)))
               (funcall action
                        (posn-window posn) (posn-point posn)
@@ -5107,9 +5108,8 @@ Returns a cons of (STRING . OVERLAYS)."
     (setq action (conn-action-accept (conn-action action))))
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
-    (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder))
-                 (thing (or thing thing-cmd)))
-      (funcall action win pt thing thing-arg))))
+    (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder)))
+      (funcall action win pt (or thing thing-cmd) thing-arg))))
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")

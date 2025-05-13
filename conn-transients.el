@@ -642,10 +642,9 @@ A zero means repeat until error."
   (macro :mutable t))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-kapply))
-  (format "Kapply <%s>"
-          (if-let* ((macro (oref action macro)))
-              (conn--kmacro-display (kmacro--keys macro))
-            "unrecorded")))
+  (concat "Kapply"
+          (when-let* ((macro (oref action macro)))
+            (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">"))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql kapply)) continuation)
   (if (cl-typep (oref continuation action) 'conn-dispatch-kapply)
@@ -668,8 +667,7 @@ A zero means repeat until error."
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
                                      &optional repeat)
-  (let ((conn-label-select-always-prompt t)
-        (conn-kapply-suppress-message t))
+  (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,thing)
                     (conn-dispatch-select-target target-finder))
@@ -701,23 +699,24 @@ A zero means repeat until error."
              (oclosure-lambda (conn-dispatch-kapply
                                (macro nil))
                  (window pt thing-cmd thing-arg)
-               (with-selected-window window
-                 (with-undo-amalgamate
-                   (apply #'conn--kapply-compose-iterator
-                          (conn--kapply-region-iterator
-                           (save-excursion
-                             (goto-char pt)
-                             (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                               ('nil (user-error "Cannot find %s at point"
-                                                 (get thing-cmd :conn-command-thing)))
-                               (`(,region) (list region))
-                               (`(,_ . ,subregions) subregions))))
-                          `(,@pipeline
-                            ,(pcase (alist-get :kmacro args)
-                               ('conn--kmacro-apply
-                                (lambda (iterator)
-                                  (conn--kmacro-apply iterator nil macro)))
-                               (kmacro kmacro))))))
+               (let ((conn-kapply-suppress-message t))
+                 (with-selected-window window
+                   (with-undo-amalgamate
+                     (apply #'conn--kapply-compose-iterator
+                            (conn--kapply-region-iterator
+                             (save-excursion
+                               (goto-char pt)
+                               (pcase (conn-bounds-of-command thing-cmd thing-arg)
+                                 ('nil (user-error "Cannot find %s at point"
+                                                   (get thing-cmd :conn-command-thing)))
+                                 (`(,region) (list region))
+                                 (`(,_ . ,subregions) subregions))))
+                            `(,@pipeline
+                              ,(pcase (alist-get :kmacro args)
+                                 ('conn--kmacro-apply
+                                  (lambda (iterator)
+                                    (conn--kmacro-apply iterator nil macro)))
+                                 (kmacro kmacro)))))))
                (unless macro (setq macro (kmacro-ring-head)))))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
