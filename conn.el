@@ -2150,6 +2150,8 @@ If `use-region-p' returns non-nil this will always return
     (conn-expand-remote . conn--bounds-of-remote-expansion)
     (visible . conn--bounds-of-command-thing)
     (narrowing . conn--bounds-of-narrowings)
+    (heading . ,(lambda (_cmd _arg)
+                  (list (bounds-of-thing-at-point 'heading))))
     (char . ,(lambda (_cmd arg)
                (list (cons (point) (+ (point) (prefix-numeric-value arg)))
                      (cons (point) (+ (point) (prefix-numeric-value arg))))))
@@ -4027,6 +4029,15 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not (bounds-of-thing-at-point thing)))
             (conn-make-target-overlay (point) 0)))))))
 
+(defun conn-dispatch-headings ()
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (goto-char (window-start))
+        (pcase-dolist (`(,beg . ,_end)
+                       (conn--visible-re-matches outline-regexp))
+          (conn-make-target-overlay beg 0))))))
+
 (defun conn-dispatch-all-buttons ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
@@ -5898,6 +5909,8 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;; Bounds of narrow ring
 
 (defun conn--bounds-of-narrowings (_cmd _arg)
+  (unless conn-narrow-ring
+    (user-error "Narrow ring empty"))
   (cl-loop for (beg . end) in conn-narrow-ring
            minimize beg into narrow-beg
            maximize end into narrow-end
@@ -8769,7 +8782,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing
  'heading
- :dispatch-target-finder (lambda () (conn-dispatch-all-things 'heading))
+ :dispatch-target-finder 'conn-dispatch-headings
  :bounds-op (lambda ()
               (save-mark-and-excursion
                 (outline-mark-subtree)
