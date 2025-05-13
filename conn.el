@@ -3391,13 +3391,13 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
           (conn-state-loop-exit))
       (conn-state-loop-error "Invalid command"))))
 
-(cl-defmethod conn-dispatch-command-case ((command (eql conn-dispatch-jump-or-goto))
+(cl-defmethod conn-dispatch-command-case ((command (eql conn-dispatch-over-or-goto))
                                           cont)
   (conn-action-cancel (oref cont action))
   (pcase (oref cont action)
     ('nil
-     (setf (oref cont action) (conn-action 'conn-dispatch-jump)))
-    ((cl-type conn-dispatch-jump)
+     (setf (oref cont action) (conn-action 'conn-dispatch-over)))
+    ((cl-type conn-dispatch-over)
      (setf (oref cont action) (conn-action 'conn-dispatch-goto)))
     ((cl-type conn-dispatch-goto)
      (setf (oref cont action) nil))))
@@ -4905,7 +4905,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
-  "f" 'conn-dispatch-jump-or-goto
+  "f" 'conn-dispatch-over-or-goto
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
@@ -4937,7 +4937,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "d" 'conn-dispatch-cut-replace
   "c" 'conn-dispatch-copy
   "x" 'conn-dispatch-cut
-  "SPC" 'conn-dispatch-over
+  "SPC" 'conn-dispatch-jump
   "q" 'conn-dispatch-transpose)
 
 
