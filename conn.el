@@ -36,7 +36,6 @@
   (eval-when-compile
     (require 'subr-x)))
 (eval-when-compile
-  (require 'pcase)
   (require 'inline)
   (require 'cl-lib)
   (require 'map))
@@ -2915,9 +2914,7 @@ The iterator must be the first argument in ARGLIST.
                                   (when (markerp beg) (set-marker beg nil))
                                   (when (markerp end) (set-marker end nil))))
                                (cl-incf ,iterations)))))
-           (run-hook-wrapped 'conn-kmacro-apply-start-hook
-                             (lambda (hook)
-                               (ignore-errors (funcall hook))))
+           (run-hooks 'conn-kmacro-apply-start-hook)
            (deactivate-mark)
            (unwind-protect
                (cl-letf (((symbol-function 'kmacro-loop-setup-function)))
@@ -2928,9 +2925,7 @@ The iterator must be the first argument in ARGLIST.
                    (message "Kapply completed successfully after %s iterations" ,iterations)))
              (let ((conn-kmacro-apply-error (not success)))
                (funcall ,iterator :finalize)
-               (run-hook-wrapped 'conn-kmacro-apply-end-hook
-                                 (lambda (hook)
-                                   (ignore-errors (funcall hook))))
+               (run-hooks 'conn-kmacro-apply-end-hook)
                (isearch-clean-overlays))))))))
 
 (conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
@@ -3390,17 +3385,6 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
                   (conn-action (conn--dispatch-default-action command))))
           (conn-state-loop-exit))
       (conn-state-loop-error "Invalid command"))))
-
-(cl-defmethod conn-dispatch-command-case ((command (eql conn-dispatch-over-or-goto))
-                                          cont)
-  (conn-action-cancel (oref cont action))
-  (pcase (oref cont action)
-    ('nil
-     (setf (oref cont action) (conn-action 'conn-dispatch-over)))
-    ((cl-type conn-dispatch-over)
-     (setf (oref cont action) (conn-action 'conn-dispatch-goto)))
-    ((cl-type conn-dispatch-goto)
-     (setf (oref cont action) nil))))
 
 (cl-defmethod conn-dispatch-command-case ((command (head conn-dispatch-command))
                                           cont)
@@ -4903,6 +4887,17 @@ Returns a cons of (STRING . OVERLAYS)."
       (insert str2)
       (accept-change-group cg))))
 
+(cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-over-or-goto))
+                                          cont)
+  (conn-action-cancel (oref cont action))
+  (pcase (oref cont action)
+    ('nil
+     (setf (oref cont action) (conn-action 'conn-dispatch-over)))
+    ((cl-type conn-dispatch-over)
+     (setf (oref cont action) (conn-action 'conn-dispatch-goto)))
+    ((cl-type conn-dispatch-goto)
+     (setf (oref cont action) nil))))
+
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
   "f" 'conn-dispatch-over-or-goto
@@ -5376,6 +5371,9 @@ Expansions and contractions are provided by functions in
   "h" 'conn-expand
   "v" 'conn-toggle-mark-command
   "e" 'end
+  "<mouse-3>" 'end
+  "<mouse-1>" 'conn-expand
+  "S-<mouse-1>" 'conn-contract
   "<escape>" 'end)
 
 (defun conn--read-expand-case (command _cont)
@@ -8173,15 +8171,23 @@ Operates with the selected windows parent window."
              finally (mapc #'delete-window to-delete))))
 
 (static-if (<= 31 emacs-major-version)
-    (define-keymap
-      :keymap conn-wincontrol-map
-      "\\" 'window-layout-transpose
-      "," 'rotate-windows-back
-      "." 'rotate-windows
-      "<" 'window-layout-rotate-anticlockwise
-      ">" 'window-layout-rotate-clockwise
-      "|" 'window-layout-flip-leftright
-      "_" 'window-layout-flip-topdown))
+    (progn
+      (define-keymap
+        :keymap conn-wincontrol-map
+        "\\" 'window-layout-transpose
+        "," 'rotate-windows-back
+        "." 'rotate-windows
+        "<" 'window-layout-rotate-anticlockwise
+        ">" 'window-layout-rotate-clockwise
+        "|" 'window-layout-flip-leftright
+        "_" 'window-layout-flip-topdown)
+
+      (defvar-keymap conn-window-rotate-repeat-map
+        :repeat t
+        "<" 'window-layout-rotate-anticlockwise
+        ">" 'window-layout-rotate-clockwise
+        "," 'rotate-windows-back
+        "." 'rotate-windows)))
 
 
 ;;;; Keymaps
