@@ -462,11 +462,6 @@ the original binding.  Also see `conn-remap-key'."
                                   (key-binding from-keys t))))
                    (if (keymapp binding) binding real-binding))))))
 
-(defun conntext-binding-form (conntext-function)
-  (cl-check-type conntext-function symbol)
-  `(menu-item (symbol-name ,conntext-function) :conntext-key
-              :filter ,(lambda (_) (funcall conntext-function))))
-
 
 ;;;;; Region Utils
 
@@ -3396,6 +3391,17 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
           (conn-state-loop-exit))
       (conn-state-loop-error "Invalid command"))))
 
+(cl-defmethod conn-dispatch-command-case ((command (eql conn-dispatch-jump-or-goto))
+                                          cont)
+  (conn-action-cancel (oref cont action))
+  (pcase (oref cont action)
+    ('nil
+     (setf (oref cont action) (conn-action 'conn-dispatch-jump)))
+    ((cl-type conn-dispatch-jump)
+     (setf (oref cont action) (conn-action 'conn-dispatch-goto)))
+    ((cl-type conn-dispatch-goto)
+     (setf (oref cont action) nil))))
+
 (cl-defmethod conn-dispatch-command-case ((command (head conn-dispatch-command))
                                           cont)
   (pcase-let ((`(,thing ,finder ,default-action) (cdr command)))
@@ -4899,12 +4905,13 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
+  "f" 'conn-dispatch-jump-or-goto
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-yank-read-to
   "t" 'conn-dispatch-throw
-  "T" 'conn-dispatch-throw-replace
+  "v" 'conn-dispatch-throw-replace
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -4921,18 +4928,16 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-register-prefix>" 'conn-dispatch-register-load
   "P" 'conn-dispatch-register-replace
   "w" 'conn-dispatch-kill
-  "<remap> <conn-kill-append>" 'conn-dispatch-kill-append
-  "<remap> <conn-kill-prepend>" 'conn-dispatch-kill-prepend
+  "<remap> <conn-kill-append-region>" 'conn-dispatch-kill-append
+  "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
   "C" 'conn-dispatch-copy-as-kill
-  "<remap> <conn-copy-append>" 'conn-dispatch-copy-append
-  "<remap> <conn-copy-prepend>" 'conn-dispatch-copy-prepend
+  "<remap> <conn-append-region>" 'conn-dispatch-copy-append
+  "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend
   "e" 'conn-dispatch-copy-replace
   "d" 'conn-dispatch-cut-replace
   "c" 'conn-dispatch-copy
   "x" 'conn-dispatch-cut
-  "g" 'conn-dispatch-goto
-  "f" 'conn-dispatch-over
-  "SPC" 'conn-dispatch-jump
+  "SPC" 'conn-dispatch-over
   "q" 'conn-dispatch-transpose)
 
 
@@ -8786,7 +8791,8 @@ Operates with the selected windows parent window."
  :bounds-op (lambda ()
               (save-mark-and-excursion
                 (outline-mark-subtree)
-                (cons (region-beginning) (region-end)))))
+                (cons (region-beginning) (region-end))))
+ :forward-op 'outline-next-visible-heading)
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler
