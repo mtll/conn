@@ -3274,6 +3274,38 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
+(defmacro conn-with-dispatch-event-handler (handler &rest body)
+  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
+  (declare (indent 1))
+  (cl-with-gensyms (return handle event)
+    `(catch ',handle
+       (let ((conn--dispatch-read-event-handlers
+              (cons (lambda (,event)
+                      (catch ',return
+                        (cl-letf (((symbol-function 'conn-dispatch-ignore-event)
+                                   (lambda () (throw ',return t)))
+                                  ((symbol-function 'conn-dispatch-handle-event)
+                                   (lambda (&optional result) (throw ',handle result))))
+                          (pcase ,event
+                            ,(cdr handler)))
+                        nil))
+                    conn--dispatch-read-event-handlers))
+             (conn--dispatch-event-message-prefixes
+              (cons ,(car handler)
+                    conn--dispatch-event-message-prefixes)))
+         ,@body))))
+
+(defmacro conn-with-dispatch-event-handlers (handlers &rest body)
+  "\(fn ((DESCRIPTION &rest CASE) ...) &body BODY)"
+  (declare (indent 1))
+  `(conn-with-dispatch-event-handler
+       ,(car handlers)
+     ,@(if (cdr handlers)
+           `((conn-with-dispatch-event-handlers
+                 ,(cdr handlers)
+               ,@body))
+         body)))
+
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
@@ -3878,38 +3910,6 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-handle-event (&optional _result)
   (error "Function only available in dispatch event handler"))
-
-(defmacro conn-with-dispatch-event-handler (handler &rest body)
-  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
-  (declare (indent 1))
-  (cl-with-gensyms (return handle event)
-    `(catch ',handle
-       (let ((conn--dispatch-read-event-handlers
-              (cons (lambda (,event)
-                      (catch ',return
-                        (cl-letf (((symbol-function 'conn-dispatch-ignore-event)
-                                   (lambda () (throw ',return t)))
-                                  ((symbol-function 'conn-dispatch-handle-event)
-                                   (lambda (&optional result) (throw ',handle result))))
-                          (pcase ,event
-                            ,(cdr handler)))
-                        nil))
-                    conn--dispatch-read-event-handlers))
-             (conn--dispatch-event-message-prefixes
-              (cons ,(car handler)
-                    conn--dispatch-event-message-prefixes)))
-         ,@body))))
-
-(defmacro conn-with-dispatch-event-handlers (handlers &rest body)
-  "\(fn ((DESCRIPTION &rest CASE) ...) &body BODY)"
-  (declare (indent 1))
-  `(conn-with-dispatch-event-handler
-       ,(car handlers)
-     ,@(if (cdr handlers)
-           `((conn-with-dispatch-event-handlers
-                 ,(cdr handlers)
-               ,@body))
-         body)))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
   (let* ((prefix
