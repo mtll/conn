@@ -3282,12 +3282,14 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
        (let ((conn--dispatch-read-event-handlers
               (cons (lambda (,event)
                       (catch ',return
-                        (cl-letf (((symbol-function 'conn-dispatch-ignore-event)
-                                   (lambda () (throw ',return t)))
-                                  ((symbol-function 'conn-dispatch-handle-event)
-                                   (lambda (&optional result) (throw ',handle result))))
-                          (pcase ,event
-                            ,(cdr handler)))
+                        ,(macroexpand-all
+                          `(pcase ,event ,(cdr handler))
+                          `((conn-dispatch-ignore-event
+                             . ,(lambda () `(throw ',return t)))
+                            (conn-dispatch-handle-event
+                             . ,(lambda (&optional result)
+                                  `(throw ',handle ,result)))
+                            ,@macroexpand-all-environment))
                         nil))
                     conn--dispatch-read-event-handlers))
              (conn--dispatch-event-message-prefixes
