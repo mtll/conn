@@ -1935,10 +1935,8 @@ themselves once the selection process has concluded."
           (conn--loop-error-message ""))
       (catch 'state-loop-exit
         (while t
-          (pcase (prog1 (thread-first
-                          (funcall message-function cont conn--loop-error-message)
-                          (read-key-sequence)
-                          (key-binding t))
+          (funcall message-function cont conn--loop-error-message)
+          (pcase (prog1 (key-binding (read-key-sequence nil) t)
                    (setf conn--loop-error-message ""))
             ('nil nil)
             ('digit-argument
@@ -2010,24 +2008,25 @@ themselves once the selection process has concluded."
                        :initial-arg initial-arg))
 
 (defun conn-read-mover-message (cont error-message)
-  (substitute-command-keys
-   (concat
-    (propertize "Thing Mover" 'face 'minibuffer-prompt)
-    " (arg: "
-    (propertize (conn-state-loop-format-prefix-arg)
-                'face 'read-multiple-choice-face)
-    "; \\[reset-arg] reset arg; \\[help] commands"
-    (if (oref cont recursive-edit)
-        (concat "; \\[recursive-edit] "
-                "recursive edit):")
-      "):")
-    " "
-    (if (oref cont mark-flag)
-        (concat (propertize "Mark Active"
-                            'face 'eldoc-highlight-function-argument)
-                " ")
-      "")
-    (propertize error-message 'face 'error))))
+  (message
+   (substitute-command-keys
+    (concat
+     (propertize "Thing Mover" 'face 'minibuffer-prompt)
+     " (arg: "
+     (propertize (conn-state-loop-format-prefix-arg)
+                 'face 'read-multiple-choice-face)
+     "; \\[reset-arg] reset arg; \\[help] commands"
+     (if (oref cont recursive-edit)
+         (concat "; \\[recursive-edit] "
+                 "recursive edit):")
+       "):")
+     " "
+     (if (oref cont mark-flag)
+         (concat (propertize "Mark Active"
+                             'face 'eldoc-highlight-function-argument)
+                 " ")
+       "")
+     (propertize error-message 'face 'error)))))
 
 (defun conn-read-thing-mover (&optional arg recursive-edit)
   "Interactively read a thing command and arg.
@@ -3321,25 +3320,26 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
                       'face 'eldoc-highlight-function-argument)
                      " ")
            "")))
-    (substitute-command-keys
-     (concat
-      (propertize "Targets" 'face 'minibuffer-prompt)
-      " (arg: "
-      (propertize
-       (conn-state-loop-format-prefix-arg)
-       'face 'read-multiple-choice-face)
-      "; \\[reset-arg] reset arg; "
-      (when (oref cont repeatable)
-        (concat
-         "\\[repeat-dispatch] "
-         (propertize
-          "repeatedly"
-          'face (when (oref cont repeat)
-                  'eldoc-highlight-function-argument))
-         "; "))
-      "\\[help] commands): "
-      action-description
-      (propertize error-message 'face 'error)))))
+    (message
+     (substitute-command-keys
+      (concat
+       (propertize "Targets" 'face 'minibuffer-prompt)
+       " (arg: "
+       (propertize
+        (conn-state-loop-format-prefix-arg)
+        'face 'read-multiple-choice-face)
+       "; \\[reset-arg] reset arg; "
+       (when (oref cont repeatable)
+         (concat
+          "\\[repeat-dispatch] "
+          (propertize
+           "repeatedly"
+           'face (when (oref cont repeat)
+                   'eldoc-highlight-function-argument))
+          "; "))
+       "\\[help] commands): "
+       action-description
+       (propertize error-message 'face 'error))))))
 
 (cl-defmethod conn-with-state-loop ( state (cont conn-dispatch-continuation)
                                      &key
@@ -3925,11 +3925,13 @@ Target overlays may override this default by setting the
                   (when prefix (propertize ") " 'face 'minibuffer-prompt))
                   prompt)))
     (catch 'char
-      (while-let ((ev (read-event prompt inherit-input-method seconds)))
+      (message prompt)
+      (while-let ((ev (read-event nil inherit-input-method seconds)))
         (cond
          ((cl-loop for handler in conn--dispatch-read-event-handlers
                    thereis (funcall handler ev)))
-         ((characterp ev) (throw 'char ev)))))))
+         ((characterp ev) (throw 'char ev)))
+        (message prompt)))))
 
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
@@ -5393,17 +5395,18 @@ Expansions and contractions are provided by functions in
     (_ (conn-state-loop-error "Invalid command"))))
 
 (defun conn--read-expand-message (_cont error-message)
-  (substitute-command-keys
-   (concat (propertize "Expansion: " 'face 'minibuffer-prompt)
-           "(arg: "
-           (propertize (conn-state-loop-format-prefix-arg)
-                       'face 'read-multiple-choice-face)
-           "; "
-           "\\[conn-expand] expand; "
-           "\\[conn-contract] contract; "
-           "\\[conn-toggle-mark-command] toggle mark; "
-           "\\[end] finish): "
-           (propertize error-message 'face 'error))))
+  (message
+   (substitute-command-keys
+    (concat (propertize "Expansion: " 'face 'minibuffer-prompt)
+            "(arg: "
+            (propertize (conn-state-loop-format-prefix-arg)
+                        'face 'read-multiple-choice-face)
+            "; "
+            "\\[conn-expand] expand; "
+            "\\[conn-contract] contract; "
+            "\\[conn-toggle-mark-command] toggle mark; "
+            "\\[end] finish): "
+            (propertize error-message 'face 'error)))))
 
 (defun conn--bounds-of-expansion (cmd arg)
   (call-interactively cmd)
@@ -6793,12 +6796,25 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "k" 'forward-line
   "u" 'forward-symbol)
 
-(defun conn--transpose-message ()
-  (substitute-command-keys
-   (concat
-    "Define region. "
-    "Press \\[exit-recursive-edit] to end and use current region. "
-    "Press \\[abort-recursive-edit] to abort.")))
+(defun conn--transpose-recursive-message ()
+  (message
+   (substitute-command-keys
+    (concat
+     "Define region. "
+     "Press \\[exit-recursive-edit] to end and use current region. "
+     "Press \\[abort-recursive-edit] to abort."))))
+
+(defun conn--transpose-message (_cont error-message)
+  (message
+   (substitute-command-keys
+    (concat
+     (propertize "Thing Mover" 'face 'minibuffer-prompt)
+     " (arg: "
+     (propertize (conn-state-loop-format-prefix-arg)
+                 'face 'read-multiple-choice-face)
+     "; \\[reset-arg] reset arg; \\[help] commands"
+     "; \\[recursive-edit] recursive edit): "
+     (propertize error-message 'face 'error)))))
 
 (defvar conn--transpose-eldoc-prev-msg-fn)
 
@@ -6810,10 +6826,10 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
       (progn
         (setq conn--transpose-eldoc-prev-msg-fn eldoc-message-function
               eldoc-message-function #'ignore)
-        (add-hook 'post-command-hook 'conn--transpose-message))
+        (add-hook 'post-command-hook 'conn--transpose-recursive-message))
     (setq eldoc-message-function conn--transpose-eldoc-prev-msg-fn
           conn--transpose-eldoc-prev-msg-fn nil)
-    (remove-hook 'post-command-hook 'conn--transpose-message)))
+    (remove-hook 'post-command-hook 'conn--transpose-recursive-message)))
 
 (define-keymap
   :keymap (conn-get-mode-map 'conn-command-state
@@ -6837,6 +6853,7 @@ region after a `recursive-edit'."
         ()
       (list thing-cmd thing-arg))
     :initial-arg current-prefix-arg
+    :message-function 'conn--transpose-message
     :case-function (lambda (command cont)
                      (pcase command
                        ((or 'conn-expand 'conn-contract)
