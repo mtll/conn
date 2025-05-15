@@ -4897,12 +4897,12 @@ Returns a cons of (STRING . OVERLAYS)."
                                           cont)
   (conn-action-cancel (oref cont action))
   (pcase (oref cont action)
-    ('nil
-     (setf (oref cont action) (conn-action 'conn-dispatch-over)))
     ((cl-type conn-dispatch-over)
      (setf (oref cont action) (conn-action 'conn-dispatch-goto)))
     ((cl-type conn-dispatch-goto)
-     (setf (oref cont action) nil))))
+     (setf (oref cont action) nil))
+    (_
+     (setf (oref cont action) (conn-action 'conn-dispatch-over)))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
