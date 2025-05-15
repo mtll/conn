@@ -3255,6 +3255,8 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
                               conn-dispatch-read-string-with-timeout)
   "L" `(conn-dispatch-command
         conn-backward-inner-line ,(lambda () (conn-dispatch-inner-lines t)))
+  ";" `(conn-dispatch-command
+        conn-backward-inner-line ,(lambda () (conn-dispatch-inner-lines t)))
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
   "O" `(conn-dispatch-command
@@ -3292,9 +3294,9 @@ For the meaning of ACTION see `conn-define-dispatch-action'.")
                             ,@macroexpand-all-environment))
                         nil))
                     conn--dispatch-read-event-handlers))
-             (conn--dispatch-event-message-prefixes
+             (conn--dispatch-read-event-message-prefixes
               (cons ,(car handler)
-                    conn--dispatch-event-message-prefixes)))
+                    conn--dispatch-read-event-message-prefixes)))
          ,@body))))
 
 (defmacro conn-with-dispatch-event-handlers (handlers &rest body)
@@ -3905,7 +3907,7 @@ Target overlays may override this default by setting the
 
 (defvar conn--dispatch-read-event-handlers nil)
 
-(defvar conn--dispatch-event-message-prefixes nil)
+(defvar conn--dispatch-read-event-message-prefixes nil)
 
 (defun conn-dispatch-ignore-event ()
   (error "Function only available in dispatch event handler"))
@@ -3919,7 +3921,7 @@ Target overlays may override this default by setting the
                               (pcase pfx
                                 ((pred functionp) (funcall pfx))
                                 ((pred stringp) pfx)))
-                            (reverse conn--dispatch-event-message-prefixes))))
+                            (reverse conn--dispatch-read-event-message-prefixes))))
          (prompt
           (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
                   (mapconcat 'identity prefix
@@ -5096,7 +5098,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-target-predicate conn-target-predicate)
         (conn-target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
-        (conn--dispatch-event-message-prefixes conn--dispatch-event-message-prefixes))
+        (conn--dispatch-read-event-message-prefixes conn--dispatch-read-event-message-prefixes))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))
@@ -5159,14 +5161,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive "P")
-  ;; This is a stub, conn-dispatch-state will update the
-  ;; symbol-function value after each call.
+  ;; conn-perform-dispatch will set this function value to the last
+  ;; dispatch each time it is run.
   (user-error "No last dispatch command"))
 
 (defun conn-last-dispatch-at-mouse (_event)
   (interactive "e")
-  ;; This is a stub, conn-dispatch-state will update the
-  ;; symbol-function value after each call.
+  ;; conn-perform-dispatch will set this function value to the last
+  ;; dispatch each time it is run.
   (user-error "No last dispatch command"))
 
 (defun conn-bind-last-dispatch-to-key ()
