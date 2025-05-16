@@ -3406,7 +3406,7 @@ associated with a command's thing.")
        (setf (oref cont action)
              (conn-make-action (conn--dispatch-default-action command))))
      (conn-state-loop-exit))
-    ((pred conn--action-name-p)
+    ((pred conn--action-type-p)
      (conn-cancel-action (oref cont action))
      (if (cl-typep (oref cont action) command)
          (setf (oref cont action) nil)
@@ -3450,7 +3450,7 @@ associated with a command's thing.")
              ('help)
              ((pred functionp)
               (or (get sym :conn-command-thing)
-                  (conn--action-name-p sym)))
+                  (conn--action-type-p sym)))
              (`(,cmd ,_ . ,_)
               (or (get cmd :conn-mark-handler)
                   (get cmd 'forward-op)))))
@@ -4176,8 +4176,10 @@ Returns a cons of (STRING . OVERLAYS)."
   (target-predicate)
   (always-retarget))
 
-(defun conn--action-name-p (symbol)
-  (not (not (cl-find-method 'conn-make-action nil `((eql ,symbol))))))
+(defun conn--action-type-p (item)
+  (when (symbolp item)
+    (memq 'conn-action
+          (oclosure--class-allparents (cl--find-class item)))))
 
 (cl-defgeneric conn-make-action (type)
   (:method (type) (error "Unknown action type %s" type)))
@@ -5302,7 +5304,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat)
-  (when (conn--action-name-p action)
+  (when (conn--action-type-p action)
     (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
