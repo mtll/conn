@@ -161,7 +161,7 @@
 (oclosure-define (conn-open-org-link
                   (:parent conn-action)))
 
-(conn-define-action conn-open-org-link
+(cl-defmethod conn-make-action ((_type (eql conn-open-org-link)))
   (oclosure-lambda (conn-open-org-link)
       (window pt _thing-cmd _thing-arg)
     (with-selected-window window

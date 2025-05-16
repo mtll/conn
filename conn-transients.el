@@ -641,7 +641,7 @@ A zero means repeat until error."
                   (:parent conn-action))
   (macro :mutable t))
 
-(conn-define-action conn-dispatch-kapply
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
   (letrec ((wconf (current-window-configuration))
            (action nil)
            (setup (lambda ()

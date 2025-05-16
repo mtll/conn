@@ -3394,33 +3394,26 @@ associated with a command's thing.")
       (unless success
         (conn-action-cancel (oref cont action))))))
 
-(static-if (>= emacs-major-version 31)
-    (progn
-      (cl-defmethod conn-dispatch-command-case (_command _cont)
-        (conn-state-loop-error "Invalid command"))
-
-      (cl-defmethod conn-dispatch-command-case ((command conn-thing-command) cont)
-        (setf (oref cont target-finder) (conn--dispatch-target-finder command)
-              (oref cont thing-cmd) command
-              (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
-        (when (null (oref cont action))
-          (setf (oref cont action)
-                (conn-action (conn--dispatch-default-action command))))
-        (conn-state-loop-exit)))
-
-  (cl-defmethod conn-dispatch-command-case (command cont)
-    (if (or (alist-get command conn-bounds-of-command-alist)
-            (when (symbolp command)
-              (get command :conn-command-thing)))
-        (progn
-          (setf (oref cont target-finder) (conn--dispatch-target-finder command)
-                (oref cont thing-cmd) command
-                (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
-          (when (null (oref cont action))
-            (setf (oref cont action)
-                  (conn-action (conn--dispatch-default-action command))))
-          (conn-state-loop-exit))
-      (conn-state-loop-error "Invalid command"))))
+(cl-defmethod conn-dispatch-command-case (command cont)
+  (pcase command
+    ((pred conn--action-type-p)
+     (conn-action-cancel (oref cont action))
+     (if (cl-typep (oref cont action) command)
+         (setf (oref cont action) nil)
+       (setf (oref cont action) (condition-case _
+                                    (conn-make-action command)
+                                  (error nil)))))
+    ((guard (or (alist-get command conn-bounds-of-command-alist)
+                (when (symbolp command)
+                  (get command :conn-command-thing))))
+     (setf (oref cont target-finder) (conn--dispatch-target-finder command)
+           (oref cont thing-cmd) command
+           (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
+     (when (null (oref cont action))
+       (setf (oref cont action)
+             (conn-make-action (conn--dispatch-default-action command))))
+     (conn-state-loop-exit))
+    (_ (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-dispatch-command-case ((command (head conn-dispatch-command))
                                           cont)
@@ -3430,8 +3423,8 @@ associated with a command's thing.")
           (oref cont target-finder) finder)
     (when (null (oref cont action))
       (setf (oref cont action)
-            (conn-action (or default-action
-                             (conn--dispatch-default-action thing)))))
+            (conn-make-action (or default-action
+                                  (conn--dispatch-default-action thing)))))
     (conn-state-loop-exit)))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql repeat-dispatch))
@@ -4190,37 +4183,16 @@ Returns a cons of (STRING . OVERLAYS)."
                        (oclosure--class-allparents
                         (cl--find-class symbol)))))
 
-(cl-defgeneric conn-action (action-type)
-  (:method ((action conn-action)) action))
+(cl-defgeneric conn-make-action (type))
 
-(defmacro conn-define-action (name &rest ctor-body)
-  (declare (indent 1))
-  `(progn
-     (cl-defmethod conn-action ((type (eql ,name)))
-       (if-let* ((instance ,(macroexp-progn ctor-body)))
-           (progn
-             (conn-action-initialize instance)
-             instance)
-         (error "Failed to construct %s" type)))
-
-     (cl-defmethod conn-dispatch-command-case ((type (eql ,name)) cont)
-       (conn-action-cancel (oref cont action))
-       (if (cl-typep (oref cont action) type)
-           (setf (oref cont action) nil)
-         (setf (oref cont action) (condition-case _
-                                      (conn-action type)
-                                    (error nil)))))))
-
-(cl-defgeneric conn-action-description (action))
-
-(cl-defgeneric conn-action-initialize (action)
-  (:method ((_ conn-action)) "Noop" nil))
-
-(cl-defmethod conn-action-initialize :around (_action)
+(cl-defmethod conn-make-action :around (type)
   (let ((wconf (current-window-configuration)))
     (unwind-protect
-        (cl-call-next-method)
+        (or (cl-call-next-method)
+            (error "Failed to construct %s" type))
       (set-window-configuration wconf))))
+
+(cl-defgeneric conn-action-description (action))
 
 (cl-defgeneric conn-action-accept (action)
   (:method ((_ conn-action)) "Noop" nil))
@@ -4258,7 +4230,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-goto
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto)
       (window pt thing-cmd thing-arg)
     (select-window window)
@@ -4285,7 +4257,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-push-button
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-push-button
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
   (oclosure-lambda (conn-dispatch-push-button)
       (window pt _thing-cmd _thing-arg)
     (select-window window)
@@ -4299,10 +4271,11 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-yank-replace-to
                   (:parent conn-action))
-  (str :mutable t))
+  (str))
 
-(conn-define-action conn-dispatch-yank-replace-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-replace-to
+                    (str (funcall region-extract-function nil))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4323,15 +4296,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-replace-to))
   "Yank and Replace To")
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-replace-to))
-  (setf (oref action str) (funcall region-extract-function nil)))
-
 (oclosure-define (conn-dispatch-yank-read-replace-to
                   (:parent conn-action))
-  (str :mutable t))
+  (str))
 
-(conn-define-action conn-dispatch-yank-read-replace-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-read-replace-to
+                    (str (read-from-kill-ring "Yank: "))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4352,17 +4323,16 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-read-replace-to))
   "Yank and Replace To")
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-read-replace-to))
-  (setf (oref action str)
-        (read-from-kill-ring "Yank: ")))
-
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
-  (str :mutable t)
-  (seperator :mutable t))
+  (str)
+  (seperator))
 
-(conn-define-action conn-dispatch-yank-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
   (oclosure-lambda (conn-dispatch-yank-to
+                    (str (funcall region-extract-function nil))
+                    (seperator (when (conn-state-loop-consume-prefix-arg)
+                                 (read-string "Seperator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4379,11 +4349,6 @@ Returns a cons of (STRING . OVERLAYS)."
                                                (+ (length str)
                                                   (length seperator)))
                                             (point)))))))
-
-(cl-defmethod conn-action-initialize ((action conn-dispatch-yank-to))
-  (setf (oref action str) (funcall region-extract-function nil))
-  (when (conn-state-loop-consume-prefix-arg)
-    (setf (oref action seperator) (read-string "Seperator: " nil nil nil t))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-yank-to))
   (if-let* ((sep (oref action seperator)))
@@ -4392,11 +4357,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-reading-yank-to
                   (:parent conn-action))
-  (str :mutable t)
-  (seperator :mutable t))
+  (str)
+  (seperator))
 
-(conn-define-action conn-dispatch-reading-yank-to
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
   (oclosure-lambda (conn-dispatch-reading-yank-to
+                    (str (read-from-kill-ring "Yank To: "))
+                    (seperator (when (conn-state-loop-consume-prefix-arg)
+                                 (read-string "Seperator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4413,12 +4381,6 @@ Returns a cons of (STRING . OVERLAYS)."
                                                (+ (length str)
                                                   (length seperator)))
                                             (point)))))))
-
-(cl-defmethod conn-action-initialize ((action conn-dispatch-reading-yank-to))
-  (setf (oref action str)
-        (read-from-kill-ring "Yank To: "))
-  (when (conn-state-loop-consume-prefix-arg)
-    (setf (oref action seperator) (read-string "Seperator: " nil nil nil t))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-reading-yank-to))
   (if-let* ((sep (oref action seperator)))
@@ -4427,37 +4389,36 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-send
                   (:parent conn-action))
-  (str :mutable t)
-  (seperator :mutable t)
+  (str)
+  (seperator)
   (change-group :mutable t))
 
-(conn-define-action conn-dispatch-send
-  (oclosure-lambda (conn-dispatch-send
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt _thing-cmd _thing-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (insert-for-yank str)
-        (when seperator (insert seperator))
-        (unless executing-kbd-macro
-          (pulse-momentary-highlight-region (- (point)
-                                               (+ (length str)
-                                                  (length seperator)))
-                                            (point)))))))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
+  (let ((cg (conn--action-buffer-change-group)))
+    (oclosure-lambda (conn-dispatch-send
+                      (change-group cg)
+                      (str (funcall region-extract-function t))
+                      (seperator (when (conn-state-loop-consume-prefix-arg)
+                                   (read-string "Seperator: " nil nil nil t)))
+                      (window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win))))))
+        (window pt _thing-cmd _thing-arg)
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (insert-for-yank str)
+          (when seperator (insert seperator))
+          (unless executing-kbd-macro
+            (pulse-momentary-highlight-region (- (point)
+                                                 (+ (length str)
+                                                    (length seperator)))
+                                              (point))))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-send))
   "Send")
-
-(cl-defmethod conn-action-initialize ((action conn-dispatch-send))
-  (setf (oref action change-group) (conn--action-buffer-change-group)
-        (oref action str) (funcall region-extract-function t))
-  (when (conn-state-loop-consume-prefix-arg)
-    (setf (oref action seperator) (read-string "Seperator: " nil nil nil t))))
 
 (cl-defmethod conn-action-description ((action conn-dispatch-reading-yank-to))
   (if-let* ((sep (oref action seperator)))
@@ -4473,34 +4434,33 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-send-replace
                   (:parent conn-action))
-  (str :mutable t)
-  (change-group :mutable t))
+  (str)
+  (change-group))
 
-(conn-define-action conn-dispatch-send-replace
-  (oclosure-lambda (conn-dispatch-send-replace
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-          (`(,beg . ,end)
-           (delete-region beg end)
-           (insert-for-yank str)
-           (unless executing-kbd-macro
-             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-send-replace)))
+  (let ((cg (conn--action-buffer-change-group)))
+    (oclosure-lambda (conn-dispatch-send-replace
+                      (change-group cg)
+                      (str (funcall region-extract-function t))
+                      (window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win))))))
+        (window pt thing-cmd thing-arg)
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+            (`(,beg . ,end)
+             (delete-region beg end)
+             (insert-for-yank str)
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+            (_ (user-error "Cannot find %s at point" thing-cmd))))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-send-replace))
   "Send and Replace")
-
-(cl-defmethod conn-action-initialize ((action conn-dispatch-send-replace))
-  (setf (oref action change-group) (conn--action-buffer-change-group)
-        (oref action str) (funcall region-extract-function t)))
 
 (cl-defmethod conn-action-accept ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group (oref action change-group))
@@ -4512,7 +4472,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-downcase
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-downcase
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-downcase)))
   (oclosure-lambda (conn-dispatch-downcase
                     (window-predicate
                      (lambda (win)
@@ -4533,7 +4493,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-upcase
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-upcase
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-upcase)))
   (oclosure-lambda (conn-dispatch-upcase
                     (window-predicate
                      (lambda (win)
@@ -4554,7 +4514,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-capitalize
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-capitalize
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-capitalize)))
   (oclosure-lambda (conn-dispatch-capitalize
                     (window-predicate
                      (lambda (win)
@@ -4575,7 +4535,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-narrow-indirect
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-narrow-indirect
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-narrow-indirect)))
   (oclosure-lambda (conn-dispatch-narrow-indirect)
       (window pt thing-cmd thing-arg)
     (with-current-buffer (window-buffer window)
@@ -4592,7 +4552,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-comment
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-comment
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-comment)))
   (oclosure-lambda (conn-dispatch-comment
                     (window-predicate
                      (lambda (win)
@@ -4614,10 +4574,11 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-duplicate
                   (:parent conn-action))
-  (arg :mutable t))
+  (arg))
 
-(conn-define-action conn-dispatch-duplicate
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-duplicate)))
   (oclosure-lambda (conn-dispatch-duplicate
+                    (arg (conn-state-loop-consume-prefix-arg))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4636,15 +4597,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-description ((_action conn-dispatch-duplicate))
   "Duplicate")
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate))
-  (setf (oref action arg) (conn-state-loop-consume-prefix-arg)))
-
 (oclosure-define (conn-dispatch-duplicate-and-comment
                   (:parent conn-action))
-  (arg :mutable t))
+  (arg))
 
-(conn-define-action conn-dispatch-duplicate-and-comment
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-duplicate-and-comment)))
   (oclosure-lambda (conn-dispatch-duplicate-and-comment
+                    (arg (conn-state-loop-consume-prefix-arg))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4663,15 +4622,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-action-description ((_action conn-dispatch-duplicate-and-comment))
   "Duplicate and Comment")
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-duplicate-and-comment))
-  (setf (oref action arg) (conn-state-loop-consume-prefix-arg)))
-
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-register-load
-  (oclosure-lambda (conn-dispatch-register-load)
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
+  (oclosure-lambda (conn-dispatch-register-load
+                    (register (register-read-with-preview "Register: ")))
       (window pt _thing-cmd _thing-arg)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
@@ -4681,9 +4638,6 @@ Returns a cons of (STRING . OVERLAYS)."
           (goto-char pt)
           (conn-register-load register))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-register-load))
-  (setf (oref action register) (register-read-with-preview "Register: ")))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-register-load))
   (format "Register <%c>" (oref action register)))
 
@@ -4691,8 +4645,9 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(conn-define-action conn-dispatch-register-replace
-  (oclosure-lambda (conn-dispatch-register-replace)
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
+  (oclosure-lambda (conn-dispatch-register-replace
+                    (register (register-read-with-preview "Register: ")))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
@@ -4706,18 +4661,17 @@ Returns a cons of (STRING . OVERLAYS)."
              (conn-register-load register))
             (_ (user-error "Cannot find %s at point" thing-cmd))))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-register-replace))
-  (setf (oref action register) (register-read-with-preview "Register: ")))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-register-replace))
   (format "Register Replace <%c>" (oref action register)))
 
 (oclosure-define (conn-dispatch-kill
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-kill
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill)))
   (oclosure-lambda (conn-dispatch-kill
+                    (register (when (conn-state-loop-consume-prefix-arg)
+                                (register-read-with-preview "Register: ")))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4739,21 +4693,18 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Killed thing"))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-kill))
-  (setf (oref action register)
-        (when (conn-state-loop-consume-prefix-arg)
-          (register-read-with-preview "Register: "))))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-kill))
   (if-let* ((register (oref action register)))
       (format "Kill to Register <%c>" register)
     "Kill"))
 
 (oclosure-define (conn-dispatch-kill-append (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-kill-append
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-append)))
   (oclosure-lambda (conn-dispatch-kill-append
+                    (register (when (conn-state-loop-consume-prefix-arg)
+                                (register-read-with-preview "Register: ")))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4774,11 +4725,6 @@ Returns a cons of (STRING . OVERLAYS)."
              (message "Appended: %s" str)))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-kill-append))
-  (setf (oref action register)
-        (when (conn-state-loop-consume-prefix-arg)
-          (register-read-with-preview "Register: "))))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-kill-append))
   (if-let* ((register (oref action register)))
       (format "Kill Append Register <%c>" register)
@@ -4786,10 +4732,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-kill-prepend
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-kill-prepend
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-prepend)))
   (oclosure-lambda (conn-dispatch-kill-prepend
+                    (register (when (conn-state-loop-consume-prefix-arg)
+                                (register-read-with-preview "Register: ")))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4810,11 +4758,6 @@ Returns a cons of (STRING . OVERLAYS)."
              (message "Prepended: %s" str)))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-kill-prepend))
-  (setf (oref action arg)
-        (when (conn-state-loop-consume-prefix-arg)
-          (register-read-with-preview "Register: "))))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-kill-prepend))
   (if-let* ((register (oref action register)))
       (format "Kill Prepend Register <%c>" register)
@@ -4822,10 +4765,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-as-kill
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-copy-as-kill
-  (oclosure-lambda (conn-dispatch-copy-as-kill)
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-as-kill)))
+  (oclosure-lambda (conn-dispatch-copy-as-kill
+                    (register (when (conn-state-loop-consume-prefix-arg)
+                                (register-read-with-preview "Register: "))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-excursion
@@ -4841,11 +4786,6 @@ Returns a cons of (STRING . OVERLAYS)."
                   (kill-new (filter-buffer-substring beg end)))))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-copy-as-kill))
-  (setf (oref action register)
-        (when (conn-state-loop-consume-prefix-arg)
-          (register-read-with-preview "Register: "))))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-copy-as-kill))
   (if-let* ((register (oref action register)))
       (format "Copy to Register <%c>" register)
@@ -4853,10 +4793,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-append
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-copy-append
-  (oclosure-lambda (conn-dispatch-copy-append)
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-append)))
+  (oclosure-lambda (conn-dispatch-copy-append
+                    (register (when (conn-state-loop-consume-prefix-arg)
+                                (register-read-with-preview "Register: "))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-excursion
@@ -4871,11 +4813,6 @@ Returns a cons of (STRING . OVERLAYS)."
           (_ (user-error "Cannot find %s at point"
                          (get thing-cmd :conn-command-thing))))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-copy-append))
-  (setf (oref action arg)
-        (when (conn-state-loop-consume-prefix-arg)
-          (register-read-with-preview "Register: "))))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-copy-append))
   (if-let* ((register (oref action register)))
       (format "Copy Append to Register <%c>" register)
@@ -4883,10 +4820,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-prepend
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
-(conn-define-action conn-dispatch-copy-prepend
-  (oclosure-lambda (conn-dispatch-copy-prepend)
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-prepend)))
+  (oclosure-lambda (conn-dispatch-copy-prepend
+                    (register (when (conn-state-loop-consume-prefix-arg)
+                                (register-read-with-preview "Register: "))))
       (window pt thing-cmd thing-arg)
     (with-selected-window window
       (save-excursion
@@ -4900,11 +4839,6 @@ Returns a cons of (STRING . OVERLAYS)."
              (message "Copy Prepended: %s" str)))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-initialize ((action conn-dispatch-copy-prepend))
-  (setf (oref action arg)
-        (when (conn-state-loop-consume-prefix-arg)
-          (register-read-with-preview "Register: "))))
-
 (cl-defmethod conn-action-description ((action conn-dispatch-copy-prepend))
   (if-let* ((register (oref action register)))
       (format "Copy Prepend to Register <%c>" register)
@@ -4913,7 +4847,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-yank-from
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-yank-from
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
   (oclosure-lambda (conn-dispatch-yank-from)
       (window pt thing-cmd thing-arg)
     (let (str)
@@ -4935,7 +4869,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-yank-from-replace
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-yank-from-replace
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from-replace)))
   (oclosure-lambda (conn-dispatch-yank-from-replace)
       (window pt thing-cmd thing-arg)
     (with-selected-window window
@@ -4956,7 +4890,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-take-replace (:parent conn-action)))
 
-(conn-define-action conn-dispatch-take-replace
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
   (oclosure-lambda (conn-dispatch-take-replace
                     (window-predicate
                      (lambda (win)
@@ -4980,7 +4914,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-take (:parent conn-action)))
 
-(conn-define-action conn-dispatch-take
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take
                     (window-predicate
                      (lambda (win)
@@ -5005,7 +4939,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-over
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-over
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over)
       (window pt thing-cmd thing-arg)
     (when (and (eq (window-buffer window) (current-buffer))
@@ -5040,7 +4974,7 @@ Returns a cons of (STRING . OVERLAYS)."
                    (conn--push-ephemeral-mark end))
                   ((<= beg end point)
                    (goto-char beg))))))
-        ('conn-dispatch-jump (funcall (conn-action 'conn-dispatch-jump)
+        ('conn-dispatch-jump (funcall (conn-make-action 'conn-dispatch-jump)
                                       window pt thing-cmd thing-arg))
         (_ (error "Can't jump to %s" thing-cmd))))))
 
@@ -5050,7 +4984,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-jump
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump)
       (window pt _thing-cmd _thing-arg)
     (with-current-buffer (window-buffer window)
@@ -5064,7 +4998,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-transpose
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-transpose)))
   (oclosure-lambda (conn-dispatch-transpose
                     (always-retarget t)
                     (window-predicate
@@ -5142,9 +5076,9 @@ Returns a cons of (STRING . OVERLAYS)."
         (condition-case _
             (pcase (oref cont action)
               ((cl-type conn-dispatch-over)
-               (conn-action 'conn-dispatch-goto))
+               (conn-make-action 'conn-dispatch-goto))
               ((cl-type conn-dispatch-goto) nil)
-              (_ (conn-action 'conn-dispatch-over)))
+              (_ (conn-make-action 'conn-dispatch-over)))
           (error nil))))
 
 (define-keymap
@@ -5372,7 +5306,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat)
   (when (conn--action-type-p action)
-    (setq action (conn-action-accept (conn-action action))))
+    (setq action (conn-action-accept (conn-make-action action))))
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder)))
@@ -7167,7 +7101,7 @@ region after a `recursive-edit'."
               'conn-read-transpose-state
               (oclosure-lambda (conn-dispatch-continuation
                                 (repeatable nil)
-                                (action (conn-action 'conn-dispatch-transpose)))
+                                (action (conn-make-action 'conn-dispatch-transpose)))
                   ()
                 (cl-check-type action conn-dispatch-transpose)
                 (conn-perform-dispatch
@@ -9314,7 +9248,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-mark
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-dired-mark
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-mark)))
   (oclosure-lambda (conn-dispatch-dired-mark
                     (window-predicate
                      (lambda (win)
@@ -9337,7 +9271,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-kill-line
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-dired-kill-line
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-line)))
   (oclosure-lambda (conn-dispatch-dired-kill-line
                     (window-predicate
                      (lambda (win)
@@ -9356,7 +9290,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-kill-subdir
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-dired-kill-subdir
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-subdir)))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
                     (window-predicate
                      (lambda (win)
@@ -9457,7 +9391,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-ibuffer-mark
                   (:parent conn-action)))
 
-(conn-define-action conn-dispatch-ibuffer-mark
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-ibuffer-mark)))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
                     (window-predicate
                      (lambda (win)
