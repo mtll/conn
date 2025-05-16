@@ -3865,12 +3865,12 @@ Target overlays may override this default by setting the
                 (funcall conn-target-window-predicate win))
            (conn-dispatch-handle-event (list pt win nil))
          (conn-dispatch-ignore-event)))
-    (let ((retarget-flag nil))
+    (let ((conn-label-select-always-prompt conn-label-select-always-prompt))
       (if (and conn--dispatch-current-targeter
                (not conn--dispatch-always-retarget))
           (progn
             (funcall conn--dispatch-current-targeter)
-            (setq retarget-flag t))
+            (setq conn-label-select-always-prompt t))
         (setf conn--dispatch-current-targeter (funcall target-finder))
         (when (and (= 0 conn-target-count)
                    (null conn--dispatch-current-targeter))
@@ -3883,8 +3883,6 @@ Target overlays may override this default by setting the
                           "["
                           (number-to-string conn-target-count)
                           "] chars"))
-                 (conn-label-select-always-prompt (or conn-label-select-always-prompt
-                                                      retarget-flag))
                  (result (conn-label-select labels prompt)))
             (conn--target-label-payload result))
         (conn-delete-targets)
@@ -5414,16 +5412,12 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   "Jump to an isearch match with dispatch labels."
   (interactive)
   (unwind-protect
-      (pcase-let
-          ((`(,pt ,_win ,_thing)
-            (conn-dispatch-select-target
-             (letrec ((finder
-                       (lambda ()
-                         (with-restriction (window-start) (window-end)
-                           (cl-loop for (beg . end) in (conn--isearch-matches)
-                                    do (conn-make-target-overlay beg (- end beg))))
-                         finder)))
-               finder))))
+      (pcase-let ((`(,pt ,_win ,_thing)
+                   (conn-dispatch-select-target
+                    (lambda ()
+                      (with-restriction (window-start) (window-end)
+                        (cl-loop for (beg . end) in (conn--isearch-matches)
+                                 do (conn-make-target-overlay beg (- end beg))))))))
         (isearch-done)
         (goto-char pt))
     (conn-delete-targets)))
