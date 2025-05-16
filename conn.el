@@ -3396,13 +3396,6 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
-    ((pred conn--action-type-p)
-     (conn-cancel-action (oref cont action))
-     (if (cl-typep (oref cont action) command)
-         (setf (oref cont action) nil)
-       (setf (oref cont action) (condition-case _
-                                    (conn-make-action command)
-                                  (error nil)))))
     ((guard (or (alist-get command conn-bounds-of-command-alist)
                 (when (symbolp command)
                   (get command :conn-command-thing))))
@@ -3413,6 +3406,13 @@ associated with a command's thing.")
        (setf (oref cont action)
              (conn-make-action (conn--dispatch-default-action command))))
      (conn-state-loop-exit))
+    ((pred conn--action-name-p)
+     (conn-cancel-action (oref cont action))
+     (if (cl-typep (oref cont action) command)
+         (setf (oref cont action) nil)
+       (setf (oref cont action) (condition-case _
+                                    (conn-make-action command)
+                                  (error nil)))))
     (_ (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-dispatch-command-case ((command (head conn-dispatch-command))
@@ -3450,7 +3450,7 @@ associated with a command's thing.")
              ('help)
              ((pred functionp)
               (or (get sym :conn-command-thing)
-                  (conn--action-type-p sym)))
+                  (conn--action-name-p sym)))
              (`(,cmd ,_ . ,_)
               (or (get cmd :conn-mark-handler)
                   (get cmd 'forward-op)))))
@@ -4178,12 +4178,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (target-predicate)
   (always-retarget))
 
-(defun conn--action-type-p (symbol)
-  (memq 'conn-action (ignore-errors
-                       (oclosure--class-allparents
-                        (cl--find-class symbol)))))
+(defun conn--action-name-p (symbol)
+  (not (not (cl-find-method 'conn-make-action `((eql ,symbol)) nil))))
 
-(cl-defgeneric conn-make-action (type))
+(cl-defgeneric conn-make-action (type)
+  (:method (type) (error "Unknown action type %s" type)))
 
 (cl-defmethod conn-make-action :around (type)
   (let ((wconf (current-window-configuration)))
@@ -5305,7 +5304,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat)
-  (when (conn--action-type-p action)
+  (when (conn--action-name-p action)
     (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
