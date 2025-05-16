@@ -3211,6 +3211,8 @@ associated with a command's thing.")
 
 (defvar conn-dispatch-repeat-count nil)
 
+(defvar conn--dispatch-always-retarget nil)
+
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH"
@@ -3224,7 +3226,9 @@ associated with a command's thing.")
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
   "DEL" 'retarget
+  "M-DEL" 'always-retarget
   "<backspace>" 'retarget
+  "M-<backspace>" 'always-retarget
   "<mouse-1>" 'act
   "<escape>" 'finish)
 
@@ -3856,12 +3860,7 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-select-target (target-finder)
   (conn-with-dispatch-event-handler
-      ((lambda ()
-         (when-let* ((binding (where-is-internal 'act conn-dispatch-targeting-map t)))
-           (concat
-            (propertize (key-description binding)
-                        'face 'read-multiple-choice-face)
-            (propertize " act" 'face 'minibuffer-prompt))))
+      (nil
        (and event `(,event-type . ,_)
             (let 'act
               (lookup-key conn-dispatch-targeting-map
@@ -3874,7 +3873,8 @@ Target overlays may override this default by setting the
            (conn-dispatch-handle-event (list pt win nil))
          (conn-dispatch-ignore-event)))
     (let ((retarget-flag nil))
-      (if conn--dispatch-current-targeter
+      (if (and conn--dispatch-current-targeter
+               (not conn--dispatch-always-retarget))
           (progn
             (funcall conn--dispatch-current-targeter)
             (setq retarget-flag t))
@@ -4020,15 +4020,6 @@ Returns a cons of (STRING . OVERLAYS)."
           (unless (and (= (point) (point-min))
                        (not (bounds-of-thing-at-point thing)))
             (conn-make-target-overlay (point) 0)))))))
-
-(defun conn-dispatch-headings ()
-  (dolist (win (conn--get-target-windows))
-    (with-selected-window win
-      (save-excursion
-        (goto-char (window-start))
-        (pcase-dolist (`(,beg . ,_end)
-                       (conn--visible-re-matches outline-regexp))
-          (conn-make-target-overlay beg 0))))))
 
 (defun conn-dispatch-all-buttons ()
   (dolist (win (conn--get-target-windows))
@@ -4191,7 +4182,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-action
                   (:predicate conn-action-p))
   (window-predicate)
-  (target-predicate))
+  (target-predicate)
+  (always-retarget))
 
 (defun conn--action-type-p (symbol)
   (memq 'conn-action (ignore-errors
@@ -4210,8 +4202,7 @@ Returns a cons of (STRING . OVERLAYS)."
          (conn-action-initialize instance)
          instance))
 
-     (cl-defmethod conn-dispatch-command-case ((type (eql ,symbol))
-                                               cont)
+     (cl-defmethod conn-dispatch-command-case ((type (eql ,symbol)) cont)
        (conn-action-cancel (oref cont action))
        (if (cl-typep (oref cont action) type)
            (setf (oref cont action) nil)
@@ -4934,6 +4925,7 @@ Returns a cons of (STRING . OVERLAYS)."
               (insert-for-yank str)
             (user-error "Cannot find %s at point"
                         (get thing-cmd :conn-command-thing))))))
+
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-from))
   "Yank From")
 
@@ -5071,6 +5063,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (setf (conn-action 'conn-dispatch-transpose)
       (oclosure-lambda (conn-dispatch-transpose
+                        (always-retarget t)
                         (window-predicate
                          (lambda (win)
                            (not (buffer-local-value 'buffer-read-only
@@ -5150,17 +5143,18 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
-  "f" 'conn-dispatch-over-or-goto
+  "v" 'conn-dispatch-over-or-goto
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
-  "C" 'conn-dispatch-yank-from-replace
-  "c" 'conn-dispatch-yank-from
+  "F" 'conn-dispatch-yank-from-replace
+  "f" 'conn-dispatch-yank-from
   "s" 'conn-dispatch-send
   "S" 'conn-dispatch-send-replace
   "T" 'conn-dispatch-take-replace
   "t" 'conn-dispatch-take
+  "C" 'conn-dispatch-copy-as-kill
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -5179,7 +5173,6 @@ Returns a cons of (STRING . OVERLAYS)."
   "w" 'conn-dispatch-kill
   "<remap> <conn-kill-append-region>" 'conn-dispatch-kill-append
   "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
-  "C" 'conn-dispatch-copy-as-kill
   "<remap> <conn-append-region>" 'conn-dispatch-copy-append
   "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend
   "SPC" 'conn-dispatch-jump
@@ -5295,43 +5288,60 @@ Returns a cons of (STRING . OVERLAYS)."
   (declare (indent 1))
   (cl-once-only (repeat)
     `(conn-with-dispatch-event-handler
-         ((lambda ()
-            (when-let* ((binding (and (> conn-dispatch-repeat-count 0)
-                                      (where-is-internal
-                                       'finish conn-dispatch-targeting-map t))))
-              (concat (propertize (key-description binding)
-                                  'face 'read-multiple-choice-face)
-                      (propertize " finish" 'face 'minibuffer-prompt))))
+         (nil
           (and key (let 'finish
                      (lookup-key conn-dispatch-targeting-map
                                  (vector key))))
           (if (> conn-dispatch-repeat-count 0)
               (conn-dispatch-handle-event)
             (conn-dispatch-ignore-event)))
-       (while
-           (let ((conn--dispatch-current-targeter nil))
-             (conn-with-dispatch-event-handler
-                 ((lambda ()
-                    (when-let* ((binding (and conn--dispatch-current-targeter
-                                              (where-is-internal
-                                               'retarget conn-dispatch-targeting-map t))))
-                      (concat
-                       (propertize (key-description binding)
-                                   'face 'read-multiple-choice-face)
-                       (propertize " retarget" 'face 'minibuffer-prompt))))
-                  (and (guard conn--dispatch-current-targeter)
-                       key (let 'retarget
-                             (lookup-key conn-dispatch-targeting-map
-                                         (vector key))))
-                  (setq conn--dispatch-current-targeter nil)
-                  (conn-dispatch-handle-event t))
-               (while
-                   (progn
-                     ,@body
-                     (cl-incf conn-dispatch-repeat-count)
-                     (and ,repeat (> conn-last-target-count 1)))
-                 (undo-boundary))
-               ,repeat))))))
+       (let ((conn--retargetable-flag conn--dispatch-always-retarget))
+         (while
+             (let ((conn--dispatch-current-targeter nil))
+               (conn-with-dispatch-event-handlers
+                   (((lambda ()
+                       (when conn--dispatch-current-targeter
+                         (setq conn--retargetable-flag t))
+                       (when-let* ((binding
+                                    (and conn--retargetable-flag
+                                         (where-is-internal
+                                          'always-retarget conn-dispatch-targeting-map t))))
+                         (concat
+                          (propertize (key-description binding)
+                                      'face 'read-multiple-choice-face)
+                          " "
+                          (propertize "always retarget"
+                                      'face (if conn--dispatch-always-retarget
+                                                'eldoc-highlight-function-argument
+                                              'minibuffer-prompt)))))
+                     (and (guard conn--retargetable-flag)
+                          key (let 'always-retarget
+                                (lookup-key conn-dispatch-targeting-map
+                                            (vector key))))
+                     (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
+                     (conn-dispatch-handle-event t))
+                    ((lambda ()
+                       (when-let* ((binding (and conn--dispatch-current-targeter
+                                                 (not conn--dispatch-always-retarget)
+                                                 (where-is-internal
+                                                  'retarget conn-dispatch-targeting-map t))))
+                         (concat
+                          (propertize (key-description binding)
+                                      'face 'read-multiple-choice-face)
+                          (propertize " retarget" 'face 'minibuffer-prompt))))
+                     (and (guard conn--dispatch-current-targeter)
+                          key (let 'retarget
+                                (lookup-key conn-dispatch-targeting-map
+                                            (vector key))))
+                     (setq conn--dispatch-current-targeter nil)
+                     (conn-dispatch-handle-event t)))
+                 (while
+                     (progn
+                       ,@body
+                       (cl-incf conn-dispatch-repeat-count)
+                       (and ,repeat (> conn-last-target-count 1)))
+                   (undo-boundary))
+                 ,repeat)))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                        &optional repeat))
@@ -5342,7 +5352,8 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-target-predicate conn-target-predicate)
         (conn-target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
-        (conn--dispatch-read-event-message-prefixes conn--dispatch-read-event-message-prefixes))
+        (conn--dispatch-read-event-message-prefixes conn--dispatch-read-event-message-prefixes)
+        (conn--dispatch-always-retarget (oref action always-retarget)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))
@@ -5359,18 +5370,20 @@ Returns a cons of (STRING . OVERLAYS)."
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder)))
-      (funcall action win pt (or thing thing-cmd) thing-arg))))
+      (funcall action win pt (or thing thing-cmd) thing-arg))
+    (when (oref action always-retarget)
+      (setq conn--dispatch-current-targeter nil))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
                                      target-finder thing-cmd _thing-arg
                                      &optional repeat)
   (conn-perform-dispatch-loop repeat
-    (pcase-let* ((`(,pt1 ,win1 ,thing1)
-                  (conn-dispatch-select-target target-finder))
-                 (`(,pt2 ,win2 ,thing2)
-                  (progn
-                    (setq conn--dispatch-current-targeter nil)
-                    (conn-dispatch-select-target target-finder))))
+    (pcase-let ((`(,pt1 ,win1 ,thing1)
+                 (let ((conn--dispatch-current-targeter nil))
+                   (conn-dispatch-select-target target-finder)))
+                (`(,pt2 ,win2 ,thing2)
+                 (let ((conn--dispatch-current-targeter nil))
+                   (conn-dispatch-select-target target-finder))))
       (funcall action
                win1 pt1 (or thing1 thing-cmd)
                win2 pt2 (or thing2 thing-cmd)))))
@@ -9072,7 +9085,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing
  'heading
- :dispatch-target-finder 'conn-dispatch-headings
+ :dispatch-target-finder 'conn-dispatch-lines
  :bounds-op (lambda ()
               (save-mark-and-excursion
                 (outline-mark-subtree)
