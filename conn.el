@@ -4391,7 +4391,7 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (str)
   (seperator)
-  (change-group :mutable t))
+  (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
   (let ((cg (conn--action-buffer-change-group)))
@@ -4643,7 +4643,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-register-replace
                   (:parent conn-action))
-  (register :mutable t))
+  (register))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
   (oclosure-lambda (conn-dispatch-register-replace
