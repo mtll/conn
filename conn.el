@@ -4231,14 +4231,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto)
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (select-window window)
     (unless (= pt (point))
       (let ((forward (< (point) pt)))
         (unless (region-active-p)
           (push-mark nil t))
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (if (region-active-p)
                (goto-char (if forward end beg))
@@ -4247,8 +4247,7 @@ Returns a cons of (STRING . OVERLAYS)."
                (conn--push-ephemeral-mark end))
              (unless (or (= pt beg) (= pt end))
                (goto-char beg))))
-          (_ (user-error "Cannot find %s at point"
-                         (get thing-cmd :conn-command-thing))))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-goto))
   "Goto")
@@ -4258,7 +4257,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
   (oclosure-lambda (conn-dispatch-push-button)
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (select-window window)
     (if (button-at pt)
         (push-button pt)
@@ -4280,17 +4279,17 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-replace-to))
   "Yank and Replace To")
@@ -4307,17 +4306,17 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-read-replace-to))
   "Yank and Replace To")
@@ -4337,7 +4336,7 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -4369,7 +4368,7 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -4404,7 +4403,7 @@ Returns a cons of (STRING . OVERLAYS)."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt _thing-cmd _thing-arg)
+        (window pt _bounds-op)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -4446,17 +4445,17 @@ Returns a cons of (STRING . OVERLAYS)."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt thing-cmd thing-arg)
+        (window pt bounds-op)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (pcase (car (funcall bounds-op))
             (`(,beg . ,end)
              (delete-region beg end)
              (insert-for-yank str)
              (unless executing-kbd-macro
                (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-            (_ (user-error "Cannot find %s at point" thing-cmd))))))))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-send-replace))
   "Send and Replace")
@@ -4478,13 +4477,13 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end) (downcase-region beg end))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-downcase))
   "Downcase")
@@ -4499,13 +4498,13 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end) (upcase-region beg end))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-upcase))
   "Upcase")
@@ -4520,13 +4519,13 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end) (capitalize-region beg end))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-capitalize))
   "Capitalize")
@@ -4536,14 +4535,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-narrow-indirect)))
   (oclosure-lambda (conn-dispatch-narrow-indirect)
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-current-buffer (window-buffer window)
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (conn--narrow-indirect beg end))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-narrow-indirect))
   "Narrow Indirect")
@@ -4558,15 +4557,14 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
-           (comment-or-uncomment-region beg end)
-           (message "Commented %s" thing-cmd))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+           (comment-or-uncomment-region beg end))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-comment))
   "Comment")
@@ -4583,15 +4581,14 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
-           (conn-duplicate-region beg end arg)
-           (message "Duplicated %s" thing-cmd))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+           (conn-duplicate-region beg end arg))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-duplicate))
   "Duplicate")
@@ -4608,15 +4605,14 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
-           (conn-duplicate-and-comment-region beg end arg)
-           (message "Duplicated and commented %s" thing-cmd))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+           (conn-duplicate-and-comment-region beg end arg))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-duplicate-and-comment))
   "Duplicate and Comment")
@@ -4628,7 +4624,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: ")))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
@@ -4647,18 +4643,18 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
   (oclosure-lambda (conn-dispatch-register-replace
                     (register (register-read-with-preview "Register: ")))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
         (save-excursion
           (goto-char pt)
-          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (pcase (car (funcall bounds-op))
             (`(,beg . ,end)
              (delete-region beg end)
              (conn-register-load register))
-            (_ (user-error "Cannot find %s at point" thing-cmd))))))))
+            (_ (user-error "Cannot find thing at point"))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-register-replace))
   (format "Register Replace <%c>" (oref action register)))
@@ -4676,11 +4672,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (cond ((> conn-dispatch-repeat-count 0)
                   (conn-append-region beg end register t))
@@ -4690,7 +4686,7 @@ Returns a cons of (STRING . OVERLAYS)."
                   (kill-region beg end)))
            (conn--dispatch-fixup-whitespace)
            (message "Killed thing"))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-kill))
   (if-let* ((register (oref action register)))
@@ -4709,11 +4705,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -4722,7 +4718,7 @@ Returns a cons of (STRING . OVERLAYS)."
                (delete-region beg end))
              (conn--dispatch-fixup-whitespace)
              (message "Appended: %s" str)))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-kill-append))
   (if-let* ((register (oref action register)))
@@ -4742,11 +4738,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -4755,7 +4751,7 @@ Returns a cons of (STRING . OVERLAYS)."
                (delete-region beg end))
              (conn--dispatch-fixup-whitespace)
              (message "Prepended: %s" str)))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-kill-prepend))
   (if-let* ((register (oref action register)))
@@ -4770,11 +4766,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (oclosure-lambda (conn-dispatch-copy-as-kill
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
            (cond ((> conn-dispatch-repeat-count 0)
@@ -4783,7 +4779,7 @@ Returns a cons of (STRING . OVERLAYS)."
                   (copy-to-register register beg end))
                  (t
                   (kill-new (filter-buffer-substring beg end)))))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-as-kill))
   (if-let* ((register (oref action register)))
@@ -4798,19 +4794,18 @@ Returns a cons of (STRING . OVERLAYS)."
   (oclosure-lambda (conn-dispatch-copy-append
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
                  (append-to-register register beg end)
                (kill-append str nil))
              (message "Copy Appended: %s" str)))
-          (_ (user-error "Cannot find %s at point"
-                         (get thing-cmd :conn-command-thing))))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-append))
   (if-let* ((register (oref action register)))
@@ -4825,18 +4820,18 @@ Returns a cons of (STRING . OVERLAYS)."
   (oclosure-lambda (conn-dispatch-copy-prepend
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
                  (prepend-to-register register beg end)
                (kill-append str t))
              (message "Copy Prepended: %s" str)))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+          (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-prepend))
   (if-let* ((register (oref action register)))
@@ -4848,19 +4843,18 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
   (oclosure-lambda (conn-dispatch-yank-from)
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (let (str)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (pcase (car (funcall bounds-op))
             (`(,beg . ,end)
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
       (if str
           (insert-for-yank str)
-        (user-error "Cannot find %s at point"
-                    (get thing-cmd :conn-command-thing))))))
+        (user-error "Cannot find thing at point")))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from))
   "Yank From")
@@ -4870,17 +4864,16 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from-replace)))
   (oclosure-lambda (conn-dispatch-yank-from-replace)
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
            (copy-region-as-kill beg end)
            (conn--dispatch-fixup-whitespace))
-          (_ (user-error "Cannot find %s at point"
-                         (get thing-cmd :conn-command-thing))))))
+          (_ (user-error "Cannot find thing at point")))))
     (delete-region (region-beginning) (region-end))
     (yank)))
 
@@ -4896,15 +4889,15 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
-          (_ (user-error "Cannot find %s at point" thing-cmd)))))
+          (_ (user-error "Cannot find thing at point")))))
     (delete-region (region-beginning) (region-end))
     (yank)))
 
@@ -4920,16 +4913,15 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+        (pcase (car (funcall bounds-op))
           (`(,beg . ,end)
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
-          (_ (user-error "Cannot find %s at point"
-                         (get thing-cmd :conn-command-thing))))))
+          (_ (user-error "Cannot find thing at point")))))
     (yank)))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-take))
@@ -4940,42 +4932,35 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over)
-      (window pt thing-cmd thing-arg)
+      (window pt bounds-op)
     (when (and (eq (window-buffer window) (current-buffer))
                (/= pt (point)))
       (unless (region-active-p)
         (push-mark nil t))
-      (pcase (alist-get thing-cmd conn-dispatch-default-action-alist)
-        ((or 'conn-dispatch-goto 'nil)
-         (pcase (cons (or (bounds-of-thing-at-point
-                           (get thing-cmd :conn-command-thing))
-                          (point))
-                      (progn
-                        (goto-char pt)
-                        (bounds-of-thing-at-point
-                         (get thing-cmd :conn-command-thing))))
-           ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
-                 (or (guard (<= beg1 end1 beg2 end2))
-                     (guard (>= end1 beg1 end2 beg2))
-                     (guard (and (= beg1 beg2) (= end1 end2)))))
-            (if (> beg2 end1)
-                (progn
-                  (conn--push-ephemeral-mark beg1)
-                  (goto-char end2))
-              (conn--push-ephemeral-mark end1)
-              (goto-char beg2)))
-           ((and `(,point . (,beg . ,end))
-                 (guard (integerp point)))
-            (cond ((<= point beg end)
-                   (goto-char end))
-                  ((<= beg point end)
-                   (goto-char beg)
-                   (conn--push-ephemeral-mark end))
-                  ((<= beg end point)
-                   (goto-char beg))))))
-        ('conn-dispatch-jump (funcall (conn-make-action 'conn-dispatch-jump)
-                                      window pt thing-cmd thing-arg))
-        (_ (error "Can't jump to %s" thing-cmd))))))
+      (pcase (cons (or (car (funcall bounds-op))
+                       (point))
+                   (progn
+                     (goto-char pt)
+                     (car (funcall bounds-op))))
+        ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
+              (or (guard (<= beg1 end1 beg2 end2))
+                  (guard (>= end1 beg1 end2 beg2))
+                  (guard (and (= beg1 beg2) (= end1 end2)))))
+         (if (> beg2 end1)
+             (progn
+               (conn--push-ephemeral-mark beg1)
+               (goto-char end2))
+           (conn--push-ephemeral-mark end1)
+           (goto-char beg2)))
+        ((and `(,point . (,beg . ,end))
+              (guard (integerp point)))
+         (cond ((<= point beg end)
+                (goto-char end))
+               ((<= beg point end)
+                (goto-char beg)
+                (conn--push-ephemeral-mark end))
+               ((<= beg end point)
+                (goto-char beg))))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-over))
   "Over")
@@ -4985,7 +4970,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump)
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-current-buffer (window-buffer window)
       (unless (= pt (point))
         (unless (region-active-p) (push-mark nil t))
@@ -5004,24 +4989,20 @@ Returns a cons of (STRING . OVERLAYS)."
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
-      (window1 pt1 thing-cmd1 window2 pt2 thing-cmd2)
+      (window1 pt1 bounds-op1 window2 pt2 bounds-op2)
     (if (eq (window-buffer window1) (window-buffer window2))
         (with-current-buffer (window-buffer window1)
           (save-excursion
             (pcase-let ((`(,beg1 . ,end1)
                          (progn
                            (goto-char pt1)
-                           (or (bounds-of-thing-at-point
-                                (or (get thing-cmd1 :conn-command-thing)
-                                    thing-cmd1))
-                               (user-error "Cannot find %s at point" thing-cmd1))))
+                           (or (car (funcall bounds-op1))
+                               (user-error "Cannot find thing at point"))))
                         (`(,beg2 . ,end2)
                          (progn
                            (goto-char pt2)
-                           (or (bounds-of-thing-at-point
-                                (or (get thing-cmd2 :conn-command-thing)
-                                    thing-cmd2))
-                               (user-error "Cannot find %s at point" thing-cmd2)))))
+                           (or (car (funcall bounds-op2))
+                               (user-error "Cannot find thing at point")))))
               (if (and (or (<= beg1 end1 beg2 end2)
                            (<= beg2 end2 beg1 end1))
                        (/= beg1 end1)
@@ -5040,25 +5021,21 @@ Returns a cons of (STRING . OVERLAYS)."
         (with-current-buffer (window-buffer window1)
           (save-excursion
             (goto-char pt1)
-            (pcase (bounds-of-thing-at-point
-                    (or (get thing-cmd1 :conn-command-thing)
-                        thing-cmd1))
+            (pcase (car (funcall bounds-op1))
               (`(,beg . ,end)
                (setq pt1 beg)
                (setq str1 (filter-buffer-substring beg end))
                (delete-region beg end))
-              (_ (user-error "Cannot find %s at point" thing-cmd1)))))
+              (_ (user-error "Cannot find thing at point")))))
         (with-current-buffer (window-buffer window2)
           (save-excursion
             (goto-char pt2)
-            (pcase (bounds-of-thing-at-point
-                    (or (get thing-cmd2 :conn-command-thing)
-                        thing-cmd2))
+            (pcase (car (funcall bounds-op2))
               (`(,beg . ,end)
                (setq str2 (filter-buffer-substring beg end))
                (delete-region beg end)
                (insert str1))
-              (_ (user-error "Cannot find %s at point" thing-cmd2)))))
+              (_ (user-error "Cannot find thing at point")))))
         (with-current-buffer (window-buffer window1)
           (save-excursion
             (goto-char pt1)
@@ -5307,23 +5284,39 @@ Returns a cons of (STRING . OVERLAYS)."
   (when (conn--action-type-p action)
     (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
-  (conn-perform-dispatch-loop repeat
-    (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder)))
-      (funcall action win pt (or thing thing-cmd) thing-arg))
-    (when (oref action always-retarget)
-      (setq conn--dispatch-current-targeter nil))))
+  (let ((bounds-op
+         (lambda ()
+           (conn-bounds-of-command thing-cmd thing-arg))))
+    (conn-perform-dispatch-loop repeat
+      (pcase-let* ((`(,pt ,win ,bounds-op-override)
+                    (conn-dispatch-select-target target-finder)))
+        (funcall action win pt
+                 (if bounds-op-override
+                     (lambda () (funcall bounds-op-override thing-arg))
+                   bounds-op)))
+      (when (oref action always-retarget)
+        (setq conn--dispatch-current-targeter nil)))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
-                                     target-finder thing-cmd _thing-arg
+                                     target-finder thing-cmd thing-arg
                                      &optional repeat)
   (conn-perform-dispatch-loop repeat
-    (pcase-let ((`(,pt1 ,win1 ,thing1)
+    (pcase-let ((`(,pt1 ,win1 ,bounds-op-override1)
                  (conn-dispatch-select-target target-finder))
-                (`(,pt2 ,win2 ,thing2)
-                 (conn-dispatch-select-target target-finder)))
+                (`(,pt2 ,win2 ,bounds-op-override2)
+                 (conn-dispatch-select-target target-finder))
+                (bounds-op
+                 (lambda ()
+                   (conn-bounds-of-command thing-cmd thing-arg))))
       (funcall action
-               win1 pt1 (or thing1 thing-cmd)
-               win2 pt2 (or thing2 thing-cmd)))))
+               win1 pt1 (if bounds-op-override1
+                            (lambda ()
+                              (funcall bounds-op-override1 thing-arg))
+                          bounds-op)
+               win2 pt2 (if bounds-op-override1
+                            (lambda ()
+                              (funcall bounds-op-override2 thing-arg))
+                          bounds-op)))))
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
@@ -5348,10 +5341,10 @@ Returns a cons of (STRING . OVERLAYS)."
                            (let ((win (selected-window)))
                              (lambda (window)
                                (eq win window)))))
-            (_win pt thing-cmd thing-arg)
+            (_win pt bounds-op)
           (save-mark-and-excursion
             (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+            (pcase (car (funcall bounds-op))
               ('nil nil)
               (reg (push reg regions)))))
         target-finder thing-cmd thing-arg repeat)
@@ -5682,7 +5675,7 @@ order to mark the region that should be defined by any of COMMANDS."
               (pcase (car (read-multiple-choice
                            "Mark to?"
                            '((?e "end")
-                             (?b "beginning"))))
+                             (?a "beginning"))))
                 (?e (goto-char end))
                 (?b (goto-char beg)))
             (goto-char beg)
@@ -8486,7 +8479,7 @@ Operates with the selected windows parent window."
 ;;;;; Top-level Command State Maps
 
 (defvar-keymap conn-default-region-map
-  "q" 'conn-replace
+  "j" 'conn-replace
   "u" 'conn-regexp-replace
   "\\" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
@@ -9248,7 +9241,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       (save-excursion
         (let ((regexp (dired-marker-regexp)))
@@ -9271,7 +9264,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -9290,7 +9283,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -9391,7 +9384,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'ibuffer-mode))))
-      (window pt _thing-cmd _thing-arg)
+      (window pt _bounds-op)
     (with-selected-window window
       (save-excursion
         (goto-char pt)

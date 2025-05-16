@@ -475,7 +475,7 @@ Begins the keyboard macro in `conn-command-state'."
 (transient-define-suffix conn--kapply-string-suffix (args)
   "Apply keyboard macro to every occurrence of a string within a region."
   :transient 'transient--do-exit
-  :key "q"
+  :key "j"
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
@@ -698,7 +698,7 @@ A zero means repeat until error."
     (funcall continuation
              (oclosure-lambda (conn-dispatch-kapply
                                (macro nil))
-                 (window pt thing-cmd thing-arg)
+                 (window pt bounds-op)
                (let ((conn-kapply-suppress-message t))
                  (with-selected-window window
                    (with-undo-amalgamate
@@ -706,9 +706,8 @@ A zero means repeat until error."
                             (conn--kapply-region-iterator
                              (save-excursion
                                (goto-char pt)
-                               (pcase (conn-bounds-of-command thing-cmd thing-arg)
-                                 ('nil (user-error "Cannot find %s at point"
-                                                   (get thing-cmd :conn-command-thing)))
+                               (pcase (funcall bounds-op)
+                                 ('nil (user-error "Cannot find thing at point"))
                                  (`(,region) (list region))
                                  (`(,_ . ,subregions) subregions))))
                             `(,@pipeline
