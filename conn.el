@@ -5318,11 +5318,9 @@ Returns a cons of (STRING . OVERLAYS)."
                                      &optional repeat)
   (conn-perform-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,thing1)
-                 (let ((conn--dispatch-current-targeter nil))
-                   (conn-dispatch-select-target target-finder)))
+                 (conn-dispatch-select-target target-finder))
                 (`(,pt2 ,win2 ,thing2)
-                 (let ((conn--dispatch-current-targeter nil))
-                   (conn-dispatch-select-target target-finder))))
+                 (conn-dispatch-select-target target-finder)))
       (funcall action
                win1 pt1 (or thing1 thing-cmd)
                win2 pt2 (or thing2 thing-cmd)))))
