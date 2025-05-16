@@ -161,13 +161,13 @@
 (oclosure-define (conn-open-org-link
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-open-org-link)
-      (oclosure-lambda (conn-open-org-link)
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (org-open-at-point-global)))))
+(conn-define-action conn-open-org-link
+  (oclosure-lambda (conn-open-org-link)
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (org-open-at-point-global)))))
 
 (cl-defmethod conn-action-description ((_action conn-open-org-link))
   "Open Link")

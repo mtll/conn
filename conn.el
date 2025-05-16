@@ -1941,9 +1941,9 @@ themselves once the selection process has concluded."
             ('nil nil)
             ('digit-argument
              (let* ((char (if (integerp last-input-event)
-		              last-input-event
-		            (get last-input-event 'ascii-character)))
-	            (digit (- (logand char ?\177) ?0)))
+                              last-input-event
+                            (get last-input-event 'ascii-character)))
+                    (digit (- (logand char ?\177) ?0)))
                (setf conn--loop-prefix-mag
                      (if (integerp conn--loop-prefix-mag)
                          (+ (* 10 conn--loop-prefix-mag) digit)
@@ -4193,18 +4193,17 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defgeneric conn-action (action-type)
   (:method ((action conn-action)) action))
 
-(gv-define-setter conn-action (constructor symbol)
-  (pcase symbol
-    (`(quote ,val) (setf symbol val)))
+(defmacro conn-define-action (name &rest ctor-body)
+  (declare (indent 1))
   `(progn
-     (cl-defmethod conn-action ((type (eql ,symbol)))
-       (if-let* ((instance ,constructor))
+     (cl-defmethod conn-action ((type (eql ,name)))
+       (if-let* ((instance ,(macroexp-progn ctor-body)))
            (progn
              (conn-action-initialize instance)
              instance)
          (error "Failed to construct %s" type)))
 
-     (cl-defmethod conn-dispatch-command-case ((type (eql ,symbol)) cont)
+     (cl-defmethod conn-dispatch-command-case ((type (eql ,name)) cont)
        (conn-action-cancel (oref cont action))
        (if (cl-typep (oref cont action) type)
            (setf (oref cont action) nil)
@@ -4259,26 +4258,26 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-goto)
-      (oclosure-lambda (conn-dispatch-goto)
-          (window pt thing-cmd thing-arg)
-        (select-window window)
-        (unless (= pt (point))
-          (let ((forward (< (point) pt)))
-            (unless (region-active-p)
-              (push-mark nil t))
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (if (region-active-p)
-                   (goto-char (if forward end beg))
-                 (if (= (point) end)
-                     (conn--push-ephemeral-mark beg)
-                   (conn--push-ephemeral-mark end))
-                 (unless (or (= pt beg) (= pt end))
-                   (goto-char beg))))
-              (_ (user-error "Cannot find %s at point"
-                             (get thing-cmd :conn-command-thing))))))))
+(conn-define-action conn-dispatch-goto
+  (oclosure-lambda (conn-dispatch-goto)
+      (window pt thing-cmd thing-arg)
+    (select-window window)
+    (unless (= pt (point))
+      (let ((forward (< (point) pt)))
+        (unless (region-active-p)
+          (push-mark nil t))
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (if (region-active-p)
+               (goto-char (if forward end beg))
+             (if (= (point) end)
+                 (conn--push-ephemeral-mark beg)
+               (conn--push-ephemeral-mark end))
+             (unless (or (= pt beg) (= pt end))
+               (goto-char beg))))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-goto))
   "Goto")
@@ -4286,14 +4285,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-push-button
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-push-button)
-      (oclosure-lambda (conn-dispatch-push-button)
-          (window pt _thing-cmd _thing-arg)
-        (select-window window)
-        (if (button-at pt)
-            (push-button pt)
-          (when (fboundp 'widget-apply-action)
-            (widget-apply-action (get-char-property pt 'button) pt)))))
+(conn-define-action conn-dispatch-push-button
+  (oclosure-lambda (conn-dispatch-push-button)
+      (window pt _thing-cmd _thing-arg)
+    (select-window window)
+    (if (button-at pt)
+        (push-button pt)
+      (when (fboundp 'widget-apply-action)
+        (widget-apply-action (get-char-property pt 'button) pt)))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-push-button))
   "Push Button")
@@ -4302,24 +4301,24 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (str :mutable t))
 
-(setf (conn-action 'conn-dispatch-yank-replace-to)
-      (oclosure-lambda (conn-dispatch-yank-replace-to
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (delete-region beg end)
-               (insert-for-yank str)
-               (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-yank-replace-to
+  (oclosure-lambda (conn-dispatch-yank-replace-to
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (delete-region beg end)
+           (insert-for-yank str)
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-replace-to))
   "Yank and Replace To")
@@ -4331,24 +4330,24 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (str :mutable t))
 
-(setf (conn-action 'conn-dispatch-yank-read-replace-to)
-      (oclosure-lambda (conn-dispatch-yank-read-replace-to
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (delete-region beg end)
-               (insert-for-yank str)
-               (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-yank-read-replace-to
+  (oclosure-lambda (conn-dispatch-yank-read-replace-to
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (delete-region beg end)
+           (insert-for-yank str)
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-read-replace-to))
   "Yank and Replace To")
@@ -4362,24 +4361,24 @@ Returns a cons of (STRING . OVERLAYS)."
   (str :mutable t)
   (seperator :mutable t))
 
-(setf (conn-action 'conn-dispatch-yank-to)
-      (oclosure-lambda (conn-dispatch-yank-to
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (insert-for-yank str)
-            (when seperator (insert seperator))
-            (unless executing-kbd-macro
-              (pulse-momentary-highlight-region (- (point)
-                                                   (+ (length str)
-                                                      (length seperator)))
-                                                (point)))))))
+(conn-define-action conn-dispatch-yank-to
+  (oclosure-lambda (conn-dispatch-yank-to
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (insert-for-yank str)
+        (when seperator (insert seperator))
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region (- (point)
+                                               (+ (length str)
+                                                  (length seperator)))
+                                            (point)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-yank-to))
   (setf (oref action str) (funcall region-extract-function nil))
@@ -4396,24 +4395,24 @@ Returns a cons of (STRING . OVERLAYS)."
   (str :mutable t)
   (seperator :mutable t))
 
-(setf (conn-action 'conn-dispatch-reading-yank-to)
-      (oclosure-lambda (conn-dispatch-reading-yank-to
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (insert-for-yank str)
-            (when seperator (insert seperator))
-            (unless executing-kbd-macro
-              (pulse-momentary-highlight-region (- (point)
-                                                   (+ (length str)
-                                                      (length seperator)))
-                                                (point)))))))
+(conn-define-action conn-dispatch-reading-yank-to
+  (oclosure-lambda (conn-dispatch-reading-yank-to
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (insert-for-yank str)
+        (when seperator (insert seperator))
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region (- (point)
+                                               (+ (length str)
+                                                  (length seperator)))
+                                            (point)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-reading-yank-to))
   (setf (oref action str)
@@ -4432,24 +4431,24 @@ Returns a cons of (STRING . OVERLAYS)."
   (seperator :mutable t)
   (change-group :mutable t))
 
-(setf (conn-action 'conn-dispatch-send)
-      (oclosure-lambda (conn-dispatch-send
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (insert-for-yank str)
-            (when seperator (insert seperator))
-            (unless executing-kbd-macro
-              (pulse-momentary-highlight-region (- (point)
-                                                   (+ (length str)
-                                                      (length seperator)))
-                                                (point)))))))
+(conn-define-action conn-dispatch-send
+  (oclosure-lambda (conn-dispatch-send
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (insert-for-yank str)
+        (when seperator (insert seperator))
+        (unless executing-kbd-macro
+          (pulse-momentary-highlight-region (- (point)
+                                               (+ (length str)
+                                                  (length seperator)))
+                                            (point)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-send))
   "Send")
@@ -4477,24 +4476,24 @@ Returns a cons of (STRING . OVERLAYS)."
   (str :mutable t)
   (change-group :mutable t))
 
-(setf (conn-action 'conn-dispatch-send-replace)
-      (oclosure-lambda (conn-dispatch-send-replace
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (delete-region beg end)
-               (insert-for-yank str)
-               (unless executing-kbd-macro
-                 (pulse-momentary-highlight-region (- (point) (length str)) (point))))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-send-replace
+  (oclosure-lambda (conn-dispatch-send-replace
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (delete-region beg end)
+           (insert-for-yank str)
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-send-replace))
   "Send and Replace")
@@ -4513,20 +4512,20 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-downcase
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-downcase)
-      (oclosure-lambda (conn-dispatch-downcase
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-mark-and-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end) (downcase-region beg end))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-downcase
+  (oclosure-lambda (conn-dispatch-downcase
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-mark-and-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end) (downcase-region beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-downcase))
   "Downcase")
@@ -4534,20 +4533,20 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-upcase
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-upcase)
-      (oclosure-lambda (conn-dispatch-upcase
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-mark-and-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end) (upcase-region beg end))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-upcase
+  (oclosure-lambda (conn-dispatch-upcase
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-mark-and-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end) (upcase-region beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-upcase))
   "Upcase")
@@ -4555,20 +4554,20 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-capitalize
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-capitalize)
-      (oclosure-lambda (conn-dispatch-capitalize
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-mark-and-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end) (capitalize-region beg end))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-capitalize
+  (oclosure-lambda (conn-dispatch-capitalize
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-mark-and-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end) (capitalize-region beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-capitalize))
   "Capitalize")
@@ -4576,16 +4575,16 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-narrow-indirect
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-narrow-indirect)
-      (oclosure-lambda (conn-dispatch-narrow-indirect)
-          (window pt thing-cmd thing-arg)
-        (with-current-buffer (window-buffer window)
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (conn--narrow-indirect beg end))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-narrow-indirect
+  (oclosure-lambda (conn-dispatch-narrow-indirect)
+      (window pt thing-cmd thing-arg)
+    (with-current-buffer (window-buffer window)
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (conn--narrow-indirect beg end))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-narrow-indirect))
   "Narrow Indirect")
@@ -4593,22 +4592,22 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-comment
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-comment)
-      (oclosure-lambda (conn-dispatch-comment
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (comment-or-uncomment-region beg end)
-               (message "Commented %s" thing-cmd))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-comment
+  (oclosure-lambda (conn-dispatch-comment
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (comment-or-uncomment-region beg end)
+           (message "Commented %s" thing-cmd))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-comment))
   "Comment")
@@ -4617,22 +4616,22 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (arg :mutable t))
 
-(setf (conn-action 'conn-dispatch-duplicate)
-      (oclosure-lambda (conn-dispatch-duplicate
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (conn-duplicate-region beg end arg)
-               (message "Duplicated %s" thing-cmd))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-duplicate
+  (oclosure-lambda (conn-dispatch-duplicate
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (conn-duplicate-region beg end arg)
+           (message "Duplicated %s" thing-cmd))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-duplicate))
   "Duplicate")
@@ -4644,22 +4643,22 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (arg :mutable t))
 
-(setf (conn-action 'conn-dispatch-duplicate-and-comment)
-      (oclosure-lambda (conn-dispatch-duplicate-and-comment
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (conn-duplicate-and-comment-region beg end arg)
-               (message "Duplicated and commented %s" thing-cmd))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-duplicate-and-comment
+  (oclosure-lambda (conn-dispatch-duplicate-and-comment
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (conn-duplicate-and-comment-region beg end arg)
+           (message "Duplicated and commented %s" thing-cmd))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-duplicate-and-comment))
   "Duplicate and Comment")
@@ -4671,16 +4670,16 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-register-load)
-      (oclosure-lambda (conn-dispatch-register-load)
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          ;; If there is a keyboard macro in the register we would like to
-          ;; amalgamate the undo
-          (with-undo-amalgamate
-            (save-excursion
-              (goto-char pt)
-              (conn-register-load register))))))
+(conn-define-action conn-dispatch-register-load
+  (oclosure-lambda (conn-dispatch-register-load)
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      ;; If there is a keyboard macro in the register we would like to
+      ;; amalgamate the undo
+      (with-undo-amalgamate
+        (save-excursion
+          (goto-char pt)
+          (conn-register-load register))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-register-load))
   (setf (oref action register) (register-read-with-preview "Register: ")))
@@ -4692,20 +4691,20 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-register-replace)
-      (oclosure-lambda (conn-dispatch-register-replace)
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          ;; If there is a keyboard macro in the register we would like to
-          ;; amalgamate the undo
-          (with-undo-amalgamate
-            (save-excursion
-              (goto-char pt)
-              (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                (`(,beg . ,end)
-                 (delete-region beg end)
-                 (conn-register-load register))
-                (_ (user-error "Cannot find %s at point" thing-cmd))))))))
+(conn-define-action conn-dispatch-register-replace
+  (oclosure-lambda (conn-dispatch-register-replace)
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      ;; If there is a keyboard macro in the register we would like to
+      ;; amalgamate the undo
+      (with-undo-amalgamate
+        (save-excursion
+          (goto-char pt)
+          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+            (`(,beg . ,end)
+             (delete-region beg end)
+             (conn-register-load register))
+            (_ (user-error "Cannot find %s at point" thing-cmd))))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-register-replace))
   (setf (oref action register) (register-read-with-preview "Register: ")))
@@ -4717,28 +4716,28 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-kill)
-      (oclosure-lambda (conn-dispatch-kill
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (cond ((> conn-dispatch-repeat-count 0)
-                      (conn-append-region beg end register t))
-                     (register
-                      (copy-to-register register beg end t))
-                     (t
-                      (kill-region beg end)))
-               (conn--dispatch-fixup-whitespace)
-               (message "Killed thing"))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-kill
+  (oclosure-lambda (conn-dispatch-kill
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (cond ((> conn-dispatch-repeat-count 0)
+                  (conn-append-region beg end register t))
+                 (register
+                  (copy-to-register register beg end t))
+                 (t
+                  (kill-region beg end)))
+           (conn--dispatch-fixup-whitespace)
+           (message "Killed thing"))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-kill))
   (setf (oref action register)
@@ -4753,27 +4752,27 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-kill-append (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-kill-append)
-      (oclosure-lambda (conn-dispatch-kill-append
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (let ((str (filter-buffer-substring beg end)))
-                 (if register
-                     (copy-to-register register beg end t)
-                   (kill-append str nil)
-                   (delete-region beg end))
-                 (conn--dispatch-fixup-whitespace)
-                 (message "Appended: %s" str)))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-kill-append
+  (oclosure-lambda (conn-dispatch-kill-append
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (copy-to-register register beg end t)
+               (kill-append str nil)
+               (delete-region beg end))
+             (conn--dispatch-fixup-whitespace)
+             (message "Appended: %s" str)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-kill-append))
   (setf (oref action register)
@@ -4789,27 +4788,27 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-kill-prepend)
-      (oclosure-lambda (conn-dispatch-kill-prepend
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (let ((str (filter-buffer-substring beg end)))
-                 (if register
-                     (prepend-to-register register beg end t)
-                   (kill-append str t)
-                   (delete-region beg end))
-                 (conn--dispatch-fixup-whitespace)
-                 (message "Prepended: %s" str)))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-kill-prepend
+  (oclosure-lambda (conn-dispatch-kill-prepend
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (prepend-to-register register beg end t)
+               (kill-append str t)
+               (delete-region beg end))
+             (conn--dispatch-fixup-whitespace)
+             (message "Prepended: %s" str)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-kill-prepend))
   (setf (oref action arg)
@@ -4825,22 +4824,22 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-copy-as-kill)
-      (oclosure-lambda (conn-dispatch-copy-as-kill)
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (pulse-momentary-highlight-region beg end)
-               (cond ((> conn-dispatch-repeat-count 0)
-                      (conn-append-region beg end register nil))
-                     (register
-                      (copy-to-register register beg end))
-                     (t
-                      (kill-new (filter-buffer-substring beg end)))))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-copy-as-kill
+  (oclosure-lambda (conn-dispatch-copy-as-kill)
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (pulse-momentary-highlight-region beg end)
+           (cond ((> conn-dispatch-repeat-count 0)
+                  (conn-append-region beg end register nil))
+                 (register
+                  (copy-to-register register beg end))
+                 (t
+                  (kill-new (filter-buffer-substring beg end)))))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-copy-as-kill))
   (setf (oref action register)
@@ -4856,21 +4855,21 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-copy-append)
-      (oclosure-lambda (conn-dispatch-copy-append)
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (let ((str (filter-buffer-substring beg end)))
-                 (if register
-                     (append-to-register register beg end)
-                   (kill-append str nil))
-                 (message "Copy Appended: %s" str)))
-              (_ (user-error "Cannot find %s at point"
-                             (get thing-cmd :conn-command-thing))))))))
+(conn-define-action conn-dispatch-copy-append
+  (oclosure-lambda (conn-dispatch-copy-append)
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (append-to-register register beg end)
+               (kill-append str nil))
+             (message "Copy Appended: %s" str)))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-copy-append))
   (setf (oref action arg)
@@ -4886,20 +4885,20 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action))
   (register :mutable t))
 
-(setf (conn-action 'conn-dispatch-copy-prepend)
-      (oclosure-lambda (conn-dispatch-copy-prepend)
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (let ((str (filter-buffer-substring beg end)))
-                 (if register
-                     (prepend-to-register register beg end)
-                   (kill-append str t))
-                 (message "Copy Prepended: %s" str)))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))))
+(conn-define-action conn-dispatch-copy-prepend
+  (oclosure-lambda (conn-dispatch-copy-prepend)
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (let ((str (filter-buffer-substring beg end)))
+             (if register
+                 (prepend-to-register register beg end)
+               (kill-append str t))
+             (message "Copy Prepended: %s" str)))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
 (cl-defmethod conn-action-initialize ((action conn-dispatch-copy-prepend))
   (setf (oref action arg)
@@ -4914,21 +4913,21 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-yank-from
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-yank-from)
-      (oclosure-lambda (conn-dispatch-yank-from)
-          (window pt thing-cmd thing-arg)
-        (let (str)
-          (with-selected-window window
-            (save-excursion
-              (goto-char pt)
-              (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-                (`(,beg . ,end)
-                 (pulse-momentary-highlight-region beg end)
-                 (setq str (filter-buffer-substring beg end))))))
-          (if str
-              (insert-for-yank str)
-            (user-error "Cannot find %s at point"
-                        (get thing-cmd :conn-command-thing))))))
+(conn-define-action conn-dispatch-yank-from
+  (oclosure-lambda (conn-dispatch-yank-from)
+      (window pt thing-cmd thing-arg)
+    (let (str)
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+            (`(,beg . ,end)
+             (pulse-momentary-highlight-region beg end)
+             (setq str (filter-buffer-substring beg end))))))
+      (if str
+          (insert-for-yank str)
+        (user-error "Cannot find %s at point"
+                    (get thing-cmd :conn-command-thing))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-from))
   "Yank From")
@@ -4936,69 +4935,69 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-yank-from-replace
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-yank-from-replace)
-      (oclosure-lambda (conn-dispatch-yank-from-replace)
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (pulse-momentary-highlight-region beg end)
-               (copy-region-as-kill beg end)
-               (conn--dispatch-fixup-whitespace))
-              (_ (user-error "Cannot find %s at point"
-                             (get thing-cmd :conn-command-thing))))))
-        (delete-region (region-beginning) (region-end))
-        (yank)))
+(conn-define-action conn-dispatch-yank-from-replace
+  (oclosure-lambda (conn-dispatch-yank-from-replace)
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (pulse-momentary-highlight-region beg end)
+           (copy-region-as-kill beg end)
+           (conn--dispatch-fixup-whitespace))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))
+    (delete-region (region-beginning) (region-end))
+    (yank)))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-yank-from-replace))
   "Yank From and Replace")
 
 (oclosure-define (conn-dispatch-take-replace (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-take-replace)
-      (oclosure-lambda (conn-dispatch-take-replace
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (kill-region beg end)
-               (conn--dispatch-fixup-whitespace))
-              (_ (user-error "Cannot find %s at point" thing-cmd)))))
-        (delete-region (region-beginning) (region-end))
-        (yank)))
+(conn-define-action conn-dispatch-take-replace
+  (oclosure-lambda (conn-dispatch-take-replace
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (kill-region beg end)
+           (conn--dispatch-fixup-whitespace))
+          (_ (user-error "Cannot find %s at point" thing-cmd)))))
+    (delete-region (region-beginning) (region-end))
+    (yank)))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-take-replace))
   "Take From and Replace")
 
 (oclosure-define (conn-dispatch-take (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-take)
-      (oclosure-lambda (conn-dispatch-take
-                        (window-predicate
-                         (lambda (win)
-                           (not
-                            (buffer-local-value 'buffer-read-only
-                                                (window-buffer win))))))
-          (window pt thing-cmd thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
-              (`(,beg . ,end)
-               (kill-region beg end)
-               (conn--dispatch-fixup-whitespace))
-              (_ (user-error "Cannot find %s at point"
-                             (get thing-cmd :conn-command-thing))))))
-        (yank)))
+(conn-define-action conn-dispatch-take
+  (oclosure-lambda (conn-dispatch-take
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt thing-cmd thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (conn-bounds-of-command thing-cmd thing-arg))
+          (`(,beg . ,end)
+           (kill-region beg end)
+           (conn--dispatch-fixup-whitespace))
+          (_ (user-error "Cannot find %s at point"
+                         (get thing-cmd :conn-command-thing))))))
+    (yank)))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-take))
   "Take From")
@@ -5006,44 +5005,44 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-over
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-over)
-      (oclosure-lambda (conn-dispatch-over)
-          (window pt thing-cmd thing-arg)
-        (when (and (eq (window-buffer window) (current-buffer))
-                   (/= pt (point)))
-          (unless (region-active-p)
-            (push-mark nil t))
-          (pcase (alist-get thing-cmd conn-dispatch-default-action-alist)
-            ((or 'conn-dispatch-goto 'nil)
-             (pcase (cons (or (bounds-of-thing-at-point
-                               (get thing-cmd :conn-command-thing))
-                              (point))
-                          (progn
-                            (goto-char pt)
-                            (bounds-of-thing-at-point
-                             (get thing-cmd :conn-command-thing))))
-               ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
-                     (or (guard (<= beg1 end1 beg2 end2))
-                         (guard (>= end1 beg1 end2 beg2))
-                         (guard (and (= beg1 beg2) (= end1 end2)))))
-                (if (> beg2 end1)
-                    (progn
-                      (conn--push-ephemeral-mark beg1)
-                      (goto-char end2))
-                  (conn--push-ephemeral-mark end1)
-                  (goto-char beg2)))
-               ((and `(,point . (,beg . ,end))
-                     (guard (integerp point)))
-                (cond ((<= point beg end)
-                       (goto-char end))
-                      ((<= beg point end)
-                       (goto-char beg)
-                       (conn--push-ephemeral-mark end))
-                      ((<= beg end point)
-                       (goto-char beg))))))
-            ('conn-dispatch-jump (funcall (conn-action 'conn-dispatch-jump)
-                                          window pt thing-cmd thing-arg))
-            (_ (error "Can't jump to %s" thing-cmd))))))
+(conn-define-action conn-dispatch-over
+  (oclosure-lambda (conn-dispatch-over)
+      (window pt thing-cmd thing-arg)
+    (when (and (eq (window-buffer window) (current-buffer))
+               (/= pt (point)))
+      (unless (region-active-p)
+        (push-mark nil t))
+      (pcase (alist-get thing-cmd conn-dispatch-default-action-alist)
+        ((or 'conn-dispatch-goto 'nil)
+         (pcase (cons (or (bounds-of-thing-at-point
+                           (get thing-cmd :conn-command-thing))
+                          (point))
+                      (progn
+                        (goto-char pt)
+                        (bounds-of-thing-at-point
+                         (get thing-cmd :conn-command-thing))))
+           ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
+                 (or (guard (<= beg1 end1 beg2 end2))
+                     (guard (>= end1 beg1 end2 beg2))
+                     (guard (and (= beg1 beg2) (= end1 end2)))))
+            (if (> beg2 end1)
+                (progn
+                  (conn--push-ephemeral-mark beg1)
+                  (goto-char end2))
+              (conn--push-ephemeral-mark end1)
+              (goto-char beg2)))
+           ((and `(,point . (,beg . ,end))
+                 (guard (integerp point)))
+            (cond ((<= point beg end)
+                   (goto-char end))
+                  ((<= beg point end)
+                   (goto-char beg)
+                   (conn--push-ephemeral-mark end))
+                  ((<= beg end point)
+                   (goto-char beg))))))
+        ('conn-dispatch-jump (funcall (conn-action 'conn-dispatch-jump)
+                                      window pt thing-cmd thing-arg))
+        (_ (error "Can't jump to %s" thing-cmd))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-over))
   "Over")
@@ -5051,13 +5050,13 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-jump)
-      (oclosure-lambda (conn-dispatch-jump)
-          (window pt _thing-cmd _thing-arg)
-        (with-current-buffer (window-buffer window)
-          (unless (= pt (point))
-            (unless (region-active-p) (push-mark nil t))
-            (select-window window) (goto-char pt)))))
+(conn-define-action conn-dispatch-jump
+  (oclosure-lambda (conn-dispatch-jump)
+      (window pt _thing-cmd _thing-arg)
+    (with-current-buffer (window-buffer window)
+      (unless (= pt (point))
+        (unless (region-active-p) (push-mark nil t))
+        (select-window window) (goto-char pt)))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-jump))
   "Jump")
@@ -5065,73 +5064,73 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-transpose)
-      (oclosure-lambda (conn-dispatch-transpose
-                        (always-retarget t)
-                        (window-predicate
-                         (lambda (win)
-                           (not (buffer-local-value 'buffer-read-only
-                                                    (window-buffer win))))))
-          (window1 pt1 thing-cmd1 window2 pt2 thing-cmd2)
-        (if (eq (window-buffer window1) (window-buffer window2))
-            (with-current-buffer (window-buffer window1)
-              (save-excursion
-                (pcase-let ((`(,beg1 . ,end1)
-                             (progn
-                               (goto-char pt1)
-                               (or (bounds-of-thing-at-point
-                                    (or (get thing-cmd1 :conn-command-thing)
-                                        thing-cmd1))
-                                   (user-error "Cannot find %s at point" thing-cmd1))))
-                            (`(,beg2 . ,end2)
-                             (progn
-                               (goto-char pt2)
-                               (or (bounds-of-thing-at-point
-                                    (or (get thing-cmd2 :conn-command-thing)
-                                        thing-cmd2))
-                                   (user-error "Cannot find %s at point" thing-cmd2)))))
-                  (if (and (or (<= beg1 end1 beg2 end2)
-                               (<= beg2 end2 beg1 end1))
-                           (/= beg1 end1)
-                           (/= beg2 end2)
-                           (<= (point-min) (min beg2 end2 beg1 end1))
-                           (> (point-max) (max beg2 end2 beg1 end1)))
-                      (transpose-regions beg1 end1 beg2 end2)
-                    (user-error "Invalid regions")))))
-          (conn-protected-let* ((cg (nconc
-                                     (prepare-change-group (window-buffer window1))
-                                     (prepare-change-group (window-buffer window2)))
-                                    (cancel-change-group cg))
-                                (str1)
-                                (str2))
-            (activate-change-group cg)
-            (with-current-buffer (window-buffer window1)
-              (save-excursion
-                (goto-char pt1)
-                (pcase (bounds-of-thing-at-point
-                        (or (get thing-cmd1 :conn-command-thing)
-                            thing-cmd1))
-                  (`(,beg . ,end)
-                   (setq pt1 beg)
-                   (setq str1 (filter-buffer-substring beg end))
-                   (delete-region beg end))
-                  (_ (user-error "Cannot find %s at point" thing-cmd1)))))
-            (with-current-buffer (window-buffer window2)
-              (save-excursion
-                (goto-char pt2)
-                (pcase (bounds-of-thing-at-point
-                        (or (get thing-cmd2 :conn-command-thing)
-                            thing-cmd2))
-                  (`(,beg . ,end)
-                   (setq str2 (filter-buffer-substring beg end))
-                   (delete-region beg end)
-                   (insert str1))
-                  (_ (user-error "Cannot find %s at point" thing-cmd2)))))
-            (with-current-buffer (window-buffer window1)
-              (save-excursion
-                (goto-char pt1)
-                (insert str2)))
-            (accept-change-group cg)))))
+(conn-define-action conn-dispatch-transpose
+  (oclosure-lambda (conn-dispatch-transpose
+                    (always-retarget t)
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
+      (window1 pt1 thing-cmd1 window2 pt2 thing-cmd2)
+    (if (eq (window-buffer window1) (window-buffer window2))
+        (with-current-buffer (window-buffer window1)
+          (save-excursion
+            (pcase-let ((`(,beg1 . ,end1)
+                         (progn
+                           (goto-char pt1)
+                           (or (bounds-of-thing-at-point
+                                (or (get thing-cmd1 :conn-command-thing)
+                                    thing-cmd1))
+                               (user-error "Cannot find %s at point" thing-cmd1))))
+                        (`(,beg2 . ,end2)
+                         (progn
+                           (goto-char pt2)
+                           (or (bounds-of-thing-at-point
+                                (or (get thing-cmd2 :conn-command-thing)
+                                    thing-cmd2))
+                               (user-error "Cannot find %s at point" thing-cmd2)))))
+              (if (and (or (<= beg1 end1 beg2 end2)
+                           (<= beg2 end2 beg1 end1))
+                       (/= beg1 end1)
+                       (/= beg2 end2)
+                       (<= (point-min) (min beg2 end2 beg1 end1))
+                       (> (point-max) (max beg2 end2 beg1 end1)))
+                  (transpose-regions beg1 end1 beg2 end2)
+                (user-error "Invalid regions")))))
+      (conn-protected-let* ((cg (nconc
+                                 (prepare-change-group (window-buffer window1))
+                                 (prepare-change-group (window-buffer window2)))
+                                (cancel-change-group cg))
+                            (str1)
+                            (str2))
+        (activate-change-group cg)
+        (with-current-buffer (window-buffer window1)
+          (save-excursion
+            (goto-char pt1)
+            (pcase (bounds-of-thing-at-point
+                    (or (get thing-cmd1 :conn-command-thing)
+                        thing-cmd1))
+              (`(,beg . ,end)
+               (setq pt1 beg)
+               (setq str1 (filter-buffer-substring beg end))
+               (delete-region beg end))
+              (_ (user-error "Cannot find %s at point" thing-cmd1)))))
+        (with-current-buffer (window-buffer window2)
+          (save-excursion
+            (goto-char pt2)
+            (pcase (bounds-of-thing-at-point
+                    (or (get thing-cmd2 :conn-command-thing)
+                        thing-cmd2))
+              (`(,beg . ,end)
+               (setq str2 (filter-buffer-substring beg end))
+               (delete-region beg end)
+               (insert str1))
+              (_ (user-error "Cannot find %s at point" thing-cmd2)))))
+        (with-current-buffer (window-buffer window1)
+          (save-excursion
+            (goto-char pt1)
+            (insert str2)))
+        (accept-change-group cg)))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-transpose))
   "Transpose")
@@ -5162,6 +5161,10 @@ Returns a cons of (STRING . OVERLAYS)."
   "T" 'conn-dispatch-take-replace
   "t" 'conn-dispatch-take
   "C" 'conn-dispatch-copy-as-kill
+  "P" 'conn-dispatch-register-replace
+  "w" 'conn-dispatch-kill
+  "q" 'conn-dispatch-transpose
+  "SPC" 'conn-dispatch-jump
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -5176,14 +5179,10 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-duplicate>" 'conn-dispatch-duplicate
   "<remap> <conn-duplicate-and-comment>" 'conn-dispatch-duplicate
   "<remap> <conn-register-prefix>" 'conn-dispatch-register-load
-  "P" 'conn-dispatch-register-replace
-  "w" 'conn-dispatch-kill
   "<remap> <conn-kill-append-region>" 'conn-dispatch-kill-append
   "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
   "<remap> <conn-append-region>" 'conn-dispatch-copy-append
-  "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend
-  "SPC" 'conn-dispatch-jump
-  "q" 'conn-dispatch-transpose)
+  "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend)
 
 
 ;;;;; Dispatch Registers
@@ -8210,9 +8209,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol-digit-argument ()
   (interactive)
   (let* ((char (if (integerp last-command-event)
-		   last-command-event
-		 (get last-command-event 'ascii-character)))
-	 (digit (- (logand char ?\177) ?0)))
+                   last-command-event
+                 (get last-command-event 'ascii-character)))
+         (digit (- (logand char ?\177) ?0)))
     (if conn--wincontrol-arg
         (setq conn--wincontrol-arg
               (+ (if (>= (or conn--wincontrol-arg 1) 0) digit (- digit))
@@ -9315,22 +9314,22 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-mark
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-dired-mark)
-      (oclosure-lambda (conn-dispatch-dired-mark
-                        (window-predicate
-                         (lambda (win)
-                           (eq (buffer-local-value 'major-mode
-                                                   (window-buffer win))
-                               'dired-mode))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (let ((regexp (dired-marker-regexp)))
-              (goto-char pt)
-              (goto-char (line-beginning-position))
-              (if (looking-at regexp)
-                  (dired-unmark 1)
-                (dired-mark 1)))))))
+(conn-define-action conn-dispatch-dired-mark
+  (oclosure-lambda (conn-dispatch-dired-mark
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode
+                                               (window-buffer win))
+                           'dired-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (let ((regexp (dired-marker-regexp)))
+          (goto-char pt)
+          (goto-char (line-beginning-position))
+          (if (looking-at regexp)
+              (dired-unmark 1)
+            (dired-mark 1)))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-dired-mark))
   "Mark")
@@ -9338,18 +9337,18 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-kill-line
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-dired-kill-line)
-      (oclosure-lambda (conn-dispatch-dired-kill-line
-                        (window-predicate
-                         (lambda (win)
-                           (eq (buffer-local-value 'major-mode
-                                                   (window-buffer win))
-                               'dired-mode))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (dired-kill-line)))))
+(conn-define-action conn-dispatch-dired-kill-line
+  (oclosure-lambda (conn-dispatch-dired-kill-line
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode
+                                               (window-buffer win))
+                           'dired-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (dired-kill-line)))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-dired-kill-line))
   "Kill Line")
@@ -9357,18 +9356,18 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-kill-subdir
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-dired-kill-subdir)
-      (oclosure-lambda (conn-dispatch-dired-kill-subdir
-                        (window-predicate
-                         (lambda (win)
-                           (eq (buffer-local-value 'major-mode
-                                                   (window-buffer win))
-                               'dired-mode))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (dired-kill-subdir)))))
+(conn-define-action conn-dispatch-dired-kill-subdir
+  (oclosure-lambda (conn-dispatch-dired-kill-subdir
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode
+                                               (window-buffer win))
+                           'dired-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (dired-kill-subdir)))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-dired-kill-subdir))
   "Kill Subdir")
@@ -9458,21 +9457,21 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-ibuffer-mark
                   (:parent conn-action)))
 
-(setf (conn-action 'conn-dispatch-ibuffer-mark)
-      (oclosure-lambda (conn-dispatch-ibuffer-mark
-                        (window-predicate
-                         (lambda (win)
-                           (eq (buffer-local-value 'major-mode
-                                                   (window-buffer win))
-                               'ibuffer-mode))))
-          (window pt _thing-cmd _thing-arg)
-        (with-selected-window window
-          (save-excursion
-            (goto-char pt)
-            (if (or (null (ibuffer-current-mark))
-                    (= (ibuffer-current-mark) ? ))
-                (ibuffer-mark-forward nil nil 1)
-              (ibuffer-unmark-forward nil nil 1))))))
+(conn-define-action conn-dispatch-ibuffer-mark
+  (oclosure-lambda (conn-dispatch-ibuffer-mark
+                    (window-predicate
+                     (lambda (win)
+                       (eq (buffer-local-value 'major-mode
+                                               (window-buffer win))
+                           'ibuffer-mode))))
+      (window pt _thing-cmd _thing-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (if (or (null (ibuffer-current-mark))
+                (= (ibuffer-current-mark) ? ))
+            (ibuffer-mark-forward nil nil 1)
+          (ibuffer-unmark-forward nil nil 1))))))
 
 (cl-defmethod conn-action-description ((_action conn-dispatch-ibuffer-mark))
   "Mark")
