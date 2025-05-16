@@ -4865,70 +4865,78 @@ Returns a cons of (STRING . OVERLAYS)."
       (select-window window)
       (goto-char pt))))
 
-(conn-define-dispatch-action conn-dispatch-transpose
-    (window1 pt1 window2 pt2 thing-cmd1 thing-cmd2)
-  :description "Transpose"
-  :window-predicate (lambda (win)
-                      (not (buffer-local-value 'buffer-read-only (window-buffer win))))
-  (if (eq (window-buffer window1) (window-buffer window2))
-      (with-current-buffer (window-buffer window1)
-        (save-excursion
-          (pcase-let ((`(,beg1 . ,end1)
-                       (progn
-                         (goto-char pt1)
-                         (or (bounds-of-thing-at-point
-                              (or (get thing-cmd1 :conn-command-thing)
-                                  thing-cmd1))
-                             (user-error "Cannot find %s at point" thing-cmd1))))
-                      (`(,beg2 . ,end2)
-                       (progn
-                         (goto-char pt2)
-                         (or (bounds-of-thing-at-point
-                              (or (get thing-cmd2 :conn-command-thing)
-                                  thing-cmd2))
-                             (user-error "Cannot find %s at point" thing-cmd2)))))
-            (if (and (or (<= beg1 end1 beg2 end2)
-                         (<= beg2 end2 beg1 end1))
-                     (/= beg1 end1)
-                     (/= beg2 end2)
-                     (<= (point-min) (min beg2 end2 beg1 end1))
-                     (> (point-max) (max beg2 end2 beg1 end1)))
-                (transpose-regions beg1 end1 beg2 end2)
-              (user-error "Invalid regions")))))
-    (conn-protected-let* ((cg (nconc
-                               (prepare-change-group (window-buffer window1))
-                               (prepare-change-group (window-buffer window2)))
-                              (cancel-change-group cg))
-                          (str1)
-                          (str2))
-      (activate-change-group cg)
-      (with-current-buffer (window-buffer window1)
-        (save-excursion
-          (goto-char pt1)
-          (pcase (bounds-of-thing-at-point
-                  (or (get thing-cmd1 :conn-command-thing)
-                      thing-cmd1))
-            (`(,beg . ,end)
-             (setq pt1 beg)
-             (setq str1 (filter-buffer-substring beg end))
-             (delete-region beg end))
-            (_ (user-error "Cannot find %s at point" thing-cmd1)))))
-      (with-current-buffer (window-buffer window2)
-        (save-excursion
-          (goto-char pt2)
-          (pcase (bounds-of-thing-at-point
-                  (or (get thing-cmd2 :conn-command-thing)
-                      thing-cmd2))
-            (`(,beg . ,end)
-             (setq str2 (filter-buffer-substring beg end))
-             (delete-region beg end)
-             (insert str1))
-            (_ (user-error "Cannot find %s at point" thing-cmd2)))))
-      (with-current-buffer (window-buffer window1)
-        (save-excursion
-          (goto-char pt1)
-          (insert str2)))
-      (accept-change-group cg))))
+(oclosure-define (conn-dispatch-transpose
+                  (:parent conn-action)))
+
+(cl-defmethod conn-action ((_action-type (eql conn-dispatch-transpose)))
+  (oclosure-lambda (conn-dispatch-transpose
+                    (window-predicate
+                     (lambda (win)
+                       (not (buffer-local-value 'buffer-read-only
+                                                (window-buffer win))))))
+      (window1 pt1 thing-cmd1 window2 pt2 thing-cmd2)
+    (if (eq (window-buffer window1) (window-buffer window2))
+        (with-current-buffer (window-buffer window1)
+          (save-excursion
+            (pcase-let ((`(,beg1 . ,end1)
+                         (progn
+                           (goto-char pt1)
+                           (or (bounds-of-thing-at-point
+                                (or (get thing-cmd1 :conn-command-thing)
+                                    thing-cmd1))
+                               (user-error "Cannot find %s at point" thing-cmd1))))
+                        (`(,beg2 . ,end2)
+                         (progn
+                           (goto-char pt2)
+                           (or (bounds-of-thing-at-point
+                                (or (get thing-cmd2 :conn-command-thing)
+                                    thing-cmd2))
+                               (user-error "Cannot find %s at point" thing-cmd2)))))
+              (if (and (or (<= beg1 end1 beg2 end2)
+                           (<= beg2 end2 beg1 end1))
+                       (/= beg1 end1)
+                       (/= beg2 end2)
+                       (<= (point-min) (min beg2 end2 beg1 end1))
+                       (> (point-max) (max beg2 end2 beg1 end1)))
+                  (transpose-regions beg1 end1 beg2 end2)
+                (user-error "Invalid regions")))))
+      (conn-protected-let* ((cg (nconc
+                                 (prepare-change-group (window-buffer window1))
+                                 (prepare-change-group (window-buffer window2)))
+                                (cancel-change-group cg))
+                            (str1)
+                            (str2))
+        (activate-change-group cg)
+        (with-current-buffer (window-buffer window1)
+          (save-excursion
+            (goto-char pt1)
+            (pcase (bounds-of-thing-at-point
+                    (or (get thing-cmd1 :conn-command-thing)
+                        thing-cmd1))
+              (`(,beg . ,end)
+               (setq pt1 beg)
+               (setq str1 (filter-buffer-substring beg end))
+               (delete-region beg end))
+              (_ (user-error "Cannot find %s at point" thing-cmd1)))))
+        (with-current-buffer (window-buffer window2)
+          (save-excursion
+            (goto-char pt2)
+            (pcase (bounds-of-thing-at-point
+                    (or (get thing-cmd2 :conn-command-thing)
+                        thing-cmd2))
+              (`(,beg . ,end)
+               (setq str2 (filter-buffer-substring beg end))
+               (delete-region beg end)
+               (insert str1))
+              (_ (user-error "Cannot find %s at point" thing-cmd2)))))
+        (with-current-buffer (window-buffer window1)
+          (save-excursion
+            (goto-char pt1)
+            (insert str2)))
+        (accept-change-group cg)))))
+
+(cl-defmethod conn-action-description ((_action conn-dispatch-transpose))
+  "Transpose")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-over-or-goto))
                                           cont)
@@ -5152,7 +5160,7 @@ Returns a cons of (STRING . OVERLAYS)."
     (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder)))
       (funcall action win pt (or thing thing-cmd) thing-arg))))
 
-(cl-defmethod conn-perform-dispatch ((_action conn-dispatch-transpose)
+(cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
                                      target-finder thing-cmd _thing-arg
                                      &optional repeat)
   (conn-perform-dispatch-loop repeat
@@ -5162,9 +5170,9 @@ Returns a cons of (STRING . OVERLAYS)."
                   (progn
                     (setq conn--dispatch-current-targeter nil)
                     (conn-dispatch-select-target target-finder))))
-      (conn-dispatch-transpose win1 pt1 win2 pt2
-                               (or thing1 thing-cmd)
-                               (or thing2 thing-cmd)))))
+      (funcall action
+               win1 pt1 (or thing1 thing-cmd)
+               win2 pt2 (or thing2 thing-cmd)))))
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
