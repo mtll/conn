@@ -4177,7 +4177,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (always-retarget))
 
 (defun conn--action-name-p (symbol)
-  (not (not (cl-find-method 'conn-make-action `((eql ,symbol)) nil))))
+  (not (not (cl-find-method 'conn-make-action nil `((eql ,symbol))))))
 
 (cl-defgeneric conn-make-action (type)
   (:method (type) (error "Unknown action type %s" type)))
