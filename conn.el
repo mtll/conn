@@ -3268,7 +3268,7 @@ associated with a command's thing.")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)
-  "\\" 'kapply)
+  "\\" 'conn-dispatch-kapply)
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
@@ -4193,20 +4193,24 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defgeneric conn-action (action-type)
   (:method ((action conn-action)) action))
 
-(gv-define-setter conn-action (lambda symbol)
+(gv-define-setter conn-action (constructor symbol)
   (pcase symbol
     (`(quote ,val) (setf symbol val)))
   `(progn
-     (cl-defmethod conn-action ((_type (eql ,symbol)))
-       (let ((instance ,lambda))
-         (conn-action-initialize instance)
-         instance))
+     (cl-defmethod conn-action ((type (eql ,symbol)))
+       (if-let* ((instance ,constructor))
+           (progn
+             (conn-action-initialize instance)
+             instance)
+         (error "Failed to construct %s" type)))
 
      (cl-defmethod conn-dispatch-command-case ((type (eql ,symbol)) cont)
        (conn-action-cancel (oref cont action))
        (if (cl-typep (oref cont action) type)
            (setf (oref cont action) nil)
-         (setf (oref cont action) (conn-action type))))))
+         (setf (oref cont action) (condition-case _
+                                      (conn-action type)
+                                    (error nil)))))))
 
 (cl-defgeneric conn-action-description (action))
 
@@ -5135,11 +5139,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-over-or-goto))
                                           cont)
   (conn-action-cancel (oref cont action))
-  (setf (oref cont action) (pcase (oref cont action)
-                             ((cl-type conn-dispatch-over)
-                              (conn-action 'conn-dispatch-goto))
-                             ((cl-type conn-dispatch-goto) nil)
-                             (_ (conn-action 'conn-dispatch-over)))))
+  (setf (oref cont action)
+        (condition-case _
+            (pcase (oref cont action)
+              ((cl-type conn-dispatch-over)
+               (conn-action 'conn-dispatch-goto))
+              ((cl-type conn-dispatch-goto) nil)
+              (_ (conn-action 'conn-dispatch-over)))
+          (error nil))))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-dispatch-state)

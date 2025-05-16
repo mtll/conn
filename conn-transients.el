@@ -641,28 +641,28 @@ A zero means repeat until error."
                   (:parent conn-action))
   (macro :mutable t))
 
+(setf (conn-action 'conn-dispatch-kapply)
+      (letrec ((wconf (current-window-configuration))
+               (action nil)
+               (setup (lambda ()
+                        (conn-with-state conn-previous-state
+                          (conn-dispatch-kapply-prefix
+                           (lambda (kapply-action)
+                             (setf action kapply-action))))
+                        (remove-hook 'post-command-hook setup))))
+        (add-hook 'post-command-hook setup -99)
+        (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
+        (unwind-protect
+            (recursive-edit)
+          (set-window-configuration wconf)
+          (remove-hook 'post-command-hook setup)
+          (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
+        action))
+
 (cl-defmethod conn-action-description ((action conn-dispatch-kapply))
   (concat "Kapply"
           (when-let* ((macro (oref action macro)))
             (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">"))))
-
-(cl-defmethod conn-dispatch-command-case ((_command (eql kapply)) continuation)
-  (if (cl-typep (oref continuation action) 'conn-dispatch-kapply)
-      (setf (oref continuation action) nil)
-    (letrec ((wconf (current-window-configuration))
-             (setup (lambda ()
-                      (conn-with-state conn-previous-state
-                        (conn-dispatch-kapply-prefix
-                         (lambda (kapply-action)
-                           (setf (oref continuation action) kapply-action))))
-                      (remove-hook 'post-command-hook setup))))
-      (add-hook 'post-command-hook setup -99)
-      (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
-      (unwind-protect
-          (recursive-edit)
-        (set-window-configuration wconf)
-        (remove-hook 'post-command-hook setup)
-        (remove-hook 'transient-post-exit-hook 'exit-recursive-edit)))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
