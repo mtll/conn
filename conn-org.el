@@ -169,7 +169,7 @@
         (goto-char pt)
         (org-open-at-point-global)))))
 
-(cl-defmethod conn-action-description ((_action conn-open-org-link))
+(cl-defmethod conn-describe-action ((_action conn-open-org-link))
   "Open Link")
 
 (setf (alist-get 'org-link conn-dispatch-default-action-alist)

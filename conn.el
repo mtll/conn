@@ -3352,7 +3352,7 @@ associated with a command's thing.")
   (let ((action-description
          (if (oref cont action)
              (concat (propertize
-                      (conn-action-description (oref cont action))
+                      (conn-describe-action (oref cont action))
                       'face 'eldoc-highlight-function-argument)
                      " ")
            "")))
@@ -3392,12 +3392,12 @@ associated with a command's thing.")
                                     :initial-arg initial-arg)
           (setq success t))
       (unless success
-        (conn-action-cancel (oref cont action))))))
+        (conn-cancel-action (oref cont action))))))
 
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
     ((pred conn--action-type-p)
-     (conn-action-cancel (oref cont action))
+     (conn-cancel-action (oref cont action))
      (if (cl-typep (oref cont action) command)
          (setf (oref cont action) nil)
        (setf (oref cont action) (condition-case _
@@ -4192,12 +4192,12 @@ Returns a cons of (STRING . OVERLAYS)."
             (error "Failed to construct %s" type))
       (set-window-configuration wconf))))
 
-(cl-defgeneric conn-action-description (action))
+(cl-defgeneric conn-describe-action (action))
 
-(cl-defgeneric conn-action-accept (action)
+(cl-defgeneric conn-accept-action (action)
   (:method ((_ conn-action)) "Noop" nil))
 
-(cl-defgeneric conn-action-cancel (action)
+(cl-defgeneric conn-cancel-action (action)
   (:method (_) "Noop" nil))
 
 (defun conn--action-buffer-change-group ()
@@ -4251,7 +4251,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (_ (user-error "Cannot find %s at point"
                          (get thing-cmd :conn-command-thing))))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-goto))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-goto))
   "Goto")
 
 (oclosure-define (conn-dispatch-push-button
@@ -4266,7 +4266,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (when (fboundp 'widget-apply-action)
         (widget-apply-action (get-char-property pt 'button) pt)))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-push-button))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-push-button))
   "Push Button")
 
 (oclosure-define (conn-dispatch-yank-replace-to
@@ -4293,7 +4293,7 @@ Returns a cons of (STRING . OVERLAYS)."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-yank-replace-to))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-replace-to))
   "Yank and Replace To")
 
 (oclosure-define (conn-dispatch-yank-read-replace-to
@@ -4320,7 +4320,7 @@ Returns a cons of (STRING . OVERLAYS)."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-yank-read-replace-to))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-read-replace-to))
   "Yank and Replace To")
 
 (oclosure-define (conn-dispatch-yank-to
@@ -4350,7 +4350,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                                   (length seperator)))
                                             (point)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-yank-to))
+(cl-defmethod conn-describe-action ((action conn-dispatch-yank-to))
   (if-let* ((sep (oref action seperator)))
       (format "Yank To <%s>" sep)
     "Yank To"))
@@ -4382,7 +4382,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                                   (length seperator)))
                                             (point)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-reading-yank-to))
+(cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to))
   (if-let* ((sep (oref action seperator)))
       (format "Yank To <%s>" sep)
     "Yank To"))
@@ -4417,19 +4417,19 @@ Returns a cons of (STRING . OVERLAYS)."
                                                     (length seperator)))
                                               (point))))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-send))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-send))
   "Send")
 
-(cl-defmethod conn-action-description ((action conn-dispatch-reading-yank-to))
+(cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to))
   (if-let* ((sep (oref action seperator)))
       (format "Send <%s>" sep)
     "Send"))
 
-(cl-defmethod conn-action-accept ((action conn-dispatch-send))
+(cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (oref action change-group))
   action)
 
-(cl-defmethod conn-action-cancel ((action conn-dispatch-send))
+(cl-defmethod conn-cancel-action ((action conn-dispatch-send))
   (conn--action-cancel-change-group (oref action change-group)))
 
 (oclosure-define (conn-dispatch-send-replace
@@ -4459,14 +4459,14 @@ Returns a cons of (STRING . OVERLAYS)."
                (pulse-momentary-highlight-region (- (point) (length str)) (point))))
             (_ (user-error "Cannot find %s at point" thing-cmd))))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-send-replace))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-send-replace))
   "Send and Replace")
 
-(cl-defmethod conn-action-accept ((action conn-dispatch-send-replace))
+(cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group (oref action change-group))
   action)
 
-(cl-defmethod conn-action-cancel ((action conn-dispatch-send-replace))
+(cl-defmethod conn-cancel-action ((action conn-dispatch-send-replace))
   (conn--action-cancel-change-group (oref action change-group)))
 
 (oclosure-define (conn-dispatch-downcase
@@ -4487,7 +4487,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (`(,beg . ,end) (downcase-region beg end))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-downcase))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-downcase))
   "Downcase")
 
 (oclosure-define (conn-dispatch-upcase
@@ -4508,7 +4508,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (`(,beg . ,end) (upcase-region beg end))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-upcase))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-upcase))
   "Upcase")
 
 (oclosure-define (conn-dispatch-capitalize
@@ -4529,7 +4529,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (`(,beg . ,end) (capitalize-region beg end))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-capitalize))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-capitalize))
   "Capitalize")
 
 (oclosure-define (conn-dispatch-narrow-indirect
@@ -4546,7 +4546,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (conn--narrow-indirect beg end))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-narrow-indirect))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-narrow-indirect))
   "Narrow Indirect")
 
 (oclosure-define (conn-dispatch-comment
@@ -4569,7 +4569,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Commented %s" thing-cmd))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-comment))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-comment))
   "Comment")
 
 (oclosure-define (conn-dispatch-duplicate
@@ -4594,7 +4594,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Duplicated %s" thing-cmd))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-duplicate))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-duplicate))
   "Duplicate")
 
 (oclosure-define (conn-dispatch-duplicate-and-comment
@@ -4619,7 +4619,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Duplicated and commented %s" thing-cmd))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-duplicate-and-comment))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-duplicate-and-comment))
   "Duplicate and Comment")
 
 (oclosure-define (conn-dispatch-register-load
@@ -4638,7 +4638,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (goto-char pt)
           (conn-register-load register))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-register-load))
+(cl-defmethod conn-describe-action ((action conn-dispatch-register-load))
   (format "Register <%c>" (oref action register)))
 
 (oclosure-define (conn-dispatch-register-replace
@@ -4661,7 +4661,7 @@ Returns a cons of (STRING . OVERLAYS)."
              (conn-register-load register))
             (_ (user-error "Cannot find %s at point" thing-cmd))))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-register-replace))
+(cl-defmethod conn-describe-action ((action conn-dispatch-register-replace))
   (format "Register Replace <%c>" (oref action register)))
 
 (oclosure-define (conn-dispatch-kill
@@ -4693,7 +4693,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (message "Killed thing"))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-kill))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kill))
   (if-let* ((register (oref action register)))
       (format "Kill to Register <%c>" register)
     "Kill"))
@@ -4725,7 +4725,7 @@ Returns a cons of (STRING . OVERLAYS)."
              (message "Appended: %s" str)))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-kill-append))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kill-append))
   (if-let* ((register (oref action register)))
       (format "Kill Append Register <%c>" register)
     "Kill Append"))
@@ -4758,7 +4758,7 @@ Returns a cons of (STRING . OVERLAYS)."
              (message "Prepended: %s" str)))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-kill-prepend))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kill-prepend))
   (if-let* ((register (oref action register)))
       (format "Kill Prepend Register <%c>" register)
     "Kill Prepend"))
@@ -4786,7 +4786,7 @@ Returns a cons of (STRING . OVERLAYS)."
                   (kill-new (filter-buffer-substring beg end)))))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-copy-as-kill))
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-as-kill))
   (if-let* ((register (oref action register)))
       (format "Copy to Register <%c>" register)
     "Copy As Kill"))
@@ -4813,7 +4813,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (_ (user-error "Cannot find %s at point"
                          (get thing-cmd :conn-command-thing))))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-copy-append))
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-append))
   (if-let* ((register (oref action register)))
       (format "Copy Append to Register <%c>" register)
     "Copy Append to Kill"))
@@ -4839,7 +4839,7 @@ Returns a cons of (STRING . OVERLAYS)."
              (message "Copy Prepended: %s" str)))
           (_ (user-error "Cannot find %s at point" thing-cmd)))))))
 
-(cl-defmethod conn-action-description ((action conn-dispatch-copy-prepend))
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-prepend))
   (if-let* ((register (oref action register)))
       (format "Copy Prepend to Register <%c>" register)
     "Copy Prepend to Kill"))
@@ -4863,7 +4863,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (user-error "Cannot find %s at point"
                     (get thing-cmd :conn-command-thing))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-yank-from))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from))
   "Yank From")
 
 (oclosure-define (conn-dispatch-yank-from-replace
@@ -4885,7 +4885,7 @@ Returns a cons of (STRING . OVERLAYS)."
     (delete-region (region-beginning) (region-end))
     (yank)))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-yank-from-replace))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from-replace))
   "Yank From and Replace")
 
 (oclosure-define (conn-dispatch-take-replace (:parent conn-action)))
@@ -4909,7 +4909,7 @@ Returns a cons of (STRING . OVERLAYS)."
     (delete-region (region-beginning) (region-end))
     (yank)))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-take-replace))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-take-replace))
   "Take From and Replace")
 
 (oclosure-define (conn-dispatch-take (:parent conn-action)))
@@ -4933,7 +4933,7 @@ Returns a cons of (STRING . OVERLAYS)."
                          (get thing-cmd :conn-command-thing))))))
     (yank)))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-take))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-take))
   "Take From")
 
 (oclosure-define (conn-dispatch-over
@@ -4978,7 +4978,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                       window pt thing-cmd thing-arg))
         (_ (error "Can't jump to %s" thing-cmd))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-over))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-over))
   "Over")
 
 (oclosure-define (conn-dispatch-jump
@@ -4992,7 +4992,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (unless (region-active-p) (push-mark nil t))
         (select-window window) (goto-char pt)))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-jump))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-jump))
   "Jump")
 
 (oclosure-define (conn-dispatch-transpose
@@ -5066,12 +5066,12 @@ Returns a cons of (STRING . OVERLAYS)."
             (insert str2)))
         (accept-change-group cg)))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-transpose))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-transpose))
   "Transpose")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-over-or-goto))
                                           cont)
-  (conn-action-cancel (oref cont action))
+  (conn-cancel-action (oref cont action))
   (setf (oref cont action)
         (condition-case _
             (pcase (oref cont action)
@@ -5191,7 +5191,7 @@ Returns a cons of (STRING . OVERLAYS)."
                     conn-dispatch-ring-max))
   (let ((description (lambda ()
                        (concat
-                        (conn-action-description action)
+                        (conn-describe-action action)
                         " @ "
                         (symbol-name thing-cmd)
                         (format " <%s>" thing-arg)))))
@@ -5306,7 +5306,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat)
   (when (conn--action-type-p action)
-    (setq action (conn-action-accept (conn-make-action action))))
+    (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,thing) (conn-dispatch-select-target target-finder)))
@@ -9265,7 +9265,7 @@ Operates with the selected windows parent window."
               (dired-unmark 1)
             (dired-mark 1)))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-dired-mark))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-dired-mark))
   "Mark")
 
 (oclosure-define (conn-dispatch-dired-kill-line
@@ -9284,7 +9284,7 @@ Operates with the selected windows parent window."
         (goto-char pt)
         (dired-kill-line)))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-dired-kill-line))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-dired-kill-line))
   "Kill Line")
 
 (oclosure-define (conn-dispatch-dired-kill-subdir
@@ -9303,7 +9303,7 @@ Operates with the selected windows parent window."
         (goto-char pt)
         (dired-kill-subdir)))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-dired-kill-subdir))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-dired-kill-subdir))
   "Kill Subdir")
 
 
@@ -9407,7 +9407,7 @@ Operates with the selected windows parent window."
             (ibuffer-mark-forward nil nil 1)
           (ibuffer-unmark-forward nil nil 1))))))
 
-(cl-defmethod conn-action-description ((_action conn-dispatch-ibuffer-mark))
+(cl-defmethod conn-describe-action ((_action conn-dispatch-ibuffer-mark))
   "Mark")
 
 (keymap-set (conn-get-major-mode-map 'conn-read-dispatch-state 'ibuffer-mode)
@@ -9523,7 +9523,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-action-info-ref
                   (:parent conn-action)))
 
-(cl-defmethod conn-action-description ((_ conn-action-info-ref))
+(cl-defmethod conn-describe-action ((_ conn-action-info-ref))
   "Info Refs")
 
 (defun conn-dispatch-on-info-refs ()
