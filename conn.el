@@ -7682,6 +7682,23 @@ Current Window: `conn-this-window-prefix'"
     (?c (conn-this-window-prefix))
     (?g (conn-other-window-prompt-prefix))))
 
+(defun conn-other-window-prefix (&optional this-window)
+  (interactive "P")
+  (if this-window
+      (conn-this-window-prefix)
+    (let ((windows (conn--get-windows nil 'nomini)))
+      (if (length= windows 1)
+          (other-window-prefix)
+        (display-buffer-override-next-command
+         (lambda (_ _)
+           (cons (conn-prompt-for-window
+                  (conn--get-windows nil 'nomini nil nil
+                                     (lambda (win)
+                                       (not (eq win (selected-window))))))
+                 'reuse))
+         nil "[select]")
+        (message "Display next command in selected buffer…")))))
+
 (defun conn-other-window-prompt-prefix ()
   "Display next buffer in a window selected by `conn-prompt-for-window'."
   (interactive)
@@ -7989,6 +8006,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "d" 'delete-window
   "h" 'kill-buffer-and-window
   "<escape>" 'conn-wincontrol-exit
+  "<return>" 'conn-other-place-prefix
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
   "g" 'delete-other-windows
@@ -8707,7 +8725,7 @@ Operates with the selected windows parent window."
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-region
   "'" 'conntext-state
-  "." 'conn-other-place-prefix
+  "." 'conn-other-window-prefix
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
   "\\" 'conn-kapply-prefix
