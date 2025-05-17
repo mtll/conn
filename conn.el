@@ -1572,19 +1572,19 @@ By default `conn-emacs-state' does not bind anything."
   :suppress-input-method t
   :cursor 'box)
 
-(conn-define-state conn-read-thing-common-state (conn-command-state)
+(conn-define-state conn-read-mover-common-state (conn-command-state)
   "Common elements of thing reading states."
   :suppress-input-method t
   :transient t
   :mode-line-face 'conn-read-thing-mode-line-face)
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state))
+(cl-defmethod conn-enter-state ((state (conn-substate conn-read-mover-common-state))
                                 &key &allow-other-keys)
   (when-let* ((face (conn-state-get state :mode-line-face)))
     (setf (alist-get 'mode-line face-remapping-alist) face))
   (cl-call-next-method))
 
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover-common-state)))
   (setf face-remapping-alist
         (delq (assq 'mode-line face-remapping-alist)
               face-remapping-alist))
@@ -1972,7 +1972,7 @@ themselves once the selection process has concluded."
 
 ;;;;; Read mover state
 
-(conn-define-state conn-read-mover-state (conn-read-thing-common-state)
+(conn-define-state conn-read-mover-state (conn-read-mover-common-state)
   "A state for reading things."
   :lighter " MOVER")
 
@@ -2224,7 +2224,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (region-bounds)))
 
 (conn-define-state conn-bounds-of-recursive-edit-state
-    (conn-read-thing-common-state)
+    (conn-read-mover-common-state)
   :lighter " RECURSIVE")
 
 (define-keymap
@@ -3191,7 +3191,7 @@ A target finder function should return a list of overlays.")
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
-determining the target finder for a command in `conn-read-dispatch-state'
+determining the target finder for a command in `conn-dispatch-state'
 actions associated with a command have higher precedence than actions
 associated with a thing.
 
@@ -3206,7 +3206,7 @@ For the meaning of TARGET-FINDER see
   "Default action functions for things or commands.
 
 Is an alist of the form (((or THING CMD) . ACTION) ...).  When
-determining the default action for a command in `conn-read-dispatch-state'
+determining the default action for a command in `conn-dispatch-state'
 actions associated with a command have higher precedence than actions
 associated with a command's thing.")
 
@@ -3214,12 +3214,12 @@ associated with a command's thing.")
 
 (defvar conn--dispatch-always-retarget nil)
 
-(conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
+(conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face)
 
-(conn-define-state conn-read-dispatch-state (conn-dispatch-mover-state)
+(conn-define-state conn-dispatch-state (conn-dispatch-mover-state)
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
@@ -3268,7 +3268,7 @@ associated with a command's thing.")
         button conn-dispatch-all-buttons))
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-dispatch-state)
+  :keymap (conn-get-state-map 'conn-dispatch-state)
   "\\" 'conn-dispatch-kapply)
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
@@ -4178,9 +4178,10 @@ Returns a cons of (STRING . OVERLAYS)."
   (always-retarget))
 
 (defun conn--action-type-p (item)
-  (when (symbolp item)
-    (memq 'conn-action
-          (oclosure--class-allparents (cl--find-class item)))))
+  (ignore-errors
+    (when (symbolp item)
+      (memq 'conn-action
+            (oclosure--class-allparents (cl--find-class item))))))
 
 (cl-defgeneric conn-make-action (type)
   (:method (type) (error "Unknown action type %s" type)))
@@ -4991,57 +4992,61 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
       (window1 pt1 bounds-op1 window2 pt2 bounds-op2)
-    (if (eq (window-buffer window1) (window-buffer window2))
-        (with-current-buffer (window-buffer window1)
-          (save-excursion
-            (pcase-let ((`(,beg1 . ,end1)
-                         (progn
-                           (goto-char pt1)
-                           (or (car (funcall bounds-op1))
-                               (user-error "Cannot find thing at point"))))
-                        (`(,beg2 . ,end2)
-                         (progn
-                           (goto-char pt2)
-                           (or (car (funcall bounds-op2))
-                               (user-error "Cannot find thing at point")))))
-              (if (and (or (<= beg1 end1 beg2 end2)
-                           (<= beg2 end2 beg1 end1))
-                       (/= beg1 end1)
-                       (/= beg2 end2)
-                       (<= (point-min) (min beg2 end2 beg1 end1))
-                       (> (point-max) (max beg2 end2 beg1 end1)))
-                  (transpose-regions beg1 end1 beg2 end2)
-                (user-error "Invalid regions")))))
-      (conn-protected-let* ((cg (nconc
-                                 (prepare-change-group (window-buffer window1))
-                                 (prepare-change-group (window-buffer window2)))
-                                (cancel-change-group cg))
-                            (str1)
-                            (str2))
-        (activate-change-group cg)
-        (with-current-buffer (window-buffer window1)
-          (save-excursion
-            (goto-char pt1)
-            (pcase (car (funcall bounds-op1))
-              (`(,beg . ,end)
-               (setq pt1 beg)
-               (setq str1 (filter-buffer-substring beg end))
-               (delete-region beg end))
-              (_ (user-error "Cannot find thing at point")))))
-        (with-current-buffer (window-buffer window2)
-          (save-excursion
-            (goto-char pt2)
-            (pcase (car (funcall bounds-op2))
-              (`(,beg . ,end)
-               (setq str2 (filter-buffer-substring beg end))
-               (delete-region beg end)
-               (insert str1))
-              (_ (user-error "Cannot find thing at point")))))
-        (with-current-buffer (window-buffer window1)
-          (save-excursion
-            (goto-char pt1)
-            (insert str2)))
-        (accept-change-group cg)))))
+    (conn--dispatch-transpose-subr (window-buffer window1) pt1 bounds-op1
+                                   (window-buffer window2) pt2 bounds-op2)))
+
+(defun conn--dispatch-transpose-subr (buffer1 pt1 bounds-op1 buffer2 pt2 bounds-op2)
+  (if (eq buffer1 buffer2)
+      (with-current-buffer buffer1
+        (save-excursion
+          (pcase-let ((`(,beg1 . ,end1)
+                       (progn
+                         (goto-char pt1)
+                         (or (car (funcall bounds-op1))
+                             (user-error "Cannot find thing at point"))))
+                      (`(,beg2 . ,end2)
+                       (progn
+                         (goto-char pt2)
+                         (or (car (funcall bounds-op2))
+                             (user-error "Cannot find thing at point")))))
+            (if (and (or (<= beg1 end1 beg2 end2)
+                         (<= beg2 end2 beg1 end1))
+                     (/= beg1 end1)
+                     (/= beg2 end2)
+                     (<= (point-min) (min beg2 end2 beg1 end1))
+                     (> (point-max) (max beg2 end2 beg1 end1)))
+                (transpose-regions beg1 end1 beg2 end2)
+              (user-error "Invalid regions")))))
+    (conn-protected-let* ((cg (nconc
+                               (prepare-change-group buffer1)
+                               (prepare-change-group buffer2))
+                              (cancel-change-group cg))
+                          (str1)
+                          (str2))
+      (activate-change-group cg)
+      (with-current-buffer buffer1
+        (save-excursion
+          (goto-char pt1)
+          (pcase (car (funcall bounds-op1))
+            (`(,beg . ,end)
+             (setq pt1 beg)
+             (setq str1 (filter-buffer-substring beg end))
+             (delete-region beg end))
+            (_ (user-error "Cannot find thing at point")))))
+      (with-current-buffer buffer2
+        (save-excursion
+          (goto-char pt2)
+          (pcase (car (funcall bounds-op2))
+            (`(,beg . ,end)
+             (setq str2 (filter-buffer-substring beg end))
+             (delete-region beg end)
+             (insert str1))
+            (_ (user-error "Cannot find thing at point")))))
+      (with-current-buffer buffer1
+        (save-excursion
+          (goto-char pt1)
+          (insert str2)))
+      (accept-change-group cg))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-transpose))
   "Transpose")
@@ -5059,7 +5064,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (error nil))))
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-dispatch-state)
+  :keymap (conn-get-state-map 'conn-dispatch-state)
   "v" 'conn-dispatch-over-or-goto
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
@@ -5322,7 +5327,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
   (conn-with-state-loop
-   'conn-read-dispatch-state
+   'conn-dispatch-state
    (oclosure-lambda (conn-dispatch-continuation
                      (repeatable t))
        ()
@@ -5564,9 +5569,22 @@ Expansions and contractions are provided by functions in
 
 ;;;;; Bounds of expansion
 
-(conn-define-state conn-expand-state (conn-read-thing-common-state)
+(conn-define-state conn-expand-state ()
   "State for expanding."
-  :lighter " EXPAND")
+  :lighter " EXPAND"
+  :transient t)
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state))
+                                &key &allow-other-keys)
+  (when-let* ((face (conn-state-get state :mode-line-face)))
+    (setf (alist-get 'mode-line face-remapping-alist) face))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-expand-state)))
+  (setf face-remapping-alist
+        (delq (assq 'mode-line face-remapping-alist)
+              face-remapping-alist))
+  (cl-call-next-method))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)
@@ -6989,11 +7007,11 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 ;;;;; Transpose
 
-(conn-define-state conn-read-transpose-state (conn-read-mover-state))
-(put 'conn-transpose-regions :conn-read-state 'conn-read-transpose-state)
+(conn-define-state conn-transpose-state (conn-read-mover-state)
+  :lighter " TRANSPOSE")
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-transpose-state)
+  :keymap (conn-get-state-map 'conn-transpose-state)
   "i" 'conn-backward-line
   "k" 'forward-line
   "u" 'forward-symbol)
@@ -7039,6 +7057,28 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit)
 
+(oclosure-define (conn-transpose-command
+                  (:parent conn-dispatch-transpose)))
+
+(cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
+                                     target-finder thing-cmd thing-arg _repeat)
+  (let ((conn-target-window-predicate conn-target-window-predicate))
+    (add-function :after-while conn-target-window-predicate
+                  (lambda (win)
+                    (not (buffer-local-value 'buffer-read-only
+                                             (window-buffer win)))))
+    (pcase-let* ((bounds
+                  (if (use-region-p)
+                      (region-bounds)
+                    (conn-bounds-of-command thing-cmd thing-arg)))
+                 (`(,pt ,win ,bounds-op-override)
+                  (conn-dispatch-select-target target-finder)))
+      (funcall action
+               win pt (or bounds-op-override
+                          (lambda ()
+                            (conn-bounds-of-command thing-cmd thing-arg)))
+               (selected-window) (point) (lambda () bounds)))))
+
 (defun conn-transpose-regions (mover arg)
   "Exchange regions defined by a thing command.
 
@@ -7048,7 +7088,7 @@ If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
    (conn-with-state-loop
-    'conn-read-transpose-state
+    'conn-transpose-state
     (oclosure-lambda (conn-read-mover-continuation
                       (recursive-edit t)
                       (mark-flag (region-active-p)))
@@ -7066,33 +7106,39 @@ region after a `recursive-edit'."
   (deactivate-mark t)
   (pcase mover
     ('recursive-edit
-     (let ((beg (region-beginning))
-           (end (region-end))
+     (let ((bounds1 (region-bounds))
            (buf (current-buffer)))
        (conn-transpose-recursive-edit-mode 1)
        (unwind-protect
            (recursive-edit)
          (conn-transpose-recursive-edit-mode -1))
-       (if (eq buf (current-buffer))
-           (transpose-regions beg end (region-beginning) (region-end))
-         (let ((str1 (filter-buffer-substring (region-beginning) (region-end) t))
-               str2)
-           (with-current-buffer buf
-             (setq str2 (filter-buffer-substring beg end t))
-             (insert str1))
-           (insert str2)))))
+       (conn--dispatch-transpose-subr
+        buf (caar bounds1) (lambda () bounds1)
+        (current-buffer) (point) (let ((bounds2 (region-bounds)))
+                                   (lambda () bounds2)))))
     ('conn-dispatch-state
      (while
          (condition-case err
              (conn-with-state-loop
-              'conn-read-transpose-state
-              (oclosure-lambda (conn-dispatch-continuation
-                                (repeatable nil)
-                                (action (conn-make-action 'conn-dispatch-transpose)))
+              'conn-transpose-state
+              (oclosure-lambda
+                  (conn-dispatch-continuation
+                   (repeatable nil)
+                   (action
+                    (oclosure-lambda
+                        (conn-transpose-command
+                         (window-predicate
+                          (lambda (win)
+                            (not (buffer-local-value 'buffer-read-only
+                                                     (window-buffer win))))))
+                        (window1 pt1 bounds-op1 window2 pt2 bounds-op2)
+                      (conn--dispatch-transpose-subr
+                       (window-buffer window1) pt1 bounds-op1
+                       (window-buffer window2) pt2 bounds-op2))))
                   ()
-                (cl-check-type action conn-dispatch-transpose)
-                (conn-perform-dispatch
-                 action target-finder thing-cmd thing-arg repeat))
+                (cl-check-type action conn-transpose-command)
+                (conn-perform-dispatch action target-finder thing-cmd thing-arg repeat)
+                nil)
               :initial-arg arg)
            ;; TODO: make this display somehow
            (user-error (message "%s" (cadr err)) t))))
@@ -8654,7 +8700,7 @@ Operates with the selected windows parent window."
 ;;;;; State Keymaps
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-thing-common-state)
+  :keymap (conn-get-state-map 'conn-read-mover-common-state)
   "C-s" 'isearch-forward
   "s" 'isearch-forward
   "C-r" 'isearch-backward
@@ -9097,7 +9143,7 @@ Operates with the selected windows parent window."
 
 ;;;; Dired
 
-(conn-define-state conn-dired-dispatch-state (conn-emacs-state conn-read-dispatch-state)
+(conn-define-state conn-dired-dispatch-state (conn-emacs-state conn-dispatch-state)
   "State for dispatch in `dired-mode'."
   :cursor 'box
   :lighter " DISPATCH"
@@ -9415,7 +9461,7 @@ Operates with the selected windows parent window."
 (cl-defmethod conn-describe-action ((_action conn-dispatch-ibuffer-mark))
   "Mark")
 
-(keymap-set (conn-get-major-mode-map 'conn-read-dispatch-state 'ibuffer-mode)
+(keymap-set (conn-get-major-mode-map 'conn-dispatch-state 'ibuffer-mode)
             "f" 'conn-dispatch-ibuffer-mark)
 
 (define-keymap
