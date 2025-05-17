@@ -734,7 +734,7 @@ of highlighting."
                           string))
           (if regexp-flag
               (read-regexp (format-prompt prompt default)
-                           (regexp-quote default)
+                           (when default (regexp-quote default))
                            'minibuffer-history)
             (let ((from (read-string
                          (format-prompt prompt default)
