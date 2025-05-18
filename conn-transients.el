@@ -671,11 +671,14 @@ A zero means repeat until error."
     (conn-perform-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,thing)
                     (conn-dispatch-select-target target-finder))
-                   (thing (or thing thing-cmd)))
+                   (thing (if thing
+                              (funcall thing thing-arg)
+                            (lambda ()
+                              (conn-bounds-of-command thing-cmd thing-arg)))))
         (while
             (condition-case err
                 (progn
-                  (funcall action win pt thing thing-arg)
+                  (funcall action win pt thing)
                   nil)
               (user-error (message (cadr err)) t))))))
   (message "Kapply completed successfully after %s iterations"
@@ -1607,10 +1610,11 @@ A zero means repeat until error."
      (alist-get :ibuffer args)
      (alist-get :kmacro args)))
 
-  (transient-append-suffix
-    'conn-kapply-prefix
-    '(conn--kapply-string-suffix)
-    '(conn--kapply-compilation)))
+  ;; (transient-append-suffix
+  ;;   'conn-kapply-prefix
+  ;;   '(conn--kapply-string-suffix)
+  ;;   '(conn--kapply-compilation))
+  )
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"

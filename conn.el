@@ -3226,12 +3226,13 @@ associated with a command's thing.")
 ;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
-  "DEL" 'retarget
-  "M-DEL" 'always-retarget
-  "<backspace>" 'retarget
-  "M-<backspace>" 'always-retarget
+  "<tab>" 'retarget
+  "<backtab>" 'always-retarget
   "<mouse-1>" 'act
-  "<escape>" 'finish)
+  "<escape>" 'finish
+  "SPC" 'conn-dispatch-scroll-up
+  "<backspace>" 'conn-dispatch-scroll-down
+  "C-v" 'conn-dispatch-set-scroll-window)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -5217,7 +5218,8 @@ Returns a cons of (STRING . OVERLAYS)."
           (if (> conn-dispatch-repeat-count 0)
               (conn-dispatch-handle-event)
             (conn-dispatch-ignore-event)))
-       (let ((conn--retargetable-flag conn--dispatch-always-retarget))
+       (let ((conn--retargetable-flag conn--dispatch-always-retarget)
+             (scroll-window (selected-window)))
          (while
              (let ((conn--dispatch-current-targeter nil))
                (conn-with-dispatch-event-handlers
@@ -5258,12 +5260,40 @@ Returns a cons of (STRING . OVERLAYS)."
                      (setq conn--dispatch-current-targeter nil)
                      (conn-dispatch-handle-event t)))
                  (while
-                     (progn
-                       ,@body
-                       (cl-incf conn-dispatch-repeat-count)
-                       (and ,repeat (> conn-last-target-count 1)))
-                   (undo-boundary))
-                 ,repeat)))))))
+                     (conn-with-dispatch-event-handlers
+                         ((nil
+                           (and key (let 'conn-dispatch-scroll-up
+                                      (lookup-key conn-dispatch-targeting-map
+                                                  (vector key))))
+                           (with-selected-window scroll-window
+                             (scroll-up)
+                             (redisplay))
+                           (conn-dispatch-handle-event t))
+                          (nil
+                           (and key (let 'conn-dispatch-scroll-down
+                                      (lookup-key conn-dispatch-targeting-map
+                                                  (vector key))))
+                           (with-selected-window scroll-window
+                             (scroll-down)
+                             (redisplay))
+                           (conn-dispatch-handle-event t))
+                          (nil
+                           (and key (let 'conn-dispatch-set-scroll-window
+                                      (lookup-key conn-dispatch-targeting-map
+                                                  (vector key))))
+                           (setq scroll-window
+                                 (conn-prompt-for-window
+                                  (conn--get-windows nil 'nomini 'visible nil
+                                                     (lambda (win)
+                                                       (not (eq win scroll-window))))))
+                           (conn-dispatch-handle-event t)))
+                       (while
+                           (progn
+                             ,@body
+                             (cl-incf conn-dispatch-repeat-count)
+                             (and ,repeat (> conn-last-target-count 1)))
+                         (undo-boundary))
+                       ,repeat)))))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                        &optional repeat))
