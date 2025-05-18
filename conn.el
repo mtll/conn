@@ -1604,8 +1604,8 @@ By default `conn-emacs-state' does not bind anything."
 ;; a set of labels.
 
 (defcustom conn-simple-label-characters
-  (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e" "r"
-        "t" "y" "u" "i" "c" "v" "b" "n" "m")
+  (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e"
+        "r" "t" "y" "u" "i" "c" "v" "b" "n" "m")
   "Chars to use for label overlays for the default labeling function."
   :group 'conn
   :type '(list integer))
@@ -1924,17 +1924,20 @@ themselves once the selection process has concluded."
 (defun conn-state-loop-abort ()
   (keyboard-quit))
 
-(cl-defgeneric conn-with-state-loop (state cont &key case-function message-function initial-arg))
+(cl-defgeneric conn-with-state-loop
+    (state cont &key case-function message-function initial-arg))
 
 (cl-defmethod conn-with-state-loop ( state (cont conn-state-loop-continuation)
                                      &key case-function message-function initial-arg)
   (conn-with-state state
     (let ((conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
           (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
-          (conn--loop-error-message ""))
+          (conn--loop-error-message "")
+          (inhibit-message t))
       (catch 'state-loop-exit
         (while t
-          (funcall message-function cont conn--loop-error-message)
+          (let ((inhibit-message nil))
+            (funcall message-function cont conn--loop-error-message))
           (pcase (prog1 (key-binding (read-key-sequence nil) t)
                    (setf conn--loop-error-message ""))
             ('nil nil)
@@ -3228,8 +3231,10 @@ associated with a command's thing.")
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
   "z" 'restrict-windows
+  "TAB" 'retarget
   "<tab>" 'retarget
-  "<backtab>" 'always-retarget
+  "M-TAB" 'always-retarget
+  "M-<tab>" 'always-retarget
   "<mouse-1>" 'act
   "<escape>" 'finish
   "SPC" 'scroll-up
@@ -3934,7 +3939,8 @@ Target overlays may override this default by setting the
                   (when prefix (propertize ") " 'face 'minibuffer-prompt))
                   prompt)))
     (catch 'char
-      (message prompt)
+      (let ((inhibit-message nil))
+        (message prompt))
       (while-let ((ev (read-event nil inherit-input-method seconds)))
         (cond
          ((cl-loop for handler in conn--dispatch-read-event-handlers
@@ -5185,7 +5191,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
-(defun conn-dispatch-push-history (action finder thing-cmd thing-arg repeat)
+(defun conn-dispatch-push-history (action finder thing-cmd thing-arg repeat restrict-windows)
   (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
     (add-to-history 'conn-dispatch-ring
                     (cons (symbol-function 'conn-repeat-last-dispatch)
@@ -5209,7 +5215,8 @@ Returns a cons of (STRING . OVERLAYS)."
               (conn-with-state state
                 (conn-perform-dispatch action finder
                                        thing-cmd thing-arg
-                                       (xor invert-repeat repeat)))
+                                       (xor invert-repeat repeat)
+                                       restrict-windows))
               (setf repeat-count conn-dispatch-repeat-count)))
           (symbol-function 'conn-last-dispatch-at-mouse)
           (oclosure-lambda (conn-dispatch
@@ -5237,7 +5244,8 @@ Returns a cons of (STRING . OVERLAYS)."
           (if (> conn-dispatch-repeat-count 0)
               (conn-dispatch-handle-event)
             (conn-dispatch-ignore-event)))
-       (let ((conn--retargetable-flag conn--dispatch-always-retarget))
+       (let ((conn--retargetable-flag conn--dispatch-always-retarget)
+             (inhibit-message t))
          (while
              (let ((conn--dispatch-current-targeter nil))
                (conn-with-dispatch-event-handlers
@@ -5359,8 +5367,9 @@ Returns a cons of (STRING . OVERLAYS)."
                     'conn--dispatch-restrict-windows))
     (unwind-protect
         (cl-call-next-method)
-      (conn-delete-targets))
-    (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat)))
+      (conn-delete-targets)
+      (message nil))
+    (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat restrict-windows)))
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat _restrict-windows)
