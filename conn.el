@@ -3408,46 +3408,45 @@ associated with a command's thing.")
       (unless success
         (conn-cancel-action (oref cont action))))))
 
-(cl-defgeneric conn-dispatch-shared-commands (command)
-  (:method (_) :no-method))
+(cl-defgeneric conn-dispatch-common-commands (command))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql toggle-input-method)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method)))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql set-input-method)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql set-input-method)))
   (let ((inhibit-message nil))
     (call-interactively 'set-input-method)))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql isearch-forward)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-forward)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-forward))))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql isearch-backward)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-backward)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-backward))))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql isearch-forward-regexp)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-forward-regexp)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-forward-regexp))))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql isearch-backward-regexp)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-backward-regexp)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-backward-regexp))))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql scroll-up)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql scroll-up)))
   (with-selected-window conn--dispatch-scroll-window
     (conn-scroll-up (conn-state-loop-prefix-arg))))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql scroll-down)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql scroll-down)))
   (with-selected-window conn--dispatch-scroll-window
     (conn-scroll-down (conn-state-loop-prefix-arg))))
 
-(cl-defmethod conn-dispatch-shared-commands ((_command (eql set-scroll-window)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql set-scroll-window)))
   (setq conn--dispatch-scroll-window
         (conn-prompt-for-window
          (conn--get-windows
@@ -3459,7 +3458,7 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
-    ((guard (not (eq :no-method (conn-dispatch-shared-commands command)))))
+    ((guard (ignore-errors (conn-dispatch-common-commands command) t)))
     ((guard (or (alist-get command conn-bounds-of-command-alist)
                 (when (symbolp command)
                   (get command :conn-command-thing))))
@@ -5216,7 +5215,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defgeneric conn-dispatch-loop-case (command))
 
 (cl-defmethod conn-dispatch-loop-case (cmd)
-  (when (not (eq :no-method (conn-dispatch-shared-commands cmd)))
+  (when (ignore-errors (conn-dispatch-common-commands cmd) t)
     (redisplay)
     (throw 'dispatch-continue nil)))
 
@@ -5228,8 +5227,9 @@ Returns a cons of (STRING . OVERLAYS)."
   (throw 'dispatch-continue nil))
 
 (cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'always-retarget)))
-  (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
-  (throw 'dispatch-continue nil))
+  (when conn--retargetable-flag
+    (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
+    (throw 'dispatch-continue nil)))
 
 (cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
@@ -5239,6 +5239,8 @@ Returns a cons of (STRING . OVERLAYS)."
     (add-function :after-while conn-target-window-predicate
                   'conn--dispatch-restrict-windows))
   (throw 'dispatch-continue nil))
+
+(defvar conn--retargetable-flag nil)
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
