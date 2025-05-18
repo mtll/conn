@@ -1605,7 +1605,7 @@ By default `conn-emacs-state' does not bind anything."
 
 (defcustom conn-simple-label-characters
   (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e" "r"
-        "t" "y" "u" "i" "o" "c" "v" "b" "n" "m")
+        "t" "y" "u" "i" "c" "v" "b" "n" "m")
   "Chars to use for label overlays for the default labeling function."
   :group 'conn
   :type '(list integer))
@@ -3227,21 +3227,21 @@ associated with a command's thing.")
 ;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
-  "C-a" 'restrict-windows
+  "z" 'restrict-windows
   "<tab>" 'retarget
   "<backtab>" 'always-retarget
   "<mouse-1>" 'act
   "<escape>" 'finish
   "SPC" 'scroll-up
   "<backspace>" 'scroll-down
-  "C-v" 'set-scroll-window)
+  "o" 'set-scroll-window)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   "C-h" 'help
   "M-DEL" 'reset-arg
   "TAB" 'repeat-dispatch
-  "C-a" 'restrict-windows
+  "z" 'restrict-windows
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over-or-goto
