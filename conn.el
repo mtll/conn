@@ -5532,15 +5532,16 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   "Jump to an isearch match with dispatch labels."
   (interactive)
   (conn-delete-targets)
-  (pcase-let* ((conn--dispatch-current-targeter nil)
-               (`(,pt ,_win ,_thing)
-                (conn-dispatch-select-target
-                 (lambda ()
-                   (with-restriction (window-start) (window-end)
-                     (cl-loop for (beg . end) in (conn--isearch-matches)
-                              do (conn-make-target-overlay beg (- end beg))))))))
+  (let* ((conn--dispatch-current-targeter nil)
+         (target-finder
+          (let ((targets (with-restriction (window-start) (window-end)
+                           (conn--isearch-matches))))
+            (lambda ()
+              (cl-loop for (beg . end) in targets
+                       do (conn-make-target-overlay beg (- end beg))))))
+         (pt))
     (isearch-exit)
-    (goto-char pt)))
+    (goto-char (car (conn-dispatch-select-target target-finder)))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
