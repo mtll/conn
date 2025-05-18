@@ -3245,6 +3245,7 @@ associated with a command's thing.")
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   "C-h" 'help
   "M-DEL" 'reset-arg
+  "s" (conn-remap-keymap "M-s")
   "M-<backspace>" 'reset-arg
   "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
@@ -5138,7 +5139,6 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
-  "s" (conn-remap-keymap "M-s")
   "v" 'conn-dispatch-over-or-goto
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
@@ -7125,6 +7125,18 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "k" 'forward-line
   "u" 'forward-symbol)
 
+(conn-define-state conn-dispatch-transpose-state (conn-transpose-state)
+  :lighter " TRANSPOSE")
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-transpose-state)
+  "s" (conn-remap-keymap "M-s")
+  "TAB" 'repeat-dispatch
+  "M-o" 'restrict-windows
+  "SPC" 'scroll-up
+  "DEL" 'scroll-down
+  "C-f" 'set-scroll-window)
+
 (defun conn--transpose-recursive-message ()
   (message
    (substitute-command-keys
@@ -7167,27 +7179,26 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "q" 'abort-recursive-edit)
 
 (oclosure-define (conn-transpose-command
-                  (:parent conn-dispatch-transpose)))
+                  (:parent conn-dispatch-transpose))
+  (buffer)
+  (point)
+  (bounds-op))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
                                      target-finder thing-cmd thing-arg
-                                     &optional _repeat &key &allow-other-keys)
+                                     &optional _repeat _restrict-windows)
   (let ((conn-target-window-predicate conn-target-window-predicate))
     (add-function :after-while conn-target-window-predicate
                   (lambda (win)
                     (not (buffer-local-value 'buffer-read-only
                                              (window-buffer win)))))
-    (pcase-let* ((bounds
-                  (if (use-region-p)
-                      (region-bounds)
-                    (conn-bounds-of-command thing-cmd thing-arg)))
-                 (`(,pt ,win ,bounds-op-override)
+    (pcase-let* ((`(,pt ,win ,bounds-op-override)
                   (conn-dispatch-select-target target-finder)))
       (funcall action
                win pt (or bounds-op-override
-                          (lambda ()
-                            (conn-bounds-of-command thing-cmd thing-arg)))
-               (selected-window) (point) (lambda () bounds)))))
+                          (lambda (arg)
+                            (conn-bounds-of-command thing-cmd arg)))
+               thing-arg))))
 
 (defun conn-transpose-regions (mover arg)
   "Exchange regions defined by a thing command.
@@ -7213,9 +7224,9 @@ region after a `recursive-edit'."
                        (_ (conn-read-mover-command-case command cont))))))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-regions"))
-  (deactivate-mark t)
   (pcase mover
     ('recursive-edit
+     (deactivate-mark t)
      (let ((bounds1 (region-bounds))
            (buf (current-buffer)))
        (conn-transpose-recursive-edit-mode 1)
@@ -7231,20 +7242,28 @@ region after a `recursive-edit'."
      (while
          (condition-case err
              (conn-with-state-loop
-              'conn-transpose-state
+              'conn-dispatch-transpose-state
               (oclosure-lambda
                   (conn-dispatch-continuation
                    (repeatable nil)
                    (action
                     (oclosure-lambda
                         (conn-transpose-command
+                         (buffer (current-buffer))
+                         (point (point))
+                         (bounds-op
+                          (prog1
+                              (when (use-region-p)
+                                (let ((bounds (region-bounds)))
+                                  (lambda (_) bounds)))
+                            (deactivate-mark t)))
                          (window-predicate
                           (lambda (win)
                             (not (buffer-local-value 'buffer-read-only
                                                      (window-buffer win))))))
-                        (window1 pt1 bounds-op1 window2 pt2 bounds-op2 bounds-arg)
+                        (window2 pt2 bounds-op2 bounds-arg)
                       (conn--dispatch-transpose-subr
-                       (window-buffer window1) pt1 bounds-op1
+                       buffer point (or bounds-op bounds-op2)
                        (window-buffer window2) pt2 bounds-op2
                        bounds-arg))))
                   ()
@@ -7255,6 +7274,7 @@ region after a `recursive-edit'."
            ;; TODO: make this display somehow
            (user-error (message "%s" (cadr err)) t))))
     ((let 0 arg)
+     (deactivate-mark t)
      (pcase-let* ((thing (get mover :conn-command-thing))
                   (`(,beg1 . ,end1) (if (region-active-p)
                                         (cons (region-beginning) (region-end))
@@ -7264,6 +7284,7 @@ region after a `recursive-edit'."
                                       (bounds-of-thing-at-point thing))))
        (transpose-regions beg1 end1 beg2 end2)))
     ((let thing (get mover :conn-command-thing))
+     (deactivate-mark t)
      (transpose-subr (lambda (N) (forward-thing thing N))
                      (prefix-numeric-value arg)))))
 
@@ -9696,7 +9717,9 @@ Operates with the selected windows parent window."
    (oclosure-lambda (conn-action-info-ref
                      (window-predicate
                       (lambda (win)
-                        (eq 'Info-mode (buffer-local-value 'major-mode (window-buffer win))))))
+                        (eq 'Info-mode
+                            (buffer-local-value 'major-mode
+                                                (window-buffer win))))))
        (win pt _thing _thing-arg)
      (select-window win)
      (goto-char pt)
