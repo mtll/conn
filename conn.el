@@ -1876,15 +1876,14 @@ themselves once the selection process has concluded."
   "Label and prompt for a window among WINDOWS."
   (cond
    ((null windows) nil)
-   ((and (length= windows 1)
-         (not always-prompt))
-    (car windows))
    (t
     (conn--ensure-window-labels)
     (let ((labels
            (cl-loop for win in windows
                     collect (funcall conn-window-labeling-function
-                                     win (window-parameter win 'conn-label-string)))))
+                                     win (window-parameter win 'conn-label-string))))
+          (conn-label-select-always-prompt
+           (or always-prompt conn-label-select-always-prompt)))
       (unwind-protect
           (conn-label-select labels)
         (mapc #'conn-label-delete labels))))))
@@ -3212,6 +3211,8 @@ associated with a command's thing.")
 
 (defvar conn-dispatch-repeat-count nil)
 
+(defvar conn--dispatch-scroll-window nil)
+
 (defvar conn--dispatch-always-retarget nil)
 
 (conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
@@ -3240,6 +3241,7 @@ associated with a command's thing.")
   "C-h" 'help
   "M-DEL" 'reset-arg
   "TAB" 'repeat-dispatch
+  "C-a" 'restrict-windows
   "C-d" 'forward-delete-arg
   "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over-or-goto
@@ -3313,6 +3315,9 @@ associated with a command's thing.")
                ,@body))
          body)))
 
+(defun conn--dispatch-restrict-windows (win)
+  (eq win conn--dispatch-scroll-window))
+
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
@@ -3345,10 +3350,11 @@ associated with a command's thing.")
 (oclosure-define (conn-dispatch-continuation
                   (:parent conn-state-loop-continuation))
   (repeatable)
+  (repeat :mutable t)
+  (restrict-windows :mutable t)
   (thing-cmd :mutable t)
   (thing-arg :mutable t)
   (action :mutable t)
-  (repeat :mutable t)
   (target-finder :mutable t))
 
 (defun conn-dispatch-message (cont error-message)
@@ -3367,7 +3373,7 @@ associated with a command's thing.")
        (propertize
         (conn-state-loop-format-prefix-arg)
         'face 'read-multiple-choice-face)
-       "; \\[reset-arg] reset arg; "
+       "; "
        (when (oref cont repeatable)
          (concat
           "\\[repeat-dispatch] "
@@ -3376,7 +3382,12 @@ associated with a command's thing.")
            'face (when (oref cont repeat)
                    'eldoc-highlight-function-argument))
           "; "))
-       "\\[help] commands): "
+       "\\[restrict-windows] "
+       (propertize
+        "restrict windows"
+        'face (when (oref cont restrict-windows)
+                'eldoc-highlight-function-argument))
+       "): "
        action-description
        (propertize error-message 'face 'error))))))
 
@@ -3434,6 +3445,10 @@ associated with a command's thing.")
                                           cont)
   (when (oref cont repeatable)
     (setf (oref cont repeat) (not (oref cont repeat)))))
+
+(cl-defmethod conn-dispatch-command-case ((_command (eql restrict-windows))
+                                          cont)
+  (setf (oref cont restrict-windows) (not (oref cont restrict-windows))))
 
 (defun conn--completing-read-dispatch (cont)
   (conn-dispatch-command-case
@@ -5222,8 +5237,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (if (> conn-dispatch-repeat-count 0)
               (conn-dispatch-handle-event)
             (conn-dispatch-ignore-event)))
-       (let ((conn--retargetable-flag conn--dispatch-always-retarget)
-             (scroll-window (selected-window)))
+       (let ((conn--retargetable-flag conn--dispatch-always-retarget))
          (while
              (let ((conn--dispatch-current-targeter nil))
                (conn-with-dispatch-event-handlers
@@ -5269,7 +5283,7 @@ Returns a cons of (STRING . OVERLAYS)."
                            (and key (let 'scroll-up
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
-                           (with-selected-window scroll-window
+                           (with-selected-window conn--dispatch-scroll-window
                              (scroll-up)
                              (redisplay))
                            (conn-dispatch-handle-event t))
@@ -5277,7 +5291,7 @@ Returns a cons of (STRING . OVERLAYS)."
                            (and key (let 'scroll-down
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
-                           (with-selected-window scroll-window
+                           (with-selected-window conn--dispatch-scroll-window
                              (scroll-down)
                              (redisplay))
                            (conn-dispatch-handle-event t))
@@ -5285,11 +5299,11 @@ Returns a cons of (STRING . OVERLAYS)."
                            (and key (let 'set-scroll-window
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
-                           (setq scroll-window
+                           (setq conn--dispatch-scroll-window
                                  (conn-prompt-for-window
                                   (conn--get-windows nil 'nomini 'visible nil
                                                      (lambda (win)
-                                                       (not (eq win scroll-window))))
+                                                       (not (eq win conn--dispatch-scroll-window))))
                                   t))
                            (conn-dispatch-handle-event t))
                           ((lambda ()
@@ -5302,19 +5316,19 @@ Returns a cons of (STRING . OVERLAYS)."
                                 " "
                                 (propertize "restrict windows"
                                             'face (if (advice-function-member-p
-                                                       'restrict-windows
+                                                       'conn--dispatch-restrict-windows
                                                        conn-target-window-predicate)
                                                       'eldoc-highlight-function-argument
                                                     'minibuffer-prompt)))))
                            (and key (let 'restrict-windows
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
-                           (if (advice-function-member-p 'restrict-windows
+                           (if (advice-function-member-p 'conn--dispatch-restrict-windows
                                                          conn-target-window-predicate)
-                               (remove-function conn-target-window-predicate 'restrict-windows)
+                               (remove-function conn-target-window-predicate
+                                                'conn--dispatch-restrict-windows)
                              (add-function :after-while conn-target-window-predicate
-                                           (lambda (win) (eq win scroll-window))
-                                           '((name . restrict-windows))))
+                                           'conn--dispatch-restrict-windows))
                            (conn-dispatch-handle-event t)))
                        (while
                            (progn
@@ -5325,27 +5339,31 @@ Returns a cons of (STRING . OVERLAYS)."
                        ,repeat)))))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
-                                       &optional repeat))
+                                       &optional repeat restrict-windows))
 
 (cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
-                                              &optional repeat)
+                                              &optional repeat restrict-windows)
   (let ((conn-target-window-predicate conn-target-window-predicate)
         (conn-target-predicate conn-target-predicate)
         (conn-target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
         (conn--dispatch-read-event-message-prefixes conn--dispatch-read-event-message-prefixes)
-        (conn--dispatch-always-retarget (oref action always-retarget)))
+        (conn--dispatch-always-retarget (oref action always-retarget))
+        (conn--dispatch-scroll-window (selected-window)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))
       (add-function :after-while conn-target-predicate predicate))
+    (when restrict-windows
+      (add-function :after-while conn-target-window-predicate
+                    'conn--dispatch-restrict-windows))
     (unwind-protect
         (cl-call-next-method)
       (conn-delete-targets))
     (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat)))
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
-                                      &optional repeat)
+                                      &optional repeat _restrict-windows)
   (when (conn--action-type-p action)
     (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
@@ -5362,7 +5380,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
                                      target-finder thing-cmd thing-arg
-                                     &optional repeat)
+                                     &optional repeat _restrict-windows)
   (conn-perform-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,bounds-op-override1)
                  (conn-dispatch-select-target target-finder))
@@ -5383,7 +5401,8 @@ Returns a cons of (STRING . OVERLAYS)."
    (oclosure-lambda (conn-dispatch-continuation
                      (repeatable t))
        ()
-     (conn-perform-dispatch action target-finder thing-cmd thing-arg repeat))
+     (conn-perform-dispatch action target-finder thing-cmd thing-arg
+                            repeat restrict-windows))
    :initial-arg initial-arg))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
@@ -5397,8 +5416,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (oclosure-lambda (conn-action
                           (window-predicate
                            (let ((win (selected-window)))
-                             (lambda (window)
-                               (eq win window)))))
+                             (lambda (window) (eq win window)))))
             (_window pt bounds-op bounds-arg)
           (save-mark-and-excursion
             (goto-char pt)
@@ -7113,7 +7131,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                   (:parent conn-dispatch-transpose)))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
-                                     target-finder thing-cmd thing-arg _repeat)
+                                     target-finder thing-cmd thing-arg
+                                     &optional _repeat &key &allow-other-keys)
   (let ((conn-target-window-predicate conn-target-window-predicate))
     (add-function :after-while conn-target-window-predicate
                   (lambda (win)
@@ -9210,7 +9229,8 @@ Operates with the selected windows parent window."
    (oclosure-lambda (conn-dispatch-continuation
                      (repeatable t))
        ()
-     (conn-perform-dispatch action target-finder thing-cmd thing-arg repeat))
+     (conn-perform-dispatch action target-finder thing-cmd thing-arg
+                            repeat restrict-windows))
    :initial-arg initial-arg))
 
 (defun conn-setup-dired-state ()

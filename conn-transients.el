@@ -666,7 +666,7 @@ A zero means repeat until error."
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder thing-cmd thing-arg
-                                     &optional repeat)
+                                     &optional repeat _restrict-windows)
   (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,bounds-op-override)
