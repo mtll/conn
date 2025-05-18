@@ -1769,7 +1769,7 @@ returned.")
 (defun conn-label-select (candidates &optional prompt)
   "Select a label from CANDIDATES.
 
-Prompts to user for prefix characters one at a time and narrows the
+Prompts the user for prefix characters one at a time and narrows the
 labels after each one.
 
 Each of CANDIDATES should be a DFA that defines its transition functions
@@ -3227,28 +3227,46 @@ associated with a command's thing.")
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
+(conn-define-state conn-dispatch-read-state ()
+  "State for reading a dispatch command."
+  :lighter " DISPATCH"
+  :mode-line-face 'conn-dispatch-mode-line-face
+  :suppress-input-method t)
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-dispatch-read-state))
+                                &key &allow-other-keys)
+  (when-let* ((face (conn-state-get state :mode-line-face)))
+    (setf (alist-get 'mode-line face-remapping-alist) face))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-dispatch-read-state)))
+  (setf face-remapping-alist
+        (delq (assq 'mode-line face-remapping-alist)
+              face-remapping-alist))
+  (cl-call-next-method))
+
 (defvar-keymap conn-dispatch-nav-map
+  "C-\\" 'toggle-input-method
+  "C-M-\\" 'set-input-method
   "C-n" 'restrict-windows
   "C-s" 'isearch-forward
   "C-M-s" 'isearch-regexp-forward
   "C-M-r" 'isearch-regexp-backward
-  "SPC" 'scroll-up
-  "<backspace>" 'scroll-down
-  "C-f" 'set-scroll-window)
+  "C-v" 'scroll-up
+  "M-v" 'scroll-down
+  "C-w" 'set-scroll-window)
 
-;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
-;; emacs key lookup in this map
-(defvar-keymap conn-dispatch-targeting-map
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-read-state)
   :parent conn-dispatch-nav-map
-  "TAB" 'retarget
-  "<tab>" 'retarget
-  "M-TAB" 'always-retarget
-  "M-<tab>" 'always-retarget
+  "C-f" 'retarget
+  "M-f" 'always-retarget
   "<mouse-1>" 'act
   "<escape>" 'finish)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
+  :parent conn-dispatch-nav-map
   "<escape>" 'keyboard-quit
   "C-h" 'help
   "M-DEL" 'reset-arg
@@ -3265,9 +3283,6 @@ associated with a command's thing.")
   "k" 'next-line
   "n" 'end-of-defun
   "," (conn-remap-key "<conn-thing-map>"))
-
-(setf (keymap-parent (conn-get-state-map 'conn-dispatch-mover-state))
-      conn-dispatch-nav-map)
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
@@ -3417,7 +3432,6 @@ associated with a command's thing.")
                                      initial-arg)
   (require 'conn-transients)
   (let ((success nil)
-        ;; (eldoc-message-function 'ignore)
         (conn--dispatch-scroll-window (selected-window)))
     (unwind-protect
         (prog1 (cl-call-next-method state cont
@@ -3430,6 +3444,14 @@ associated with a command's thing.")
 
 (cl-defgeneric conn-dispatch-nav-commands (command)
   (:method (_) :no-method))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql toggle-input-method)))
+  (let ((inhibit-message nil))
+    (toggle-input-method)))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql set-input-method)))
+  (let ((inhibit-message nil))
+    (call-interactively 'set-input-method)))
 
 (cl-defmethod conn-dispatch-nav-commands ((_command (eql isearch-forward)))
   (with-selected-window conn--dispatch-scroll-window
@@ -3934,17 +3956,14 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-select-target (target-finder)
   (conn-with-dispatch-event-handler
       (nil
-       (and event `(,event-type . ,_)
-            (let 'act
-              (lookup-key conn-dispatch-targeting-map
-                          (vector event-type)))
-            (let posn (event-start event))
-            (let win (posn-window posn))
-            (let pt (posn-point posn)))
-       (if (and (not (posn-area posn))
-                (funcall conn-target-window-predicate win))
-           (conn-dispatch-handle-event (list pt win nil))
-         (conn-dispatch-ignore-event)))
+       (and 'act (guard (mouse-event-p last-input-event)))
+       (let* ((posn (event-start last-input-event))
+              (win (posn-window posn))
+              (pt (posn-point posn)))
+         (if (and (not (posn-area posn))
+                  (funcall conn-target-window-predicate win))
+             (conn-dispatch-handle-event (list pt win nil))
+           (conn-dispatch-ignore-event))))
     (let ((conn-label-select-always-prompt conn-label-select-always-prompt))
       (if (and conn--dispatch-current-targeter
                (not conn--dispatch-always-retarget))
@@ -3983,27 +4002,47 @@ Target overlays may override this default by setting the
   (error "Function only available in dispatch event handler"))
 
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds)
-  (let* ((prefix
-          (delq nil (mapcar (lambda (pfx)
-                              (pcase pfx
-                                ((pred functionp) (funcall pfx))
-                                ((pred stringp) pfx)))
-                            (reverse conn--dispatch-read-event-message-prefixes))))
-         (prompt
-          (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
-                  (mapconcat 'identity prefix
-                             (propertize "; " 'face 'minibuffer-prompt))
-                  (when prefix (propertize ") " 'face 'minibuffer-prompt))
-                  prompt)))
-    (catch 'char
-      (let ((inhibit-message nil))
-        (message prompt))
-      (while-let ((ev (read-event nil inherit-input-method seconds)))
-        (cond
-         ((cl-loop for handler in conn--dispatch-read-event-handlers
-                   thereis (funcall handler ev)))
-         ((characterp ev) (throw 'char ev)))
-        (message prompt)))))
+  (conn-with-state 'conn-dispatch-read-state
+    (let* ((prefix
+            (delq nil (mapcar (lambda (pfx)
+                                (pcase pfx
+                                  ((pred functionp) (funcall pfx))
+                                  ((pred stringp) pfx)))
+                              (reverse conn--dispatch-read-event-message-prefixes))))
+           (prompt
+            (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
+                    (mapconcat 'identity prefix
+                               (propertize "; " 'face 'minibuffer-prompt))
+                    (when prefix (propertize ") " 'face 'minibuffer-prompt))
+                    prompt)))
+      (catch 'char
+        (let ((inhibit-message nil))
+          (message prompt))
+        (if seconds
+            (while-let ((ev (conn-with-input-method
+                              (read-event nil inherit-input-method seconds))))
+              (when (characterp ev)
+                (throw 'char ev))
+              (let ((inhibit-message nil))
+                (message prompt)))
+          (while t
+            (let* ((seq (if inherit-input-method
+                            (conn-with-input-method
+                              (read-key-sequence-vector nil))
+                          (read-key-sequence-vector nil))))
+              (pcase (key-binding seq t)
+                ('self-insert-command
+                 (setq unread-command-events (listify-key-sequence seq))
+                 (throw 'char (if inherit-input-method
+                                  (conn-with-input-method (read-event nil t))
+                                (read-event nil))))
+                ('keyboard-quit
+                 (keyboard-quit))
+                (cmd
+                 (cl-loop for handler in conn--dispatch-read-event-handlers
+                          thereis (funcall handler cmd)))))
+            (let ((inhibit-message nil))
+              (message prompt))))))))
 
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
@@ -5149,8 +5188,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "v" 'conn-dispatch-over-or-goto
-  "C-y" 'conn-dispatch-yank-replace-to
-  "M-y" 'conn-dispatch-yank-read-replace-to
+  "z" 'conn-dispatch-yank-replace-to
+  "Z" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "F" 'conn-dispatch-yank-from-replace
@@ -5295,9 +5334,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (cl-once-only (repeat)
     `(conn-with-dispatch-event-handler
          (nil
-          (and key (let 'finish
-                     (lookup-key conn-dispatch-targeting-map
-                                 (vector key))))
+          'finish
           (if (> conn-dispatch-repeat-count 0)
               (conn-dispatch-handle-event)
             (conn-dispatch-ignore-event)))
@@ -5311,8 +5348,7 @@ Returns a cons of (STRING . OVERLAYS)."
                          (setq conn--retargetable-flag t))
                        (when-let* ((binding
                                     (and conn--retargetable-flag
-                                         (where-is-internal
-                                          'always-retarget conn-dispatch-targeting-map t))))
+                                         (where-is-internal 'always-retarget nil t))))
                          (concat
                           (propertize (key-description binding)
                                       'face 'read-multiple-choice-face)
@@ -5321,42 +5357,31 @@ Returns a cons of (STRING . OVERLAYS)."
                                       'face (if conn--dispatch-always-retarget
                                                 'eldoc-highlight-function-argument
                                               'minibuffer-prompt)))))
-                     (and (guard conn--retargetable-flag)
-                          key (let 'always-retarget
-                                (lookup-key conn-dispatch-targeting-map
-                                            (vector key))))
+                     'always-retarget
                      (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
                      (conn-dispatch-handle-event t))
                     ((lambda ()
                        (when-let* ((binding (and conn--dispatch-current-targeter
                                                  (not conn--dispatch-always-retarget)
-                                                 (where-is-internal
-                                                  'retarget conn-dispatch-targeting-map t))))
+                                                 (where-is-internal 'retarget nil t))))
                          (concat
                           (propertize (key-description binding)
                                       'face 'read-multiple-choice-face)
                           (propertize " retarget" 'face 'minibuffer-prompt))))
-                     (and (guard conn--dispatch-current-targeter)
-                          key (let 'retarget
-                                (lookup-key conn-dispatch-targeting-map
-                                            (vector key))))
+                     'retarget
                      (setq conn--dispatch-current-targeter nil)
                      (conn-dispatch-handle-event t)))
                  (while
                      (conn-with-dispatch-event-handlers
                          ((nil
-                           (and key
-                                (guard (not (thread-last
-                                              (vector key)
-                                              (lookup-key conn-dispatch-targeting-map)
-                                              (conn-dispatch-nav-commands)
-                                              (eq :no-method)))))
+                           (and cmd
+                                (guard
+                                 (not (eq :no-method (conn-dispatch-nav-commands cmd)))))
                            (redisplay)
                            (conn-dispatch-handle-event t))
                           ((lambda ()
                              (when-let* ((binding
-                                          (where-is-internal
-                                           'restrict-windows conn-dispatch-targeting-map t)))
+                                          (where-is-internal 'restrict-windows nil t)))
                                (concat
                                 (propertize (key-description binding)
                                             'face 'read-multiple-choice-face)
@@ -5367,9 +5392,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                                        conn-target-window-predicate)
                                                       'eldoc-highlight-function-argument
                                                     'minibuffer-prompt)))))
-                           (and key (let 'restrict-windows
-                                      (lookup-key conn-dispatch-targeting-map
-                                                  (vector key))))
+                           'restrict-windows
                            (if (advice-function-member-p 'conn--dispatch-restrict-windows
                                                          conn-target-window-predicate)
                                (remove-function conn-target-window-predicate
@@ -5530,7 +5553,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-delete-targets)
   (pcase-let* ((conn--dispatch-current-targeter nil)
-               (`(,pt ,win ,_thing)
+               (`(,pt ,_win ,_thing)
                 (conn-dispatch-select-target
                  (lambda ()
                    (with-restriction (window-start) (window-end)
