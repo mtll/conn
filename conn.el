@@ -3226,13 +3226,14 @@ associated with a command's thing.")
 ;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
+  "C-a" 'restrict-windows
   "<tab>" 'retarget
   "<backtab>" 'always-retarget
   "<mouse-1>" 'act
   "<escape>" 'finish
-  "SPC" 'conn-dispatch-scroll-up
-  "<backspace>" 'conn-dispatch-scroll-down
-  "C-v" 'conn-dispatch-set-scroll-window)
+  "SPC" 'scroll-up
+  "<backspace>" 'scroll-down
+  "C-v" 'set-scroll-window)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -5265,7 +5266,7 @@ Returns a cons of (STRING . OVERLAYS)."
                  (while
                      (conn-with-dispatch-event-handlers
                          ((nil
-                           (and key (let 'conn-dispatch-scroll-up
+                           (and key (let 'scroll-up
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
                            (with-selected-window scroll-window
@@ -5273,7 +5274,7 @@ Returns a cons of (STRING . OVERLAYS)."
                              (redisplay))
                            (conn-dispatch-handle-event t))
                           (nil
-                           (and key (let 'conn-dispatch-scroll-down
+                           (and key (let 'scroll-down
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
                            (with-selected-window scroll-window
@@ -5281,14 +5282,39 @@ Returns a cons of (STRING . OVERLAYS)."
                              (redisplay))
                            (conn-dispatch-handle-event t))
                           (nil
-                           (and key (let 'conn-dispatch-set-scroll-window
+                           (and key (let 'set-scroll-window
                                       (lookup-key conn-dispatch-targeting-map
                                                   (vector key))))
                            (setq scroll-window
                                  (conn-prompt-for-window
                                   (conn--get-windows nil 'nomini 'visible nil
                                                      (lambda (win)
-                                                       (not (eq win scroll-window))))))
+                                                       (not (eq win scroll-window))))
+                                  t))
+                           (conn-dispatch-handle-event t))
+                          ((lambda ()
+                             (when-let* ((binding
+                                          (where-is-internal
+                                           'restrict-windows conn-dispatch-targeting-map t)))
+                               (concat
+                                (propertize (key-description binding)
+                                            'face 'read-multiple-choice-face)
+                                " "
+                                (propertize "restrict windows"
+                                            'face (if (advice-function-member-p
+                                                       'restrict-windows
+                                                       conn-target-window-predicate)
+                                                      'eldoc-highlight-function-argument
+                                                    'minibuffer-prompt)))))
+                           (and key (let 'restrict-windows
+                                      (lookup-key conn-dispatch-targeting-map
+                                                  (vector key))))
+                           (if (advice-function-member-p 'restrict-windows
+                                                         conn-target-window-predicate)
+                               (remove-function conn-target-window-predicate 'restrict-windows)
+                             (add-function :after-while conn-target-window-predicate
+                                           (lambda (win) (eq win scroll-window))
+                                           '((name . restrict-windows))))
                            (conn-dispatch-handle-event t)))
                        (while
                            (progn
