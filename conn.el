@@ -3227,19 +3227,25 @@ associated with a command's thing.")
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
+(defvar-keymap conn-dispatch-nav-map
+  "C-n" 'restrict-windows
+  "C-s" 'isearch-forward
+  "C-M-s" 'isearch-regexp-forward
+  "C-M-r" 'isearch-regexp-backward
+  "SPC" 'scroll-up
+  "<backspace>" 'scroll-down
+  "C-f" 'set-scroll-window)
+
 ;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
-  "C-n" 'restrict-windows
+  :parent conn-dispatch-nav-map
   "TAB" 'retarget
   "<tab>" 'retarget
   "M-TAB" 'always-retarget
   "M-<tab>" 'always-retarget
   "<mouse-1>" 'act
-  "<escape>" 'finish
-  "SPC" 'scroll-up
-  "<backspace>" 'scroll-down
-  "C-f" 'set-scroll-window)
+  "<escape>" 'finish)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -3259,6 +3265,9 @@ associated with a command's thing.")
   "k" 'next-line
   "n" 'end-of-defun
   "," (conn-remap-key "<conn-thing-map>"))
+
+(setf (keymap-parent (conn-get-state-map 'conn-dispatch-mover-state))
+      conn-dispatch-nav-map)
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
@@ -5519,16 +5528,16 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (unwind-protect
-      (pcase-let ((`(,pt ,_win ,_thing)
-                   (conn-dispatch-select-target
-                    (lambda ()
-                      (with-restriction (window-start) (window-end)
-                        (cl-loop for (beg . end) in (conn--isearch-matches)
-                                 do (conn-make-target-overlay beg (- end beg))))))))
-        (isearch-done)
-        (goto-char pt))
-    (conn-delete-targets)))
+  (conn-delete-targets)
+  (pcase-let* ((conn--dispatch-current-targeter nil)
+               (`(,pt ,win ,_thing)
+                (conn-dispatch-select-target
+                 (lambda ()
+                   (with-restriction (window-start) (window-end)
+                     (cl-loop for (beg . end) in (conn--isearch-matches)
+                              do (conn-make-target-overlay beg (- end beg))))))))
+    (isearch-exit)
+    (goto-char pt)))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."

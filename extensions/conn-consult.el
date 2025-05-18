@@ -30,10 +30,8 @@
 
 (declare-function conn-regions-kapply-prefix "conn-transient")
 
-(keymap-set (conn-get-state-map 'conn-dispatch-mover-state)
-            "M-o" 'consult-line)
-(keymap-set conn-dispatch-targeting-map
-            "M-o" 'consult-line)
+(keymap-set conn-dispatch-nav-map "M-i" 'consult-imenu)
+(keymap-set conn-dispatch-nav-map "M-i" 'consult-line)
 
 (cl-defmethod conn-dispatch-nav-commands ((_command (eql consult-line)))
   (with-selected-window conn--dispatch-scroll-window
