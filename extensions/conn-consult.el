@@ -30,15 +30,12 @@
 
 (declare-function conn-regions-kapply-prefix "conn-transient")
 
-(keymap-set conn-dispatch-nav-map "M-i" 'consult-imenu)
-(keymap-set conn-dispatch-nav-map "M-i" 'consult-line)
-
-(cl-defmethod conn-dispatch-nav-commands ((_command (eql consult-line)))
+(cl-defmethod conn-dispatch-shared-commands ((_command (eql consult-line)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (consult-line))))
 
-(cl-defmethod conn-dispatch-nav-commands ((_command (eql consult-imenu)))
+(cl-defmethod conn-dispatch-shared-commands ((_command (eql consult-imenu)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (consult-imenu))))
