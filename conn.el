@@ -5309,9 +5309,11 @@ Returns a cons of (STRING . OVERLAYS)."
                                                   (vector key))))
                            (setq conn--dispatch-scroll-window
                                  (conn-prompt-for-window
-                                  (conn--get-windows nil 'nomini 'visible nil
-                                                     (lambda (win)
-                                                       (not (eq win conn--dispatch-scroll-window))))
+                                  (conn--get-windows
+                                   nil 'nomini 'visible nil
+                                   (lambda (win)
+                                     (and (funcall conn-target-window-predicate win)
+                                          (not (eq win conn--dispatch-scroll-window)))))
                                   t))
                            (conn-dispatch-handle-event t))
                           ((lambda ()
@@ -5369,7 +5371,8 @@ Returns a cons of (STRING . OVERLAYS)."
         (cl-call-next-method)
       (conn-delete-targets)
       (message nil))
-    (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat restrict-windows)))
+    (conn-dispatch-push-history action target-finder thing-cmd
+                                thing-arg repeat restrict-windows)))
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &optional repeat _restrict-windows)
