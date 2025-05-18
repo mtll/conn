@@ -3230,7 +3230,7 @@ associated with a command's thing.")
 ;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
-  "M-o" 'restrict-windows
+  "C-n" 'restrict-windows
   "TAB" 'retarget
   "<tab>" 'retarget
   "M-TAB" 'always-retarget
@@ -3243,14 +3243,14 @@ associated with a command's thing.")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
+  "<escape>" 'keyboard-quit
   "C-h" 'help
   "M-DEL" 'reset-arg
-  "s" (conn-remap-keymap "M-s")
   "M-<backspace>" 'reset-arg
   "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "TAB" 'repeat-dispatch
-  "M-o" 'restrict-windows
+  "C-n" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
   "C-f" 'set-scroll-window
@@ -3444,11 +3444,11 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-nav-commands ((_command (eql scroll-up)))
   (with-selected-window conn--dispatch-scroll-window
-    (conn-scroll-up)))
+    (conn-scroll-up (conn-state-loop-prefix-arg))))
 
 (cl-defmethod conn-dispatch-nav-commands ((_command (eql scroll-down)))
   (with-selected-window conn--dispatch-scroll-window
-    (conn-scroll-down)))
+    (conn-scroll-down (conn-state-loop-prefix-arg))))
 
 (cl-defmethod conn-dispatch-nav-commands ((_command (eql set-scroll-window)))
   (setq conn--dispatch-scroll-window
@@ -7130,9 +7130,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-transpose-state)
-  "s" (conn-remap-keymap "M-s")
   "TAB" 'repeat-dispatch
-  "M-o" 'restrict-windows
+  "C-n" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
   "C-f" 'set-scroll-window)
