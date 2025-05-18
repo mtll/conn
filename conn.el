@@ -1980,7 +1980,7 @@ themselves once the selection process has concluded."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-mover-state)
-  "DEL" 'backward-delete-arg
+  "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
@@ -3230,7 +3230,7 @@ associated with a command's thing.")
 ;; TODO: maybe use "(elisp) Translation Keymaps" to more closely mimic
 ;; emacs key lookup in this map
 (defvar-keymap conn-dispatch-targeting-map
-  "z" 'restrict-windows
+  "M-o" 'restrict-windows
   "TAB" 'retarget
   "<tab>" 'retarget
   "M-TAB" 'always-retarget
@@ -3239,16 +3239,20 @@ associated with a command's thing.")
   "<escape>" 'finish
   "SPC" 'scroll-up
   "<backspace>" 'scroll-down
-  "o" 'set-scroll-window)
+  "C-f" 'set-scroll-window)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   "C-h" 'help
   "M-DEL" 'reset-arg
-  "TAB" 'repeat-dispatch
-  "z" 'restrict-windows
+  "M-<backspace>" 'reset-arg
+  "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
-  "DEL" 'backward-delete-arg
+  "TAB" 'repeat-dispatch
+  "M-o" 'restrict-windows
+  "SPC" 'scroll-up
+  "DEL" 'scroll-down
+  "C-f" 'set-scroll-window
   "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
   "k" 'next-line
@@ -3403,7 +3407,8 @@ associated with a command's thing.")
                                      initial-arg)
   (require 'conn-transients)
   (let ((success nil)
-        (eldoc-message-function 'ignore))
+        ;; (eldoc-message-function 'ignore)
+        (conn--dispatch-scroll-window (selected-window)))
     (unwind-protect
         (prog1 (cl-call-next-method state cont
                                     :case-function case-function
@@ -3413,8 +3418,50 @@ associated with a command's thing.")
       (unless success
         (conn-cancel-action (oref cont action))))))
 
+(cl-defgeneric conn-dispatch-nav-commands (command)
+  (:method (_) :no-method))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql isearch-forward)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((inhibit-message nil))
+      (isearch-forward))))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql isearch-backward)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((inhibit-message nil))
+      (isearch-backward))))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql isearch-forward-regexp)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((inhibit-message nil))
+      (isearch-forward-regexp))))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql isearch-backward-regexp)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((inhibit-message nil))
+      (isearch-backward-regexp))))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql scroll-up)))
+  (with-selected-window conn--dispatch-scroll-window
+    (conn-scroll-up)))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql scroll-down)))
+  (with-selected-window conn--dispatch-scroll-window
+    (conn-scroll-down)))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql set-scroll-window)))
+  (setq conn--dispatch-scroll-window
+        (conn-prompt-for-window
+         (conn--get-windows
+          nil 'nomini 'visible nil
+          (lambda (win)
+            (and (funcall conn-target-window-predicate win)
+                 (not (eq win conn--dispatch-scroll-window)))))
+         t)))
+
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
+    ((guard (not (eq :no-method (conn-dispatch-nav-commands command)))))
     ((guard (or (alist-get command conn-bounds-of-command-alist)
                 (when (symbolp command)
                   (get command :conn-command-thing))))
@@ -5091,6 +5138,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
+  "s" (conn-remap-keymap "M-s")
   "v" 'conn-dispatch-over-or-goto
   "C-y" 'conn-dispatch-yank-replace-to
   "M-y" 'conn-dispatch-yank-read-replace-to
@@ -5098,15 +5146,15 @@ Returns a cons of (STRING . OVERLAYS)."
   "Y" 'conn-dispatch-reading-yank-to
   "F" 'conn-dispatch-yank-from-replace
   "f" 'conn-dispatch-yank-from
-  "s" 'conn-dispatch-send
-  "S" 'conn-dispatch-send-replace
+  "e" 'conn-dispatch-send
+  "E" 'conn-dispatch-send-replace
   "T" 'conn-dispatch-take-replace
   "t" 'conn-dispatch-take
   "C" 'conn-dispatch-copy-as-kill
   "P" 'conn-dispatch-register-replace
   "w" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
-  "SPC" 'conn-dispatch-jump
+  "C-SPC" 'conn-dispatch-jump
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -5288,33 +5336,13 @@ Returns a cons of (STRING . OVERLAYS)."
                  (while
                      (conn-with-dispatch-event-handlers
                          ((nil
-                           (and key (let 'scroll-up
-                                      (lookup-key conn-dispatch-targeting-map
-                                                  (vector key))))
-                           (with-selected-window conn--dispatch-scroll-window
-                             (scroll-up)
-                             (redisplay))
-                           (conn-dispatch-handle-event t))
-                          (nil
-                           (and key (let 'scroll-down
-                                      (lookup-key conn-dispatch-targeting-map
-                                                  (vector key))))
-                           (with-selected-window conn--dispatch-scroll-window
-                             (scroll-down)
-                             (redisplay))
-                           (conn-dispatch-handle-event t))
-                          (nil
-                           (and key (let 'set-scroll-window
-                                      (lookup-key conn-dispatch-targeting-map
-                                                  (vector key))))
-                           (setq conn--dispatch-scroll-window
-                                 (conn-prompt-for-window
-                                  (conn--get-windows
-                                   nil 'nomini 'visible nil
-                                   (lambda (win)
-                                     (and (funcall conn-target-window-predicate win)
-                                          (not (eq win conn--dispatch-scroll-window)))))
-                                  t))
+                           (and key
+                                (guard (not (thread-last
+                                              (vector key)
+                                              (lookup-key conn-dispatch-targeting-map)
+                                              (conn-dispatch-nav-commands)
+                                              (eq :no-method)))))
+                           (redisplay)
                            (conn-dispatch-handle-event t))
                           ((lambda ()
                              (when-let* ((binding
@@ -5358,8 +5386,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
         (conn--dispatch-read-event-message-prefixes conn--dispatch-read-event-message-prefixes)
-        (conn--dispatch-always-retarget (oref action always-retarget))
-        (conn--dispatch-scroll-window (selected-window)))
+        (conn--dispatch-always-retarget (oref action always-retarget)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))

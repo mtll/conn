@@ -30,6 +30,16 @@
 
 (declare-function conn-regions-kapply-prefix "conn-transient")
 
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql consult-line)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((inhibit-message nil))
+      (consult-line))))
+
+(cl-defmethod conn-dispatch-nav-commands ((_command (eql consult-imenu)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((inhibit-message nil))
+      (consult-imenu))))
+
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)
   (interactive (list (region-beginning)
