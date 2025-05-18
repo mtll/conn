@@ -163,7 +163,7 @@
 
 (cl-defmethod conn-make-action ((_type (eql conn-open-org-link)))
   (oclosure-lambda (conn-open-org-link)
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)

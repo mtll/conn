@@ -669,16 +669,16 @@ A zero means repeat until error."
                                      &optional repeat)
   (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
-      (pcase-let* ((`(,pt ,win ,thing)
+      (pcase-let* ((`(,pt ,win ,bounds-op-override)
                     (conn-dispatch-select-target target-finder))
-                   (thing (if thing
-                              (funcall thing thing-arg)
-                            (lambda ()
-                              (conn-bounds-of-command thing-cmd thing-arg)))))
+                   (bounds-op
+                    (or bounds-op-override
+                        (lambda (arg)
+                          (conn-bounds-of-command thing-cmd arg)))))
         (while
             (condition-case err
                 (progn
-                  (funcall action win pt thing)
+                  (funcall action win pt bounds-op thing-arg)
                   nil)
               (user-error (message (cadr err)) t))))))
   (message "Kapply completed successfully after %s iterations"
@@ -701,7 +701,7 @@ A zero means repeat until error."
     (funcall continuation
              (oclosure-lambda (conn-dispatch-kapply
                                (macro nil))
-                 (window pt bounds-op)
+                 (window pt bounds-op bounds-arg)
                (let ((conn-kapply-suppress-message t))
                  (with-selected-window window
                    (with-undo-amalgamate
@@ -709,7 +709,7 @@ A zero means repeat until error."
                             (conn--kapply-region-iterator
                              (save-excursion
                                (goto-char pt)
-                               (pcase (funcall bounds-op)
+                               (pcase (funcall bounds-op bounds-arg)
                                  ('nil (user-error "Cannot find thing at point"))
                                  (`(,region) (list region))
                                  (`(,_ . ,subregions) subregions))))

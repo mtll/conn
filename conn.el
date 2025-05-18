@@ -4234,14 +4234,14 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto)
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (select-window window)
     (unless (= pt (point))
       (let ((forward (< (point) pt)))
         (unless (region-active-p)
           (push-mark nil t))
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (if (region-active-p)
                (goto-char (if forward end beg))
@@ -4260,7 +4260,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
   (oclosure-lambda (conn-dispatch-push-button)
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (select-window window)
     (if (button-at pt)
         (push-button pt)
@@ -4282,11 +4282,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
@@ -4309,11 +4309,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
@@ -4339,7 +4339,7 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -4371,7 +4371,7 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -4406,7 +4406,7 @@ Returns a cons of (STRING . OVERLAYS)."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt _bounds-op)
+        (window pt _bounds-op _bounds-arg)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -4448,11 +4448,11 @@ Returns a cons of (STRING . OVERLAYS)."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt bounds-op)
+        (window pt bounds-op bounds-arg)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (pcase (car (funcall bounds-op))
+          (pcase (car (funcall bounds-op bounds-arg))
             (`(,beg . ,end)
              (delete-region beg end)
              (insert-for-yank str)
@@ -4480,11 +4480,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end) (downcase-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -4501,11 +4501,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end) (upcase-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -4522,11 +4522,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end) (capitalize-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -4538,11 +4538,11 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-narrow-indirect)))
   (oclosure-lambda (conn-dispatch-narrow-indirect)
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-current-buffer (window-buffer window)
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (conn--narrow-indirect beg end))
           (_ (user-error "Cannot find thing at point")))))))
@@ -4560,11 +4560,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (comment-or-uncomment-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
@@ -4584,11 +4584,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (conn-duplicate-region beg end arg))
           (_ (user-error "Cannot find thing at point")))))))
@@ -4608,11 +4608,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (conn-duplicate-and-comment-region beg end arg))
           (_ (user-error "Cannot find thing at point")))))))
@@ -4627,7 +4627,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: ")))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
@@ -4646,14 +4646,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
   (oclosure-lambda (conn-dispatch-register-replace
                     (register (register-read-with-preview "Register: ")))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
         (save-excursion
           (goto-char pt)
-          (pcase (car (funcall bounds-op))
+          (pcase (car (funcall bounds-op bounds-arg))
             (`(,beg . ,end)
              (delete-region beg end)
              (conn-register-load register))
@@ -4675,11 +4675,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (cond ((> conn-dispatch-repeat-count 0)
                   (conn-append-region beg end register t))
@@ -4708,11 +4708,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -4741,11 +4741,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -4769,11 +4769,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (oclosure-lambda (conn-dispatch-copy-as-kill
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
            (cond ((> conn-dispatch-repeat-count 0)
@@ -4797,11 +4797,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (oclosure-lambda (conn-dispatch-copy-append
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -4823,11 +4823,11 @@ Returns a cons of (STRING . OVERLAYS)."
   (oclosure-lambda (conn-dispatch-copy-prepend
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -4846,12 +4846,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
   (oclosure-lambda (conn-dispatch-yank-from)
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (let (str)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (pcase (car (funcall bounds-op))
+          (pcase (car (funcall bounds-op bounds-arg))
             (`(,beg . ,end)
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
@@ -4867,11 +4867,11 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from-replace)))
   (oclosure-lambda (conn-dispatch-yank-from-replace)
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
            (copy-region-as-kill beg end)
@@ -4892,11 +4892,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
@@ -4916,11 +4916,11 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (car (funcall bounds-op))
+        (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
@@ -4935,16 +4935,16 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over)
-      (window pt bounds-op)
+      (window pt bounds-op bounds-arg)
     (when (and (eq (window-buffer window) (current-buffer))
                (/= pt (point)))
       (unless (region-active-p)
         (push-mark nil t))
-      (pcase (cons (or (car (funcall bounds-op))
+      (pcase (cons (or (car (funcall bounds-op bounds-arg))
                        (point))
                    (progn
                      (goto-char pt)
-                     (car (funcall bounds-op))))
+                     (car (funcall bounds-op bounds-arg))))
         ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
               (or (guard (<= beg1 end1 beg2 end2))
                   (guard (>= end1 beg1 end2 beg2))
@@ -4973,7 +4973,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump)
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-current-buffer (window-buffer window)
       (unless (= pt (point))
         (unless (region-active-p) (push-mark nil t))
@@ -4992,23 +4992,26 @@ Returns a cons of (STRING . OVERLAYS)."
                      (lambda (win)
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
-      (window1 pt1 bounds-op1 window2 pt2 bounds-op2)
-    (conn--dispatch-transpose-subr (window-buffer window1) pt1 bounds-op1
-                                   (window-buffer window2) pt2 bounds-op2)))
+      (window1 pt1 bounds-op1 window2 pt2 bounds-op2 bounds-arg)
+    (conn--dispatch-transpose-subr
+     (window-buffer window1) pt1 bounds-op1
+     (window-buffer window2) pt2 bounds-op2
+     bounds-arg)))
 
-(defun conn--dispatch-transpose-subr (buffer1 pt1 bounds-op1 buffer2 pt2 bounds-op2)
+(defun conn--dispatch-transpose-subr
+    (buffer1 pt1 bounds-op1 buffer2 pt2 bounds-op2 bounds-arg)
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
         (save-excursion
           (pcase-let ((`(,beg1 . ,end1)
                        (progn
                          (goto-char pt1)
-                         (or (car (funcall bounds-op1))
+                         (or (car (funcall bounds-op1 bounds-arg))
                              (user-error "Cannot find thing at point"))))
                       (`(,beg2 . ,end2)
                        (progn
                          (goto-char pt2)
-                         (or (car (funcall bounds-op2))
+                         (or (car (funcall bounds-op2 bounds-arg))
                              (user-error "Cannot find thing at point")))))
             (if (and (or (<= beg1 end1 beg2 end2)
                          (<= beg2 end2 beg1 end1))
@@ -5028,7 +5031,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (with-current-buffer buffer1
         (save-excursion
           (goto-char pt1)
-          (pcase (car (funcall bounds-op1))
+          (pcase (car (funcall bounds-op1 bounds-arg))
             (`(,beg . ,end)
              (setq pt1 beg)
              (setq str1 (filter-buffer-substring beg end))
@@ -5037,7 +5040,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (with-current-buffer buffer2
         (save-excursion
           (goto-char pt2)
-          (pcase (car (funcall bounds-op2))
+          (pcase (car (funcall bounds-op2 bounds-arg))
             (`(,beg . ,end)
              (setq str2 (filter-buffer-substring beg end))
              (delete-region beg end)
@@ -5320,18 +5323,16 @@ Returns a cons of (STRING . OVERLAYS)."
   (when (conn--action-type-p action)
     (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
-  (let ((bounds-op
-         (lambda ()
-           (conn-bounds-of-command thing-cmd thing-arg))))
-    (conn-perform-dispatch-loop repeat
-      (pcase-let* ((`(,pt ,win ,bounds-op-override)
-                    (conn-dispatch-select-target target-finder)))
-        (funcall action win pt
-                 (if bounds-op-override
-                     (lambda () (funcall bounds-op-override thing-arg))
-                   bounds-op)))
-      (when (oref action always-retarget)
-        (setq conn--dispatch-current-targeter nil)))))
+  (conn-perform-dispatch-loop repeat
+    (pcase-let* ((`(,pt ,win ,bounds-op-override)
+                  (conn-dispatch-select-target target-finder)))
+      (funcall action win pt
+               (or bounds-op-override
+                   (lambda (arg)
+                     (conn-bounds-of-command thing-cmd arg)))
+               thing-arg))
+    (when (oref action always-retarget)
+      (setq conn--dispatch-current-targeter nil))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
                                      target-finder thing-cmd thing-arg
@@ -5342,17 +5343,12 @@ Returns a cons of (STRING . OVERLAYS)."
                 (`(,pt2 ,win2 ,bounds-op-override2)
                  (conn-dispatch-select-target target-finder))
                 (bounds-op
-                 (lambda ()
-                   (conn-bounds-of-command thing-cmd thing-arg))))
+                 (lambda (arg)
+                   (conn-bounds-of-command thing-cmd arg))))
       (funcall action
-               win1 pt1 (if bounds-op-override1
-                            (lambda ()
-                              (funcall bounds-op-override1 thing-arg))
-                          bounds-op)
-               win2 pt2 (if bounds-op-override1
-                            (lambda ()
-                              (funcall bounds-op-override2 thing-arg))
-                          bounds-op)))))
+               win1 pt1 (or bounds-op-override1 bounds-op)
+               win2 pt2 (or bounds-op-override2 bounds-op)
+               thing-arg))))
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
@@ -5377,10 +5373,10 @@ Returns a cons of (STRING . OVERLAYS)."
                            (let ((win (selected-window)))
                              (lambda (window)
                                (eq win window)))))
-            (_win pt bounds-op)
+            (_window pt bounds-op bounds-arg)
           (save-mark-and-excursion
             (goto-char pt)
-            (pcase (car (funcall bounds-op))
+            (pcase (car (funcall bounds-op bounds-arg))
               ('nil nil)
               (reg (push reg regions)))))
         target-finder thing-cmd thing-arg repeat)
@@ -7143,9 +7139,10 @@ region after a `recursive-edit'."
            (recursive-edit)
          (conn-transpose-recursive-edit-mode -1))
        (conn--dispatch-transpose-subr
-        buf (caar bounds1) (lambda () bounds1)
+        buf (caar bounds1) (lambda (_) bounds1)
         (current-buffer) (point) (let ((bounds2 (region-bounds)))
-                                   (lambda () bounds2)))))
+                                   (lambda (_) bounds2))
+        nil)))
     ('conn-dispatch-state
      (while
          (condition-case err
@@ -7161,10 +7158,11 @@ region after a `recursive-edit'."
                           (lambda (win)
                             (not (buffer-local-value 'buffer-read-only
                                                      (window-buffer win))))))
-                        (window1 pt1 bounds-op1 window2 pt2 bounds-op2)
+                        (window1 pt1 bounds-op1 window2 pt2 bounds-op2 bounds-arg)
                       (conn--dispatch-transpose-subr
                        (window-buffer window1) pt1 bounds-op1
-                       (window-buffer window2) pt2 bounds-op2))))
+                       (window-buffer window2) pt2 bounds-op2
+                       bounds-arg))))
                   ()
                 (cl-check-type action conn-transpose-command)
                 (conn-perform-dispatch action target-finder thing-cmd thing-arg repeat)
@@ -9336,7 +9334,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (let ((regexp (dired-marker-regexp)))
@@ -9359,7 +9357,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -9378,7 +9376,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'dired-mode))))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -9479,7 +9477,7 @@ Operates with the selected windows parent window."
                        (eq (buffer-local-value 'major-mode
                                                (window-buffer win))
                            'ibuffer-mode))))
-      (window pt _bounds-op)
+      (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
