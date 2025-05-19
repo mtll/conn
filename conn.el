@@ -3433,47 +3433,47 @@ associated with a command's thing.")
       (unless success
         (conn-cancel-action (oref cont action))))))
 
-(cl-defgeneric conn-dispatch-common-commands (command))
+(cl-defgeneric conn-dispatch-common-case (command))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql toggle-input-method)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method)))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql set-input-method)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql set-input-method)))
   (let ((inhibit-message nil))
     (call-interactively 'set-input-method)))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-forward)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-forward)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-forward))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-backward)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-backward)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-backward))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-forward-regexp)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-forward-regexp)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-forward-regexp))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql isearch-backward-regexp)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-backward-regexp)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((inhibit-message nil))
       (isearch-backward-regexp))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql scroll-up)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql scroll-up)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((next-screen-context-lines (conn-state-loop-prefix-arg)))
       (conn-scroll-up))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql scroll-down)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql scroll-down)))
   (with-selected-window conn--dispatch-scroll-window
     (let ((next-screen-context-lines (conn-state-loop-prefix-arg)))
       (conn-scroll-down))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql other-window)))
+(cl-defmethod conn-dispatch-common-case ((_command (eql other-window)))
   (setq conn--dispatch-scroll-window
         (conn-prompt-for-window
          (conn--get-windows
@@ -3485,8 +3485,8 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
-    ((guard (ignore-error 'cl-no-applicable-method
-              (conn-dispatch-common-commands command)
+    ((guard (ignore-error cl-no-applicable-method
+              (conn-dispatch-common-case command)
               t)))
     ((guard (or (alist-get command conn-bounds-of-command-alist)
                 (when (symbolp command)
@@ -5301,8 +5301,8 @@ Returns a cons of (STRING . OVERLAYS)."
        (setf conn--loop-prefix-mag nil))
       ('negative-argument
        (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
-      ((guard (ignore-error 'cl-no-applicable-method
-                (conn-dispatch-common-commands cmd)
+      ((guard (ignore-error cl-no-applicable-method
+                (conn-dispatch-common-case cmd)
                 t))
        (redisplay))
       (_ (throw 'dont-handle nil)))
