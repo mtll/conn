@@ -1927,10 +1927,13 @@ themselves once the selection process has concluded."
   (keyboard-quit))
 
 (cl-defgeneric conn-with-state-loop
-    (state cont &key case-function message-function initial-arg))
+    ( state cont
+      &key case-function message-function initial-arg
+      &allow-other-keys))
 
 (cl-defmethod conn-with-state-loop ( state (cont conn-state-loop-continuation)
-                                     &key case-function message-function initial-arg)
+                                     &key case-function message-function initial-arg
+                                     &allow-other-keys)
   (conn-with-state state
     (let ((conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
           (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
@@ -1938,7 +1941,8 @@ themselves once the selection process has concluded."
           (inhibit-message t))
       (catch 'state-loop-exit
         (while t
-          (let ((inhibit-message nil))
+          (let ((inhibit-message nil)
+                (message-log-max nil))
             (funcall message-function cont conn--loop-error-message))
           (pcase (prog1 (key-binding (read-key-sequence nil) t)
                    (setf conn--loop-error-message ""))
@@ -2005,7 +2009,7 @@ themselves once the selection process has concluded."
                                      &key
                                      (case-function 'conn-read-mover-command-case)
                                      (message-function 'conn-read-mover-message)
-                                     initial-arg)
+                                     initial-arg &allow-other-keys)
   (cl-call-next-method state cont
                        :case-function case-function
                        :message-function message-function
@@ -3246,6 +3250,7 @@ associated with a command's thing.")
   (cl-call-next-method))
 
 (defvar-keymap conn-dispatch-common-map
+  "C-z" 'dispatch-other-end
   "C-\\" 'toggle-input-method
   "C-M-\\" 'set-input-method
   "C-n" 'restrict-windows
@@ -3271,6 +3276,7 @@ associated with a command's thing.")
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   :parent conn-dispatch-common-map
+  "z" 'dispatch-other-end
   "<escape>" 'keyboard-quit
   "C-h" 'help
   "M-DEL" 'reset-arg
@@ -3351,10 +3357,14 @@ associated with a command's thing.")
 
 ;;;;; Dispatch Command Loop
 
+(defvar conn-dispatch-other-end nil)
+
 (oclosure-define (conn-dispatch-continuation
                   (:parent conn-state-loop-continuation))
-  (repeatable)
+  (other-end :mutable t)
+  (no-other-end :mutable t)
   (repeat :mutable t)
+  (repeatable :mutable t)
   (restrict-windows :mutable t)
   (thing-cmd :mutable t)
   (thing-arg :mutable t)
@@ -3378,17 +3388,24 @@ associated with a command's thing.")
         (conn-state-loop-format-prefix-arg)
         'face 'read-multiple-choice-face)
        "; "
+       (unless (oref cont no-other-end)
+         (concat
+          "\\[dispatch-other-end] "
+          (propertize "other-end"
+                      'face (when (oref cont other-end)
+                              'eldoc-highlight-function-argument))
+          "; "))
        (when (oref cont repeatable)
          (concat
           "\\[repeat-dispatch] "
           (propertize
-           "repeatedly"
+           "repeat"
            'face (when (oref cont repeat)
                    'eldoc-highlight-function-argument))
           "; "))
        "\\[restrict-windows] "
        (propertize
-        "restrict windows"
+        "this win"
         'face (when (oref cont restrict-windows)
                 'eldoc-highlight-function-argument))
        "): "
@@ -3399,10 +3416,14 @@ associated with a command's thing.")
                                      &key
                                      (case-function 'conn-dispatch-command-case)
                                      (message-function 'conn-dispatch-message)
-                                     initial-arg)
+                                     initial-arg no-other-end no-repeat
+                                     &allow-other-keys)
   (require 'conn-transients)
   (let ((success nil)
-        (conn--dispatch-scroll-window (selected-window)))
+        (conn--dispatch-scroll-window (selected-window))
+        (conn-dispatch-other-end nil))
+    (setf (oref cont no-other-end) no-other-end
+          (oref cont repeatable) (not no-repeat))
     (unwind-protect
         (prog1 (cl-call-next-method state cont
                                     :case-function case-function
@@ -3494,6 +3515,10 @@ associated with a command's thing.")
                                   (conn--dispatch-default-action thing)))))
     (conn-state-loop-exit)))
 
+(cl-defmethod conn-dispatch-command-case ((_cmd (eql dispatch-other-end))
+                                          cont)
+  (setf (oref cont other-end) (not (oref cont other-end))))
+
 (cl-defmethod conn-dispatch-command-case ((_command (eql repeat-dispatch))
                                           cont)
   (when (oref cont repeatable)
@@ -3519,12 +3544,9 @@ associated with a command's thing.")
          (lambda (sym)
            (pcase sym
              ('help)
-             ((pred functionp)
+             ((pred symbolp)
               (or (get sym :conn-command-thing)
-                  (conn--action-type-p sym)))
-             (`(,cmd ,_ . ,_)
-              (or (get cmd :conn-mark-handler)
-                  (get cmd 'forward-op)))))
+                  (conn--action-type-p sym)))))
          t))
      (quit nil))
    cont))
@@ -3661,7 +3683,7 @@ Optionally the overlay may have an associated THING."
                (string (char-to-string (read-char prompt t))))
           (while-no-input
             (conn-make-string-target-overlays string predicate))
-          (while-let ((next-char (read-char (format (concat prompt "%s") string)
+          (while-let ((next-char (read-char (format (concat prompt "%s ") string)
                                             t conn-read-string-timeout)))
             (setq string (concat string (char-to-string next-char)))
             (conn-delete-targets)
@@ -3983,13 +4005,14 @@ Target overlays may override this default by setting the
                                   ((pred stringp) pfx)))
                               conn--dispatch-read-event-message-prefixes)))
            (prompt
-            (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
-                    (mapconcat 'identity prefix
-                               (propertize "; " 'face 'minibuffer-prompt))
-                    (when prefix (propertize ") " 'face 'minibuffer-prompt))
-                    prompt)))
+            (concat
+             prompt
+             (when prefix "(")
+             (mapconcat 'identity prefix "; ")
+             (when prefix ")"))))
       (catch 'return
-        (let ((inhibit-message nil))
+        (let ((inhibit-message nil)
+              (message-log-max nil))
           (message prompt))
         (if seconds
             (while-let ((ev (conn-with-input-method
@@ -4334,13 +4357,12 @@ Returns a cons of (STRING . OVERLAYS)."
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
+           (when conn-dispatch-other-end
+             (cl-rotatef beg end))
            (if (region-active-p)
                (goto-char (if forward end beg))
-             (if (= (point) end)
-                 (conn--push-ephemeral-mark beg)
-               (conn--push-ephemeral-mark end))
-             (unless (or (= pt beg) (= pt end))
-               (goto-char beg))))
+             (conn--push-ephemeral-mark end)
+             (goto-char beg)))
           (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-goto))
@@ -4430,17 +4452,23 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt _bounds-op _bounds-arg)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (insert-for-yank str)
-        (when seperator (insert seperator))
-        (unless executing-kbd-macro
-          (pulse-momentary-highlight-region (- (point)
-                                               (+ (length str)
-                                                  (length seperator)))
-                                            (point)))))))
+        (pcase (car (funcall bounds-op bounds-arg))
+          (`(,beg . ,end)
+           (goto-char (if conn-dispatch-other-end end beg))
+           (when (and seperator conn-dispatch-other-end)
+             (insert seperator))
+           (insert-for-yank str)
+           (when (and seperator (not conn-dispatch-other-end))
+             (insert seperator))
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point)
+                                                  (+ (length str)
+                                                     (length seperator)))
+                                               (point)))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-yank-to))
   (if-let* ((sep (oref action seperator)))
@@ -4462,12 +4490,23 @@ Returns a cons of (STRING . OVERLAYS)."
                        (not
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
-      (window pt _bounds-op _bounds-arg)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (insert-for-yank str)
-        (when seperator (insert seperator))
+        (pcase (car (funcall bounds-op bounds-arg))
+          (`(,beg . ,end)
+           (goto-char (if conn-dispatch-other-end end beg))
+           (when (and seperator conn-dispatch-other-end)
+             (insert seperator))
+           (insert-for-yank str)
+           (when (and seperator (not conn-dispatch-other-end))
+             (insert seperator))
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point)
+                                                  (+ (length str)
+                                                     (length seperator)))
+                                               (point)))))
         (unless executing-kbd-macro
           (pulse-momentary-highlight-region (- (point)
                                                (+ (length str)
@@ -4497,12 +4536,23 @@ Returns a cons of (STRING . OVERLAYS)."
                          (not
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
-        (window pt _bounds-op _bounds-arg)
+        (window pt bounds-op bounds-arg)
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (insert-for-yank str)
-          (when seperator (insert seperator))
+          (pcase (car (funcall bounds-op bounds-arg))
+            (`(,beg . ,end)
+             (goto-char (if conn-dispatch-other-end end beg))
+             (when (and seperator conn-dispatch-other-end)
+               (insert seperator))
+             (insert-for-yank str)
+             (when (and seperator (not conn-dispatch-other-end))
+               (insert seperator))
+             (unless executing-kbd-macro
+               (pulse-momentary-highlight-region (- (point)
+                                                    (+ (length str)
+                                                       (length seperator)))
+                                                 (point)))))
           (unless executing-kbd-macro
             (pulse-momentary-highlight-region (- (point)
                                                  (+ (length str)
@@ -4718,14 +4768,17 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: ")))
-      (window pt _bounds-op _bounds-arg)
+      (window pt bounds-op bounds-arg)
     (with-selected-window window
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
         (save-excursion
           (goto-char pt)
-          (conn-register-load register))))))
+          (pcase (car (funcall bounds-op bounds-arg))
+            (`(,beg . ,end)
+             (goto-char (if conn-dispatch-other-end end beg))
+             (conn-register-load register))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-register-load))
   (format "Register <%c>" (oref action register)))
@@ -5161,14 +5214,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "v" 'conn-dispatch-over-or-goto
-  "z" 'conn-dispatch-yank-replace-to
-  "Z" 'conn-dispatch-yank-read-replace-to
+  "r" 'conn-dispatch-yank-replace-to
+  "R" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "F" 'conn-dispatch-yank-from-replace
   "f" 'conn-dispatch-yank-from
-  "e" 'conn-dispatch-send
-  "E" 'conn-dispatch-send-replace
+  "s" 'conn-dispatch-send
+  "S" 'conn-dispatch-send-replace
   "T" 'conn-dispatch-take-replace
   "t" 'conn-dispatch-take
   "C" 'conn-dispatch-copy-as-kill
@@ -5249,19 +5302,23 @@ Returns a cons of (STRING . OVERLAYS)."
       (_ (throw 'dont-handle nil)))
     (throw 'dispatch-continue nil)))
 
-(cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'finish)))
+(cl-defmethod conn-dispatch-loop-case ((_cmd (eql finish)))
   (throw 'dispatch-exit nil))
 
-(cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'retarget)))
+(cl-defmethod conn-dispatch-loop-case ((_cmd (eql dispatch-other-end)))
+  (setf conn-dispatch-other-end (not conn-dispatch-other-end))
+  (throw 'dispatch-continue nil))
+
+(cl-defmethod conn-dispatch-loop-case ((_cmd (eql retarget)))
   (setq conn--dispatch-current-targeter nil)
   (throw 'dispatch-continue nil))
 
-(cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'always-retarget)))
+(cl-defmethod conn-dispatch-loop-case ((_cmd (eql always-retarget)))
   (when conn--retargetable-flag
     (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
     (throw 'dispatch-continue nil)))
 
-(cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'restrict-windows)))
+(cl-defmethod conn-dispatch-loop-case ((_cmd (eql restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
                                 conn-target-window-predicate)
       (remove-function conn-target-window-predicate
@@ -5284,22 +5341,33 @@ Returns a cons of (STRING . OVERLAYS)."
             (conn--dispatch-read-event-message-prefixes
              `(,(lambda ()
                   (concat
-                   (propertize "arg: " 'face 'minibuffer-prompt)
+                   "arg: "
                    (propertize (conn-state-loop-format-prefix-arg)
                                'face 'read-multiple-choice-face)))
                ,(lambda ()
                   (when-let* ((binding
-                               (where-is-internal 'restrict-windows nil t)))
+                               (where-is-internal 'dispatch-other-end nil t)))
                     (concat
                      (propertize (key-description binding)
-                                 'face 'read-multiple-choice-face)
+                                 'face 'help-key-binding)
                      " "
-                     (propertize "selected win"
-                                 'face (if (advice-function-member-p
-                                            'conn--dispatch-restrict-windows
-                                            conn-target-window-predicate)
-                                           'eldoc-highlight-function-argument
-                                         'minibuffer-prompt)))))
+                     (propertize
+                      "other end"
+                      'face (when conn-dispatch-other-end
+                              'eldoc-highlight-function-argument)))))
+               ;; ,(lambda ()
+               ;;    (when-let* ((binding
+               ;;                 (where-is-internal 'restrict-windows nil t)))
+               ;;      (concat
+               ;;       (propertize (key-description binding)
+               ;;                   'face 'read-multiple-choice-face)
+               ;;       " "
+               ;;       (propertize "this win"
+               ;;                   'face (if (advice-function-member-p
+               ;;                              'conn--dispatch-restrict-windows
+               ;;                              conn-target-window-predicate)
+               ;;                             'eldoc-highlight-function-argument
+               ;;                           'minibuffer-prompt)))))
                ,(lambda ()
                   (when conn--dispatch-current-targeter
                     (setq conn--retargetable-flag t))
@@ -5308,20 +5376,19 @@ Returns a cons of (STRING . OVERLAYS)."
                                             (where-is-internal 'retarget nil t))))
                     (concat
                      (propertize (key-description binding)
-                                 'face 'read-multiple-choice-face)
-                     (propertize " retarget" 'face 'minibuffer-prompt))))
+                                 'face 'help-key-binding)
+                     " retarget")))
                ,(lambda ()
                   (when-let* ((binding
                                (and conn--retargetable-flag
                                     (where-is-internal 'always-retarget nil t))))
                     (concat
                      (propertize (key-description binding)
-                                 'face 'read-multiple-choice-face)
+                                 'face 'help-key-binding)
                      " "
                      (propertize "always retarget"
-                                 'face (if conn--dispatch-always-retarget
-                                           'eldoc-highlight-function-argument
-                                         'minibuffer-prompt)))))
+                                 'face (when conn--dispatch-always-retarget
+                                         'eldoc-highlight-function-argument)))))
                ,@conn--dispatch-read-event-message-prefixes)))
        (while (or ,repeat (< conn-dispatch-repeat-count 1))
          (catch 'dispatch-continue
@@ -5377,7 +5444,8 @@ Returns a cons of (STRING . OVERLAYS)."
           (message (conn-describe-dispatch repeat))))
     (user-error "Dispatch ring empty")))
 
-(defun conn-dispatch-push-history (action finder thing-cmd thing-arg repeat restrict-windows)
+(defun conn-dispatch-push-history ( action finder thing-cmd thing-arg
+                                    repeat restrict-windows other-end)
   (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
     (add-to-history 'conn-dispatch-ring
                     (cons (symbol-function 'conn-repeat-last-dispatch)
@@ -5401,18 +5469,20 @@ Returns a cons of (STRING . OVERLAYS)."
               (conn-with-state state
                 (conn-perform-dispatch action finder
                                        thing-cmd thing-arg
-                                       (xor invert-repeat repeat)
-                                       restrict-windows))
+                                       :repeat (xor invert-repeat repeat)
+                                       :restrict-windows restrict-windows
+                                       :other-end other-end))
               (setf repeat-count conn-dispatch-repeat-count)))
           (symbol-function 'conn-last-dispatch-at-mouse)
           (oclosure-lambda (conn-dispatch
                             (repeat-count conn-dispatch-repeat-count)
                             (description description))
-              (event)
-            (interactive "e")
+              (event &optional arg)
+            (interactive "e\nP")
             (cl-letf ((posn (event-start event))
                       (conn-dispatch-repeat-count repeat-count)
                       (conn-kapply-suppress-message t)
+                      (conn-dispatch-other-end (xor other-end arg))
                       ((symbol-function 'conn-repeat-last-dispatch)))
               (funcall action
                        (posn-window posn) (posn-point posn)
@@ -5420,14 +5490,17 @@ Returns a cons of (STRING . OVERLAYS)."
               (setf repeat-count conn-dispatch-repeat-count))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
-                                       &optional repeat restrict-windows))
+                                       &key repeat restrict-windows other-end
+                                       &allow-other-keys))
 
 (cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
-                                              &optional repeat restrict-windows)
+                                              &key repeat restrict-windows other-end
+                                              &allow-other-keys)
   (let* ((conn-target-window-predicate conn-target-window-predicate)
          (conn-target-predicate conn-target-predicate)
          (conn-target-sort-function conn-target-sort-function)
          (conn-dispatch-repeat-count 0)
+         (conn-dispatch-other-end other-end)
          (conn--dispatch-read-event-message-prefixes conn--dispatch-read-event-message-prefixes)
          (conn--dispatch-always-retarget (oref action always-retarget)))
     (when-let* ((predicate (conn-action--window-predicate action)))
@@ -5443,11 +5516,11 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-delete-targets)
         (message nil)))
     (when (> conn-dispatch-repeat-count 0)
-      (conn-dispatch-push-history action target-finder thing-cmd
-                                  thing-arg repeat restrict-windows))))
+      (conn-dispatch-push-history action target-finder thing-cmd thing-arg
+                                  repeat restrict-windows other-end))))
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
-                                      &optional repeat _restrict-windows)
+                                      &key repeat &allow-other-keys)
   (when (conn--action-type-p action)
     (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
@@ -5462,7 +5535,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
                                      target-finder thing-cmd thing-arg
-                                     &optional repeat _restrict-windows)
+                                     &key repeat &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,bounds-op-override1)
                  (conn-dispatch-select-target target-finder))
@@ -5484,7 +5557,9 @@ Returns a cons of (STRING . OVERLAYS)."
                      (repeatable t))
        ()
      (conn-perform-dispatch action target-finder thing-cmd thing-arg
-                            repeat restrict-windows))
+                            :repeat repeat
+                            :restrict-windows restrict-windows
+                            :other-end other-end))
    :initial-arg initial-arg))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
@@ -5505,7 +5580,9 @@ Returns a cons of (STRING . OVERLAYS)."
             (pcase (car (funcall bounds-op bounds-arg))
               ('nil nil)
               (reg (push reg regions)))))
-        target-finder thing-cmd thing-arg repeat)
+        target-finder thing-cmd thing-arg
+        :repeat repeat
+        :other-end other-end)
        (unless regions (keyboard-quit))
        (cl-loop for (b . e) in (compat-call sort
                                             (conn--merge-regions regions t)
@@ -7281,7 +7358,6 @@ region after a `recursive-edit'."
               'conn-dispatch-transpose-state
               (oclosure-lambda
                   (conn-dispatch-continuation
-                   (repeatable nil)
                    (action
                     (oclosure-lambda
                         (conn-transpose-command
@@ -7304,8 +7380,11 @@ region after a `recursive-edit'."
                        bounds-arg))))
                   ()
                 (cl-check-type action conn-transpose-command)
-                (conn-perform-dispatch action target-finder thing-cmd thing-arg repeat)
+                (conn-perform-dispatch action target-finder thing-cmd thing-arg
+                                       :repeat repeat)
                 nil)
+              :no-repeat t
+              :no-other-end t
               :initial-arg arg)
            ;; TODO: make this display somehow
            (user-error (message "%s" (cadr err)) t))))
@@ -9327,6 +9406,7 @@ Operates with the selected windows parent window."
        ()
      (conn-perform-dispatch action target-finder thing-cmd thing-arg
                             repeat restrict-windows))
+   :no-other-end t
    :initial-arg initial-arg))
 
 (defun conn-setup-dired-state ()
