@@ -3245,7 +3245,7 @@ associated with a command's thing.")
               face-remapping-alist))
   (cl-call-next-method))
 
-(defvar-keymap conn-dispatch-nav-map
+(defvar-keymap conn-dispatch-common-map
   "C-\\" 'toggle-input-method
   "C-M-\\" 'set-input-method
   "C-n" 'restrict-windows
@@ -3254,11 +3254,15 @@ associated with a command's thing.")
   "C-M-r" 'isearch-regexp-backward
   "C-v" 'scroll-up
   "M-v" 'scroll-down
-  "C-w" 'set-scroll-window)
+  "C-o" 'other-window)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-read-state)
-  :parent conn-dispatch-nav-map
+  :parent conn-dispatch-common-map
+  "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg
+  "C-d" 'forward-delete-arg
+  "C-w" 'backward-delete-arg
   "C-f" 'retarget
   "M-f" 'always-retarget
   "<mouse-1>" 'act
@@ -3266,7 +3270,7 @@ associated with a command's thing.")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
-  :parent conn-dispatch-nav-map
+  :parent conn-dispatch-common-map
   "<escape>" 'keyboard-quit
   "C-h" 'help
   "M-DEL" 'reset-arg
@@ -3277,7 +3281,7 @@ associated with a command's thing.")
   "C-n" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
-  "C-f" 'set-scroll-window
+  "C-o" 'other-window
   "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
   "k" 'next-line
@@ -3446,7 +3450,7 @@ associated with a command's thing.")
   (with-selected-window conn--dispatch-scroll-window
     (conn-scroll-down (conn-state-loop-prefix-arg))))
 
-(cl-defmethod conn-dispatch-common-commands ((_command (eql set-scroll-window)))
+(cl-defmethod conn-dispatch-common-commands ((_command (eql other-window)))
   (setq conn--dispatch-scroll-window
         (conn-prompt-for-window
          (conn--get-windows
@@ -3931,7 +3935,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-select-target (target-finder)
   (catch 'mouse-click
     (let ((conn--dispatch-read-event-handlers
-           (cons 'conn--dispatch-handle-mouse
+           (cons #'conn--dispatch-handle-mouse
                  conn--dispatch-read-event-handlers))
           (conn-label-select-always-prompt conn-label-select-always-prompt))
       (if (and conn--dispatch-current-targeter
@@ -3977,7 +3981,7 @@ Target overlays may override this default by setting the
                                 (pcase pfx
                                   ((pred functionp) (funcall pfx))
                                   ((pred stringp) pfx)))
-                              (reverse conn--dispatch-read-event-message-prefixes))))
+                              conn--dispatch-read-event-message-prefixes)))
            (prompt
             (concat (when prefix (propertize "(" 'face 'minibuffer-prompt))
                     (mapconcat 'identity prefix
@@ -5217,8 +5221,32 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defgeneric conn-dispatch-loop-case (command))
 
 (cl-defmethod conn-dispatch-loop-case (cmd)
-  (when (ignore-errors (conn-dispatch-common-commands cmd) t)
-    (redisplay)
+  (catch 'dont-handle
+    (pcase cmd
+      ('digit-argument
+       (let* ((char (if (integerp last-input-event)
+                        last-input-event
+                      (get last-input-event 'ascii-character)))
+              (digit (- (logand char ?\177) ?0)))
+         (setf conn--loop-prefix-mag
+               (if (integerp conn--loop-prefix-mag)
+                   (+ (* 10 conn--loop-prefix-mag) digit)
+                 (when (/= 0 digit) digit)))))
+      ('forward-delete-arg
+       (when conn--loop-prefix-mag
+         (setf conn--loop-prefix-mag
+               (mod conn--loop-prefix-mag
+                    (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
+      ('backward-delete-arg
+       (when conn--loop-prefix-mag
+         (setf conn--loop-prefix-mag (floor conn--loop-prefix-mag 10))))
+      ('reset-arg
+       (setf conn--loop-prefix-mag nil))
+      ('negative-argument
+       (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
+      ((guard (ignore-errors (conn-dispatch-common-commands cmd) t))
+       (redisplay))
+      (_ (throw 'dont-handle nil)))
     (throw 'dispatch-continue nil)))
 
 (cl-defmethod conn-dispatch-loop-case ((_cmd (eql 'finish)))
@@ -5246,26 +5274,35 @@ Returns a cons of (STRING . OVERLAYS)."
   (declare (indent 1))
   `(catch 'dispatch-exit
      (let* ((inhibit-message t)
+            (conn--loop-prefix-mag nil)
+            (conn--loop-prefix-sign nil)
             (conn--retargetable-flag conn--dispatch-always-retarget)
             (conn--dispatch-current-targeter nil)
             (conn--dispatch-read-event-handlers
-             (cons 'conn-dispatch-loop-case
+             (cons #'conn-dispatch-loop-case
                    conn--dispatch-read-event-handlers))
             (conn--dispatch-read-event-message-prefixes
              `(,(lambda ()
+                  (concat
+                   (propertize "arg: " 'face 'minibuffer-prompt)
+                   (propertize (conn-state-loop-format-prefix-arg)
+                               'face 'read-multiple-choice-face)))
+               ,(lambda ()
                   (when-let* ((binding
                                (where-is-internal 'restrict-windows nil t)))
                     (concat
                      (propertize (key-description binding)
                                  'face 'read-multiple-choice-face)
                      " "
-                     (propertize "restrict windows"
+                     (propertize "selected win"
                                  'face (if (advice-function-member-p
                                             'conn--dispatch-restrict-windows
                                             conn-target-window-predicate)
                                            'eldoc-highlight-function-argument
                                          'minibuffer-prompt)))))
                ,(lambda ()
+                  (when conn--dispatch-current-targeter
+                    (setq conn--retargetable-flag t))
                   (when-let* ((binding (and conn--dispatch-current-targeter
                                             (not conn--dispatch-always-retarget)
                                             (where-is-internal 'retarget nil t))))
@@ -5274,8 +5311,6 @@ Returns a cons of (STRING . OVERLAYS)."
                                  'face 'read-multiple-choice-face)
                      (propertize " retarget" 'face 'minibuffer-prompt))))
                ,(lambda ()
-                  (when conn--dispatch-current-targeter
-                    (setq conn--retargetable-flag t))
                   (when-let* ((binding
                                (and conn--retargetable-flag
                                     (where-is-internal 'always-retarget nil t))))
@@ -5423,9 +5458,7 @@ Returns a cons of (STRING . OVERLAYS)."
                (or bounds-op-override
                    (lambda (arg)
                      (conn-bounds-of-command thing-cmd arg)))
-               thing-arg))
-    (when (oref action always-retarget)
-      (setq conn--dispatch-current-targeter nil))))
+               thing-arg))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
                                      target-finder thing-cmd thing-arg
@@ -7144,7 +7177,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "C-n" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
-  "C-f" 'set-scroll-window)
+  "C-o" 'other-window)
 
 (defun conn--transpose-recursive-message ()
   (message
