@@ -3465,11 +3465,13 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-common-commands ((_command (eql scroll-up)))
   (with-selected-window conn--dispatch-scroll-window
-    (conn-scroll-up (conn-state-loop-prefix-arg))))
+    (let ((next-screen-context-lines (conn-state-loop-prefix-arg)))
+      (conn-scroll-up))))
 
 (cl-defmethod conn-dispatch-common-commands ((_command (eql scroll-down)))
   (with-selected-window conn--dispatch-scroll-window
-    (conn-scroll-down (conn-state-loop-prefix-arg))))
+    (let ((next-screen-context-lines (conn-state-loop-prefix-arg)))
+      (conn-scroll-down))))
 
 (cl-defmethod conn-dispatch-common-commands ((_command (eql other-window)))
   (setq conn--dispatch-scroll-window
@@ -3483,7 +3485,9 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
-    ((guard (ignore-errors (conn-dispatch-common-commands command) t)))
+    ((guard (ignore-error 'cl-no-applicable-method
+              (conn-dispatch-common-commands command)
+              t)))
     ((guard (or (alist-get command conn-bounds-of-command-alist)
                 (when (symbolp command)
                   (get command :conn-command-thing))))
@@ -5297,7 +5301,9 @@ Returns a cons of (STRING . OVERLAYS)."
        (setf conn--loop-prefix-mag nil))
       ('negative-argument
        (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
-      ((guard (ignore-errors (conn-dispatch-common-commands cmd) t))
+      ((guard (ignore-error 'cl-no-applicable-method
+                (conn-dispatch-common-commands cmd)
+                t))
        (redisplay))
       (_ (throw 'dont-handle nil)))
     (throw 'dispatch-continue nil)))
