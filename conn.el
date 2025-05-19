@@ -2189,9 +2189,13 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
     (save-mark-and-excursion
       (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
             (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                         (when (symbolp cmd)
-                           (alist-get (get cmd :conn-command-thing)
-                                      conn-bounds-of-command-alist))
+                         (cl-loop for depth from 0 below 30
+                                  for thing = (get cmd :conn-command-thing)
+                                  then (get thing :conn-command-thing)
+                                  while thing
+                                  for bounds = (alist-get (get thing :conn-command-thing)
+                                                          conn-bounds-of-command-alist)
+                                  when bounds return bounds)
                          conn-bounds-of-command-default)
                      cmd arg)))))
 
@@ -3190,8 +3194,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 A target finder function should return a list of overlays.")
 
 (defvar conn-dispatch-target-finders-alist
-  `((conn-backward-inner-line . conn-dispatch-inner-lines-end)
-    (move-end-of-line . conn-dispatch-lines-end)
+  `((move-end-of-line . conn-dispatch-lines-end)
     (conn-backward-symbol . ,(lambda () (conn-dispatch-all-things 'symbol)))
     (backward-word . ,(lambda () (conn-dispatch-all-things 'word))))
   "Default target finders for for things or commands.
@@ -3296,24 +3299,14 @@ associated with a command's thing.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
-  "<remap> <conn-expand>" '(conn-dispatch-command
-                            conn-expand-remote
-                            conn-dispatch-read-string-with-timeout)
-  "<remap> <conn-contract>" '(conn-dispatch-command
-                              conn-expand-remote
-                              conn-dispatch-read-string-with-timeout)
-  "L" `(conn-dispatch-command
-        conn-backward-inner-line ,(lambda () (conn-dispatch-inner-lines t)))
-  ";" `(conn-dispatch-command
-        conn-backward-inner-line ,(lambda () (conn-dispatch-inner-lines t)))
+  "<remap> <conn-expand>" 'conn-expand-remote
+  "<remap> <conn-contract>" 'conn-expand-remote
+  ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
-  "O" `(conn-dispatch-command
-        forward-word ,(lambda () (conn-dispatch-all-things 'word)))
-  "U" `(conn-dispatch-command
-        forward-symbol ,(lambda () (conn-dispatch-all-things 'symbol)))
-  "b" '(conn-dispatch-command
-        button conn-dispatch-all-buttons))
+  "O" 'conn-dispatch-all-words
+  "U" 'conn-dispatch-all-symbols
+  "b" 'conn-dispatch-buttons)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
@@ -3325,18 +3318,30 @@ associated with a command's thing.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
-(defun conn--dispatch-restrict-windows (win)
-  (eq win conn--dispatch-scroll-window))
+(setf (alist-get 'conn-dispatch-buttons conn-dispatch-target-finders-alist)
+      'conn-dispatch-all-buttons
+      (get 'conn-dispatch-all-buttons :conn-command-thing) 'button)
+
+(setf (alist-get 'conn-dispatch-all-symbols conn-dispatch-target-finders-alist)
+      (lambda () (conn-dispatch-all-things 'word))
+      (get 'conn-dispatch-all-symbols :conn-command-thing) 'conn-forward-symbol)
+
+(setf (alist-get 'conn-dispatch-all-words conn-dispatch-target-finders-alist)
+      (lambda () (conn-dispatch-all-things 'symbol))
+      (get 'conn-dispatch-all-words :conn-command-thing) 'conn-forward-word)
+
+(defun conn--dispatch-default-action (command)
+  (or (alist-get command conn-dispatch-default-action-alist)
+      (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
+      conn-dispatch-action-default))
 
 (defun conn--dispatch-target-finder (command)
   (or (alist-get command conn-dispatch-target-finders-alist)
       (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
       conn-dispatch-default-target-finder))
 
-(defun conn--dispatch-default-action (command)
-  (or (alist-get command conn-dispatch-default-action-alist)
-      (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
-      conn-dispatch-action-default))
+(defun conn--dispatch-restrict-windows (win)
+  (eq win conn--dispatch-scroll-window))
 
 (defun conn--dispatch-command-affixation (command-names)
   (with-selected-window (or (minibuffer-selected-window) (selected-window))
@@ -3488,6 +3493,13 @@ associated with a command's thing.")
     ((guard (ignore-error cl-no-applicable-method
               (conn-dispatch-common-case command)
               t)))
+    ((pred conn--action-type-p)
+     (conn-cancel-action (oref cont action))
+     (if (cl-typep (oref cont action) command)
+         (setf (oref cont action) nil)
+       (setf (oref cont action) (condition-case _
+                                    (conn-make-action command)
+                                  (error nil)))))
     ((guard (or (alist-get command conn-bounds-of-command-alist)
                 (when (symbolp command)
                   (get command :conn-command-thing))))
@@ -3498,26 +3510,7 @@ associated with a command's thing.")
        (setf (oref cont action)
              (conn-make-action (conn--dispatch-default-action command))))
      (conn-state-loop-exit))
-    ((pred conn--action-type-p)
-     (conn-cancel-action (oref cont action))
-     (if (cl-typep (oref cont action) command)
-         (setf (oref cont action) nil)
-       (setf (oref cont action) (condition-case _
-                                    (conn-make-action command)
-                                  (error nil)))))
     (_ (conn-state-loop-error "Invalid command"))))
-
-(cl-defmethod conn-dispatch-command-case ((command (head conn-dispatch-command))
-                                          cont)
-  (pcase-let ((`(,thing ,finder ,default-action) (cdr command)))
-    (setf (oref cont thing-cmd) thing
-          (oref cont thing-arg) (conn-state-loop-consume-prefix-arg)
-          (oref cont target-finder) finder)
-    (when (null (oref cont action))
-      (setf (oref cont action)
-            (conn-make-action (or default-action
-                                  (conn--dispatch-default-action thing)))))
-    (conn-state-loop-exit)))
 
 (cl-defmethod conn-dispatch-command-case ((_cmd (eql dispatch-other-end))
                                           cont)
@@ -3549,7 +3542,8 @@ associated with a command's thing.")
            (pcase sym
              ('help)
              ((pred symbolp)
-              (or (get sym :conn-command-thing)
+              (or (or (get sym :conn-command-thing)
+                      (alist-get sym conn-bounds-of-command-alist))
                   (conn--action-type-p sym)))))
          t))
      (quit nil))
@@ -3699,6 +3693,10 @@ Optionally the overlay may have an associated THING."
 
 
 ;;;;; Dispatch Labels
+
+(defvar conn--dispatch-read-event-handlers nil)
+
+(defvar conn--dispatch-read-event-message-prefixes nil)
 
 (defvar conn-dispatch-label-function 'conn-dispatch-labels)
 
@@ -3990,10 +3988,6 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Target Finders
 
-(defvar conn--dispatch-read-event-handlers nil)
-
-(defvar conn--dispatch-read-event-message-prefixes nil)
-
 (defun conn-dispatch-ignore-event ()
   (error "Function only available in dispatch event handler"))
 
@@ -4250,7 +4244,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                  (propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay (point) 0)))))))))
 
-(defun conn-dispatch-inner-lines (&optional end)
+(defun conn-dispatch-inner-lines ()
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
       (save-excursion
@@ -4258,9 +4252,7 @@ Returns a cons of (STRING . OVERLAYS)."
           (goto-char (point-max))
           (while (let ((pt (point)))
                    (forward-line -1)
-                   (if end
-                       (conn-end-of-inner-line)
-                     (conn-beginning-of-inner-line))
+                   (conn-beginning-of-inner-line)
                    (/= (point) pt))
             (when (not (invisible-p (point)))
               (conn-make-target-overlay (point) 0))))))))
@@ -4283,9 +4275,6 @@ Returns a cons of (STRING . OVERLAYS)."
             (conn-make-target-overlay
              (point) 0 'char 'conn--right-justify-padding))
           (vertical-motion 1))))))
-
-(defun conn-dispatch-inner-lines-end ()
-  (conn-dispatch-inner-lines t))
 
 
 ;;;;; Dispatch Actions
@@ -7099,7 +7088,8 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
             (cl-loop with old-list = (conn-ring-list conn-mark-ring)
                      with new-list = (conn-ring-list new-ring)
                      for elem in (conn-ring-history new-ring)
-                     collect (nth (seq-position old-list elem #'eq) new-list))
+                     for pos = (seq-position old-list elem)
+                     when pos collect (nth pos new-list))
             conn-mark-ring new-ring))))
 
 (defun conn-delete-mark-ring ()
@@ -7171,7 +7161,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
             (cl-loop with old-list = (conn-ring-list conn-movement-ring)
                      with new-list = (conn-ring-list new-ring)
                      for elem in (conn-ring-history conn-movement-ring)
-                     collect (nth (seq-position old-list elem) new-list))
+                     for pos = (seq-position old-list elem)
+                     when pos collect (nth pos new-list))
             conn-movement-ring new-ring))))
 
 (defun conn-push-region (point mark &optional back)
