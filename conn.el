@@ -4292,7 +4292,8 @@ Returns a cons of (STRING . OVERLAYS)."
             (oclosure--class-allparents (cl--find-class item))))))
 
 (cl-defgeneric conn-make-action (type)
-  (:method (type) (error "Unknown action type %s" type)))
+  (:method (type) (error "Unknown action type %s" type))
+  (:method :after (_type) (conn-state-loop-consume-prefix-arg)))
 
 (cl-defmethod conn-make-action :around (type)
   (let ((wconf (current-window-configuration)))
@@ -4518,12 +4519,13 @@ Returns a cons of (STRING . OVERLAYS)."
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
-  (let ((cg (conn--action-buffer-change-group)))
+  (let* ((sep (when (conn-state-loop-consume-prefix-arg)
+                (read-string "Seperator: " nil nil nil t)))
+         (cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send
                       (change-group cg)
                       (str (funcall region-extract-function t))
-                      (seperator (when (conn-state-loop-consume-prefix-arg)
-                                   (read-string "Seperator: " nil nil nil t)))
+                      (seperator sep)
                       (window-predicate
                        (lambda (win)
                          (not
