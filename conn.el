@@ -1768,7 +1768,7 @@ returned.")
 
 (defvar conn-label-select-always-prompt nil)
 
-(defun conn-label-select (candidates &optional prompt)
+(defun conn-label-select (candidates char-reader &optional prompt)
   "Select a label from CANDIDATES.
 
 Prompts the user for prefix characters one at a time and narrows the
@@ -1799,7 +1799,7 @@ themselves once the selection process has concluded."
           (cl-return (conn-label-payload it)))))
      (setq prompt-flag nil)
      (let ((next nil)
-           (c (conn-dispatch-read-event prompt)))
+           (c (funcall char-reader prompt)))
        (setq prompt (concat (if (eq no-matches prompt) init-prompt prompt)
                             (string c))
              current (dolist (label current next)
@@ -1887,7 +1887,7 @@ themselves once the selection process has concluded."
           (conn-label-select-always-prompt
            (or always-prompt conn-label-select-always-prompt)))
       (unwind-protect
-          (conn-label-select labels)
+          (conn-label-select labels #'read-char)
         (mapc #'conn-label-delete labels))))))
 
 
@@ -3982,6 +3982,50 @@ Target overlays may override this default by setting the
                  (funcall conn-target-window-predicate win))
         (throw 'mouse-click (list pt win nil))))))
 
+(defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds
+                                           inhibit-message-suffixes)
+  (let* ((suffix
+          (unless inhibit-message-suffixes
+            (string-join
+             (delq nil (mapcar (lambda (pfx)
+                                 (pcase pfx
+                                   ((pred functionp) (funcall pfx))
+                                   ((pred stringp) pfx)))
+                               conn--dispatch-read-event-message-suffixes))
+             "; ")))
+         (prompt
+          (concat prompt
+                  (unless (or inhibit-message-suffixes seconds)
+                    (if (length= suffix 0)
+                        (propertize ": " 'face 'minibuffer-prompt)
+                      (concat " (" suffix ")"
+                              (propertize ": " 'face 'minibuffer-prompt))))))
+         (inhibit-message nil)
+         (message-log-max 0))
+    (catch 'return
+      (if seconds
+          (while-let ((ev (conn-with-input-method
+                            (read-event prompt
+                                        inherit-input-method
+                                        seconds))))
+            (when (characterp ev)
+              (throw 'return ev)))
+        (while t
+          (pcase (key-binding (read-key-sequence-vector prompt) t)
+            ('self-insert-command
+             (setq unread-command-events `((no-record . ,last-input-event)))
+             (throw 'return
+                    (conn-with-input-method
+                      (read-event prompt inherit-input-method))))
+            ('keyboard-quit
+             (keyboard-quit))
+            (cmd
+             (unwind-protect
+                 (catch 'dispatch-handle
+                   (cl-loop for handler in conn--dispatch-read-event-handlers
+                            do (funcall handler cmd)))
+               (setf conn-state-loop-last-command cmd)))))))))
+
 (defun conn-dispatch-select-target (target-finder)
   (catch 'mouse-click
     (let ((conn--dispatch-read-event-handlers
@@ -4006,7 +4050,9 @@ Target overlays may override this default by setting the
                             "["
                             (number-to-string conn-target-count)
                             "] chars"))
-                   (result (conn-label-select labels prompt)))
+                   (result (conn-label-select labels
+                                              #'conn-dispatch-read-event
+                                              prompt)))
               (conn--target-label-payload result)))
         (conn-delete-targets)
         (dolist (win (conn--get-target-windows))
@@ -4014,51 +4060,6 @@ Target overlays may override this default by setting the
 
 
 ;;;;; Dispatch Target Finders
-
-(defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds
-                                           inhibit-message-suffixes)
-  (conn-with-state 'conn-dispatch-read-state
-    (let* ((suffix
-            (unless inhibit-message-suffixes
-              (string-join
-               (delq nil (mapcar (lambda (pfx)
-                                   (pcase pfx
-                                     ((pred functionp) (funcall pfx))
-                                     ((pred stringp) pfx)))
-                                 conn--dispatch-read-event-message-suffixes))
-               "; ")))
-           (prompt
-            (concat prompt
-                    (unless (or inhibit-message-suffixes seconds)
-                      (if (length= suffix 0)
-                          (propertize ": " 'face 'minibuffer-prompt)
-                        (concat " (" suffix ")"
-                                (propertize ": " 'face 'minibuffer-prompt))))))
-           (inhibit-message nil)
-           (message-log-max 0))
-      (catch 'return
-        (if seconds
-            (while-let ((ev (conn-with-input-method
-                              (read-event prompt
-                                          inherit-input-method
-                                          seconds))))
-              (when (characterp ev)
-                (throw 'return ev)))
-          (while t
-            (pcase (key-binding (read-key-sequence-vector prompt) t)
-              ('self-insert-command
-               (setq unread-command-events `((no-record . ,last-input-event)))
-               (throw 'return
-                      (conn-with-input-method
-                        (read-event prompt inherit-input-method))))
-              ('keyboard-quit
-               (keyboard-quit))
-              (cmd
-               (unwind-protect
-                   (catch 'dispatch-handle
-                     (cl-loop for handler in conn--dispatch-read-event-handlers
-                              do (funcall handler cmd)))
-                 (setf conn-state-loop-last-command cmd))))))))))
 
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
@@ -5425,13 +5426,14 @@ Returns a cons of (STRING . OVERLAYS)."
                                  'face (when conn--dispatch-always-retarget
                                          'eldoc-highlight-function-argument)))))
                ,@conn--dispatch-read-event-message-suffixes)))
-       (while (or ,repeat (< conn-dispatch-repeat-count 1))
-         (catch 'dispatch-redisplay
-           (while (progn
-                    ,@body
-                    (cl-incf conn-dispatch-repeat-count)
-                    (and ,repeat (> conn-last-target-count 1)))
-             (undo-boundary)))))))
+       (conn-with-state 'conn-dispatch-read-state
+         (while (or ,repeat (< conn-dispatch-repeat-count 1))
+           (catch 'dispatch-redisplay
+             (while (progn
+                      ,@body
+                      (cl-incf conn-dispatch-repeat-count)
+                      (and ,repeat (> conn-last-target-count 1)))
+               (undo-boundary))))))))
 
 
 ;;;;; Dispatch Commands
