@@ -4026,7 +4026,8 @@ Target overlays may override this default by setting the
                           (read-key-sequence-vector nil))))
               (pcase (key-binding seq t)
                 ('self-insert-command
-                 (setq unread-command-events (listify-key-sequence seq))
+                 (setq unread-command-events (cl-loop for c across seq
+                                                      collect (cons 'no-record c)))
                  (throw 'return (if inherit-input-method
                                     (conn-with-input-method (read-event nil t))
                                   (read-event nil))))
