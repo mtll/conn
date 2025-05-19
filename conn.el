@@ -3470,12 +3470,14 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql scroll-up)))
   (with-selected-window conn--dispatch-scroll-window
-    (let ((next-screen-context-lines (conn-state-loop-prefix-arg)))
+    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+                                         next-screen-context-lines)))
       (conn-scroll-up))))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql scroll-down)))
   (with-selected-window conn--dispatch-scroll-window
-    (let ((next-screen-context-lines (conn-state-loop-prefix-arg)))
+    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+                                         next-screen-context-lines)))
       (conn-scroll-down))))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql other-window)))
@@ -3539,12 +3541,9 @@ associated with a command's thing.")
                  (category . conn-dispatch-command))
              (complete-with-action action obarray string pred)))
          (lambda (sym)
-           (pcase sym
-             ('help)
-             ((pred symbolp)
-              (or (or (get sym :conn-command-thing)
-                      (alist-get sym conn-bounds-of-command-alist))
-                  (conn--action-type-p sym)))))
+           (or (get sym :conn-command-thing)
+               (alist-get sym conn-bounds-of-command-alist)
+               (conn--action-type-p sym)))
          t))
      (quit nil))
    cont))
