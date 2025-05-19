@@ -1893,6 +1893,7 @@ themselves once the selection process has concluded."
 
 ;;;; State Command Loops
 
+(defvar conn-state-loop-last-command nil)
 (defvar conn--loop-prefix-mag nil)
 (defvar conn--loop-prefix-sign nil)
 (defvar conn--loop-error-message nil)
@@ -1944,34 +1945,36 @@ themselves once the selection process has concluded."
           (let ((inhibit-message nil)
                 (message-log-max nil))
             (funcall message-function cont conn--loop-error-message))
-          (pcase (prog1 (key-binding (read-key-sequence nil) t)
-                   (setf conn--loop-error-message ""))
-            ('nil nil)
-            ('digit-argument
-             (let* ((char (if (integerp last-input-event)
-                              last-input-event
-                            (get last-input-event 'ascii-character)))
-                    (digit (- (logand char ?\177) ?0)))
-               (setf conn--loop-prefix-mag
-                     (if (integerp conn--loop-prefix-mag)
-                         (+ (* 10 conn--loop-prefix-mag) digit)
-                       (when (/= 0 digit) digit)))))
-            ('forward-delete-arg
-             (when conn--loop-prefix-mag
-               (setf conn--loop-prefix-mag
-                     (mod conn--loop-prefix-mag
-                          (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
-            ('backward-delete-arg
-             (when conn--loop-prefix-mag
-               (setf conn--loop-prefix-mag (floor conn--loop-prefix-mag 10))))
-            ('reset-arg
-             (setf conn--loop-prefix-mag nil))
-            ('negative-argument
-             (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
-            ('keyboard-quit
-             (conn-state-loop-abort))
-            (cmd
-             (funcall case-function cmd cont))))))
+          (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
+                       (setf conn--loop-error-message ""))))
+            (pcase cmd
+              ('nil nil)
+              ('digit-argument
+               (let* ((char (if (integerp last-input-event)
+                                last-input-event
+                              (get last-input-event 'ascii-character)))
+                      (digit (- (logand char ?\177) ?0)))
+                 (setf conn--loop-prefix-mag
+                       (if (integerp conn--loop-prefix-mag)
+                           (+ (* 10 conn--loop-prefix-mag) digit)
+                         (when (/= 0 digit) digit)))))
+              ('forward-delete-arg
+               (when conn--loop-prefix-mag
+                 (setf conn--loop-prefix-mag
+                       (mod conn--loop-prefix-mag
+                            (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
+              ('backward-delete-arg
+               (when conn--loop-prefix-mag
+                 (setf conn--loop-prefix-mag (floor conn--loop-prefix-mag 10))))
+              ('reset-arg
+               (setf conn--loop-prefix-mag nil))
+              ('negative-argument
+               (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
+              ('keyboard-quit
+               (conn-state-loop-abort))
+              (cmd
+               (funcall case-function cmd cont)))
+            (setf conn-state-loop-last-command cmd)))))
     (message nil)
     (funcall cont)))
 
@@ -3440,6 +3443,11 @@ associated with a command's thing.")
 
 (cl-defgeneric conn-dispatch-common-case (command))
 
+(cl-defmethod conn-dispatch-common-case ((_command (eql recenter-top-bottom)))
+  (let ((this-command 'recenter-top-bottom)
+        (last-command conn-state-loop-last-command))
+    (recenter-top-bottom (conn-state-loop-prefix-arg))))
+
 (cl-defmethod conn-dispatch-common-case ((_command (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method)))
@@ -3528,25 +3536,26 @@ associated with a command's thing.")
   (setf (oref cont restrict-windows) (not (oref cont restrict-windows))))
 
 (defun conn--completing-read-dispatch (cont)
-  (conn-dispatch-command-case
-   (condition-case _
-       (intern
-        (completing-read
-         "Command: "
-         (lambda (string pred action)
-           (if (eq action 'metadata)
-               `(metadata
-                 ,(cons 'affixation-function
-                        'conn--dispatch-command-affixation)
-                 (category . conn-dispatch-command))
-             (complete-with-action action obarray string pred)))
-         (lambda (sym)
-           (or (get sym :conn-command-thing)
-               (alist-get sym conn-bounds-of-command-alist)
-               (conn--action-type-p sym)))
-         t))
-     (quit nil))
-   cont))
+  (save-window-excursion
+    (conn-dispatch-command-case
+     (condition-case _
+         (intern
+          (completing-read
+           "Command: "
+           (lambda (string pred action)
+             (if (eq action 'metadata)
+                 `(metadata
+                   ,(cons 'affixation-function
+                          'conn--dispatch-command-affixation)
+                   (category . conn-dispatch-command))
+               (complete-with-action action obarray string pred)))
+           (lambda (sym)
+             (or (get sym :conn-command-thing)
+                 (alist-get sym conn-bounds-of-command-alist)
+                 (conn--action-type-p sym)))
+           t))
+       (quit nil))
+     cont)))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql help)) cont)
   (conn--completing-read-dispatch cont))
@@ -4001,12 +4010,11 @@ Target overlays may override this default by setting the
                                   ((pred functionp) (funcall pfx))
                                   ((pred stringp) pfx)))
                               conn--dispatch-read-event-message-prefixes)))
-           (prompt
-            (concat
-             prompt
-             (when prefix "(")
-             (mapconcat 'identity prefix "; ")
-             (when prefix ")"))))
+           (prompt (concat
+                    prompt
+                    (when prefix "(")
+                    (mapconcat 'identity prefix "; ")
+                    (when prefix ")"))))
       (catch 'return
         (let ((inhibit-message nil)
               (message-log-max nil))
@@ -4016,26 +4024,31 @@ Target overlays may override this default by setting the
                               (read-event nil inherit-input-method seconds))))
               (when (characterp ev)
                 (throw 'return ev))
-              (let ((inhibit-message nil))
+              (let ((inhibit-message nil)
+                    (message-log-max nil))
                 (message prompt)))
           (while t
             (let* ((seq (if inherit-input-method
                             (conn-with-input-method
                               (read-key-sequence-vector nil))
-                          (read-key-sequence-vector nil))))
-              (pcase (key-binding seq t)
-                ('self-insert-command
-                 (setq unread-command-events (cl-loop for c across seq
-                                                      collect (cons 'no-record c)))
-                 (throw 'return (if inherit-input-method
-                                    (conn-with-input-method (read-event nil t))
-                                  (read-event nil))))
-                ('keyboard-quit
-                 (keyboard-quit))
-                (cmd
-                 (cl-loop for handler in conn--dispatch-read-event-handlers
-                          do (funcall handler cmd)))))
-            (let ((inhibit-message nil))
+                          (read-key-sequence-vector nil)))
+                   (cmd (key-binding seq t)))
+              (unwind-protect
+                  (pcase cmd
+                    ('self-insert-command
+                     (setq unread-command-events (cl-loop for c across seq
+                                                          collect (cons 'no-record c)))
+                     (throw 'return (if inherit-input-method
+                                        (conn-with-input-method (read-event nil t))
+                                      (read-event nil))))
+                    ('keyboard-quit
+                     (keyboard-quit))
+                    (cmd
+                     (cl-loop for handler in conn--dispatch-read-event-handlers
+                              do (funcall handler cmd))))
+                (setf conn-state-loop-last-command cmd)))
+            (let ((inhibit-message nil)
+                  (message-log-max nil))
               (message prompt))))))))
 
 (defun conn-target-sort-nearest (a b)
@@ -5332,6 +5345,10 @@ Returns a cons of (STRING . OVERLAYS)."
             (conn--loop-prefix-sign nil)
             (conn--retargetable-flag conn--dispatch-always-retarget)
             (conn--dispatch-current-targeter nil)
+            (conn--dispatch-scroll-window (or conn--dispatch-scroll-window
+                                              (selected-window)))
+            (conn-state-loop-last-command nil)
+            (recenter-last-op nil)
             (conn--dispatch-read-event-handlers
              (cons #'conn-dispatch-loop-case
                    conn--dispatch-read-event-handlers))
@@ -5352,19 +5369,6 @@ Returns a cons of (STRING . OVERLAYS)."
                       "other end"
                       'face (when conn-dispatch-other-end
                               'eldoc-highlight-function-argument)))))
-               ;; ,(lambda ()
-               ;;    (when-let* ((binding
-               ;;                 (where-is-internal 'restrict-windows nil t)))
-               ;;      (concat
-               ;;       (propertize (key-description binding)
-               ;;                   'face 'read-multiple-choice-face)
-               ;;       " "
-               ;;       (propertize "this win"
-               ;;                   'face (if (advice-function-member-p
-               ;;                              'conn--dispatch-restrict-windows
-               ;;                              conn-target-window-predicate)
-               ;;                             'eldoc-highlight-function-argument
-               ;;                           'minibuffer-prompt)))))
                ,(lambda ()
                   (when conn--dispatch-current-targeter
                     (setq conn--retargetable-flag t))
