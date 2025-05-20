@@ -3315,6 +3315,11 @@ associated with a command's thing.")
   "b" 'conn-dispatch-buttons)
 
 (define-keymap
+  :keymap (conn-get-overriding-map 'conn-dispatch-state)
+  "M-r" (conn-remap-key "<conn-region-map>")
+  "," (conn-remap-key "<conn-thing-map>"))
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "\\" 'conn-dispatch-kapply)
 
@@ -4734,7 +4739,8 @@ Returns a cons of (STRING . OVERLAYS)."
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
-           (conn--narrow-indirect beg end))
+           (conn-with-state conn-previous-state
+             (conn--narrow-indirect beg end)))
           (_ (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-narrow-indirect))
@@ -5288,6 +5294,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <capitalize-region>" 'conn-dispatch-capitalize
   "<remap> <capitalize-dwim>" 'conn-dispatch-capitalize
   "<remap> <conn-narrow-indirect>" 'conn-dispatch-narrow-indirect
+  "<remap> <conn-narrow-to-thing>" 'conn-dispatch-narrow-indirect
   "<remap> <comment-or-uncomment-region>" 'conn-dispatch-comment
   "<remap> <conn-duplicate>" 'conn-dispatch-duplicate
   "<remap> <conn-duplicate-and-comment>" 'conn-dispatch-duplicate
