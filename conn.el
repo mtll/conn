@@ -3298,6 +3298,7 @@ associated with a command's thing.")
   "C-o" 'other-window
   "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
+  "i" 'forward-line
   "k" 'next-line
   "n" 'end-of-defun
   "," (conn-remap-key "<conn-thing-map>"))
@@ -4617,10 +4618,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (oref action change-group))
+  (setf (oref action change-group) nil)
   action)
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send))
-  (conn--action-cancel-change-group (oref action change-group)))
+  (conn--action-cancel-change-group (oref action change-group))
+  (setf (oref action change-group) nil))
 
 (oclosure-define (conn-dispatch-send-replace
                   (:parent conn-action))
@@ -5328,7 +5331,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defgeneric conn-dispatch-read-event-case (command))
 
-(cl-defmethod conn-dispatch-read-event-case (cmd)
+(cl-defmethod conn-dispatch-read-event-case :extra "Prefix" (cmd)
   (catch 'dont-handle
     (pcase cmd
       ('digit-argument
