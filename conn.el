@@ -4618,12 +4618,10 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-accept-action ((action conn-dispatch-send))
   (conn--action-accept-change-group (oref action change-group))
-  (setf (oref action change-group) nil)
   action)
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-send))
-  (conn--action-cancel-change-group (oref action change-group))
-  (setf (oref action change-group) nil))
+  (conn--action-cancel-change-group (oref action change-group)))
 
 (oclosure-define (conn-dispatch-send-replace
                   (:parent conn-action))
@@ -5575,8 +5573,6 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                       &key repeat &allow-other-keys)
-  (when (conn--action-type-p action)
-    (setq action (conn-accept-action (conn-make-action action))))
   (cl-assert (conn-action-p action))
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,bounds-op-override)
@@ -5686,7 +5682,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   "Dispatch on buttons."
   (interactive)
   (conn-perform-dispatch
-   'conn-dispatch-push-button
+   (conn-make-action 'conn-dispatch-push-button)
    'conn-dispatch-all-buttons
    nil nil))
 
