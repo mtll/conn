@@ -846,6 +846,8 @@ This variable will be bound to the state t be entered during
 `conn-enter-state'.  In particular this will be bound when
 `conn-enter-state' calls `conn-exit-state' and `conn-exit-functions'.")
 
+(defvar-local conn-state-stack nil)
+
 (define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
   (inline-quote
@@ -1095,8 +1097,6 @@ Called when the inheritance hierarchy for STATE changes."
 
 (defun conn--activate-input-method ()
   "Enable input method in states with nil :conn-suppress-input-method property."
-  ;; Ensure conn-local-mode is t since this can be run by conn-with-state
-  ;; in buffers without conn-local-mode enabled.
   (when conn-local-mode
     (let (input-method-activate-hook
           input-method-deactivate-hook)
@@ -1282,16 +1282,31 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
 
-(defmacro conn-with-state (state &rest body)
+(defmacro conn-without-transient-state (&rest body)
+  (declare (indent 0))
+  `(if conn-state-stack
+       (pcase-let ((`(,curr . ,prev)
+                    (seq-subseq conn-state-stack -2)))
+         (conn-with-transient-state curr
+           (setq conn-previous-state prev)
+           ,@body))
+     ,@body))
+
+(defmacro conn-with-transient-state (state &rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
   (cl-with-gensyms ( saved-curr-state saved-prev-state
                      saved-cursor-type buffer)
-    `(let ((,saved-curr-state conn-current-state)
-           (,saved-prev-state conn-previous-state)
-           (,buffer (current-buffer))
-           (,saved-cursor-type cursor-type))
+    `(let* ((,saved-curr-state conn-current-state)
+            (,saved-prev-state conn-previous-state)
+            (,buffer (current-buffer))
+            (,saved-cursor-type cursor-type)
+            (conn-state-stack (if conn-state-stack
+                                  (cons conn-current-state
+                                        conn-state-stack)
+                                (list conn-current-state
+                                      conn-previous-state))))
        (unwind-protect
            (progn
              ,(if state
@@ -1349,7 +1364,7 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
-(cl-defgeneric conn-exit-state (state &key &allow-other-keys)
+(cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE.
 
 Methods can be added to this generic function in order to run code every
@@ -1408,7 +1423,8 @@ and specializes the method on all conn states."
   ( :method (state &key &allow-other-keys)
     (error "Attempting to enter unknown state: %s" state)))
 
-(cl-defmethod conn-enter-state :around ((state conn-state) &key &allow-other-keys)
+(cl-defmethod conn-enter-state :around ((state conn-state)
+                                        &key &allow-other-keys)
   (unless (symbol-value state)
     (let ((success nil)
           (conn-next-state state))
@@ -1935,7 +1951,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-with-state-loop ( state (cont conn-state-loop-continuation)
                                      &key case-function message-function initial-arg
                                      &allow-other-keys)
-  (conn-with-state state
+  (conn-with-transient-state state
     (let ((conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
           (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
           (conn--loop-error-message "")
@@ -2258,7 +2274,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
     (unwind-protect
         (progn
           (add-hook 'pre-command-hook pre)
-          (conn-with-state 'conn-bounds-of-recursive-edit-state
+          (conn-with-transient-state 'conn-bounds-of-recursive-edit-state
             (funcall pre)
             (recursive-edit))
           (cons (cons (region-beginning) (region-end))
@@ -4739,7 +4755,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end)
-           (conn-with-state conn-previous-state
+           (conn-without-transient-state
              (conn--narrow-indirect beg end)))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -5448,7 +5464,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                  'face (when conn--dispatch-always-retarget
                                          'eldoc-highlight-function-argument)))))
                ,@conn--dispatch-read-event-message-suffixes)))
-       (conn-with-state 'conn-dispatch-read-state
+       (conn-with-transient-state 'conn-dispatch-read-state
          (while (or ,repeat (< conn-dispatch-repeat-count 1))
            (catch 'dispatch-redisplay
              (while (progn
@@ -5525,7 +5541,7 @@ Returns a cons of (STRING . OVERLAYS)."
             (interactive "P")
             (cl-letf ((conn-dispatch-repeat-count repeat-count)
                       ((symbol-function 'conn-repeat-last-dispatch)))
-              (conn-with-state state
+              (conn-with-transient-state state
                 (conn-perform-dispatch action finder
                                        thing-cmd thing-arg
                                        :repeat (xor invert-repeat repeat)
@@ -7665,15 +7681,27 @@ for the meaning of prefix ARG."
    (list
     (register-read-with-preview "Load register: ")
     current-prefix-arg))
-  (when (use-region-p)
-    (if (bound-and-true-p rectangle-mark-mode)
-        (delete-rectangle (region-beginning) (region-end))
-      (delete-region (region-beginning) (region-end))))
   (condition-case err
       (jump-to-register reg arg)
     (user-error
      (unless (string-search "access aborted" (error-message-string err))
        (insert-register reg (not arg))))))
+
+(defun conn-register-load-and-replace (reg &optional arg)
+  "Do what I mean with a REG.
+
+For a window configuration, restore it.  For a number or text, insert it.
+For a location, jump to it.  See `jump-to-register' and `insert-register'
+for the meaning of prefix ARG."
+  (interactive
+   (list
+    (register-read-with-preview "Load register: ")
+    current-prefix-arg))
+  (atomic-change-group
+    (if (bound-and-true-p rectangle-mark-mode)
+        (delete-rectangle (region-beginning) (region-end))
+      (delete-region (region-beginning) (region-end)))
+    (conn-register-load reg arg)))
 
 (defun conn-unset-register (register)
   "Unset REGISTER."
@@ -9067,7 +9095,7 @@ Operates with the selected windows parent window."
   "C-<return>" 'conn-join-lines
   "T" 'conn-copy-thing
   "D" 'conn-duplicate-region
-  "P" 'conn-register-load
+  "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-seperator
   "H" 'conn-expand
   "b" (conn-remap-key "<conn-edit-map>")
@@ -9337,7 +9365,7 @@ Operates with the selected windows parent window."
   (declare-function calc-dispatch "calc")
 
   (defun conn--calc-dispatch-ad (&rest app)
-    (conn-with-state 'conn-null-state
+    (conn-with-transient-state 'conn-null-state
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 

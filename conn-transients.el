@@ -645,7 +645,7 @@ A zero means repeat until error."
   (letrec ((wconf (current-window-configuration))
            (action nil)
            (setup (lambda ()
-                    (conn-with-state conn-previous-state
+                    (conn-without-transient-state
                       (conn-dispatch-kapply-prefix
                        (lambda (kapply-action)
                          (setf action kapply-action))))
