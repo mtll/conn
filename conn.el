@@ -4059,6 +4059,12 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Target Finders
 
+;; If a target finder takes user input it should return a function of
+;; no arguments which targets all candidates matching that input so
+;; that retargeting can be done without prompting for user input
+;; repeatedly. If a target finder does not take user input it should
+;; return nil.
+
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
      (abs (- (overlay-end b) (point)))))
@@ -4350,17 +4356,27 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn--action-buffer-change-group ()
   (let ((change-group (prepare-change-group)))
     (activate-change-group change-group)
-    (list change-group (point) (save-mark-and-excursion--save))))
+    (list change-group (point) (mark t) mark-active)))
 
 (defun conn--action-accept-change-group (change-group)
   (pcase-let ((`(,handle ,_saved-point ,_saved-mark) change-group))
     (accept-change-group handle)))
 
 (defun conn--action-cancel-change-group (change-group)
-  (pcase-let ((`(,handle ,saved-point ,saved-mark) change-group))
+  (pcase-let ((`(,handle ,saved-point ,saved-mark ,saved-mark-active)
+               change-group))
     (cancel-change-group handle)
     (goto-char saved-point)
-    (save-mark-and-excursion--restore saved-mark)))
+    (let ((omark (marker-position (mark-marker)))
+          (cur-mark-active mark-active))
+      (set-marker (mark-marker) saved-mark)
+      (setq mark-active saved-mark-active)
+      (if saved-mark-active
+          (when (or (not cur-mark-active)
+                    (not (= omark saved-mark)))
+            (run-hooks 'activate-mark-hook))
+        (when cur-mark-active
+          (run-hooks 'deactivate-mark-hook))))))
 
 (defun conn--dispatch-fixup-whitespace ()
   (when (or (looking-at " ") (looking-back " " 1))
