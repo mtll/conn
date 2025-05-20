@@ -3270,6 +3270,8 @@ associated with a command's thing.")
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-read-state)
   :parent conn-dispatch-common-map
+  "DEL" 'backward-delete-char
+  "<backspace>" 'backward-delete-char
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   "C-d" 'forward-delete-arg
@@ -3363,18 +3365,16 @@ associated with a command's thing.")
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
 
-(defmacro conn-with-dispatch-event-handler (tag keys handler &rest body)
+(defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
   "\(fn (DESCRIPTION &rest CASE) &body BODY)"
   (declare (indent 3))
-  (cl-with-gensyms (keymap)
-    (setq body `(let ((conn--dispatch-read-event-handlers
-                       (cons ,handler conn--dispatch-read-event-handlers)))
-                  ,@body))
+  (setq body `(let ((conn--dispatch-read-event-handlers
+                     (cons ,handler conn--dispatch-read-event-handlers)))
+                ,@body))
+  (cl-once-only (keymap)
     `(catch ,tag
-       ,(if keys
-            `(let ((,keymap (define-keymap
-                              ,@(cl-loop for key in keys
-                                         append (list key tag)))))
+       ,(if keymap
+            `(progn
                (internal-push-keymap ,keymap 'overriding-terminal-local-map)
                (unwind-protect
                    ,body
@@ -3695,10 +3695,11 @@ Optionally the overlay may have an associated THING."
   (cl-decf conn-target-count))
 
 (defun conn-make-string-target-overlays (string &optional predicate)
-  (dolist (win (conn--get-target-windows))
-    (with-selected-window win
-      (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
-        (conn-make-target-overlay beg (- end beg))))))
+  (when (length> string 0)
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
+          (conn-make-target-overlay beg (- end beg)))))))
 
 (defun conn--read-string-with-timeout (&optional predicate)
   (unwind-protect
@@ -3972,16 +3973,6 @@ Target overlays may override this default by setting the
 
 (defvar conn--dispatch-current-targeter nil)
 
-(defun conn--dispatch-handle-mouse (cmd)
-  (when (and (eq cmd 'act)
-             (mouse-event-p last-input-event))
-    (let* ((posn (event-start last-input-event))
-           (win (posn-window posn))
-           (pt (posn-point posn)))
-      (when (and (not (posn-area posn))
-                 (funcall conn-target-window-predicate win))
-        (throw 'mouse-click (list pt win nil))))))
-
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds
                                            inhibit-message-suffixes)
   (let* ((suffix
@@ -4027,11 +4018,18 @@ Target overlays may override this default by setting the
                (setf conn-state-loop-last-command cmd)))))))))
 
 (defun conn-dispatch-select-target (target-finder)
-  (catch 'mouse-click
-    (let ((conn--dispatch-read-event-handlers
-           (cons #'conn--dispatch-handle-mouse
-                 conn--dispatch-read-event-handlers))
-          (conn-label-select-always-prompt conn-label-select-always-prompt))
+  (conn-with-dispatch-event-handler 'mouse-click
+      nil
+      (lambda (cmd)
+        (when (and (eq cmd 'act)
+                   (mouse-event-p last-input-event))
+          (let* ((posn (event-start last-input-event))
+                 (win (posn-window posn))
+                 (pt (posn-point posn)))
+            (when (and (not (posn-area posn))
+                       (funcall conn-target-window-predicate win))
+              (throw 'mouse-click (list pt win nil))))))
+    (let ((conn-label-select-always-prompt conn-label-select-always-prompt))
       (unwind-protect
           (progn
             (if (and conn--dispatch-current-targeter
@@ -4090,7 +4088,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (setq success t))
       (while (< (length string) N)
         (conn-with-dispatch-event-handler 'backspace
-            ("DEL" "<backspace>")
+            (define-keymap "<remap> <backward-delete-char>" 'backspace)
             (lambda (cmd)
               (when (eq cmd 'backspace)
                 (when (length> string 0)
@@ -5691,7 +5689,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   "Jump to point defined by two characters and maybe a label."
   (interactive)
   (conn-perform-dispatch
-   'conn-dispatch-jump
+   (conn-make-action 'conn-dispatch-jump)
    (lambda () (conn-dispatch-read-n-chars 2))
    nil nil))
 
