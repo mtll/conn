@@ -703,22 +703,23 @@ A zero means repeat until error."
                                (macro nil))
                  (window pt bounds-op bounds-arg)
                (let ((conn-kapply-suppress-message t))
-                 (with-selected-window window
-                   (with-undo-amalgamate
-                     (apply #'conn--kapply-compose-iterator
-                            (conn--kapply-region-iterator
-                             (save-excursion
-                               (goto-char pt)
-                               (pcase (funcall bounds-op bounds-arg)
-                                 ('nil (user-error "Cannot find thing at point"))
-                                 (`(,region) (list region))
-                                 (`(,_ . ,subregions) subregions))))
-                            `(,@pipeline
-                              ,(pcase (alist-get :kmacro args)
-                                 ('conn--kmacro-apply
-                                  (lambda (iterator)
-                                    (conn--kmacro-apply iterator nil macro)))
-                                 (kmacro kmacro)))))))
+                 (conn-with-dispatch-suspended
+                   (with-selected-window window
+                     (with-undo-amalgamate
+                       (apply #'conn--kapply-compose-iterator
+                              (conn--kapply-region-iterator
+                               (save-excursion
+                                 (goto-char pt)
+                                 (pcase (funcall bounds-op bounds-arg)
+                                   ('nil (user-error "Cannot find thing at point"))
+                                   (`(,region) (list region))
+                                   (`(,_ . ,subregions) subregions))))
+                              `(,@pipeline
+                                ,(pcase (alist-get :kmacro args)
+                                   ('conn--kmacro-apply
+                                    (lambda (iterator)
+                                      (conn--kmacro-apply iterator nil macro)))
+                                   (kmacro kmacro))))))))
                (unless macro (setq macro (kmacro-ring-head)))))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
