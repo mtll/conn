@@ -3272,6 +3272,7 @@ associated with a command's thing.")
   (cl-call-next-method))
 
 (defvar-keymap conn-dispatch-common-map
+  "C-'" 'recursive-edit
   "C-z" 'dispatch-other-end
   "C-\\" 'toggle-input-method
   "C-M-\\" 'set-input-method
@@ -3483,6 +3484,10 @@ associated with a command's thing.")
 
 (cl-defgeneric conn-dispatch-common-case (command))
 
+(cl-defmethod conn-dispatch-common-case ((_command (eql recursive-edit)))
+  (conn-with-dispatch-suspended
+    (recursive-edit)))
+
 (cl-defmethod conn-dispatch-common-case ((_command (eql recenter-top-bottom)))
   (let ((this-command 'recenter-top-bottom)
         (last-command conn-state-loop-last-command))
@@ -3497,23 +3502,23 @@ associated with a command's thing.")
     (call-interactively 'set-input-method)))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql isearch-forward)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((inhibit-message nil))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
       (isearch-forward))))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql isearch-backward)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((inhibit-message nil))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
       (isearch-backward))))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql isearch-forward-regexp)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((inhibit-message nil))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
       (isearch-forward-regexp))))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql isearch-backward-regexp)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((inhibit-message nil))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
       (isearch-backward-regexp))))
 
 (cl-defmethod conn-dispatch-common-case ((_command (eql scroll-up)))
@@ -5472,6 +5477,23 @@ Returns a cons of (STRING . OVERLAYS)."
                       (cl-incf conn-dispatch-repeat-count)
                       (and ,repeat (> conn-last-target-count 1)))
                (undo-boundary))))))))
+
+(defmacro conn-with-dispatch-suspended (&rest body)
+  (declare (indent 0))
+  `(let ((inhibit-message nil)
+         (conn--loop-prefix-mag nil)
+         (conn--loop-prefix-sign nil)
+         (conn--retargetable-flag nil)
+         (conn--dispatch-current-targeter nil)
+         (conn--dispatch-scroll-window nil)
+         (conn-state-loop-last-command nil)
+         (recenter-last-op nil)
+         (conn--dispatch-read-event-handlers nil)
+         (conn--dispatch-read-event-message-suffixes nil))
+     (conn-delete-targets)
+     (message nil)
+     (conn-without-transient-state
+       ,@body)))
 
 
 ;;;;; Dispatch Commands
@@ -7752,13 +7774,16 @@ of deleting it."
   (interactive (list (region-beginning)
                      (region-end)
                      current-prefix-arg))
-  (conn--without-conn-maps
-    (if arg
-        (funcall (keymap-lookup nil conn-kill-region-keys t) start end)
-      (funcall (or (keymap-lookup nil conn-delete-region-keys t)
-                   'delete-region)
-               start end))
-    (funcall (keymap-lookup nil conn-yank-keys t))))
+  (atomic-change-group
+    (conn--without-conn-maps
+      (if arg
+          (let ((str (filter-buffer-substring start end t)))
+            (funcall (keymap-lookup nil conn-yank-keys t))
+            (kill-new str))
+        (funcall (or (keymap-lookup nil conn-delete-region-keys t)
+                     'delete-region)
+                 start end)
+        (funcall (keymap-lookup nil conn-yank-keys t))))))
 
 (defun conn-copy-region (start end &optional register)
   "Copy region between START and END as kill.
