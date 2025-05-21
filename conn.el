@@ -1899,8 +1899,7 @@ themselves once the selection process has concluded."
            (cl-loop for win in windows
                     collect (funcall conn-window-labeling-function
                                      win (window-parameter win 'conn-label-string))))
-          (conn-label-select-always-prompt
-           (or always-prompt conn-label-select-always-prompt)))
+          (conn-label-select-always-prompt always-prompt))
       (unwind-protect
           (conn-label-select labels #'read-char)
         (mapc #'conn-label-delete labels))))))
@@ -3239,8 +3238,6 @@ associated with a command's thing.")
 
 (defvar conn-dispatch-repeat-count nil)
 
-(defvar conn--dispatch-scroll-window nil)
-
 (defvar conn--dispatch-always-retarget nil)
 
 (conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
@@ -3253,17 +3250,9 @@ associated with a command's thing.")
   :lighter " DISPATCH")
 
 (defvar-keymap conn-dispatch-common-map
-  "C-'" 'recursive-edit
   "C-z" 'dispatch-other-end
   "C-\\" 'toggle-input-method
-  "C-M-\\" 'set-input-method
-  "C-n" 'restrict-windows
-  "C-s" 'isearch-forward
-  "C-M-s" 'isearch-regexp-forward
-  "C-M-r" 'isearch-regexp-backward
-  "C-v" 'scroll-up
-  "M-v" 'scroll-down
-  "C-o" 'other-window)
+  "C-M-\\" 'set-input-method)
 
 (defvar conn-dispatch-read-event-map
   (let ((map (make-keymap)))
@@ -3277,6 +3266,7 @@ associated with a command's thing.")
 (define-keymap
   :keymap conn-dispatch-read-event-map
   :parent conn-dispatch-common-map
+  "C-'" 'recursive-edit
   "<mouse-1>" 'act
   "DEL" 'backward-delete-char
   "<backspace>" 'backward-delete-char
@@ -3286,7 +3276,14 @@ associated with a command's thing.")
   "C-w" 'backward-delete-arg
   "C-f" 'retarget
   "M-f" 'always-retarget
-  "<escape>" 'finish)
+  "<escape>" 'finish
+  "C-o" 'conn-goto-window
+  "C-n" 'restrict-windows
+  "C-s" 'isearch-forward
+  "C-M-s" 'isearch-regexp-forward
+  "C-M-r" 'isearch-regexp-backward
+  "C-v" 'scroll-up
+  "M-v" 'scroll-down)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -3302,7 +3299,6 @@ associated with a command's thing.")
   "C-n" 'restrict-windows
   "SPC" 'scroll-up
   "DEL" 'scroll-down
-  "C-o" 'other-window
   "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
   "i" 'forward-line
@@ -3359,7 +3355,7 @@ associated with a command's thing.")
       conn-dispatch-default-target-finder))
 
 (defun conn--dispatch-restrict-windows (win)
-  (eq win conn--dispatch-scroll-window))
+  (eq win (selected-window)))
 
 (defun conn--dispatch-command-affixation (command-names)
   (with-selected-window (or (minibuffer-selected-window) (selected-window))
@@ -3459,7 +3455,6 @@ associated with a command's thing.")
                                      &allow-other-keys)
   (require 'conn-transients)
   (let ((success nil)
-        (conn--dispatch-scroll-window (selected-window))
         (conn-dispatch-other-end nil))
     (setf (oref cont no-other-end) no-other-end
           (oref cont repeatable) (not no-repeat))
@@ -5378,8 +5373,6 @@ Returns a cons of (STRING . OVERLAYS)."
             (conn--loop-prefix-sign nil)
             (conn--retargetable-flag conn--dispatch-always-retarget)
             (conn--dispatch-current-targeter nil)
-            (conn--dispatch-scroll-window (or conn--dispatch-scroll-window
-                                              (selected-window)))
             (conn-state-loop-last-command nil)
             (recenter-last-op nil)
             (conn--dispatch-read-event-handlers
@@ -5393,7 +5386,9 @@ Returns a cons of (STRING . OVERLAYS)."
                                'face 'read-multiple-choice-face)))
                ,(lambda ()
                   (when-let* ((binding
-                               (where-is-internal 'dispatch-other-end nil t)))
+                               (where-is-internal 'dispatch-other-end
+                                                  conn-dispatch-read-event-map
+                                                  t)))
                     (concat
                      (propertize (key-description binding)
                                  'face 'help-key-binding)
@@ -5405,9 +5400,12 @@ Returns a cons of (STRING . OVERLAYS)."
                ,(lambda ()
                   (when conn--dispatch-current-targeter
                     (setq conn--retargetable-flag t))
-                  (when-let* ((binding (and conn--dispatch-current-targeter
-                                            (not conn--dispatch-always-retarget)
-                                            (where-is-internal 'retarget nil t))))
+                  (when-let* ((binding
+                               (and conn--dispatch-current-targeter
+                                    (not conn--dispatch-always-retarget)
+                                    (where-is-internal 'retarget
+                                                       conn-dispatch-read-event-map
+                                                       t))))
                     (concat
                      (propertize (key-description binding)
                                  'face 'help-key-binding)
@@ -5415,7 +5413,9 @@ Returns a cons of (STRING . OVERLAYS)."
                ,(lambda ()
                   (when-let* ((binding
                                (and conn--retargetable-flag
-                                    (where-is-internal 'always-retarget nil t))))
+                                    (where-is-internal 'always-retarget
+                                                       conn-dispatch-read-event-map
+                                                       t))))
                     (concat
                      (propertize (key-description binding)
                                  'face 'help-key-binding)
@@ -5446,7 +5446,6 @@ Returns a cons of (STRING . OVERLAYS)."
          (conn--loop-prefix-sign nil)
          (conn--retargetable-flag nil)
          (conn--dispatch-current-targeter nil)
-         (conn--dispatch-scroll-window nil)
          (conn-state-loop-last-command nil)
          (recenter-last-op nil)
          (conn--dispatch-read-event-handlers nil)
@@ -5519,51 +5518,41 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-forward)))
   (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-forward)))
+    (isearch-forward))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-backward)))
   (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-backward)))
+    (isearch-backward))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-forward-regexp)))
   (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-forward-regexp)))
+    (isearch-forward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-backward-regexp)))
   (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-backward-regexp)))
+    (isearch-backward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_command (eql scroll-up)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
-                                         next-screen-context-lines)))
-      (conn-scroll-up)))
+  (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+                                       next-screen-context-lines)))
+    (conn-scroll-up))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_command (eql scroll-down)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
-                                         next-screen-context-lines)))
-      (conn-scroll-down)))
+  (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+                                       next-screen-context-lines)))
+    (conn-scroll-down))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql other-window)))
-  (setq conn--dispatch-scroll-window
-        (conn-prompt-for-window
-         (conn--get-windows
-          nil 'nomini 'visible nil
-          (lambda (win)
-            (and (funcall conn-target-window-predicate win)
-                 (not (eq win conn--dispatch-scroll-window)))))
-         t))
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql conn-goto-window)))
+  (conn-goto-window
+   (conn-prompt-for-window
+    (delq (selected-window)
+          (conn--get-windows nil 'nomini 'visible))))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_cmd (eql finish)))
