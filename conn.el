@@ -3295,8 +3295,10 @@ associated with a command's thing.")
   "C-w" 'backward-delete-arg
   "C-f" 'retarget
   "M-f" 'always-retarget
-  "<mouse-1>" 'act
   "<escape>" 'finish)
+
+(defvar-keymap conn-dispatch-mouse-map
+  "<mouse-1>" 'act)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -3482,72 +3484,8 @@ associated with a command's thing.")
       (unless success
         (conn-cancel-action (oref cont action))))))
 
-(cl-defgeneric conn-dispatch-common-case (command))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql recursive-edit)))
-  (conn-with-dispatch-suspended
-    (recursive-edit)))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql recenter-top-bottom)))
-  (let ((this-command 'recenter-top-bottom)
-        (last-command conn-state-loop-last-command))
-    (recenter-top-bottom (conn-state-loop-prefix-arg))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql toggle-input-method)))
-  (let ((inhibit-message nil))
-    (toggle-input-method)))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql set-input-method)))
-  (let ((inhibit-message nil))
-    (call-interactively 'set-input-method)))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-forward)))
-  (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-forward))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-backward)))
-  (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-backward))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-forward-regexp)))
-  (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-forward-regexp))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql isearch-backward-regexp)))
-  (conn-with-dispatch-suspended
-    (with-selected-window conn--dispatch-scroll-window
-      (isearch-backward-regexp))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql scroll-up)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
-                                         next-screen-context-lines)))
-      (conn-scroll-up))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql scroll-down)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
-                                         next-screen-context-lines)))
-      (conn-scroll-down))))
-
-(cl-defmethod conn-dispatch-common-case ((_command (eql other-window)))
-  (setq conn--dispatch-scroll-window
-        (conn-prompt-for-window
-         (conn--get-windows
-          nil 'nomini 'visible nil
-          (lambda (win)
-            (and (funcall conn-target-window-predicate win)
-                 (not (eq win conn--dispatch-scroll-window)))))
-         t)))
-
 (cl-defmethod conn-dispatch-command-case (command cont)
   (pcase command
-    ((guard (ignore-error cl-no-applicable-method
-              (conn-dispatch-common-case command)
-              t)))
     ((pred conn--action-type-p)
      (conn-cancel-action (oref cont action))
      (if (cl-typep (oref cont action) command)
@@ -4046,7 +3984,7 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-select-target (target-finder)
   (conn-with-dispatch-event-handler 'mouse-click
-      nil
+      conn-dispatch-mouse-map
       (lambda (cmd)
         (when (and (eq cmd 'act)
                    (mouse-event-p last-input-event))
@@ -4635,10 +4573,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                                     (length seperator)))
                                               (point))))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-send))
-  "Send")
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to))
+(cl-defmethod conn-describe-action ((action conn-dispatch-send))
   (if-let* ((sep (oref action seperator)))
       (format "Send <%s>" sep)
     "Send"))
@@ -5063,10 +4998,12 @@ Returns a cons of (STRING . OVERLAYS)."
     "Copy Prepend to Kill"))
 
 (oclosure-define (conn-dispatch-yank-from
-                  (:parent conn-action)))
+                  (:parent conn-action))
+  (opoint))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
-  (oclosure-lambda (conn-dispatch-yank-from)
+  (oclosure-lambda (conn-dispatch-yank-from
+                    (opoint (point-marker)))
       (window pt bounds-op bounds-arg)
     (let (str)
       (with-selected-window window
@@ -5076,9 +5013,12 @@ Returns a cons of (STRING . OVERLAYS)."
             (`(,beg . ,end)
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
-      (if str
-          (insert-for-yank str)
-        (user-error "Cannot find thing at point")))))
+      (with-current-buffer (marker-buffer opoint)
+        (save-excursion
+          (goto-char opoint)
+          (if str
+              (insert-for-yank str)
+            (user-error "Cannot find thing at point")))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from))
   "Yank From")
@@ -5104,10 +5044,15 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from-replace))
   "Yank From and Replace")
 
-(oclosure-define (conn-dispatch-take-replace (:parent conn-action)))
+(oclosure-define (conn-dispatch-take-replace
+                  (:parent conn-action))
+  (opoint)
+  (omark))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
   (oclosure-lambda (conn-dispatch-take-replace
+                    (opoint (point-marker))
+                    (omark (copy-marker (mark-marker)))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5122,8 +5067,11 @@ Returns a cons of (STRING . OVERLAYS)."
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
           (_ (user-error "Cannot find thing at point")))))
-    (delete-region (region-beginning) (region-end))
-    (yank)))
+    (with-current-buffer (marker-buffer opoint)
+      (save-excursion
+        (goto-char opoint)
+        (delete-region opoint omark)
+        (yank)))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-take-replace))
   "Take From and Replace")
@@ -5385,18 +5333,86 @@ Returns a cons of (STRING . OVERLAYS)."
       (_ (throw 'dont-handle nil)))
     (conn-dispatch-handle)))
 
-(cl-defmethod conn-dispatch-read-event-case :extra "Common" (cmd)
-  (when (ignore-error cl-no-applicable-method
-          (conn-dispatch-common-case cmd)
-          t)
-    (conn-dispatch-handle-and-redisplay)))
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql mwheel-scroll)))
+  (mwheel-scroll last-input-event)
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql recursive-edit)))
+  (conn-with-dispatch-suspended
+    (recursive-edit))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql recenter-top-bottom)))
+  (let ((this-command 'recenter-top-bottom)
+        (last-command conn-state-loop-last-command))
+    (recenter-top-bottom (conn-state-loop-prefix-arg)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql toggle-input-method)))
+  (let ((inhibit-message nil))
+    (toggle-input-method))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql set-input-method)))
+  (let ((inhibit-message nil))
+    (call-interactively 'set-input-method))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-forward)))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
+      (isearch-forward)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-backward)))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
+      (isearch-backward)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-forward-regexp)))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
+      (isearch-forward-regexp)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-backward-regexp)))
+  (conn-with-dispatch-suspended
+    (with-selected-window conn--dispatch-scroll-window
+      (isearch-backward-regexp)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql scroll-up)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+                                         next-screen-context-lines)))
+      (conn-scroll-up)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql scroll-down)))
+  (with-selected-window conn--dispatch-scroll-window
+    (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+                                         next-screen-context-lines)))
+      (conn-scroll-down)))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-read-event-case ((_command (eql other-window)))
+  (setq conn--dispatch-scroll-window
+        (conn-prompt-for-window
+         (conn--get-windows
+          nil 'nomini 'visible nil
+          (lambda (win)
+            (and (funcall conn-target-window-predicate win)
+                 (not (eq win conn--dispatch-scroll-window)))))
+         t))
+  (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_cmd (eql finish)))
   (conn-state-loop-exit))
 
 (cl-defmethod conn-dispatch-read-event-case ((_cmd (eql dispatch-other-end)))
   (setf conn-dispatch-other-end (not conn-dispatch-other-end))
-  (conn-dispatch-handle))
+  (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-read-event-case ((_cmd (eql retarget)))
   (setq conn--dispatch-current-targeter nil)
@@ -5481,20 +5497,30 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
-  `(let ((inhibit-message nil)
-         (conn--loop-prefix-mag nil)
-         (conn--loop-prefix-sign nil)
-         (conn--retargetable-flag nil)
-         (conn--dispatch-current-targeter nil)
-         (conn--dispatch-scroll-window nil)
-         (conn-state-loop-last-command nil)
-         (recenter-last-op nil)
-         (conn--dispatch-read-event-handlers nil)
-         (conn--dispatch-read-event-message-suffixes nil))
-     (conn-delete-targets)
-     (message nil)
-     (conn-without-transient-state
-       ,@body)))
+  (cl-with-gensyms (window buffer)
+    `(let ((inhibit-message nil)
+           (conn--loop-prefix-mag nil)
+           (conn--loop-prefix-sign nil)
+           (conn--retargetable-flag nil)
+           (conn--dispatch-current-targeter nil)
+           (conn--dispatch-scroll-window nil)
+           (conn-state-loop-last-command nil)
+           (recenter-last-op nil)
+           (conn--dispatch-read-event-handlers nil)
+           (conn--dispatch-read-event-message-suffixes nil)
+           (,window (selected-window))
+           (,buffer (current-buffer)))
+       (conn-delete-targets)
+       (message nil)
+       (unwind-protect
+           (conn-without-transient-state
+             ,@body)
+         (cond ((not (buffer-live-p ,buffer))
+                (error "Dispatch buffer no longer live"))
+               ((and (window-live-p ,window)
+                     (eq ,buffer (window-buffer ,window)))
+                (select-window ,window))
+               (t (pop-to-buffer ,buffer)))))))
 
 
 ;;;;; Dispatch Commands
