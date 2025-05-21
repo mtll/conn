@@ -846,7 +846,7 @@ This variable will be bound to the state t be entered during
 `conn-enter-state'.  In particular this will be bound when
 `conn-enter-state' calls `conn-exit-state' and `conn-exit-functions'.")
 
-(defvar-local conn-state-stack nil)
+(defvar-local conn-transient-state-stack nil)
 
 (define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
@@ -1284,9 +1284,9 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 (defmacro conn-without-transient-state (&rest body)
   (declare (indent 0))
-  `(if conn-state-stack
+  `(if conn-transient-state-stack
        (pcase-let ((`(,curr . ,prev)
-                    (seq-subseq conn-state-stack -2)))
+                    (seq-subseq conn-transient-state-stack -2)))
          (conn-with-transient-state curr
            (setq conn-previous-state prev)
            ,@body))
@@ -1302,11 +1302,13 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
             (,saved-prev-state conn-previous-state)
             (,buffer (current-buffer))
             (,saved-cursor-type cursor-type)
-            (conn-state-stack (if conn-state-stack
-                                  (cons conn-current-state
-                                        conn-state-stack)
-                                (list conn-current-state
-                                      conn-previous-state))))
+            (conn-transient-state-stack
+             (if conn-transient-state-stack
+
+                 (cons conn-current-state
+                       conn-transient-state-stack)
+               (list conn-current-state
+                     conn-previous-state))))
        (unwind-protect
            (progn
              ,(if state
@@ -1388,8 +1390,6 @@ and specializes the method on all conn states."
           (progn
             (setq conn-current-state nil
                   cursor-type t)
-            (unless (conn-state-get state :transient)
-              (setq conn-previous-state state))
             (set state nil)
             (cl-call-next-method)
             (setq success t))
@@ -1593,7 +1593,6 @@ By default `conn-emacs-state' does not bind anything."
 (conn-define-state conn-read-mover-common-state (conn-command-state)
   "Common elements of thing reading states."
   :suppress-input-method t
-  :transient t
   :mode-line-face 'conn-read-thing-mode-line-face)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-read-mover-common-state))
@@ -5989,8 +5988,7 @@ Expansions and contractions are provided by functions in
 
 (conn-define-state conn-expand-state ()
   "State for expanding."
-  :lighter " EXPAND"
-  :transient t)
+  :lighter " EXPAND")
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state))
                                 &key &allow-other-keys)
