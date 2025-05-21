@@ -5441,30 +5441,27 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
-  (cl-with-gensyms (window buffer)
-    `(let ((inhibit-message nil)
-           (conn--loop-prefix-mag nil)
-           (conn--loop-prefix-sign nil)
-           (conn--retargetable-flag nil)
-           (conn--dispatch-current-targeter nil)
-           (conn--dispatch-scroll-window nil)
-           (conn-state-loop-last-command nil)
-           (recenter-last-op nil)
-           (conn--dispatch-read-event-handlers nil)
-           (conn--dispatch-read-event-message-suffixes nil)
-           (,window (selected-window))
-           (,buffer (current-buffer)))
-       (conn-delete-targets)
-       (message nil)
-       (conn-dispatch-read-mode -1)
-       (internal-pop-keymap conn-dispatch-read-event-map
-                            'overriding-terminal-local-map)
-       (unwind-protect
-           (conn-without-transient-state
-             ,@body)
-         (internal-push-keymap conn-dispatch-read-event-map
-                               'overriding-terminal-local-map)
-         (conn-dispatch-read-mode 1)))))
+  `(let ((inhibit-message nil)
+         (conn--loop-prefix-mag nil)
+         (conn--loop-prefix-sign nil)
+         (conn--retargetable-flag nil)
+         (conn--dispatch-current-targeter nil)
+         (conn--dispatch-scroll-window nil)
+         (conn-state-loop-last-command nil)
+         (recenter-last-op nil)
+         (conn--dispatch-read-event-handlers nil)
+         (conn--dispatch-read-event-message-suffixes nil))
+     (conn-delete-targets)
+     (message nil)
+     (conn-dispatch-read-mode -1)
+     (internal-pop-keymap conn-dispatch-read-event-map
+                          'overriding-terminal-local-map)
+     (unwind-protect
+         (conn-without-transient-state
+           ,@body)
+       (internal-push-keymap conn-dispatch-read-event-map
+                             'overriding-terminal-local-map)
+       (conn-dispatch-read-mode 1))))
 
 (cl-defgeneric conn-dispatch-read-event-case (command))
 
