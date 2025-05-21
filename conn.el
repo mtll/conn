@@ -1314,13 +1314,14 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                   `(conn-enter-state ,state)
                 '(conn-exit-state conn-current-state))
              ,@body)
-         (with-current-buffer ,buffer
-           (if ,saved-curr-state
-               (conn-enter-state ,saved-curr-state)
-             (when conn-current-state
-               (conn-exit-state conn-current-state))
-             (setq cursor-type ,saved-cursor-type))
-           (setq conn-previous-state ,saved-prev-state))))))
+         (ignore-errors
+           (with-current-buffer ,buffer
+             (if ,saved-curr-state
+                 (conn-enter-state ,saved-curr-state)
+               (when conn-current-state
+                 (conn-exit-state conn-current-state))
+               (setq cursor-type ,saved-cursor-type))
+             (setq conn-previous-state ,saved-prev-state)))))))
 
 
 ;;;;; Cl-generic Specializers
@@ -5351,6 +5352,17 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defvar conn--retargetable-flag nil)
 
+(define-minor-mode conn-dispatch-read-mode
+  "Mode for dispatch event reading"
+  :global t
+  :lighter " READ"
+  (if conn-dispatch-read-mode
+      (when-let* ((face (conn-state-get 'conn-dispatch-state :mode-line-face)))
+        (setf (alist-get 'mode-line face-remapping-alist) face))
+    (setf face-remapping-alist
+          (delq (assq 'mode-line face-remapping-alist)
+                face-remapping-alist))))
+
 (defun conn-dispatch-handle-and-redisplay ()
   (redisplay)
   (throw 'dispatch-redisplay nil))
@@ -5412,6 +5424,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                  'face (when conn--dispatch-always-retarget
                                          'eldoc-highlight-function-argument)))))
                ,@conn--dispatch-read-event-message-suffixes)))
+       (conn-dispatch-read-mode 1)
        (internal-push-keymap conn-dispatch-read-event-map
                              'overriding-terminal-local-map)
        (unwind-protect
@@ -5423,7 +5436,8 @@ Returns a cons of (STRING . OVERLAYS)."
                         (and ,repeat (> conn-last-target-count 1)))
                  (undo-boundary))))
          (internal-pop-keymap conn-dispatch-read-event-map
-                              'overriding-terminal-local-map)))))
+                              'overriding-terminal-local-map)
+         (conn-dispatch-read-mode -1)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -5442,19 +5456,15 @@ Returns a cons of (STRING . OVERLAYS)."
            (,buffer (current-buffer)))
        (conn-delete-targets)
        (message nil)
+       (conn-dispatch-read-mode -1)
        (internal-pop-keymap conn-dispatch-read-event-map
                             'overriding-terminal-local-map)
        (unwind-protect
            (conn-without-transient-state
              ,@body)
-         (cond ((not (buffer-live-p ,buffer))
-                (error "Dispatch buffer no longer live"))
-               ((and (window-live-p ,window)
-                     (eq ,buffer (window-buffer ,window)))
-                (select-window ,window))
-               (t (pop-to-buffer ,buffer)))
          (internal-push-keymap conn-dispatch-read-event-map
-                               'overriding-terminal-local-map)))))
+                               'overriding-terminal-local-map)
+         (conn-dispatch-read-mode 1)))))
 
 (cl-defgeneric conn-dispatch-read-event-case (command))
 
