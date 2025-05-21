@@ -3567,7 +3567,7 @@ associated with a command's thing.")
      (conn-state-loop-exit))
     (_ (conn-state-loop-error "Invalid command"))))
 
-(cl-defmethod conn-dispatch-command-case ((_cmd (eql dispatch-other-end))
+(cl-defmethod conn-dispatch-command-case ((_command (eql dispatch-other-end))
                                           cont)
   (setf (oref cont other-end) (not (oref cont other-end))))
 
@@ -4120,22 +4120,23 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn-make-string-target-overlays string predicate)
         (setq success t))
       (while (< (length string) N)
-        (conn-with-dispatch-event-handler 'backspace
-            (define-keymap "<remap> <backward-delete-char>" 'backspace)
-            (lambda (cmd)
-              (when (eq cmd 'backspace)
-                (when (length> string 0)
-                  (setq string (substring string 0 -1)))
-                (throw 'backspace nil)))
-          (thread-last
-            (conn-dispatch-read-event
-             (concat prompt
-                     (propertize ": " 'face 'minibuffer-prompt)
-                     string)
-             t nil t)
-            (char-to-string)
-            (concat string)
-            (setq string)))
+        (catch 'dispatch-redisplay
+          (conn-with-dispatch-event-handler 'backspace
+              (define-keymap "<remap> <backward-delete-char>" 'backspace)
+              (lambda (cmd)
+                (when (eq cmd 'backspace)
+                  (when (length> string 0)
+                    (setq string (substring string 0 -1)))
+                  (throw 'backspace nil)))
+            (thread-last
+              (conn-dispatch-read-event
+               (concat prompt
+                       (propertize ": " 'face 'minibuffer-prompt)
+                       string)
+               t nil t)
+              (char-to-string)
+              (concat string)
+              (setq string))))
         (setq success nil)
         (conn-delete-targets)
         (while-no-input
