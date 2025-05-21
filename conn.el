@@ -4396,13 +4396,78 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-describe-action ((_action conn-dispatch-push-button))
   "Push Button")
 
+(oclosure-define (conn-dispatch-copy-to
+                  (:parent conn-action))
+  (str)
+  (seperator))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
+  (oclosure-lambda (conn-dispatch-copy-to
+                    (str (funcall region-extract-function nil))
+                    (seperator (when (conn-state-loop-consume-prefix-arg)
+                                 (read-string "Seperator: " nil nil nil t)))
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt bounds-op bounds-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (funcall bounds-op bounds-arg))
+          (`(,beg . ,end)
+           (goto-char (if conn-dispatch-other-end end beg))
+           (when (and seperator conn-dispatch-other-end)
+             (insert seperator))
+           (insert-for-yank str)
+           (when (and seperator (not conn-dispatch-other-end))
+             (insert seperator))
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point)
+                                                  (+ (length str)
+                                                     (length seperator)))
+                                               (point)))))))))
+
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-to))
+  (if-let* ((sep (oref action seperator)))
+      (format "Copy To <%s>" sep)
+    "Copy To"))
+
+(oclosure-define (conn-dispatch-copy-replace-to
+                  (:parent conn-action))
+  (str))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-replace-to)))
+  (oclosure-lambda (conn-dispatch-copy-replace-to
+                    (str (funcall region-extract-function nil))
+                    (window-predicate
+                     (lambda (win)
+                       (not
+                        (buffer-local-value 'buffer-read-only
+                                            (window-buffer win))))))
+      (window pt bounds-op bounds-arg)
+    (with-selected-window window
+      (save-excursion
+        (goto-char pt)
+        (pcase (car (funcall bounds-op bounds-arg))
+          (`(,beg . ,end)
+           (delete-region beg end)
+           (insert-for-yank str)
+           (unless executing-kbd-macro
+             (pulse-momentary-highlight-region (- (point) (length str)) (point))))
+          (_ (user-error "Cannot find thing at point")))))))
+
+(cl-defmethod conn-describe-action ((_action conn-dispatch-copy-replace-to))
+  "Copy Region and Replace To")
+
 (oclosure-define (conn-dispatch-yank-replace-to
                   (:parent conn-action))
   (str))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-replace-to
-                    (str (funcall region-extract-function nil))
+                    (str (current-kill 0))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -4457,7 +4522,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
   (oclosure-lambda (conn-dispatch-yank-to
-                    (str (funcall region-extract-function nil))
+                    (str (current-kill 0))
                     (seperator (when (conn-state-loop-consume-prefix-arg)
                                  (read-string "Seperator: " nil nil nil t)))
                     (window-predicate
@@ -5238,6 +5303,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
+  "d" 'conn-dispatch-copy-to
+  "D" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over-or-goto
   "r" 'conn-dispatch-yank-replace-to
   "R" 'conn-dispatch-yank-read-replace-to
@@ -5303,6 +5370,96 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle nil))
+
+(defmacro conn-perform-dispatch-loop (repeat &rest body)
+  (declare (indent 1))
+  `(catch 'state-loop-exit
+     (let* ((inhibit-message t)
+            (conn--loop-prefix-mag nil)
+            (conn--loop-prefix-sign nil)
+            (conn--retargetable-flag conn--dispatch-always-retarget)
+            (conn--dispatch-current-targeter nil)
+            (conn--dispatch-scroll-window (or conn--dispatch-scroll-window
+                                              (selected-window)))
+            (conn-state-loop-last-command nil)
+            (recenter-last-op nil)
+            (conn--dispatch-read-event-handlers
+             (cons #'conn-dispatch-read-event-case
+                   conn--dispatch-read-event-handlers))
+            (conn--dispatch-read-event-message-suffixes
+             `(,(lambda ()
+                  (concat
+                   "arg: "
+                   (propertize (conn-state-loop-format-prefix-arg)
+                               'face 'read-multiple-choice-face)))
+               ,(lambda ()
+                  (when-let* ((binding
+                               (where-is-internal 'dispatch-other-end nil t)))
+                    (concat
+                     (propertize (key-description binding)
+                                 'face 'help-key-binding)
+                     " "
+                     (propertize
+                      "other end"
+                      'face (when conn-dispatch-other-end
+                              'eldoc-highlight-function-argument)))))
+               ,(lambda ()
+                  (when conn--dispatch-current-targeter
+                    (setq conn--retargetable-flag t))
+                  (when-let* ((binding (and conn--dispatch-current-targeter
+                                            (not conn--dispatch-always-retarget)
+                                            (where-is-internal 'retarget nil t))))
+                    (concat
+                     (propertize (key-description binding)
+                                 'face 'help-key-binding)
+                     " retarget")))
+               ,(lambda ()
+                  (when-let* ((binding
+                               (and conn--retargetable-flag
+                                    (where-is-internal 'always-retarget nil t))))
+                    (concat
+                     (propertize (key-description binding)
+                                 'face 'help-key-binding)
+                     " "
+                     (propertize "always retarget"
+                                 'face (when conn--dispatch-always-retarget
+                                         'eldoc-highlight-function-argument)))))
+               ,@conn--dispatch-read-event-message-suffixes)))
+       (conn-with-transient-state 'conn-dispatch-read-state
+         (while (or ,repeat (< conn-dispatch-repeat-count 1))
+           (catch 'dispatch-redisplay
+             (while (progn
+                      ,@body
+                      (cl-incf conn-dispatch-repeat-count)
+                      (and ,repeat (> conn-last-target-count 1)))
+               (undo-boundary))))))))
+
+(defmacro conn-with-dispatch-suspended (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (window buffer)
+    `(let ((inhibit-message nil)
+           (conn--loop-prefix-mag nil)
+           (conn--loop-prefix-sign nil)
+           (conn--retargetable-flag nil)
+           (conn--dispatch-current-targeter nil)
+           (conn--dispatch-scroll-window nil)
+           (conn-state-loop-last-command nil)
+           (recenter-last-op nil)
+           (conn--dispatch-read-event-handlers nil)
+           (conn--dispatch-read-event-message-suffixes nil)
+           (,window (selected-window))
+           (,buffer (current-buffer)))
+       (conn-delete-targets)
+       (message nil)
+       (unwind-protect
+           (conn-without-transient-state
+             ,@body)
+         (cond ((not (buffer-live-p ,buffer))
+                (error "Dispatch buffer no longer live"))
+               ((and (window-live-p ,window)
+                     (eq ,buffer (window-buffer ,window)))
+                (select-window ,window))
+               (t (pop-to-buffer ,buffer)))))))
 
 (cl-defgeneric conn-dispatch-read-event-case (command))
 
@@ -5431,96 +5588,6 @@ Returns a cons of (STRING . OVERLAYS)."
     (add-function :after-while conn-target-window-predicate
                   'conn--dispatch-restrict-windows))
   (conn-dispatch-handle-and-redisplay))
-
-(defmacro conn-perform-dispatch-loop (repeat &rest body)
-  (declare (indent 1))
-  `(catch 'state-loop-exit
-     (let* ((inhibit-message t)
-            (conn--loop-prefix-mag nil)
-            (conn--loop-prefix-sign nil)
-            (conn--retargetable-flag conn--dispatch-always-retarget)
-            (conn--dispatch-current-targeter nil)
-            (conn--dispatch-scroll-window (or conn--dispatch-scroll-window
-                                              (selected-window)))
-            (conn-state-loop-last-command nil)
-            (recenter-last-op nil)
-            (conn--dispatch-read-event-handlers
-             (cons #'conn-dispatch-read-event-case
-                   conn--dispatch-read-event-handlers))
-            (conn--dispatch-read-event-message-suffixes
-             `(,(lambda ()
-                  (concat
-                   "arg: "
-                   (propertize (conn-state-loop-format-prefix-arg)
-                               'face 'read-multiple-choice-face)))
-               ,(lambda ()
-                  (when-let* ((binding
-                               (where-is-internal 'dispatch-other-end nil t)))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " "
-                     (propertize
-                      "other end"
-                      'face (when conn-dispatch-other-end
-                              'eldoc-highlight-function-argument)))))
-               ,(lambda ()
-                  (when conn--dispatch-current-targeter
-                    (setq conn--retargetable-flag t))
-                  (when-let* ((binding (and conn--dispatch-current-targeter
-                                            (not conn--dispatch-always-retarget)
-                                            (where-is-internal 'retarget nil t))))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " retarget")))
-               ,(lambda ()
-                  (when-let* ((binding
-                               (and conn--retargetable-flag
-                                    (where-is-internal 'always-retarget nil t))))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " "
-                     (propertize "always retarget"
-                                 'face (when conn--dispatch-always-retarget
-                                         'eldoc-highlight-function-argument)))))
-               ,@conn--dispatch-read-event-message-suffixes)))
-       (conn-with-transient-state 'conn-dispatch-read-state
-         (while (or ,repeat (< conn-dispatch-repeat-count 1))
-           (catch 'dispatch-redisplay
-             (while (progn
-                      ,@body
-                      (cl-incf conn-dispatch-repeat-count)
-                      (and ,repeat (> conn-last-target-count 1)))
-               (undo-boundary))))))))
-
-(defmacro conn-with-dispatch-suspended (&rest body)
-  (declare (indent 0))
-  (cl-with-gensyms (window buffer)
-    `(let ((inhibit-message nil)
-           (conn--loop-prefix-mag nil)
-           (conn--loop-prefix-sign nil)
-           (conn--retargetable-flag nil)
-           (conn--dispatch-current-targeter nil)
-           (conn--dispatch-scroll-window nil)
-           (conn-state-loop-last-command nil)
-           (recenter-last-op nil)
-           (conn--dispatch-read-event-handlers nil)
-           (conn--dispatch-read-event-message-suffixes nil)
-           (,window (selected-window))
-           (,buffer (current-buffer)))
-       (conn-delete-targets)
-       (message nil)
-       (unwind-protect
-           (conn-without-transient-state
-             ,@body)
-         (cond ((not (buffer-live-p ,buffer))
-                (error "Dispatch buffer no longer live"))
-               ((and (window-live-p ,window)
-                     (eq ,buffer (window-buffer ,window)))
-                (select-window ,window))
-               (t (pop-to-buffer ,buffer)))))))
 
 
 ;;;;; Dispatch Commands
