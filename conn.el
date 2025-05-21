@@ -1304,7 +1304,6 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
             (,saved-cursor-type cursor-type)
             (conn-transient-state-stack
              (if conn-transient-state-stack
-
                  (cons conn-current-state
                        conn-transient-state-stack)
                (list conn-current-state
@@ -3252,24 +3251,6 @@ associated with a command's thing.")
   "State for reading a dispatch command."
   :lighter " DISPATCH")
 
-(conn-define-state conn-dispatch-read-state ()
-  "State for reading a dispatch command."
-  :lighter " DISPATCH"
-  :mode-line-face 'conn-dispatch-mode-line-face
-  :suppress-input-method t)
-
-(cl-defmethod conn-enter-state ((state (conn-substate conn-dispatch-read-state))
-                                &key &allow-other-keys)
-  (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf (alist-get 'mode-line face-remapping-alist) face))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-dispatch-read-state)))
-  (setf face-remapping-alist
-        (delq (assq 'mode-line face-remapping-alist)
-              face-remapping-alist))
-  (cl-call-next-method))
-
 (defvar-keymap conn-dispatch-common-map
   "C-'" 'recursive-edit
   "C-z" 'dispatch-other-end
@@ -3283,9 +3264,19 @@ associated with a command's thing.")
   "M-v" 'scroll-down
   "C-o" 'other-window)
 
+(defvar conn-dispatch-read-event-map
+  (let ((map (make-keymap)))
+    (set-char-table-range (nth 1 map)
+                          (cons #x100 (max-char))
+		          'dispatch-character-event)
+    (cl-loop for i from ?\s below 256
+             do (define-key map (vector i) 'dispatch-character-event))
+    map))
+
 (define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-read-state)
+  :keymap conn-dispatch-read-event-map
   :parent conn-dispatch-common-map
+  "<mouse-1>" 'act
   "DEL" 'backward-delete-char
   "<backspace>" 'backward-delete-char
   "M-DEL" 'reset-arg
@@ -3295,9 +3286,6 @@ associated with a command's thing.")
   "C-f" 'retarget
   "M-f" 'always-retarget
   "<escape>" 'finish)
-
-(defvar-keymap conn-dispatch-mouse-map
-  "<mouse-1>" 'act)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -3967,7 +3955,7 @@ Target overlays may override this default by setting the
               (throw 'return ev)))
         (while t
           (pcase (key-binding (read-key-sequence-vector prompt) t)
-            ('self-insert-command
+            ('dispatch-character-event
              (setq unread-command-events `((no-record . ,last-input-event)))
              (throw 'return
                     (conn-with-input-method
@@ -3983,7 +3971,7 @@ Target overlays may override this default by setting the
 
 (defun conn-dispatch-select-target (target-finder)
   (conn-with-dispatch-event-handler 'mouse-click
-      conn-dispatch-mouse-map
+      nil
       (lambda (cmd)
         (when (and (eq cmd 'act)
                    (mouse-event-p last-input-event))
@@ -5424,14 +5412,18 @@ Returns a cons of (STRING . OVERLAYS)."
                                  'face (when conn--dispatch-always-retarget
                                          'eldoc-highlight-function-argument)))))
                ,@conn--dispatch-read-event-message-suffixes)))
-       (conn-with-transient-state 'conn-dispatch-read-state
-         (while (or ,repeat (< conn-dispatch-repeat-count 1))
-           (catch 'dispatch-redisplay
-             (while (progn
-                      ,@body
-                      (cl-incf conn-dispatch-repeat-count)
-                      (and ,repeat (> conn-last-target-count 1)))
-               (undo-boundary))))))))
+       (internal-push-keymap conn-dispatch-read-event-map
+                             'overriding-terminal-local-map)
+       (unwind-protect
+           (while (or ,repeat (< conn-dispatch-repeat-count 1))
+             (catch 'dispatch-redisplay
+               (while (progn
+                        ,@body
+                        (cl-incf conn-dispatch-repeat-count)
+                        (and ,repeat (> conn-last-target-count 1)))
+                 (undo-boundary))))
+         (internal-pop-keymap conn-dispatch-read-event-map
+                              'overriding-terminal-local-map)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -5450,6 +5442,8 @@ Returns a cons of (STRING . OVERLAYS)."
            (,buffer (current-buffer)))
        (conn-delete-targets)
        (message nil)
+       (internal-pop-keymap conn-dispatch-read-event-map
+                            'overriding-terminal-local-map)
        (unwind-protect
            (conn-without-transient-state
              ,@body)
@@ -5458,7 +5452,9 @@ Returns a cons of (STRING . OVERLAYS)."
                ((and (window-live-p ,window)
                      (eq ,buffer (window-buffer ,window)))
                 (select-window ,window))
-               (t (pop-to-buffer ,buffer)))))))
+               (t (pop-to-buffer ,buffer)))
+         (internal-push-keymap conn-dispatch-read-event-map
+                               'overriding-terminal-local-map)))))
 
 (cl-defgeneric conn-dispatch-read-event-case (command))
 
