@@ -5065,6 +5065,9 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from))
   "Yank From")
 
+(cl-defmethod conn-cancel-action ((action conn-dispatch-yank-from))
+  (set-marker (oref action opoint) nil))
+
 (oclosure-define (conn-dispatch-yank-from-replace
                   (:parent conn-action)))
 
@@ -5118,10 +5121,17 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-describe-action ((_action conn-dispatch-take-replace))
   "Take From and Replace")
 
-(oclosure-define (conn-dispatch-take (:parent conn-action)))
+(cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
+  (set-marker (oref action opoint) nil)
+  (set-marker (oref action omark) nil))
+
+(oclosure-define (conn-dispatch-take
+                  (:parent conn-action))
+  (opoint))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take
+                    (opoint (point-marker))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5136,16 +5146,23 @@ Returns a cons of (STRING . OVERLAYS)."
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
           (_ (user-error "Cannot find thing at point")))))
-    (yank)))
+    (with-current-buffer (marker-buffer opoint)
+      (yank))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-take))
   "Take From")
+
+(cl-defmethod conn-cancel-action ((action conn-dispatch-take))
+  (set-marker (oref action opoint) nil))
 
 (oclosure-define (conn-dispatch-over
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
-  (oclosure-lambda (conn-dispatch-over)
+  (oclosure-lambda (conn-dispatch-over
+                    (window-predicate (let ((obuf (current-buffer)))
+                                        (lambda (win)
+                                          (eq (window-buffer win) obuf)))))
       (window pt bounds-op bounds-arg)
     (when (and (eq (window-buffer window) (current-buffer))
                (/= pt (point)))
@@ -5187,7 +5204,8 @@ Returns a cons of (STRING . OVERLAYS)."
       (window pt _bounds-op _bounds-arg)
     (with-current-buffer (window-buffer window)
       (unless (= pt (point))
-        (unless (region-active-p) (push-mark nil t))
+        (unless (region-active-p)
+          (push-mark nil t))
         (select-window window) (goto-char pt)))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-jump))
@@ -5675,13 +5693,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
                                               &key repeat restrict-windows other-end
                                               &allow-other-keys)
-  (let* ((conn--target-window-predicate conn-target-window-predicate)
-         (conn--target-predicate conn-target-predicate)
-         (conn--target-sort-function conn-target-sort-function)
-         (conn-dispatch-repeat-count 0)
-         (conn-dispatch-other-end other-end)
-         (conn--dispatch-read-event-message-suffixes nil)
-         (conn--dispatch-always-retarget (oref action always-retarget)))
+  (let ((opoint (point-marker))
+        (conn--target-window-predicate conn-target-window-predicate)
+        (conn--target-predicate conn-target-predicate)
+        (conn--target-sort-function conn-target-sort-function)
+        (conn-dispatch-repeat-count 0)
+        (conn-dispatch-other-end other-end)
+        (conn--dispatch-read-event-message-suffixes nil)
+        (conn--dispatch-always-retarget (oref action always-retarget)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn--target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))
@@ -5693,7 +5712,11 @@ Returns a cons of (STRING . OVERLAYS)."
       (unwind-protect
           (cl-call-next-method)
         (conn-delete-targets)
-        (message nil)))
+        (message nil)
+        (with-current-buffer (marker-buffer opoint)
+          (unless (= (point) opoint)
+            (conn--push-mark-ring opoint)))
+        (set-marker opoint nil)))
     (when (> conn-dispatch-repeat-count 0)
       (conn-dispatch-push-history action target-finder thing-cmd thing-arg
                                   repeat restrict-windows other-end))))
