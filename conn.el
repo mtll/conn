@@ -1643,9 +1643,26 @@ which see.")
 
 (defvar conn--target-window-predicate)
 
-(cl-defstruct (conn-dispatch-label)
+(cl-defstruct (conn-dispatch-label
+               (:constructor conn--make-dispatch-label))
   "Store the state for a dispatch label."
-  string narrowed-string overlay prop target-overlay)
+  string
+  narrowed-string
+  overlay
+  prop
+  setup-function
+  target-overlay)
+
+(defun conn-dispatch-label (string label-overlay setup-function)
+  (conn--make-dispatch-label
+   :setup-function setup-function
+   :string string
+   :narrowed-string string
+   :overlay label-overlay
+   :prop (if (overlay-get label-overlay 'display)
+             'display
+           'before-string)
+   :target-overlay (overlay-get label-overlay 'target-overlay)))
 
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
@@ -1735,7 +1752,11 @@ returned.")
       label)))
 
 (cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label overlay target-overlay narrowed-string)
+  (pcase-let (((cl-struct conn-dispatch-label
+                          overlay
+                          target-overlay
+                          narrowed-string
+                          setup-function)
                label))
     (with-current-buffer (overlay-buffer overlay)
       (if narrowed-string
@@ -1743,26 +1764,24 @@ returned.")
             (overlay-put overlay 'display nil)
             (overlay-put overlay 'before-string nil)
             (overlay-put overlay 'after-string nil)
-            (funcall (overlay-get overlay 'setup-fn) narrowed-string)
-            (unless (overlay-get target-overlay 'display)
-              (overlay-put target-overlay 'display
-                           (propertize (buffer-substring
-                                        (overlay-start target-overlay)
-                                        (overlay-end target-overlay))
-                                       'face 'conn-target-overlay-face))))
+            (funcall setup-function
+                     overlay narrowed-string
+                     (overlay-get target-overlay 'padding-function))
+            (overlay-put target-overlay 'face 'conn-target-overlay-face))
         (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
         (overlay-put overlay 'display nil)
         (overlay-put overlay 'after-string nil)
         (overlay-put overlay 'before-string nil)
-        (overlay-put target-overlay 'display nil)
-        (overlay-put target-overlay 'after-string nil)))))
+        (overlay-put target-overlay 'after-string nil)
+        (overlay-put target-overlay 'face nil)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
   (conn-window-label-window label))
 
 (cl-defmethod conn-label-reset ((label conn-window-label))
-  (pcase-let (((cl-struct conn-window-label string window) label))
-    (set-window-parameter window 'conn-label-string string)))
+  (set-window-parameter (oref label window)
+                        'conn-label-string
+                        (oref label string)))
 
 (cl-defmethod conn-label-delete ((label conn-window-label))
   (pcase-let* (((cl-struct conn-window-label window string state) label)
@@ -1807,6 +1826,8 @@ themselves once the selection process has concluded."
          (current candidates)
          (no-matches (concat prompt (propertize "no matches" 'face 'error)))
          (init-prompt prompt))
+    (while-no-input
+      (mapc #'conn-label-redisplay candidates))
     (cl-loop
      (pcase current
        ('nil
@@ -3628,12 +3649,7 @@ Optionally the overlay may have an associated THING."
       (overlay-put ov 'conn-overlay t)
       (overlay-put ov 'thing thing)
       (overlay-put ov 'category 'conn-target-overlay)
-      ;; Prevents overlay extending into invisible text ellipsis
-      (when (> length 0)
-        (overlay-put ov 'display
-                     (propertize (buffer-substring (overlay-start ov)
-                                                   (overlay-end ov))
-                                 'face 'conn-target-overlay-face)))
+      (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)
       (overlay-put ov 'padding-function padding-function)
       (cl-incf conn-target-count)
@@ -3899,25 +3915,12 @@ Target overlays may override this default by setting the
               (overlay-put ov 'category 'conn-label-overlay)
               (overlay-put ov 'window window)
               (overlay-put ov 'target-overlay tar)
-              (overlay-put ov 'string string)
-              (funcall (thread-last
-                         (if (and window-pixelwise
-                                  (funcall conn-pixelwise-labels-target-predicate ov))
-                             (lambda (str)
-                               (conn--dispatch-setup-label-pixelwise
-                                ov str (overlay-get tar 'padding-function)))
-                           (lambda (str)
-                             (conn--dispatch-setup-label-charwise
-                              ov str (overlay-get tar 'padding-function))))
-                         (overlay-put ov 'setup-fn))
-                       string)
-              (push (make-conn-dispatch-label :string string
-                                              :narrowed-string string
-                                              :overlay ov
-                                              :prop (if (overlay-get ov 'display)
-                                                        'display
-                                                      'before-string)
-                                              :target-overlay tar)
+              (push (conn-dispatch-label
+                     string ov
+                     (if (and window-pixelwise
+                              (funcall conn-pixelwise-labels-target-predicate ov))
+                         'conn--dispatch-setup-label-pixelwise
+                       'conn--dispatch-setup-label-charwise))
                     labels)
               (overlay-put tar 'label (car labels)))))))
     labels))
