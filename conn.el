@@ -1645,7 +1645,7 @@ which see.")
 
 (cl-defstruct (conn-dispatch-label)
   "Store the state for a dispatch label."
-  string overlay prop target-overlay)
+  string narrowed-string overlay prop target-overlay)
 
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
@@ -1709,6 +1709,9 @@ the label does not contain the prefix then the label state be updated
 to reflect that the label is no longer active and nil should be
 returned.")
 
+(cl-defgeneric conn-label-redisplay (label)
+  (:method (_) "Noop" nil))
+
 (cl-defgeneric conn-label-reset (label)
   "Reset LABEL to its initial state.")
 
@@ -1719,40 +1722,40 @@ returned.")
   (conn-dispatch-label-target-overlay label))
 
 (cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label string overlay target-overlay)
-               label))
-    (with-current-buffer (overlay-buffer overlay)
-      (overlay-put target-overlay 'display
-                   (propertize (buffer-substring
-                                (overlay-start target-overlay)
-                                (overlay-end target-overlay))
-                               'face 'conn-target-overlay-face))
-      (funcall (overlay-get overlay 'setup-fn) string))))
+  (setf (oref label narrowed-string) (oref label string)))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label)))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (pcase-let (((cl-struct conn-dispatch-label overlay prop target-overlay)
+  (pcase-let (((cl-struct conn-dispatch-label narrowed-string) label))
+    (if (not (eql prefix-char (aref narrowed-string 0)))
+        (setf (oref label narrowed-string) nil)
+      (setf (oref label narrowed-string) (substring narrowed-string 1))
+      label)))
+
+(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
+  (pcase-let (((cl-struct conn-dispatch-label overlay target-overlay narrowed-string)
                label))
     (with-current-buffer (overlay-buffer overlay)
-      (cond ((length= (overlay-get overlay prop) 0)
-             nil)
-            ((not (eql prefix-char (aref (overlay-get overlay prop) 0)))
-             (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-             (overlay-put overlay 'display nil)
-             (overlay-put overlay 'after-string nil)
-             (overlay-put overlay 'before-string nil)
-             (overlay-put target-overlay 'display nil)
-             (overlay-put target-overlay 'after-string nil)
-             nil)
-            (t
-             (let ((new-string (substring (overlay-get overlay prop) 1)))
-               (overlay-put overlay 'display nil)
-               (overlay-put overlay 'before-string nil)
-               (overlay-put overlay 'after-string nil)
-               (funcall (overlay-get overlay 'setup-fn) new-string))
-             label)))))
+      (if narrowed-string
+          (progn
+            (overlay-put overlay 'display nil)
+            (overlay-put overlay 'before-string nil)
+            (overlay-put overlay 'after-string nil)
+            (funcall (overlay-get overlay 'setup-fn) narrowed-string)
+            (unless (overlay-get target-overlay 'display)
+              (overlay-put target-overlay 'display
+                           (propertize (buffer-substring
+                                        (overlay-start target-overlay)
+                                        (overlay-end target-overlay))
+                                       'face 'conn-target-overlay-face))))
+        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
+        (overlay-put overlay 'display nil)
+        (overlay-put overlay 'after-string nil)
+        (overlay-put overlay 'before-string nil)
+        (overlay-put target-overlay 'display nil)
+        (overlay-put target-overlay 'after-string nil)))))
 
 (cl-defmethod conn-label-payload ((label conn-window-label))
   (conn-window-label-window label))
@@ -1809,7 +1812,9 @@ themselves once the selection process has concluded."
         (setq current candidates
               prompt no-matches
               prompt-flag conn-label-select-always-prompt)
-        (mapc #'conn-label-reset current))
+        (mapc #'conn-label-reset current)
+        (while-no-input
+          (mapc #'conn-label-redisplay candidates)))
        (`(,it . nil)
         (unless prompt-flag
           (cl-return (conn-label-payload it)))))
@@ -1820,7 +1825,9 @@ themselves once the selection process has concluded."
                             (string c))
              current (dolist (label current next)
                        (when-let* ((l (conn-label-narrow label c)))
-                         (push l next))))))))
+                         (push l next))))
+       (while-no-input
+         (mapc #'conn-label-redisplay candidates))))))
 
 
 ;;;;; Window Header-line Labels
@@ -3884,7 +3891,7 @@ Target overlays may override this default by setting the
           (funcall conn-label-string-generator
                    conn-target-count))
          (labels nil))
-    (pcase-dolist (`(,window . ,targets) conn-targets)
+    (pcase-dolist (`(,window . ,targets) (reverse conn-targets))
       (setq targets (seq-sort conn--target-sort-function targets))
       (with-selected-window window
         (conn--dispatch-window-lines window)
@@ -3897,6 +3904,7 @@ Target overlays may override this default by setting the
               (overlay-put ov 'category 'conn-label-overlay)
               (overlay-put ov 'window window)
               (overlay-put ov 'target-overlay tar)
+              (overlay-put ov 'string string)
               (funcall (thread-last
                          (if (and window-pixelwise
                                   (funcall conn-pixelwise-labels-target-predicate ov))
@@ -3909,6 +3917,7 @@ Target overlays may override this default by setting the
                          (overlay-put ov 'setup-fn))
                        string)
               (push (make-conn-dispatch-label :string string
+                                              :narrowed-string string
                                               :overlay ov
                                               :prop (if (overlay-get ov 'display)
                                                         'display
@@ -3954,6 +3963,7 @@ Target overlays may override this default by setting the
                    (read-key-sequence-vector)
                    (key-binding t))
             ('dispatch-character-event
+             (setq conn--dispatch-must-prompt nil)
              (setq unread-command-events `((no-record . ,last-input-event)))
              (throw 'return
                     (conn-with-input-method
@@ -3982,7 +3992,9 @@ Target overlays may override this default by setting the
             (when (and (not (posn-area posn))
                        (funcall conn--target-window-predicate win))
               (throw 'mouse-click (list pt win nil))))))
-    (let ((conn-label-select-always-prompt conn-label-select-always-prompt))
+    (let ((conn-label-select-always-prompt (or conn-label-select-always-prompt
+                                               conn--dispatch-must-prompt
+                                               (> conn-dispatch-repeat-count 0))))
       (unwind-protect
           (progn
             (when conn--dispatch-always-retarget
@@ -4070,8 +4082,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
              (string (char-to-string (conn-dispatch-read-event prompt t))))
         (while-no-input
-          (conn-make-string-target-overlays conn-dispatch-target-state
-                                            predicate))
+          (conn-make-string-target-overlays string predicate))
         (while-let ((next-char (conn-dispatch-read-event
                                 (concat prompt string)
                                 t conn-read-string-timeout)))
@@ -5339,8 +5350,11 @@ Returns a cons of (STRING . OVERLAYS)."
           (delq (assq 'mode-line face-remapping-alist)
                 face-remapping-alist))))
 
+(defvar conn--dispatch-must-prompt nil)
+
 (defun conn-dispatch-handle-and-redisplay ()
   (redisplay)
+  (setq conn--dispatch-must-prompt t)
   (throw 'dispatch-redisplay nil))
 
 (defun conn-dispatch-handle ()
@@ -5349,58 +5363,59 @@ Returns a cons of (STRING . OVERLAYS)."
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
   `(catch 'state-loop-exit
-     (let* ((inhibit-message t)
-            (conn--loop-prefix-mag nil)
-            (conn--loop-prefix-sign nil)
-            (conn-dispatch-target-state nil)
-            (conn-state-loop-last-command nil)
-            (recenter-last-op nil)
-            (conn--dispatch-read-event-handlers
-             (cons #'conn-dispatch-read-event-case
-                   conn--dispatch-read-event-handlers))
-            (conn--dispatch-read-event-message-suffixes
-             `(,(lambda ()
-                  (concat
-                   "arg: "
-                   (propertize (conn-state-loop-format-prefix-arg)
-                               'face 'read-multiple-choice-face)))
-               ,(lambda ()
-                  (when-let* ((binding
-                               (where-is-internal 'dispatch-other-end
-                                                  conn-dispatch-read-event-map
-                                                  t)))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " "
-                     (propertize
-                      "other end"
-                      'face (when conn-dispatch-other-end
-                              'eldoc-highlight-function-argument)))))
-               ,(lambda ()
-                  (when-let* ((binding
-                               (where-is-internal 'always-retarget
-                                                  conn-dispatch-read-event-map
-                                                  t)))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " "
-                     (propertize "always retarget"
-                                 'face (when conn--dispatch-always-retarget
-                                         'eldoc-highlight-function-argument)))))
-               ,(lambda ()
-                  (when-let* ((binding
-                               (and conn-dispatch-target-state
-                                    (not conn--dispatch-always-retarget)
-                                    (where-is-internal 'retarget
-                                                       conn-dispatch-read-event-map
-                                                       t))))
-                    (concat
-                     (propertize (key-description binding)
-                                 'face 'help-key-binding)
-                     " retarget")))
-               ,@conn--dispatch-read-event-message-suffixes)))
+     (let ((conn--dispatch-must-prompt nil)
+           (inhibit-message t)
+           (conn--loop-prefix-mag nil)
+           (conn--loop-prefix-sign nil)
+           (conn-dispatch-target-state nil)
+           (conn-state-loop-last-command nil)
+           (recenter-last-op nil)
+           (conn--dispatch-read-event-handlers
+            (cons #'conn-dispatch-read-event-case
+                  conn--dispatch-read-event-handlers))
+           (conn--dispatch-read-event-message-suffixes
+            `(,(lambda ()
+                 (concat
+                  "arg: "
+                  (propertize (conn-state-loop-format-prefix-arg)
+                              'face 'read-multiple-choice-face)))
+              ,(lambda ()
+                 (when-let* ((binding
+                              (where-is-internal 'dispatch-other-end
+                                                 conn-dispatch-read-event-map
+                                                 t)))
+                   (concat
+                    (propertize (key-description binding)
+                                'face 'help-key-binding)
+                    " "
+                    (propertize
+                     "other end"
+                     'face (when conn-dispatch-other-end
+                             'eldoc-highlight-function-argument)))))
+              ,(lambda ()
+                 (when-let* ((binding
+                              (where-is-internal 'always-retarget
+                                                 conn-dispatch-read-event-map
+                                                 t)))
+                   (concat
+                    (propertize (key-description binding)
+                                'face 'help-key-binding)
+                    " "
+                    (propertize "always retarget"
+                                'face (when conn--dispatch-always-retarget
+                                        'eldoc-highlight-function-argument)))))
+              ,(lambda ()
+                 (when-let* ((binding
+                              (and conn-dispatch-target-state
+                                   (not conn--dispatch-always-retarget)
+                                   (where-is-internal 'retarget
+                                                      conn-dispatch-read-event-map
+                                                      t))))
+                   (concat
+                    (propertize (key-description binding)
+                                'face 'help-key-binding)
+                    " retarget")))
+              ,@conn--dispatch-read-event-message-suffixes)))
        (conn-dispatch-read-mode 1)
        (internal-push-keymap conn-dispatch-read-event-map
                              'overriding-terminal-local-map)
