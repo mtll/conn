@@ -2019,9 +2019,9 @@ themselves once the selection process has concluded."
                (conn-state-loop-abort))
               (cmd
                (funcall case-function cmd cont)))
-            (setf conn-state-loop-last-command cmd)))))
-    (message nil)
-    (funcall cont)))
+            (setf conn-state-loop-last-command cmd))))))
+  (message nil)
+  (funcall cont))
 
 
 ;;;; Read Things
@@ -8500,8 +8500,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "M-L" 'windmove-swap-states-right
   "M-K" 'windmove-swap-states-down
   "M-i" 'conn-wincontrol-windmove-up
-  "M-j" 'conn-wincontrol-windmove-right
-  "M-l" 'conn-wincontrol-windmove-left
+  "M-j" 'conn-wincontrol-windmove-left
+  "M-l" 'conn-wincontrol-windmove-right
   "M-k" 'conn-wincontrol-windmove-down
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
