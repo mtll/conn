@@ -29,16 +29,15 @@
   (require 'subr-x))
 
 (declare-function conn-regions-kapply-prefix "conn-transient")
+(declare-function consult-imenu "consult-imenu")
 
 (cl-defmethod conn-dispatch-common-commands ((_command (eql consult-line)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((inhibit-message nil))
-      (consult-line))))
+  (let ((inhibit-message nil))
+    (consult-line)))
 
 (cl-defmethod conn-dispatch-common-commands ((_command (eql consult-imenu)))
-  (with-selected-window conn--dispatch-scroll-window
-    (let ((inhibit-message nil))
-      (consult-imenu))))
+  (let ((inhibit-message nil))
+    (consult-imenu)))
 
 ;;;###autoload
 (defun conn-consult-ripgrep-region (beg end)

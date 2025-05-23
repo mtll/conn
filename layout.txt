@@ -17,8 +17,8 @@ Command State Map
 ┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │  prefix  │          │          │ apply    ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │          │ duplicate│  repeat  │          │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
-┃                │          │          │  region  │ dispatch │          │  region  │   line   │          │   line   │          │          │                   ┃
+┃                │   M-X    │          │ duplicate│          │          │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │          │  region  │          │          │  region  │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
 ┃                │   M-x    │   M-s    │  →delete │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │   win    │ conntext │                   ┃

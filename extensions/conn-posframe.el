@@ -72,11 +72,6 @@
   :type (or 'integer 'nil)
   :group 'conn-posframe)
 
-(defcustom conn-posframe-macro-timeout 2
-  "Timeout for conn macro posframe."
-  :type (or 'integer 'nil)
-  :group 'conn-posframe)
-
 (defcustom conn-posframe-buffer-context-lines 5
   "Number of context lines for buffer cycling posframe."
   :type 'integer
@@ -379,10 +374,37 @@
      :right-fringe 0
      :background-color (face-attribute 'menu :background)
      :poshandler conn-posframe-tab-poshandler
-     :timeout conn-posframe-macro-timeout
+     :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
      :border-color conn-posframe-border-color)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
+
+(defun conn-posframe--dispatch-ring-display-subr ()
+  (let ((ring (conn-ring-list conn-dispatch-ring)))
+    (posframe-show
+     " *conn-list-posframe*"
+     :string (concat
+              (propertize "Dispatch Ring\n"
+                          'face 'conn-posframe-header)
+              (mapconcat 'conn-describe-dispatch
+                         (take (min 4 (floor (length (cdr ring)) 2))
+                               (reverse (cdr ring)))
+                         "\n")
+              (when (length> ring 2) "\n")
+              (propertize (concat (conn-describe-dispatch (car ring))
+                                  "\n")
+                          'face 'conn-posframe-highlight)
+              (mapconcat 'conn-describe-dispatch
+                         (take (min 4 (ceiling (length (cdr ring)) 2))
+                               (cdr ring))
+                         "\n"))
+     :left-fringe 0
+     :right-fringe 0
+     :background-color (face-attribute 'menu :background)
+     :poshandler conn-posframe-tab-poshandler
+     :timeout conn-posframe-timeout
+     :border-width conn-posframe-border-width
+     :border-color conn-posframe-border-color)))
 
 (defun conn-posframe--dispatch-ring-display (&rest _)
   (when (and (not executing-kbd-macro)
@@ -390,33 +412,7 @@
                (cl-loop for fn in (cons this-command (function-alias-p this-command))
                         thereis (advice-member-p 'conn-posframe--dispatch-ring-display fn)))
              conn-dispatch-ring)
-    (posframe-show
-     " *conn-list-posframe*"
-     :string (concat
-              (propertize "Dispatch Ring\n"
-                          'face 'conn-posframe-header)
-              (mapconcat (lambda (cons)
-                           (conn-describe-dispatch (car cons)))
-                         (take (min 4 (floor (length conn-dispatch-ring) 2))
-                               (reverse conn-dispatch-ring))
-                         "\n")
-              (when (length> conn-dispatch-ring 1) "\n")
-              (propertize (concat (conn-describe-dispatch
-                                   (symbol-function 'conn-repeat-last-dispatch))
-                                  "\n")
-                          'face 'conn-posframe-highlight)
-              (mapconcat (lambda (cons)
-                           (conn-describe-dispatch (car cons)))
-                         (take (min 4 (ceiling (length conn-dispatch-ring) 2))
-                               conn-dispatch-ring)
-                         "\n"))
-     :left-fringe 0
-     :right-fringe 0
-     :background-color (face-attribute 'menu :background)
-     :poshandler conn-posframe-tab-poshandler
-     :timeout conn-posframe-macro-timeout
-     :border-width conn-posframe-border-width
-     :border-color conn-posframe-border-color)
+    (conn-posframe--dispatch-ring-display-subr)
     (add-hook 'pre-command-hook 'conn-posframe--hide-pre)))
 
 ;;;###autoload

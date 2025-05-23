@@ -53,6 +53,7 @@
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function project-files "project")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
+(declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 
 
 ;;;;; Mark Variables
@@ -393,13 +394,13 @@ Takes (1 2 3 4) to (4 1 2 3)."
     (conn-ring--visit ring head)
     head))
 
-(defun conn-ring-front (ring)
+(defun conn-ring-head (ring)
   "Return the front element of RING.
 
 If ring is (1 2 3 4) 1 would be returned."
   (car (conn-ring-list ring)))
 
-(defun conn-ring-back (ring)
+(defun conn-ring-tail (ring)
   "Return the back element of RING.
 
 If ring is (1 2 3 4) 4 would be returned."
@@ -1942,6 +1943,8 @@ themselves once the selection process has concluded."
 (defvar conn--loop-prefix-mag nil)
 (defvar conn--loop-prefix-sign nil)
 (defvar conn--loop-error-message nil)
+(defvar conn--loop-message-timer nil)
+(defvar conn--loop-message-function nil)
 
 (oclosure-define conn-state-loop-continuation)
 
@@ -1972,6 +1975,19 @@ themselves once the selection process has concluded."
 (defun conn-state-loop-abort ()
   (keyboard-quit))
 
+(defun conn-state-loop-message (format-string args)
+  (let ((inhibit-message nil)
+        (message-log-max nil))
+    (message format-string args))
+  (setq conn--loop-message-timer
+        (run-with-timer
+         minibuffer-message-timeout
+         nil
+         (lambda ()
+           (let ((inhibit-message nil)
+                 (message-log-max nil))
+             (funcall conn--loop-message-function))))))
+
 (cl-defgeneric conn-with-state-loop
     ( state cont
       &key case-function message-function initial-arg
@@ -1984,14 +2000,26 @@ themselves once the selection process has concluded."
     (let ((conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
           (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
           (conn--loop-error-message "")
+          (conn--loop-message-timer nil)
+          (conn--loop-message-function
+           (lambda ()
+             (funcall message-function cont conn--loop-error-message)))
           (inhibit-message t))
       (catch 'state-loop-exit
         (while t
-          (let ((inhibit-message nil)
-                (message-log-max nil))
-            (funcall message-function cont conn--loop-error-message))
+          (unless conn--loop-message-timer
+            (let ((inhibit-message nil)
+                  (message-log-max nil))
+              (funcall conn--loop-message-function)))
           (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
                        (setf conn--loop-error-message ""))))
+            (when conn--loop-message-timer
+              (cancel-timer conn--loop-message-timer)
+              (setq conn--loop-message-timer nil))
+            (message nil)
+            (when (and (bound-and-true-p conn-posframe-mode)
+                       (fboundp 'posframe-hide))
+              (posframe-hide " *conn-list-posframe*"))
             (pcase cmd
               ('nil nil)
               ('digit-argument
@@ -3236,7 +3264,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :group 'conn-faces)
 
 (defvar conn-dispatch-default-target-finder
-  'conn-dispatch-read-string-with-timeout
+  (lambda () (conn-dispatch-read-n-chars 2))
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -3526,6 +3554,34 @@ associated with a command's thing.")
 (cl-defmethod conn-dispatch-command-case ((_command (eql restrict-windows))
                                           cont)
   (setf (oref cont restrict-windows) (not (oref cont restrict-windows))))
+
+(cl-defmethod conn-dispatch-command-case ((_command (eql conn-repeat-last-dispatch))
+                                          cont)
+  (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
+      (progn
+        (setf (oref cont target-finder) (conn--dispatch-target-finder
+                                         (oref prev thing-cmd))
+              (oref cont thing-cmd) (oref prev thing-cmd)
+              (oref cont thing-arg) (oref prev thing-arg)
+              (oref cont action) (oref prev action))
+        (conn-state-loop-exit))
+    (conn-state-loop-error "Dispatch ring empty")))
+
+(cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-cycle-ring-next))
+                                          _cont)
+  (conn-dispatch-cycle-ring-next)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-state-loop-message "%s" (conn-describe-dispatch
+                                   (conn-ring-head conn-dispatch-ring)))))
+
+(cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-cycle-ring-previous))
+                                          _cont)
+  (conn-dispatch-cycle-ring-previous)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-state-loop-message "%s" (conn-describe-dispatch
+                                   (conn-ring-head conn-dispatch-ring)))))
 
 (defun conn--completing-read-dispatch (cont)
   (save-window-excursion
@@ -4262,6 +4318,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-action
                   (:predicate conn-action-p))
+  (no-history)
   (window-predicate)
   (target-predicate)
   (always-retarget)
@@ -4358,7 +4415,8 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
-  (oclosure-lambda (conn-dispatch-push-button)
+  (oclosure-lambda (conn-dispatch-push-button
+                    (no-history t))
       (window pt _bounds-op _bounds-arg)
     (select-window window)
     (if (button-at pt)
@@ -5087,39 +5145,43 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-take-replace
                   (:parent conn-action))
-  (opoint)
-  (omark))
+  (change-group)
+  (opoint))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
-  (oclosure-lambda (conn-dispatch-take-replace
-                    (opoint (point-marker))
-                    (omark (copy-marker (mark-marker)))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt bounds-op bounds-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (funcall bounds-op bounds-arg))
-          (`(,beg . ,end)
-           (kill-region beg end)
-           (conn--dispatch-fixup-whitespace))
-          (_ (user-error "Cannot find thing at point")))))
-    (with-current-buffer (marker-buffer opoint)
-      (save-excursion
-        (goto-char opoint)
-        (delete-region opoint omark)
-        (yank)))))
+  (let ((cg (conn--action-buffer-change-group)))
+    (delete-region (region-beginning) (region-end))
+    (oclosure-lambda (conn-dispatch-take-replace
+                      (change-group cg)
+                      (opoint (point-marker))
+                      (window-predicate
+                       (lambda (win)
+                         (not
+                          (buffer-local-value 'buffer-read-only
+                                              (window-buffer win))))))
+        (window pt bounds-op bounds-arg)
+      (with-selected-window window
+        (save-excursion
+          (goto-char pt)
+          (pcase (car (funcall bounds-op bounds-arg))
+            (`(,beg . ,end)
+             (kill-region beg end)
+             (conn--dispatch-fixup-whitespace))
+            (_ (user-error "Cannot find thing at point")))))
+      (with-current-buffer (marker-buffer opoint)
+        (save-excursion
+          (goto-char opoint)
+          (yank))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-take-replace))
   "Take From and Replace")
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
   (set-marker (oref action opoint) nil)
-  (set-marker (oref action omark) nil))
+  (conn--action-cancel-change-group (oref action change-group)))
+
+(cl-defmethod conn-accept-action ((action conn-dispatch-take-replace))
+  (conn--action-accept-change-group (oref action change-group)))
 
 (oclosure-define (conn-dispatch-take
                   (:parent conn-action))
@@ -5196,7 +5258,8 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
-  (oclosure-lambda (conn-dispatch-jump)
+  (oclosure-lambda (conn-dispatch-jump
+                    (no-history t))
       (window pt _bounds-op _bounds-arg)
     (with-current-buffer (window-buffer window)
       (unless (= pt (point))
@@ -5294,6 +5357,10 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
+  "RET" 'conn-repeat-last-dispatch
+  "<return>" 'conn-repeat-last-dispatch
+  "M-n" 'conn-dispatch-cycle-ring-next
+  "M-p" 'conn-dispatch-cycle-ring-previous
   "d" 'conn-dispatch-copy-to
   "D" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over-or-goto
@@ -5349,7 +5416,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "Store last dispatch command in REGISTER."
   (interactive (list (register-read-with-preview "Dispatch to register: ")))
   (set-register register (conn--make-dispatch-register
-                          (symbol-function 'conn-repeat-last-dispatch))))
+                          (conn-ring-head conn-dispatch-ring))))
 
 ;;;;; Perform Dispatch Loop
 
@@ -5601,91 +5668,69 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defvar conn-post-dispatch-hook nil)
 
-(defvar conn-dispatch-ring nil)
-
 (defvar conn-dispatch-ring-max 8)
+
+(defvar conn-dispatch-ring
+  (conn-ring conn-dispatch-ring-max))
 
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p))
   (description :type function)
   (repeat-count :mutable t)
-  (state))
+  (action)
+  (thing-cmd)
+  (thing-arg)
+  (other-end))
 
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
 
-(defun conn-dispatch-cycle-ring-previous ()
-  "Cycle forwards through `conn-dispatch-ring'."
-  (interactive)
-  (if conn-dispatch-ring
-      (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
-                             (symbol-function 'conn-last-dispatch-at-mouse)))
-                  (`(,repeat . ,mouse) (pop conn-dispatch-ring)))
-        (setf conn-dispatch-ring (nconc conn-dispatch-ring (list old))
-              (symbol-function 'conn-repeat-last-dispatch) repeat
-              (symbol-function 'conn-last-dispatch-at-mouse) mouse)
-        (unless executing-kbd-macro
-          (message (conn-describe-dispatch repeat))))
-    (user-error "Dispatch ring empty")))
-
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle backwards through `conn-dispatch-ring'."
   (interactive)
-  (if conn-dispatch-ring
-      (pcase-let ((old (cons (symbol-function 'conn-repeat-last-dispatch)
-                             (symbol-function 'conn-last-dispatch-at-mouse)))
-                  (`(,repeat . ,mouse) (car (last conn-dispatch-ring))))
-        (setf conn-dispatch-ring (cons old (butlast conn-dispatch-ring))
-              (symbol-function 'conn-repeat-last-dispatch) repeat
-              (symbol-function 'conn-last-dispatch-at-mouse) mouse)
-        (unless executing-kbd-macro
-          (message (conn-describe-dispatch repeat))))
-    (user-error "Dispatch ring empty")))
+  (unless conn-dispatch-ring
+    (user-error "Dispatch ring empty"))
+  (conn-ring-rotate-forward conn-dispatch-ring)
+  (unless executing-kbd-macro
+    (message (conn-describe-dispatch
+              (conn-ring-head conn-dispatch-ring)))))
+
+(defun conn-dispatch-cycle-ring-previous ()
+  "Cycle backwards through `conn-dispatch-ring'."
+  (interactive)
+  (unless conn-dispatch-ring
+    (user-error "Dispatch ring empty"))
+  (conn-ring-rotate-backward conn-dispatch-ring)
+  (unless executing-kbd-macro
+    (message (conn-describe-dispatch
+              (conn-ring-head conn-dispatch-ring)))))
 
 (defun conn-dispatch-push-history ( action finder thing-cmd thing-arg
                                     repeat restrict-windows other-end)
-  (when (conn-dispatch-p (symbol-function 'conn-repeat-last-dispatch))
-    (add-to-history 'conn-dispatch-ring
-                    (cons (symbol-function 'conn-repeat-last-dispatch)
-                          (symbol-function 'conn-last-dispatch-at-mouse))
-                    conn-dispatch-ring-max))
-  (let ((description (lambda ()
-                       (concat
-                        (conn-describe-action action)
-                        " @ "
-                        (symbol-name thing-cmd)
-                        (format " <%s>" thing-arg)))))
-    (setf (symbol-function 'conn-repeat-last-dispatch)
-          (oclosure-lambda (conn-dispatch
-                            (state conn-current-state)
-                            (repeat-count conn-dispatch-repeat-count)
-                            (description description))
-              (invert-repeat)
-            (interactive "P")
-            (cl-letf ((conn-dispatch-repeat-count repeat-count)
-                      ((symbol-function 'conn-repeat-last-dispatch)))
-              (conn-with-transient-state state
-                (conn-perform-dispatch action finder
-                                       thing-cmd thing-arg
-                                       :repeat (xor invert-repeat repeat)
-                                       :restrict-windows restrict-windows
-                                       :other-end other-end))
-              (setf repeat-count conn-dispatch-repeat-count)))
-          (symbol-function 'conn-last-dispatch-at-mouse)
-          (oclosure-lambda (conn-dispatch
-                            (repeat-count conn-dispatch-repeat-count)
-                            (description description))
-              (event &optional arg)
-            (interactive "e\nP")
-            (cl-letf ((posn (event-start event))
-                      (conn-dispatch-repeat-count repeat-count)
-                      (conn-kapply-suppress-message t)
-                      (conn-dispatch-other-end (xor other-end arg))
-                      ((symbol-function 'conn-repeat-last-dispatch)))
-              (funcall action
-                       (posn-window posn) (posn-point posn)
-                       thing-cmd thing-arg)
-              (setf repeat-count conn-dispatch-repeat-count))))))
+  (unless (oref action no-history)
+    (conn-ring-insert-front
+     conn-dispatch-ring
+     (oclosure-lambda (conn-dispatch
+                       (action action)
+                       (thing-cmd thing-cmd)
+                       (thing-arg thing-arg)
+                       (other-end other-end)
+                       (repeat-count conn-dispatch-repeat-count)
+                       (description (lambda ()
+                                      (concat
+                                       (conn-describe-action action)
+                                       " @ "
+                                       (symbol-name thing-cmd)
+                                       (format " <%s>" thing-arg)))))
+         (invert-repeat)
+       (interactive "P")
+       (let ((conn-dispatch-repeat-count repeat-count))
+         (conn-perform-dispatch action finder
+                                thing-cmd thing-arg
+                                :repeat (xor invert-repeat repeat)
+                                :restrict-windows restrict-windows
+                                :other-end other-end)
+         (setf repeat-count conn-dispatch-repeat-count))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                        &key repeat restrict-windows other-end
@@ -5794,20 +5839,28 @@ Returns a cons of (STRING . OVERLAYS)."
                 finally return (cons (cons beg end) regions)))
      :initial-arg arg)))
 
-(defun conn-repeat-last-dispatch (_repeat)
+(defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
 
-Prefix arg REPEAT inverts the value of repeat in the last dispatch."
+Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
   (interactive "P")
-  ;; conn-perform-dispatch will set this function value to the last
-  ;; dispatch each time it is run.
-  (user-error "No last dispatch command"))
+  (funcall (conn-ring-head conn-dispatch-ring) invert-repeat))
 
-(defun conn-last-dispatch-at-mouse (_event)
-  (interactive "e")
-  ;; conn-perform-dispatch will set this function value to the last
-  ;; dispatch each time it is run.
-  (user-error "No last dispatch command"))
+(defun conn-last-dispatch-at-mouse (event arg)
+  (interactive "e\nP")
+  (unless (conn-ring-list conn-dispatch-ring)
+    (user-error "Dispatch ring empty"))
+  (let* ((prev (conn-ring-head conn-dispatch-ring))
+         (posn (event-start event))
+         (conn-dispatch-repeat-count (oref prev repeat-count))
+         (conn-kapply-suppress-message t)
+         (conn-dispatch-other-end (xor (oref prev other-end) arg)))
+    (funcall (oref prev action)
+             (posn-window posn) (posn-point posn)
+             (lambda (arg)
+               (conn-bounds-of-command (oref prev thing-cmd) arg))
+             (oref prev thing-arg))
+    (setf (oref prev repeat-count) conn-dispatch-repeat-count)))
 
 (defun conn-bind-last-dispatch-to-key ()
   "Bind last dispatch command to a key.
@@ -5827,7 +5880,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                                         (format-kbd-macro key-seq)
                                         binding))))
       (define-key (conn-get-overriding-map conn-current-state)
-                  key-seq (symbol-function 'conn-repeat-last-dispatch))
+                  key-seq (conn-ring-head conn-dispatch-ring))
       (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
 
 (defun conn-dispatch-on-buttons ()
@@ -5859,8 +5912,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-jump)
-   (lambda () (conn-dispatch-read-n-chars 2))
-   nil nil))
+   nil nil nil))
 
 
 ;;;; Expand Region
@@ -7311,8 +7363,8 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
     (setq conn-mark-ring
           (conn-ring conn-mark-ring-max
                      :cleanup (lambda (mk) (set-marker mk nil)))))
-  (pcase-let ((ptb (conn-ring-back conn-mark-ring))
-              (ptf (conn-ring-front conn-mark-ring)))
+  (pcase-let ((ptb (conn-ring-tail conn-mark-ring))
+              (ptf (conn-ring-head conn-mark-ring)))
     (cond
      ((and ptf (= location ptf))
       (when back (conn-ring-rotate-forward conn-mark-ring)))
@@ -7333,7 +7385,7 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
     (conn--push-ephemeral-mark (point))
     (conn--push-mark-ring (point))
     (conn-ring-rotate-forward conn-mark-ring)
-    (goto-char (conn-ring-front conn-mark-ring)))
+    (goto-char (conn-ring-head conn-mark-ring)))
   (deactivate-mark))
 
 (defun conn-unpop-mark-ring ()
@@ -7344,7 +7396,7 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
     (conn--push-ephemeral-mark (point))
     (conn--push-mark-ring (point))
     (conn-ring-rotate-backward conn-mark-ring)
-    (goto-char (conn-ring-front conn-mark-ring)))
+    (goto-char (conn-ring-head conn-mark-ring)))
   (deactivate-mark))
 
 
@@ -7380,8 +7432,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                      :cleanup (pcase-lambda (`(,pt . ,mk))
                                 (set-marker pt nil)
                                 (set-marker mk nil)))))
-  (pcase-let ((`(,ptf . ,mkf) (conn-ring-front conn-movement-ring))
-              (`(,ptb . ,mkb) (conn-ring-back conn-movement-ring)))
+  (pcase-let ((`(,ptf . ,mkf) (conn-ring-head conn-movement-ring))
+              (`(,ptb . ,mkb) (conn-ring-tail conn-movement-ring)))
     (cond
      ((and ptf (= point ptf) (= mark mkf))
       (when back (conn-ring-rotate-backward conn-movement-ring)))
@@ -7410,7 +7462,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
          (conn-push-region (point) (mark t))
          (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
            (conn-ring-rotate-backward conn-movement-ring))
-         (pcase (conn-ring-front conn-movement-ring)
+         (pcase (conn-ring-head conn-movement-ring)
            (`(,pt . ,mk)
             (goto-char pt)
             (conn--push-ephemeral-mark mk))))))
@@ -7427,7 +7479,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
          (conn-push-region (point) (mark t))
          (dotimes (_ (mod arg (conn-ring-capacity conn-movement-ring)))
            (conn-ring-rotate-forward conn-movement-ring))
-         (pcase (conn-ring-front conn-movement-ring)
+         (pcase (conn-ring-head conn-movement-ring)
            (`(,pt . ,mk)
             (goto-char pt)
             (conn--push-ephemeral-mark mk))))))
@@ -9256,7 +9308,6 @@ Operates with the selected windows parent window."
   "C" 'conn-copy-region
   "d" (conn-remap-key conn-delete-char-keys t)
   "f" 'conn-dispatch-state
-  "F" 'conn-repeat-last-dispatch
   "h" 'conn-wincontrol-one-command
   "," (conn-remap-key "<conn-thing-map>")
   "p" 'conn-register-prefix
