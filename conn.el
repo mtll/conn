@@ -406,6 +406,10 @@ If ring is (1 2 3 4) 1 would be returned."
 If ring is (1 2 3 4) 4 would be returned."
   (car (last (conn-ring-list ring))))
 
+(defun conn-ring-delete (ring elem)
+  (setf (conn-ring-list ring) (delete elem (conn-ring-list ring))
+        (conn-ring-history ring) (delete elem (conn-ring-history ring))))
+
 
 ;;;;; Keymap Utils
 
@@ -2540,6 +2544,7 @@ Possibilities: \\<query-replace-map>
                   matches)))))
     (unless matches
       (user-error "No highlights for kapply."))
+    (setq matches (nreverse matches))
     (when sort-function
       (setq matches (funcall sort-function matches)))
     (lambda (state)
@@ -2613,6 +2618,7 @@ Possibilities: \\<query-replace-map>
                   matches))))
     (unless matches
       (user-error "No matches for kapply."))
+    (setq matches (nreverse matches))
     (when sort-function
       (setq matches (funcall sort-function matches)))
     (lambda (state)
@@ -3559,6 +3565,10 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-repeat-last-dispatch))
                                           cont)
+  (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
+                                   action))
+    (conn-dispatch-ring-remove-stale)
+    (conn-state-loop-error "Last dispatch action stale"))
   (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
       (progn
         (setf (oref cont target-finder) (conn--dispatch-target-finder
@@ -3580,6 +3590,14 @@ associated with a command's thing.")
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-cycle-ring-previous))
                                           _cont)
   (conn-dispatch-cycle-ring-previous)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-state-loop-message "%s" (conn-describe-dispatch
+                                   (conn-ring-head conn-dispatch-ring)))))
+
+(cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-ring-describe-head))
+                                          _cont)
+  (conn-dispatch-ring-remove-stale)
   (if (bound-and-true-p conn-posframe-mode)
       (conn-posframe--dispatch-ring-display-subr)
     (conn-state-loop-message "%s" (conn-describe-dispatch
@@ -4332,6 +4350,9 @@ Returns a cons of (STRING . OVERLAYS)."
     (when (symbolp item)
       (memq 'conn-action
             (oclosure--class-allparents (cl--find-class item))))))
+
+(cl-defgeneric conn-action-stale-p (action)
+  (:method ((_action conn-action)) nil))
 
 (cl-defgeneric conn-action-copy (action)
   (:method (action) (conn-action--copy action)))
@@ -5107,6 +5128,9 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:copier conn-dispatch-yank-from-copy (opoint)))
   (opoint))
 
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-yank-from))
+  (not (buffer-live-p (marker-buffer (oref action opoint)))))
+
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-yank-from))
   (set-marker (oref action opoint) nil))
 
@@ -5165,6 +5189,9 @@ Returns a cons of (STRING . OVERLAYS)."
   (change-group)
   (opoint))
 
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
+  (not (buffer-live-p (marker-buffer (oref action opoint)))))
+
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
   (set-marker (oref action opoint) nil))
 
@@ -5210,6 +5237,9 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:parent conn-action)
                   (:copier conn-dispatch-take-copy (opoint)))
   (opoint))
+
+(cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
+  (not (buffer-live-p (marker-buffer (oref action opoint)))))
 
 (cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
   (set-marker (oref action opoint) nil))
@@ -5391,6 +5421,7 @@ Returns a cons of (STRING . OVERLAYS)."
   "<return>" 'conn-repeat-last-dispatch
   "M-n" 'conn-dispatch-cycle-ring-next
   "M-p" 'conn-dispatch-cycle-ring-previous
+  "M-f" 'conn-dispatch-ring-describe-head
   "d" 'conn-dispatch-copy-to
   "D" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over-or-goto
@@ -5702,11 +5733,19 @@ Returns a cons of (STRING . OVERLAYS)."
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
 
+(defun conn-dispatch-ring-remove-stale ()
+  (cl-loop for stale in (seq-filter
+                         (lambda (disp)
+                           (conn-action-stale-p (oref disp action)))
+                         (conn-ring-list conn-dispatch-ring))
+           do (conn-ring-delete conn-dispatch-ring stale)))
+
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle backwards through `conn-dispatch-ring'."
   (interactive)
   (unless conn-dispatch-ring
     (user-error "Dispatch ring empty"))
+  (conn-dispatch-ring-remove-stale)
   (conn-ring-rotate-forward conn-dispatch-ring)
   (unless executing-kbd-macro
     (message (conn-describe-dispatch
@@ -5717,6 +5756,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (interactive)
   (unless conn-dispatch-ring
     (user-error "Dispatch ring empty"))
+  (conn-dispatch-ring-remove-stale)
   (conn-ring-rotate-backward conn-dispatch-ring)
   (unless executing-kbd-macro
     (message (conn-describe-dispatch
@@ -5724,6 +5764,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn-dispatch-push-history ( action finder thing-cmd thing-arg
                                     repeat restrict-windows other-end)
+  (conn-dispatch-ring-remove-stale)
   (unless (oref action no-history)
     (conn-ring-insert-front
      conn-dispatch-ring
@@ -5861,7 +5902,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
   (interactive "P")
-  (funcall (conn-ring-head conn-dispatch-ring) invert-repeat))
+  (if (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
+                                 action))
+      (progn
+        (conn-dispatch-ring-remove-stale)
+        (user-error "Last dispatch action stale"))
+    (funcall (conn-ring-head conn-dispatch-ring) invert-repeat)))
 
 (defun conn-last-dispatch-at-mouse (event arg)
   (interactive "e\nP")

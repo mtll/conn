@@ -186,6 +186,15 @@ the edit in the macro."
              ("step-edit" . conn--kmacro-apply-append)
              ("append" . conn--kmacro-apply-step-edit)))
 
+(transient-define-argument conn--kapply-sort-infix ()
+  :class 'conn-transient-lisp-choices
+  :description "Order"
+  :key "o"
+  :keyword :sort
+  :choices `((nil . nil)
+             ("forward" . identity)
+             ("reverse" . nreverse)))
+
 (transient-define-argument conn--kapply-ibuffer-infix ()
   "Display buffers touched in an `ibuffer' buffer."
   :class 'conn-transient-lisp-choices
@@ -252,7 +261,7 @@ before each iteration."
 (transient-define-argument conn--kapply-highlights-in-thing ()
   "Dispatch on regions from last to first."
   :class 'conn-transient-lisp-choices
-  :key "o"
+  :key "i"
   :description "In"
   :keyword :in-thing
   :choices '(("buffer" . nil)
@@ -494,7 +503,9 @@ Begins the keyboard macro in `conn-command-state'."
     (conn--kapply-compose-iterator
      (conn--kapply-match-iterator
       string (or regions (list (cons beg end)))
-      'conn--nnearest-first nil delimited)
+      (or (alist-get :sort args)
+          'conn--nnearest-first)
+      nil delimited)
      'conn--kapply-relocate-to-region
      (if (eq search-invisible 'open)
          'conn--kapply-open-invisible
@@ -529,7 +540,9 @@ Begins the keyboard macro in `conn-command-state'."
     (conn--kapply-compose-iterator
      (conn--kapply-match-iterator
       regexp (or regions (list (cons beg end)))
-      'conn--nnearest-first t delimited)
+      (or (alist-get :sort args)
+          'conn--nnearest-first)
+      t delimited)
      'conn--kapply-relocate-to-region
      (if (eq search-invisible 'open)
          'conn--kapply-open-invisible
@@ -781,7 +794,8 @@ A zero means repeat until error."
      (conn--kapply-highlight-iterator
       (or beg (point-min))
       (or end (point-max))
-      'conn--nnearest-first
+      (or (alist-get :sort args)
+          'conn--nnearest-first)
       (alist-get :read-patterns args))
      'conn--kapply-relocate-to-region
      'conn--kapply-open-invisible
@@ -811,7 +825,8 @@ A zero means repeat until error."
                         ((and pt (guard (markerp pt)))
                          (list (cons pt (marker-position pt))))
                         (reg reg))))
-    'conn--nnearest-first)
+    (or (alist-get :sort args)
+        'conn--nnearest-first))
    'conn--kapply-relocate-to-region
    'conn--kapply-skip-region-invisible
    (alist-get :undo args)
@@ -850,7 +865,8 @@ A zero means repeat until error."
                       (prop-match-end match))
                 regions))
         regions))
-    'conn--nnearest-first)
+    (or (alist-get :sort args)
+        'conn--nnearest-first))
    'conn--kapply-advance-region
    'conn--kapply-open-invisible
    (alist-get :undo args)
@@ -898,7 +914,8 @@ A zero means repeat until error."
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-state-infix)]
+      (conn--kapply-state-infix)
+      (conn--kapply-sort-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
   [ [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
@@ -1046,6 +1063,7 @@ A zero means repeat until error."
   [ :description "Options:"
     [ (conn--kapply-region-infix)
       (conn--kapply-state-infix)
+      (conn--kapply-sort-infix)
       (conn--kapply-highlights-in-thing)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)
