@@ -3256,6 +3256,8 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 ;;;; Thing Dispatch
 
+(defvar conn-dispatch-ring)
+
 ;;;;; Dispatch read thing
 
 (defface conn-dispatch-mode-line-face
@@ -4317,7 +4319,8 @@ Returns a cons of (STRING . OVERLAYS)."
 ;;;;; Dispatch Actions
 
 (oclosure-define (conn-action
-                  (:predicate conn-action-p))
+                  (:predicate conn-action-p)
+                  (:copier conn-action--copy))
   (no-history)
   (window-predicate)
   (target-predicate)
@@ -4329,6 +4332,12 @@ Returns a cons of (STRING . OVERLAYS)."
     (when (symbolp item)
       (memq 'conn-action
             (oclosure--class-allparents (cl--find-class item))))))
+
+(cl-defgeneric conn-action-copy (action)
+  (:method (action) (conn-action--copy action)))
+
+(cl-defgeneric conn-action-cleanup (action)
+  (:method (_action) "Noop" nil))
 
 (cl-defgeneric conn-make-action (type)
   (:method (type) (error "Unknown action type %s" type))
@@ -5094,12 +5103,19 @@ Returns a cons of (STRING . OVERLAYS)."
     "Copy Prepend to Kill"))
 
 (oclosure-define (conn-dispatch-yank-from
-                  (:parent conn-action))
+                  (:parent conn-action)
+                  (:copier conn-dispatch-yank-from-copy (opoint)))
   (opoint))
+
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-yank-from))
+  (set-marker (oref action opoint) nil))
+
+(cl-defmethod conn-action-copy ((action conn-dispatch-yank-from))
+  (conn-dispatch-yank-from-copy action (copy-marker (oref action opoint) t)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
   (oclosure-lambda (conn-dispatch-yank-from
-                    (opoint (point-marker)))
+                    (opoint (copy-marker (point) t)))
       (window pt bounds-op bounds-arg)
     (let (str)
       (with-selected-window window
@@ -5144,16 +5160,23 @@ Returns a cons of (STRING . OVERLAYS)."
   "Yank From and Replace")
 
 (oclosure-define (conn-dispatch-take-replace
-                  (:parent conn-action))
+                  (:parent conn-action)
+                  (:copier conn-dispatch-take-replace-copy (opoint)))
   (change-group)
   (opoint))
+
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-take-replace))
+  (set-marker (oref action opoint) nil))
+
+(cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
+  (conn-dispatch-take-replace-copy action (copy-marker (oref action opoint) t)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
   (let ((cg (conn--action-buffer-change-group)))
     (delete-region (region-beginning) (region-end))
     (oclosure-lambda (conn-dispatch-take-replace
                       (change-group cg)
-                      (opoint (point-marker))
+                      (opoint (copy-marker (point) t))
                       (window-predicate
                        (lambda (win)
                          (not
@@ -5184,12 +5207,19 @@ Returns a cons of (STRING . OVERLAYS)."
   (conn--action-accept-change-group (oref action change-group)))
 
 (oclosure-define (conn-dispatch-take
-                  (:parent conn-action))
+                  (:parent conn-action)
+                  (:copier conn-dispatch-take-copy (opoint)))
   (opoint))
+
+(cl-defmethod conn-action-cleaup ((action conn-dispatch-take))
+  (set-marker (oref action opoint) nil))
+
+(cl-defmethod conn-action-copy ((action conn-dispatch-take))
+  (conn-dispatch-take-copy action (copy-marker (oref action opoint) t)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take
-                    (opoint (point-marker))
+                    (opoint (copy-marker (point) t))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5398,25 +5428,6 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
   "<remap> <conn-append-region>" 'conn-dispatch-copy-append
   "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend)
-
-
-;;;;; Dispatch Registers
-
-(cl-defstruct (conn-dispatch-register
-               (:constructor conn--make-dispatch-register (dispatch-command)))
-  (dispatch-command nil))
-
-(cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
-  (funcall (conn-dispatch-register-dispatch-command val) arg))
-
-(cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
-  (princ "Dispatch Register"))
-
-(defun conn-last-dispatch-to-register (register)
-  "Store last dispatch command in REGISTER."
-  (interactive (list (register-read-with-preview "Dispatch to register: ")))
-  (set-register register (conn--make-dispatch-register
-                          (conn-ring-head conn-dispatch-ring))))
 
 ;;;;; Perform Dispatch Loop
 
@@ -5666,21 +5677,27 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Dispatch Commands
 
-(defvar conn-post-dispatch-hook nil)
-
-(defvar conn-dispatch-ring-max 8)
+(defvar conn-dispatch-ring-max 12)
 
 (defvar conn-dispatch-ring
-  (conn-ring conn-dispatch-ring-max))
+  (conn-ring conn-dispatch-ring-max
+             :cleanup 'conn-dispatch--cleanup))
 
 (oclosure-define (conn-dispatch
-                  (:predicate conn-dispatch-p))
+                  (:predicate conn-dispatch-p)
+                  (:copier conn-dispatch--copy (action)))
   (description :type function)
   (repeat-count :mutable t)
   (action)
   (thing-cmd)
   (thing-arg)
   (other-end))
+
+(defun conn-dispatch-copy (dispatch)
+  (conn-dispatch--copy dispatch (conn-action-copy (oref dispatch action))))
+
+(defun conn-dispatch--cleanup (dispatch)
+  (conn-action-cleanup (oref dispatch action)))
 
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
@@ -5913,6 +5930,25 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-jump)
    nil nil nil))
+
+
+;;;;; Dispatch Registers
+
+(cl-defstruct (conn-dispatch-register
+               (:constructor conn--make-dispatch-register (dispatch-command)))
+  (dispatch-command nil))
+
+(cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
+  (funcall (conn-dispatch-register-dispatch-command val) arg))
+
+(cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
+  (princ "Dispatch Register"))
+
+(defun conn-last-dispatch-to-register (register)
+  "Store last dispatch command in REGISTER."
+  (interactive (list (register-read-with-preview "Dispatch to register: ")))
+  (set-register register (conn--make-dispatch-register
+                          (conn-ring-head conn-dispatch-ring))))
 
 
 ;;;; Expand Region
