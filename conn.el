@@ -4828,94 +4828,6 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defmethod conn-describe-action ((_action conn-dispatch-capitalize))
   "Capitalize")
 
-(oclosure-define (conn-dispatch-narrow-indirect
-                  (:parent conn-action)))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-narrow-indirect)))
-  (oclosure-lambda (conn-dispatch-narrow-indirect)
-      (window pt bounds-op bounds-arg)
-    (with-current-buffer (window-buffer window)
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (funcall bounds-op bounds-arg))
-          (`(,beg . ,end)
-           (conn-without-transient-state
-             (conn--narrow-indirect beg end)))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-narrow-indirect))
-  "Narrow Indirect")
-
-(oclosure-define (conn-dispatch-comment
-                  (:parent conn-action)))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-comment)))
-  (oclosure-lambda (conn-dispatch-comment
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt bounds-op bounds-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (funcall bounds-op bounds-arg))
-          (`(,beg . ,end)
-           (comment-or-uncomment-region beg end))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-comment))
-  "Comment")
-
-(oclosure-define (conn-dispatch-duplicate
-                  (:parent conn-action))
-  (arg))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-duplicate)))
-  (oclosure-lambda (conn-dispatch-duplicate
-                    (arg (conn-state-loop-consume-prefix-arg))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt bounds-op bounds-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (funcall bounds-op bounds-arg))
-          (`(,beg . ,end)
-           (conn-duplicate-region beg end arg))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-duplicate))
-  "Duplicate")
-
-(oclosure-define (conn-dispatch-duplicate-and-comment
-                  (:parent conn-action))
-  (arg))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-duplicate-and-comment)))
-  (oclosure-lambda (conn-dispatch-duplicate-and-comment
-                    (arg (conn-state-loop-consume-prefix-arg))
-                    (window-predicate
-                     (lambda (win)
-                       (not
-                        (buffer-local-value 'buffer-read-only
-                                            (window-buffer win))))))
-      (window pt bounds-op bounds-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (funcall bounds-op bounds-arg))
-          (`(,beg . ,end)
-           (conn-duplicate-and-comment-region beg end arg))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-duplicate-and-comment))
-  "Duplicate and Comment")
-
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
   (register))
@@ -5059,34 +4971,6 @@ Returns a cons of (STRING . OVERLAYS)."
   (if-let* ((register (oref action register)))
       (format "Kill Prepend Register <%c>" register)
     "Kill Prepend"))
-
-(oclosure-define (conn-dispatch-copy-as-kill
-                  (:parent conn-action))
-  (register))
-
-(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-as-kill)))
-  (oclosure-lambda (conn-dispatch-copy-as-kill
-                    (register (when (conn-state-loop-consume-prefix-arg)
-                                (register-read-with-preview "Register: "))))
-      (window pt bounds-op bounds-arg)
-    (with-selected-window window
-      (save-excursion
-        (goto-char pt)
-        (pcase (car (funcall bounds-op bounds-arg))
-          (`(,beg . ,end)
-           (pulse-momentary-highlight-region beg end)
-           (cond ((> conn-dispatch-repeat-count 0)
-                  (conn-append-region beg end register nil))
-                 (register
-                  (copy-to-register register beg end))
-                 (t
-                  (kill-new (filter-buffer-substring beg end)))))
-          (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-as-kill))
-  (if-let* ((register (oref action register)))
-      (format "Copy to Register <%c>" register)
-    "Copy As Kill"))
 
 (oclosure-define (conn-dispatch-copy-append
                   (:parent conn-action))
@@ -5446,8 +5330,8 @@ Returns a cons of (STRING . OVERLAYS)."
   "d" 'conn-dispatch-copy-to
   "D" 'conn-dispatch-copy-replace-to
   "v" 'conn-dispatch-over-or-goto
-  "r" 'conn-dispatch-yank-replace-to
-  "R" 'conn-dispatch-yank-read-replace-to
+  "x" 'conn-dispatch-yank-replace-to
+  "X" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "F" 'conn-dispatch-yank-from-replace
@@ -5456,7 +5340,6 @@ Returns a cons of (STRING . OVERLAYS)."
   "S" 'conn-dispatch-send-replace
   "T" 'conn-dispatch-take-replace
   "t" 'conn-dispatch-take
-  "C" 'conn-dispatch-copy-as-kill
   "P" 'conn-dispatch-register-replace
   "w" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
@@ -5470,11 +5353,6 @@ Returns a cons of (STRING . OVERLAYS)."
   "<remap> <capitalize-word>" 'conn-dispatch-capitalize
   "<remap> <capitalize-region>" 'conn-dispatch-capitalize
   "<remap> <capitalize-dwim>" 'conn-dispatch-capitalize
-  "<remap> <conn-narrow-indirect>" 'conn-dispatch-narrow-indirect
-  "<remap> <conn-narrow-to-thing>" 'conn-dispatch-narrow-indirect
-  "<remap> <comment-or-uncomment-region>" 'conn-dispatch-comment
-  "<remap> <conn-duplicate>" 'conn-dispatch-duplicate
-  "<remap> <conn-duplicate-and-comment>" 'conn-dispatch-duplicate
   "<remap> <conn-register-prefix>" 'conn-dispatch-register-load
   "<remap> <conn-kill-append-region>" 'conn-dispatch-kill-append
   "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
