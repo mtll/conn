@@ -5167,11 +5167,15 @@ Returns a cons of (STRING . OVERLAYS)."
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
       (with-current-buffer (marker-buffer opoint)
-        (save-excursion
-          (goto-char opoint)
-          (if str
-              (insert-for-yank str)
-            (user-error "Cannot find thing at point")))))))
+        (cond ((null str)
+               (user-error "Cannot find thing at point"))
+              ((/= (point) opoint)
+               (save-excursion
+                 (goto-char opoint)
+                 (insert-for-yank str)))
+              (t
+               (goto-char opoint)
+               (insert-for-yank str)))))))
 
 (cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from))
   "Yank From")
