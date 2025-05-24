@@ -3264,7 +3264,11 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn-dispatch-ring)
 
-;;;;; Dispatch read thing
+(defvar conn--dispatch-must-prompt nil)
+
+(defvar conn--dispatch-action-always-prompt nil)
+
+;;;;; Dispatch Read Thing
 
 (defface conn-dispatch-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
@@ -3280,10 +3284,7 @@ A target finder function should return a list of overlays.")
 (defvar conn-dispatch-target-finders-alist
   `((move-end-of-line . conn-dispatch-lines-end)
     (conn-backward-symbol . ,(lambda () (conn-dispatch-all-things 'symbol)))
-    (backward-word . ,(lambda () (conn-dispatch-all-things 'word)))
-    (conn-dispatch-buttons . 'conn-dispatch-all-buttons)
-    (conn-dispatch-all-symbols . (lambda () (conn-dispatch-all-things 'symbol)))
-    (conn-dispatch-all-words . (lambda () (conn-dispatch-all-things 'word))))
+    (backward-word . ,(lambda () (conn-dispatch-all-things 'word))))
   "Default target finders for for things or commands.
 
 Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
@@ -3389,6 +3390,7 @@ associated with a command's thing.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-state)
+  "]" 'conn-dispatch-open-parens
   "M-r" (conn-remap-key "<conn-region-map>")
   "," (conn-remap-key "<conn-thing-map>"))
 
@@ -3402,9 +3404,11 @@ associated with a command's thing.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
-(put 'conn-dispatch-all-buttons :conn-command-thing 'button)
-(put 'conn-dispatch-all-symbols :conn-command-thing 'conn-forward-symbol)
-(put 'conn-dispatch-all-words :conn-command-thing 'conn-forward-word)
+(cl-defun conn-dispatch-register-command
+    (name &key target-finder bounds-of-command default-action)
+  (setf (alist-get name conn-bounds-of-command-alist) bounds-of-command
+        (alist-get name conn-dispatch-default-action-alist) default-action
+        (alist-get name conn-dispatch-target-finders-alist) target-finder))
 
 (defun conn--dispatch-default-action (command)
   (or (alist-get command conn-dispatch-default-action-alist)
@@ -3538,10 +3542,9 @@ associated with a command's thing.")
        (setf (oref cont action) (condition-case _
                                     (conn-make-action command)
                                   (error nil)))))
-    ((guard (or (alist-get command conn-bounds-of-command-alist)
-                (when (symbolp command)
-                  (get command :conn-command-thing))))
-     (setf (oref cont target-finder) (conn--dispatch-target-finder command)
+    ((let (and (pred identity) target-finder)
+       (conn--dispatch-target-finder command))
+     (setf (oref cont target-finder) target-finder
            (oref cont thing-cmd) command
            (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
      (when (null (oref cont action))
@@ -4221,6 +4224,20 @@ Returns a cons of (STRING . OVERLAYS)."
        (goto-char beg)
        (pcase (ignore-errors (bounds-of-thing-at-point thing))
          (`(,tbeg . ,_tend) (= beg tbeg)))))))
+
+(defun conn-dispatch-things-with-re-prefix (thing prefix-regex)
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (pcase-dolist (`(,beg . ,end)
+                     (conn--visible-re-matches
+                      prefix-regex
+                      (lambda (beg end)
+                        (save-excursion
+                          (goto-char beg)
+                          (pcase (ignore-errors (bounds-of-thing-at-point thing))
+                            (`(,tbeg . ,tend)
+                             (and (= tbeg beg) (<= end tend))))))))
+        (conn-make-target-overlay beg (- end beg))))))
 
 (defun conn-dispatch-things-matching-re (thing regexp)
   (dolist (win (conn--get-target-windows))
@@ -5462,14 +5479,10 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Perform Dispatch Loop
 
-(defvar conn--dispatch-must-prompt nil)
-
-(defvar conn--dispatch-action-always-prompt nil)
-
 (define-minor-mode conn-dispatch-read-mode
   "Mode for dispatch event reading"
   :global t
-  :lighter " READ"
+  :lighter " SELECT"
   (if conn-dispatch-read-mode
       (when-let* ((face (conn-state-get 'conn-dispatch-state :mode-line-face)))
         (setf (alist-get 'mode-line face-remapping-alist) face))
@@ -5818,9 +5831,10 @@ Returns a cons of (STRING . OVERLAYS)."
           (cl-call-next-method)
         (conn-delete-targets)
         (message nil)
-        (with-current-buffer (marker-buffer opoint)
-          (unless (= (point) opoint)
-            (conn--push-mark-ring opoint)))
+        (ignore-errors
+          (with-current-buffer (marker-buffer opoint)
+            (unless (= (point) opoint)
+              (conn--push-mark-ring opoint))))
         (set-marker opoint nil)))
     (when (> conn-dispatch-repeat-count 0)
       (conn-dispatch-push-history action target-finder thing-cmd thing-arg
@@ -5846,9 +5860,8 @@ Returns a cons of (STRING . OVERLAYS)."
                  (conn-dispatch-select-target target-finder))
                 (`(,pt2 ,win2 ,bounds-op-override2)
                  (conn-dispatch-select-target target-finder))
-                (bounds-op
-                 (lambda (arg)
-                   (conn-bounds-of-command thing-cmd arg))))
+                (bounds-op (lambda (arg)
+                             (conn-bounds-of-command thing-cmd arg))))
       (funcall action
                win1 pt1 (or bounds-op-override1 bounds-op)
                win2 pt2 (or bounds-op-override2 bounds-op)
@@ -5980,6 +5993,34 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-jump)
    nil nil nil))
+
+(conn-dispatch-register-command
+ 'conn-dispatch-open-parens
+ :bounds-of-command (lambda (_ arg)
+                      (conn-bounds-of-command 'forward-sexp arg))
+ :target-finder (lambda ()
+                  (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
+
+(conn-dispatch-register-command
+ 'conn-dispatch-all-buttons
+ :bounds-of-command (lambda (_cmd _arg)
+                      (list (bounds-of-thing-at-point 'button)))
+ :target-finder 'conn-dispatch-all-buttons)
+
+(conn-dispatch-register-command
+ 'conn-dispatch-all-symbols
+ :bounds-of-command (lambda (_ arg)
+                      (conn-bounds-of-command 'conn-forward-symbol arg))
+ :target-finder (lambda ()
+                  (conn-dispatch-all-things 'symbol)))
+
+(conn-dispatch-register-command
+ 'conn-dispatch-all-words
+ :bounds-of-command (lambda (_ arg)
+                      (conn-bounds-of-command 'conn-forward-word arg))
+ :target-finder (lambda ()
+                  (conn-dispatch-all-things 'word)))
+
 
 
 ;;;;; Dispatch Registers
