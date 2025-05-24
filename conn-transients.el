@@ -1610,14 +1610,13 @@ A zero means repeat until error."
                                 (let ((name (apply #'expand-file-name file)))
                                   (or (get-file-buffer name)
                                       (find-file-noselect name)))
+                              (goto-char (point-min))
                               (save-excursion
-                                (if (eq selective-display t)
-                                    (re-search-forward "[\n\C-m]" nil 'end (1- line))
-                                  (forward-line (1- line)))
-                                (forward-char col)
+                                (forward-line (1- line))
+                                (forward-char (1- col))
                                 (cons (point-marker) (line-end-position))))))))
       'conn--nnearest-first)
-     'conn--kapply-advance-region
+     'conn--kapply-relocate-to-region
      'conn--kapply-skip-region-invisible
      (alist-get :undo args)
      (alist-get :restrictions args)
@@ -1629,11 +1628,11 @@ A zero means repeat until error."
      (alist-get :ibuffer args)
      (alist-get :kmacro args)))
 
-  ;; (transient-append-suffix
-  ;;   'conn-kapply-prefix
-  ;;   '(conn--kapply-string-suffix)
-  ;;   '(conn--kapply-compilation))
-  )
+  (transient-append-suffix
+    'conn-kapply-prefix
+    'conn--kapply-string-suffix
+    '(conn--kapply-compilation)
+    t))
 
 ;; Local Variables:
 ;; outline-regexp: ";;;;* [^ 	\n]"
