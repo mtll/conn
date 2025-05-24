@@ -5689,9 +5689,10 @@ Returns a cons of (STRING . OVERLAYS)."
                                        &key repeat restrict-windows other-end
                                        &allow-other-keys))
 
-(cl-defmethod conn-perform-dispatch :around ( action target-finder thing-cmd thing-arg
-                                              &key repeat restrict-windows other-end
-                                              &allow-other-keys)
+(cl-defmethod conn-perform-dispatch :around ((action conn-action)
+                                             target-finder thing-cmd thing-arg
+                                             &key repeat restrict-windows other-end
+                                             &allow-other-keys)
   (let ((opoint (point-marker))
         (conn--target-window-predicate conn-target-window-predicate)
         (conn--target-predicate conn-target-predicate)
@@ -5722,9 +5723,9 @@ Returns a cons of (STRING . OVERLAYS)."
       (conn-dispatch-push-history action target-finder thing-cmd thing-arg
                                   repeat restrict-windows other-end))))
 
-(cl-defmethod conn-perform-dispatch ( action target-finder thing-cmd thing-arg
-                                      &key repeat &allow-other-keys)
-  (cl-assert (conn-action-p action))
+(cl-defmethod conn-perform-dispatch ((action conn-action)
+                                     target-finder thing-cmd thing-arg
+                                     &key repeat &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,bounds-op-override)
                   (conn-dispatch-select-target target-finder)))
