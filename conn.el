@@ -4664,9 +4664,9 @@ Returns a cons of (STRING . OVERLAYS)."
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
-  (let* ((sep (when (conn-state-loop-consume-prefix-arg)
-                (read-string "Seperator: " nil nil nil t)))
-         (cg (conn--action-buffer-change-group)))
+  (let ((sep (when (conn-state-loop-consume-prefix-arg)
+               (read-string "Seperator: " nil nil nil t)))
+        (cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send
                       (change-group cg)
                       (str (funcall region-extract-function t))
@@ -5746,7 +5746,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (unless conn-dispatch-ring
     (user-error "Dispatch ring empty"))
   (conn-dispatch-ring-remove-stale)
-  (conn-ring-rotate-forward conn-dispatch-ring)
+  (conn-ring-rotate-backward conn-dispatch-ring)
   (unless executing-kbd-macro
     (message (conn-describe-dispatch
               (conn-ring-head conn-dispatch-ring)))))
@@ -5757,7 +5757,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (unless conn-dispatch-ring
     (user-error "Dispatch ring empty"))
   (conn-dispatch-ring-remove-stale)
-  (conn-ring-rotate-backward conn-dispatch-ring)
+  (conn-ring-rotate-forward conn-dispatch-ring)
   (unless executing-kbd-macro
     (message (conn-describe-dispatch
               (conn-ring-head conn-dispatch-ring)))))
@@ -5961,12 +5961,12 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (defun conn-dispatch-isearch ()
   "Jump to an isearch match with dispatch labels."
   (interactive)
-  (let* ((target-finder
-          (let ((targets (with-restriction (window-start) (window-end)
-                           (conn--isearch-matches))))
-            (lambda ()
-              (cl-loop for (beg . end) in targets
-                       do (conn-make-target-overlay beg (- end beg)))))))
+  (let ((target-finder
+         (let ((targets (with-restriction (window-start) (window-end)
+                          (conn--isearch-matches))))
+           (lambda ()
+             (cl-loop for (beg . end) in targets
+                      do (conn-make-target-overlay beg (- end beg)))))))
     ;; In case this was a recursive isearch
     (unwind-protect
         (isearch-exit)
@@ -7003,8 +7003,8 @@ instances of from-string.")
                           'separator t)))))
 
 (defun conn-replace-read-default ()
-  (let* ((beg (region-beginning))
-         (end (region-end)))
+  (let ((beg (region-beginning))
+        (end (region-end)))
     (when (and (< (- end beg) 60)
                (<= end (save-excursion
                          (goto-char beg)
