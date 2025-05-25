@@ -1572,13 +1572,6 @@ For use in buffers that should not have any other state."
   :hide-mark-cursor t
   :cursor '(bar . 4))
 
-(conn-define-state conn-emacs-state ()
-  "A `conn-mode' state for inserting text.
-
-By default `conn-emacs-state' does not bind anything."
-  :lighter " Emacs"
-  :cursor '(bar . 4))
-
 (conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
   :lighter " Move"
@@ -1616,6 +1609,36 @@ By default `conn-emacs-state' does not bind anything."
   :cursor '(hbar . 8)
   :lighter " OEdit"
   :suppress-input-method t)
+
+(conn-define-state conn-emacs-state ()
+  "A `conn-mode' state for inserting text.
+
+By default `conn-emacs-state' does not bind anything."
+  :lighter " Emacs"
+  :cursor '(bar . 4))
+
+;;;;; Emacs State
+
+(defvar-local conn-emacs-state-ring
+  (conn-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
+  (unless (eq (point) (conn-ring-head conn-emacs-state-ring))
+    (conn-ring-insert-front conn-emacs-state-ring (point-marker))))
+
+(defun conn-copy-emacs-state-ring ()
+  (when (conn-ring-p conn-emacs-state-ring)
+    (let ((new-ring (copy-conn-ring conn-emacs-state-ring)))
+      (setf (conn-ring-list new-ring)
+            (cl-loop for mk in (conn-ring-list new-ring)
+                     collect (copy-marker (marker-position mk)))
+            (conn-ring-history new-ring)
+            (cl-loop with old-list = (conn-ring-list conn-emacs-state-ring)
+                     with new-list = (conn-ring-list new-ring)
+                     for elem in (conn-ring-history new-ring)
+                     for pos = (seq-position old-list elem)
+                     when pos collect (nth pos new-list))
+            conn-emacs-state-ring new-ring))))
 
 
 ;;;; Labels
@@ -2080,10 +2103,10 @@ themselves once the selection process has concluded."
 
 (oclosure-define (conn-read-mover-continuation
                   (:parent conn-state-loop-continuation))
-  (recursive-edit)
-  (thing-cmd :mutable t)
+  (recursive-edit :type boolean)
+  (thing-cmd :mutable t :type symbol)
   (thing-arg :mutable t)
-  (mark-flag :mutable t))
+  (mark-flag :mutable t :type boolean))
 
 (cl-defmethod conn-with-state-loop ( state (cont conn-read-mover-continuation)
                                      &key
@@ -3462,15 +3485,15 @@ associated with a command's thing.")
 
 (oclosure-define (conn-dispatch-continuation
                   (:parent conn-state-loop-continuation))
-  (other-end :mutable t)
-  (no-other-end :mutable t)
-  (repeat :mutable t)
-  (repeatable :mutable t)
-  (restrict-windows :mutable t)
-  (thing-cmd :mutable t)
+  (other-end :mutable t :type boolean)
+  (no-other-end :mutable t :type boolean)
+  (repeat :mutable t :type boolean)
+  (repeatable :mutable t :type boolean)
+  (restrict-windows :mutable t :type boolean)
+  (thing-cmd :mutable t :type symbol)
   (thing-arg :mutable t)
-  (action :mutable t)
-  (target-finder :mutable t))
+  (action :mutable t :type conn-action)
+  (target-finder :mutable t :type function))
 
 (defun conn-dispatch-message (cont error-message)
   (let ((action-description
@@ -4356,11 +4379,11 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
-  (no-history)
-  (window-predicate)
-  (target-predicate)
-  (always-retarget)
-  (always-prompt))
+  (no-history :type boolean)
+  (window-predicate :type function)
+  (target-predicate :type function)
+  (always-retarget :type boolean)
+  (always-prompt :type boolean))
 
 (defun conn--action-type-p (item)
   (ignore-errors
@@ -4476,8 +4499,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
-  (str)
-  (seperator))
+  (str :type string)
+  (seperator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
   (oclosure-lambda (conn-dispatch-copy-to
@@ -4514,7 +4537,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-replace-to
                   (:parent conn-action))
-  (str))
+  (str :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-replace-to)))
   (oclosure-lambda (conn-dispatch-copy-replace-to
@@ -4541,7 +4564,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-yank-replace-to
                   (:parent conn-action))
-  (str))
+  (str :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-replace-to
@@ -4568,7 +4591,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-yank-read-replace-to
                   (:parent conn-action))
-  (str))
+  (str :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-read-replace-to
@@ -4595,8 +4618,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
-  (str)
-  (seperator))
+  (str :type string)
+  (seperator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
   (oclosure-lambda (conn-dispatch-yank-to
@@ -4633,8 +4656,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-reading-yank-to
                   (:parent conn-action))
-  (str)
-  (seperator))
+  (str :type string)
+  (seperator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
   (oclosure-lambda (conn-dispatch-reading-yank-to
@@ -4676,8 +4699,8 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-send
                   (:parent conn-action))
-  (str)
-  (seperator)
+  (str :type string)
+  (seperator :type string)
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
@@ -4730,7 +4753,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-send-replace
                   (:parent conn-action))
-  (str)
+  (str :type string)
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send-replace)))
@@ -4830,7 +4853,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
   (oclosure-lambda (conn-dispatch-register-load
@@ -4852,7 +4875,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-register-replace
                   (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
   (oclosure-lambda (conn-dispatch-register-replace
@@ -4875,7 +4898,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-kill
                   (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill)))
   (oclosure-lambda (conn-dispatch-kill
@@ -4908,7 +4931,7 @@ Returns a cons of (STRING . OVERLAYS)."
     "Kill"))
 
 (oclosure-define (conn-dispatch-kill-append (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-append)))
   (oclosure-lambda (conn-dispatch-kill-append
@@ -4941,7 +4964,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-kill-prepend
                   (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-prepend)))
   (oclosure-lambda (conn-dispatch-kill-prepend
@@ -4974,7 +4997,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-append
                   (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-append)))
   (oclosure-lambda (conn-dispatch-copy-append
@@ -5000,7 +5023,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (oclosure-define (conn-dispatch-copy-prepend
                   (:parent conn-action))
-  (register))
+  (register :type integer))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-prepend)))
   (oclosure-lambda (conn-dispatch-copy-prepend
@@ -5027,7 +5050,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-yank-from
                   (:parent conn-action)
                   (:copier conn-dispatch-yank-from-copy (opoint)))
-  (opoint))
+  (opoint :type marker))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-yank-from))
   (not (buffer-live-p (marker-buffer (oref action opoint)))))
@@ -5091,8 +5114,8 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-take-replace
                   (:parent conn-action)
                   (:copier conn-dispatch-take-replace-copy (opoint)))
-  (change-group)
-  (opoint))
+  (opoint :type marker)
+  (change-group))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take-replace))
   (not (buffer-live-p (marker-buffer (oref action opoint)))))
@@ -5141,7 +5164,7 @@ Returns a cons of (STRING . OVERLAYS)."
 (oclosure-define (conn-dispatch-take
                   (:parent conn-action)
                   (:copier conn-dispatch-take-copy (opoint)))
-  (opoint))
+  (opoint :type marker))
 
 (cl-defmethod conn-action-stale-p ((action conn-dispatch-take))
   (not (buffer-live-p (marker-buffer (oref action opoint)))))
@@ -5251,8 +5274,9 @@ Returns a cons of (STRING . OVERLAYS)."
      (window-buffer window2) pt2 bounds-op2
      bounds-arg)))
 
-(defun conn--dispatch-transpose-subr
-    (buffer1 pt1 bounds-op1 buffer2 pt2 bounds-op2 bounds-arg)
+(defun conn--dispatch-transpose-subr ( buffer1 pt1 bounds-op1
+                                       buffer2 pt2 bounds-op2
+                                       bounds-arg)
   (if (eq buffer1 buffer2)
       (with-current-buffer buffer1
         (save-excursion
@@ -5274,9 +5298,8 @@ Returns a cons of (STRING . OVERLAYS)."
                      (> (point-max) (max beg2 end2 beg1 end1)))
                 (transpose-regions beg1 end1 beg2 end2)
               (user-error "Invalid regions")))))
-    (conn-protected-let* ((cg (nconc
-                               (prepare-change-group buffer1)
-                               (prepare-change-group buffer2))
+    (conn-protected-let* ((cg (nconc (prepare-change-group buffer1)
+                                     (prepare-change-group buffer2))
                               (cancel-change-group cg))
                           (str1)
                           (str2))
@@ -5383,15 +5406,15 @@ Returns a cons of (STRING . OVERLAYS)."
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
   `(catch 'state-loop-exit
-     (let ((conn--dispatch-must-prompt nil)
-           (inhibit-message t)
-           (conn--loop-prefix-mag nil)
-           (conn--loop-prefix-sign nil)
+     (let ((inhibit-message t)
+           (recenter-last-op nil)
            (conn-dispatch-target-state nil)
            (conn-state-loop-last-command nil)
-           (recenter-last-op nil)
+           (conn--dispatch-must-prompt nil)
+           (conn--loop-prefix-mag nil)
+           (conn--loop-prefix-sign nil)
            (conn--dispatch-read-event-handlers
-            (cons #'conn-dispatch-read-event-case
+            (cons #'conn-dispatch-select-command-case
                   conn--dispatch-read-event-handlers))
            (conn--dispatch-read-event-message-suffixes
             `(,(lambda ()
@@ -5454,18 +5477,18 @@ Returns a cons of (STRING . OVERLAYS)."
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
   `(let ((inhibit-message nil)
+         (recenter-last-op nil)
          (conn-dispatch-target-state nil)
+         (conn-dispatch-repeat-count nil)
+         (conn-dispatch-other-end nil)
+         (conn-state-loop-last-command nil)
          (conn--loop-prefix-mag nil)
          (conn--loop-prefix-sign nil)
-         (conn-state-loop-last-command nil)
-         (recenter-last-op nil)
          (conn--dispatch-read-event-handlers nil)
          (conn--dispatch-read-event-message-suffixes nil)
          (conn--target-window-predicate nil)
          (conn--target-predicate nil)
          (conn--target-sort-function nil)
-         (conn-dispatch-repeat-count nil)
-         (conn-dispatch-other-end nil)
          (conn--dispatch-read-event-message-suffixes nil)
          (conn--dispatch-always-retarget nil))
      (conn-delete-targets)
@@ -5480,9 +5503,9 @@ Returns a cons of (STRING . OVERLAYS)."
                              'overriding-terminal-local-map)
        (conn-dispatch-select-mode 1))))
 
-(cl-defgeneric conn-dispatch-read-event-case (command))
+(cl-defgeneric conn-dispatch-select-command-case (command))
 
-(cl-defmethod conn-dispatch-read-event-case :extra "Prefix" (cmd)
+(cl-defmethod conn-dispatch-select-command-case :extra "Prefix" (cmd)
   (catch 'dont-handle
     (pcase cmd
       ('digit-argument
@@ -5509,89 +5532,89 @@ Returns a cons of (STRING . OVERLAYS)."
       (_ (throw 'dont-handle nil)))
     (conn-dispatch-handle)))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql mwheel-scroll)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql mwheel-scroll)))
   (mwheel-scroll last-input-event)
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql recursive-edit)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql recursive-edit)))
   (conn-with-dispatch-suspended
     (recursive-edit))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql recenter-top-bottom)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql recenter-top-bottom)))
   (let ((this-command 'recenter-top-bottom)
         (last-command conn-state-loop-last-command))
     (recenter-top-bottom (conn-state-loop-prefix-arg)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql toggle-input-method)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql set-input-method)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql set-input-method)))
   (let ((inhibit-message nil))
     (call-interactively 'set-input-method))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-forward)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql isearch-forward)))
   (conn-with-dispatch-suspended
     (isearch-forward))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-backward)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql isearch-backward)))
   (conn-with-dispatch-suspended
     (isearch-backward))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-forward-regexp)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql isearch-forward-regexp)))
   (conn-with-dispatch-suspended
     (isearch-forward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql isearch-backward-regexp)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql isearch-backward-regexp)))
   (conn-with-dispatch-suspended
     (isearch-backward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql scroll-up)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql scroll-up)))
   (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-up))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql scroll-down)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql scroll-down)))
   (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-down))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-read-event-case ((_command (eql conn-goto-window)))
+(cl-defmethod conn-dispatch-select-command-case ((_command (eql conn-goto-window)))
   (conn-goto-window
    (conn-prompt-for-window
     (delq (selected-window)
           (conn--get-windows nil 'nomini 'visible))))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-read-event-case ((_cmd (eql finish)))
+(cl-defmethod conn-dispatch-select-command-case ((_cmd (eql finish)))
   (conn-state-loop-exit))
 
-(cl-defmethod conn-dispatch-read-event-case ((_cmd (eql dispatch-other-end)))
+(cl-defmethod conn-dispatch-select-command-case ((_cmd (eql dispatch-other-end)))
   (setf conn-dispatch-other-end (not conn-dispatch-other-end))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-read-event-case ((_cmd (eql retarget)))
+(cl-defmethod conn-dispatch-select-command-case ((_cmd (eql retarget)))
   (setq conn-dispatch-target-state nil)
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-read-event-case ((_cmd (eql always-retarget)))
+(cl-defmethod conn-dispatch-select-command-case ((_cmd (eql always-retarget)))
   (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
   (conn-dispatch-handle))
 
-(cl-defmethod conn-dispatch-read-event-case ((_cmd (eql restrict-windows)))
+(cl-defmethod conn-dispatch-select-command-case ((_cmd (eql restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
                                 conn--target-window-predicate)
       (remove-function conn--target-window-predicate
@@ -5613,11 +5636,11 @@ Returns a cons of (STRING . OVERLAYS)."
                   (:predicate conn-dispatch-p)
                   (:copier conn-dispatch--copy (action)))
   (description :type function)
-  (repeat-count :mutable t)
-  (action)
-  (thing-cmd)
+  (repeat-count :mutable t :type integer)
+  (action :type conn-action)
+  (thing-cmd :type symbol)
   (thing-arg)
-  (other-end))
+  (other-end :type boolean))
 
 (defun conn-dispatch-copy (dispatch)
   (conn-dispatch--copy dispatch (conn-action-copy (oref dispatch action))))
@@ -5627,63 +5650,6 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
-
-(defun conn-dispatch-ring-remove-stale ()
-  (cl-loop for stale in (seq-filter
-                         (lambda (disp)
-                           (conn-action-stale-p (oref disp action)))
-                         (conn-ring-list conn-dispatch-ring))
-           do (conn-ring-delete conn-dispatch-ring stale)))
-
-(defun conn-dispatch-cycle-ring-next ()
-  "Cycle backwards through `conn-dispatch-ring'."
-  (interactive)
-  (unless conn-dispatch-ring
-    (user-error "Dispatch ring empty"))
-  (conn-dispatch-ring-remove-stale)
-  (conn-ring-rotate-backward conn-dispatch-ring)
-  (unless executing-kbd-macro
-    (message (conn-describe-dispatch
-              (conn-ring-head conn-dispatch-ring)))))
-
-(defun conn-dispatch-cycle-ring-previous ()
-  "Cycle backwards through `conn-dispatch-ring'."
-  (interactive)
-  (unless conn-dispatch-ring
-    (user-error "Dispatch ring empty"))
-  (conn-dispatch-ring-remove-stale)
-  (conn-ring-rotate-forward conn-dispatch-ring)
-  (unless executing-kbd-macro
-    (message (conn-describe-dispatch
-              (conn-ring-head conn-dispatch-ring)))))
-
-(defun conn-dispatch-push-history ( action finder thing-cmd thing-arg
-                                    repeat restrict-windows other-end)
-  (conn-dispatch-ring-remove-stale)
-  (unless (oref action no-history)
-    (conn-ring-insert-front
-     conn-dispatch-ring
-     (oclosure-lambda (conn-dispatch
-                       (action action)
-                       (thing-cmd thing-cmd)
-                       (thing-arg thing-arg)
-                       (other-end other-end)
-                       (repeat-count conn-dispatch-repeat-count)
-                       (description (lambda ()
-                                      (concat
-                                       (conn-describe-action action)
-                                       " @ "
-                                       (symbol-name thing-cmd)
-                                       (format " <%s>" thing-arg)))))
-         (invert-repeat)
-       (interactive "P")
-       (let ((conn-dispatch-repeat-count repeat-count))
-         (conn-perform-dispatch action finder
-                                thing-cmd thing-arg
-                                :repeat (xor invert-repeat repeat)
-                                :restrict-windows restrict-windows
-                                :other-end other-end)
-         (setf repeat-count conn-dispatch-repeat-count))))))
 
 (cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
                                        &key repeat restrict-windows other-end
@@ -5798,14 +5764,12 @@ Returns a cons of (STRING . OVERLAYS)."
 
 Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
   (interactive "P")
-  (if (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
-                                 action))
-      (progn
-        (conn-dispatch-ring-remove-stale)
-        (user-error "Last dispatch action stale"))
-    (funcall (conn-ring-head conn-dispatch-ring) invert-repeat)))
+  (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring) action))
+    (conn-dispatch-ring-remove-stale)
+    (user-error "Last dispatch action stale"))
+  (funcall (conn-ring-head conn-dispatch-ring) invert-repeat))
 
-(defun conn-last-dispatch-at-mouse (event arg)
+(defun conn-last-dispatch-at-mouse (event invert-other-end)
   (interactive "e\nP")
   (unless (conn-ring-list conn-dispatch-ring)
     (user-error "Dispatch ring empty"))
@@ -5817,7 +5781,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
          (posn (event-start event))
          (conn-dispatch-repeat-count (oref prev repeat-count))
          (conn-kapply-suppress-message t)
-         (conn-dispatch-other-end (xor (oref prev other-end) arg)))
+         (conn-dispatch-other-end (xor (oref prev other-end) invert-other-end)))
     (funcall (oref prev action)
              (posn-window posn) (posn-point posn)
              (lambda (arg)
@@ -5904,13 +5868,72 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
  :target-finder (lambda ()
                   (conn-dispatch-all-things 'word)))
 
+
+;;;;; Dispatch Ring
+
+(defun conn-dispatch-push-history ( action finder thing-cmd thing-arg
+                                    repeat restrict-windows other-end)
+  (conn-dispatch-ring-remove-stale)
+  (unless (oref action no-history)
+    (conn-ring-insert-front
+     conn-dispatch-ring
+     (oclosure-lambda (conn-dispatch
+                       (action action)
+                       (thing-cmd thing-cmd)
+                       (thing-arg thing-arg)
+                       (other-end other-end)
+                       (repeat-count conn-dispatch-repeat-count)
+                       (description (lambda ()
+                                      (concat
+                                       (conn-describe-action action)
+                                       " @ "
+                                       (symbol-name thing-cmd)
+                                       (format " <%s>" thing-arg)))))
+         (invert-repeat)
+       (interactive "P")
+       (let ((conn-dispatch-repeat-count repeat-count))
+         (conn-perform-dispatch action finder
+                                thing-cmd thing-arg
+                                :repeat (xor invert-repeat repeat)
+                                :restrict-windows restrict-windows
+                                :other-end other-end)
+         (setf repeat-count conn-dispatch-repeat-count))))))
+
+(defun conn-dispatch-ring-remove-stale ()
+  (cl-loop for stale in (seq-filter
+                         (lambda (disp)
+                           (conn-action-stale-p (oref disp action)))
+                         (conn-ring-list conn-dispatch-ring))
+           do (conn-ring-delete conn-dispatch-ring stale)))
+
+(defun conn-dispatch-cycle-ring-next ()
+  "Cycle backwards through `conn-dispatch-ring'."
+  (interactive)
+  (unless conn-dispatch-ring
+    (user-error "Dispatch ring empty"))
+  (conn-dispatch-ring-remove-stale)
+  (conn-ring-rotate-backward conn-dispatch-ring)
+  (unless executing-kbd-macro
+    (message (conn-describe-dispatch
+              (conn-ring-head conn-dispatch-ring)))))
+
+(defun conn-dispatch-cycle-ring-previous ()
+  "Cycle backwards through `conn-dispatch-ring'."
+  (interactive)
+  (unless conn-dispatch-ring
+    (user-error "Dispatch ring empty"))
+  (conn-dispatch-ring-remove-stale)
+  (conn-ring-rotate-forward conn-dispatch-ring)
+  (unless executing-kbd-macro
+    (message (conn-describe-dispatch
+              (conn-ring-head conn-dispatch-ring)))))
 
 
 ;;;;; Dispatch Registers
 
 (cl-defstruct (conn-dispatch-register
                (:constructor conn--make-dispatch-register (dispatch-command)))
-  (dispatch-command nil))
+  dispatch-command)
 
 (cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
   (funcall (conn-dispatch-register-dispatch-command val) arg))
@@ -6831,49 +6854,43 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
   "Move point to after the last non-whitespace or comment character in line.
 
 Immediately repeating this command goes to the point at end
-of line proper.
-
-With a non-nil prefix arg go `forward-line' by N instead."
+of line proper."
   (interactive "P")
-  (if N
-      (progn
-        (forward-line N)
-        (setq conn-this-command-handler (conn-get-mark-handler 'forward-line)
-              conn-this-command-thing 'line))
-    (let ((point (point))
-          (mark (mark t)))
-      (conn--end-of-inner-line-1)
-      (when (and (= point (point))
-                 (or (= mark (save-excursion
-                               (back-to-indentation)
-                               (point)))
-                     (region-active-p)))
-        (goto-char (line-end-position))
-        (setq conn-this-command-thing 'outer-line)))))
+  (if (null N)
+      (let ((point (point))
+            (mark (mark t)))
+        (conn--end-of-inner-line-1)
+        (when (and (= point (point))
+                   (or (= mark (save-excursion
+                                 (back-to-indentation)
+                                 (point)))
+                       (region-active-p)))
+          (goto-char (line-end-position))
+          (setq conn-this-command-thing 'outer-line)))
+    (forward-line N)
+    (setq conn-this-command-handler (conn-get-mark-handler 'forward-line)
+          conn-this-command-thing 'line)))
 
 (defun conn-beginning-of-inner-line (&optional N)
   "Move point to the first non-whitespace character in line.
 
 Immediately repeating this command goes to the point at beginning
-of line proper.
-
-With a non-nil prefix arg go `forward-line' by -N instead."
+of line proper."
   (interactive "P")
-  (if N
-      (progn
-        (forward-line (- N))
-        (setq conn-this-command-thing 'line
-              conn-this-command-handler (conn-get-mark-handler 'forward-line)))
-    (let ((point (point))
-          (mark (mark t)))
-      (back-to-indentation)
-      (when (and (= point (point))
-                 (or (= mark (save-excursion
-                               (conn--end-of-inner-line-1)
-                               (point)))
-                     (region-active-p)))
-        (goto-char (line-beginning-position))
-        (setq conn-this-command-thing 'outer-line)))))
+  (if (null N)
+      (let ((point (point))
+            (mark (mark t)))
+        (back-to-indentation)
+        (when (and (= point (point))
+                   (or (= mark (save-excursion
+                                 (conn--end-of-inner-line-1)
+                                 (point)))
+                       (region-active-p)))
+          (goto-char (line-beginning-position))
+          (setq conn-this-command-thing 'outer-line)))
+    (forward-line (- N))
+    (setq conn-this-command-thing 'line
+          conn-this-command-handler (conn-get-mark-handler 'forward-line))))
 
 (defun conn-end-of-list ()
   "Move point to the end of the enclosing list."
@@ -7560,9 +7577,9 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 (oclosure-define (conn-transpose-command
                   (:parent conn-dispatch-transpose))
-  (buffer)
-  (point)
-  (bounds-op))
+  (buffer :type buffer)
+  (point :type marker)
+  (bounds-op :type function))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
                                      target-finder thing-cmd thing-arg
@@ -8339,6 +8356,13 @@ Currently selected window remains selected afterwards."
 (defun conntext-state ()
   (interactive)
   (run-hook-with-args-until-success 'conntext-state-hook))
+
+(defun conn-last-emacs-state (arg)
+  (interactive "p")
+  (dotimes (_ arg)
+    (conn-ring-rotate-forward conn-emacs-state-ring))
+  (goto-char (conn-ring-head conn-emacs-state-ring))
+  (conn-enter-state 'conn-emacs-state))
 
 (defun conn-previous-state ()
   (interactive)
@@ -9181,6 +9205,7 @@ Operates with the selected windows parent window."
   "C-x y" conn-dispatch-cycle-map
   "M-g o" 'conn-pop-mark-ring
   "M-g u" 'conn-unpop-mark-ring
+  "M-g e" 'conn-last-emacs-state
   "C-S-w" 'delete-region
   "C-." 'conn-dispatch-state
   "C->" 'conn-dispatch-on-buttons
@@ -9429,7 +9454,8 @@ Operates with the selected windows parent window."
     (delete-overlay ov))
   (conn-copy-narrow-ring)
   (conn-copy-movement-ring)
-  (conn-copy-mark-ring))
+  (conn-copy-mark-ring)
+  (conn-copy-emacs-state-ring))
 
 (defun conn--setup-keymaps ()
   (if conn-mode
