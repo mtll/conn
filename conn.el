@@ -5361,11 +5361,11 @@ Returns a cons of (STRING . OVERLAYS)."
 
 ;;;;; Perform Dispatch Loop
 
-(define-minor-mode conn-dispatch-read-mode
+(define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
   :lighter " SELECT"
-  (if conn-dispatch-read-mode
+  (if conn-dispatch-select-mode
       (when-let* ((face (conn-state-get 'conn-dispatch-state :mode-line-face)))
         (setf (alist-get 'mode-line face-remapping-alist) face))
     (setf face-remapping-alist
@@ -5436,7 +5436,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                 'face 'help-key-binding)
                     " retarget")))
               ,@conn--dispatch-read-event-message-suffixes)))
-       (conn-dispatch-read-mode 1)
+       (conn-dispatch-select-mode 1)
        (internal-push-keymap conn-dispatch-read-event-map
                              'overriding-terminal-local-map)
        (unwind-protect
@@ -5449,7 +5449,7 @@ Returns a cons of (STRING . OVERLAYS)."
                  (undo-boundary))))
          (internal-pop-keymap conn-dispatch-read-event-map
                               'overriding-terminal-local-map)
-         (conn-dispatch-read-mode -1)))))
+         (conn-dispatch-select-mode -1)))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -5470,7 +5470,7 @@ Returns a cons of (STRING . OVERLAYS)."
          (conn--dispatch-always-retarget nil))
      (conn-delete-targets)
      (message nil)
-     (conn-dispatch-read-mode -1)
+     (conn-dispatch-select-mode -1)
      (internal-pop-keymap conn-dispatch-read-event-map
                           'overriding-terminal-local-map)
      (unwind-protect
@@ -5478,7 +5478,7 @@ Returns a cons of (STRING . OVERLAYS)."
            ,@body)
        (internal-push-keymap conn-dispatch-read-event-map
                              'overriding-terminal-local-map)
-       (conn-dispatch-read-mode 1))))
+       (conn-dispatch-select-mode 1))))
 
 (cl-defgeneric conn-dispatch-read-event-case (command))
 
