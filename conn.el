@@ -1619,8 +1619,7 @@ By default `conn-emacs-state' does not bind anything."
 
 ;;;;; Emacs State
 
-(defvar-local conn-emacs-state-ring
-  (conn-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
+(defvar-local conn-emacs-state-ring nil)
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
   (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
@@ -2315,15 +2314,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
   (let* ((ring (conn-ring-list conn-emacs-state-ring))
          (mk (nth (mod arg (length ring)) ring))
          (pt (point)))
-    (list (if (> mk pt)
-              (cons (line-beginning-position)
-                    (save-excursion
-                      (goto-char mk)
-                      (line-end-position)))
-            (cons (save-excursion
-                    (goto-char mk)
-                    (line-beginning-position))
-                  (line-end-position))))))
+    (list (cons (min pt mk) (max pt mk)))))
 
 (defun conn--bounds-of-command-thing (cmd _arg)
   (let* ((thing (get cmd :conn-command-thing))
@@ -3449,9 +3440,12 @@ associated with a command's thing.")
 
 (cl-defun conn-dispatch-register-command
     (name &key target-finder bounds-of-command default-action)
-  (setf (alist-get name conn-bounds-of-command-alist) bounds-of-command
-        (alist-get name conn-dispatch-default-action-alist) default-action
-        (alist-get name conn-dispatch-target-finders-alist) target-finder))
+  (when target-finder
+    (setf (alist-get name conn-dispatch-target-finders-alist) target-finder))
+  (when bounds-of-command
+    (setf (alist-get name conn-bounds-of-command-alist) bounds-of-command))
+  (when default-action
+    (setf (alist-get name conn-dispatch-default-action-alist) default-action)))
 
 (defun conn--dispatch-default-action (command)
   (or (alist-get command conn-dispatch-default-action-alist)
@@ -3736,6 +3730,10 @@ be ignored by during dispatch.")
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
 
+(cl-defgeneric conn-dispatch-reset-target-state (state)
+  (:method ((_state string)) "")
+  (:method (_state) nil))
+
 (defun conn--overlays-in-of-type (beg end category &optional window)
   (cl-loop for ov in (overlays-in beg end)
            when (and (eq (overlay-get ov 'category) category)
@@ -3774,7 +3772,6 @@ Optionally the overlay may have an associated THING."
       (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)
       (overlay-put ov 'padding-function padding-function)
-      (cl-incf conn-target-count)
       (push ov (alist-get window conn-targets))
       ov)))
 
@@ -3783,8 +3780,7 @@ Optionally the overlay may have an associated THING."
     (cl-assert (memq ov (alist-get win conn-targets)))
     (setf (alist-get win conn-targets)
           (delq ov (alist-get win conn-targets))))
-  (delete-overlay ov)
-  (cl-decf conn-target-count))
+  (delete-overlay ov))
 
 (defun conn-make-string-target-overlays (string &optional predicate)
   (when (length> string 0)
@@ -3980,7 +3976,7 @@ Target overlays may override this default by setting the
            (pt beg))
       (while (not end)
         (cond
-         ((= line-end pt)
+         ((eql line-end pt)
           (if (not (invisible-p (1+ pt)))
               (setq end pt)
             (setq end (1+ pt))
@@ -4020,10 +4016,17 @@ Target overlays may override this default by setting the
     (set-window-parameter window 'conn-dispatch-lines lines)))
 
 (defun conn-dispatch-labels ()
-  (let* ((label-strings
-          (funcall conn-label-string-generator
-                   conn-target-count))
-         (labels nil))
+  (setq conn-target-count 0)
+  (pcase-dolist (`(,window . ,targets) conn-targets)
+    (dolist (tar targets)
+      (when (<= (window-start window)
+                (overlay-start tar)
+                (overlay-end tar)
+                (window-end window))
+        (cl-incf conn-target-count))))
+  (let ((label-strings
+         (funcall conn-label-string-generator conn-target-count))
+        (labels nil))
     (pcase-dolist (`(,window . ,targets) (reverse conn-targets))
       (setq targets (seq-sort conn--target-sort-function targets))
       (with-selected-window window
@@ -4031,20 +4034,24 @@ Target overlays may override this default by setting the
         (let ((window-pixelwise
                (funcall conn-pixelwise-labels-window-predicate window targets)))
           (dolist (tar targets)
-            (conn-protected-let* ((string (pop label-strings))
-                                  (beg (overlay-end tar))
-                                  (ov (make-overlay beg beg) (delete-overlay ov)))
-              (overlay-put ov 'category 'conn-label-overlay)
-              (overlay-put ov 'window window)
-              (overlay-put ov 'target-overlay tar)
-              (push (conn-dispatch-label
-                     string ov
-                     (if (and window-pixelwise
-                              (funcall conn-pixelwise-labels-target-predicate ov))
-                         'conn--dispatch-setup-label-pixelwise
-                       'conn--dispatch-setup-label-charwise))
-                    labels)
-              (overlay-put tar 'label (car labels)))))))
+            (when (<= (window-start)
+                      (overlay-start tar)
+                      (overlay-end tar)
+                      (window-end))
+              (conn-protected-let* ((string (pop label-strings))
+                                    (beg (overlay-end tar))
+                                    (ov (make-overlay beg beg) (delete-overlay ov)))
+                (overlay-put ov 'category 'conn-label-overlay)
+                (overlay-put ov 'window window)
+                (overlay-put ov 'target-overlay tar)
+                (push (conn-dispatch-label
+                       string ov
+                       (if (and window-pixelwise
+                                (funcall conn-pixelwise-labels-target-predicate ov))
+                           'conn--dispatch-setup-label-pixelwise
+                         'conn--dispatch-setup-label-charwise))
+                      labels)
+                (overlay-put tar 'label (car labels))))))))
     labels))
 
 (defun conn--target-label-payload (overlay)
@@ -4113,7 +4120,8 @@ Target overlays may override this default by setting the
                        (funcall conn--target-window-predicate win))
               (throw 'mouse-click (list pt win nil))))))
     (when conn--dispatch-always-retarget
-      (setq conn-dispatch-target-state nil))
+      (setq conn-dispatch-target-state
+            (conn-dispatch-reset-target-state conn-dispatch-target-state)))
     (unwind-protect
         (progn
           (funcall target-finder)
@@ -4208,6 +4216,51 @@ Returns a cons of (STRING . OVERLAYS)."
           (while-no-input
             (conn-make-string-target-overlays string predicate)))
         (setq conn-dispatch-target-state string)))))
+
+(cl-defstruct (conn-dispatch-lines-state
+               (:constructor conn-dispatch-lines-state (&optional hidden)))
+  hidden)
+
+(cl-defmethod conn-dispatch-reset-target-state ((state conn-dispatch-lines-state))
+  (mapc #'delete-overlay (oref state hidden))
+  (setf (oref state hidden) nil)
+  state)
+
+(defun conn-dispatch-previous-emacs-state ()
+  (unless conn-dispatch-target-state
+    (setf conn-dispatch-target-state (conn-dispatch-lines-state)))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (let ((points (conn-ring-list conn-emacs-state-ring)))
+        (dolist (pt points)
+          (conn-make-target-overlay pt 0))
+        (setq points (seq-sort #'< (cons (point) points)))
+        (save-excursion
+          (goto-char (car points))
+          (if (/= (point-min) (line-beginning-position))
+              (goto-char (point-min))
+            (forward-line 1)
+            (pop points))
+          (while points
+            (let ((beg (point)))
+              (goto-char (pop points))
+              (when-let* ((end (save-excursion
+                                 (ignore-errors (forward-line -1))
+                                 (point)))
+                          ((> end beg)))
+                (push (make-overlay beg end)
+                      (oref conn-dispatch-target-state hidden))
+                (overlay-put (car (oref conn-dispatch-target-state hidden))
+                             'invisible t)))
+            (forward-line 2)
+            (while (and points (> (point) (car points)))
+              (pop points)))
+          (unless (<= (point-max) (1+ (line-end-position)))
+            (push (make-overlay (1+ (line-end-position)) (point-max))
+                  (oref conn-dispatch-target-state hidden))
+            (overlay-put (car (oref conn-dispatch-target-state hidden))
+                         'invisible t))))
+      (recenter nil t))))
 
 (defun conn-dispatch-chars-in-thing (thing)
   (conn-dispatch-read-string-with-timeout
@@ -5428,7 +5481,6 @@ Returns a cons of (STRING . OVERLAYS)."
   `(catch 'state-loop-exit
      (let ((inhibit-message t)
            (recenter-last-op nil)
-           (conn-dispatch-target-state nil)
            (conn-state-loop-last-command nil)
            (conn--dispatch-must-prompt nil)
            (conn--loop-prefix-mag nil)
@@ -5627,7 +5679,8 @@ Returns a cons of (STRING . OVERLAYS)."
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql retarget)))
-  (setq conn-dispatch-target-state nil)
+  (setq conn-dispatch-target-state
+        (conn-dispatch-reset-target-state conn-dispatch-target-state))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql always-retarget)))
@@ -5680,6 +5733,7 @@ Returns a cons of (STRING . OVERLAYS)."
                                              &key repeat restrict-windows other-end
                                              &allow-other-keys)
   (let ((opoint (point-marker))
+        (conn-dispatch-target-state nil)
         (conn--target-window-predicate conn-target-window-predicate)
         (conn--target-predicate conn-target-predicate)
         (conn--target-sort-function conn-target-sort-function)
@@ -5698,7 +5752,11 @@ Returns a cons of (STRING . OVERLAYS)."
     (catch 'exit-dispatch
       (unwind-protect
           (cl-call-next-method)
-        (conn-delete-targets)
+        (ignore-errors
+          (setf conn-dispatch-target-state
+                (conn-dispatch-reset-target-state conn-dispatch-target-state)))
+        (ignore-errors
+          (conn-delete-targets))
         (message nil)
         (ignore-errors
           (with-current-buffer (marker-buffer opoint)
@@ -5887,6 +5945,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                       (conn-bounds-of-command 'conn-forward-word arg))
  :target-finder (lambda ()
                   (conn-dispatch-all-things 'word)))
+
+(conn-dispatch-register-command
+ 'conn-previous-emacs-state
+ :target-finder 'conn-dispatch-previous-emacs-state
+ :default-action 'conn-dispatch-jump)
 
 
 ;;;;; Dispatch Ring
@@ -8411,7 +8474,8 @@ Currently selected window remains selected afterwards."
          (dotimes (_ (1- arg))
            (conn-ring-rotate-forward conn-emacs-state-ring))
          (if (and conn-emacs-state
-                  (eql (point) (conn-ring-head conn-emacs-state-ring)))
+                  (conn-ring-head conn-emacs-state-ring)
+                  (= (point) (conn-ring-head conn-emacs-state-ring)))
              (progn
                (conn-ring-rotate-forward conn-emacs-state-ring)
                (goto-char (conn-ring-head conn-emacs-state-ring)))
@@ -9567,7 +9631,9 @@ Operates with the selected windows parent window."
         (setq-local conn-lighter (seq-copy conn-lighter)
                     conn--local-state-map (list (list 'conn-local-mode))
                     conn--local-override-map (list (list 'conn-local-mode))
-                    conn--local-major-mode-map (list (list 'conn-local-mode)))
+                    conn--local-major-mode-map (list (list 'conn-local-mode))
+                    conn-emacs-state-ring
+                    (conn-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
         ;; We would like to be able to do the same to
         ;; query-replace-read-from-regexp-default but it must be
         ;; either nil, a string, a list of strings, or a symbol with a
