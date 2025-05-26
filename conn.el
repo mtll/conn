@@ -2265,7 +2265,9 @@ If `use-region-p' returns non-nil this will always return
     (isearch-forward . conn--bounds-of-isearch)
     (isearch-backward . conn--bounds-of-isearch)
     (isearch-forward-regexp . conn--bounds-of-isearch)
-    (isearch-backward-regexp . conn--bounds-of-isearch))
+    (isearch-backward-regexp . conn--bounds-of-isearch)
+    (conn-previous-emacs-state . conn--bounds-of-emacs-state)
+    (conn-next-emacs-state . conn--bounds-of-emacs-state))
   "Alist of bounds-op functions for things or commands.
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
@@ -2304,6 +2306,24 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
 
 
 ;;;;; Bounds of Command Providers
+
+(defun conn--bounds-of-emacs-state (cmd arg)
+  (setq arg (prefix-numeric-value arg))
+  (when (> arg 0) (cl-decf arg))
+  (when (eq cmd 'conn-next-emacs-state)
+    (setq arg (- arg)))
+  (let* ((ring (conn-ring-list conn-emacs-state-ring))
+         (mk (nth (mod arg (length ring)) ring))
+         (pt (point)))
+    (list (if (> mk pt)
+              (cons (line-beginning-position)
+                    (save-excursion
+                      (goto-char mk)
+                      (line-end-position)))
+            (cons (save-excursion
+                    (goto-char mk)
+                    (line-beginning-position))
+                  (line-end-position))))))
 
 (defun conn--bounds-of-command-thing (cmd _arg)
   (let* ((thing (get cmd :conn-command-thing))
@@ -3795,7 +3815,7 @@ Optionally the overlay may have an associated THING."
 
 (defvar conn--dispatch-read-event-handlers nil)
 
-(defvar conn--dispatch-read-event-message-suffixes nil)
+(defvar conn--dispatch-read-event-message-prefixes nil)
 
 (defvar conn-dispatch-label-function 'conn-dispatch-labels)
 
@@ -4039,7 +4059,7 @@ Target overlays may override this default by setting the
                               (pcase pfx
                                 ((pred functionp) (funcall pfx))
                                 ((pred stringp) pfx)))
-                            conn--dispatch-read-event-message-suffixes))
+                            conn--dispatch-read-event-message-prefixes))
           "; ")))
     (unless (length= prefix 0)
       (concat "(" prefix ") "))))
@@ -4160,7 +4180,7 @@ Returns a cons of (STRING . OVERLAYS)."
                (concat prompt
                        (propertize ": " 'face 'minibuffer-prompt)
                        conn-dispatch-target-state)
-               t nil t)
+               t nil)
               (char-to-string)
               (concat conn-dispatch-target-state)
               (setq conn-dispatch-target-state))))
@@ -5416,7 +5436,7 @@ Returns a cons of (STRING . OVERLAYS)."
            (conn--dispatch-read-event-handlers
             (cons #'conn-dispatch-select-command-case
                   conn--dispatch-read-event-handlers))
-           (conn--dispatch-read-event-message-suffixes
+           (conn--dispatch-read-event-message-prefixes
             `(,(lambda ()
                  (concat
                   "arg: "
@@ -5458,7 +5478,7 @@ Returns a cons of (STRING . OVERLAYS)."
                     (propertize (key-description binding)
                                 'face 'help-key-binding)
                     " retarget")))
-              ,@conn--dispatch-read-event-message-suffixes)))
+              ,@conn--dispatch-read-event-message-prefixes)))
        (conn-dispatch-select-mode 1)
        (internal-push-keymap conn-dispatch-read-event-map
                              'overriding-terminal-local-map)
@@ -5485,11 +5505,11 @@ Returns a cons of (STRING . OVERLAYS)."
          (conn--loop-prefix-mag nil)
          (conn--loop-prefix-sign nil)
          (conn--dispatch-read-event-handlers nil)
-         (conn--dispatch-read-event-message-suffixes nil)
+         (conn--dispatch-read-event-message-prefixes nil)
          (conn--target-window-predicate nil)
          (conn--target-predicate nil)
          (conn--target-sort-function nil)
-         (conn--dispatch-read-event-message-suffixes nil)
+         (conn--dispatch-read-event-message-prefixes nil)
          (conn--dispatch-always-retarget nil))
      (conn-delete-targets)
      (message nil)
@@ -5665,7 +5685,7 @@ Returns a cons of (STRING . OVERLAYS)."
         (conn--target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
         (conn-dispatch-other-end other-end)
-        (conn--dispatch-read-event-message-suffixes nil)
+        (conn--dispatch-read-event-message-prefixes nil)
         (conn--dispatch-always-retarget (oref action always-retarget))
         (conn--dispatch-action-always-prompt (oref action always-prompt)))
     (when-let* ((predicate (conn-action--window-predicate action)))
