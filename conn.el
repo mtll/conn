@@ -1328,7 +1328,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
              (setq conn-previous-state ,saved-prev-state)))))))
 
 
-;;;;; Cl-generic Specializers
+;;;;; Cl-Generic Specializers
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state) `(and (conn-state-p ,state) ,state))
@@ -1623,7 +1623,7 @@ By default `conn-emacs-state' does not bind anything."
   (conn-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
-  (unless (= (point) (conn-ring-head conn-emacs-state-ring))
+  (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
     (conn-ring-insert-front conn-emacs-state-ring (point-marker))))
 
 (defun conn-copy-emacs-state-ring ()
@@ -2081,7 +2081,7 @@ themselves once the selection process has concluded."
 
 ;;;; Read Things
 
-;;;;; Read mover state
+;;;;; Read Mover State
 
 (conn-define-state conn-read-mover-state (conn-read-mover-common-state)
   "A state for reading things."
@@ -5612,7 +5612,7 @@ Returns a cons of (STRING . OVERLAYS)."
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql always-retarget)))
   (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
-  (conn-dispatch-handle))
+  (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
@@ -6649,7 +6649,7 @@ order to mark the region that should be defined by any of COMMANDS."
                                (copy-marker (marker-position end))))))
 
 
-;;;;; Bounds of narrow ring
+;;;;; Bounds of Narrow Ring
 
 (defun conn--bounds-of-narrowings (_cmd _arg)
   (unless conn-narrow-ring
@@ -7750,7 +7750,18 @@ When KILL-FLAG is non-nil kill the region as well."
          (when current-prefix-arg
            (register-read-with-preview "Append kill to register: "))))
   (if register
-      (append-to-register register beg end kill-flag)
+      (pcase (get-register register)
+        ((and reg (cl-type marker))
+         (let ((text (filter-buffer-substring beg end))
+               (separator (and register-separator (get-register register-separator))))
+           (when kill-flag
+             (delete-region beg end))
+           (with-current-buffer (marker-buffer reg)
+             (save-excursion
+               (goto-char reg)
+               (insert-for-yank (concat separator text)))
+             (setq deactivate-mark t))))
+        (_ (append-to-register register beg end kill-flag)))
     (kill-append (pcase (alist-get register-separator register-alist)
                    ((and (pred stringp) sep)
                     (concat sep (filter-buffer-substring beg end kill-flag)))
@@ -7774,7 +7785,21 @@ When KILL-FLAG is non-nil kill the region as well."
          (when current-prefix-arg
            (register-read-with-preview "Prepend to register: "))))
   (if register
-      (prepend-to-register register beg end kill-flag)
+      (pcase (get-register register)
+        ((and reg (cl-type marker))
+         (let ((text (filter-buffer-substring beg end))
+               (separator (and register-separator (get-register register-separator))))
+           (with-current-buffer (marker-buffer reg)
+             (save-excursion
+               (goto-char reg)
+               (insert-for-yank (concat text separator)))
+             (set-marker reg (- (marker-position reg)
+                                (+ (length text)
+                                   (length separator))))
+             (setq deactivate-mark t)))
+         (when kill-flag
+           (delete-region beg end)))
+        (_ (prepend-to-register register beg end kill-flag)))
     (kill-append (pcase (alist-get register-separator register-alist)
                    ((and (pred stringp) sep)
                     (concat (filter-buffer-substring beg end kill-flag) sep))
@@ -8054,7 +8079,7 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
     (yank-rectangle)))
 
 
-;;;;; Duplicate commands
+;;;;; Duplicate Commands
 
 (defun conn--duplicate-region-1 (beg end)
   (let* ((region (buffer-substring-no-properties beg end))
@@ -8362,10 +8387,11 @@ Currently selected window remains selected afterwards."
   (cond ((< arg 0)
          (conn-next-emacs-state (abs arg)))
         ((> arg 0)
+         (push-mark nil t)
          (dotimes (_ (1- arg))
            (conn-ring-rotate-forward conn-emacs-state-ring))
          (if (and conn-emacs-state
-                  (= (point) (conn-ring-head conn-emacs-state-ring)))
+                  (eql (point) (conn-ring-head conn-emacs-state-ring)))
              (progn
                (conn-ring-rotate-forward conn-emacs-state-ring)
                (goto-char (conn-ring-head conn-emacs-state-ring)))
@@ -8377,6 +8403,7 @@ Currently selected window remains selected afterwards."
   (cond ((< arg 0)
          (conn-previous-emacs-state (abs arg)))
         ((> arg 0)
+         (push-mark nil t)
          (dotimes (_ arg)
            (conn-ring-rotate-backward conn-emacs-state-ring))
          (goto-char (conn-ring-head conn-emacs-state-ring))
@@ -9047,7 +9074,7 @@ Operates with the selected windows parent window."
 
 ;;;; Keymaps
 
-;;;;; Repeat map
+;;;;; Repeat Map
 
 (defvar-keymap conn-reb-navigation-repeat-map
   :repeat t
@@ -9116,7 +9143,7 @@ Operates with the selected windows parent window."
 ;;;;; Top-level Command State Maps
 
 (defvar-keymap conn-default-region-map
-  "j" 'conn-replace
+  "m" 'conn-replace
   "u" 'conn-regexp-replace
   "\\" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
@@ -9138,10 +9165,10 @@ Operates with the selected windows parent window."
   "DEL" 'clear-rectangle
   "N" 'conn-narrow-indirect
   "n" 'conn-narrow-to-thing
-  "w j" 'conn-kill-prepend-region
-  "w l" 'conn-kill-append-region
-  "c j" 'conn-append-region
-  "c l" 'conn-append-region)
+  "j" 'conn-kill-prepend-region
+  "l" 'conn-kill-append-region
+  "J" 'conn-append-region
+  "L" 'conn-append-region)
 
 (defvar-keymap conn-default-edit-map
   "\\" 'conn-kapply-on-thing-prefix
