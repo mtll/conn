@@ -1623,7 +1623,7 @@ By default `conn-emacs-state' does not bind anything."
   (conn-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
-  (unless (eq (point) (conn-ring-head conn-emacs-state-ring))
+  (unless (= (point) (conn-ring-head conn-emacs-state-ring))
     (conn-ring-insert-front conn-emacs-state-ring (point-marker))))
 
 (defun conn-copy-emacs-state-ring ()
