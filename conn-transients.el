@@ -697,7 +697,7 @@ A zero means repeat until error."
   (message "Kapply completed successfully after %s iterations"
            conn-dispatch-repeat-count))
 
-(transient-define-suffix conn--kapply-dispatch-suffix (continuation args)
+(transient-define-suffix conn--kapply-dispatch-suffix (callback args)
   "Apply keyboard macro on dispatch targets."
   :transient 'transient--do-exit
   :key "f"
@@ -711,7 +711,7 @@ A zero means repeat until error."
                          (alist-get :regions args)
                          'conn--kapply-pulse-region
                          (alist-get :window-conf args))))
-    (funcall continuation
+    (funcall callback
              (oclosure-lambda (conn-dispatch-kapply
                                (macro nil))
                  (window pt bounds-op bounds-arg)
@@ -1166,7 +1166,7 @@ A zero means repeat until error."
   (transient-setup 'conn-regions-kapply-prefix nil nil :scope iterator))
 
 ;;;###autoload (autoload 'conn-dispatch-kapply-prefix "conn-transients" nil t)
-(transient-define-prefix conn-dispatch-kapply-prefix (continuation)
+(transient-define-prefix conn-dispatch-kapply-prefix (callback)
   "Transient menu for keyboard macro application on regions."
   [ :description conn--kmacro-ring-display
     [ ("n" "Next" kmacro-cycle-ring-previous :transient t)
@@ -1205,7 +1205,7 @@ A zero means repeat until error."
       (conn--kapply-dispatch-suffix)]]
   (interactive (list nil))
   (kmacro-display last-kbd-macro t)
-  (transient-setup 'conn-dispatch-kapply-prefix nil nil :scope continuation))
+  (transient-setup 'conn-dispatch-kapply-prefix nil nil :scope callback))
 
 
 ;;;; Kmacro Prefix

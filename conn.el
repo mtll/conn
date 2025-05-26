@@ -1670,6 +1670,8 @@ which see.")
 
 (defvar conn--target-window-predicate)
 
+(defvar conn-dispatch-all-frames 'visible)
+
 (cl-defstruct (conn-dispatch-label
                (:constructor conn--make-dispatch-label))
   "Store the state for a dispatch label."
@@ -1731,7 +1733,8 @@ strings have `conn-dispatch-label-face'."
 
 (defun conn--get-target-windows ()
   (if conn--target-window-predicate
-      (conn--get-windows nil nil 'visible nil conn--target-window-predicate)
+      (conn--get-windows nil nil conn-dispatch-all-frames
+                         nil conn--target-window-predicate)
     (list (selected-window))))
 
 
@@ -1972,7 +1975,7 @@ themselves once the selection process has concluded."
 (defvar conn--loop-message-timer nil)
 (defvar conn--loop-message-function nil)
 
-(oclosure-define conn-state-loop-continuation)
+(oclosure-define conn-state-loop-callback)
 
 (defun conn-state-loop-format-prefix-arg ()
   (cond (conn--loop-prefix-mag
@@ -2015,22 +2018,22 @@ themselves once the selection process has concluded."
              (funcall conn--loop-message-function))))))
 
 (cl-defgeneric conn-with-state-loop
-    ( state cont
+    ( state callback
       &key case-function message-function initial-arg
       &allow-other-keys))
 
-(cl-defmethod conn-with-state-loop ( state (cont conn-state-loop-continuation)
+(cl-defmethod conn-with-state-loop ( state (callback conn-state-loop-callback)
                                      &key case-function message-function initial-arg
                                      &allow-other-keys)
   (conn-with-transient-state state
-    (let ((conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
+    (let ((inhibit-message t)
+          (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
           (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
           (conn--loop-error-message "")
           (conn--loop-message-timer nil)
           (conn--loop-message-function
            (lambda ()
-             (funcall message-function cont conn--loop-error-message)))
-          (inhibit-message t))
+             (funcall message-function callback conn--loop-error-message))))
       (catch 'state-loop-exit
         (while t
           (unless conn--loop-message-timer
@@ -2072,10 +2075,10 @@ themselves once the selection process has concluded."
               ('keyboard-quit
                (conn-state-loop-abort))
               (cmd
-               (funcall case-function cmd cont)))
+               (funcall case-function cmd callback)))
             (setf conn-state-loop-last-command cmd))))))
   (message nil)
-  (funcall cont))
+  (funcall callback))
 
 
 ;;;; Read Things
@@ -2100,24 +2103,24 @@ themselves once the selection process has concluded."
 
 ;;;;; Read Thing Command Loop
 
-(oclosure-define (conn-read-mover-continuation
-                  (:parent conn-state-loop-continuation))
+(oclosure-define (conn-read-mover-callback
+                  (:parent conn-state-loop-callback))
   (recursive-edit :type boolean)
   (thing-cmd :mutable t :type symbol)
   (thing-arg :mutable t)
   (mark-flag :mutable t :type boolean))
 
-(cl-defmethod conn-with-state-loop ( state (cont conn-read-mover-continuation)
+(cl-defmethod conn-with-state-loop ( state (callback conn-read-mover-callback)
                                      &key
                                      (case-function 'conn-read-mover-command-case)
                                      (message-function 'conn-read-mover-message)
                                      initial-arg &allow-other-keys)
-  (cl-call-next-method state cont
+  (cl-call-next-method state callback
                        :case-function case-function
                        :message-function message-function
                        :initial-arg initial-arg))
 
-(defun conn-read-mover-message (cont error-message)
+(defun conn-read-mover-message (callback error-message)
   (message
    (substitute-command-keys
     (concat
@@ -2126,12 +2129,12 @@ themselves once the selection process has concluded."
      (propertize (conn-state-loop-format-prefix-arg)
                  'face 'read-multiple-choice-face)
      "; \\[reset-arg] reset arg; \\[help] commands"
-     (if (oref cont recursive-edit)
+     (if (oref callback recursive-edit)
          (concat "; \\[recursive-edit] "
                  "recursive edit):")
        "):")
      " "
-     (if (oref cont mark-flag)
+     (if (oref callback mark-flag)
          (concat (propertize "Mark Active"
                              'face 'eldoc-highlight-function-argument)
                  " ")
@@ -2146,7 +2149,7 @@ RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command."
   (conn-with-state-loop
    'conn-read-mover-state
-   (oclosure-lambda (conn-read-mover-continuation
+   (oclosure-lambda (conn-read-mover-callback
                      (recursive-edit recursive-edit)
                      (mark-flag (region-active-p)))
        ()
@@ -2180,42 +2183,42 @@ If `use-region-p' returns non-nil this will always return
     (cons (get cmd :conn-command-thing)
           (conn-bounds-of-command cmd arg))))
 
-(cl-defgeneric conn-read-mover-command-case (command cont))
+(cl-defgeneric conn-read-mover-command-case (command callback))
 
 (static-if (>= emacs-major-version 31)
     (progn
       (cl-defmethod conn-read-mover-command-case (_command _cont)
         (conn-state-loop-error "Invalid command"))
 
-      (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) cont)
-        (setf (oref cont thing-cmd) command
-              (oref cont thing-arg) (conn-state-loop-prefix-arg))
+      (cl-defmethod conn-read-mover-command-case ((command conn-thing-command) callback)
+        (setf (oref callback thing-cmd) command
+              (oref callback thing-arg) (conn-state-loop-prefix-arg))
         (conn-state-loop-exit)))
 
-  (cl-defmethod conn-read-mover-command-case (command cont)
+  (cl-defmethod conn-read-mover-command-case (command callback)
     (if (or (alist-get command conn-bounds-of-command-alist)
             (when (symbolp command)
               (get command :conn-command-thing)))
         (progn
-          (setf (oref cont thing-cmd) command
-                (oref cont thing-arg) (conn-state-loop-prefix-arg))
+          (setf (oref callback thing-cmd) command
+                (oref callback thing-arg) (conn-state-loop-prefix-arg))
           (conn-state-loop-exit))
       (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-read-mover-command-case ((command (eql recursive-edit))
-                                            cont)
-  (if (oref cont recursive-edit)
+                                            callback)
+  (if (oref callback recursive-edit)
       (progn
-        (setf (oref cont thing-cmd) command
-              (oref cont thing-arg) (conn-state-loop-prefix-arg))
+        (setf (oref callback thing-cmd) command
+              (oref callback thing-arg) (conn-state-loop-prefix-arg))
         (conn-state-loop-exit))
     (conn-state-loop-error "Invalid command")))
 
 (cl-defmethod conn-read-mover-command-case ((_command (eql conn-set-mark-command))
-                                            cont)
-  (setf (oref cont mark-flag) (not (oref cont mark-flag))))
+                                            callback)
+  (setf (oref callback mark-flag) (not (oref callback mark-flag))))
 
-(defun conn--completing-read-mover (cont)
+(defun conn--completing-read-mover (callback)
   (save-window-excursion
     (conn-read-mover-command-case
      (condition-case _
@@ -2235,14 +2238,14 @@ If `use-region-p' returns non-nil this will always return
                   (conn-thing-command-p sym)))
            t))
        (quit nil))
-     cont)))
+     callback)))
 
 (cl-defmethod conn-read-mover-command-case ((_command (eql execute-extended-command))
-                                            cont)
-  (conn--completing-read-dispatch cont))
+                                            callback)
+  (conn--completing-read-dispatch callback))
 
-(cl-defmethod conn-read-mover-command-case ((_command (eql help)) cont)
-  (conn--completing-read-dispatch cont))
+(cl-defmethod conn-read-mover-command-case ((_command (eql help)) callback)
+  (conn--completing-read-dispatch callback))
 
 
 ;;;; Bounds of Command
@@ -2583,7 +2586,7 @@ Possibilities: \\<query-replace-map>
       (setq matches (funcall sort-function matches)))
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (when (consp matches)
            (pcase-dolist (`(,beg . ,end) matches)
              (set-marker beg nil)
@@ -2613,7 +2616,7 @@ Possibilities: \\<query-replace-map>
       (setcdr reg (conn--create-marker end (marker-buffer (car reg))))))
   (lambda (state)
     (pcase state
-      (:finalize
+      (:cleanup
        (when (consp regions)
          (pcase-dolist (`(,beg . ,end) regions)
            (set-marker beg nil)
@@ -2629,7 +2632,7 @@ Possibilities: \\<query-replace-map>
                   collect (if (markerp pt) pt (conn--create-marker pt)))))
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (when (consp points)
            (dolist (pt points)
              (set-marker pt nil))))
@@ -2657,7 +2660,7 @@ Possibilities: \\<query-replace-map>
       (setq matches (funcall sort-function matches)))
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (when (consp matches)
            (mapc (pcase-lambda (`(,beg . ,end))
                    (set-marker beg nil)
@@ -2679,21 +2682,21 @@ Possibilities: \\<query-replace-map>
          (overlay-put hl 'conn-overlay t)
          (unwind-protect
              (cl-loop
-              for cont = (funcall iterator state)
-              until (or (null cont)
+              for callback = (funcall iterator state)
+              until (or (null callback)
                         (progn
                           (recenter nil)
                           (move-overlay hl (region-beginning) (region-end) (current-buffer))
                           (y-or-n-p (format "Record here?"))))
-              finally return cont)
+              finally return callback)
            (delete-overlay hl))))
-      ((or :finalize :next)
+      ((or :cleanup :next)
        (funcall iterator state)))))
 
 (defun conn--kapply-skip-empty (iterator)
   (lambda (state)
     (pcase state
-      (:finalize
+      (:cleanup
        (funcall iterator state))
       ((or :next :record)
        (catch 'non-empty
@@ -2711,7 +2714,7 @@ Possibilities: \\<query-replace-map>
   (cl-assert (> N 0))
   (lambda (state)
     (pcase state
-      (:finalize
+      (:cleanup
        (funcall iterator state))
       ((or :next :record)
        (dotimes (_ (1- N))
@@ -2730,7 +2733,7 @@ Possibilities: \\<query-replace-map>
                           (not (invisible-p (car ret))))
                 when (markerp ret) do (set-marker ret nil)
                 finally return ret))
-      (:finalize (funcall iterator state)))))
+      (:cleanup (funcall iterator state)))))
 
 (defun conn--kapply-skip-region-invisible (iterator)
   (lambda (state)
@@ -2743,7 +2746,7 @@ Possibilities: \\<query-replace-map>
                      (when (markerp beg) (set-marker beg nil))
                      (when (markerp end) (set-marker end nil)))
                 finally return ret))
-      (:finalize (funcall iterator state)))))
+      (:cleanup (funcall iterator state)))))
 
 (defun conn--kapply-open-invisible (iterator)
   (let (restore)
@@ -2761,7 +2764,7 @@ Possibilities: \\<query-replace-map>
                       finally return ret)
            (setq restore (append isearch-opened-overlays restore)
                  isearch-opened-overlays nil)))
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (setq isearch-opened-overlays restore))))))
 
@@ -2787,7 +2790,7 @@ Possibilities: \\<query-replace-map>
   (let (undo-handles)
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
            (accept-change-group handle)
@@ -2805,7 +2808,7 @@ Possibilities: \\<query-replace-map>
   (let (undo-handles)
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (pcase-dolist (`(_ . ,handle) undo-handles)
            (if conn-kmacro-apply-error
@@ -2831,7 +2834,7 @@ Possibilities: \\<query-replace-map>
            (unless (eq buffer-undo-list t)
              (setq handle (prepare-change-group))
              (activate-change-group handle))))
-        (:finalize
+        (:cleanup
          (when handle
            (accept-change-group handle)
            (undo-amalgamate-change-group handle))
@@ -2852,7 +2855,7 @@ Possibilities: \\<query-replace-map>
   (let (saved-excursions)
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (pcase-dolist (`(,buffer ,pt . ,saved) saved-excursions)
            (with-current-buffer buffer
@@ -2882,7 +2885,7 @@ Possibilities: \\<query-replace-map>
         buffers automatic)
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (when (and (not conn-kmacro-apply-error)
                     (length> buffers 1))
@@ -2931,7 +2934,7 @@ Possibilities: \\<query-replace-map>
   (let (kapply-saved-restrictions)
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (pcase-dolist (`(,buffer ,beg . ,end) kapply-saved-restrictions)
            (with-current-buffer buffer
@@ -2967,7 +2970,7 @@ Possibilities: \\<query-replace-map>
       (prog1
           (funcall iterator state)
         (pcase state
-          (:finalize
+          (:cleanup
            (pcase-dolist (`(,buf ,state ,prev-state) buffer-states)
              (when state
                (with-current-buffer buf
@@ -2999,7 +3002,7 @@ Possibilities: \\<query-replace-map>
   (let (wconf)
     (lambda (state)
       (pcase state
-        (:finalize
+        (:cleanup
          (funcall iterator state)
          (set-window-configuration wconf))
         ((or :record :next)
@@ -3051,7 +3054,7 @@ The iterator must be the first argument in ARGLIST.
                  (unless conn-kapply-suppress-message
                    (message "Kapply completed successfully after %s iterations" ,iterations)))
              (let ((conn-kmacro-apply-error (not success)))
-               (funcall ,iterator :finalize)
+               (funcall ,iterator :cleanup)
                (run-hooks 'conn-kmacro-apply-end-hook)
                (isearch-clean-overlays))))))))
 
@@ -3497,8 +3500,8 @@ associated with a command's thing.")
 
 (defvar conn-dispatch-other-end nil)
 
-(oclosure-define (conn-dispatch-continuation
-                  (:parent conn-state-loop-continuation))
+(oclosure-define (conn-dispatch-callback
+                  (:parent conn-state-loop-callback))
   (other-end :mutable t :type boolean)
   (no-other-end :mutable t :type boolean)
   (repeat :mutable t :type boolean)
@@ -3509,11 +3512,11 @@ associated with a command's thing.")
   (action :mutable t :type conn-action)
   (target-finder :mutable t :type function))
 
-(defun conn-dispatch-message (cont error-message)
+(defun conn-dispatch-message (callback error-message)
   (let ((action-description
-         (if (oref cont action)
+         (if (oref callback action)
              (concat (propertize
-                      (conn-describe-action (oref cont action))
+                      (conn-describe-action (oref callback action))
                       'face 'eldoc-highlight-function-argument)
                      " ")
            "")))
@@ -3526,31 +3529,31 @@ associated with a command's thing.")
         (conn-state-loop-format-prefix-arg)
         'face 'read-multiple-choice-face)
        "; "
-       (unless (oref cont no-other-end)
+       (unless (oref callback no-other-end)
          (concat
           "\\[dispatch-other-end] "
           (propertize "other-end"
-                      'face (when (oref cont other-end)
+                      'face (when (oref callback other-end)
                               'eldoc-highlight-function-argument))
           "; "))
-       (when (oref cont repeatable)
+       (when (oref callback repeatable)
          (concat
           "\\[repeat-dispatch] "
           (propertize
            "repeat"
-           'face (when (oref cont repeat)
+           'face (when (oref callback repeat)
                    'eldoc-highlight-function-argument))
           "; "))
        "\\[restrict-windows] "
        (propertize
         "this win"
-        'face (when (oref cont restrict-windows)
+        'face (when (oref callback restrict-windows)
                 'eldoc-highlight-function-argument))
        "): "
        action-description
        (propertize error-message 'face 'error))))))
 
-(cl-defmethod conn-with-state-loop ( state (cont conn-dispatch-continuation)
+(cl-defmethod conn-with-state-loop ( state (callback conn-dispatch-callback)
                                      &key
                                      (case-function 'conn-dispatch-command-case)
                                      (message-function 'conn-dispatch-message)
@@ -3559,63 +3562,63 @@ associated with a command's thing.")
   (require 'conn-transients)
   (let ((success nil)
         (conn-dispatch-other-end nil))
-    (setf (oref cont no-other-end) no-other-end
-          (oref cont repeatable) (not no-repeat))
+    (setf (oref callback no-other-end) no-other-end
+          (oref callback repeatable) (not no-repeat))
     (unwind-protect
-        (prog1 (cl-call-next-method state cont
+        (prog1 (cl-call-next-method state callback
                                     :case-function case-function
                                     :message-function message-function
                                     :initial-arg initial-arg)
           (setq success t))
       (unless success
-        (conn-cancel-action (oref cont action))))))
+        (conn-cancel-action (oref callback action))))))
 
-(cl-defmethod conn-dispatch-command-case (command cont)
+(cl-defmethod conn-dispatch-command-case (command callback)
   (pcase command
     ((pred conn--action-type-p)
-     (conn-cancel-action (oref cont action))
-     (if (cl-typep (oref cont action) command)
-         (setf (oref cont action) nil)
-       (setf (oref cont action) (condition-case _
+     (conn-cancel-action (oref callback action))
+     (if (cl-typep (oref callback action) command)
+         (setf (oref callback action) nil)
+       (setf (oref callback action) (condition-case _
                                     (conn-make-action command)
                                   (error nil)))))
     ((let (and (pred identity) target-finder)
        (conn--dispatch-target-finder command))
-     (setf (oref cont target-finder) (funcall target-finder)
-           (oref cont thing-cmd) command
-           (oref cont thing-arg) (conn-state-loop-consume-prefix-arg))
-     (when (null (oref cont action))
-       (setf (oref cont action)
+     (setf (oref callback target-finder) (funcall target-finder)
+           (oref callback thing-cmd) command
+           (oref callback thing-arg) (conn-state-loop-consume-prefix-arg))
+     (when (null (oref callback action))
+       (setf (oref callback action)
              (conn-make-action (conn--dispatch-default-action command))))
      (conn-state-loop-exit))
     (_ (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql dispatch-other-end))
-                                          cont)
-  (setf (oref cont other-end) (not (oref cont other-end))))
+                                          callback)
+  (setf (oref callback other-end) (not (oref callback other-end))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql repeat-dispatch))
-                                          cont)
-  (when (oref cont repeatable)
-    (setf (oref cont repeat) (not (oref cont repeat)))))
+                                          callback)
+  (when (oref callback repeatable)
+    (setf (oref callback repeat) (not (oref callback repeat)))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql restrict-windows))
-                                          cont)
-  (setf (oref cont restrict-windows) (not (oref cont restrict-windows))))
+                                          callback)
+  (setf (oref callback restrict-windows) (not (oref callback restrict-windows))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-repeat-last-dispatch))
-                                          cont)
+                                          callback)
   (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
                                    action))
     (conn-dispatch-ring-remove-stale)
     (conn-state-loop-error "Last dispatch action stale"))
   (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
       (progn
-        (setf (oref cont target-finder) (funcall (conn--dispatch-target-finder
+        (setf (oref callback target-finder) (funcall (conn--dispatch-target-finder
                                                   (oref prev thing-cmd)))
-              (oref cont thing-cmd) (oref prev thing-cmd)
-              (oref cont thing-arg) (oref prev thing-arg)
-              (oref cont action) (oref prev action))
+              (oref callback thing-cmd) (oref prev thing-cmd)
+              (oref callback thing-arg) (oref prev thing-arg)
+              (oref callback action) (oref prev action))
         (conn-state-loop-exit))
     (conn-state-loop-error "Dispatch ring empty")))
 
@@ -3643,7 +3646,7 @@ associated with a command's thing.")
     (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
-(defun conn--completing-read-dispatch (cont)
+(defun conn--completing-read-dispatch (callback)
   (save-window-excursion
     (conn-dispatch-command-case
      (condition-case _
@@ -3663,14 +3666,14 @@ associated with a command's thing.")
                  (conn--action-type-p sym)))
            t))
        (quit nil))
-     cont)))
+     callback)))
 
-(cl-defmethod conn-dispatch-command-case ((_command (eql help)) cont)
-  (conn--completing-read-dispatch cont))
+(cl-defmethod conn-dispatch-command-case ((_command (eql help)) callback)
+  (conn--completing-read-dispatch callback))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql execute-extended-command))
-                                          cont)
-  (conn--completing-read-dispatch cont))
+                                          callback)
+  (conn--completing-read-dispatch callback))
 
 
 ;;;;; Dispatch Window Filtering
@@ -4165,7 +4168,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (pcase message
         (:retarget (setq string nil))
         (:retargetable t)
-        (:has-target string)
+        (:has-target (and string t))
         ((and :update (guard string))
          (conn-make-string-target-overlays string predicate))
         (:update
@@ -4206,7 +4209,7 @@ Returns a cons of (STRING . OVERLAYS)."
       (pcase message
         (:retarget (setq string nil))
         (:retargetable t)
-        (:has-target string)
+        (:has-target (and string t))
         ((and :update (guard string))
          (conn-make-string-target-overlays string predicate))
         (:update
@@ -4256,7 +4259,8 @@ Returns a cons of (STRING . OVERLAYS)."
                    (while (and points (> (point) (car points)))
                      (pop points)))
                  (unless (<= (point-max) (1+ (line-end-position)))
-                   (push (make-overlay (1+ (line-end-position)) (point-max)) hidden)
+                   (push (make-overlay (1+ (line-end-position)) (point-max))
+                         hidden)
                    (overlay-put (car hidden) 'invisible t))))
              (recenter nil t))))))))
 
@@ -5420,11 +5424,11 @@ Returns a cons of (STRING . OVERLAYS)."
   "Transpose")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-over-or-goto))
-                                          cont)
-  (conn-cancel-action (oref cont action))
-  (setf (oref cont action)
+                                          callback)
+  (conn-cancel-action (oref callback action))
+  (setf (oref callback action)
         (condition-case _
-            (pcase (oref cont action)
+            (pcase (oref callback action)
               ((cl-type conn-dispatch-over)
                (conn-make-action 'conn-dispatch-goto))
               ((cl-type conn-dispatch-goto) nil)
@@ -5812,7 +5816,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (interactive "P")
   (conn-with-state-loop
    'conn-dispatch-state
-   (oclosure-lambda (conn-dispatch-continuation
+   (oclosure-lambda (conn-dispatch-callback
                      (repeatable t))
        ()
      (conn-perform-dispatch action target-finder thing-cmd thing-arg
@@ -5825,7 +5829,7 @@ Returns a cons of (STRING . OVERLAYS)."
   (let ((regions nil))
     (conn-with-state-loop
      'conn-dispatch-mover-state
-     (oclosure-lambda (conn-dispatch-continuation
+     (oclosure-lambda (conn-dispatch-callback
                        (repeatable t))
          ()
        (conn-perform-dispatch
@@ -6246,7 +6250,7 @@ Expansions and contractions are provided by functions in
   (call-interactively cmd)
   (conn-with-state-loop
    'conn-expand-state
-   (oclosure-lambda (conn-state-loop-continuation)
+   (oclosure-lambda (conn-state-loop-callback)
        ()
      (region-bounds))
    :message-function 'conn--read-expand-message
@@ -7704,18 +7708,18 @@ region after a `recursive-edit'."
   (interactive
    (conn-with-state-loop
     'conn-transpose-state
-    (oclosure-lambda (conn-read-mover-continuation
+    (oclosure-lambda (conn-read-mover-callback
                       (recursive-edit t)
                       (mark-flag (region-active-p)))
         ()
       (list thing-cmd thing-arg))
     :initial-arg current-prefix-arg
     :message-function 'conn--transpose-message
-    :case-function (lambda (command cont)
+    :case-function (lambda (command callback)
                      (pcase command
                        ((or 'conn-expand 'conn-contract)
                         (conn-state-loop-error "Invalid command"))
-                       (_ (conn-read-mover-command-case command cont))))))
+                       (_ (conn-read-mover-command-case command callback))))))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-regions"))
   (pcase mover
@@ -7738,7 +7742,7 @@ region after a `recursive-edit'."
              (conn-with-state-loop
               'conn-dispatch-transpose-state
               (oclosure-lambda
-                  (conn-dispatch-continuation
+                  (conn-dispatch-callback
                    (action
                     (oclosure-lambda
                         (conn-transpose-command
@@ -9862,7 +9866,7 @@ Operates with the selected windows parent window."
   (interactive "P")
   (conn-with-state-loop
    'conn-dired-dispatch-state
-   (oclosure-lambda (conn-dispatch-continuation
+   (oclosure-lambda (conn-dispatch-callback
                      (repeatable t))
        ()
      (conn-perform-dispatch action target-finder thing-cmd thing-arg
