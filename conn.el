@@ -8357,12 +8357,30 @@ Currently selected window remains selected afterwards."
   (interactive)
   (run-hook-with-args-until-success 'conntext-state-hook))
 
-(defun conn-last-emacs-state (arg)
+(defun conn-previous-emacs-state (arg)
   (interactive "p")
-  (dotimes (_ arg)
-    (conn-ring-rotate-forward conn-emacs-state-ring))
-  (goto-char (conn-ring-head conn-emacs-state-ring))
-  (conn-enter-state 'conn-emacs-state))
+  (cond ((< arg 0)
+         (conn-next-emacs-state (abs arg)))
+        ((> arg 0)
+         (dotimes (_ (1- arg))
+           (conn-ring-rotate-forward conn-emacs-state-ring))
+         (if (and conn-emacs-state
+                  (= (point) (conn-ring-head conn-emacs-state-ring)))
+             (progn
+               (conn-ring-rotate-forward conn-emacs-state-ring)
+               (goto-char (conn-ring-head conn-emacs-state-ring)))
+           (goto-char (conn-ring-head conn-emacs-state-ring))
+           (conn-enter-state 'conn-emacs-state)))))
+
+(defun conn-next-emacs-state (arg)
+  (interactive "p")
+  (cond ((< arg 0)
+         (conn-previous-emacs-state (abs arg)))
+        ((> arg 0)
+         (dotimes (_ arg)
+           (conn-ring-rotate-backward conn-emacs-state-ring))
+         (goto-char (conn-ring-head conn-emacs-state-ring))
+         (conn-enter-state 'conn-emacs-state))))
 
 (defun conn-previous-state ()
   (interactive)
@@ -9201,11 +9219,20 @@ Operates with the selected windows parent window."
   "l" 'conn-dispatch-cycle-ring-next
   "j" 'conn-dispatch-cycle-ring-previous)
 
+(defvar-keymap conn-last-emacs-state-repeat-map
+  :repeat t
+  "M-p" 'conn-previous-emacs-state
+  "M-n" 'conn-next-emacs-state)
+
+(put 'conn-next-emacs-state 'repeat-check-key 'no)
+(put 'conn-previous-emacs-state 'repeat-check-key 'no)
+
 (defvar-keymap conn-local-mode-map
   "C-x y" conn-dispatch-cycle-map
   "M-g o" 'conn-pop-mark-ring
   "M-g u" 'conn-unpop-mark-ring
-  "M-g e" 'conn-last-emacs-state
+  "M-g e" 'conn-previous-emacs-state
+  "M-g E" 'conn-next-emacs-state
   "C-S-w" 'delete-region
   "C-." 'conn-dispatch-state
   "C->" 'conn-dispatch-on-buttons
