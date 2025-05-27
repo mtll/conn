@@ -7837,7 +7837,7 @@ With arg N, insert N newlines."
 
 ;;;;; Prepend/Append to Kill/Register
 
-(defun conn-append-region (beg end &optional register kill-flag)
+(defun conn-append-region (beg end &optional register kill-flag prepend)
   "Append region from BEG to END to most recent kill.
 
 Optionally if REGISTER is specified append to REGISTER instead.
@@ -7850,27 +7850,26 @@ When KILL-FLAG is non-nil kill the region as well."
          (region-end)
          (when current-prefix-arg
            (register-read-with-preview "Append kill to register: "))))
-  (if register
-      (pcase (get-register register)
-        ((and reg (cl-type marker))
-         (let ((text (filter-buffer-substring beg end))
-               (separator (and register-separator (get-register register-separator)))
-               (marker-type (marker-insertion-type reg)))
-           (when kill-flag (delete-region beg end))
-           (set-marker-insertion-type reg t)
-           (unwind-protect
-               (with-current-buffer (marker-buffer reg)
-                 (save-excursion
-                   (goto-char reg)
-                   (insert-for-yank (concat separator text)))
-                 (setq deactivate-mark t))
-             (set-marker-insertion-type reg marker-type))))
-        (_ (append-to-register register beg end kill-flag)))
-    (kill-append (pcase (alist-get register-separator register-alist)
-                   ((and (pred stringp) sep)
-                    (concat sep (filter-buffer-substring beg end kill-flag)))
-                   (_ (filter-buffer-substring beg end kill-flag)))
-                 nil))
+  (let ((separator (and register-separator (get-register register-separator)))
+        (text (filter-buffer-substring beg end kill-flag)))
+    (pcase (and register (get-register register))
+      ('nil (kill-append (concat separator text) prepend))
+      ((and reg (cl-type marker))
+       (let ((marker-type (marker-insertion-type reg)))
+         (set-marker-insertion-type reg (not prepend))
+         (unwind-protect
+             (with-current-buffer (marker-buffer reg)
+               (save-excursion
+                 (goto-char reg)
+                 (insert-for-yank (if prepend
+                                      (concat text separator)
+                                    (concat separator text))))
+               (setq deactivate-mark t))
+           (set-marker-insertion-type reg marker-type))))
+      ((guard prepend)
+       (prepend-to-register register beg end kill-flag))
+      (_
+       (append-to-register register beg end kill-flag))))
   (when (and (null kill-flag)
              (called-interactively-p 'interactive))
     (pulse-momentary-highlight-region beg end)))
@@ -7888,27 +7887,7 @@ When KILL-FLAG is non-nil kill the region as well."
          (region-end)
          (when current-prefix-arg
            (register-read-with-preview "Prepend to register: "))))
-  (if register
-      (pcase (get-register register)
-        ((and reg (cl-type marker))
-         (let ((text (filter-buffer-substring beg end))
-               (separator (and register-separator (get-register register-separator)))
-               (marker-type (marker-insertion-type reg)))
-           (when kill-flag (delete-region beg end))
-           (set-marker-insertion-type reg nil)
-           (unwind-protect
-               (with-current-buffer (marker-buffer reg)
-                 (save-excursion
-                   (goto-char reg)
-                   (insert-for-yank (concat text separator)))
-                 (setq deactivate-mark t))
-             (set-marker-insertion-type reg marker-type))))
-        (_ (prepend-to-register register beg end kill-flag)))
-    (kill-append (pcase (alist-get register-separator register-alist)
-                   ((and (pred stringp) sep)
-                    (concat (filter-buffer-substring beg end kill-flag) sep))
-                   (_ (filter-buffer-substring beg end kill-flag)))
-                 t))
+  (conn-append-region beg end register kill-flag t)
   (when (and (null kill-flag)
              (called-interactively-p 'interactive))
     (pulse-momentary-highlight-region beg end)))
