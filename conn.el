@@ -1658,9 +1658,6 @@ By default `conn-emacs-state' does not bind anything."
   "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defvar conn-label-string-generator 'conn-simple-labels
-  "Function to create label strings for a number of elements.")
-
 (defvar conn-window-labeling-function 'conn-header-line-label
   "Function to label windows for `conn-prompt-for-window'.
 
@@ -3812,7 +3809,7 @@ Optionally the overlay may have an associated THING."
 
 (defvar conn--dispatch-read-event-message-prefixes nil)
 
-(defvar conn-dispatch-label-function 'conn-dispatch-labels)
+(defvar conn-dispatch-label-function 'conn-dispatch-smart-labels)
 
 (defvar conn-default-label-padding-function 'conn--centered-padding
   "Default function for padding dispatch labels.
@@ -3832,14 +3829,15 @@ Target overlays may override this default by setting the
 (defvar conn-pixelwise-labels-target-predicate
   'conn--pixelwise-labels-target-p)
 
-(defun conn--pixelwise-labels-window-p (win targets)
+(defun conn--pixelwise-labels-window-p (win)
   (and (eq (selected-frame) (window-frame win))
-       (length< targets conn-pixelwise-label-target-limit)))
+       (length< (alist-get win conn-targets)
+                conn-pixelwise-label-target-limit)))
 
 (defun conn--pixelwise-labels-target-p (target)
   (cl-loop with ov-beg = (overlay-start target)
-           for (beg . end) in (window-parameter (overlay-get target 'window)
-                                                'conn-dispatch-lines)
+           for (beg . end) in (conn--dispatch-window-lines
+                               (overlay-get target 'window))
            when (and (<= beg ov-beg)
                      (< ov-beg end))
            return (< (- ov-beg beg)
@@ -3871,7 +3869,7 @@ Target overlays may override this default by setting the
                   'face 'conn-dispatch-label-face))))
 
 (defun conn--dispatch-eol (pt window)
-  (cl-loop for (beg . end) in (window-parameter window 'conn-dispatch-lines)
+  (cl-loop for (beg . end) in (conn--dispatch-window-lines window)
            when (and (<= beg pt) (< pt end))
            return (1- end)))
 
@@ -4002,56 +4000,131 @@ Target overlays may override this default by setting the
       (overlay-put overlay 'before-string label-string)
     (overlay-put overlay 'display label-string)))
 
-(defun conn--dispatch-window-lines (window)
-  (let (lines prev)
-    (save-excursion
-      (goto-char (window-start window))
-      (setq prev (pos-bol))
-      (while (and (<= prev (window-end window))
-                  (not (eobp)))
-        (forward-line)
-        (push (cons prev (point)) lines)
-        (setq prev (point))))
-    (set-window-parameter window 'conn-dispatch-lines lines)))
+(defvar conn--dispatch-window-lines-cache (make-hash-table :test 'eq))
 
-(defun conn-dispatch-labels ()
-  (setq conn-target-count 0)
-  (pcase-dolist (`(,window . ,targets) conn-targets)
-    (dolist (tar targets)
-      (when (<= (window-start window)
-                (overlay-start tar)
-                (overlay-end tar)
-                (window-end window))
-        (cl-incf conn-target-count))))
-  (let ((label-strings
-         (funcall conn-label-string-generator conn-target-count))
-        (labels nil))
-    (pcase-dolist (`(,window . ,targets) (reverse conn-targets))
-      (setq targets (seq-sort conn--target-sort-function targets))
-      (with-selected-window window
-        (conn--dispatch-window-lines window)
-        (let ((window-pixelwise
-               (funcall conn-pixelwise-labels-window-predicate window targets)))
-          (dolist (tar targets)
-            (when (<= (window-start)
-                      (overlay-start tar)
-                      (overlay-end tar)
-                      (window-end))
-              (conn-protected-let* ((string (pop label-strings))
-                                    (beg (overlay-end tar))
-                                    (ov (make-overlay beg beg) (delete-overlay ov)))
-                (overlay-put ov 'category 'conn-label-overlay)
-                (overlay-put ov 'window window)
-                (overlay-put ov 'target-overlay tar)
-                (push (conn-dispatch-label
-                       string ov
-                       (if (and window-pixelwise
-                                (funcall conn-pixelwise-labels-target-predicate ov))
-                           'conn--dispatch-setup-label-pixelwise
-                         'conn--dispatch-setup-label-charwise))
-                      labels)
-                (overlay-put tar 'label (car labels))))))))
+(defun conn--dispatch-window-lines (window)
+  (with-memoization (gethash window conn--dispatch-window-lines-cache)
+    (let (lines prev)
+      (save-excursion
+        (goto-char (window-start window))
+        (setq prev (pos-bol))
+        (while (and (<= prev (window-end window))
+                    (not (eobp)))
+          (forward-line)
+          (push (cons prev (point)) lines)
+          (setq prev (point))))
+      lines)))
+
+(defvar conn--pixelwise-window-cache (make-hash-table :test 'eq))
+
+(defun conn-dispatch-pixelwise-label-p (ov)
+  (and (with-memoization (gethash (overlay-get ov 'window)
+                                  conn--pixelwise-window-cache)
+         (funcall conn-pixelwise-labels-window-predicate
+                  (overlay-get ov 'window)))
+       (funcall conn-pixelwise-labels-target-predicate ov)))
+
+(defun conn-disptach-label-target (target string)
+  (let ((window (overlay-get target 'window)))
+    (when (<= (window-start)
+              (overlay-start target)
+              (overlay-end target)
+              (window-end))
+      (conn-protected-let* ((beg (overlay-end target))
+                            (ov (make-overlay beg beg) (delete-overlay ov)))
+        (overlay-put ov 'category 'conn-label-overlay)
+        (overlay-put ov 'window window)
+        (overlay-put ov 'target-overlay target)
+        (overlay-put target 'label
+                     (conn-dispatch-label
+                      string ov
+                      (if (conn-dispatch-pixelwise-label-p ov)
+                          'conn--dispatch-setup-label-pixelwise
+                        'conn--dispatch-setup-label-charwise)))))))
+
+(defun conn-dispatch-get-targets (&optional sort-function)
+  (let ((result nil))
+    (setq conn-target-count 0)
+    (pcase-dolist (`(,window . ,targets) conn-targets)
+      (let ((filtered
+             (cl-loop for tar in targets
+                      when (<= (window-start window)
+                               (overlay-start tar)
+                               (overlay-end tar)
+                               (window-end window))
+                      do (cl-incf conn-target-count)
+                      and collect tar)))
+        (push (cons window
+                    (if sort-function
+                        (compat-call sort filtered
+                                     :lessp sort-function
+                                     :in-place t)
+                      filtered))
+              result)))
+    result))
+
+(defun conn-dispatch-simple-labels ()
+  (let* ((all-targets (conn-dispatch-get-targets conn-target-sort-function))
+         (label-strings (conn-simple-labels (1+ conn-target-count)))
+         (labels nil))
+    (pcase-dolist (`(,_window . ,targets) all-targets)
+      (dolist (tar targets)
+        (push (conn-disptach-label-target tar (pop label-strings))
+              labels)))
     labels))
+
+(defvar conn-disptach-stable-label-chars
+  `(("j" "u" "m" "k" "i" "," "l" "o" "h" "y" "n" "p" ";")
+    ("f" "r" "v" "d" "e" "c" "s" "w" "x" "g" "t" "b" "a")))
+
+(defun conn--stable-label-side (targets characters window-label)
+  (let ((group 0)
+        (chars characters)
+        (labels nil))
+    (dolist (tar targets labels)
+      (when (null chars)
+        (cl-incf group)
+        (setq chars characters))
+      (push (conn-disptach-label-target
+             tar
+             (propertize (concat window-label
+                                 (when (> group 0)
+                                   (number-to-string group))
+                                 (pop chars))
+                         'face 'conn-dispatch-label-face))
+            labels))))
+
+(defun conn-dispatch-stable-labels ()
+  (conn--ensure-window-labels)
+  (pcase-let* ((`(,before-chars ,after-chars) conn-disptach-stable-label-chars)
+               (first t)
+               (labels nil))
+    (pcase-dolist (`(,window . ,targets)
+                   (conn-dispatch-get-targets conn-target-sort-function))
+      (with-selected-window window
+        (let ((window-label
+               (if (prog1 first (setq first nil)) ""
+                 (upcase (window-parameter window 'conn-label-string))))
+              (targets
+               (seq-group-by (lambda (ov)
+                               (> (point) (overlay-start ov)))
+                             targets)))
+          (setq labels (nconc (conn--stable-label-side
+                               (alist-get t targets)
+                               after-chars
+                               window-label)
+                              labels))
+          (setq labels (nconc (conn--stable-label-side
+                               (alist-get nil targets)
+                               before-chars
+                               window-label)
+                              labels)))))
+    labels))
+
+(defun conn-dispatch-smart-labels ()
+  (if (or executing-kbd-macro defining-kbd-macro)
+      (conn-dispatch-stable-labels)
+    (conn-dispatch-simple-labels)))
 
 (defun conn--target-label-payload (overlay)
   (list (overlay-start overlay)
@@ -4060,13 +4133,14 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-read-event-prefix ()
   (let ((prefix
-         (string-join
-          (delq nil (mapcar (lambda (pfx)
-                              (pcase pfx
-                                ((pred functionp) (funcall pfx))
-                                ((pred stringp) pfx)))
-                            conn--dispatch-read-event-message-prefixes))
-          "; ")))
+         (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+                  for str = (pcase pfx
+                              ((pred functionp) (funcall pfx))
+                              ((pred stringp) pfx))
+                  if str
+                  if (length> result 0) concat "; " into result end
+                  and concat str into result
+                  finally return result)))
     (unless (length= prefix 0)
       (concat "(" prefix ") "))))
 
@@ -4133,9 +4207,7 @@ Target overlays may override this default by setting the
                                    conn--dispatch-action-always-prompt
                                    (> conn-dispatch-repeat-count 0)))
             (conn--target-label-payload)))
-      (conn-delete-targets)
-      (dolist (win (conn--get-target-windows))
-        (set-window-parameter win 'conn-dispatch-lines nil)))))
+      (conn-delete-targets))))
 
 
 ;;;;; Dispatch Target Finders
@@ -4155,6 +4227,8 @@ Target overlays may override this default by setting the
     (dolist (target targets)
       (conn-label-delete (overlay-get target 'label))
       (delete-overlay target)))
+  (clrhash conn--pixelwise-window-cache)
+  (clrhash conn--dispatch-window-lines-cache)
   (setq conn-targets nil
         conn-target-count 0))
 
@@ -4492,6 +4566,14 @@ Returns a cons of (STRING . OVERLAYS)."
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
+(cl-defgeneric conn-describe-action (action))
+
+(cl-defgeneric conn-accept-action (action)
+  (:method ((_ conn-action)) "Noop" nil))
+
+(cl-defgeneric conn-cancel-action (action)
+  (:method (_) "Noop" nil))
+
 (cl-defgeneric conn-make-action (type)
   (:method (type) (error "Unknown action type %s" type))
   (:method :after (_type) (conn-state-loop-consume-prefix-arg)))
@@ -4502,14 +4584,6 @@ Returns a cons of (STRING . OVERLAYS)."
         (or (cl-call-next-method)
             (error "Failed to construct %s" type))
       (set-window-configuration wconf))))
-
-(cl-defgeneric conn-describe-action (action))
-
-(cl-defgeneric conn-accept-action (action)
-  (:method ((_ conn-action)) "Noop" nil))
-
-(cl-defgeneric conn-cancel-action (action)
-  (:method (_) "Noop" nil))
 
 (defun conn--action-buffer-change-group ()
   (let ((change-group (prepare-change-group)))
