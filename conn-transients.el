@@ -678,12 +678,12 @@ A zero means repeat until error."
             (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">"))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
-                                     _target-finder thing-cmd thing-arg
+                                     target-finder thing-cmd thing-arg
                                      &key repeat &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,bounds-op-override)
-                    (conn-dispatch-select-target))
+                    (conn-dispatch-select-target target-finder))
                    (bounds-op
                     (or bounds-op-override
                         (lambda (arg)
