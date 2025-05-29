@@ -4184,6 +4184,9 @@ Target overlays may override this default by setting the
               (throw 'mouse-click (list pt win nil))))))
     (when conn--dispatch-always-retarget
       (funcall conn-dispatch-target-finder :retarget))
+    (conn-dispatch-select-mode 1)
+    (internal-push-keymap conn-dispatch-read-event-map
+                          'overriding-terminal-local-map)
     (unwind-protect
         (progn
           (funcall conn-dispatch-target-finder :update)
@@ -4197,7 +4200,10 @@ Target overlays may override this default by setting the
                                    conn--dispatch-action-always-prompt
                                    (> conn-dispatch-repeat-count 0)))
             (conn--target-label-payload)))
-      (conn-delete-targets))))
+      (internal-pop-keymap conn-dispatch-read-event-map
+                           'overriding-terminal-local-map)
+      (conn-delete-targets)
+      (conn-dispatch-select-mode -1))))
 
 
 ;;;;; Dispatch Target Finders
@@ -5616,20 +5622,13 @@ Returns a cons of (STRING . OVERLAYS)."
                                 'face 'help-key-binding)
                     " retarget")))
               ,@conn--dispatch-read-event-message-prefixes)))
-       (conn-dispatch-select-mode 1)
-       (internal-push-keymap conn-dispatch-read-event-map
-                             'overriding-terminal-local-map)
-       (unwind-protect
-           (while (or ,repeat (< conn-dispatch-repeat-count 1))
-             (catch 'dispatch-redisplay
-               (while (progn
-                        ,@body
-                        (cl-incf conn-dispatch-repeat-count)
-                        ,repeat)
-                 (undo-boundary))))
-         (internal-pop-keymap conn-dispatch-read-event-map
-                              'overriding-terminal-local-map)
-         (conn-dispatch-select-mode -1)))))
+       (while (or ,repeat (< conn-dispatch-repeat-count 1))
+         (catch 'dispatch-redisplay
+           (while (progn
+                    ,@body
+                    (cl-incf conn-dispatch-repeat-count)
+                    ,repeat)
+             (undo-boundary)))))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -5646,18 +5645,21 @@ Returns a cons of (STRING . OVERLAYS)."
          (conn--target-predicate nil)
          (conn--target-sort-function nil)
          (conn--dispatch-read-event-message-prefixes nil)
-         (conn--dispatch-always-retarget nil))
+         (conn--dispatch-always-retarget nil)
+         (select-mode conn-dispatch-select-mode))
      (conn-delete-targets)
      (message nil)
-     (conn-dispatch-select-mode -1)
-     (internal-pop-keymap conn-dispatch-read-event-map
-                          'overriding-terminal-local-map)
+     (when select-mode
+       (conn-dispatch-select-mode -1)
+       (internal-pop-keymap conn-dispatch-read-event-map
+                            'overriding-terminal-local-map))
      (unwind-protect
          (conn-without-transient-state
            ,@body)
-       (internal-push-keymap conn-dispatch-read-event-map
-                             'overriding-terminal-local-map)
-       (conn-dispatch-select-mode 1))))
+       (when select-mode
+         (internal-push-keymap conn-dispatch-read-event-map
+                               'overriding-terminal-local-map)
+         (conn-dispatch-select-mode 1)))))
 
 (cl-defgeneric conn-dispatch-select-command-case (command))
 
@@ -7754,13 +7756,15 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                   (lambda (win)
                     (not (buffer-local-value 'buffer-read-only
                                              (window-buffer win)))))
-    (pcase-let* ((`(,pt ,win ,bounds-op-override)
-                  (conn-dispatch-select-target)))
-      (funcall action
-               win pt (or bounds-op-override
-                          (lambda (arg)
-                            (conn-bounds-of-command thing-cmd arg)))
-               thing-arg))))
+    (conn-perform-dispatch-loop nil
+      (pcase-let* ((`(,pt ,win ,bounds-op-override)
+                    (save-mark-and-excursion
+                      (conn-dispatch-select-target))))
+        (funcall action
+                 win pt (or bounds-op-override
+                            (lambda (arg)
+                              (conn-bounds-of-command thing-cmd arg)))
+                 thing-arg)))))
 
 (defun conn-transpose-regions (mover arg)
   "Exchange regions defined by a thing command.
