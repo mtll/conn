@@ -8736,6 +8736,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
+(defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--previous-scroll-conservatively)
 (defvar conn--wincontrol-help)
 (defvar conn--wincontrol-initial-window nil)
@@ -8912,6 +8913,10 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (message nil)))
 
 (defun conn--wincontrol-post-command ()
+  (unless conn--wincontrol-preserve-arg
+    (setq conn--wincontrol-arg nil
+          conn--wincontrol-arg-sign 1))
+  (setq conn--wincontrol-preserve-arg nil)
   (cond
    ((not (eq conn-wincontrol-map (cadr overriding-terminal-local-map)))
     ;; Something else is using overriding-terminal-local-map,
@@ -8988,10 +8993,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol-universal-arg ()
   "Multiply wincontrol prefix arg by 4."
   (interactive)
-  (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))))
+  (setq conn--wincontrol-arg (* 4 (or conn--wincontrol-arg 1))
+        conn--wincontrol-preserve-arg t))
 
 (defun conn-wincontrol-digit-argument ()
   (interactive)
+  (setq conn--wincontrol-preserve-arg t)
   (let* ((char (if (integerp last-command-event)
                    last-command-event
                  (get last-command-event 'ascii-character)))
@@ -9006,7 +9013,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol-invert-argument ()
   "Invert sign of wincontrol prefix arg."
   (interactive)
-  (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
+  (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)
+        conn--wincontrol-preserve-arg t))
 
 (defun conn-wincontrol-digit-argument-reset ()
   "Reset wincontrol prefix arg to nil and sign to +."
@@ -9017,16 +9025,23 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol-backward-delete-arg ()
   "Delete least significant digit of prefix arg."
   (interactive)
+  (setq conn--wincontrol-preserve-arg t)
   (setq conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
 
 (defun conn-wincontrol-forward-delete-arg ()
   "Delete most significant digit of prefix arg."
   (interactive)
+  (setq conn--wincontrol-preserve-arg t)
   (setq conn--wincontrol-arg (thread-last
                                (log conn--wincontrol-arg 10)
                                (floor)
                                (expt 10)
                                (mod conn--wincontrol-arg))))
+
+(defun conn-wincontrol-prefix-arg ()
+  (when conn--wincontrol-arg
+    (setq conn--wincontrol-preserve-arg t)
+    (* conn--wincontrol-arg-sign conn--wincontrol-arg)))
 
 
 ;;;;; Wincontrol Quiting
@@ -9155,38 +9170,42 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;;; Window Scroll Commands
 
-(defun conn-wincontrol-other-window-scroll-down (arg)
+(defun conn-wincontrol-other-window-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
-  (interactive "p")
+  (interactive)
   (setq this-command 'conn-scroll-down)
   (with-selected-window (other-window-for-scrolling)
-    (let ((next-screen-context-lines arg))
+    (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
+                                         next-screen-context-lines)))
       (funcall (or (command-remapping #'scroll-down-command)
                    (command-remapping #'conn-scroll-down)
                    #'conn-scroll-down)))))
 
-(defun conn-wincontrol-other-window-scroll-up (arg)
+(defun conn-wincontrol-other-window-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
-  (interactive "p")
+  (interactive)
   (setq this-command 'conn-scroll-up)
   (with-selected-window (other-window-for-scrolling)
-    (let ((next-screen-context-lines arg))
+    (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
+                                         next-screen-context-lines)))
       (funcall (or (command-remapping #'scroll-up-command)
                    (command-remapping #'conn-scroll-up)
                    #'conn-scroll-up)))))
 
-(defun conn-wincontrol-scroll-down (arg)
+(defun conn-wincontrol-scroll-down ()
   "Scroll down with ARG `next-screen-context-lines'."
-  (interactive "p")
+  (interactive)
   (setq this-command 'conn-scroll-down)
-  (let ((next-screen-context-lines arg))
+  (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
+                                       next-screen-context-lines)))
     (conn-scroll-down)))
 
-(defun conn-wincontrol-scroll-up (arg)
+(defun conn-wincontrol-scroll-up ()
   "Scroll down with ARG `next-screen-context-lines'."
-  (interactive "p")
+  (interactive)
   (setq this-command 'conn-scroll-up)
-  (let ((next-screen-context-lines arg))
+  (let ((next-screen-context-lines (or (conn-wincontrol-prefix-arg)
+                                       next-screen-context-lines)))
     (conn-scroll-up)))
 
 
@@ -9194,37 +9213,31 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (defun conn-wincontrol-widen-window ()
   (interactive)
-  (enlarge-window-horizontally
-   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+  (enlarge-window-horizontally (or (conn-wincontrol-prefix-arg) 1)))
 
 (defun conn-wincontrol-narrow-window ()
   (interactive)
-  (shrink-window-horizontally
-   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+  (shrink-window-horizontally (or (conn-wincontrol-prefix-arg) 1)))
 
 (defun conn-wincontrol-heighten-window ()
   (interactive)
-  (enlarge-window
-   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+  (enlarge-window (or (conn-wincontrol-prefix-arg) 1)))
 
 (defun conn-wincontrol-shorten-window ()
   (interactive)
-  (shrink-window
-   (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+  (shrink-window (or (conn-wincontrol-prefix-arg) 1)))
 
 (defun conn-wincontrol-split-vertically ()
   "Split window vertically.
 Uses `split-window-vertically'."
   (interactive)
-  (select-window
-   (split-window-vertically)))
+  (select-window (split-window-vertically)))
 
 (defun conn-wincontrol-split-right ()
   "Split window vertically.
 Uses `split-window-right'."
   (interactive)
-  (select-window
-   (split-window-right)))
+  (select-window (split-window-right)))
 
 (defun conn-wincontrol-maximize-horizontally ()
   "Delete all adjacent windows horizontally.
