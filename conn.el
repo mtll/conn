@@ -4212,12 +4212,6 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Target Finders
 
-;; If a target finder takes user input it should return a function of
-;; no arguments which targets all candidates matching that input so
-;; that retargeting can be done without prompting for user input
-;; repeatedly. If a target finder does not take user input it should
-;; return nil.
-
 (defun conn-target-sort-nearest (a b)
   (< (abs (- (overlay-end a) (point)))
      (abs (- (overlay-end b) (point)))))
