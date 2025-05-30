@@ -3310,7 +3310,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defvar conn-dispatch-default-target-finder
   (lambda ()
     (make-instance 'conn-dispatch-read-n-chars
-                   :string-lenght 2))
+                   :string-length 2))
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -4337,7 +4337,8 @@ Target overlays may override this default by setting the
    :predicate predicate))
 
 (defclass conn-dispatch-focus-targets ()
-  ((hidden :initform nil))
+  ((hidden :initform nil)
+   (context-lines :initform 0 :initarg :context-lines))
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
@@ -4346,7 +4347,9 @@ contain targets."
   (mapc #'delete-overlay (oref state hidden)))
 
 (cl-defmethod conn-dispatch-update-targets :after ((state conn-dispatch-focus-targets))
-  (with-slots (hidden) state
+  (with-slots (hidden context-lines) state
+    (cl-check-type context-lines integer)
+    (cl-assert (>= context-lines 0) nil "Context lines must be non-negative")
     (unless hidden
       (pcase-dolist (`(,win . ,targets) conn-targets)
         (with-selected-window win
@@ -4361,12 +4364,13 @@ contain targets."
                 (let ((beg (point)))
                   (goto-char (pop points))
                   (when-let* ((end (save-excursion
-                                     (ignore-errors (forward-line -1))
+                                     (ignore-errors
+                                       (forward-line (- context-lines)))
                                      (point)))
                               ((> end beg)))
                     (push (make-overlay beg end) hidden)
                     (overlay-put (car hidden) 'invisible t)))
-                (forward-line 2)
+                (forward-line (1+ context-lines))
                 (while (and points (> (point) (car points)))
                   (pop points)))
               (unless (<= (point-max) (1+ (pos-eol)))
@@ -4376,7 +4380,7 @@ contain targets."
       (redisplay))))
 
 (defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets)
-  ())
+  ((context-lines :initform 1 :initarg :context-lines)))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-previous-emacs-state))
   (unless conn-targets
@@ -4596,10 +4600,9 @@ contain targets."
   (always-prompt :type boolean))
 
 (defun conn--action-type-p (item)
-  (ignore-errors
-    (when (symbolp item)
-      (memq 'conn-action
-            (oclosure--class-allparents (cl--find-class item))))))
+  (let ((class (cl--find-class item)))
+    (and (oclosure--class-p class)
+         (memq 'conn-action (oclosure--class-allparents class)))))
 
 (cl-defgeneric conn-action-stale-p (action)
   (:method ((_action conn-action)) nil))
