@@ -166,15 +166,13 @@
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-open-org-link)))
-  (oclosure-lambda (conn-open-org-link)
+  (oclosure-lambda (conn-open-org-link
+                    (description "Open Link"))
       (window pt _bounds-op _bounds-arg)
     (with-selected-window window
       (save-excursion
         (goto-char pt)
         (org-open-at-point-global)))))
-
-(cl-defmethod conn-describe-action ((_action conn-open-org-link))
-  "Open Link")
 
 (setf (alist-get 'org-link conn-dispatch-default-action-alist)
       'conn-open-org-link)
