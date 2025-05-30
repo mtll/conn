@@ -4600,7 +4600,8 @@ contain targets."
   (always-prompt :type boolean))
 
 (defun conn--action-type-p (item)
-  (let ((class (cl--find-class item)))
+  (when-let* ((class (and (symbolp item)
+                          (cl--find-class item))))
     (and (oclosure--class-p class)
          (memq 'conn-action (oclosure--class-allparents class)))))
 
