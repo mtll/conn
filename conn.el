@@ -4247,8 +4247,22 @@ Target overlays may override this default by setting the
 (cl-defgeneric conn-dispatch-has-target-p (target-finder)
   (:method (_) "Noop" nil))
 
+(defclass conn-dispatch-target-window-predicate ()
+  ((window-predicate :initform nil
+                     :initarg :window-predicate))
+  "Abstract type for target finders with a window predicate."
+  :abstract t)
+
+(cl-defmethod conn-dispatch-update-targets :around ((state conn-dispatch-target-window-predicate))
+  (let ((conn-target-window-predicate conn-target-window-predicate))
+    (when-let* ((pred (oref state window-predicate)))
+      (add-function :before-while conn-target-window-predicate pred))
+    (cl-call-next-method)))
+
 (defclass conn-dispatch-string-targets ()
-  ((string :initform nil)))
+  ((string :initform nil))
+  "Abstract type for target finders targeting a string."
+  :abstract t)
 
 (cl-defmethod conn-dispatch-retarget ((state conn-dispatch-string-targets))
   (setf (oref state string) nil))
@@ -4316,8 +4330,17 @@ Target overlays may override this default by setting the
             (while-no-input
               (conn-make-string-target-overlays string predicate))))))))
 
+(defun conn-dispatch-read-string-with-timeout (&optional predicate)
+  (make-instance
+   'conn-dispatch-read-with-timeout
+   :timeout conn-read-string-timeout
+   :predicate predicate))
+
 (defclass conn-dispatch-focus-targets ()
-  ((hidden :initform nil)))
+  ((hidden :initform nil))
+  "Abstract type for target finders that hide buffer contents that do not
+contain targets."
+  :abstract t)
 
 (cl-defmethod conn-dispatch-cleanup-target-state ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden)))
@@ -10028,35 +10051,38 @@ Operates with the selected windows parent window."
 (conn-set-mode-property 'dired-mode :hide-mark-cursor t)
 
 (defun conn--dispatch-dired-lines ()
-  (let ((dired-movement-style 'bounded))
+  (lambda ()
+    (let ((dired-movement-style 'bounded))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (while (/= (point)
+                     (progn
+                       (dired-next-line 1)
+                       (point)))
+            (conn-make-target-overlay (point) 0)))))))
+
+(defun conn--dispatch-dired-dirline ()
+  (lambda ()
     (save-excursion
       (with-restriction (window-start) (window-end)
         (goto-char (point-min))
         (while (/= (point)
                    (progn
-                     (dired-next-line 1)
+                     (dired-next-dirline 1)
                      (point)))
           (conn-make-target-overlay (point) 0))))))
 
-(defun conn--dispatch-dired-dirline ()
-  (save-excursion
-    (with-restriction (window-start) (window-end)
-      (goto-char (point-min))
-      (while (/= (point)
-                 (progn
-                   (dired-next-dirline 1)
-                   (point)))
-        (conn-make-target-overlay (point) 0)))))
-
 (defun conn--dispatch-dired-subdir ()
-  (let ((start (window-start))
-        (end (window-end)))
-    (save-excursion
-      (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
-        (when (<= start marker end)
-          (goto-char marker)
-          (conn-make-target-overlay
-           (+ 2 marker) (- (line-end-position) marker 2)))))))
+  (lambda ()
+    (let ((start (window-start))
+          (end (window-end)))
+      (save-excursion
+        (pcase-dolist (`(,_ . ,marker) dired-subdir-alist)
+          (when (<= start marker end)
+            (goto-char marker)
+            (conn-make-target-overlay
+             (+ 2 marker) (- (line-end-position) marker 2))))))))
 
 (conn-register-thing
  'dired-line
@@ -10188,27 +10214,29 @@ Operates with the selected windows parent window."
 (declare-function ibuffer-backward-filter-group "ibuffer")
 
 (defun conn--dispatch-ibuffer-lines ()
-  (let ((ibuffer-movement-cycle nil))
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-max))
-        (while (/= (point)
-                   (progn
-                     (ibuffer-backward-line)
-                     (point)))
-          (unless (get-text-property (point) 'ibuffer-filter-group-name)
-            (conn-make-target-overlay (point) 0)))))))
+  (lambda ()
+    (let ((ibuffer-movement-cycle nil))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-max))
+          (while (/= (point)
+                     (progn
+                       (ibuffer-backward-line)
+                       (point)))
+            (unless (get-text-property (point) 'ibuffer-filter-group-name)
+              (conn-make-target-overlay (point) 0))))))))
 
 (defun conn--dispatch-ibuffer-filter-group ()
-  (let ((ibuffer-movement-cycle nil))
-    (save-excursion
-      (with-restriction (window-start) (window-end)
-        (goto-char (point-max))
-        (while (/= (point)
-                   (progn
-                     (ibuffer-backward-filter-group)
-                     (point)))
-          (conn-make-target-overlay (point) 0))))))
+  (lambda ()
+    (let ((ibuffer-movement-cycle nil))
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-max))
+          (while (/= (point)
+                     (progn
+                       (ibuffer-backward-filter-group)
+                       (point)))
+            (conn-make-target-overlay (point) 0)))))))
 
 (conn-register-thing
  'ibuffer-line

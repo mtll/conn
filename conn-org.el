@@ -137,21 +137,25 @@
 (conn-register-thing
  'org-link
  :dispatch-target-finder (lambda ()
-                           (let ((conn-target-window-predicate conn-target-window-predicate))
-                             (add-function :before-while
-                                           conn-target-window-predicate
-                                           'conn--org-window-p)
-                             (conn-dispatch-re-matches org-link-any-re)))
+                           (let ((fn (conn-dispatch-re-matches org-link-any-re)))
+                             (lambda ()
+                               (let ((conn-target-window-predicate conn-target-window-predicate))
+                                 (add-function :before-while
+                                               conn-target-window-predicate
+                                               'conn--org-window-p)
+                                 (funcall fn)))))
  :bounds-op (lambda () (org-in-regexp org-link-any-re)))
 
 (conn-register-thing
  'org-paragraph
  :dispatch-target-finder (lambda ()
-                           (let ((conn-target-window-predicate conn-target-window-predicate))
-                             (add-function :before-while
-                                           conn-target-window-predicate
-                                           'conn--org-window-p)
-                             (conn-dispatch-all-things 'org-paragraph)))
+                           (let ((fn (conn-dispatch-all-things 'org-paragraph)))
+                             (lambda ()
+                               (let ((conn-target-window-predicate conn-target-window-predicate))
+                                 (add-function :before-while
+                                               conn-target-window-predicate
+                                               'conn--org-window-p)
+                                 (funcall fn)))))
  :forward-op 'org-forward-paragraph)
 
 (conn-register-thing-commands
