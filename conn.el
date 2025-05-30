@@ -1346,7 +1346,7 @@ These match if the argument is a substate of STATE."
   15 (lambda (state) `(and (conn-state-p ,state) 'conn-state))
   (lambda (tag &rest _) (when tag (list tag))))
 
-(cl-defmethod cl-generic-generalizers ((_specializer (head conn-state)))
+(cl-defmethod cl-generic-generalizers ((_specializer (eql conn-state)))
   "Support for conn-state specializers.
 These match if the argument is a conn-state."
   (list conn--state-generalizer))
@@ -4218,6 +4218,20 @@ Target overlays may override this default by setting the
 ;; repeatedly. If a target finder does not take user input it should
 ;; return nil.
 
+(defun conn-target-sort-nearest (a b)
+  (< (abs (- (overlay-end a) (point)))
+     (abs (- (overlay-end b) (point)))))
+
+(defun conn-delete-targets ()
+  (pcase-dolist (`(_ . ,targets) conn-targets)
+    (dolist (target targets)
+      (conn-label-delete (overlay-get target 'label))
+      (delete-overlay target)))
+  (clrhash conn--pixelwise-window-cache)
+  (clrhash conn--dispatch-window-lines-cache)
+  (setq conn-targets nil
+        conn-target-count 0))
+
 (cl-defgeneric conn-dispatch-update-targets (target-finder)
   (:method ((target-finder function)) (funcall target-finder)))
 
@@ -4232,20 +4246,6 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-has-target-p (target-finder)
   (:method (_) "Noop" nil))
-
-(defun conn-target-sort-nearest (a b)
-  (< (abs (- (overlay-end a) (point)))
-     (abs (- (overlay-end b) (point)))))
-
-(defun conn-delete-targets ()
-  (pcase-dolist (`(_ . ,targets) conn-targets)
-    (dolist (target targets)
-      (conn-label-delete (overlay-get target 'label))
-      (delete-overlay target)))
-  (clrhash conn--pixelwise-window-cache)
-  (clrhash conn--dispatch-window-lines-cache)
-  (setq conn-targets nil
-        conn-target-count 0))
 
 (defclass conn-dispatch-string-targets ()
   ((string :initform nil)))
