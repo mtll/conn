@@ -4588,6 +4588,7 @@ contain targets."
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
   (no-history :type boolean)
+  (description :type (or string nil))
   (window-predicate :type function)
   (target-predicate :type function)
   (always-retarget :type boolean)
@@ -4608,7 +4609,8 @@ contain targets."
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
-(cl-defgeneric conn-describe-action (action))
+(cl-defgeneric conn-describe-action (action)
+  (:method ((action conn-action)) (oref action description)))
 
 (cl-defgeneric conn-accept-action (action)
   (:method ((_ conn-action)) "Noop" nil))
@@ -4668,7 +4670,8 @@ contain targets."
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
-  (oclosure-lambda (conn-dispatch-goto)
+  (oclosure-lambda (conn-dispatch-goto
+                    (description "Goto"))
       (window pt bounds-op bounds-arg)
     (select-window window)
     (unless (= pt (point))
@@ -4686,14 +4689,12 @@ contain targets."
              (goto-char beg)))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-goto))
-  "Goto")
-
 (oclosure-define (conn-dispatch-push-button
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
   (oclosure-lambda (conn-dispatch-push-button
+                    (description "Push Button")
                     (no-history t))
       (window pt _bounds-op _bounds-arg)
     (select-window window)
@@ -4701,9 +4702,6 @@ contain targets."
         (push-button pt)
       (when (fboundp 'widget-apply-action)
         (widget-apply-action (get-char-property pt 'button) pt)))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-push-button))
-  "Push Button")
 
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
@@ -4749,6 +4747,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-replace-to)))
   (oclosure-lambda (conn-dispatch-copy-replace-to
+                    (description "Copy Region and Replace To")
                     (str (funcall region-extract-function nil))
                     (window-predicate
                      (lambda (win)
@@ -4767,15 +4766,13 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-copy-replace-to))
-  "Copy Region and Replace To")
-
 (oclosure-define (conn-dispatch-yank-replace-to
                   (:parent conn-action))
   (str :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-replace-to
+                    (description "Yank and Replace To")
                     (str (current-kill 0))
                     (window-predicate
                      (lambda (win)
@@ -4794,15 +4791,13 @@ contain targets."
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-replace-to))
-  "Yank and Replace To")
-
 (oclosure-define (conn-dispatch-yank-read-replace-to
                   (:parent conn-action))
   (str :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-read-replace-to
+                    (description "Yank and Replace To")
                     (str (read-from-kill-ring "Yank: "))
                     (window-predicate
                      (lambda (win)
@@ -4820,9 +4815,6 @@ contain targets."
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point) (length str)) (point))))
           (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-read-replace-to))
-  "Yank and Replace To")
 
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
@@ -4967,6 +4959,7 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send-replace)))
   (let ((cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send-replace
+                      (description "Send and Replace")
                       (change-group cg)
                       (str (funcall region-extract-function t))
                       (window-predicate
@@ -4986,9 +4979,6 @@ contain targets."
                (pulse-momentary-highlight-region (- (point) (length str)) (point))))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-send-replace))
-  "Send and Replace")
-
 (cl-defmethod conn-accept-action ((action conn-dispatch-send-replace))
   (conn--action-accept-change-group (oref action change-group))
   action)
@@ -5001,6 +4991,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-downcase)))
   (oclosure-lambda (conn-dispatch-downcase
+                    (description "Downcase")
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5014,14 +5005,12 @@ contain targets."
           (`(,beg . ,end) (downcase-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-downcase))
-  "Downcase")
-
 (oclosure-define (conn-dispatch-upcase
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-upcase)))
   (oclosure-lambda (conn-dispatch-upcase
+                    (description "Upcase")
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5035,14 +5024,12 @@ contain targets."
           (`(,beg . ,end) (upcase-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-upcase))
-  "Upcase")
-
 (oclosure-define (conn-dispatch-capitalize
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-capitalize)))
   (oclosure-lambda (conn-dispatch-capitalize
+                    (description "Capitalize")
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5055,9 +5042,6 @@ contain targets."
         (pcase (car (funcall bounds-op bounds-arg))
           (`(,beg . ,end) (capitalize-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-capitalize))
-  "Capitalize")
 
 (oclosure-define (conn-dispatch-register-load
                   (:parent conn-action))
@@ -5271,6 +5255,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
   (oclosure-lambda (conn-dispatch-yank-from
+                    (description "Yank From")
                     (opoint (copy-marker (point) t)))
       (window pt bounds-op bounds-arg)
     (let (str)
@@ -5292,9 +5277,6 @@ contain targets."
                (goto-char opoint)
                (insert-for-yank str)))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from))
-  "Yank From")
-
 (cl-defmethod conn-cancel-action ((action conn-dispatch-yank-from))
   (set-marker (oref action opoint) nil))
 
@@ -5302,7 +5284,8 @@ contain targets."
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from-replace)))
-  (oclosure-lambda (conn-dispatch-yank-from-replace)
+  (oclosure-lambda (conn-dispatch-yank-from-replace
+                    (description "Yank From and Replace"))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
       (save-excursion
@@ -5315,9 +5298,6 @@ contain targets."
           (_ (user-error "Cannot find thing at point")))))
     (delete-region (region-beginning) (region-end))
     (yank)))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-yank-from-replace))
-  "Yank From and Replace")
 
 (oclosure-define (conn-dispatch-take-replace
                   (:parent conn-action)
@@ -5338,6 +5318,7 @@ contain targets."
   (let ((cg (conn--action-buffer-change-group)))
     (delete-region (region-beginning) (region-end))
     (oclosure-lambda (conn-dispatch-take-replace
+                      (description "Take From and Replace")
                       (change-group cg)
                       (opoint (copy-marker (point) t))
                       (window-predicate
@@ -5358,9 +5339,6 @@ contain targets."
         (save-excursion
           (goto-char opoint)
           (yank))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-take-replace))
-  "Take From and Replace")
 
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take-replace))
   (set-marker (oref action opoint) nil)
@@ -5385,6 +5363,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take
+                    (description "Take From")
                     (opoint (copy-marker (point) t))
                     (window-predicate
                      (lambda (win)
@@ -5403,9 +5382,6 @@ contain targets."
     (with-current-buffer (marker-buffer opoint)
       (yank))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-take))
-  "Take From")
-
 (cl-defmethod conn-cancel-action ((action conn-dispatch-take))
   (set-marker (oref action opoint) nil))
 
@@ -5414,6 +5390,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over
+                    (description "Over")
                     (window-predicate (let ((obuf (current-buffer)))
                                         (lambda (win)
                                           (eq (window-buffer win) obuf)))))
@@ -5447,14 +5424,12 @@ contain targets."
                ((<= beg end point)
                 (goto-char beg))))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-over))
-  "Over")
-
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump
+                    (description "Jump")
                     (no-history t))
       (window pt _bounds-op _bounds-arg)
     (with-current-buffer (window-buffer window)
@@ -5463,14 +5438,12 @@ contain targets."
           (push-mark nil t))
         (select-window window) (goto-char pt)))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-jump))
-  "Jump")
-
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-transpose)))
   (oclosure-lambda (conn-dispatch-transpose
+                    (description "Transpose")
                     (always-retarget t)
                     (window-predicate
                      (lambda (win)
@@ -5535,9 +5508,6 @@ contain targets."
           (goto-char pt1)
           (insert str2)))
       (accept-change-group cg))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-transpose))
-  "Transpose")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql conn-dispatch-over-or-goto))
                                           callback)
@@ -5946,6 +5916,7 @@ contain targets."
          ()
        (conn-perform-dispatch
         (oclosure-lambda (conn-action
+                          (description "Bounds")
                           (window-predicate
                            (let ((win (selected-window)))
                              (lambda (window) (eq win window)))))
@@ -10128,6 +10099,7 @@ Operates with the selected windows parent window."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-mark)))
   (oclosure-lambda (conn-dispatch-dired-mark
+                    (description "Mark")
                     (window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
@@ -10143,14 +10115,12 @@ Operates with the selected windows parent window."
               (dired-unmark 1)
             (dired-mark 1)))))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-dired-mark))
-  "Mark")
-
 (oclosure-define (conn-dispatch-dired-kill-line
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-line)))
   (oclosure-lambda (conn-dispatch-dired-kill-line
+                    (description "Kill Line")
                     (window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
@@ -10162,14 +10132,12 @@ Operates with the selected windows parent window."
         (goto-char pt)
         (dired-kill-line)))))
 
-(cl-defmethod conn-describe-action ((_action conn-dispatch-dired-kill-line))
-  "Kill Line")
-
 (oclosure-define (conn-dispatch-dired-kill-subdir
                   (:parent conn-action)))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-subdir)))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
+                    (description "Kill Subdir")
                     (window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
@@ -10180,9 +10148,6 @@ Operates with the selected windows parent window."
       (save-excursion
         (goto-char pt)
         (dired-kill-subdir)))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-dired-kill-subdir))
-  "Kill Subdir")
 
 
 ;;;; Magit
@@ -10273,6 +10238,7 @@ Operates with the selected windows parent window."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-ibuffer-mark)))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
+                    (description "Mark")
                     (window-predicate
                      (lambda (win)
                        (eq (buffer-local-value 'major-mode
@@ -10286,9 +10252,6 @@ Operates with the selected windows parent window."
                 (= (ibuffer-current-mark) ? ))
             (ibuffer-mark-forward nil nil 1)
           (ibuffer-unmark-forward nil nil 1))))))
-
-(cl-defmethod conn-describe-action ((_action conn-dispatch-ibuffer-mark))
-  "Mark")
 
 (keymap-set (conn-get-major-mode-map 'conn-dispatch-state 'ibuffer-mode)
             "f" 'conn-dispatch-ibuffer-mark)
@@ -10403,13 +10366,11 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-action-info-ref
                   (:parent conn-action)))
 
-(cl-defmethod conn-describe-action ((_ conn-action-info-ref))
-  "Info Refs")
-
 (defun conn-dispatch-on-info-refs ()
   (interactive)
   (conn-perform-dispatch
    (oclosure-lambda (conn-action-info-ref
+                     (description "Info Refs")
                      (window-predicate
                       (lambda (win)
                         (eq 'Info-mode
