@@ -3402,8 +3402,8 @@ associated with a command's thing.")
   "C-d" 'forward-delete-arg
   "TAB" 'repeat-dispatch
   "C-n" 'restrict-windows
-  "SPC" 'scroll-up
-  "DEL" 'scroll-down
+  "<backspace>" 'backward-delete-arg
+  "DEL" 'backward-delete-arg
   "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
   "i" 'forward-line
