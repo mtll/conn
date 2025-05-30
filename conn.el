@@ -1346,7 +1346,7 @@ These match if the argument is a substate of STATE."
   15 (lambda (state) `(and (conn-state-p ,state) 'conn-state))
   (lambda (tag &rest _) (when tag (list tag))))
 
-(cl-defmethod cl-generic-generalizers ((_specializer (eql conn-state)))
+(cl-defmethod cl-generic-generalizers ((_specializer (head conn-state)))
   "Support for conn-state specializers.
 These match if the argument is a conn-state."
   (list conn--state-generalizer))
@@ -6044,7 +6044,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (conn-dispatch-register-command
  'conn-dispatch-all-symbols
  :bounds-of-command (lambda (_ arg)
-                      (conn-bounds-of-command 'conn-forward-symbol arg))
+                      (conn-bounds-of-command 'forward-symbol arg))
  :target-finder (lambda ()
                   (conn-dispatch-all-things 'symbol)))
 
