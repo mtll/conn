@@ -883,8 +883,7 @@ This variable will be bound to the state t be entered during
 The returned list is not fresh, don't modify it."
   (inline-letevals (state)
     (inline-quote
-     (with-memoization
-         (gethash ,state conn--state-all-parents-cache)
+     (with-memoization (gethash ,state conn--state-all-parents-cache)
        (cl-check-type ,state conn-state)
        (cons ,state
              (merge-ordered-lists
@@ -936,8 +935,7 @@ The returned list is not fresh, don't modify it."
 
 Composed keymap is of the same form as returned by
 `conn--compose-state-map'."
-  (with-memoization
-      (gethash state conn--override-map-cache)
+  (with-memoization (gethash state conn--override-map-cache)
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
               collect (gethash pstate conn--override-maps)))))
@@ -958,8 +956,7 @@ The composed keymap is of the form:
  (keymap . bindings)  ;; state map for STATE
  (keymap . bindings)  ;; state map for STATE parent
  ...)"
-  (with-memoization
-      (gethash state conn--state-map-cache)
+  (with-memoization (gethash state conn--state-map-cache)
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
               collect (gethash pstate conn--state-maps)))))
@@ -3965,7 +3962,7 @@ Target overlays may override this default by setting the
                           (length label-string))
                        (save-excursion
                          (goto-char (overlay-start overlay))
-                         (line-end-position))))
+                         (pos-eol))))
     (let* ((target (overlay-get overlay 'target-overlay))
            (beg (overlay-start overlay))
            (end nil)
@@ -4019,8 +4016,8 @@ Target overlays may override this default by setting the
 (defvar conn--pixelwise-window-cache (make-hash-table :test 'eq))
 
 (defun conn-dispatch-pixelwise-label-p (ov)
-  (and (with-memoization (gethash (overlay-get ov 'window)
-                                  conn--pixelwise-window-cache)
+  (and (with-memoization
+           (gethash (overlay-get ov 'window) conn--pixelwise-window-cache)
          (funcall conn-pixelwise-labels-window-predicate
                   (overlay-get ov 'window)))
        (funcall conn-pixelwise-labels-target-predicate ov)))
@@ -4503,7 +4500,7 @@ contain targets."
           (with-restriction (window-start) (window-end)
             (goto-char (point-min))
             (when (and (bolp)
-                       (<= (+ (point) (window-hscroll)) (line-end-position))
+                       (<= (+ (point) (window-hscroll)) (pos-eol))
                        (goto-char (+ (point) (window-hscroll)))
                        (not (invisible-p (point))))
               (conn-make-target-overlay
@@ -4512,7 +4509,7 @@ contain targets."
               (forward-line)
               (when (and (bolp)
                          (<= (+ (point) (window-hscroll))
-                             (line-end-position) (point-max))
+                             (pos-eol) (point-max))
                          (goto-char (+ (point) (window-hscroll)))
                          (not (invisible-p (point)))
                          (not (invisible-p (1- (point)))))
@@ -8312,7 +8309,7 @@ With prefix arg N duplicate region N times."
   (pcase-let* ((origin (point))
                (region (buffer-substring-no-properties beg end)))
     (comment-or-uncomment-region beg end)
-    (setq end (line-end-position))
+    (setq end (pos-eol))
     (dotimes (_ arg)
       (goto-char end)
       (newline)
@@ -8333,7 +8330,7 @@ With prefix arg N duplicate region N times."
           (let region (buffer-substring-no-properties beg end)))
      (goto-char end)
      (comment-or-uncomment-region beg end)
-     (setq end (if (bolp) (point) (line-end-position)))
+     (setq end (if (bolp) (point) (pos-eol)))
      (dotimes (_ N)
        (goto-char end)
        (newline)
@@ -9271,10 +9268,6 @@ Operates with the selected windows parent window."
 (defvar-keymap conn-mru-window-repeat-map
   :repeat t
   "`" 'conn-wincontrol-mru-window)
-
-(defvar-keymap conn-other-buffer-repeat-map
-  :repeat t
-  "&" 'conn-other-buffer)
 
 (defvar-keymap conn-tab-bar-history-repeat-map
   :repeat t
