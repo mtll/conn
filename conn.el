@@ -3885,9 +3885,14 @@ Target overlays may override this default by setting the
       (unwind-protect
           (progn
             (unless (= (overlay-start overlay) (point-max))
-              (let* ((beg (overlay-end target))
-                     (line-end (conn--dispatch-eol beg (overlay-get target 'window)))
+              (let* ((win (overlay-get target 'window))
+                     (beg (overlay-end target))
                      (end nil)
+                     (line-end
+                      (or (conn--dispatch-eol beg win)
+                          (save-excursion
+                            (goto-char beg)
+                            (pos-eol))))
                      (pt beg))
                 ;; Find the end of the label overlay.  Barring
                 ;; exceptional conditions, which see the test clauses of
@@ -3897,7 +3902,7 @@ Target overlays may override this default by setting the
                   (cond
                    ;; If we are at the end of a line than end the label overlay.
                    ((= line-end pt)
-                    (if (and (not (invisible-p (1+ pt)))
+                    (if (and (not (invisible-p pt))
                              (/= pt beg))
                         (setq end pt)
                       ;; If we are at the end of the line and the label
@@ -3909,11 +3914,11 @@ Target overlays may override this default by setting the
                       (let ((str (buffer-substring pt end)))
                         (add-text-properties
                          0 (length str)
-                         `(invisible ,(get-char-property pt 'invisible))
+                         `(invisible ,(get-char-property pt 'invisible win))
                          str)
                         (overlay-put overlay 'after-string str))))
                    ;; If the label overlay is wider than the label
-                   ;; string then we are done.
+                   ;; string we are done.
                    ((pcase-let ((`(,width . ,_)
                                  (save-excursion
                                    (with-restriction beg pt
@@ -3958,27 +3963,26 @@ Target overlays may override this default by setting the
                overlay target)
       label
     (unless (= (overlay-start overlay) (point-max))
-      (move-overlay overlay
-                    (overlay-start overlay)
-                    (min (+ (overlay-start overlay)
-                            (length string))
-                         (save-excursion
-                           (goto-char (overlay-start overlay))
-                           (pos-eol))))
-      (let* ((beg (overlay-start overlay))
+      (let* ((win (overlay-get overlay 'window))
+             (beg (overlay-start overlay))
              (end nil)
-             (line-end (conn--dispatch-eol beg (overlay-get overlay 'window)))
+             (line-end
+              (or (conn--dispatch-eol beg win)
+                  (save-excursion
+                    (goto-char beg)
+                    (pos-eol))))
              (pt beg))
         (while (not end)
           (cond
-           ((eql line-end pt)
-            (if (not (invisible-p (1+ pt)))
+           ((= line-end pt)
+            (if (and (not (invisible-p pt))
+                     (/= pt beg))
                 (setq end pt)
               (setq end (1+ pt))
               (let ((str (buffer-substring pt end)))
                 (add-text-properties
                  0 (length str)
-                 `(invisible ,(get-char-property pt 'invisible))
+                 `(invisible ,(get-char-property pt 'invisible win))
                  str)
                 (overlay-put overlay 'after-string str))))
            ((or (= pt (point-max))
@@ -4340,37 +4344,33 @@ contain targets."
   (mapc #'delete-overlay (oref state hidden)))
 
 (cl-defmethod conn-dispatch-update-targets :after ((state conn-dispatch-focus-targets))
-  (with-slots (hidden context-lines) state
-    (cl-check-type context-lines integer)
-    (cl-assert (>= context-lines 0) nil "Context lines must be non-negative")
-    (unless hidden
+  (unless (oref state hidden)
+    (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden))
+                          (context-lines (oref state context-lines))
+                          (context
+                           (lambda (tar)
+                             (or (overlay-get tar 'context)
+                                 (progn
+                                   (goto-char (overlay-start tar))
+                                   (cons (pos-bol (- 1 context-lines))
+                                         (pos-bol (+ 2 context-lines))))))))
       (pcase-dolist (`(,win . ,targets) conn-targets)
         (with-selected-window win
-          (let ((points (seq-sort #'< (cons (point) (mapcar #'overlay-start targets)))))
-            (save-excursion
-              (goto-char (car points))
-              (if (/= (point-min) (pos-bol))
-                  (goto-char (point-min))
-                (forward-line 1)
-                (pop points))
-              (while points
-                (let ((beg (point)))
-                  (goto-char (pop points))
-                  (when-let* ((end (save-excursion
-                                     (ignore-errors
-                                       (forward-line (- context-lines)))
-                                     (point)))
-                              ((> end beg)))
-                    (push (make-overlay beg end) hidden)
-                    (overlay-put (car hidden) 'invisible t)))
-                (forward-line (1+ context-lines))
-                (while (and points (> (point) (car points)))
-                  (pop points)))
-              (unless (<= (point-max) (1+ (pos-eol)))
-                (push (make-overlay (1+ (pos-eol)) (point-max)) hidden)
-                (overlay-put (car hidden) 'invisible t))))
+          (let* ((points (conn--merge-regions
+                          (cons (cons (pos-bol) (pos-bol 2))
+                                (save-excursion
+                                  (mapcar context targets)))
+                          t)))
+            (cl-loop for beg = (point-min) then next-beg
+                     for (end . next-beg) in (compat-call
+                                              sort points :key #'car :in-place t)
+                     while end
+                     do (push (make-overlay beg end) hidden)
+                     finally (push (make-overlay beg (point-max)) hidden))
+            (cl-loop for ov in hidden do (overlay-put ov 'invisible t)))
           (recenter)))
-      (redisplay))))
+      (redisplay)
+      (setf (oref state hidden) hidden))))
 
 (defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets)
   ((context-lines :initform 1 :initarg :context-lines)))
@@ -4425,13 +4425,27 @@ contain targets."
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-all-defuns))
   (dolist (win (conn--get-target-windows))
     (with-current-buffer (window-buffer win)
-      (save-excursion
-        (pcase-dolist (`(,beg . ,end)
-                       (conn--visible-regions (point-min) (point-max)))
-          (with-restriction beg end
-            (goto-char (point-max))
-            (while (beginning-of-defun)
-              (conn-make-target-overlay (point) 0 nil win))))))))
+      (if (bound-and-true-p treesit-primary-parser)
+          (treesit-induce-sparse-tree
+           (treesit-buffer-root-node)
+           (or treesit-defun-type-regexp 'defun)
+           (lambda (node)
+             (save-excursion
+               (goto-char (treesit-node-start node))
+               (overlay-put
+                (conn-make-target-overlay (point) 0 nil nil win)
+                'context (cons (pos-bol)
+                               (progn
+                                 (when-let* ((name (treesit-defun-name node)))
+                                   (search-forward name))
+                                 (pos-bol 2)))))))
+        (save-excursion
+          (pcase-dolist (`(,beg . ,end)
+                         (conn--visible-regions (point-min) (point-max)))
+            (with-restriction beg end
+              (goto-char (point-max))
+              (while (beginning-of-defun)
+                (conn-make-target-overlay (point) 0 nil nil win)))))))))
 
 (defun conn-dispatch-all-things (thing)
   (lambda ()
@@ -9905,8 +9919,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing
  'heading
- :dispatch-target-finder (lambda ()
-                           (conn-dispatch-headings :context-lines 0))
+ :dispatch-target-finder 'conn-dispatch-headings
  :bounds-op (lambda ()
               (save-mark-and-excursion
                 (outline-mark-subtree)
