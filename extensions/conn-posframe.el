@@ -390,7 +390,7 @@
                          (reverse (take (min 4 (ceiling (length (cdr ring)) 2))
                                         (cdr ring)))
                          "\n")
-              "\n"
+              (when (length> ring 1) "\n")
               (propertize (concat (conn-describe-dispatch (car ring))
                                   (when (length> ring 2) "\n"))
                           'face 'conn-posframe-highlight)
