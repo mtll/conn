@@ -1683,15 +1683,6 @@ which see.")
   setup-function
   padding-function)
 
-(defun conn-dispatch-label (overlay target string setup-function &optional padding-function)
-  (conn--make-dispatch-label
-   :setup-function setup-function
-   :padding-function padding-function
-   :string string
-   :narrowed-string string
-   :overlay overlay
-   :target target))
-
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
   string window state)
@@ -1769,7 +1760,8 @@ returned.")
   (setf (oref label narrowed-string) (oref label string)))
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
-  (delete-overlay (conn-dispatch-label-overlay label)))
+  (delete-overlay (conn-dispatch-label-overlay label))
+  (remhash (conn-dispatch-label-target label) conn-target-labels))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
   (pcase-let (((cl-struct conn-dispatch-label narrowed-string) label))
@@ -3705,7 +3697,7 @@ with `conn-dispatch-thing-ignored-modes'."
 
 (defvar conn-targets nil)
 
-(defvar conn--target-labels (make-hash-table :test 'eq))
+(defvar conn-target-labels (make-hash-table :test 'eq))
 
 (defvar conn-target-count 0)
 
@@ -4037,19 +4029,23 @@ Target overlays may override this default by setting the
               (overlay-start target)
               (overlay-end target)
               (window-end window))
-      (conn-protected-let* ((beg (overlay-end target))
-                            (ov (make-overlay beg beg (overlay-buffer target))
-                                (delete-overlay ov)))
+      (conn-protected-let*
+          ((beg (overlay-end target))
+           (ov (make-overlay beg beg (overlay-buffer target))
+               (delete-overlay ov))
+           (str (propertize string 'face 'conn-dispatch-label-face)))
         (overlay-put ov 'category 'conn-label-overlay)
         (overlay-put ov 'window window)
-        (setf (gethash target conn--target-labels)
-              (conn-dispatch-label
-               ov target
-               (propertize string 'face 'conn-dispatch-label-face)
-               (if (conn-dispatch-pixelwise-label-p ov)
-                   'conn--dispatch-setup-label-pixelwise
-                 'conn--dispatch-setup-label-charwise)
-               (overlay-get target 'padding-function)))))))
+        (setf (gethash target conn-target-labels)
+              (conn--make-dispatch-label
+               :setup-function (if (conn-dispatch-pixelwise-label-p ov)
+                                   'conn--dispatch-setup-label-pixelwise
+                                 'conn--dispatch-setup-label-charwise)
+               :padding-function (overlay-get target 'padding-function)
+               :string str
+               :narrowed-string str
+               :overlay ov
+               :target target))))))
 
 (defun conn-dispatch-get-targets (&optional sort-function)
   (let ((result nil))
@@ -4223,8 +4219,7 @@ Target overlays may override this default by setting the
     (dolist (target targets)
       (delete-overlay target)))
   (maphash (lambda (_ label) (conn-label-delete label))
-           conn--target-labels)
-  (clrhash conn--target-labels)
+           conn-target-labels)
   (clrhash conn--pixelwise-window-cache)
   (clrhash conn--dispatch-window-lines-cache)
   (setq conn-targets nil
@@ -4399,9 +4394,6 @@ contain targets."
 
 (defclass conn-dispatch-headings (conn-dispatch-focus-targets)
   ())
-
-(defun conn-dispatch-headings ()
-  (make-instance 'conn-dispatch-headings :context-lines 0))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
   (unless conn-targets
@@ -9886,7 +9878,8 @@ Operates with the selected windows parent window."
 
 (conn-register-thing
  'heading
- :dispatch-target-finder 'conn-dispatch-headings
+ :dispatch-target-finder (lambda ()
+                           (conn-dispatch-headings :context-lines 0))
  :bounds-op (lambda ()
               (save-mark-and-excursion
                 (outline-mark-subtree)
