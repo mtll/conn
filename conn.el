@@ -3491,10 +3491,11 @@ associated with a command's thing.")
 
 (oclosure-define (conn-dispatch-callback
                   (:parent conn-state-loop-callback))
-  (other-end :mutable t :type boolean)
   (no-other-end :mutable t :type boolean)
+  (other-end :mutable t :type boolean)
+  (always-retarget :mutable t :type boolean)
   (repeat :mutable t :type boolean)
-  (repeatable :mutable t :type boolean)
+  (non-repeatable :mutable t :type boolean)
   (restrict-windows :mutable t :type boolean)
   (thing-cmd :mutable t :type symbol)
   (thing-arg :mutable t)
@@ -3525,7 +3526,7 @@ associated with a command's thing.")
                       'face (when (oref callback other-end)
                               'eldoc-highlight-function-argument))
           "; "))
-       (when (oref callback repeatable)
+       (unless (oref callback non-repeatable)
          (concat
           "\\[repeat-dispatch] "
           (propertize
@@ -3546,13 +3547,10 @@ associated with a command's thing.")
                                      &key
                                      (case-function 'conn-dispatch-command-case)
                                      (message-function 'conn-dispatch-message)
-                                     initial-arg no-other-end no-repeat
+                                     initial-arg
                                      &allow-other-keys)
   (require 'conn-transients)
-  (let ((success nil)
-        (conn-dispatch-other-end nil))
-    (setf (oref callback no-other-end) no-other-end
-          (oref callback repeatable) (not no-repeat))
+  (let ((success nil))
     (unwind-protect
         (prog1 (cl-call-next-method state callback
                                     :case-function case-function
@@ -3569,8 +3567,8 @@ associated with a command's thing.")
      (if (cl-typep (oref callback action) command)
          (setf (oref callback action) nil)
        (setf (oref callback action) (condition-case _
-                                    (conn-make-action command)
-                                  (error nil)))))
+                                        (conn-make-action command)
+                                      (error nil)))))
     ((let (and (pred identity) target-finder)
        (conn--dispatch-target-finder command))
      (setf (oref callback target-finder) (funcall target-finder)
@@ -3588,7 +3586,7 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql repeat-dispatch))
                                           callback)
-  (when (oref callback repeatable)
+  (unless (oref callback non-repeatable)
     (setf (oref callback repeat) (not (oref callback repeat)))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql restrict-windows))
@@ -3604,10 +3602,13 @@ associated with a command's thing.")
   (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
       (progn
         (setf (oref callback target-finder) (funcall (conn--dispatch-target-finder
-                                                  (oref prev thing-cmd)))
+                                                      (oref prev thing-cmd)))
               (oref callback thing-cmd) (oref prev thing-cmd)
               (oref callback thing-arg) (oref prev thing-arg)
-              (oref callback action) (oref prev action))
+              (oref callback action) (oref prev action)
+              (oref callback other-end) (oref prev other-end)
+              (oref callback always-retarget) (oref prev always-retarget))
+        (setf conn--dispatch-always-retarget (oref prev always-retarget))
         (conn-state-loop-exit))
     (conn-state-loop-error "Dispatch ring empty")))
 
@@ -4641,7 +4642,7 @@ contain targets."
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
                   (:copier conn-action--copy))
-  (no-history :type boolean)
+  (no-history :mutable t :type boolean)
   (description :type (or string nil))
   (window-predicate :type function)
   (target-predicate :type function)
@@ -5863,12 +5864,15 @@ contain targets."
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p)
                   (:copier conn-dispatch--copy (action)))
+  (action)
+  (thing-cmd)
+  (thing-arg)
   (description :type function)
   (repeat-count :mutable t :type integer)
-  (action :type conn-action)
-  (thing-cmd :type symbol)
-  (thing-arg)
-  (other-end :type boolean))
+  (repeat :type boolean)
+  (always-retarget :type boolean)
+  (other-end :type boolean)
+  (restrict-windows :type boolean))
 
 (defun conn-dispatch-copy (dispatch)
   (conn-dispatch--copy dispatch (conn-action-copy (oref dispatch action))))
@@ -5885,7 +5889,9 @@ contain targets."
 
 (cl-defmethod conn-perform-dispatch :around ((action conn-action)
                                              target-finder thing-cmd thing-arg
-                                             &key repeat restrict-windows other-end
+                                             &key
+                                             repeat restrict-windows
+                                             other-end always-retarget
                                              &allow-other-keys)
   (let ((opoint (point-marker))
         (conn-dispatch-target-finder target-finder)
@@ -5893,9 +5899,10 @@ contain targets."
         (conn--target-predicate conn-target-predicate)
         (conn--target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
-        (conn-dispatch-other-end other-end)
         (conn--dispatch-read-event-message-prefixes nil)
-        (conn--dispatch-always-retarget (oref action always-retarget))
+        (conn--dispatch-always-retarget (or always-retarget
+                                            (oref action always-retarget)))
+        (conn-dispatch-other-end (or other-end conn-dispatch-other-end))
         (conn--dispatch-action-always-prompt (oref action always-prompt)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn--target-window-predicate predicate))
@@ -5918,8 +5925,7 @@ contain targets."
               (conn--push-mark-ring opoint))))
         (set-marker opoint nil)))
     (when (> conn-dispatch-repeat-count 0)
-      (conn-dispatch-push-history action target-finder thing-cmd thing-arg
-                                  repeat restrict-windows other-end))))
+      (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-action)
                                      target-finder thing-cmd thing-arg
@@ -5952,13 +5958,13 @@ contain targets."
   (interactive "P")
   (conn-with-state-loop
    'conn-dispatch-state
-   (oclosure-lambda (conn-dispatch-callback
-                     (repeatable t))
+   (oclosure-lambda (conn-dispatch-callback)
        ()
      (conn-perform-dispatch action target-finder thing-cmd thing-arg
                             :repeat repeat
                             :restrict-windows restrict-windows
-                            :other-end other-end))
+                            :other-end other-end
+                            :always-retarget always-retarget))
    :initial-arg initial-arg))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
@@ -5966,7 +5972,7 @@ contain targets."
     (conn-with-state-loop
      'conn-dispatch-mover-state
      (oclosure-lambda (conn-dispatch-callback
-                       (repeatable t))
+                       (no-other-end t))
          ()
        (conn-perform-dispatch
         (oclosure-lambda (conn-action
@@ -5982,7 +5988,7 @@ contain targets."
               (reg (push reg regions)))))
         target-finder thing-cmd thing-arg
         :repeat repeat
-        :other-end other-end)
+        :always-retarget always-retarget)
        (unless regions (keyboard-quit))
        (cl-loop for (b . e) in (compat-call sort
                                             (conn--merge-regions regions t)
@@ -6109,17 +6115,23 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 ;;;;; Dispatch Ring
 
-(defun conn-dispatch-push-history ( action finder thing-cmd thing-arg
-                                    repeat restrict-windows other-end)
+(defun conn-dispatch-push-history (action target-finder thing-cmd thing-arg repeat)
   (conn-dispatch-ring-remove-stale)
   (unless (oref action no-history)
+    (setf (oref action no-history) t)
     (conn-ring-insert-front
      conn-dispatch-ring
      (oclosure-lambda (conn-dispatch
+                       (restrict-windows
+                        (advice-function-member-p
+                         'conn--dispatch-restrict-windows
+                         conn--target-window-predicate))
                        (action action)
                        (thing-cmd thing-cmd)
                        (thing-arg thing-arg)
-                       (other-end other-end)
+                       (repeat repeat)
+                       (other-end conn-dispatch-other-end)
+                       (always-retarget conn--dispatch-always-retarget)
                        (repeat-count conn-dispatch-repeat-count)
                        (description (lambda ()
                                       (concat
@@ -6130,8 +6142,9 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
          (invert-repeat)
        (interactive "P")
        (let ((conn-dispatch-repeat-count repeat-count))
-         (conn-perform-dispatch action finder
+         (conn-perform-dispatch action target-finder
                                 thing-cmd thing-arg
+                                :always-retarget always-retarget
                                 :repeat (xor invert-repeat repeat)
                                 :restrict-windows restrict-windows
                                 :other-end other-end)
@@ -7882,6 +7895,8 @@ region after a `recursive-edit'."
               'conn-dispatch-transpose-state
               (oclosure-lambda
                   (conn-dispatch-callback
+                   (no-other-end t)
+                   (non-repeatable t)
                    (action
                     (oclosure-lambda
                         (conn-transpose-command
@@ -7907,8 +7922,6 @@ region after a `recursive-edit'."
                 (conn-perform-dispatch action target-finder thing-cmd thing-arg
                                        :repeat repeat)
                 nil)
-              :no-repeat t
-              :no-other-end t
               :initial-arg arg)
            ;; TODO: make this display somehow
            (user-error (message "%s" (cadr err)) t))))
@@ -9997,11 +10010,13 @@ Operates with the selected windows parent window."
   (conn-with-state-loop
    'conn-dired-dispatch-state
    (oclosure-lambda (conn-dispatch-callback
-                     (repeatable t))
+                     (no-other-end t))
        ()
-     (conn-perform-dispatch action target-finder thing-cmd thing-arg
-                            repeat restrict-windows))
-   :no-other-end t
+     (conn-perform-dispatch action target-finder
+                            thing-cmd thing-arg
+                            :repeat repeat
+                            :restrict-widnows restrict-windows
+                            :always-retarget always-retarget))
    :initial-arg initial-arg))
 
 (defun conn-setup-dired-state ()
