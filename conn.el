@@ -7900,6 +7900,7 @@ region after a `recursive-edit'."
                    (action
                     (oclosure-lambda
                         (conn-transpose-command
+                         (no-history t)
                          (buffer (current-buffer))
                          (point (point))
                          (bounds-op
