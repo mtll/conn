@@ -4241,8 +4241,8 @@ Target overlays may override this default by setting the
   (:method (_) "Noop" nil))
 
 (defclass conn-dispatch-target-window-predicate ()
-  ((window-predicate :initform nil
-                     :initarg :window-predicate))
+  ((window-predicate :initform (lambda (&rest _) t)
+                     :allocation :class))
   "Abstract type for target finders with a window predicate."
   :abstract t)
 
@@ -4392,24 +4392,33 @@ contain targets."
                 (ignore-errors
                   (bounds-of-thing-at-point thing)))))
 
-(defclass conn-dispatch-headings (conn-dispatch-focus-targets)
-  ())
+(defclass conn-dispatch-headings (conn-dispatch-focus-targets
+                                  conn-dispatch-target-window-predicate)
+  ((window-predicate
+    :initform (lambda (win)
+                (let ((buf (window-buffer win)))
+                  (or (buffer-local-value 'outline-minor-mode buf)
+                      (provided-mode-derived-p
+                       (buffer-local-value 'major-mode buf)
+                       'outline-mode)))))))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
-  (let ((bounds-op (lambda (arg)
+  (let ((bounds-op (lambda (_arg)
                      (save-mark-and-excursion
                        (outline-mark-subtree)
                        (region-bounds)))))
     (unless conn-targets
       (dolist (win (conn--get-target-windows))
-        (with-selected-window win
-          (save-excursion
-            (pcase-dolist (`(,beg . ,end)
-                           (conn--visible-regions (point-min) (point-max)))
-              (goto-char beg)
-              (while (re-search-forward outline-regexp end t)
-                (conn-make-target-overlay (match-beginning 0) 0
-                                          bounds-op)))))))))
+        (with-current-buffer (window-buffer win)
+          (let ((heading-regexp (concat "^\\(?:" outline-regexp "\\).*"
+                                        outline-heading-end-regexp)))
+            (save-excursion
+              (pcase-dolist (`(,beg . ,end)
+                             (conn--visible-regions (point-min) (point-max)))
+                (goto-char beg)
+                (while (re-search-forward heading-regexp end t)
+                  (conn-make-target-overlay
+                   (match-beginning 0) 0 bounds-op nil win))))))))))
 
 (defun conn-dispatch-all-things (thing)
   (lambda ()
