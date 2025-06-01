@@ -4397,6 +4397,23 @@ contain targets."
                 (ignore-errors
                   (bounds-of-thing-at-point thing)))))
 
+(defclass conn-dispatch-headings (conn-dispatch-focus-targets)
+  ())
+
+(defun conn-dispatch-headings ()
+  (make-instance 'conn-dispatch-headings :context-lines 0))
+
+(cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
+  (unless conn-targets
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (save-excursion
+          (pcase-dolist (`(,beg . ,end)
+                         (conn--visible-regions (point-min) (point-max)))
+            (goto-char beg)
+            (while (re-search-forward outline-regexp end t)
+              (conn-make-target-overlay (match-beginning 0) 0))))))))
+
 (defun conn-dispatch-all-things (thing)
   (lambda ()
     (dolist (win (conn--get-target-windows))
@@ -9869,7 +9886,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing
  'heading
- :dispatch-target-finder 'conn-dispatch-lines
+ :dispatch-target-finder 'conn-dispatch-headings
  :bounds-op (lambda ()
               (save-mark-and-excursion
                 (outline-mark-subtree)
