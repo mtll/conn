@@ -4396,15 +4396,20 @@ contain targets."
   ())
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
-  (unless conn-targets
-    (dolist (win (conn--get-target-windows))
-      (with-selected-window win
-        (save-excursion
-          (pcase-dolist (`(,beg . ,end)
-                         (conn--visible-regions (point-min) (point-max)))
-            (goto-char beg)
-            (while (re-search-forward outline-regexp end t)
-              (conn-make-target-overlay (match-beginning 0) 0))))))))
+  (let ((bounds-op (lambda (arg)
+                     (save-mark-and-excursion
+                       (outline-mark-subtree)
+                       (region-bounds)))))
+    (unless conn-targets
+      (dolist (win (conn--get-target-windows))
+        (with-selected-window win
+          (save-excursion
+            (pcase-dolist (`(,beg . ,end)
+                           (conn--visible-regions (point-min) (point-max)))
+              (goto-char beg)
+              (while (re-search-forward outline-regexp end t)
+                (conn-make-target-overlay (match-beginning 0) 0
+                                          bounds-op)))))))))
 
 (defun conn-dispatch-all-things (thing)
   (lambda ()
