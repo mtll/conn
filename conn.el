@@ -4407,18 +4407,31 @@ contain targets."
                      (save-mark-and-excursion
                        (outline-mark-subtree)
                        (region-bounds)))))
-    (unless conn-targets
-      (dolist (win (conn--get-target-windows))
-        (with-current-buffer (window-buffer win)
-          (let ((heading-regexp (concat "^\\(?:" outline-regexp "\\).*"
-                                        outline-heading-end-regexp)))
-            (save-excursion
-              (pcase-dolist (`(,beg . ,end)
-                             (conn--visible-regions (point-min) (point-max)))
-                (goto-char beg)
-                (while (re-search-forward heading-regexp end t)
-                  (conn-make-target-overlay
-                   (match-beginning 0) 0 bounds-op nil win))))))))))
+    (dolist (win (conn--get-target-windows))
+      (with-current-buffer (window-buffer win)
+        (let ((heading-regexp (concat "^\\(?:" outline-regexp "\\).*"
+                                      outline-heading-end-regexp)))
+          (save-excursion
+            (pcase-dolist (`(,beg . ,end)
+                           (conn--visible-regions (point-min) (point-max)))
+              (goto-char beg)
+              (while (re-search-forward heading-regexp end t)
+                (conn-make-target-overlay
+                 (match-beginning 0) 0 bounds-op nil win)))))))))
+
+(defclass conn-dispatch-all-defuns (conn-dispatch-focus-targets)
+  ())
+
+(cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-all-defuns))
+  (dolist (win (conn--get-target-windows))
+    (with-current-buffer (window-buffer win)
+      (save-excursion
+        (pcase-dolist (`(,beg . ,end)
+                       (conn--visible-regions (point-min) (point-max)))
+          (with-restriction beg end
+            (goto-char (point-max))
+            (while (beginning-of-defun)
+              (conn-make-target-overlay (point) 0 nil win))))))))
 
 (defun conn-dispatch-all-things (thing)
   (lambda ()
@@ -6437,7 +6450,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'defun
  :forward-op 'conn-forward-defun
- :dispatch-target-finder (lambda () (conn-dispatch-all-things 'defun)))
+ :dispatch-target-finder 'conn-dispatch-all-defuns)
 
 (conn-register-thing
  'visual-line
