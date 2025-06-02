@@ -3308,7 +3308,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 A target finder function should return a list of overlays.")
 
 (defvar conn-dispatch-target-finders-alist
-  `((move-end-of-line . conn-dispatch-lines-end)
+  `((move-end-of-line . ,(lambda () 'conn-dispatch-lines))
     (conn-backward-symbol . ,(lambda () (conn-dispatch-all-things 'symbol)))
     (backward-word . ,(lambda () (conn-dispatch-all-things 'word))))
   "Default target finders for for things or commands.
@@ -4471,18 +4471,17 @@ contain targets."
               (conn-make-target-overlay (point) 0))))))))
 
 (defun conn-dispatch-all-buttons ()
-  (lambda ()
-    (dolist (win (conn--get-target-windows))
-      (with-selected-window win
-        (with-restriction (window-start) (window-end)
-          (save-excursion
-            (goto-char (point-min))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (with-restriction (window-start) (window-end)
+        (save-excursion
+          (goto-char (point-min))
+          (when (get-char-property (point) 'button)
+            (conn-make-target-overlay (point) 0))
+          (while (not (eobp))
+            (goto-char (next-single-char-property-change (point) 'button))
             (when (get-char-property (point) 'button)
-              (conn-make-target-overlay (point) 0))
-            (while (not (eobp))
-              (goto-char (next-single-char-property-change (point) 'button))
-              (when (get-char-property (point) 'button)
-                (conn-make-target-overlay (point) 0)))))))))
+              (conn-make-target-overlay (point) 0))))))))
 
 (defun conn-dispatch-re-matches (regexp)
   (lambda ()
@@ -4543,87 +4542,86 @@ contain targets."
           (conn-make-target-overlay beg (- end beg)))))))
 
 (defun conn-dispatch-columns ()
-  (lambda ()
-    (let ((line-move-visual nil)
-          (goal-column (or goal-column (current-column))))
-      (save-excursion
-        (with-restriction (window-start) (window-end)
-          (save-excursion
-            (while (and (< (point) (point-max))
-                        (line-move-1 1 t))
-              (conn-make-target-overlay (point) 0)))
-          (save-excursion
-            (while (and (< (point-min) (point))
-                        (line-move -1 t))
-              (conn-make-target-overlay (point) 0))))))))
+  (let ((line-move-visual nil)
+        (goal-column (or goal-column (current-column))))
+    (save-excursion
+      (with-restriction (window-start) (window-end)
+        (save-excursion
+          (while (and (< (point) (point-max))
+                      (line-move-1 1 t))
+            (conn-make-target-overlay (point) 0)))
+        (save-excursion
+          (while (and (< (point-min) (point))
+                      (line-move -1 t))
+            (conn-make-target-overlay (point) 0)))))))
 
 (defun conn-dispatch-lines ()
-  (lambda ()
-    (dolist (win (conn--get-target-windows))
-      (with-selected-window win
-        (save-excursion
-          (with-restriction (window-start) (window-end)
-            (goto-char (point-min))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (when (and (bolp)
+                     (<= (+ (point) (window-hscroll)) (pos-eol))
+                     (goto-char (+ (point) (window-hscroll)))
+                     (not (invisible-p (point))))
+            (conn-make-target-overlay
+             (point) 0
+             :padding-function 'conn--right-justify-padding))
+          (while (/= (point) (point-max))
+            (forward-line)
             (when (and (bolp)
-                       (<= (+ (point) (window-hscroll)) (pos-eol))
+                       (<= (+ (point) (window-hscroll))
+                           (pos-eol) (point-max))
                        (goto-char (+ (point) (window-hscroll)))
-                       (not (invisible-p (point))))
-              (conn-make-target-overlay
-               (point) 0
-               :padding-function 'conn--right-justify-padding))
-            (while (/= (point) (point-max))
-              (forward-line)
-              (when (and (bolp)
-                         (<= (+ (point) (window-hscroll))
-                             (pos-eol) (point-max))
-                         (goto-char (+ (point) (window-hscroll)))
-                         (not (invisible-p (point)))
-                         (not (invisible-p (1- (point)))))
-                (if (= (point) (point-max))
-                    ;; hack to get the label displayed on its own line
-                    (when-let* ((ov (conn-make-target-overlay (point) 0)))
-                      (overlay-put ov 'after-string
-                                   (propertize " " 'display '(space :width 0))))
-                  (conn-make-target-overlay
-                   (point) 0
-                   :padding-function 'conn--right-justify-padding))))))))))
+                       (not (invisible-p (point)))
+                       (not (invisible-p (1- (point)))))
+              (if (= (point) (point-max))
+                  ;; hack to get the label displayed on its own line
+                  (when-let* ((ov (conn-make-target-overlay (point) 0)))
+                    (overlay-put ov 'after-string
+                                 (propertize " " 'display '(space :width 0))))
+                (conn-make-target-overlay
+                 (point) 0
+                 :padding-function 'conn--right-justify-padding)))))))))
 
-(defun conn-dispatch-lines-end ()
-  (lambda ()
-    (dolist (win (conn--get-target-windows))
-      (with-selected-window win
-        (save-excursion
-          (with-restriction (window-start) (window-end)
-            (goto-char (point-min))
+(defun conn-dispatch-end-of-lines ()
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-min))
+          (move-end-of-line nil)
+          (when (and (eolp) (not (invisible-p (point))))
+            (conn-make-target-overlay (point) 0))
+          (while (/= (point) (point-max))
+            (forward-line)
             (move-end-of-line nil)
-            (when (and (eolp) (not (invisible-p (point))))
-              (conn-make-target-overlay (point) 0))
-            (while (/= (point) (point-max))
-              (forward-line)
-              (move-end-of-line nil)
-              (when (and (eolp)
-                         (not (invisible-p (point)))
-                         (not (invisible-p (1- (point)))))
-                (if (= (point-max) (point))
-                    ;; hack to get the label displayed on its own line
-                    (when-let* ((ov (conn-make-target-overlay (point) 0)))
-                      (overlay-put ov 'after-string
-                                   (propertize " " 'display '(space :width 0))))
-                  (conn-make-target-overlay (point) 0))))))))))
+            (when (and (eolp)
+                       (not (invisible-p (point)))
+                       (not (invisible-p (1- (point)))))
+              (if (= (point-max) (point))
+                  ;; hack to get the label displayed on its own line
+                  (when-let* ((ov (conn-make-target-overlay (point) 0)))
+                    (overlay-put ov 'after-string
+                                 (propertize " " 'display '(space :width 0))))
+                (conn-make-target-overlay (point) 0)))))))))
+
+(cl-defmethod conn-dispatch-targets-other-end-p ((_ (eql conn-dispatch-end-of-lines)))
+  t)
 
 (defun conn-dispatch-inner-lines ()
-  (lambda ()
-    (dolist (win (conn--get-target-windows))
-      (with-selected-window win
-        (save-excursion
-          (with-restriction (window-start) (window-end)
-            (goto-char (point-max))
-            (while (let ((pt (point)))
-                     (forward-line -1)
-                     (conn-beginning-of-inner-line)
-                     (/= (point) pt))
-              (when (not (invisible-p (point)))
-                (conn-make-target-overlay (point) 0)))))))))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (with-restriction (window-start) (window-end)
+          (goto-char (point-max))
+          (while (let ((pt (point)))
+                   (forward-line -1)
+                   (conn-beginning-of-inner-line)
+                   (/= (point) pt))
+            (when (not (invisible-p (point)))
+              (conn-make-target-overlay (point) 0))))))))
 
 (defun conn-dispatch-end-of-inner-lines ()
   (let ((bounds-op (lambda (arg)
@@ -4649,30 +4647,29 @@ contain targets."
   t)
 
 (defun conn-dispatch-visual-lines ()
-  (lambda ()
-    (dolist (win (conn--get-target-windows))
-      (with-selected-window win
-        (save-excursion
-          (goto-char (window-start))
-          (vertical-motion 0)
-          (conn-make-target-overlay
-           (point) 0
-           :bounds-op 'char
-           :padding-function 'conn--right-justify-padding)
-          (vertical-motion 1)
-          (while (<= (point) (window-end))
-            (if (= (point) (point-max))
-                ;; hack to get the label displayed on its own line
-                (when-let* ((ov (conn-make-target-overlay
-                                 (point) 0
-                                 :bounds-op 'char)))
-                  (overlay-put ov 'after-string
-                               (propertize " " 'display '(space :width 0))))
-              (conn-make-target-overlay
-               (point) 0
-               :bounds-op 'char
-               :padding-function 'conn--right-justify-padding))
-            (vertical-motion 1)))))))
+  (dolist (win (conn--get-target-windows))
+    (with-selected-window win
+      (save-excursion
+        (goto-char (window-start))
+        (vertical-motion 0)
+        (conn-make-target-overlay
+         (point) 0
+         :bounds-op 'char
+         :padding-function 'conn--right-justify-padding)
+        (vertical-motion 1)
+        (while (<= (point) (window-end))
+          (if (= (point) (point-max))
+              ;; hack to get the label displayed on its own line
+              (when-let* ((ov (conn-make-target-overlay
+                               (point) 0
+                               :bounds-op 'char)))
+                (overlay-put ov 'after-string
+                             (propertize " " 'display '(space :width 0))))
+            (conn-make-target-overlay
+             (point) 0
+             :bounds-op 'char
+             :padding-function 'conn--right-justify-padding))
+          (vertical-motion 1))))))
 
 
 ;;;;; Dispatch Actions
@@ -6132,7 +6129,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
  'conn-dispatch-all-buttons
  :bounds-of-command (lambda (_cmd _arg)
                       (list (bounds-of-thing-at-point 'button)))
- :target-finder 'conn-dispatch-all-buttons)
+ :target-finder (lambda () 'conn-dispatch-all-buttons))
 
 (conn-dispatch-register-command
  'conn-dispatch-all-symbols
@@ -6156,6 +6153,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 (conn-dispatch-register-command
  'conn-forward-inner-line
  :target-finder (lambda () 'conn-dispatch-end-of-inner-lines)
+ :default-action 'conn-dispatch-goto)
+
+(conn-dispatch-register-command
+ 'move-end-of-line
+ :target-finder (lambda () 'conn-dispatch-end-of-lines)
  :default-action 'conn-dispatch-goto)
 
 
@@ -6527,7 +6529,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-register-thing
  'visual-line
- :dispatch-target-finder 'conn-dispatch-visual-lines
+ :dispatch-target-finder (lambda () 'conn-dispatch-visual-lines)
  :forward-op (lambda (&optional N)
                (let ((line-move-visual t))
                  (vertical-motion 0)
@@ -6702,7 +6704,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-register-thing
  'line
- :dispatch-target-finder 'conn-dispatch-lines)
+ :dispatch-target-finder (lambda () 'conn-dispatch-lines))
 
 (conn-register-thing-commands
  'line 'conn-continuous-thing-handler
@@ -6713,7 +6715,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (conn-register-thing
  'line-column
  :forward-op 'next-line
- :dispatch-target-finder 'conn-dispatch-columns
+ :dispatch-target-finder (lambda () 'conn-dispatch-columns)
  :default-action 'conn-dispatch-jump)
 
 (conn-register-thing-commands
@@ -6727,7 +6729,7 @@ order to mark the region that should be defined by any of COMMANDS."
  'outer-line
  :beg-op (lambda () (move-beginning-of-line nil))
  :end-op (lambda () (move-end-of-line nil))
- :dispatch-target-finder 'conn-dispatch-lines)
+ :dispatch-target-finder (lambda () 'conn-dispatch-lines))
 
 (conn-register-thing-commands
  'outer-line 'conn-discrete-thing-handler
@@ -6747,7 +6749,7 @@ order to mark the region that should be defined by any of COMMANDS."
  'inner-line
  :bounds-op 'conn--bounds-of-inner-line
  :forward-op 'conn-forward-inner-line
- :dispatch-target-finder 'conn-dispatch-inner-lines)
+ :dispatch-target-finder (lambda () 'conn-dispatch-inner-lines))
 
 (conn-register-thing-commands
  'inner-line 'conn-continuous-thing-handler
