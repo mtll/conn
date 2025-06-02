@@ -1125,11 +1125,16 @@ Called when the inheritance hierarchy for STATE changes."
 (defun conn--isearch-input-method ()
   "Ensure input method is enabled in isearch-mode."
   (when (and conn--input-method isearch-mode)
-    (letrec ((hook (lambda ()
-                     (conn--activate-input-method)
-                     (add-hook 'input-method-activate-hook #'conn--activate-input-method nil t)
-                     (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
-                     (remove-hook 'isearch-mode-end-hook hook))))
+    (letrec ((hook
+              (lambda ()
+                (conn--activate-input-method)
+                (add-hook 'input-method-activate-hook
+                          #'conn--activate-input-method
+                          nil t)
+                (add-hook 'input-method-deactivate-hook
+                          #'conn--deactivate-input-method
+                          nil t)
+                (remove-hook 'isearch-mode-end-hook hook))))
       (remove-hook 'input-method-activate-hook #'conn--activate-input-method t)
       (remove-hook 'input-method-deactivate-hook #'conn--deactivate-input-method t)
       (let ((overriding-terminal-local-map nil))
@@ -1287,12 +1292,11 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   (declare (indent 0))
   `(if conn-transient-state-stack
        (pcase-let ((`(,curr . ,prev)
-                    (seq-subseq conn-transient-state-stack -2))
-                   (conn-transient-state-stack nil))
+                    (seq-subseq conn-transient-state-stack -2)))
          (conn-with-transient-state curr
-           (setq conn-previous-state prev
-                 conn-transient-state-stack nil)
-           ,@body))
+           (let ((conn-transient-state-stack nil))
+             (setq conn-previous-state prev)
+             ,@body)))
      ,@body))
 
 (defmacro conn-with-transient-state (state &rest body)
