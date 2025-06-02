@@ -3732,7 +3732,11 @@ be ignored by during dispatch.")
                          (eq (overlay-get ov 'window) window)))
            collect ov))
 
-(defun conn-make-target-overlay (pt length &optional thing padding-function window)
+(cl-defun conn-make-target-overlay ( pt length
+                                     &key
+                                     padding-function
+                                     window
+                                     bounds-op)
   "Make a target overlay at PT of LENGTH.
 
 Optionally the overlay may have an associated THING."
@@ -3758,11 +3762,11 @@ Optionally the overlay may have an associated THING."
                (make-overlay pt (min (+ pt length) (cdr line-bounds)) nil t))
              (delete-overlay ov)))
       (overlay-put ov 'conn-overlay t)
-      (overlay-put ov 'thing thing)
       (overlay-put ov 'category 'conn-target-overlay)
       (overlay-put ov 'face 'conn-target-overlay-face)
       (overlay-put ov 'window window)
       (overlay-put ov 'padding-function padding-function)
+      (when bounds-op (overlay-put ov 'thing bounds-op))
       (push ov (alist-get window conn-targets))
       ov)))
 
@@ -4231,7 +4235,8 @@ Target overlays may override this default by setting the
         conn-target-count 0))
 
 (cl-defgeneric conn-dispatch-update-targets (target-finder)
-  (:method ((target-finder function)) (funcall target-finder)))
+  (:method ((target-finder function)) (funcall target-finder))
+  (:method ((target-finder symbol)) (funcall target-finder)))
 
 (cl-defgeneric conn-dispatch-cleanup-target-state (target-finder)
   (:method (_) "Noop" nil))
@@ -4244,6 +4249,9 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-has-target-p (target-finder)
   (:method (_) "Noop" nil))
+
+(cl-defgeneric conn-dispatch-targets-other-end-p (target-finder)
+  (:method (_) nil))
 
 (defclass conn-dispatch-target-window-predicate ()
   ((window-predicate :initform (lambda (&rest _) t)
@@ -4346,24 +4354,26 @@ contain targets."
 (cl-defmethod conn-dispatch-update-targets :after ((state conn-dispatch-focus-targets))
   (unless (oref state hidden)
     (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden))
-                          (context-lines (oref state context-lines))
-                          (context
-                           (lambda (tar)
+                          (context-lines (oref state context-lines)))
+      (pcase-dolist (`(,win . ,targets) conn-targets)
+        (with-selected-window win
+          (let* ((regions
+                  (save-excursion
+                    (cl-loop for tar in targets
+                             collect
                              (or (overlay-get tar 'context)
                                  (progn
                                    (goto-char (overlay-start tar))
                                    (cons (pos-bol (- 1 context-lines))
-                                         (pos-bol (+ 2 context-lines))))))))
-      (pcase-dolist (`(,win . ,targets) conn-targets)
-        (with-selected-window win
-          (let* ((points (conn--merge-regions
-                          (cons (cons (pos-bol) (pos-bol 2))
-                                (save-excursion
-                                  (mapcar context targets)))
-                          t)))
+                                         (pos-bol (+ 2 context-lines)))))))))
             (cl-loop for beg = (point-min) then next-beg
                      for (end . next-beg) in (compat-call
-                                              sort points :key #'car :in-place t)
+                                              sort (conn--merge-regions
+                                                    (cons (cons (pos-bol) (pos-bol 2))
+                                                          regions)
+                                                    t)
+                                              :key #'car
+                                              :in-place t)
                      while end
                      do (push (make-overlay beg end) hidden)
                      finally (push (make-overlay beg (point-max)) hidden))
@@ -4416,7 +4426,7 @@ contain targets."
               (goto-char beg)
               (while (re-search-forward heading-regexp end t)
                 (conn-make-target-overlay
-                 (match-beginning 0) 0 bounds-op nil win)))))))))
+                 (match-beginning 0) 0 bounds-op :window win)))))))))
 
 (defclass conn-dispatch-all-defuns (conn-dispatch-focus-targets)
   ())
@@ -4432,7 +4442,7 @@ contain targets."
              (save-excursion
                (goto-char (treesit-node-start node))
                (overlay-put
-                (conn-make-target-overlay (point) 0 nil nil win)
+                (conn-make-target-overlay (point) 0 :window win)
                 'context (cons (pos-bol)
                                (progn
                                  (when-let* ((name (treesit-defun-name node)))
@@ -4444,7 +4454,7 @@ contain targets."
             (with-restriction beg end
               (goto-char (point-max))
               (while (beginning-of-defun)
-                (conn-make-target-overlay (point) 0 nil nil win)))))))))
+                (conn-make-target-overlay (point) 0 :window win)))))))))
 
 (defun conn-dispatch-all-things (thing)
   (lambda ()
@@ -4468,11 +4478,11 @@ contain targets."
           (save-excursion
             (goto-char (point-min))
             (when (get-char-property (point) 'button)
-              (conn-make-target-overlay (point) 0 nil))
+              (conn-make-target-overlay (point) 0))
             (while (not (eobp))
               (goto-char (next-single-char-property-change (point) 'button))
               (when (get-char-property (point) 'button)
-                (conn-make-target-overlay (point) 0 nil)))))))))
+                (conn-make-target-overlay (point) 0)))))))))
 
 (defun conn-dispatch-re-matches (regexp)
   (lambda ()
@@ -4559,7 +4569,8 @@ contain targets."
                        (goto-char (+ (point) (window-hscroll)))
                        (not (invisible-p (point))))
               (conn-make-target-overlay
-               (point) 0 nil 'conn--right-justify-padding))
+               (point) 0
+               :padding-function 'conn--right-justify-padding))
             (while (/= (point) (point-max))
               (forward-line)
               (when (and (bolp)
@@ -4574,7 +4585,8 @@ contain targets."
                       (overlay-put ov 'after-string
                                    (propertize " " 'display '(space :width 0))))
                   (conn-make-target-overlay
-                   (point) 0 nil 'conn--right-justify-padding))))))))))
+                   (point) 0
+                   :padding-function 'conn--right-justify-padding))))))))))
 
 (defun conn-dispatch-lines-end ()
   (lambda ()
@@ -4613,6 +4625,29 @@ contain targets."
               (when (not (invisible-p (point)))
                 (conn-make-target-overlay (point) 0)))))))))
 
+(defun conn-dispatch-end-of-inner-lines ()
+  (let ((bounds-op (lambda (arg)
+                     (save-excursion
+                       (goto-char (pos-bol))
+                       (conn-bounds-of-command 'conn-forward-inner-line arg)))))
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (save-excursion
+          (with-restriction (window-start) (window-end)
+            (goto-char (point-max))
+            (while (let ((pt (point)))
+                     (forward-line -1)
+                     (conn-end-of-inner-line)
+                     (/= (point) pt))
+              (when (not (invisible-p (point)))
+                (conn-make-target-overlay
+                 (point) 0
+                 :bounds-op bounds-op)))))))))
+
+(cl-defmethod conn-dispatch-targets-other-end-p
+  ((_ (eql conn-dispatch-end-of-inner-lines)))
+  t)
+
 (defun conn-dispatch-visual-lines ()
   (lambda ()
     (dolist (win (conn--get-target-windows))
@@ -4621,16 +4656,22 @@ contain targets."
           (goto-char (window-start))
           (vertical-motion 0)
           (conn-make-target-overlay
-           (point) 0 'char 'conn--right-justify-padding)
+           (point) 0
+           :bounds-op 'char
+           :padding-function 'conn--right-justify-padding)
           (vertical-motion 1)
           (while (<= (point) (window-end))
             (if (= (point) (point-max))
                 ;; hack to get the label displayed on its own line
-                (when-let* ((ov (conn-make-target-overlay (point) 0 'char)))
+                (when-let* ((ov (conn-make-target-overlay
+                                 (point) 0
+                                 :bounds-op 'char)))
                   (overlay-put ov 'after-string
                                (propertize " " 'display '(space :width 0))))
               (conn-make-target-overlay
-               (point) 0 'char 'conn--right-justify-padding))
+               (point) 0
+               :bounds-op 'char
+               :padding-function 'conn--right-justify-padding))
             (vertical-motion 1)))))))
 
 
@@ -5897,9 +5938,12 @@ contain targets."
         (conn--target-sort-function conn-target-sort-function)
         (conn-dispatch-repeat-count 0)
         (conn--dispatch-read-event-message-prefixes nil)
-        (conn--dispatch-always-retarget (or always-retarget
-                                            (oref action always-retarget)))
-        (conn-dispatch-other-end (or other-end conn-dispatch-other-end))
+        (conn--dispatch-always-retarget
+         (or always-retarget
+             (oref action always-retarget)))
+        (conn-dispatch-other-end
+         (xor (conn-dispatch-targets-other-end-p target-finder)
+              (or other-end conn-dispatch-other-end)))
         (conn--dispatch-action-always-prompt (oref action always-prompt)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn--target-window-predicate predicate))
@@ -6108,6 +6152,11 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
  'conn-previous-emacs-state
  :target-finder 'conn-dispatch-previous-emacs-state
  :default-action 'conn-dispatch-jump)
+
+(conn-dispatch-register-command
+ 'conn-forward-inner-line
+ :target-finder (lambda () 'conn-dispatch-end-of-inner-lines)
+ :default-action 'conn-dispatch-goto)
 
 
 ;;;;; Dispatch Ring
@@ -10452,7 +10501,7 @@ Operates with the selected windows parent window."
                                       (Info-prev-reference)
                                       (setq last-pt (point))))
                          (<= (window-start) (point) (window-end)))
-               (conn-make-target-overlay (point) 0 nil)))))))
+               (conn-make-target-overlay (point) 0)))))))
    nil nil))
 
 (define-keymap
