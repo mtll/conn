@@ -1287,9 +1287,11 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   (declare (indent 0))
   `(if conn-transient-state-stack
        (pcase-let ((`(,curr . ,prev)
-                    (seq-subseq conn-transient-state-stack -2)))
+                    (seq-subseq conn-transient-state-stack -2))
+                   (conn-transient-state-stack nil))
          (conn-with-transient-state curr
-           (setq conn-previous-state prev)
+           (setq conn-previous-state prev
+                 conn-transient-state-stack nil)
            ,@body))
      ,@body))
 
@@ -1390,6 +1392,7 @@ and specializes the method on all conn states."
       (unwind-protect
           (progn
             (setq conn-current-state nil
+                  conn-previous-state state
                   cursor-type t)
             (set state nil)
             (cl-call-next-method)
@@ -3284,15 +3287,13 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
 
-;;;; Thing Dispatch
+;;;; Dispatch State
 
 (defvar conn-dispatch-ring)
 
 (defvar conn--dispatch-must-prompt nil)
 
 (defvar conn--dispatch-action-always-prompt nil)
-
-;;;;; Dispatch Read Thing
 
 (defface conn-dispatch-mode-line-face
   '((t (:inherit mode-line :inverse-video t)))
@@ -3334,6 +3335,8 @@ actions associated with a command have higher precedence than actions
 associated with a command's thing.")
 
 (defvar conn-dispatch-repeat-count nil)
+
+(defvar conn-dispatch-other-end nil)
 
 (defvar conn--dispatch-always-retarget nil)
 
@@ -3486,8 +3489,6 @@ associated with a command's thing.")
           body))))
 
 ;;;;; Dispatch Command Loop
-
-(defvar conn-dispatch-other-end nil)
 
 (oclosure-define (conn-dispatch-callback
                   (:parent conn-state-loop-callback))
