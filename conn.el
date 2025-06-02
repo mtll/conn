@@ -4426,7 +4426,9 @@ contain targets."
               (goto-char beg)
               (while (re-search-forward heading-regexp end t)
                 (conn-make-target-overlay
-                 (match-beginning 0) 0 bounds-op :window win)))))))))
+                 (match-beginning 0) 0
+                 :bounds-op bounds-op
+                 :window win)))))))))
 
 (defclass conn-dispatch-all-defuns (conn-dispatch-focus-targets)
   ())
@@ -5899,8 +5901,8 @@ contain targets."
 (oclosure-define (conn-dispatch
                   (:predicate conn-dispatch-p)
                   (:copier conn-dispatch--copy (action)))
-  (action)
-  (thing-cmd)
+  (action :type conn-action)
+  (thing-cmd :type (or symbol function))
   (thing-arg)
   (description :type function)
   (repeat-count :mutable t :type integer)
@@ -6058,7 +6060,8 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
          (posn (event-start event))
          (conn-dispatch-repeat-count (oref prev repeat-count))
          (conn-kapply-suppress-message t)
-         (conn-dispatch-other-end (xor (oref prev other-end) invert-other-end))
+         (conn-dispatch-other-end (xor (oref prev other-end)
+                                       invert-other-end))
          (action (oref prev action)))
     (when (and-let* ((pred (oref action window-predicate)))
             (not (funcall pred (posn-window posn))))
