@@ -6058,8 +6058,13 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
          (posn (event-start event))
          (conn-dispatch-repeat-count (oref prev repeat-count))
          (conn-kapply-suppress-message t)
-         (conn-dispatch-other-end (xor (oref prev other-end) invert-other-end)))
-    (funcall (oref prev action)
+         (conn-dispatch-other-end (xor (oref prev other-end) invert-other-end))
+         (action (oref prev action)))
+    (when (and-let* ((pred (oref action window-predicate)))
+            (not (funcall pred (posn-window posn))))
+      (user-error "Window not valid for %s action"
+                  (conn-describe-action action)))
+    (funcall action
              (posn-window posn) (posn-point posn)
              (lambda (arg)
                (conn-bounds-of-command (oref prev thing-cmd) arg))
