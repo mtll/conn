@@ -3302,8 +3302,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defvar conn-dispatch-default-target-finder
   (lambda ()
-    (make-instance 'conn-dispatch-read-n-chars
-                   :string-length 2))
+    (conn-dispatch-read-n-chars :string-length 2))
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -4330,8 +4329,7 @@ Target overlays may override this default by setting the
               (conn-make-string-target-overlays string predicate))))))))
 
 (defun conn-dispatch-read-string-with-timeout (&optional predicate)
-  (make-instance
-   'conn-dispatch-read-with-timeout
+  (conn-dispatch-read-with-timeout
    :timeout conn-read-string-timeout
    :predicate predicate))
 
@@ -4371,8 +4369,8 @@ contain targets."
                      finally (push (make-overlay beg (point-max)) hidden))
             (cl-loop for ov in hidden do (overlay-put ov 'invisible t)))
           (recenter)))
-      (redisplay)
-      (setf (oref state hidden) hidden))))
+      (setf (oref state hidden) hidden)
+      (sit-for 0))))
 
 (defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets)
   ((context-lines :initform 1 :initarg :context-lines)))
@@ -4386,8 +4384,7 @@ contain targets."
             (conn-make-target-overlay pt 0)))))))
 
 (defun conn-dispatch-chars-in-thing (thing)
-  (make-instance
-   'conn-dispatch-read-with-timeout
+  (conn-dispatch-read-with-timeout
    :timeout conn-read-string-timeout
    :predicate (lambda (beg _end)
                 (goto-char beg)
@@ -4487,8 +4484,7 @@ contain targets."
             (conn-make-target-overlay beg (- end beg))))))))
 
 (defun conn-dispatch-things-read-prefix (thing prefix-length)
-  (make-instance
-   'conn-dispatch-read-n-chars
+  (conn-dispatch-read-n-chars
    :string-length prefix-length
    :predicate (lambda (beg _end)
                 (save-excursion
