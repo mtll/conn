@@ -3341,6 +3341,8 @@ associated with a command's thing.")
 
 (defvar conn-dispatch-other-end nil)
 
+(defvar conn-dispath-no-other-end nil)
+
 (defvar conn--dispatch-always-retarget nil)
 
 (conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
@@ -3586,7 +3588,8 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql dispatch-other-end))
                                           callback)
-  (setf (oref callback other-end) (not (oref callback other-end))))
+  (unless (oref callback no-other-end)
+    (setf (oref callback other-end) (not (oref callback other-end)))))
 
 (cl-defmethod conn-dispatch-command-case ((_command (eql repeat-dispatch))
                                           callback)
@@ -5679,68 +5682,71 @@ contain targets."
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  `(catch 'state-loop-exit
-     (let ((inhibit-message t)
-           (recenter-last-op nil)
-           (conn-state-loop-last-command nil)
-           (conn--dispatch-must-prompt nil)
-           (conn--loop-prefix-mag nil)
-           (conn--loop-prefix-sign nil)
-           (conn--dispatch-read-event-handlers
-            (cons #'conn-dispatch-select-command-case
-                  conn--dispatch-read-event-handlers))
-           (conn--dispatch-read-event-message-prefixes
-            `(,(lambda ()
-                 (concat
-                  "arg: "
-                  (propertize (conn-state-loop-format-prefix-arg)
-                              'face 'read-multiple-choice-face)))
-              ,(lambda ()
-                 (when-let* ((binding
-                              (where-is-internal 'dispatch-other-end
-                                                 conn-dispatch-read-event-map
-                                                 t)))
+  (cl-once-only (repeat)
+    `(catch 'state-loop-exit
+       (let ((inhibit-message t)
+             (recenter-last-op nil)
+             (conn-state-loop-last-command nil)
+             (conn--dispatch-must-prompt nil)
+             (conn--loop-prefix-mag nil)
+             (conn--loop-prefix-sign nil)
+             (conn--dispatch-read-event-handlers
+              (cons #'conn-dispatch-select-command-case
+                    conn--dispatch-read-event-handlers))
+             (conn--dispatch-read-event-message-prefixes
+              `(,(lambda ()
                    (concat
-                    (propertize (key-description binding)
-                                'face 'help-key-binding)
-                    " "
-                    (propertize
-                     "other end"
-                     'face (when conn-dispatch-other-end
-                             'eldoc-highlight-function-argument)))))
-              ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                 (lambda ()
-                   (when-let* ((binding
-                                (where-is-internal 'always-retarget
-                                                   conn-dispatch-read-event-map
-                                                   t)))
-                     (concat
-                      (propertize (key-description binding)
-                                  'face 'help-key-binding)
-                      " "
-                      (propertize "always retarget"
-                                  'face (when conn--dispatch-always-retarget
-                                          'eldoc-highlight-function-argument))))))
-              ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                 (lambda ()
-                   (when-let* ((binding
-                                (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
-                                     (not conn--dispatch-always-retarget)
-                                     (where-is-internal 'retarget
-                                                        conn-dispatch-read-event-map
-                                                        t))))
-                     (concat
-                      (propertize (key-description binding)
-                                  'face 'help-key-binding)
-                      " retarget"))))
-              ,@conn--dispatch-read-event-message-prefixes)))
-       (while (or ,repeat (< conn-dispatch-repeat-count 1))
-         (catch 'dispatch-redisplay
-           (while (progn
-                    ,@body
-                    (cl-incf conn-dispatch-repeat-count)
-                    ,repeat)
-             (undo-boundary)))))))
+                    "arg: "
+                    (propertize (conn-state-loop-format-prefix-arg)
+                                'face 'read-multiple-choice-face)))
+                ,(unless conn-dispath-no-other-end
+                   (lambda ()
+                     (when-let* ((binding
+                                  (where-is-internal 'dispatch-other-end
+                                                     conn-dispatch-read-event-map
+                                                     t)))
+                       (concat
+                        (propertize (key-description binding)
+                                    'face 'help-key-binding)
+                        " "
+                        (propertize
+                         "other end"
+                         'face (when conn-dispatch-other-end
+                                 'eldoc-highlight-function-argument))))))
+                ,(when (and (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+                            ,repeat)
+                   (lambda ()
+                     (when-let* ((binding
+                                  (where-is-internal 'always-retarget
+                                                     conn-dispatch-read-event-map
+                                                     t)))
+                       (concat
+                        (propertize (key-description binding)
+                                    'face 'help-key-binding)
+                        " "
+                        (propertize "always retarget"
+                                    'face (when conn--dispatch-always-retarget
+                                            'eldoc-highlight-function-argument))))))
+                ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+                   (lambda ()
+                     (when-let* ((binding
+                                  (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
+                                       (not conn--dispatch-always-retarget)
+                                       (where-is-internal 'retarget
+                                                          conn-dispatch-read-event-map
+                                                          t))))
+                       (concat
+                        (propertize (key-description binding)
+                                    'face 'help-key-binding)
+                        " retarget"))))
+                ,@conn--dispatch-read-event-message-prefixes)))
+         (while (or ,repeat (< conn-dispatch-repeat-count 1))
+           (catch 'dispatch-redisplay
+             (while (progn
+                      ,@body
+                      (cl-incf conn-dispatch-repeat-count)
+                      ,repeat)
+               (undo-boundary))))))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -5873,8 +5879,9 @@ contain targets."
   (conn-state-loop-exit))
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql dispatch-other-end)))
-  (setf conn-dispatch-other-end (not conn-dispatch-other-end))
-  (conn-dispatch-handle-and-redisplay :prompt nil))
+  (unless conn-dispath-no-other-end
+    (setf conn-dispatch-other-end (not conn-dispatch-other-end))
+    (conn-dispatch-handle-and-redisplay :prompt nil)))
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql retarget)))
   (conn-dispatch-retarget conn-dispatch-target-finder)
@@ -5931,8 +5938,11 @@ contain targets."
 (cl-defmethod conn-perform-dispatch :around ((action conn-action)
                                              target-finder thing-cmd thing-arg
                                              &key
-                                             repeat restrict-windows
-                                             other-end always-retarget
+                                             repeat
+                                             restrict-windows
+                                             other-end
+                                             no-other-end
+                                             always-retarget
                                              &allow-other-keys)
   (let ((opoint (point-marker))
         (conn-dispatch-target-finder target-finder)
@@ -5944,9 +5954,11 @@ contain targets."
         (conn--dispatch-always-retarget
          (or always-retarget
              (oref action always-retarget)))
+        (conn-dispath-no-other-end no-other-end)
         (conn-dispatch-other-end
-         (xor (conn-dispatch-targets-other-end-p target-finder)
-              (or other-end conn-dispatch-other-end)))
+         (unless no-other-end
+           (xor (conn-dispatch-targets-other-end-p target-finder)
+                (or other-end conn-dispatch-other-end))))
         (conn--dispatch-action-always-prompt (oref action always-prompt)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn--target-window-predicate predicate))
@@ -5983,8 +5995,37 @@ contain targets."
                      (conn-bounds-of-command thing-cmd arg)))
                thing-arg))))
 
+(cl-defun conn-do-dispatch-state (&key no-other-end
+                                       non-repeatable
+                                       initial-arg
+                                       action
+                                       restrict-windows
+                                       (case-function 'conn-dispatch-command-case)
+                                       (message-function 'conn-dispatch-message)
+                                       (state 'conn-dispatch-state))
+  (conn-with-state-loop
+   state
+   (oclosure-lambda (conn-dispatch-callback
+                     (action action)
+                     (non-repeatable non-repeatable)
+                     (no-other-end no-other-end)
+                     (restrict-windows restrict-windows))
+       ()
+     (conn-perform-dispatch action target-finder
+                            thing-cmd thing-arg
+                            :repeat repeat
+                            :restrict-windows restrict-windows
+                            :other-end other-end
+                            :no-other-end no-other-end
+                            :always-retarget always-retarget))
+   :message-function message-function
+   :case-function case-function
+   :initial-arg initial-arg))
+
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
-                                     target-finder thing-cmd thing-arg
+                                     target-finder
+                                     thing-cmd
+                                     thing-arg
                                      &key repeat &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,bounds-op-override1)
@@ -6000,47 +6041,32 @@ contain targets."
 
 (defun conn-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn-with-state-loop
-   'conn-dispatch-state
-   (oclosure-lambda (conn-dispatch-callback)
-       ()
-     (conn-perform-dispatch action target-finder thing-cmd thing-arg
-                            :repeat repeat
-                            :restrict-windows restrict-windows
-                            :other-end other-end
-                            :always-retarget always-retarget))
-   :initial-arg initial-arg))
+  (conn-do-dispatch-state :initial-arg initial-arg))
 
 (defun conn-bounds-of-dispatch (_cmd arg)
   (let ((regions nil))
-    (conn-with-state-loop
-     'conn-dispatch-mover-state
-     (oclosure-lambda (conn-dispatch-callback
-                       (no-other-end t))
-         ()
-       (conn-perform-dispatch
-        (oclosure-lambda (conn-action
-                          (description "Bounds")
-                          (window-predicate
-                           (let ((win (selected-window)))
-                             (lambda (window) (eq win window)))))
-            (_window pt bounds-op bounds-arg)
-          (save-mark-and-excursion
-            (goto-char pt)
-            (pcase (car (funcall bounds-op bounds-arg))
-              ('nil nil)
-              (reg (push reg regions)))))
-        target-finder thing-cmd thing-arg
-        :repeat repeat
-        :always-retarget always-retarget)
-       (unless regions (keyboard-quit))
-       (cl-loop for (b . e) in (compat-call sort
-                                            (conn--merge-regions regions t)
-                                            :key #'car :in-place t)
-                minimize b into beg
-                maximize e into end
-                finally return (cons (cons beg end) regions)))
-     :initial-arg arg)))
+    (conn-do-dispatch-state
+     :state 'conn-dispatch-mover-state
+     :initial-arg arg
+     :no-other-end t
+     :action (oclosure-lambda (conn-action
+                               (description "Bounds")
+                               (window-predicate
+                                (let ((win (selected-window)))
+                                  (lambda (window) (eq win window)))))
+                 (_window pt bounds-op bounds-arg)
+               (save-mark-and-excursion
+                 (goto-char pt)
+                 (pcase (car (funcall bounds-op bounds-arg))
+                   ('nil nil)
+                   (reg (push reg regions))))))
+    (unless regions (keyboard-quit))
+    (cl-loop for (b . e) in (compat-call sort
+                                         (conn--merge-regions regions t)
+                                         :key #'car :in-place t)
+             minimize b into beg
+             maximize e into end
+             finally return (cons (cons beg end) regions))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
@@ -7834,7 +7860,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "k" 'forward-line
   "u" 'forward-symbol)
 
-(conn-define-state conn-dispatch-transpose-state (conn-transpose-state)
+(conn-define-state conn-dispatch-transpose-state (conn-transpose-state
+                                                  conn-dispatch-state)
   :lighter " TRANSPOSE")
 
 (define-keymap
@@ -7894,7 +7921,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
                                      target-finder thing-cmd thing-arg
-                                     &optional _repeat _restrict-windows)
+                                     &key &allow-other-keys)
   (let ((conn--target-window-predicate conn--target-window-predicate))
     (add-function :after-while conn--target-window-predicate
                   (lambda (win)
@@ -7951,39 +7978,35 @@ region after a `recursive-edit'."
     ('conn-dispatch-state
      (while
          (condition-case err
-             (conn-with-state-loop
-              'conn-dispatch-transpose-state
-              (oclosure-lambda
-                  (conn-dispatch-callback
-                   (no-other-end t)
-                   (non-repeatable t)
-                   (action
-                    (oclosure-lambda
-                        (conn-transpose-command
-                         (no-history t)
-                         (buffer (current-buffer))
-                         (point (point))
-                         (bounds-op
-                          (prog1
-                              (when (use-region-p)
-                                (let ((bounds (region-bounds)))
-                                  (lambda (_) bounds)))
-                            (deactivate-mark t)))
-                         (window-predicate
-                          (lambda (win)
-                            (not (buffer-local-value 'buffer-read-only
-                                                     (window-buffer win))))))
-                        (window2 pt2 bounds-op2 bounds-arg)
-                      (conn--dispatch-transpose-subr
-                       buffer point (or bounds-op bounds-op2)
-                       (window-buffer window2) pt2 bounds-op2
-                       bounds-arg))))
-                  ()
-                (cl-check-type action conn-transpose-command)
-                (conn-perform-dispatch action target-finder thing-cmd thing-arg
-                                       :repeat repeat)
-                nil)
-              :initial-arg arg)
+             (progn
+               (conn-do-dispatch-state
+                :state 'conn-dispatch-transpose-state
+                :no-other-end t
+                :non-repeatable t
+                :initial-arg arg
+                :message-function 'conn-dispatch-message
+                :action (oclosure-lambda
+                            (conn-transpose-command
+                             (description "Transpose")
+                             (no-history t)
+                             (buffer (current-buffer))
+                             (point (point))
+                             (bounds-op
+                              (prog1
+                                  (when (use-region-p)
+                                    (let ((bounds (region-bounds)))
+                                      (lambda (_) bounds)))
+                                (deactivate-mark t)))
+                             (window-predicate
+                              (lambda (win)
+                                (not (buffer-local-value 'buffer-read-only
+                                                         (window-buffer win))))))
+                            (window2 pt2 bounds-op2 bounds-arg)
+                          (conn--dispatch-transpose-subr
+                           buffer point (or bounds-op bounds-op2)
+                           (window-buffer window2) pt2 bounds-op2
+                           bounds-arg)))
+               nil)
            ;; TODO: make this display somehow
            (user-error (message "%s" (cadr err)) t))))
     ((let 0 arg)
@@ -10068,16 +10091,9 @@ Operates with the selected windows parent window."
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (conn-with-state-loop
-   'conn-dired-dispatch-state
-   (oclosure-lambda (conn-dispatch-callback
-                     (no-other-end t))
-       ()
-     (conn-perform-dispatch action target-finder
-                            thing-cmd thing-arg
-                            :repeat repeat
-                            :restrict-widnows restrict-windows
-                            :always-retarget always-retarget))
+  (conn-do-dispatch-state
+   :state 'conn-dired-dispatch-state
+   :no-other-end t
    :initial-arg initial-arg))
 
 (defun conn-setup-dired-state ()
