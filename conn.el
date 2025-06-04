@@ -4187,7 +4187,7 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-select-target (target-finder))
 
-(cl-defmethod conn-dispatch-select-target (target-finder)
+(cl-defmethod conn-dispatch-select-target :around (target-finder)
   (conn-with-dispatch-event-handler 'mouse-click
       nil
       (lambda (cmd)
@@ -4199,28 +4199,31 @@ Target overlays may override this default by setting the
             (when (and (not (posn-area posn))
                        (funcall conn--target-window-predicate win))
               (throw 'mouse-click (list pt win nil))))))
-    (when conn--dispatch-always-retarget
-      (conn-dispatch-retarget conn-dispatch-target-finder))
-    (conn-dispatch-select-mode 1)
-    (internal-push-keymap conn-dispatch-read-event-map
-                          'overriding-terminal-local-map)
-    (unwind-protect
-        (progn
-          (conn-dispatch-update-targets target-finder)
-          (thread-first
-            (funcall conn-dispatch-label-function)
-            (conn-label-select #'conn-dispatch-read-event
-                               (concat "["
-                                       (number-to-string conn-target-count)
-                                       "] chars: ")
-                               (or conn--dispatch-must-prompt
-                                   conn--dispatch-action-always-prompt
-                                   (> conn-dispatch-repeat-count 0)))
-            (conn--target-label-payload)))
-      (internal-pop-keymap conn-dispatch-read-event-map
-                           'overriding-terminal-local-map)
-      (conn-delete-targets)
-      (conn-dispatch-select-mode -1))))
+    (cl-call-next-method)))
+
+(cl-defmethod conn-dispatch-select-target (target-finder)
+  (when conn--dispatch-always-retarget
+    (conn-dispatch-retarget conn-dispatch-target-finder))
+  (conn-dispatch-select-mode 1)
+  (internal-push-keymap conn-dispatch-read-event-map
+                        'overriding-terminal-local-map)
+  (unwind-protect
+      (progn
+        (conn-dispatch-update-targets target-finder)
+        (thread-first
+          (funcall conn-dispatch-label-function)
+          (conn-label-select #'conn-dispatch-read-event
+                             (concat "["
+                                     (number-to-string conn-target-count)
+                                     "] chars: ")
+                             (or conn--dispatch-must-prompt
+                                 conn--dispatch-action-always-prompt
+                                 (> conn-dispatch-repeat-count 0)))
+          (conn--target-label-payload)))
+    (internal-pop-keymap conn-dispatch-read-event-map
+                         'overriding-terminal-local-map)
+    (conn-delete-targets)
+    (conn-dispatch-select-mode -1)))
 
 
 ;;;;; Dispatch Target Finders
