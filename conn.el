@@ -4187,7 +4187,7 @@ Target overlays may override this default by setting the
 
 (cl-defgeneric conn-dispatch-select-target (target-finder))
 
-(cl-defmethod conn-dispatch-select-target :around (target-finder)
+(cl-defmethod conn-dispatch-select-target :around (_target-finder)
   (conn-with-dispatch-event-handler 'mouse-click
       nil
       (lambda (cmd)
@@ -4208,7 +4208,7 @@ Target overlays may override this default by setting the
   (internal-push-keymap conn-dispatch-read-event-map
                         'overriding-terminal-local-map)
   (unwind-protect
-      (progn
+      (let ((inhibit-message t))
         (conn-dispatch-update-targets target-finder)
         (thread-first
           (funcall conn-dispatch-label-function)
@@ -5684,65 +5684,27 @@ contain targets."
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  (cl-once-only (repeat)
+  (let ((rep (gensym "repeat")))
     `(catch 'state-loop-exit
-       (let ((inhibit-message t)
-             (recenter-last-op nil)
-             (conn-state-loop-last-command nil)
-             (conn--dispatch-must-prompt nil)
-             (conn--loop-prefix-mag nil)
-             (conn--loop-prefix-sign nil)
-             (conn--dispatch-read-event-handlers
-              (cons #'conn-dispatch-select-command-case
-                    conn--dispatch-read-event-handlers))
-             (conn--dispatch-read-event-message-prefixes
-              `(,(lambda ()
-                   (concat
-                    "arg: "
-                    (propertize (conn-state-loop-format-prefix-arg)
-                                'face 'read-multiple-choice-face)))
-                ,(unless conn-dispath-no-other-end
-                   (lambda ()
-                     (when-let* ((binding
-                                  (where-is-internal 'dispatch-other-end
-                                                     conn-dispatch-read-event-map
-                                                     t)))
-                       (concat
-                        (propertize (key-description binding)
-                                    'face 'help-key-binding)
-                        " "
-                        (propertize
-                         "other end"
-                         'face (when conn-dispatch-other-end
-                                 'eldoc-highlight-function-argument))))))
-                ,(when (and (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                            ,repeat)
-                   (lambda ()
-                     (when-let* ((binding
-                                  (where-is-internal 'always-retarget
-                                                     conn-dispatch-read-event-map
-                                                     t)))
-                       (concat
-                        (propertize (key-description binding)
-                                    'face 'help-key-binding)
-                        " "
-                        (propertize "always retarget"
-                                    'face (when conn--dispatch-always-retarget
-                                            'eldoc-highlight-function-argument))))))
-                ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                   (lambda ()
-                     (when-let* ((binding
-                                  (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
-                                       (not conn--dispatch-always-retarget)
-                                       (where-is-internal 'retarget
-                                                          conn-dispatch-read-event-map
-                                                          t))))
-                       (concat
-                        (propertize (key-description binding)
-                                    'face 'help-key-binding)
-                        " retarget"))))
-                ,@conn--dispatch-read-event-message-prefixes)))
-         (while (or ,repeat (< conn-dispatch-repeat-count 1))
+       (let* ((,rep nil)
+              (conn--dispatch-read-event-message-prefixes
+               `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+                    (lambda ()
+                      (when-let* ((binding
+                                   (and ,rep
+                                        (where-is-internal 'always-retarget
+                                                           conn-dispatch-read-event-map
+                                                           t))))
+                        (concat
+                         (propertize (key-description binding)
+                                     'face 'help-key-binding)
+                         " "
+                         (propertize "always retarget"
+                                     'face (when conn--dispatch-always-retarget
+                                             'eldoc-highlight-function-argument))))))
+                 ,@conn--dispatch-read-event-message-prefixes)))
+         (while (or (setq ,rep ,repeat)
+                    (< conn-dispatch-repeat-count 1))
            (catch 'dispatch-redisplay
              (while (progn
                       ,@body
@@ -5946,22 +5908,58 @@ contain targets."
                                              no-other-end
                                              always-retarget
                                              &allow-other-keys)
-  (let ((opoint (point-marker))
-        (conn-dispatch-target-finder target-finder)
-        (conn--target-window-predicate conn-target-window-predicate)
-        (conn--target-predicate conn-target-predicate)
-        (conn--target-sort-function conn-target-sort-function)
-        (conn-dispatch-repeat-count 0)
-        (conn--dispatch-read-event-message-prefixes nil)
-        (conn--dispatch-always-retarget
-         (or always-retarget
-             (oref action always-retarget)))
-        (conn-dispath-no-other-end no-other-end)
-        (conn-dispatch-other-end
-         (unless no-other-end
-           (xor (conn-dispatch-targets-other-end-p target-finder)
-                (or other-end conn-dispatch-other-end))))
-        (conn--dispatch-action-always-prompt (oref action always-prompt)))
+  (let* ((opoint (point-marker))
+         (recenter-last-op nil)
+         (conn-state-loop-last-command nil)
+         (conn--dispatch-must-prompt nil)
+         (conn--loop-prefix-mag nil)
+         (conn--loop-prefix-sign nil)
+         (conn--dispatch-read-event-handlers
+          (cons #'conn-dispatch-select-command-case
+                conn--dispatch-read-event-handlers))
+         (conn-dispatch-target-finder target-finder)
+         (conn--target-window-predicate conn-target-window-predicate)
+         (conn--target-predicate conn-target-predicate)
+         (conn--target-sort-function conn-target-sort-function)
+         (conn-dispatch-repeat-count 0)
+         (conn--dispatch-read-event-message-prefixes nil)
+         (conn--dispatch-always-retarget
+          (or always-retarget
+              (oref action always-retarget)))
+         (conn-dispath-no-other-end no-other-end)
+         (conn-dispatch-other-end
+          (unless no-other-end
+            (xor (conn-dispatch-targets-other-end-p target-finder)
+                 (or other-end conn-dispatch-other-end))))
+         (conn--dispatch-action-always-prompt (oref action always-prompt))
+         (conn--dispatch-read-event-message-prefixes
+          `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+               (lambda ()
+                 (when-let* ((binding
+                              (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
+                                   (not conn--dispatch-always-retarget)
+                                   (where-is-internal 'retarget
+                                                      conn-dispatch-read-event-map
+                                                      t))))
+                   (concat
+                    (propertize (key-description binding)
+                                'face 'help-key-binding)
+                    " retarget"))))
+            ,(unless conn-dispath-no-other-end
+               (lambda ()
+                 (when-let* ((binding
+                              (where-is-internal 'dispatch-other-end
+                                                 conn-dispatch-read-event-map
+                                                 t)))
+                   (concat
+                    (propertize (key-description binding)
+                                'face 'help-key-binding)
+                    " "
+                    (propertize
+                     "other end"
+                     'face (when conn-dispatch-other-end
+                             'eldoc-highlight-function-argument))))))
+            ,@conn--dispatch-read-event-message-prefixes)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn--target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))
