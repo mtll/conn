@@ -3891,9 +3891,10 @@ Target overlays may override this default by setting the
           (padding-width 0)
           ;; display-line-numbers, line-prefix and wrap-prefix break
           ;; width calculations, temporarily disable them.
-          (linum (prog1 display-line-numbers (setq-local display-line-numbers nil)))
-          (line-pfx (prog1 line-prefix (setq-local line-prefix nil)))
-          (wrap-pfx (prog1 wrap-prefix (setq-local wrap-prefix nil))))
+          (old-state (buffer-local-set-state
+                      display-line-numbers nil
+                      line-prefix nil
+                      wrap-prefix nil)))
       (unwind-protect
           (progn
             (unless (= (overlay-start overlay) (point-max))
@@ -3966,9 +3967,7 @@ Target overlays may override this default by setting the
               (if padding-function
                   (funcall padding-function overlay padding-width)
                 (funcall conn-default-label-padding-function overlay padding-width)))))
-        (setq-local display-line-numbers linum
-                    line-prefix line-pfx
-                    wrap-prefix wrap-pfx)))))
+        (buffer-local-restore-state old-state)))))
 
 (defun conn--dispatch-setup-label-charwise (label)
   (with-slots ((string narrowed-string)
@@ -6306,7 +6305,8 @@ potential expansions.  Functions may return invalid expansions
   :repeat t
   "z" 'conn-expand-exchange
   "j" 'conn-contract
-  "h" 'conn-expand)
+  "h" 'conn-expand
+  "l" 'conn-expand)
 
 (defun conn--expand-filter-regions (regions)
   (let (result)
@@ -6357,10 +6357,11 @@ potential expansions.  Functions may return invalid expansions
 If the region is active only the `point' is moved.
 Expansions are provided by functions in `conn-expansion-functions'."
   (interactive "P")
-  (when (consp arg)
-    (conn--push-ephemeral-mark)
-    (setq arg (log (prefix-numeric-value arg) 4)))
-  (setq arg (prefix-numeric-value arg))
+  (if (consp arg)
+      (progn
+        (conn--push-ephemeral-mark)
+        (setq arg (log (prefix-numeric-value arg) 4)))
+    (setq arg (prefix-numeric-value arg)))
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-contract (- arg))
@@ -6394,7 +6395,10 @@ Expansions are provided by functions in `conn-expansion-functions'."
 If the region is active only the `point' is moved.
 Expansions and contractions are provided by functions in
 `conn-expansion-functions'."
-  (interactive "p")
+  (interactive "P")
+  (if (consp arg)
+      (setq arg (log (prefix-numeric-value arg) 4))
+    (setq arg (prefix-numeric-value arg)))
   (conn--expand-create-expansions)
   (if (< arg 0)
       (conn-expand (- arg))
@@ -6444,7 +6448,7 @@ Expansions and contractions are provided by functions in
   :keymap (conn-get-state-map 'conn-expand-state)
   "z" 'conn-expand-exchange
   "j" 'conn-contract
-  "h" 'conn-expand
+  "l" 'conn-expand
   "v" 'conn-toggle-mark-command
   "e" 'end
   "<mouse-3>" 'end
