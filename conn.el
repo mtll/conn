@@ -5698,9 +5698,10 @@ contain targets."
                     (lambda ()
                       (when-let* ((binding
                                    (and ,rep
-                                        (where-is-internal 'always-retarget
-                                                           conn-dispatch-read-event-map
-                                                           t))))
+                                        (where-is-internal
+                                         'always-retarget
+                                         conn-dispatch-read-event-map
+                                         t))))
                         (concat
                          (propertize (key-description binding)
                                      'face 'help-key-binding)
@@ -7938,15 +7939,14 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                   (lambda (win)
                     (not (buffer-local-value 'buffer-read-only
                                              (window-buffer win)))))
-    (conn-perform-dispatch-loop nil
-      (pcase-let* ((`(,pt ,win ,bounds-op-override)
-                    (save-mark-and-excursion
-                      (conn-dispatch-select-target target-finder))))
-        (funcall action
-                 win pt (or bounds-op-override
-                            (lambda (arg)
-                              (conn-bounds-of-command thing-cmd arg)))
-                 thing-arg)))))
+    (pcase-let* ((`(,pt ,win ,bounds-op-override)
+                  (save-mark-and-excursion
+                    (conn-dispatch-select-target target-finder))))
+      (funcall action
+               win pt (or bounds-op-override
+                          (lambda (arg)
+                            (conn-bounds-of-command thing-cmd arg)))
+               thing-arg))))
 
 (defun conn-transpose-regions (mover arg)
   "Exchange regions defined by a thing command.
