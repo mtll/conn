@@ -3486,18 +3486,18 @@ associated with a command's thing.")
 (defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
   "\(fn (DESCRIPTION &rest CASE) &body BODY)"
   (declare (indent 3))
-  (setq body `(let ((conn--dispatch-read-event-handlers
-                     (cons ,handler conn--dispatch-read-event-handlers)))
-                ,@body))
   (cl-once-only (keymap)
-    `(catch ,tag
-       ,(if keymap
-            `(progn
-               (internal-push-keymap ,keymap 'overriding-terminal-local-map)
-               (unwind-protect
-                   ,body
-                 (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))
-          body))))
+    (let ((body `(let ((conn--dispatch-read-event-handlers
+                        (cons ,handler conn--dispatch-read-event-handlers)))
+                   ,@body)))
+      `(catch ,tag
+         ,(if keymap
+              `(progn
+                 (internal-push-keymap ,keymap 'overriding-terminal-local-map)
+                 (unwind-protect
+                     ,body
+                   (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))
+            body)))))
 
 ;;;;; Dispatch Command Loop
 
@@ -4214,7 +4214,7 @@ Target overlays may override this default by setting the
   (internal-push-keymap conn-dispatch-read-event-map
                         'overriding-terminal-local-map)
   (unwind-protect
-      (let ((inhibit-message t))
+      (progn
         (conn-dispatch-update-targets target-finder)
         (thread-first
           (funcall conn-dispatch-label-function)
@@ -5916,6 +5916,8 @@ contain targets."
                                              always-retarget
                                              &allow-other-keys)
   (let* ((opoint (point-marker))
+         (eldoc-display-functions nil)
+         (inhibit-message t)
          (recenter-last-op nil)
          (conn-state-loop-last-command nil)
          (conn--dispatch-must-prompt nil)
