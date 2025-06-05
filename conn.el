@@ -2019,11 +2019,18 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-with-state-loop
     ( state callback
-      &key case-function message-function initial-arg
+      &key
+      case-function
+      message-function
+      initial-arg
       &allow-other-keys))
 
-(cl-defmethod conn-with-state-loop ( state (callback conn-state-loop-callback)
-                                     &key case-function message-function initial-arg
+(cl-defmethod conn-with-state-loop ( state
+                                     (callback conn-state-loop-callback)
+                                     &key
+                                     case-function
+                                     message-function
+                                     initial-arg
                                      &allow-other-keys)
   (conn-with-transient-state state
     (let ((inhibit-message t)
@@ -2110,11 +2117,13 @@ themselves once the selection process has concluded."
   (thing-arg :mutable t)
   (mark-flag :mutable t :type boolean))
 
-(cl-defmethod conn-with-state-loop ( state (callback conn-read-mover-callback)
+(cl-defmethod conn-with-state-loop ( state
+                                     (callback conn-read-mover-callback)
                                      &key
                                      (case-function 'conn-read-mover-command-case)
                                      (message-function 'conn-read-mover-message)
-                                     initial-arg &allow-other-keys)
+                                     initial-arg
+                                     &allow-other-keys)
   (cl-call-next-method state callback
                        :case-function case-function
                        :message-function message-function
@@ -3555,7 +3564,8 @@ associated with a command's thing.")
        action-description
        (propertize error-message 'face 'error))))))
 
-(cl-defmethod conn-with-state-loop ( state (callback conn-dispatch-callback)
+(cl-defmethod conn-with-state-loop ( state
+                                     (callback conn-dispatch-callback)
                                      &key
                                      (case-function 'conn-dispatch-command-case)
                                      (message-function 'conn-dispatch-message)
@@ -5872,7 +5882,7 @@ contain targets."
   (conn-dispatch-handle-and-redisplay))
 
 
-;;;;; Dispatch Commands
+;;;;; Dispatch Ring
 
 (defvar conn-dispatch-ring-max 12)
 
@@ -5902,9 +5912,82 @@ contain targets."
 (defun conn-describe-dispatch (dispatch)
   (funcall (oref dispatch description)))
 
-(cl-defgeneric conn-perform-dispatch ( action target-finder thing-cmd thing-arg
-                                       &key repeat restrict-windows other-end
-                                       &allow-other-keys))
+(defun conn-dispatch-push-history (action target-finder thing-cmd thing-arg repeat)
+  (conn-dispatch-ring-remove-stale)
+  (unless (oref action no-history)
+    (setf (oref action no-history) t)
+    (conn-ring-insert-front
+     conn-dispatch-ring
+     (oclosure-lambda (conn-dispatch
+                       (restrict-windows
+                        (advice-function-member-p
+                         'conn--dispatch-restrict-windows
+                         conn--target-window-predicate))
+                       (action action)
+                       (thing-cmd thing-cmd)
+                       (thing-arg thing-arg)
+                       (repeat repeat)
+                       (other-end conn-dispatch-other-end)
+                       (always-retarget conn--dispatch-always-retarget)
+                       (repeat-count conn-dispatch-repeat-count)
+                       (description (lambda ()
+                                      (concat
+                                       (conn-describe-action action)
+                                       " @ "
+                                       (symbol-name thing-cmd)
+                                       (format " <%s>" thing-arg)))))
+         (invert-repeat)
+       (interactive "P")
+       (let ((conn-dispatch-repeat-count repeat-count))
+         (conn-perform-dispatch action target-finder
+                                thing-cmd thing-arg
+                                :always-retarget always-retarget
+                                :repeat (xor invert-repeat repeat)
+                                :restrict-windows restrict-windows
+                                :other-end other-end)
+         (setf repeat-count conn-dispatch-repeat-count))))))
+
+(defun conn-dispatch-ring-remove-stale ()
+  (cl-loop for stale in (seq-filter
+                         (lambda (disp)
+                           (conn-action-stale-p (oref disp action)))
+                         (conn-ring-list conn-dispatch-ring))
+           do (conn-ring-delete conn-dispatch-ring stale)))
+
+(defun conn-dispatch-cycle-ring-next ()
+  "Cycle backwards through `conn-dispatch-ring'."
+  (interactive)
+  (unless conn-dispatch-ring
+    (user-error "Dispatch ring empty"))
+  (conn-dispatch-ring-remove-stale)
+  (conn-ring-rotate-backward conn-dispatch-ring)
+  (unless executing-kbd-macro
+    (message (conn-describe-dispatch
+              (conn-ring-head conn-dispatch-ring)))))
+
+(defun conn-dispatch-cycle-ring-previous ()
+  "Cycle backwards through `conn-dispatch-ring'."
+  (interactive)
+  (unless conn-dispatch-ring
+    (user-error "Dispatch ring empty"))
+  (conn-dispatch-ring-remove-stale)
+  (conn-ring-rotate-forward conn-dispatch-ring)
+  (unless executing-kbd-macro
+    (message (conn-describe-dispatch
+              (conn-ring-head conn-dispatch-ring)))))
+
+
+;;;;; Dispatch Commands
+
+(cl-defgeneric conn-perform-dispatch (action
+                                      target-finder
+                                      thing-cmd
+                                      thing-arg
+                                      &key
+                                      repeat
+                                      restrict-windows
+                                      other-end
+                                      &allow-other-keys))
 
 (cl-defmethod conn-perform-dispatch :around ((action conn-action)
                                              target-finder thing-cmd thing-arg
@@ -5968,6 +6051,21 @@ contain targets."
                      "other end"
                      'face (when conn-dispatch-other-end
                              'eldoc-highlight-function-argument))))))
+            (lambda ()
+              (when-let* ((binding
+                           (where-is-internal 'restrict-windows
+                                              conn-dispatch-read-event-map
+                                              t)))
+                (concat
+                 (propertize (key-description binding)
+                             'face 'help-key-binding)
+                 " "
+                 (propertize
+                  "this win"
+                  'face (when (advice-function-member-p
+                               'conn--dispatch-restrict-windows
+                               conn--target-window-predicate)
+                          'eldoc-highlight-function-argument)))))
             ,@conn--dispatch-read-event-message-prefixes)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn--target-window-predicate predicate))
@@ -5993,8 +6091,12 @@ contain targets."
       (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-action)
-                                     target-finder thing-cmd thing-arg
-                                     &key repeat &allow-other-keys)
+                                     target-finder
+                                     thing-cmd
+                                     thing-arg
+                                     &key
+                                     repeat
+                                     &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,bounds-op-override)
                   (conn-dispatch-select-target target-finder)))
@@ -6008,7 +6110,9 @@ contain targets."
                                      target-finder
                                      thing-cmd
                                      thing-arg
-                                     &key repeat &allow-other-keys)
+                                     &key
+                                     repeat
+                                     &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,bounds-op-override1)
                  (conn-dispatch-select-target target-finder))
@@ -6207,74 +6311,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
  :target-finder (lambda () 'conn-dispatch-end-of-lines)
  :default-action 'conn-dispatch-goto)
 
-
-;;;;; Dispatch Ring
-
-(defun conn-dispatch-push-history (action target-finder thing-cmd thing-arg repeat)
-  (conn-dispatch-ring-remove-stale)
-  (unless (oref action no-history)
-    (setf (oref action no-history) t)
-    (conn-ring-insert-front
-     conn-dispatch-ring
-     (oclosure-lambda (conn-dispatch
-                       (restrict-windows
-                        (advice-function-member-p
-                         'conn--dispatch-restrict-windows
-                         conn--target-window-predicate))
-                       (action action)
-                       (thing-cmd thing-cmd)
-                       (thing-arg thing-arg)
-                       (repeat repeat)
-                       (other-end conn-dispatch-other-end)
-                       (always-retarget conn--dispatch-always-retarget)
-                       (repeat-count conn-dispatch-repeat-count)
-                       (description (lambda ()
-                                      (concat
-                                       (conn-describe-action action)
-                                       " @ "
-                                       (symbol-name thing-cmd)
-                                       (format " <%s>" thing-arg)))))
-         (invert-repeat)
-       (interactive "P")
-       (let ((conn-dispatch-repeat-count repeat-count))
-         (conn-perform-dispatch action target-finder
-                                thing-cmd thing-arg
-                                :always-retarget always-retarget
-                                :repeat (xor invert-repeat repeat)
-                                :restrict-windows restrict-windows
-                                :other-end other-end)
-         (setf repeat-count conn-dispatch-repeat-count))))))
-
-(defun conn-dispatch-ring-remove-stale ()
-  (cl-loop for stale in (seq-filter
-                         (lambda (disp)
-                           (conn-action-stale-p (oref disp action)))
-                         (conn-ring-list conn-dispatch-ring))
-           do (conn-ring-delete conn-dispatch-ring stale)))
-
-(defun conn-dispatch-cycle-ring-next ()
-  "Cycle backwards through `conn-dispatch-ring'."
-  (interactive)
-  (unless conn-dispatch-ring
-    (user-error "Dispatch ring empty"))
-  (conn-dispatch-ring-remove-stale)
-  (conn-ring-rotate-backward conn-dispatch-ring)
-  (unless executing-kbd-macro
-    (message (conn-describe-dispatch
-              (conn-ring-head conn-dispatch-ring)))))
-
-(defun conn-dispatch-cycle-ring-previous ()
-  "Cycle backwards through `conn-dispatch-ring'."
-  (interactive)
-  (unless conn-dispatch-ring
-    (user-error "Dispatch ring empty"))
-  (conn-dispatch-ring-remove-stale)
-  (conn-ring-rotate-forward conn-dispatch-ring)
-  (unless executing-kbd-macro
-    (message (conn-describe-dispatch
-              (conn-ring-head conn-dispatch-ring)))))
-
-
 ;;;;; Dispatch Registers
 
 (cl-defstruct (conn-dispatch-register
@@ -7934,7 +7970,9 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   (bounds-op :type function))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
-                                     target-finder thing-cmd thing-arg
+                                     target-finder
+                                     thing-cmd
+                                     thing-arg
                                      &key &allow-other-keys)
   (let ((conn--target-window-predicate conn--target-window-predicate))
     (add-function :after-while conn--target-window-predicate
