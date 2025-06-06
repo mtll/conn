@@ -6083,7 +6083,8 @@ contain targets."
           (conn-dispatch-cleanup-target-state target-finder))
         (ignore-errors
           (conn-delete-targets))
-        (message nil)
+        (let ((inhibit-message nil))
+          (message nil))
         (ignore-errors
           (with-current-buffer (marker-buffer opoint)
             (unless (= (point) opoint)
