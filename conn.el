@@ -10079,6 +10079,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler
+ 'conn-outline-state
  'outline-up-heading
  'outline-next-heading
  'outline-next-visible-heading
@@ -10102,6 +10103,15 @@ Operates with the selected windows parent window."
 
 (defun conn-outline-state ()
   (interactive)
+  (conn-enter-state 'conn-outline-state))
+
+(defun conn-outline-state ()
+  (interactive)
+  (conn-enter-state 'conn-outline-state))
+
+(defun conn-outline-state-prev-heading ()
+  (interactive)
+  (outline-previous-visible-heading 1)
   (conn-enter-state 'conn-outline-state))
 
 (defun conntext-outline-state ()
