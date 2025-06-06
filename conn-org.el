@@ -88,7 +88,10 @@
 (defun conn-org-edit-state-prev-heading ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
-  (org-previous-visible-heading 1)
+  (unless (save-excursion
+            (goto-char (pos-bol))
+            (looking-at-p outline-regexp))
+    (org-previous-visible-heading 1))
   (conn-enter-state 'conn-org-edit-state))
 
 (defun conn-org-edit-insert-heading ()

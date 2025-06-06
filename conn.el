@@ -10111,7 +10111,10 @@ Operates with the selected windows parent window."
 
 (defun conn-outline-state-prev-heading ()
   (interactive)
-  (outline-previous-visible-heading 1)
+  (unless (save-excursion
+            (goto-char (pos-bol))
+            (looking-at-p outline-regexp))
+    (outline-previous-visible-heading 1))
   (conn-enter-state 'conn-outline-state))
 
 (defun conntext-outline-state ()
