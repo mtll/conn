@@ -10089,50 +10089,62 @@ Operates with the selected windows parent window."
 
 (define-minor-mode conntext-outline-mode
   "Minor mode for contextual bindings in outline-mode."
-  :global t)
+  :global t
+  (if conntext-smartparens-mode
+      (add-hook 'conntext-state-hook 'conntext-outline-state -80)
+    (remove-hook 'conntext-state-hook 'conntext-outline-state)))
 
-(defvar-keymap conntext-outline-map
-  "/ h" 'outline-hide-by-heading-regexp
-  "/ s" 'outline-show-by-heading-regexp
-  "<" 'outline-promote
-  ">" 'outline-demote
-  "I" 'outline-move-subtree-up
-  "K" 'outline-move-subtree-down
+(conn-define-state conn-outline-state ()
+  "State for dispatch in `dired-mode'."
+  :cursor '(hbar . 10)
+  :lighter " **"
+  :suppress-input-method t)
+
+(defun conntext-outline-state ()
+  (when (and outline-minor-mode
+             (save-excursion
+               (goto-char (pos-bol))
+               (looking-at-p outline-regexp)))
+    (conn-enter-state 'conn-outline-state)
+    t))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-outline-state)
+  "<escape>" 'conn-command-state
+  "J" 'outline-promote
+  "L" 'outline-demote
+  "O" 'outline-move-subtree-down
   "RET" 'outline-insert-heading
-  "a" 'outline-show-all
-  "c" 'outline-hide-entry
-  "e" 'outline-show-entry
+  "SPC" 'conn-set-mark-command
+  "U" 'outline-move-subtree-up
+  "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
+  "b" 'outline-show-branches
+  "c" (conn-remap-key "C-c" t)
+  "d h" 'outline-hide-by-heading-regexp
+  "d s" 'outline-show-by-heading-regexp
+  "e" 'conn-previous-state
   "f" 'outline-hide-other
+  "g" (conn-remap-key "M-g" t)
   "h" 'outline-hide-subtree
   "i" 'outline-previous-visible-heading
   "j" 'outline-backward-same-level
   "k" 'outline-next-visible-heading
-  "b" 'outline-show-branches
   "l" 'outline-forward-same-level
-  "v" 'outline-hide-leaves
-  "m" 'outline-mark-subtree
-  "o" 'outline-show-children
+  "m" 'outline-show-subtree
+  "n" 'outline-hide-leaves
+  "o" 'outline-hide-other
+  "p" 'conn-register-prefix
   "q" 'outline-hide-sublevels
-  "s" 'outline-show-subtree
+  "r" (conn-remap-key "<conn-region-map>" t)
+  "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body
-  "u" 'outline-up-heading)
-
-(defvar-keymap conntext-outline-edit-repeat-map
-  :repeat t
-  "<" 'outline-promote
-  ">" 'outline-demote
-  "I" 'outline-move-subtree-up
-  "K" 'outline-move-subtree-down)
-
-(defvar-keymap conntext-outline-movement-repeat-map
-  :repeat t
-  "i" 'outline-previous-visible-heading
-  "j" 'outline-backward-same-level
-  "k" 'outline-next-visible-heading
-  "l" 'outline-forward-same-level
-  "u" 'outline-up-heading)
-
-(conn-set-mode-map-depth 'conn-command-state 'conntext-outline-mode -80)
+  "u" 'outline-up-heading
+  "v" 'conn-toggle-mark-command
+  "w" 'conn-kill-region
+  "x" (conn-remap-key "C-x" t)
+  "y" 'outline-show-subtree
+  "z" 'conn-exchange-mark-command)
 
 
 ;;;; Dired
