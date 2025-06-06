@@ -10091,7 +10091,7 @@ Operates with the selected windows parent window."
 (define-minor-mode conntext-outline-mode
   "Minor mode for contextual bindings in outline-mode."
   :global t
-  (if conntext-smartparens-mode
+  (if conntext-outline-mode
       (add-hook 'conntext-state-hook 'conntext-outline-state -80)
     (remove-hook 'conntext-state-hook 'conntext-outline-state)))
 
@@ -10100,10 +10100,6 @@ Operates with the selected windows parent window."
   :cursor '(hbar . 10)
   :lighter " **"
   :suppress-input-method t)
-
-(defun conn-outline-state ()
-  (interactive)
-  (conn-enter-state 'conn-outline-state))
 
 (defun conn-outline-state ()
   (interactive)
