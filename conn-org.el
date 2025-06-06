@@ -27,48 +27,55 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-org-edit-state)
   :suppress t
-  "e" 'conn-previous-state
-  "<escape>" 'conn-previous-state
-  "SPC" 'conn-scroll-up
-  "<backspace>" 'conn-scroll-down
-  "DEL" 'conn-scroll-down
+  ";" 'conn-wincontrol
+  "*" 'conn-org-edit-insert-heading
   "." 'point-to-register
   "/" (conn-remap-key conn-undo-keys t)
-  "a" 'execute-extended-command
-  "A" 'execute-extended-command-for-buffer
-  "*" 'conn-org-edit-insert-heading
   "<" 'org-drag-element-backward
+  "<backspace>" 'conn-scroll-down
+  "<escape>" 'conn-previous-state
   ">" 'org-drag-element-forward
   "?" (conn-remap-key conn-undo-redo-keys t)
-  "f" 'conn-dispatch-state
+  "A" 'execute-extended-command-for-buffer
   "C" 'org-toggle-comment
-  "b" (conn-remap-key "C-c C-v")
-  "c" (conn-remap-key "C-c")
-  "r" (conn-remap-key "C-c C-x")
-  "d" 'org-down-element
-  "g" (conn-remap-keymap "M-g" t)
-  "i" 'org-backward-heading-same-level
+  "DEL" 'conn-scroll-down
   "I" 'org-metaup
   "J" 'org-metaleft
-  "j" 'org-previous-visible-heading
-  "k" 'org-forward-heading-same-level
   "K" 'org-metadown
   "L" 'org-metaright
-  "l" 'org-next-visible-heading
   "M" 'org-mark-subtree
-  "m" 'org-forward-element
-  "n" 'org-backward-element
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
-  "p" 'conn-register-load
-  "s" (conn-remap-keymap "M-s" t)
+  "SPC" 'conn-scroll-up
   "T" 'org-todo
-  "t" 'org-sparse-tree
   "U" 'org-previous-block
-  "u" 'org-up-element
   "W" 'widen
+  "a" 'execute-extended-command
+  "A" 'execute-extended-command-for-buffer
+  "b" (conn-remap-key "C-c C-v")
+  "c" (conn-remap-key "C-c")
+  "d" 'org-down-element
+  "e" 'conn-previous-state
+  "f" 'conn-dispatch-state
+  "g" (conn-remap-keymap "M-g" t)
+  "h" 'conn-wincontrol-one-command
+  "i" 'org-previous-visible-heading
+  "j" 'org-backward-heading-same-level
+  "k" 'org-next-visible-heading
+  "l" 'org-forward-heading-same-level
+  "m" 'org-forward-element
+  "n" 'org-backward-element
+  "o" 'outline-hide-other
+  "p" 'conn-register-load
+  "q" (conn-remap-key "C-c C-x")
+  "r" (conn-remap-keymap "<conn-region-map>")
+  "s" (conn-remap-keymap "M-s" t)
+  "t" 'org-sparse-tree
+  "u" 'org-up-element
+  "v" 'conn-toggle-mark-command
   "w" 'org-refile
   "x" (conn-remap-key "C-x" t)
+  ;; "y"
   "z" 'conn-exchange-mark-command)
 
 ;;;###autoload

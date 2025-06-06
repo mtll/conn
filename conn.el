@@ -10100,6 +10100,10 @@ Operates with the selected windows parent window."
   :lighter " **"
   :suppress-input-method t)
 
+(defun conn-outline-state ()
+  (interactive)
+  (conn-enter-state 'conn-outline-state))
+
 (defun conntext-outline-state ()
   (when (and outline-minor-mode
              (save-excursion
@@ -10110,6 +10114,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
+  ";" 'conn-wincontrol
   "<escape>" 'conn-command-state
   "J" 'outline-promote
   "L" 'outline-demote
@@ -10124,9 +10129,9 @@ Operates with the selected windows parent window."
   "d h" 'outline-hide-by-heading-regexp
   "d s" 'outline-show-by-heading-regexp
   "e" 'conn-previous-state
-  "f" 'outline-hide-other
+  "f" 'conn-dispatch-state
   "g" (conn-remap-key "M-g" t)
-  "h" 'outline-hide-subtree
+  "h" 'conn-wincontrol-one-command
   "i" 'outline-previous-visible-heading
   "j" 'outline-backward-same-level
   "k" 'outline-next-visible-heading
@@ -10135,15 +10140,15 @@ Operates with the selected windows parent window."
   "n" 'outline-hide-leaves
   "o" 'outline-hide-other
   "p" 'conn-register-prefix
-  "q" 'outline-hide-sublevels
-  "r" (conn-remap-key "<conn-region-map>" t)
+  ;; "q"
+  "r" (conn-remap-key "<conn-region-map>")
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body
   "u" 'outline-up-heading
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
   "x" (conn-remap-key "C-x" t)
-  "y" 'outline-show-subtree
+  ;; "y"
   "z" 'conn-exchange-mark-command)
 
 
