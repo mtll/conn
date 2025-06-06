@@ -344,7 +344,10 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (cl-defstruct (conn-ring
                (:constructor conn--make-ring (capacity cleanup)))
   "A ring that removes elements in least recently visited order."
-  list history capacity cleanup)
+  list
+  history
+  capacity
+  cleanup)
 
 (cl-defun conn-ring (capacity &key cleanup)
   (cl-assert (and (integerp capacity)
@@ -842,13 +845,6 @@ meaning of CONDITION see `buffer-match-p'."
 
 (defvar-local conn-previous-state nil
   "Previous conn state in buffer.")
-
-(defvar conn-next-state nil
-  "Next conn state in buffer.
-
-This variable will be bound to the state t be entered during
-`conn-enter-state'.  In particular this will be bound when
-`conn-enter-state' calls `conn-exit-state' and `conn-exit-functions'.")
 
 (defvar-local conn-transient-state-stack nil)
 
@@ -1432,8 +1428,7 @@ and specializes the method on all conn states."
 (cl-defmethod conn-enter-state :around ((state conn-state)
                                         &key &allow-other-keys)
   (unless (symbol-value state)
-    (let ((success nil)
-          (conn-next-state state))
+    (let ((success nil))
       (unwind-protect
           (progn
             (conn-exit-state conn-current-state)
@@ -1458,7 +1453,7 @@ and specializes the method on all conn states."
             (setq success t))
         (unless success
           (conn-local-mode -1)
-          (message "Error entering state %s." ',name))))
+          (message "Error entering state %s." state))))
     (run-hook-wrapped
      'conn-state-entry-functions
      (lambda (fn)
@@ -1497,7 +1492,9 @@ NAME.
 :CURSOR is the `cursor-type' in NAME.
 
 Code that should be run whenever a state is entered or exited can be
-added as methods to `conn-enter-state' and `conn-exit-state', which see.
+added as methods to `conn-enter-state' and `conn-exit-state', or added
+to the abnormal hooks `conn-state-entry-functions' or
+`conn-state-exit-functions'.
 
 \(fn NAME PARENTS &optional DOC [KEYWORD VAL ...])"
   (declare (debug ( name form string-or-null-p
@@ -1698,7 +1695,9 @@ which see.")
 
 (cl-defstruct (conn-window-label)
   "Store the state for a window label."
-  string window state)
+  string
+  window
+  state)
 
 (defun conn-simple-labels (count &optional face)
   "Return a list of label strings of length COUNT.
@@ -1817,8 +1816,7 @@ returned.")
   (pcase-let* (((cl-struct conn-window-label window string state) label)
                (`(,pt ,vscroll ,hscroll) state))
     (with-current-buffer (window-buffer window)
-      (when (eq (car-safe (car-safe header-line-format))
-                'conn-mode)
+      (when (eq 'conn-mode (car-safe (car-safe header-line-format)))
         (setq-local header-line-format (cadadr header-line-format))))
     (set-window-point window pt)
     (set-window-hscroll window hscroll)
@@ -2017,21 +2015,21 @@ themselves once the selection process has concluded."
                  (message-log-max nil))
              (funcall conn--loop-message-function))))))
 
-(cl-defgeneric conn-with-state-loop
-    ( state callback
-      &key
-      case-function
-      message-function
-      initial-arg
-      &allow-other-keys))
-
-(cl-defmethod conn-with-state-loop ( state
-                                     (callback conn-state-loop-callback)
+(cl-defgeneric conn-with-state-loop (state
+                                     callback
                                      &key
                                      case-function
                                      message-function
                                      initial-arg
-                                     &allow-other-keys)
+                                     &allow-other-keys))
+
+(cl-defmethod conn-with-state-loop (state
+                                    (callback conn-state-loop-callback)
+                                    &key
+                                    case-function
+                                    message-function
+                                    initial-arg
+                                    &allow-other-keys)
   (conn-with-transient-state state
     (let ((inhibit-message t)
           (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
@@ -2117,13 +2115,13 @@ themselves once the selection process has concluded."
   (thing-arg :mutable t)
   (mark-flag :mutable t :type boolean))
 
-(cl-defmethod conn-with-state-loop ( state
-                                     (callback conn-read-mover-callback)
-                                     &key
-                                     (case-function 'conn-read-mover-command-case)
-                                     (message-function 'conn-read-mover-message)
-                                     initial-arg
-                                     &allow-other-keys)
+(cl-defmethod conn-with-state-loop (state
+                                    (callback conn-read-mover-callback)
+                                    &key
+                                    (case-function 'conn-read-mover-command-case)
+                                    (message-function 'conn-read-mover-message)
+                                    initial-arg
+                                    &allow-other-keys)
   (cl-call-next-method state callback
                        :case-function case-function
                        :message-function message-function
@@ -2649,8 +2647,11 @@ Possibilities: \\<query-replace-map>
          (when-let* ((pt (pop points)))
            (cons pt pt)))))))
 
-(defun conn--kapply-match-iterator ( string regions &optional
-                                     sort-function regexp-flag delimited-flag)
+(defun conn--kapply-match-iterator ( string regions
+                                     &optional
+                                     sort-function
+                                     regexp-flag
+                                     delimited-flag)
   (let (matches)
     (save-excursion
       (pcase-dolist (`(,beg . ,end) regions)
@@ -3564,13 +3565,13 @@ associated with a command's thing.")
        action-description
        (propertize error-message 'face 'error))))))
 
-(cl-defmethod conn-with-state-loop ( state
-                                     (callback conn-dispatch-callback)
-                                     &key
-                                     (case-function 'conn-dispatch-command-case)
-                                     (message-function 'conn-dispatch-message)
-                                     initial-arg
-                                     &allow-other-keys)
+(cl-defmethod conn-with-state-loop (state
+                                    (callback conn-dispatch-callback)
+                                    &key
+                                    (case-function 'conn-dispatch-command-case)
+                                    (message-function 'conn-dispatch-message)
+                                    initial-arg
+                                    &allow-other-keys)
   (require 'conn-transients)
   (let ((success nil))
     (unwind-protect
@@ -4215,16 +4216,20 @@ Target overlays may override this default by setting the
             (when (and (not (posn-area posn))
                        (funcall conn--target-window-predicate win))
               (throw 'mouse-click (list pt win nil))))))
-    (cl-call-next-method)))
+    (conn-dispatch-select-mode 1)
+    (internal-push-keymap conn-dispatch-read-event-map
+                          'overriding-terminal-local-map)
+    (unwind-protect
+        (cl-call-next-method)
+      (internal-pop-keymap conn-dispatch-read-event-map
+                           'overriding-terminal-local-map)
+      (conn-dispatch-select-mode -1))))
 
 (cl-defmethod conn-dispatch-select-target (target-finder)
-  (when conn--dispatch-always-retarget
-    (conn-dispatch-retarget conn-dispatch-target-finder))
-  (conn-dispatch-select-mode 1)
-  (internal-push-keymap conn-dispatch-read-event-map
-                        'overriding-terminal-local-map)
   (unwind-protect
       (progn
+        (when conn--dispatch-always-retarget
+          (conn-dispatch-retarget conn-dispatch-target-finder))
         (conn-dispatch-update-targets target-finder)
         (thread-first
           (funcall conn-dispatch-label-function)
@@ -4236,10 +4241,7 @@ Target overlays may override this default by setting the
                                  conn--dispatch-action-always-prompt
                                  (> conn-dispatch-repeat-count 0)))
           (conn--target-label-payload)))
-    (internal-pop-keymap conn-dispatch-read-event-map
-                         'overriding-terminal-local-map)
-    (conn-delete-targets)
-    (conn-dispatch-select-mode -1)))
+    (conn-delete-targets)))
 
 
 ;;;;; Dispatch Target Finders
