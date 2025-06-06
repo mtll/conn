@@ -3195,7 +3195,7 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
   :group 'conn-faces)
 
 (defvar-local conn--mark-cursor nil)
-(put 'conn--mark-cursor 'permanent-local nil)
+(put 'conn--mark-cursor 'permanent-local t)
 
 (defvar conn--prev-mark-even-if-inactive nil
   "Previous value of `mark-even-if-inactive'.
