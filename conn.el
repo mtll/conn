@@ -966,11 +966,13 @@ return it."
   (cl-assert (symbolp mode))
   (or (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
         (nth 1 (gethash mode mmode-table)))
-      (let* ((keymap (setf (gethash mode (gethash state conn--major-mode-maps))
-                           (make-composed-keymap (make-sparse-keymap)))))
-        (setf (cddr keymap)
-              (cl-loop for parent in (cdr (conn--state-all-parents state))
-                       collect (conn-get-major-mode-map parent mode)))
+      (let* ((keymap
+              (make-composed-keymap
+               (make-sparse-keymap)
+               (cl-loop for parent in (cdr (conn--state-all-parents state))
+                        collect (conn-get-major-mode-map parent mode)))))
+        (setf (gethash mode (gethash state conn--major-mode-maps))
+              keymap)
         (dolist (child (conn--state-all-children state))
           (conn-get-major-mode-map child mode))
         (nth 1 keymap))))
@@ -3155,8 +3157,8 @@ For the meaning of MARK-HANDLER see `conn-get-mark-handler'.")
           ((= (point) beg)
            (pcase (bounds-of-thing-at-point conn-this-command-thing)
              (`(,beg . ,end)
-              (when (= (point) beg) (conn--push-ephemeral-mark end))
-              (when (= (point) end) (conn--push-ephemeral-mark beg)))))
+              (cond ((= (point) beg) (conn--push-ephemeral-mark end))
+                    ((= (point) end) (conn--push-ephemeral-mark beg))))))
           ((let ((dir (pcase (- (point) beg)
                         (0 0)
                         ((pred (< 0)) 1)
@@ -10079,7 +10081,7 @@ Operates with the selected windows parent window."
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler
- 'conn-outline-state
+ 'conn-outline-state-prev-heading
  'outline-up-heading
  'outline-next-heading
  'outline-next-visible-heading
@@ -10107,7 +10109,7 @@ Operates with the selected windows parent window."
 
 (defun conn-outline-state-prev-heading ()
   (interactive)
-  (unless (save-excursion
+  (unless (progn
             (goto-char (pos-bol))
             (looking-at-p outline-regexp))
     (outline-previous-visible-heading 1))
@@ -10115,7 +10117,7 @@ Operates with the selected windows parent window."
 
 (defun conntext-outline-state ()
   (when (and outline-minor-mode
-             (save-excursion
+             (progn
                (goto-char (pos-bol))
                (looking-at-p outline-regexp)))
     (conn-enter-state 'conn-outline-state)
@@ -10157,7 +10159,7 @@ Operates with the selected windows parent window."
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
   "x" (conn-remap-key "C-x" t)
-  ;; "y"
+  "y" 'outline-show-all
   "z" 'conn-exchange-mark-command)
 
 

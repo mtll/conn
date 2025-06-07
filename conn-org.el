@@ -75,7 +75,7 @@
   "v" 'conn-toggle-mark-command
   "w" 'org-refile
   "x" (conn-remap-key "C-x" t)
-  ;; "y"
+  "y" 'org-show-all
   "z" 'conn-exchange-mark-command)
 
 ;;;###autoload
@@ -88,7 +88,7 @@
 (defun conn-org-edit-state-prev-heading ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
-  (unless (save-excursion
+  (unless (progn
             (goto-char (pos-bol))
             (looking-at-p outline-regexp))
     (org-previous-visible-heading 1))
@@ -256,6 +256,7 @@
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler
+ 'conn-org-edit-state-prev-heading
  'org-next-visible-heading
  'org-previous-visible-heading)
 
