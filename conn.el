@@ -1772,7 +1772,7 @@ returned.")
 
 (cl-defmethod conn-label-delete ((label conn-dispatch-label))
   (delete-overlay (conn-dispatch-label-overlay label))
-  (remhash (conn-dispatch-label-target label) conn-target-labels))
+  (setf (overlay-get (conn-dispatch-label-target label) 'conn-label) nil))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
   (pcase-let (((cl-struct conn-dispatch-label narrowed-string) label))
@@ -3721,8 +3721,6 @@ with `conn-dispatch-thing-ignored-modes'."
 
 (defvar conn-targets nil)
 
-(defvar conn-target-labels (make-hash-table :test 'eq))
-
 (defvar conn-target-count 0)
 
 (defvar conn-dispatch-target-finder nil)
@@ -3796,6 +3794,7 @@ Optionally the overlay may have an associated THING."
 (defun conn-delete-target-overlay (ov)
   (let ((win (overlay-get ov 'window)))
     (cl-assert (memq ov (alist-get win conn-targets)))
+    (conn-label-delete (overlay-get ov 'conn-label))
     (setf (alist-get win conn-targets)
           (delq ov (alist-get win conn-targets))))
   (delete-overlay ov))
@@ -3804,7 +3803,16 @@ Optionally the overlay may have an associated THING."
   (when (length> string 0)
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
-        (pcase-dolist (`(,beg . ,end) (conn--visible-matches string predicate))
+        (pcase-dolist (`(,beg . ,end)
+                       (conn--visible-matches string predicate))
+          (conn-make-target-overlay beg (- end beg)))))))
+
+(defun conn-make-re-target-overlays (regexp &optional predicate)
+  (when (length> regexp 0)
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (pcase-dolist (`(,beg . ,end)
+                       (conn--visible-re-matches regexp predicate))
           (conn-make-target-overlay beg (- end beg)))))))
 
 (defun conn--read-string-with-timeout (&optional predicate)
@@ -4065,9 +4073,9 @@ Target overlays may override this default by setting the
            (ov (make-overlay beg beg (overlay-buffer target))
                (delete-overlay ov))
            (str (propertize string 'face 'conn-dispatch-label-face)))
-        (overlay-put ov 'category 'conn-label-overlay)
-        (overlay-put ov 'window window)
-        (setf (gethash target conn-target-labels)
+        (setf (overlay-get ov 'category) 'conn-label-overlay
+              (overlay-get ov 'window) window
+              (overlay-get target 'conn-label)
               (conn--make-dispatch-label
                :setup-function (if (conn-dispatch-pixelwise-label-p ov)
                                    'conn--dispatch-setup-label-pixelwise
@@ -4252,9 +4260,8 @@ Target overlays may override this default by setting the
 (defun conn-delete-targets ()
   (pcase-dolist (`(_ . ,targets) conn-targets)
     (dolist (target targets)
+      (conn-label-delete (overlay-get target 'conn-label))
       (delete-overlay target)))
-  (maphash (lambda (_ label) (conn-label-delete label))
-           conn-target-labels)
   (clrhash conn--pixelwise-window-cache)
   (clrhash conn--dispatch-window-lines-cache)
   (setq conn-targets nil
@@ -7346,47 +7353,55 @@ instances of from-string.")
   (when-let* ((default (conn-replace-read-default)))
     (regexp-quote default)))
 
-(defun conn--replace-read-args (prompt regexp-flag regions &optional noerror)
+(defun conn--replace-read-from ( prompt regions
+                                 &optional regexp-flag delimited-flag)
+  (minibuffer-with-setup-hook
+      (minibuffer-lazy-highlight-setup
+       :case-fold case-fold-search
+       :filter (lambda (mb me)
+                 (cl-loop for (beg . end) in regions
+                          when (<= beg mb me end) return t))
+       :highlight query-replace-lazy-highlight
+       :regexp regexp-flag
+       :regexp-function (or replace-regexp-function
+                            delimited-flag
+                            (and replace-char-fold
+                                 (not regexp-flag)
+                                 #'char-fold-to-regexp))
+       :transform (lambda (string)
+                    (let* ((split (query-replace--split-string string))
+                           (from-string (if (consp split) (car split) split)))
+                      (when (and case-fold-search search-upper-case)
+                        (setq isearch-case-fold-search
+                              (isearch-no-upper-case-p from-string regexp-flag)))
+                      from-string)))
+    (minibuffer-with-setup-hook
+        (lambda ()
+          (thread-last
+            (current-local-map)
+            (make-composed-keymap conn-replace-from-map)
+            (use-local-map)))
+      (if regexp-flag
+          (let ((query-replace-read-from-regexp-default
+                 (if-let* ((def (conn-replace-read-regexp-default)))
+                     def
+                   query-replace-read-from-regexp-default)))
+            (query-replace-read-from prompt regexp-flag))
+        (query-replace-read-from prompt regexp-flag)))))
+
+(defun conn--replace-read-args ( prompt regexp-flag regions
+                                 &optional noerror)
   (unless noerror
     (barf-if-buffer-read-only))
   (conn--with-region-emphasis regions
     (save-mark-and-excursion
-      (let* ((delimited-flag (and current-prefix-arg
+      (let* ((conn-query-flag conn-query-flag)
+             (delimited-flag (and current-prefix-arg
                                   (not (eq current-prefix-arg '-))))
-             (conn-query-flag conn-query-flag)
-             (from (minibuffer-with-setup-hook
-                       (minibuffer-lazy-highlight-setup
-                        :case-fold case-fold-search
-                        :filter (lambda (mb me)
-                                  (cl-loop for (beg . end) in regions
-                                           when (<= beg mb me end) return t))
-                        :highlight query-replace-lazy-highlight
-                        :regexp regexp-flag
-                        :regexp-function (or replace-regexp-function
-                                             delimited-flag
-                                             (and replace-char-fold
-                                                  (not regexp-flag)
-                                                  #'char-fold-to-regexp))
-                        :transform (lambda (string)
-                                     (let* ((split (query-replace--split-string string))
-                                            (from-string (if (consp split) (car split) split)))
-                                       (when (and case-fold-search search-upper-case)
-                                         (setq isearch-case-fold-search
-                                               (isearch-no-upper-case-p from-string regexp-flag)))
-                                       from-string)))
-                     (minibuffer-with-setup-hook
-                         (lambda ()
-                           (thread-last
-                             (current-local-map)
-                             (make-composed-keymap conn-replace-from-map)
-                             (use-local-map)))
-                       (if regexp-flag
-                           (let ((query-replace-read-from-regexp-default
-                                  (if-let* ((def (conn-replace-read-regexp-default)))
-                                      def
-                                    query-replace-read-from-regexp-default)))
-                             (query-replace-read-from prompt regexp-flag))
-                         (query-replace-read-from prompt regexp-flag)))))
+             (from (conn--replace-read-from prompt
+                                            regions
+                                            regexp-flag
+                                            delimited-flag))
              (to (if (consp from)
                      (prog1 (cdr from) (setq from (car from)))
                    (minibuffer-with-setup-hook
@@ -7398,7 +7413,8 @@ instances of from-string.")
                      (query-replace-read-to from prompt regexp-flag)))))
         (list from to
               (or delimited-flag
-                  (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
+                  (and (plist-member (text-properties-at 0 from)
+                                     'isearch-regexp-function)
                        (get-text-property 0 'isearch-regexp-function from)))
               (and current-prefix-arg (eq current-prefix-arg '-))
               conn-query-flag)))))
@@ -7457,7 +7473,9 @@ instances of from-string.")
                  (conn--replace-read-args
                   (concat "Replace"
                           (if current-prefix-arg
-                              (if (eq current-prefix-arg '-) " backward" " word")
+                              (if (eq current-prefix-arg '-)
+                                  " backward"
+                                " word")
                             ""))
                   t (or (cdr regions) regions) nil)))
      (append (list thing-mover arg) common)))
@@ -10151,7 +10169,7 @@ Operates with the selected windows parent window."
   "n" 'outline-hide-leaves
   "o" 'outline-hide-other
   "p" 'conn-register-prefix
-  ;; "q"
+  "q" 'conn-transpose-regions
   "r" (conn-remap-key "<conn-region-map>")
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body

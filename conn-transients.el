@@ -655,8 +655,7 @@ A zero means repeat until error."
   (macro :mutable t))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
-  (letrec ((wconf (current-window-configuration))
-           (action nil)
+  (letrec ((action nil)
            (setup (lambda ()
                     (conn-without-transient-state
                       (conn-dispatch-kapply-prefix
@@ -667,7 +666,6 @@ A zero means repeat until error."
     (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
     (unwind-protect
         (recursive-edit)
-      (set-window-configuration wconf)
       (remove-hook 'post-command-hook setup)
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
     action))
@@ -678,7 +676,9 @@ A zero means repeat until error."
             (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">"))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
-                                     target-finder thing-cmd thing-arg
+                                     target-finder
+                                     thing-cmd
+                                     thing-arg
                                      &key repeat &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
@@ -711,29 +711,30 @@ A zero means repeat until error."
                          (alist-get :regions args)
                          'conn--kapply-pulse-region
                          (alist-get :window-conf args))))
-    (funcall callback
-             (oclosure-lambda (conn-dispatch-kapply
-                               (macro nil))
-                 (window pt bounds-op bounds-arg)
-               (let ((conn-kapply-suppress-message t))
-                 (conn-with-dispatch-suspended
-                   (with-selected-window window
-                     (with-undo-amalgamate
-                       (apply #'conn--kapply-compose-iterator
-                              (conn--kapply-region-iterator
-                               (save-excursion
-                                 (goto-char pt)
-                                 (pcase (funcall bounds-op bounds-arg)
-                                   ('nil (user-error "Cannot find thing at point"))
-                                   (`(,region) (list region))
-                                   (`(,_ . ,subregions) subregions))))
-                              `(,@pipeline
-                                ,(pcase (alist-get :kmacro args)
-                                   ('conn--kmacro-apply
-                                    (lambda (iterator)
-                                      (conn--kmacro-apply iterator nil macro)))
-                                   (kmacro kmacro))))))))
-               (unless macro (setq macro (kmacro-ring-head)))))))
+    (thread-last
+      (oclosure-lambda (conn-dispatch-kapply
+                        (macro nil))
+          (window pt bounds-op bounds-arg)
+        (let ((conn-kapply-suppress-message t))
+          (conn-with-dispatch-suspended
+            (with-selected-window window
+              (with-undo-amalgamate
+                (apply #'conn--kapply-compose-iterator
+                       (conn--kapply-region-iterator
+                        (save-excursion
+                          (goto-char pt)
+                          (pcase (funcall bounds-op bounds-arg)
+                            ('nil (user-error "Cannot find thing at point"))
+                            (`(,region) (list region))
+                            (`(,_ . ,subregions) subregions))))
+                       `(,@pipeline
+                         ,(pcase (alist-get :kmacro args)
+                            ('conn--kmacro-apply
+                             (lambda (iterator)
+                               (conn--kmacro-apply iterator nil macro)))
+                            (kmacro kmacro))))))))
+        (unless macro (setq macro (kmacro-ring-head))))
+      (funcall callback))))
 
 (transient-define-suffix conn--kapply-isearch-suffix (args)
   "Apply keyboard macro on current isearch matches."
