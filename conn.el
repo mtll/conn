@@ -9025,6 +9025,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
   "h" 'kill-buffer-and-window
+  "H" 'conn-kill-this-buffer
   "<escape>" 'conn-wincontrol-exit
   "<return>" 'conn-other-place-prefix
   "F" 'toggle-frame-fullscreen
@@ -9456,6 +9457,10 @@ Operates with the selected windows parent window."
         ">" 'window-layout-rotate-clockwise
         "," 'rotate-windows-back
         "." 'rotate-windows)))
+
+(defun conn-kill-this-buffer ()
+  (interactive)
+  (kill-buffer))
 
 
 ;;;; Keymaps
