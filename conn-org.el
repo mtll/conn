@@ -27,6 +27,7 @@
 (define-keymap
   :keymap (conn-get-state-map 'conn-org-edit-state)
   :suppress t
+  "_" 'org-down-element
   ";" 'conn-wincontrol
   "*" 'conn-org-edit-insert-heading
   "." 'point-to-register
@@ -54,7 +55,7 @@
   "A" 'execute-extended-command-for-buffer
   "b" (conn-remap-key "C-c C-v")
   "c" (conn-remap-key "C-c")
-  "d" 'org-down-element
+  "d" (conn-remap-key "C-c C-x")
   "e" 'conn-previous-state
   "f" 'conn-dispatch-state
   "g" (conn-remap-keymap "M-g" t)
@@ -67,7 +68,7 @@
   "n" 'org-backward-element
   "o" 'outline-hide-other
   "p" 'conn-register-load
-  "q" (conn-remap-key "C-c C-x")
+  "q" 'conn-transpose-regions
   "r" (conn-remap-keymap "<conn-region-map>")
   "s" (conn-remap-keymap "M-s" t)
   "t" 'org-sparse-tree
