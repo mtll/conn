@@ -25,7 +25,7 @@
 (require 'org-agenda)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-org-edit-state)
+  :keymap (conn-get-state-map 'conn-org-heading-state)
   :suppress t
   "_" 'org-down-element
   ";" 'conn-wincontrol
@@ -80,20 +80,20 @@
   "z" 'conn-exchange-mark-command)
 
 ;;;###autoload
-(defun conn-org-edit-state ()
+(defun conn-org-heading-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
-  (conn-enter-state 'conn-org-edit-state))
+  (conn-enter-state 'conn-org-heading-state))
 
 ;;;###autoload
-(defun conn-org-edit-state-prev-heading ()
+(defun conn-org-heading-state-prev-heading ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
   (unless (progn
             (goto-char (pos-bol))
             (looking-at-p outline-regexp))
     (org-previous-visible-heading 1))
-  (conn-enter-state 'conn-org-edit-state))
+  (conn-enter-state 'conn-org-heading-state))
 
 (defun conn-org-edit-insert-heading ()
   "Insert org heading."
@@ -257,7 +257,7 @@
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler
- 'conn-org-edit-state-prev-heading
+ 'conn-org-heading-state-prev-heading
  'org-next-visible-heading
  'org-previous-visible-heading)
 
@@ -319,7 +319,7 @@
     t))
 
 (defun conntext-org-edit-state ()
-  (conn-org-edit-state)
+  (conn-org-heading-state)
   t)
 
 (defun conntext-org-hook ()

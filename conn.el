@@ -1610,10 +1610,10 @@ For use in buffers that should not have any other state."
               face-remapping-alist))
   (cl-call-next-method))
 
-(conn-define-state conn-org-edit-state ()
+(conn-define-state conn-org-heading-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   :cursor '(hbar . 8)
-  :lighter " OEdit"
+  :lighter " **"
   :suppress-input-method t)
 
 (conn-define-state conn-emacs-state ()
