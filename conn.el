@@ -476,7 +476,7 @@ the original binding.  Also see `conn-remap-key'."
 (defmacro conn--with-region-emphasis (regions &rest body)
   "Run BODY with the text in the complement of REGIONS shadowed."
   (declare (debug (form form body))
-           (indent 2))
+           (indent 1))
   (cl-with-gensyms (overlays)
     `(let (,overlays)
        (unwind-protect
@@ -724,37 +724,37 @@ REGEXP-FLAG means to treat the from string as a regexp for the purpose
 of highlighting."
   (let ((default (conn-replace-read-default)))
     (conn--with-region-emphasis bounds
-        (minibuffer-with-setup-hook
-            (minibuffer-lazy-highlight-setup
-             :case-fold case-fold-search
-             :filter (lambda (mb me)
-                       (cl-loop for (beg . end) in bounds
-                                when (<= beg mb me end) return t))
-             :highlight query-replace-lazy-highlight
-             :regexp regexp-flag
-             :regexp-function (or replace-regexp-function
-                                  (and replace-char-fold
-                                       (not regexp-flag)
-                                       #'char-fold-to-regexp))
-             :transform (lambda (string)
-                          (when (and case-fold-search search-upper-case)
-                            (setq isearch-case-fold-search
-                                  (isearch-no-upper-case-p string regexp-flag)))
-                          string))
-          (if regexp-flag
-              (read-regexp (format-prompt prompt default)
-                           (when default (regexp-quote default))
-                           'minibuffer-history)
-            (let ((from (read-string
-                         (format-prompt prompt default)
-                         nil nil
-                         (if default
-                             (delete-dups
-                              (cons default (query-replace-read-from-suggestions)))
-                           (query-replace-read-from-suggestions))
-                         t)))
-              (or (and (length= from 0) default)
-                  from)))))))
+      (minibuffer-with-setup-hook
+          (minibuffer-lazy-highlight-setup
+           :case-fold case-fold-search
+           :filter (lambda (mb me)
+                     (cl-loop for (beg . end) in bounds
+                              when (<= beg mb me end) return t))
+           :highlight query-replace-lazy-highlight
+           :regexp regexp-flag
+           :regexp-function (or replace-regexp-function
+                                (and replace-char-fold
+                                     (not regexp-flag)
+                                     #'char-fold-to-regexp))
+           :transform (lambda (string)
+                        (when (and case-fold-search search-upper-case)
+                          (setq isearch-case-fold-search
+                                (isearch-no-upper-case-p string regexp-flag)))
+                        string))
+        (if regexp-flag
+            (read-regexp (format-prompt prompt default)
+                         (when default (regexp-quote default))
+                         'minibuffer-history)
+          (let ((from (read-string
+                       (format-prompt prompt default)
+                       nil nil
+                       (if default
+                           (delete-dups
+                            (cons default (query-replace-read-from-suggestions)))
+                         (query-replace-read-from-suggestions))
+                       t)))
+            (or (and (length= from 0) default)
+                from)))))))
 
 
 ;;;;; Overlay Utils
@@ -1509,14 +1509,11 @@ to the abnormal hooks `conn-state-entry-functions' or
     `(progn
        (dolist (parent ',parents)
          (cl-check-type parent conn-state))
-
        (cl-assert
         (cl-loop for parent in ',parents
                  never (memq ',name (conn--state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
-
        (defvar-local ,name nil ,doc)
-
        (let ((state-props
               (cl-loop with kvs = (list ,@properties)
                        with table = (make-hash-table :test 'eq)
@@ -7353,58 +7350,58 @@ instances of from-string.")
   (unless noerror
     (barf-if-buffer-read-only))
   (conn--with-region-emphasis regions
-      (save-mark-and-excursion
-        (let* ((delimited-flag (and current-prefix-arg
-                                    (not (eq current-prefix-arg '-))))
-               (conn-query-flag conn-query-flag)
-               (from (minibuffer-with-setup-hook
-                         (minibuffer-lazy-highlight-setup
-                          :case-fold case-fold-search
-                          :filter (lambda (mb me)
-                                    (cl-loop for (beg . end) in regions
-                                             when (<= beg mb me end) return t))
-                          :highlight query-replace-lazy-highlight
-                          :regexp regexp-flag
-                          :regexp-function (or replace-regexp-function
-                                               delimited-flag
-                                               (and replace-char-fold
-                                                    (not regexp-flag)
-                                                    #'char-fold-to-regexp))
-                          :transform (lambda (string)
-                                       (let* ((split (query-replace--split-string string))
-                                              (from-string (if (consp split) (car split) split)))
-                                         (when (and case-fold-search search-upper-case)
-                                           (setq isearch-case-fold-search
-                                                 (isearch-no-upper-case-p from-string regexp-flag)))
-                                         from-string)))
-                       (minibuffer-with-setup-hook
-                           (lambda ()
-                             (thread-last
-                               (current-local-map)
-                               (make-composed-keymap conn-replace-from-map)
-                               (use-local-map)))
-                         (if regexp-flag
-                             (let ((query-replace-read-from-regexp-default
-                                    (if-let* ((def (conn-replace-read-regexp-default)))
-                                        def
-                                      query-replace-read-from-regexp-default)))
-                               (query-replace-read-from prompt regexp-flag))
-                           (query-replace-read-from prompt regexp-flag)))))
-               (to (if (consp from)
-                       (prog1 (cdr from) (setq from (car from)))
+    (save-mark-and-excursion
+      (let* ((delimited-flag (and current-prefix-arg
+                                  (not (eq current-prefix-arg '-))))
+             (conn-query-flag conn-query-flag)
+             (from (minibuffer-with-setup-hook
+                       (minibuffer-lazy-highlight-setup
+                        :case-fold case-fold-search
+                        :filter (lambda (mb me)
+                                  (cl-loop for (beg . end) in regions
+                                           when (<= beg mb me end) return t))
+                        :highlight query-replace-lazy-highlight
+                        :regexp regexp-flag
+                        :regexp-function (or replace-regexp-function
+                                             delimited-flag
+                                             (and replace-char-fold
+                                                  (not regexp-flag)
+                                                  #'char-fold-to-regexp))
+                        :transform (lambda (string)
+                                     (let* ((split (query-replace--split-string string))
+                                            (from-string (if (consp split) (car split) split)))
+                                       (when (and case-fold-search search-upper-case)
+                                         (setq isearch-case-fold-search
+                                               (isearch-no-upper-case-p from-string regexp-flag)))
+                                       from-string)))
                      (minibuffer-with-setup-hook
                          (lambda ()
                            (thread-last
                              (current-local-map)
-                             (make-composed-keymap conn-replace-to-map)
+                             (make-composed-keymap conn-replace-from-map)
                              (use-local-map)))
-                       (query-replace-read-to from prompt regexp-flag)))))
-          (list from to
-                (or delimited-flag
-                    (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
-                         (get-text-property 0 'isearch-regexp-function from)))
-                (and current-prefix-arg (eq current-prefix-arg '-))
-                conn-query-flag)))))
+                       (if regexp-flag
+                           (let ((query-replace-read-from-regexp-default
+                                  (if-let* ((def (conn-replace-read-regexp-default)))
+                                      def
+                                    query-replace-read-from-regexp-default)))
+                             (query-replace-read-from prompt regexp-flag))
+                         (query-replace-read-from prompt regexp-flag)))))
+             (to (if (consp from)
+                     (prog1 (cdr from) (setq from (car from)))
+                   (minibuffer-with-setup-hook
+                       (lambda ()
+                         (thread-last
+                           (current-local-map)
+                           (make-composed-keymap conn-replace-to-map)
+                           (use-local-map)))
+                     (query-replace-read-to from prompt regexp-flag)))))
+        (list from to
+              (or delimited-flag
+                  (and (plist-member (text-properties-at 0 from) 'isearch-regexp-function)
+                       (get-text-property 0 'isearch-regexp-function from)))
+              (and current-prefix-arg (eq current-prefix-arg '-))
+              conn-query-flag)))))
 
 (defun conn-replace ( thing-mover arg from-string to-string
                       &optional delimited backward query-flag)
@@ -9822,14 +9819,12 @@ Operates with the selected windows parent window."
             (apply app))
     (apply app)))
 
-(defun conn--repeat-ad (&rest app)
-  (unwind-protect
-      (apply app)
-    (setq conn-this-command-thing
-          (conn--command-property :conn-command-thing)
-          conn-this-command-handler
-          (or (alist-get this-command conn-mark-handler-overrides-alist)
-              (conn--command-property :conn-mark-handler)))))
+(defun conn--repeat-ad ()
+  (setq conn-this-command-thing
+        (conn--command-property :conn-command-thing)
+        conn-this-command-handler
+        (or (alist-get this-command conn-mark-handler-overrides-alist)
+            (conn--command-property :conn-mark-handler))))
 
 (defun conn--push-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
@@ -9862,7 +9857,7 @@ Operates with the selected windows parent window."
                     #'conn--read-from-suggestions-ad)
         (advice-add 'read-regexp-suggestions :around
                     #'conn--read-from-suggestions-ad)
-        (advice-add 'repeat :around #'conn--repeat-ad)
+        (advice-add 'repeat :after #'conn--repeat-ad)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'pop-mark :before #'conn--pop-mark-ad)
         (advice-add 'set-mark :after #'conn--set-mark-ad)
