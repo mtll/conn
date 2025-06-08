@@ -1610,11 +1610,14 @@ For use in buffers that should not have any other state."
               face-remapping-alist))
   (cl-call-next-method))
 
-(conn-define-state conn-org-heading-state ()
-  "A `conn-mode' state for structural editing of `org-mode' buffers."
-  :cursor '(hbar . 8)
+(conn-define-state conn-outline-state ()
+  "State for dispatch in `dired-mode'."
+  :cursor '(hbar . 10)
   :lighter " **"
   :suppress-input-method t)
+
+(conn-define-state conn-org-state (conn-outline-state)
+  "A `conn-mode' state for structural editing of `org-mode' buffers.")
 
 (conn-define-state conn-emacs-state ()
   "A `conn-mode' state for inserting text.
@@ -10115,12 +10118,6 @@ Operates with the selected windows parent window."
       (add-hook 'conntext-state-hook 'conntext-outline-state -80)
     (remove-hook 'conntext-state-hook 'conntext-outline-state)))
 
-(conn-define-state conn-outline-state ()
-  "State for dispatch in `dired-mode'."
-  :cursor '(hbar . 10)
-  :lighter " **"
-  :suppress-input-method t)
-
 (defun conn-outline-state ()
   (interactive)
   (conn-enter-state 'conn-outline-state))
@@ -10143,13 +10140,22 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-outline-state)
+  :suppress t
+  ;; TODO: write an insert heading command that works in this state
+  "*" 'outline-insert-heading
+  "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol
+  "." 'point-to-register
+  "/" (conn-remap-key conn-undo-keys t)
+  "?" (conn-remap-key conn-undo-redo-keys t)
+  "DEL" 'conn-scroll-down
+  "SPC" 'conn-scroll-up
+  "W" 'widen
   "<escape>" 'conn-command-state
   "J" 'outline-promote
   "L" 'outline-demote
   "O" 'outline-move-subtree-down
-  "RET" 'outline-insert-heading
-  "SPC" 'conn-set-mark-command
+  "C-SPC" 'conn-set-mark-command
   "U" 'outline-move-subtree-up
   "a" 'execute-extended-command
   "A" 'execute-extended-command-for-buffer

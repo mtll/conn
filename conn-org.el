@@ -28,18 +28,11 @@
   :keymap (conn-get-state-map 'conn-org-heading-state)
   :suppress t
   "_" 'org-down-element
-  ";" 'conn-wincontrol
+  ;; TODO: write an insert heading command that works in this state
   "*" 'conn-org-edit-insert-heading
-  "." 'point-to-register
-  "/" (conn-remap-key conn-undo-keys t)
   "<" 'org-drag-element-backward
-  "<backspace>" 'conn-scroll-down
-  "<escape>" 'conn-previous-state
   ">" 'org-drag-element-forward
-  "?" (conn-remap-key conn-undo-redo-keys t)
-  "A" 'execute-extended-command-for-buffer
   "C" 'org-toggle-comment
-  "DEL" 'conn-scroll-down
   "I" 'org-metaup
   "J" 'org-metaleft
   "K" 'org-metadown
@@ -47,37 +40,20 @@
   "M" 'org-mark-subtree
   "N" 'org-toggle-narrow-to-subtree
   "O" 'org-next-block
-  "SPC" 'conn-scroll-up
   "T" 'org-todo
   "U" 'org-previous-block
-  "W" 'widen
-  "a" 'execute-extended-command
-  "A" 'execute-extended-command-for-buffer
   "b" (conn-remap-key "C-c C-v")
-  "c" (conn-remap-key "C-c")
   "d" (conn-remap-key "C-c C-x")
-  "e" 'conn-previous-state
-  "f" 'conn-dispatch-state
-  "g" (conn-remap-keymap "M-g" t)
-  "h" 'conn-wincontrol-one-command
   "i" 'org-previous-visible-heading
   "j" 'org-backward-heading-same-level
   "k" 'org-next-visible-heading
   "l" 'org-forward-heading-same-level
   "m" 'org-forward-element
   "n" 'org-backward-element
-  "o" 'outline-hide-other
-  "p" 'conn-register-load
-  "q" 'conn-transpose-regions
-  "r" (conn-remap-keymap "<conn-region-map>")
-  "s" (conn-remap-keymap "M-s" t)
   "t" 'org-sparse-tree
   "u" 'org-up-element
-  "v" 'conn-toggle-mark-command
   "w" 'org-refile
-  "x" (conn-remap-key "C-x" t)
-  "y" 'org-show-all
-  "z" 'conn-exchange-mark-command)
+  "y" 'org-show-all)
 
 ;;;###autoload
 (defun conn-org-heading-state ()
