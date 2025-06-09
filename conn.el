@@ -3272,7 +3272,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (set-marker conn-this-command-start (point))
     (setq conn--movement-tick (buffer-chars-modified-tick)
           conn--movement-mark (mark t)
-          conn--movement-ring-rotating nil)))
+          conn--movement-ring-rotating nil
+          conn-this-command-thing nil
+          conn-this-command-handler nil)))
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
