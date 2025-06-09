@@ -657,7 +657,7 @@ A zero means repeat until error."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
   (letrec ((action nil)
            (setup (lambda ()
-                    (conn-with-transient-state (car conn-state-stack)
+                    (conn-with-state (car conn-state-stack)
                       (conn-dispatch-kapply-prefix
                        (lambda (kapply-action)
                          (setf action kapply-action))))

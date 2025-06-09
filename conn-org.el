@@ -28,8 +28,7 @@
   :keymap (conn-get-state-map 'conn-org-heading-state)
   :suppress t
   "_" 'org-down-element
-  ;; TODO: write an insert heading command that works in this state
-  "*" 'conn-org-edit-insert-heading
+  "*" 'conn-org-insert-heading
   "<" 'org-drag-element-backward
   ">" 'org-drag-element-forward
   "C" 'org-toggle-comment
@@ -59,7 +58,7 @@
 (defun conn-org-heading-state ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
-  (conn-enter-state 'conn-org-heading-state))
+  (conn-push-state 'conn-org-state))
 
 ;;;###autoload
 (defun conn-org-heading-state-prev-heading ()
@@ -69,9 +68,9 @@
             (goto-char (pos-bol))
             (looking-at-p outline-regexp))
     (org-previous-visible-heading 1))
-  (conn-enter-state 'conn-org-heading-state))
+  (conn-push-state 'conn-org-state))
 
-(defun conn-org-edit-insert-heading ()
+(defun conn-org-insert-heading ()
   "Insert org heading."
   (interactive)
   (forward-char 1)
@@ -294,13 +293,13 @@
     (org-edit-special)
     t))
 
-(defun conntext-org-edit-state ()
+(defun conntext-org-state ()
   (conn-org-heading-state)
   t)
 
 (defun conntext-org-hook ()
   (add-hook 'conntext-state-hook 'conntext-edit-special -20 t)
-  (add-hook 'conntext-state-hook 'conntext-org-edit-state 90 t))
+  (add-hook 'conntext-state-hook 'conntext-org-state 90 t))
 
 (add-hook 'org-mode-hook 'conntext-org-hook)
 

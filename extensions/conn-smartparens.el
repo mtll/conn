@@ -144,7 +144,7 @@
   "State for editing parens."
   :cursor '(hbar . 5)
   :suppress-input-method t
-  :lighter " ()")
+  :lighter "()")
 
 (define-keymap
   :keymap (conn-get-state-map 'conntext-paren-state)
@@ -186,7 +186,7 @@
   "x" (conn-remap-key "C-x"))
 
 (defun conntext-paren-state ()
-  (conn-enter-state 'conntext-paren-state)
+  (conn-push-state 'conntext-paren-state)
   t)
 
 ;;;###autoload
