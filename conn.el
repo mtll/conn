@@ -1410,11 +1410,11 @@ and specializes the method on all conn states."
 (cl-defmethod conn-enter-state :around ((state conn-state)
                                         &key &allow-other-keys)
   (unless (symbol-value state)
-    (when (conn-state-get state :abstract t)
-      (error "Attempting to enter abstract state"))
     (let ((success nil))
       (unwind-protect
           (progn
+            (when (conn-state-get state :abstract t)
+              (error "Attempting to enter abstract state"))
             (conn-exit-state conn-current-state)
             (set state t)
             (setf
@@ -1653,10 +1653,6 @@ By default `conn-emacs-state' does not bind anything."
 
 
 ;;;; Labels
-
-;; Functions to provide the basic machinery for labeling a set of things
-;; (buffer regions, windows, etc.) and prompting the user to select from
-;; a set of labels.
 
 (defcustom conn-simple-label-characters
   (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e"
@@ -9719,9 +9715,8 @@ Operates with the selected windows parent window."
 
 ;;;;; State Keymaps
 
-(define-keymap
-  :keymap (conn-get-state-map 'conn-emacs-state)
-  "<escape>" 'conn-command-state)
+(keymap-set (conn-get-state-map 'conn-emacs-state)
+            "<escape>" 'conn-command-state)
 
 (keymap-set (conn-get-mode-map 'conn-command-state 'conn-kmacro-applying-p)
             "<escape>" 'exit-recursive-edit)
@@ -9757,7 +9752,6 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
-  :suppress t
   ">" 'forward-line
   "<" 'conn-backward-line
   "o" (conn-remap-key conn-forward-word-keys t)
@@ -9785,7 +9779,6 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
-  :suppress t
   "s" (conn-remap-keymap "M-s" t)
   "g" (conn-remap-keymap "M-g" t)
   "c" (conn-remap-key "C-c" t)
