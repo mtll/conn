@@ -1298,8 +1298,8 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
-           (setq conn-state-stack ,stack)
-           (conn-pop-state))))))
+           (setq conn-state-stack (cdr ,stack))
+           (conn-enter-state (car ,stack)))))))
 
 
 ;;;;; Cl-Generic Specializers
@@ -8320,9 +8320,8 @@ For a window configuration, restore it.  For a number or text, insert it.
 For a location, jump to it.  See `jump-to-register' and `insert-register'
 for the meaning of prefix ARG."
   (interactive
-   (list
-    (register-read-with-preview "Load register: ")
-    current-prefix-arg))
+   (list (register-read-with-preview "Load register: ")
+         current-prefix-arg))
   (condition-case err
       (jump-to-register reg arg)
     (user-error
@@ -8336,9 +8335,8 @@ For a window configuration, restore it.  For a number or text, insert it.
 For a location, jump to it.  See `jump-to-register' and `insert-register'
 for the meaning of prefix ARG."
   (interactive
-   (list
-    (register-read-with-preview "Load register: ")
-    current-prefix-arg))
+   (list (register-read-with-preview "Load register: ")
+         current-prefix-arg))
   (atomic-change-group
     (if (bound-and-true-p rectangle-mark-mode)
         (delete-rectangle (region-beginning) (region-end))
@@ -8409,10 +8407,11 @@ of deleting it."
   "Copy region between START and END as kill.
 
 If REGISTER is given copy to REGISTER instead."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (when current-prefix-arg
-                       (register-read-with-preview "Copy to register: "))))
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (when current-prefix-arg
+           (register-read-with-preview "Copy to register: "))))
   (if register
       (if (bound-and-true-p rectangle-mark-mode)
           (copy-rectangle-to-register register start end)
@@ -8457,9 +8456,10 @@ If ARG is a numeric prefix argument kill region to a register."
   "Replace region from START to END with result of `yank-from-kill-ring'.
 
 If ARG is non-nil `kill-region' instead of `delete-region'."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         current-prefix-arg))
   (let ((ov (make-overlay start end))
         exchange)
     (overlay-put ov 'conn-overlay t)
@@ -8510,9 +8510,10 @@ If ARG is non-nil `kill-region' instead of `delete-region'."
   "Duplicate the current region.
 
 With prefix arg N duplicate region N times."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (prefix-numeric-value current-prefix-arg)))
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (prefix-numeric-value current-prefix-arg)))
   (if (use-region-p)
       (duplicate-dwim)
     (let ((end (set-marker (make-marker) end)))
@@ -8527,8 +8528,9 @@ With prefix arg N duplicate region N times."
   "Duplicate the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
-  (interactive (append (conn-read-thing-mover-dwim nil t)
-                       (list (prefix-numeric-value current-prefix-arg))))
+  (interactive
+   (append (conn-read-thing-mover-dwim nil t)
+           (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     (`((,beg . ,end) . ,_)
      (if (use-region-p)
@@ -8546,9 +8548,10 @@ With prefix arg N duplicate region N times."
 
 (defun conn-duplicate-and-comment-region (beg end &optional arg)
   "Duplicate and comment the current region."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     (prefix-numeric-value current-prefix-arg)))
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         (prefix-numeric-value current-prefix-arg)))
   (pcase-let* ((origin (point))
                (region (buffer-substring-no-properties beg end)))
     (comment-or-uncomment-region beg end)
@@ -8564,8 +8567,9 @@ With prefix arg N duplicate region N times."
   "Duplicate and comment the region defined by a thing command.
 
 With prefix arg N duplicate region N times."
-  (interactive (append (conn-read-thing-mover-dwim nil t)
-                       (list (prefix-numeric-value current-prefix-arg))))
+  (interactive
+   (append (conn-read-thing-mover-dwim nil t)
+           (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-bounds-of-command thing-mover thing-arg)
     ((and `((,beg . ,end) . ,_)
           (let offset (- (point) end))
@@ -8657,8 +8661,9 @@ of `conn-recenter-positions'."
 (defun conn-rgrep-region (beg end)
   "`rgrep' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
-  (interactive (list (region-beginning)
-                     (region-end)))
+  (interactive
+   (list (region-beginning)
+         (region-end)))
   (let ((search-string
          (read-string "Search for: "
                       (regexp-quote (buffer-substring-no-properties beg end))
@@ -8668,8 +8673,9 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-occur-region (beg end)
   "`occur' for the string contained in the region from BEG to END.
 Interactively `region-beginning' and `region-end'."
-  (interactive (list (region-beginning)
-                     (region-end)))
+  (interactive
+   (list (region-beginning)
+         (region-end)))
   (let ((search-string
          (read-string "Search for: "
                       (regexp-quote (buffer-substring-no-properties beg end))
@@ -8898,9 +8904,10 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
 
 If KILL is non-nil add region to the `kill-ring'.  When in
 `rectangle-mark-mode' defer to `string-rectangle'."
-  (interactive (list (region-beginning)
-                     (region-end)
-                     current-prefix-arg))
+  (interactive
+   (list (region-beginning)
+         (region-end)
+         current-prefix-arg))
   (cond ((and (bound-and-true-p rectangle-mark-mode) kill)
          (copy-rectangle-as-kill start end)
          (call-interactively #'string-rectangle))
