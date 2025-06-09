@@ -3270,10 +3270,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 (defun conn--mark-pre-command-hook ()
   (unless conn--hide-mark-cursor
     (set-marker conn-this-command-start (point))
-    (setq conn-this-command-handler (or (alist-get this-command conn-mark-handler-overrides-alist)
-                                        (conn--command-property :conn-mark-handler))
-          conn-this-command-thing (conn--command-property :conn-command-thing)
-          conn--movement-tick (buffer-chars-modified-tick)
+    (setq conn--movement-tick (buffer-chars-modified-tick)
           conn--movement-mark (mark t)
           conn--movement-ring-rotating nil)))
 
@@ -3282,13 +3279,18 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (setf conn--last-bounds-of-command
           (delq (assq (recursion-depth) conn--last-bounds-of-command)
                 conn--last-bounds-of-command))
+    (unless conn-this-command-thing
+      (setq conn-this-command-thing (conn--command-property :conn-command-thing)))
     (when (and conn-local-mode
                (marker-position conn-this-command-start)
                (eq (current-buffer) (marker-buffer conn-this-command-start)))
-      (when (and conn-this-command-handler
-                 (not (region-active-p)))
+      (when-let* (((not (region-active-p)))
+                  (handler
+                   (or conn-this-command-handler
+                       (alist-get this-command conn-mark-handler-overrides-alist)
+                       (conn--command-property :conn-mark-handler))))
         (with-demoted-errors "Error in Mark Handler: %s"
-          (funcall conn-this-command-handler conn-this-command-start)))
+          (funcall handler conn-this-command-start)))
       (unless (or conn--movement-ring-rotating
                   (null conn--movement-mark)
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
@@ -9860,13 +9862,6 @@ Operates with the selected windows parent window."
             (apply app))
     (apply app)))
 
-(defun conn--repeat-ad ()
-  (setq conn-this-command-thing
-        (conn--command-property :conn-command-thing)
-        conn-this-command-handler
-        (or (alist-get this-command conn-mark-handler-overrides-alist)
-            (conn--command-property :conn-mark-handler))))
-
 (defun conn--push-mark-ad (&rest _)
   (unless (or conn--ephemeral-mark
               (null (marker-position (mark-marker))))
@@ -9898,7 +9893,6 @@ Operates with the selected windows parent window."
                     #'conn--read-from-suggestions-ad)
         (advice-add 'read-regexp-suggestions :around
                     #'conn--read-from-suggestions-ad)
-        (advice-add 'repeat :after #'conn--repeat-ad)
         (advice-add 'push-mark :before #'conn--push-mark-ad)
         (advice-add 'pop-mark :before #'conn--pop-mark-ad)
         (advice-add 'set-mark :after #'conn--set-mark-ad)
@@ -9912,7 +9906,6 @@ Operates with the selected windows parent window."
     (advice-remove 'read-regexp-suggestions
                    #'conn--read-from-suggestions-ad)
     (advice-remove 'set-mark #'conn--set-mark-ad)
-    (advice-remove 'repeat #'conn--repeat-ad)
     (advice-remove 'pop-mark #'conn--pop-mark-ad)
     (advice-remove 'push-mark #'conn--push-mark-ad)
     (advice-remove 'save-mark-and-excursion--save #'conn--save-ephemeral-mark-ad)
