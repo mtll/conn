@@ -1298,8 +1298,8 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
-           (setq conn-state-stack (cdr ,stack))
-           (conn-enter-state (car ,stack)))))))
+           (setq conn-state-stack ,stack)
+           (conn-pop-state))))))
 
 
 ;;;;; Cl-Generic Specializers
@@ -1455,16 +1455,17 @@ and specializes the method on all conn states."
     (setq conn-state-stack nil)
     (conn-enter-state state)))
 
-(defun conn-pop-state ()
-  (interactive)
+(defun conn-pop-state (&optional skip-transient)
+  (interactive (list t))
   (catch 'return
     (while-let ((state (pop conn-state-stack)))
-      (unless (conn-state-get state :transient t)
+      (unless (and skip-transient
+                   (conn-state-get state :transient t))
         (throw 'return (conn-enter-state state))))
     (error "State stack empty")))
 
 
-;;;;; State Definitions
+;;;;; test-State Definitions
 
 (defmacro conn-define-state (name parents &rest properties)
   "Define a conn state NAME.
@@ -10105,7 +10106,7 @@ Operates with the selected windows parent window."
   (defun conn--edebug-toggle-emacs-state ()
     (if edebug-mode
         (conn-push-state 'conn-emacs-state t)
-      (conn-pop-state)))
+      (conn-pop-state t)))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
 
