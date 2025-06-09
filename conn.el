@@ -2361,10 +2361,17 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
   (cons (cons (region-beginning) (region-end))
         (region-bounds)))
 
-(conn-define-state conn-bounds-of-recursive-edit-state
-    (conn-read-mover-common-state)
+(conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
   :lighter "[R]"
   :transient t)
+
+(cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
+  (setq buffer-read-only t)
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
+  (setq buffer-read-only nil)
+  (cl-call-next-method))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
@@ -6494,7 +6501,8 @@ Expansions and contractions are provided by functions in
 (conn-define-state conn-expand-state ()
   "State for expanding."
   :lighter "↔"
-  :transient t)
+  :transient t
+  :mode-line-face 'conn-read-thing-mode-line-face)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state))
                                 &key &allow-other-keys)
@@ -8651,9 +8659,10 @@ of `conn-recenter-positions'."
 Interactively `region-beginning' and `region-end'."
   (interactive (list (region-beginning)
                      (region-end)))
-  (let ((search-string (read-string "Search for: "
-                                    (regexp-quote (buffer-substring-no-properties beg end))
-                                    'grep-regexp-history)))
+  (let ((search-string
+         (read-string "Search for: "
+                      (regexp-quote (buffer-substring-no-properties beg end))
+                      'grep-regexp-history)))
     (rgrep search-string)))
 
 (defun conn-occur-region (beg end)
@@ -8661,9 +8670,10 @@ Interactively `region-beginning' and `region-end'."
 Interactively `region-beginning' and `region-end'."
   (interactive (list (region-beginning)
                      (region-end)))
-  (let ((search-string (read-string "Search for: "
-                                    (regexp-quote (buffer-substring-no-properties beg end))
-                                    'grep-regexp-history)))
+  (let ((search-string
+         (read-string "Search for: "
+                      (regexp-quote (buffer-substring-no-properties beg end))
+                      'grep-regexp-history)))
     (occur search-string)))
 
 
