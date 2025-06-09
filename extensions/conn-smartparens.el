@@ -150,8 +150,8 @@
   :keymap (conn-get-state-map 'conntext-paren-state)
   :suppress t
   "`" 'other-window
-  "e" 'conn-previous-state
-  "<escape>" 'conn-previous-state
+  "e" 'conn-pop-state
+  "<escape>" 'conn-command-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun
   "o" 'sp-forward-symbol
