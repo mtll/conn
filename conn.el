@@ -846,11 +846,6 @@ meaning of CONDITION see `buffer-match-p'."
 (defvar-local conn-state-stack nil
   "Previous conn states in buffer.")
 
-(defvar conn-base-states (list 'conn-command-state
-                               'conn-emacs-state
-                               'conn-null-state)
-  "States which clear the state stack when entered.")
-
 (define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
   (inline-quote
@@ -1194,20 +1189,24 @@ mouse-3: Describe current input method")
 
 ;;;;; State Properties
 
-(define-inline conn-state-get (state property)
+(define-inline conn-state-get (state property &optional no-inherit)
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
   (inline-letevals (state property)
-    (inline-quote
-     (progn
-       (cl-check-type ,state conn-state)
-       (let ((key-missing (make-symbol "missing")))
-         (cl-loop for parent in (conn--state-all-parents ,state)
-                  for table = (aref (get parent :conn--state) 1)
-                  for prop = (gethash ,property table key-missing)
-                  unless (eq prop key-missing) return prop))))))
+    (if (and (inline-const-p no-inherit)
+             (inline-const-val no-inherit))
+        (inline-quote
+         (gethash ,property (aref (get ,state :conn--state) 1)))
+      (inline-quote
+       (progn
+         (cl-check-type ,state conn-state)
+         (let ((key-missing (make-symbol "missing")))
+           (cl-loop for parent in (conn--state-all-parents ,state)
+                    for table = (aref (get parent :conn--state) 1)
+                    for prop = (gethash ,property table key-missing)
+                    unless (eq prop key-missing) return prop)))))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1443,9 +1442,9 @@ and specializes the method on all conn states."
           (remove-hook 'conn-state-entry-functions fn)
           (message "Error in conn-state-entry-functions: %s" (car err))))))))
 
-(defun conn-push-state (state &optional force)
+(defun conn-push-state (state &optional force-push)
   (cl-check-type state conn-state)
-  (if (or force (not (memq state conn-base-states)))
+  (if (or force-push (not (conn-state-get state :base-state t)))
       (progn
         (push conn-current-state conn-state-stack)
         (conn-enter-state state))
@@ -1569,7 +1568,8 @@ to the abnormal hooks `conn-state-entry-functions' or
 
 For use in buffers that should not have any other state."
   :hide-mark-cursor t
-  :cursor '(bar . 4))
+  :cursor '(bar . 4)
+  :base-state t)
 
 (conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
@@ -1583,7 +1583,8 @@ For use in buffers that should not have any other state."
   "A `conn-mode' state for editing test."
   :lighter "C"
   :suppress-input-method t
-  :cursor 'box)
+  :cursor 'box
+  :base-state t)
 
 (conn-define-state conn-read-mover-common-state (conn-command-state)
   "Common elements of thing reading states."
@@ -1616,7 +1617,8 @@ For use in buffers that should not have any other state."
 
 By default `conn-emacs-state' does not bind anything."
   :lighter "E"
-  :cursor '(bar . 4))
+  :cursor '(bar . 4)
+  :base-state t)
 
 ;;;;; Emacs State
 
