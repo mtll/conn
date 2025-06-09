@@ -1198,15 +1198,15 @@ PROPERTY.  If no parent has that property either than nil is returned."
     (if (and (inline-const-p no-inherit)
              (inline-const-val no-inherit))
         (inline-quote
-         (gethash ,property (aref (get ,state :conn--state) 1)))
+         (progn
+           (cl-check-type ,state conn-state)
+           (gethash ,property (aref (get ,state :conn--state) 1))))
       (inline-quote
-       (progn
-         (cl-check-type ,state conn-state)
-         (let ((key-missing (make-symbol "missing")))
-           (cl-loop for parent in (conn--state-all-parents ,state)
-                    for table = (aref (get parent :conn--state) 1)
-                    for prop = (gethash ,property table key-missing)
-                    unless (eq prop key-missing) return prop)))))))
+       (cl-with-gensyms (key-missing)
+         (cl-loop for parent in (conn--state-all-parents ,state)
+                  for table = (aref (get parent :conn--state) 1)
+                  for prop = (gethash ,property table key-missing)
+                  unless (eq prop key-missing) return prop))))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
