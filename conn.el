@@ -1189,24 +1189,38 @@ mouse-3: Describe current input method")
 
 ;;;;; State Properties
 
-(define-inline conn-state-get (state property &optional no-inherit)
+(defun conn-state-get (state property &optional no-inherit)
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
-  (inline-letevals (state property)
-    (if (and (inline-const-p no-inherit)
-             (inline-const-val no-inherit))
-        (inline-quote
-         (progn
-           (cl-check-type ,state conn-state)
-           (gethash ,property (aref (get ,state :conn--state) 1))))
-      (inline-quote
-       (cl-with-gensyms (key-missing)
-         (cl-loop for parent in (conn--state-all-parents ,state)
-                  for table = (aref (get parent :conn--state) 1)
-                  for prop = (gethash ,property table key-missing)
-                  unless (eq prop key-missing) return prop))))))
+  (declare (compiler-macro conn--state-get-compiler-macro))
+  (if (not no-inherit)
+      (cl-with-gensyms (key-missing)
+        (cl-loop for parent in (conn--state-all-parents state)
+                 for table = (aref (get parent :conn--state) 1)
+                 for prop = (gethash property table key-missing)
+                 unless (eq prop key-missing) return prop))
+    (cl-check-type state conn-state)
+    (gethash property (aref (get state :conn--state) 1))))
+
+(defun conn--state-get-compiler-macro (_exp state property &optional no-inherit)
+  (cl-once-only (state property)
+    (let ((with-parents
+           `(cl-with-gensyms (key-missing)
+              (cl-loop for parent in (conn--state-all-parents ,state)
+                       for table = (aref (get parent :conn--state) 1)
+                       for prop = (gethash ,property table key-missing)
+                       unless (eq prop key-missing) return prop)))
+          (without-parents
+           `(progn
+              (cl-check-type ,state conn-state)
+              (gethash ,property (aref (get ,state :conn--state) 1))))
+          (no-inherit (macroexpand-all no-inherit macroexpand-all-environment)))
+      (if (and (macroexp-const-p no-inherit)
+               (if (consp no-inherit) (cadr no-inherit) no-inherit))
+          (if no-inherit without-parents with-parents)
+        `(if ,no-inherit ,without-parents ,with-parents)))))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
