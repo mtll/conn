@@ -2108,8 +2108,7 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-read-mover-state (conn-read-mover-common-state)
   "A state for reading things."
-  :lighter "Mv"
-  :transient t)
+  :lighter "Mv")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-mover-state)
@@ -2377,8 +2376,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (region-bounds)))
 
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
-  :lighter "[R]"
-  :transient t)
+  :lighter "[R]")
 
 (cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
   (setq buffer-read-only t)
@@ -3393,12 +3391,10 @@ associated with a command's thing.")
 (conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
   "State for reading a dispatch command."
   :lighter "Dsp"
-  :mode-line-face 'conn-dispatch-mode-line-face
-  :transient t)
+  :mode-line-face 'conn-dispatch-mode-line-face)
 
 (conn-define-state conn-dispatch-state (conn-dispatch-mover-state)
-  "State for reading a dispatch command."
-  :transient t)
+  "State for reading a dispatch command.")
 
 (defvar-keymap conn-dispatch-common-map
   "C-z" 'dispatch-other-end
@@ -6522,7 +6518,6 @@ Expansions and contractions are provided by functions in
 (conn-define-state conn-expand-state ()
   "State for expanding."
   :lighter "↔"
-  :transient t
   :mode-line-face 'conn-read-thing-mode-line-face)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state))
@@ -7960,8 +7955,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 ;;;;; Transpose
 
 (conn-define-state conn-transpose-state (conn-read-mover-state)
-  :lighter "⍉"
-  :transient t)
+  :lighter "⍉")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-transpose-state)
@@ -7970,8 +7964,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "u" 'forward-symbol)
 
 (conn-define-state conn-dispatch-transpose-state (conn-transpose-state
-                                                  conn-dispatch-state)
-  :transient t)
+                                                  conn-dispatch-state))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-transpose-state)
@@ -10235,8 +10228,7 @@ Operates with the selected windows parent window."
   "State for dispatch in `dired-mode'."
   :cursor 'box
   :lighter "D"
-  :suppress-input-method t
-  :transient t)
+  :suppress-input-method t)
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
@@ -10466,8 +10458,7 @@ Operates with the selected windows parent window."
   "State for dispatch in `ibuffer-mode'."
   :cursor '(bar . 4)
   :hide-mark-cursor t
-  :suppress-input-method t
-  :transient t)
+  :suppress-input-method t)
 
 (conn-set-mode-property 'ibuffer-mode :hide-mark-cursor t)
 
