@@ -230,8 +230,8 @@ BEFORE means only those matches before, and including, the current match."
              ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
                 (with-slots (choices value) obj
-                  (setf value (rassq (or conn-current-state 'conn-command-state)
-                                     choices))))
+                  (setf value (or (rassq conn-current-state choices)
+                                  (rassq 'conn-command-state choices)))))
   :value-transform (lambda (val)
                      (lambda (it)
                        (conn--kapply-with-state it val))))
@@ -657,7 +657,7 @@ A zero means repeat until error."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
   (letrec ((action nil)
            (setup (lambda ()
-                    (conn-with-state (car conn-state-stack)
+                    (conn-without-state
                       (conn-dispatch-kapply-prefix
                        (lambda (kapply-action)
                          (setf action kapply-action))))

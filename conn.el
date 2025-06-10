@@ -843,7 +843,7 @@ meaning of CONDITION see `buffer-match-p'."
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
 
-(defvar-local conn-state-stack nil
+(defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
 
 (define-inline conn-state-p (state)
@@ -1294,12 +1294,22 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
     `(let* (,stack
             (,buffer (current-buffer)))
        (conn-push-state ,state t)
-       (setq ,stack conn-state-stack)
+       (setq ,stack conn--state-stack)
+       (push t conn--state-stack)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
-           (setq conn-state-stack ,stack)
+           (setq conn--state-stack ,stack)
            (conn-pop-state))))))
+
+(defmacro conn-without-state (&rest body)
+  "Call TRANSITION-FN and run BODY preserving state variables."
+  (declare (debug (body))
+           (indent 0))
+  `(conn-with-state
+       (or (cadr (memq t conn--state-stack))
+           (error "conn-without-state can only be used within conn-with-state"))
+     ,@body))
 
 
 ;;;;; Cl-Generic Specializers
@@ -1345,9 +1355,8 @@ Each function is passed the state being entered
 See also `conn-exit-functions'.")
 
 (defun conn--state-lighter (state)
-  (mapconcat (lambda (s)
-               (conn-state-get s :lighter))
-             (reverse (cons state conn-state-stack))
+  (mapconcat (lambda (s) (conn-state-get s :lighter))
+             (nreverse (cons state (remove t conn--state-stack)))
              ">"))
 
 (cl-defgeneric conn-exit-state (state)
@@ -1450,19 +1459,24 @@ and specializes the method on all conn states."
   (cl-check-type state conn-state)
   (if (or force-push (not (conn-state-get state :base-state t)))
       (progn
-        (push conn-current-state conn-state-stack)
+        (push conn-current-state conn--state-stack)
         (conn-enter-state state))
-    (setq conn-state-stack nil)
+    (while (and conn--state-stack
+                (not (eq t (car conn--state-stack))))
+      (pop conn--state-stack))
     (conn-enter-state state)))
 
-(defun conn-pop-state (&optional skip-transient)
-  (interactive (list t))
-  (catch 'return
-    (while-let ((state (pop conn-state-stack)))
-      (unless (and skip-transient
-                   (conn-state-get state :transient t))
-        (throw 'return (conn-enter-state state))))
-    (error "State stack empty")))
+(defun conn-pop-state ()
+  (interactive)
+  (pcase conn--state-stack
+    ('nil (error "State stack empty"))
+    (`(t . ,_) (error "Cannot pop past transient state")))
+  (conn-enter-state (pop conn--state-stack)))
+
+(defun conn-peek-state-stack ()
+  (unless (or (null conn--state-stack)
+              (eq t (car conn--state-stack)))
+    (car conn--state-stack)))
 
 
 ;;;;; test-State Definitions
@@ -2996,12 +3010,12 @@ Possibilities: \\<query-replace-map>
              (when state
                (with-current-buffer buf
                  (conn-push-state state)
-                 (setq conn-state-stack state-stack)))))
+                 (setq conn--state-stack state-stack)))))
           ((or :record :next)
            (when conn-local-mode
              (unless (alist-get (current-buffer) buffer-states)
                (setf (alist-get (current-buffer) buffer-states)
-                     (list conn-current-state conn-state-stack)))
+                     (list conn-current-state conn--state-stack)))
              (conn-push-state conn-state))))))))
 
 (defun conn--kapply-at-end (iterator)
@@ -4663,17 +4677,23 @@ contain targets."
   t)
 
 (defun conn-dispatch-inner-lines ()
-  (dolist (win (conn--get-target-windows))
-    (with-selected-window win
-      (save-excursion
-        (with-restriction (window-start) (window-end)
-          (goto-char (point-max))
-          (while (let ((pt (point)))
-                   (forward-line -1)
-                   (conn-beginning-of-inner-line)
-                   (/= (point) pt))
-            (when (not (invisible-p (point)))
-              (conn-make-target-overlay (point) 0))))))))
+  (let ((bounds-op (lambda (arg)
+                     (save-excursion
+                       (goto-char (pos-bol))
+                       (conn-bounds-of-command 'conn-forward-inner-line arg)))))
+    (dolist (win (conn--get-target-windows))
+      (with-selected-window win
+        (save-excursion
+          (with-restriction (window-start) (window-end)
+            (goto-char (point-max))
+            (while (let ((pt (point)))
+                     (forward-line -1)
+                     (conn-beginning-of-inner-line)
+                     (/= (point) pt))
+              (when (not (invisible-p (point)))
+                (conn-make-target-overlay
+                 (point) 0
+                 :bounds-op bounds-op)))))))))
 
 (defun conn-dispatch-end-of-inner-lines ()
   (let ((bounds-op (lambda (arg)
@@ -9743,14 +9763,8 @@ Operates with the selected windows parent window."
 (keymap-set (conn-get-mode-map 'conn-command-state 'conn-kmacro-applying-p)
             "<escape>" 'exit-recursive-edit)
 
-(keymap-set (conn-get-mode-map 'conn-command-state 'conn-state-stack)
-            "e" 'conn-pop-state)
-
 (keymap-set (conn-get-state-map 'conn-emacs-state)
             "C-<escape>" 'exit-recursive-edit)
-
-(keymap-set (conn-get-mode-map 'conn-emacs-state 'conn-state-stack)
-            "<escape>" 'conn-pop-state)
 
 (keymap-set (conn-get-state-map 'conn-command-state)
             "C-<escape>" 'exit-recursive-edit)
@@ -9977,7 +9991,7 @@ Operates with the selected windows parent window."
   (if conn-local-mode
       (progn
         (setq conn-current-state nil
-              conn-state-stack nil)
+              conn--state-stack nil)
         (setq-local conn-lighter (seq-copy conn-lighter)
                     conn--local-state-map (list (list 'conn-local-mode))
                     conn--local-override-map (list (list 'conn-local-mode))
@@ -10106,7 +10120,7 @@ Operates with the selected windows parent window."
   (defun conn--edebug-toggle-emacs-state ()
     (if edebug-mode
         (conn-push-state 'conn-emacs-state t)
-      (conn-pop-state t)))
+      (conn-pop-state)))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
 
