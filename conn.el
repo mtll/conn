@@ -1310,11 +1310,13 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
        (conn-push-state ,state t)
        (setq ,stack conn--state-stack)
        (push t conn--state-stack)
+       (setq conn-lighter (conn--state-lighter))
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
            (setq conn--state-stack ,stack)
-           (conn-pop-state))))))
+           (conn-pop-state)
+           (setq conn-lighter (conn--state-lighter)))))))
 
 (defmacro conn-without-state (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
@@ -1368,10 +1370,14 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
-(defun conn--state-lighter (state)
-  (mapconcat (lambda (s) (conn-state-get s :lighter))
-             (nreverse (cons state (remove t conn--state-stack)))
-             ">"))
+(defun conn--state-lighter ()
+  (cl-loop with lighter = ""
+           for s in (cons conn-current-state conn--state-stack)
+           if (eq s t) do (setq lighter (concat ">[" (substring lighter 1) "]"))
+           else do (setq lighter (concat ">"
+                                         (conn-state-get s :lighter)
+                                         lighter))
+           finally return (concat " " (substring lighter 1))))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE.
@@ -1445,7 +1451,7 @@ and specializes the method on all conn states."
              conn--local-override-map `((conn-local-mode . ,(conn--compose-overide-map state)))
              conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
              conn--local-major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
-             conn-lighter (concat " " (conn--state-lighter state))
+             conn-lighter (conn--state-lighter)
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
              conn--hide-mark-cursor (or (alist-get state conn-hide-mark-alist)
                                         (alist-get t conn-hide-mark-alist)
@@ -1471,14 +1477,16 @@ and specializes the method on all conn states."
 
 (defun conn-push-state (state &optional force-push)
   (cl-check-type state conn-state)
-  (if (or force-push (not (conn-state-get state :base-state t)))
-      (progn
-        (push conn-current-state conn--state-stack)
-        (conn-enter-state state))
+  (if (or force-push
+          (eq t (car conn--state-stack))
+          (not (conn-state-get state :base-state t)))
+      (push conn-current-state conn--state-stack)
     (while (and conn--state-stack
-                (not (eq t (car conn--state-stack))))
+                (not (eq t (nth 1 conn--state-stack))))
       (pop conn--state-stack))
-    (conn-enter-state state)))
+    (when (eq state (car conn--state-stack))
+      (pop conn--state-stack)))
+  (conn-enter-state state))
 
 (defun conn-pop-state ()
   (interactive)
@@ -2148,14 +2156,15 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-with-state-loop (state
                                     (callback conn-read-mover-callback)
                                     &key
-                                    (case-function 'conn-read-mover-command-case)
-                                    (message-function 'conn-read-mover-message)
+                                    case-function
+                                    message-function
                                     initial-arg
                                     &allow-other-keys)
-  (cl-call-next-method state callback
-                       :case-function case-function
-                       :message-function message-function
-                       :initial-arg initial-arg))
+  (cl-call-next-method
+   state callback
+   :case-function (or case-function 'conn-read-mover-command-case)
+   :message-function (or message-function 'conn-read-mover-message)
+   :initial-arg initial-arg))
 
 (defun conn-read-mover-message (callback error-message)
   (message
@@ -2332,16 +2341,17 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
       (conn-bounds-of-command forward arg)
     (save-mark-and-excursion
       (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
-            (funcall (or (alist-get cmd conn-bounds-of-command-alist)
-                         (cl-loop for depth from 0 below 30
-                                  for thing = (get cmd :conn-command-thing)
-                                  then (get thing :conn-command-thing)
-                                  while thing
-                                  for bounds = (alist-get (get thing :conn-command-thing)
-                                                          conn-bounds-of-command-alist)
-                                  when bounds return bounds)
-                         conn-bounds-of-command-default)
-                     cmd arg)))))
+            (funcall
+             (or (alist-get cmd conn-bounds-of-command-alist)
+                 (cl-loop for depth from 0 below 30
+                          for thing = (get cmd :conn-command-thing)
+                          then (get thing :conn-command-thing)
+                          while thing
+                          for bounds = (alist-get (get thing :conn-command-thing)
+                                                  conn-bounds-of-command-alist)
+                          when bounds return bounds)
+                 conn-bounds-of-command-default)
+             cmd arg)))))
 
 
 ;;;;; Bounds of Command Providers
@@ -2390,7 +2400,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (region-bounds)))
 
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
-  :lighter "[R]")
+  :lighter "Rec")
 
 (cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
   (setq buffer-read-only t)
@@ -3608,17 +3618,18 @@ associated with a command's thing.")
 (cl-defmethod conn-with-state-loop (state
                                     (callback conn-dispatch-callback)
                                     &key
-                                    (case-function 'conn-dispatch-command-case)
-                                    (message-function 'conn-dispatch-message)
+                                    case-function
+                                    message-function
                                     initial-arg
                                     &allow-other-keys)
   (require 'conn-transients)
   (let ((success nil))
     (unwind-protect
-        (prog1 (cl-call-next-method state callback
-                                    :case-function case-function
-                                    :message-function message-function
-                                    :initial-arg initial-arg)
+        (prog1 (cl-call-next-method
+                state callback
+                :case-function (or case-function 'conn-dispatch-command-case)
+                :message-function (or message-function 'conn-dispatch-message)
+                :initial-arg initial-arg)
           (setq success t))
       (unless success
         (conn-cancel-action (oref callback action))))))
@@ -6559,20 +6570,21 @@ Expansions and contractions are provided by functions in
   "<escape>" 'end)
 
 (defun conn--read-expand-case (command _cont)
-  (pcase command
-    ('conn-expand-exchange
-     (conn-expand-exchange))
-    ('conn-contract
-     (conn-contract (conn-state-loop-consume-prefix-arg)))
-    ('conn-expand
-     (conn-expand (conn-state-loop-consume-prefix-arg)))
-    ('conn-toggle-mark-command
-     (conn-toggle-mark-command))
-    ((or 'end 'exit-recursive-edit)
-     (conn-state-loop-exit))
-    ((or 'quit 'keyboard-quit 'abort-recursive-edit)
-     (conn-state-loop-abort))
-    (_ (conn-state-loop-error "Invalid command"))))
+  (ignore-error user-error
+    (pcase command
+      ('conn-expand-exchange
+       (conn-expand-exchange))
+      ('conn-contract
+       (conn-contract (conn-state-loop-consume-prefix-arg)))
+      ('conn-expand
+       (conn-expand (conn-state-loop-consume-prefix-arg)))
+      ('conn-toggle-mark-command
+       (conn-toggle-mark-command))
+      ((or 'end 'exit-recursive-edit)
+       (conn-state-loop-exit))
+      ((or 'quit 'keyboard-quit 'abort-recursive-edit)
+       (conn-state-loop-abort))
+      (_ (conn-state-loop-error "Invalid command")))))
 
 (defun conn--read-expand-message (_cont error-message)
   (message
@@ -8680,6 +8692,12 @@ of `conn-recenter-positions'."
       (let ((comment-empty-lines t))
         (comment-region beg end)))))
 
+(defun conn-outline-insert-heading ()
+  (interactive)
+  (outline-insert-heading)
+  (conn-with-state 'conn-emacs-state
+    (recursive-edit)))
+
 (defun conn-shell-command-on-region (&optional arg)
   "Like `shell-command-on-region' but inverts the meaning of ARG."
   (interactive "P")
@@ -10191,7 +10209,7 @@ Operates with the selected windows parent window."
   :keymap (conn-get-state-map 'conn-outline-state)
   :suppress t
   ;; TODO: write an insert heading command that works in this state
-  "*" 'outline-insert-heading
+  "*" 'conn-outline-insert-heading
   "<backspace>" 'conn-scroll-down
   ";" 'conn-wincontrol
   "." 'point-to-register

@@ -25,7 +25,7 @@
 (require 'org-agenda)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-org-heading-state)
+  :keymap (conn-get-state-map 'conn-org-state)
   :suppress t
   "_" 'org-down-element
   "*" 'conn-org-insert-heading
@@ -61,7 +61,7 @@
   (conn-push-state 'conn-org-state))
 
 ;;;###autoload
-(defun conn-org-heading-state-prev-heading ()
+(defun conn-org-state-prev-heading ()
   "A `conn-mode' state for structural editing of `org-mode' buffers."
   (interactive)
   (unless (progn
@@ -74,7 +74,9 @@
   "Insert org heading."
   (interactive)
   (forward-char 1)
-  (call-interactively 'org-insert-heading-respect-content))
+  (call-interactively 'org-insert-heading-respect-content)
+  (conn-with-state 'conn-emacs-state
+    (recursive-edit)))
 
 (conn-register-thing
  'org-inner-math
@@ -256,36 +258,6 @@
   "M" 'org-forward-element
   "I" 'org-backward-paragraph
   "K" 'org-forward-paragraph)
-
-(defun conn-org-speed-next-heading ()
-  (interactive)
-  (org-speed-move-safe 'org-next-visible-heading))
-
-(defun conn-org-speed-previous-heading ()
-  (interactive)
-  (org-speed-move-safe 'org-previous-visible-heading))
-
-(defun conn-org-speed-forward-heading ()
-  (interactive)
-  (org-speed-move-safe 'org-forward-heading-same-level))
-
-(defun conn-org-speed-backward-heading ()
-  (interactive)
-  (org-speed-move-safe 'org-backward-heading-same-level))
-
-(defun conn-org-speed-up-heading ()
-  (interactive)
-  (org-speed-move-safe 'outline-up-heading))
-
-(conn-register-thing-commands
- 'org-element 'conn-discrete-thing-handler
- 'conn-org-speed-up-heading
- 'conn-org-speed-next-heading
- 'conn-org-speed-previous-heading
- 'conn-org-speed-forward-heading
- 'conn-org-speed-backward-heading
- 'conn-org-speed-next-block
- 'conn-org-speed-previous-block)
 
 (defun conntext-edit-special ()
   (when (or (org-babel-where-is-src-block-head)
