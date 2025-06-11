@@ -1304,28 +1304,29 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms (buffer stack)
-    `(let* (,stack
-            (,buffer (current-buffer)))
-       (conn-push-state ,state t)
-       (setq ,stack conn--state-stack)
-       (push t conn--state-stack)
-       (setq conn-lighter (conn--state-lighter))
+  (cl-with-gensyms (buffer)
+    `(let ((,buffer (current-buffer)))
+       (conn-recursive-state ,state)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
-           (setq conn--state-stack ,stack)
-           (conn-pop-state)
-           (setq conn-lighter (conn--state-lighter)))))))
+           (conn-exit-recurive-state))))))
 
 (defmacro conn-without-state (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (body))
            (indent 0))
-  `(conn-with-state
-       (or (cadr (memq t conn--state-stack))
-           (error "conn-without-state can only be used within conn-with-state"))
-     ,@body))
+  (cl-with-gensyms (stack state buffer)
+    `(let ((,stack conn--state-stack)
+           (,state conn-current-state)
+           (,buffer (current-buffer)))
+       (conn-exit-recurive-state)
+       (unwind-protect
+           ,(macroexp-progn body)
+         (with-current-buffer ,buffer
+           (conn-enter-state ,state)
+           (setq conn--state-stack ,stack)
+           (conn--update-lighter))))))
 
 
 ;;;;; Cl-Generic Specializers
@@ -1370,14 +1371,16 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
-(defun conn--state-lighter ()
-  (cl-loop with lighter = ""
-           for s in (cons conn-current-state conn--state-stack)
-           if (eq s t) do (setq lighter (concat ">[" (substring lighter 1) "]"))
-           else do (setq lighter (concat ">"
-                                         (conn-state-get s :lighter)
-                                         lighter))
-           finally return (concat " " (substring lighter 1))))
+(defun conn--update-lighter ()
+  (thread-last
+    (cl-loop with lighter = ""
+             for s in (cons conn-current-state conn--state-stack)
+             if (eq s t) do (setq lighter (concat ">[" (substring lighter 1) "]"))
+             else do (setq lighter (concat ">"
+                                           (conn-state-get s :lighter)
+                                           lighter))
+             finally return (concat " " (substring lighter 1)))
+    (setq conn-lighter)))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE.
@@ -1451,7 +1454,6 @@ and specializes the method on all conn states."
              conn--local-override-map `((conn-local-mode . ,(conn--compose-overide-map state)))
              conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
              conn--local-major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
-             conn-lighter (conn--state-lighter)
              conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)
              conn--hide-mark-cursor (or (alist-get state conn-hide-mark-alist)
                                         (alist-get t conn-hide-mark-alist)
@@ -1486,14 +1488,29 @@ and specializes the method on all conn states."
       (pop conn--state-stack))
     (when (eq state (car conn--state-stack))
       (pop conn--state-stack)))
-  (conn-enter-state state))
+  (conn-enter-state state)
+  (conn--update-lighter))
+
+(defun conn-recursive-state (state)
+  (conn-push-state state t)
+  (push t conn--state-stack)
+  (conn--update-lighter))
+
+(defun conn-exit-recurive-state ()
+  (interactive)
+  (if-let* ((tail (memq t conn--state-stack)))
+      (progn
+        (setq conn--state-stack (cdr tail))
+        (conn-pop-state))
+    (error "Not in a recursive state")))
 
 (defun conn-pop-state ()
   (interactive)
   (pcase conn--state-stack
     ('nil (error "State stack empty"))
     (`(t . ,_) (error "Cannot pop past transient state")))
-  (conn-enter-state (pop conn--state-stack)))
+  (conn-enter-state (pop conn--state-stack))
+  (conn--update-lighter))
 
 (defun conn-peek-state-stack ()
   (unless (or (null conn--state-stack)
