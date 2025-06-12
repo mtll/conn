@@ -1488,12 +1488,12 @@ and specializes the method on all conn states."
 
 (defun conn-pop-state ()
   (interactive)
-  (if (eq t (cadr conn--state-stack))
-      (conn-push-state
-       (conn-state-get conn-current-state :pop-alternate
-                       t 'conn-command-state))
-    (pop conn--state-stack)
-    (conn-enter-state (car conn--state-stack))))
+  (pcase (cadr conn--state-stack)
+    ('t (conn-push-state
+         (conn-state-get conn-current-state :pop-alternate
+                         t 'conn-command-state)))
+    (state (conn-enter-state state)
+           (pop conn--state-stack))))
 
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
@@ -1504,8 +1504,8 @@ and specializes the method on all conn states."
   (interactive)
   (if-let* ((tail (memq t conn--state-stack)))
       (progn
-        (setq conn--state-stack (cdr tail))
-        (conn-enter-state (car conn--state-stack)))
+        (conn-enter-state (cadr tail))
+        (setq conn--state-stack (cdr tail)))
     (error "Not in a recursive state")))
 
 
@@ -8703,9 +8703,11 @@ of `conn-recenter-positions'."
 
 (defun conn-outline-insert-heading ()
   (interactive)
-  (outline-insert-heading)
   (conn-with-state 'conn-emacs-state
-    (recursive-edit)))
+    (save-mark-and-excursion
+      (save-current-buffer
+        (outline-insert-heading)
+        (recursive-edit)))))
 
 (defun conn-shell-command-on-region (&optional arg)
   "Like `shell-command-on-region' but inverts the meaning of ARG."
