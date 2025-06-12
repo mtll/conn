@@ -1379,13 +1379,15 @@ See also `conn-exit-functions'.")
 
 (defun conn--update-lighter ()
   (thread-last
-    (cl-loop with lighter = ""
+    (cl-loop with lighter = "]"
              for s in conn--state-stack
-             if (eq s t) do (setq lighter (concat ">[" (substring lighter 1) "]"))
-             else do (setq lighter (concat ">"
-                                           (conn-state-get s :lighter)
-                                           lighter))
-             finally return (concat " " (substring lighter 1)))
+             if (eq s t)
+             do (setq lighter (concat ">[" (substring lighter 1) "]"))
+             else
+             do (setq lighter (concat ">"
+                                      (conn-state-get s :lighter)
+                                      lighter))
+             finally return (concat " [" (substring lighter 1)))
     (setq conn-lighter)))
 
 (cl-defgeneric conn-exit-state (state)
