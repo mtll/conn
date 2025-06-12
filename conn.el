@@ -916,10 +916,6 @@ The returned list is not fresh, don't modify it."
 (defvar conn--major-mode-maps (make-hash-table :test 'eq))
 (defvar conn--minor-mode-maps (make-hash-table :test 'eq))
 
-(defvar-keymap conn-pop-map "<escape>" 'conn-pop-state)
-
-(defvar conn-pop-map-active nil)
-(defvar conn--pop-map-alist `((conn-pop-map-active . ,conn-pop-map)))
 (defvar-local conn--local-state-map)
 (defvar-local conn--local-override-map)
 (defvar-local conn--local-major-mode-map)
@@ -1460,7 +1456,6 @@ and specializes the method on all conn states."
             (conn-exit-state conn-current-state)
             (set state t)
             (setf
-             conn-pop-map-active (conn-state-get state :poppable t)
              conn-current-state state
              conn--local-override-map `((conn-local-mode . ,(conn--compose-overide-map state)))
              conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
@@ -1647,7 +1642,6 @@ For use in buffers that should not have any other state."
     (conn-menu-state conn-movement-state)
   "A `conn-mode' state for editing test."
   :alternate 'conn-emacs-state
-  :poppable t
   :lighter "Cmd"
   :suppress-input-method t
   :cursor 'box)
@@ -1672,22 +1666,19 @@ For use in buffers that should not have any other state."
 
 (conn-define-state conn-outline-state ()
   "State for dispatch in `dired-mode'."
-  :poppable t
   :cursor '(hbar . 10)
   :lighter "*"
   :suppress-input-method t)
 
 (conn-define-state conn-org-state (conn-outline-state)
-  "A `conn-mode' state for structural editing of `org-mode' buffers."
-  :poppable t)
+  "A `conn-mode' state for structural editing of `org-mode' buffers.")
 
 (conn-define-state conn-emacs-state ()
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
   :lighter "Emc"
-  :cursor '(bar . 4)
-  :poppable t)
+  :cursor '(bar . 4))
 
 ;;;;; Emacs State
 
@@ -9808,6 +9799,10 @@ Operates with the selected windows parent window."
 ;;;;; State Keymaps
 
 (define-keymap
+  :keymap (conn-get-state-map 'conn-emacs-state)
+  "<escape>" 'conn-pop-state)
+
+(define-keymap
   :keymap (conn-get-state-map 'conn-read-mover-common-state)
   "C-s" 'isearch-forward
   "s" 'isearch-forward
@@ -10000,7 +9995,6 @@ Operates with the selected windows parent window."
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn
-        (cl-pushnew 'conn--pop-map-alist emulation-mode-map-alists)
         (cl-pushnew 'conn--local-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
@@ -10017,8 +10011,7 @@ Operates with the selected windows parent window."
           (seq-difference '(conn--local-state-map
                             conn--local-major-mode-map
                             conn--local-minor-mode-maps
-                            conn--local-override-map
-                            conn--pop-map-alist)
+                            conn--local-override-map)
                           emulation-mode-map-alists #'eq))))
 
 (define-minor-mode conn-local-mode
@@ -10231,7 +10224,7 @@ Operates with the selected windows parent window."
   "DEL" 'conn-scroll-down
   "SPC" 'conn-scroll-up
   "W" 'widen
-  "<escape>" 'conn-command-state
+  "<escape>" 'conn-pop-state
   "J" 'outline-promote
   "L" 'outline-demote
   "O" 'outline-move-subtree-down
