@@ -807,7 +807,7 @@ of highlighting."
 ;;;; States
 
 (defcustom conn-buffer-state-setup-alist
-  `(("COMMIT_EDITMSG" . nil)
+  `(("COMMIT_EDITMSG" . conn-setup-emacs-state)
     ((or (derived-mode . calc-mode)
          (derived-mode . calc-trail-mode)
          (derived-mode . calc-keypad-mode)
@@ -823,7 +823,8 @@ of highlighting."
          (derived-mode . text-mode)
          (derived-mode . conf-mode)
          (major-mode . fundamental-mode))
-     . conn-setup-command-state))
+     . conn-setup-command-state)
+    (t . conn-setup-emacs-state))
   "Alist of the form ((CONDITION . STATE-SETUP-FN) ...).
 
 Elements specify a STATE-SETUP-FN that should enter the default state
@@ -904,6 +905,9 @@ The returned list is not fresh, don't modify it."
 (defun conn-setup-command-state ()
   (conn-push-state 'conn-command-state))
 
+(defun conn-setup-emacs-state ()
+  (conn-push-state 'conn-emacs-state))
+
 
 ;;;;; State Keymap Impl
 
@@ -912,6 +916,10 @@ The returned list is not fresh, don't modify it."
 (defvar conn--major-mode-maps (make-hash-table :test 'eq))
 (defvar conn--minor-mode-maps (make-hash-table :test 'eq))
 
+(defvar-keymap conn-pop-map "<escape>" 'conn-pop-state)
+
+(defvar conn-pop-map-active nil)
+(defvar conn--pop-map-alist `((conn-pop-map-active . ,conn-pop-map)))
 (defvar-local conn--local-state-map)
 (defvar-local conn--local-override-map)
 (defvar-local conn--local-major-mode-map)
@@ -1189,7 +1197,7 @@ mouse-3: Describe current input method")
 
 ;;;;; State Properties
 
-(defun conn-state-get (state property &optional no-inherit)
+(defun conn-state-get (state property &optional no-inherit default)
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
@@ -1200,22 +1208,24 @@ PROPERTY.  If no parent has that property either than nil is returned."
         (cl-loop for parent in (conn--state-all-parents state)
                  for table = (aref (get parent :conn--state) 1)
                  for prop = (gethash property table key-missing)
-                 unless (eq prop key-missing) return prop))
+                 unless (eq prop key-missing) return prop
+                 finally return default))
     (cl-check-type state conn-state)
-    (gethash property (aref (get state :conn--state) 1))))
+    (gethash property (aref (get state :conn--state) 1) default)))
 
-(defun conn--state-get-compiler-macro (_exp state property &optional no-inherit)
+(defun conn--state-get-compiler-macro (_exp state property &optional no-inherit default)
   (cl-once-only (state property)
     (let ((with-parents
            `(cl-with-gensyms (key-missing)
               (cl-loop for parent in (conn--state-all-parents ,state)
                        for table = (aref (get parent :conn--state) 1)
                        for prop = (gethash ,property table key-missing)
-                       unless (eq prop key-missing) return prop)))
+                       unless (eq prop key-missing) return prop
+                       finally return ,default)))
           (without-parents
            `(progn
               (cl-check-type ,state conn-state)
-              (gethash ,property (aref (get ,state :conn--state) 1))))
+              (gethash ,property (aref (get ,state :conn--state) 1) ,default)))
           (no-inherit (macroexpand-all no-inherit macroexpand-all-environment)))
       (if (and (macroexp-const-p no-inherit)
                (if (consp no-inherit) (cadr no-inherit) no-inherit))
@@ -1306,7 +1316,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (indent 1))
   (cl-with-gensyms (buffer)
     `(let ((,buffer (current-buffer)))
-       (conn-recursive-state ,state)
+       (conn-push-state ,state t)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
@@ -1374,7 +1384,7 @@ See also `conn-exit-functions'.")
 (defun conn--update-lighter ()
   (thread-last
     (cl-loop with lighter = ""
-             for s in (cons conn-current-state conn--state-stack)
+             for s in conn--state-stack
              if (eq s t) do (setq lighter (concat ">[" (substring lighter 1) "]"))
              else do (setq lighter (concat ">"
                                            (conn-state-get s :lighter)
@@ -1450,6 +1460,7 @@ and specializes the method on all conn states."
             (conn-exit-state conn-current-state)
             (set state t)
             (setf
+             conn-pop-map-active (conn-state-get state :poppable t)
              conn-current-state state
              conn--local-override-map `((conn-local-mode . ,(conn--compose-overide-map state)))
              conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
@@ -1477,45 +1488,37 @@ and specializes the method on all conn states."
           (remove-hook 'conn-state-entry-functions fn)
           (message "Error in conn-state-entry-functions: %s" (car err))))))))
 
-(defun conn-push-state (state &optional force-push)
+(defun conn-push-state (state &optional recursive)
   (cl-check-type state conn-state)
-  (if (or force-push
-          (eq t (car conn--state-stack))
-          (not (conn-state-get state :base-state t)))
-      (push conn-current-state conn--state-stack)
-    (while (and conn--state-stack
-                (not (eq t (nth 1 conn--state-stack))))
-      (pop conn--state-stack))
-    (when (eq state (car conn--state-stack))
-      (pop conn--state-stack)))
-  (conn-enter-state state)
-  (conn--update-lighter))
-
-(defun conn-recursive-state (state)
-  (conn-push-state state t)
-  (push t conn--state-stack)
-  (conn--update-lighter))
+  (cond (recursive
+         (conn-enter-state state)
+         (push t conn--state-stack)
+         (push state conn--state-stack)
+         (conn--update-lighter))
+        ((not (eq state conn-current-state))
+         (conn-enter-state state)
+         (push state conn--state-stack)
+         (conn--update-lighter))))
 
 (defun conn-exit-recurive-state ()
   (interactive)
   (if-let* ((tail (memq t conn--state-stack)))
       (progn
         (setq conn--state-stack (cdr tail))
-        (conn-pop-state))
+        (conn-enter-state (car conn--state-stack))
+        (conn--update-lighter))
     (error "Not in a recursive state")))
 
 (defun conn-pop-state ()
   (interactive)
-  (pcase conn--state-stack
-    ('nil (error "State stack empty"))
-    (`(t . ,_) (error "Cannot pop past transient state")))
-  (conn-enter-state (pop conn--state-stack))
-  (conn--update-lighter))
-
-(defun conn-peek-state-stack ()
-  (unless (or (null conn--state-stack)
-              (eq t (car conn--state-stack)))
-    (car conn--state-stack)))
+  (if (or (null (cdr conn--state-stack))
+          (eq t (cadr conn--state-stack)))
+      (when-let* ((alt (conn-state-get conn-current-state :alternate
+                                       t 'conn-command-state)))
+        (conn-push-state alt))
+    (pop conn--state-stack)
+    (conn-enter-state (car conn--state-stack))
+    (conn--update-lighter)))
 
 
 ;;;;; test-State Definitions
@@ -1643,10 +1646,11 @@ For use in buffers that should not have any other state."
 (conn-define-state conn-command-state
     (conn-menu-state conn-movement-state)
   "A `conn-mode' state for editing test."
+  :alternate 'conn-emacs-state
+  :poppable t
   :lighter "Cmd"
   :suppress-input-method t
-  :cursor 'box
-  :base-state t)
+  :cursor 'box)
 
 (conn-define-state conn-read-mover-common-state (conn-command-state)
   "Common elements of thing reading states."
@@ -1668,12 +1672,14 @@ For use in buffers that should not have any other state."
 
 (conn-define-state conn-outline-state ()
   "State for dispatch in `dired-mode'."
+  :poppable t
   :cursor '(hbar . 10)
   :lighter "*"
   :suppress-input-method t)
 
 (conn-define-state conn-org-state (conn-outline-state)
-  "A `conn-mode' state for structural editing of `org-mode' buffers.")
+  "A `conn-mode' state for structural editing of `org-mode' buffers."
+  :poppable t)
 
 (conn-define-state conn-emacs-state ()
   "A `conn-mode' state for inserting text.
@@ -1681,7 +1687,7 @@ For use in buffers that should not have any other state."
 By default `conn-emacs-state' does not bind anything."
   :lighter "Emc"
   :cursor '(bar . 4)
-  :base-state t)
+  :poppable t)
 
 ;;;;; Emacs State
 
@@ -2429,6 +2435,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
+  "<escape>" 'exit-recursive-edit
   "e" 'exit-recursive-edit
   "C-]" 'abort-recursive-edit)
 
@@ -9746,6 +9753,7 @@ Operates with the selected windows parent window."
 (put 'conn-previous-emacs-state 'repeat-check-key 'no)
 
 (defvar-keymap conn-local-mode-map
+  "C-<escape>" 'exit-recursive-edit
   "C-x y" conn-dispatch-cycle-map
   "M-g o" 'conn-pop-mark-ring
   "M-g u" 'conn-unpop-mark-ring
@@ -9798,18 +9806,6 @@ Operates with the selected windows parent window."
 
 
 ;;;;; State Keymaps
-
-(keymap-set (conn-get-state-map 'conn-emacs-state)
-            "<escape>" 'conn-command-state)
-
-(keymap-set (conn-get-mode-map 'conn-command-state 'conn-kmacro-applying-p)
-            "<escape>" 'exit-recursive-edit)
-
-(keymap-set (conn-get-state-map 'conn-emacs-state)
-            "C-<escape>" 'exit-recursive-edit)
-
-(keymap-set (conn-get-state-map 'conn-command-state)
-            "C-<escape>" 'exit-recursive-edit)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-mover-common-state)
@@ -9876,7 +9872,7 @@ Operates with the selected windows parent window."
   "b" (conn-remap-key "<conn-edit-map>")
   "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
-  "e" 'conn-insert-state
+  "e" 'conn-pop-state
   "E" 'conn-emacs-state-at-mark
   "t" 'conn-change
   "`" 'conn-wincontrol-mru-window
@@ -10004,6 +10000,7 @@ Operates with the selected windows parent window."
 (defun conn--setup-keymaps ()
   (if conn-mode
       (progn
+        (cl-pushnew 'conn--pop-map-alist emulation-mode-map-alists)
         (cl-pushnew 'conn--local-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
@@ -10020,7 +10017,8 @@ Operates with the selected windows parent window."
           (seq-difference '(conn--local-state-map
                             conn--local-major-mode-map
                             conn--local-minor-mode-maps
-                            conn--local-override-map)
+                            conn--local-override-map
+                            conn--pop-map-alist)
                           emulation-mode-map-alists #'eq))))
 
 (define-minor-mode conn-local-mode
@@ -10059,11 +10057,9 @@ Operates with the selected windows parent window."
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
-        (if-let* ((setup-fn
-                   (alist-get (current-buffer) conn-buffer-state-setup-alist
-                              nil nil #'buffer-match-p)))
-            (funcall setup-fn)
-          (conn-push-state 'conn-emacs-state)))
+        (funcall (alist-get (current-buffer)
+                            conn-buffer-state-setup-alist
+                            nil nil #'buffer-match-p)))
     ;; conn-exit-state sets conn-current-state to nil before
     ;; anything else, so if we got here after an error in
     ;; conn-exit-state this prevents an infinite loop.
@@ -10161,7 +10157,7 @@ Operates with the selected windows parent window."
   (defvar edebug-mode)
   (defun conn--edebug-toggle-emacs-state ()
     (if edebug-mode
-        (conn-push-state 'conn-emacs-state t)
+        (conn-push-state 'conn-emacs-state)
       (conn-pop-state)))
   (add-hook 'edebug-mode-hook 'conn--edebug-toggle-emacs-state))
 
