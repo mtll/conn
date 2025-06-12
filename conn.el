@@ -1489,6 +1489,17 @@ and specializes the method on all conn states."
     (push state conn--state-stack)
     (conn--update-lighter)))
 
+(defun conn-pop-state ()
+  (interactive)
+  (if (or (null (cdr conn--state-stack))
+          (eq t (cadr conn--state-stack)))
+      (conn-push-state
+       (conn-state-get conn-current-state :pop-alternate
+                       t 'conn-command-state))
+    (pop conn--state-stack)
+    (conn-enter-state (car conn--state-stack))
+    (conn--update-lighter)))
+
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
   (push t conn--state-stack)
@@ -1503,17 +1514,6 @@ and specializes the method on all conn states."
         (conn-enter-state (car conn--state-stack))
         (conn--update-lighter))
     (error "Not in a recursive state")))
-
-(defun conn-pop-state ()
-  (interactive)
-  (if (or (null (cdr conn--state-stack))
-          (eq t (cadr conn--state-stack)))
-      (conn-push-state
-       (conn-state-get conn-current-state :alternate
-                       t 'conn-command-state))
-    (pop conn--state-stack)
-    (conn-enter-state (car conn--state-stack))
-    (conn--update-lighter)))
 
 
 ;;;;; test-State Definitions
@@ -1641,8 +1641,8 @@ For use in buffers that should not have any other state."
 (conn-define-state conn-command-state
     (conn-menu-state conn-movement-state)
   "A `conn-mode' state for editing test."
-  :alternate 'conn-emacs-state
-  :lighter "Cmd"
+  :pop-alternate 'conn-emacs-state
+  :lighter "C"
   :suppress-input-method t
   :cursor 'box)
 
@@ -1677,7 +1677,7 @@ For use in buffers that should not have any other state."
   "A `conn-mode' state for inserting text.
 
 By default `conn-emacs-state' does not bind anything."
-  :lighter "Emc"
+  :lighter "E"
   :cursor '(bar . 4))
 
 ;;;;; Emacs State
@@ -2144,7 +2144,7 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-read-mover-state (conn-read-mover-common-state)
   "A state for reading things."
-  :lighter "Mv")
+  :lighter "M")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-mover-state)
@@ -2414,7 +2414,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
         (region-bounds)))
 
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
-  :lighter "Rec")
+  :lighter "R")
 
 (cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
   (setq buffer-read-only t)
@@ -3429,7 +3429,7 @@ associated with a command's thing.")
 
 (conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
   "State for reading a dispatch command."
-  :lighter "Dsp"
+  :lighter "D"
   :mode-line-face 'conn-dispatch-mode-line-face)
 
 (conn-define-state conn-dispatch-state (conn-dispatch-mover-state)
