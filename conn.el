@@ -1312,7 +1312,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            (indent 1))
   (cl-with-gensyms (buffer)
     `(let ((,buffer (current-buffer)))
-       (conn-push-state ,state t)
+       (conn-enter-recursive-state ,state)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
@@ -1483,17 +1483,17 @@ and specializes the method on all conn states."
           (remove-hook 'conn-state-entry-functions fn)
           (message "Error in conn-state-entry-functions: %s" (car err))))))))
 
-(defun conn-push-state (state &optional recursive)
-  (cl-check-type state conn-state)
-  (cond (recursive
-         (conn-enter-state state)
-         (push t conn--state-stack)
-         (push state conn--state-stack)
-         (conn--update-lighter))
-        ((not (eq state conn-current-state))
-         (conn-enter-state state)
-         (push state conn--state-stack)
-         (conn--update-lighter))))
+(defun conn-push-state (state)
+  (when (not (eq state conn-current-state))
+    (conn-enter-state state)
+    (push state conn--state-stack)
+    (conn--update-lighter)))
+
+(defun conn-enter-recursive-state (state)
+  (conn-enter-state state)
+  (push t conn--state-stack)
+  (push state conn--state-stack)
+  (conn--update-lighter))
 
 (defun conn-exit-recurive-state ()
   (interactive)
@@ -1508,9 +1508,9 @@ and specializes the method on all conn states."
   (interactive)
   (if (or (null (cdr conn--state-stack))
           (eq t (cadr conn--state-stack)))
-      (when-let* ((alt (conn-state-get conn-current-state :alternate
-                                       t 'conn-command-state)))
-        (conn-push-state alt))
+      (conn-push-state
+       (conn-state-get conn-current-state :alternate
+                       t 'conn-command-state))
     (pop conn--state-stack)
     (conn-enter-state (car conn--state-stack))
     (conn--update-lighter)))
@@ -9859,6 +9859,7 @@ Operates with the selected windows parent window."
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
   "C-<return>" 'conn-join-lines
+  "<escape>" 'conn-pop-state
   "T" 'conn-copy-thing
   "D" 'conn-duplicate-region
   "P" 'conn-register-load-and-replace
