@@ -844,7 +844,7 @@ meaning of CONDITION see `buffer-match-p'."
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
 
-(defvar-local conn--state-stack nil
+(defvar-local conn--state-stack (list t)
   "Previous conn states in buffer.")
 
 (define-inline conn-state-p (state)
@@ -1331,8 +1331,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
            (conn-enter-state ,state)
-           (setq conn--state-stack ,stack)
-           (conn--update-lighter))))))
+           (setq conn--state-stack ,stack))))))
 
 
 ;;;;; Cl-Generic Specializers
@@ -1377,16 +1376,14 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
-(defun conn--update-lighter ()
-  (cl-loop with lighter = "]"
-           for s in conn--state-stack
-           if (eq s t)
-           do (setq lighter (concat ">[" (substring lighter 1) "]"))
-           else
-           do (setq lighter (concat ">"
-                                    (conn-state-get s :lighter)
-                                    lighter))
-           finally (setq conn-lighter (concat " [" (substring lighter 1)))))
+(defun conn--get-lighter ()
+  (or conn-lighter
+      (let ((lighter ""))
+        (dolist (s conn--state-stack)
+          (setq lighter (if (eq s t)
+                            (concat ">[" (substring lighter 1) "]")
+                          (concat ">" (conn-state-get s :lighter) lighter))))
+        (setq conn-lighter (concat " " (substring lighter 1))))))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE.
@@ -1470,6 +1467,7 @@ and specializes the method on all conn states."
             (cl-call-next-method)
             (unless executing-kbd-macro
               (force-mode-line-update))
+            (setq conn-lighter nil)
             (setq success t))
         (unless success
           (conn-local-mode -1)
@@ -1484,35 +1482,30 @@ and specializes the method on all conn states."
           (message "Error in conn-state-entry-functions: %s" (car err))))))))
 
 (defun conn-push-state (state)
-  (when (not (eq state conn-current-state))
+  (unless (symbol-value state)
     (conn-enter-state state)
-    (push state conn--state-stack)
-    (conn--update-lighter)))
+    (push state conn--state-stack)))
 
 (defun conn-pop-state ()
   (interactive)
-  (if (or (null (cdr conn--state-stack))
-          (eq t (cadr conn--state-stack)))
+  (if (eq t (cadr conn--state-stack))
       (conn-push-state
        (conn-state-get conn-current-state :pop-alternate
                        t 'conn-command-state))
     (pop conn--state-stack)
-    (conn-enter-state (car conn--state-stack))
-    (conn--update-lighter)))
+    (conn-enter-state (car conn--state-stack))))
 
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
   (push t conn--state-stack)
-  (push state conn--state-stack)
-  (conn--update-lighter))
+  (push state conn--state-stack))
 
 (defun conn-exit-recurive-state ()
   (interactive)
   (if-let* ((tail (memq t conn--state-stack)))
       (progn
         (setq conn--state-stack (cdr tail))
-        (conn-enter-state (car conn--state-stack))
-        (conn--update-lighter))
+        (conn-enter-state (car conn--state-stack)))
     (error "Not in a recursive state")))
 
 
@@ -10019,14 +10012,14 @@ Operates with the selected windows parent window."
 (define-minor-mode conn-local-mode
   "Minor mode for setting up conn in a buffer."
   :init-value nil
-  :lighter (:eval conn-lighter)
+  :lighter (:eval (conn--get-lighter))
   :group 'conn
   :keymap conn-local-mode-map
   (conn--input-method-mode-line)
   (if conn-local-mode
       (progn
-        (setq conn-current-state nil
-              conn--state-stack nil)
+        (setq conn-current-state nil)
+        (kill-local-variable 'conn--state-stack)
         (setq-local conn-lighter (seq-copy conn-lighter)
                     conn--local-state-map (list (list 'conn-local-mode))
                     conn--local-override-map (list (list 'conn-local-mode))
