@@ -1626,8 +1626,7 @@ to the abnormal hooks `conn-state-entry-functions' or
 
 For use in buffers that should not have any other state."
   :hide-mark-cursor t
-  :cursor '(bar . 4)
-  :base-state t)
+  :cursor '(bar . 4))
 
 (conn-define-state conn-movement-state ()
   "A `conn-mode' state moving in a buffer."
@@ -2133,9 +2132,9 @@ themselves once the selection process has concluded."
                (conn-state-loop-abort))
               (cmd
                (funcall case-function cmd callback)))
-            (setf conn-state-loop-last-command cmd))))))
-  (message nil)
-  (funcall callback))
+            (setf conn-state-loop-last-command cmd)))))
+    (message nil)
+    (funcall callback)))
 
 
 ;;;; Read Things
@@ -2324,6 +2323,8 @@ If `use-region-p' returns non-nil this will always return
     (conn-expand . conn--bounds-of-expansion)
     (conn-contract . conn--bounds-of-expansion)
     (recursive-edit . conn--bounds-of-recursive-edit)
+    (exit-recursive-edit . conn--bounds-of-recursive-edit)
+    (abort-recursive-edit . conn--bounds-of-recursive-edit)
     (isearch-forward . conn--bounds-of-isearch)
     (isearch-backward . conn--bounds-of-isearch)
     (isearch-forward-regexp . conn--bounds-of-isearch)
@@ -4294,7 +4295,8 @@ Target overlays may override this default by setting the
     (internal-push-keymap conn-dispatch-read-event-map
                           'overriding-terminal-local-map)
     (unwind-protect
-        (cl-call-next-method)
+        (let ((inhibit-message t))
+          (cl-call-next-method))
       (internal-pop-keymap conn-dispatch-read-event-map
                            'overriding-terminal-local-map)
       (conn-dispatch-select-mode -1))))
@@ -6080,7 +6082,6 @@ contain targets."
                                              &allow-other-keys)
   (let* ((opoint (point-marker))
          (eldoc-display-functions nil)
-         (inhibit-message t)
          (recenter-last-op nil)
          (conn-state-loop-last-command nil)
          (conn--dispatch-must-prompt nil)
