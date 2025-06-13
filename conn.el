@@ -2146,9 +2146,9 @@ themselves once the selection process has concluded."
                (conn-state-loop-abort))
               (cmd
                (funcall case-function cmd callback)))
-            (setf conn-state-loop-last-command cmd)))))
-    (message nil)
-    (funcall callback)))
+            (setf conn-state-loop-last-command cmd))))))
+  (message nil)
+  (funcall callback))
 
 
 ;;;; Read Things
@@ -3466,6 +3466,7 @@ associated with a command's thing.")
 (define-keymap
   :keymap conn-dispatch-read-event-map
   :parent conn-dispatch-common-map
+  "C-/" 'undo
   "C-'" 'recursive-edit
   "<mouse-1>" 'act
   "DEL" 'backward-delete-char
@@ -4812,6 +4813,13 @@ contain targets."
   (always-retarget :type boolean)
   (always-prompt :type boolean))
 
+(defvar conn--dispatch-change-groups nil)
+
+(defun conn-dispatch-prepare-undo (&rest buffers)
+  (push (mapcan #'prepare-change-group
+                (or buffers (list (current-buffer))))
+        conn--dispatch-change-groups))
+
 (defun conn--action-type-p (item)
   (when-let* ((class (and (symbolp item)
                           (cl--find-class item))))
@@ -4938,6 +4946,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -4974,6 +4983,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -4999,6 +5009,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5024,6 +5035,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5051,6 +5063,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5089,6 +5102,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5136,6 +5150,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt bounds-op bounds-arg)
       (with-selected-window window
+        (conn-dispatch-prepare-undo)
         (save-excursion
           (goto-char pt)
           (pcase (car (funcall bounds-op bounds-arg))
@@ -5187,6 +5202,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt bounds-op bounds-arg)
       (with-selected-window window
+        (conn-dispatch-prepare-undo)
         (save-excursion
           (goto-char pt)
           (pcase (car (funcall bounds-op bounds-arg))
@@ -5217,6 +5233,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-mark-and-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5236,6 +5253,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-mark-and-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5255,6 +5273,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-mark-and-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5270,6 +5289,7 @@ contain targets."
                     (register (register-read-with-preview "Register: ")))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
@@ -5292,6 +5312,7 @@ contain targets."
                     (register (register-read-with-preview "Register: ")))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
@@ -5321,6 +5342,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5354,6 +5376,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5387,6 +5410,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
+      (conn-dispatch-prepare-undo)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5485,6 +5509,7 @@ contain targets."
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
       (with-current-buffer (marker-buffer opoint)
+        (conn-dispatch-prepare-undo)
         (cond ((null str)
                (user-error "Cannot find thing at point"))
               ((/= (point) opoint)
@@ -5514,6 +5539,7 @@ contain targets."
            (copy-region-as-kill beg end)
            (conn--dispatch-fixup-whitespace))
           (_ (user-error "Cannot find thing at point")))))
+    (conn-dispatch-prepare-undo)
     (delete-region (region-beginning) (region-end))
     (yank)))
 
@@ -5545,6 +5571,7 @@ contain targets."
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
         (window pt bounds-op bounds-arg)
+      (conn-dispatch-prepare-undo (current-buffer) (window-buffer window))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -5589,6 +5616,7 @@ contain targets."
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
+    (conn-dispatch-prepare-undo (current-buffer) (window-buffer window))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -5668,6 +5696,8 @@ contain targets."
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
       (window1 pt1 bounds-op1 window2 pt2 bounds-op2 bounds-arg)
+    (conn-dispatch-prepare-undo (window-buffer window1)
+                                (window-buffer window2))
     (conn--dispatch-transpose-subr
      (window-buffer window1) pt1 bounds-op1
      (window-buffer window2) pt2 bounds-op2
@@ -5804,6 +5834,7 @@ contain targets."
   (let ((rep (gensym "repeat")))
     `(catch 'state-loop-exit
        (let* ((,rep nil)
+              (conn--dispatch-change-groups nil)
               (conn--dispatch-read-event-message-prefixes
                `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                     (lambda ()
@@ -5821,14 +5852,16 @@ contain targets."
                                      'face (when conn--dispatch-always-retarget
                                              'eldoc-highlight-function-argument))))))
                  ,@conn--dispatch-read-event-message-prefixes)))
-         (while (or (setq ,rep ,repeat)
-                    (< conn-dispatch-repeat-count 1))
-           (catch 'dispatch-redisplay
-             (while (progn
-                      ,@body
-                      (cl-incf conn-dispatch-repeat-count)
-                      ,repeat)
-               (undo-boundary))))))))
+         (unwind-protect
+             (while (or (setq ,rep ,repeat)
+                        (< conn-dispatch-repeat-count 1))
+               (catch 'dispatch-redisplay
+                 (while (progn
+                          ,@body
+                          (cl-incf conn-dispatch-repeat-count)
+                          ,repeat)
+                   (undo-boundary))))
+           (mapc #'accept-change-group conn--dispatch-change-groups))))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -5836,6 +5869,7 @@ contain targets."
                   ,conn-target-predicate
                   ,conn-target-sort-function)
                 conn--dispatch-init-state)
+               (conn--dispatch-change-groups nil)
                (inhibit-message nil)
                (recenter-last-op nil)
                (conn-dispatch-repeat-count nil)
@@ -5979,6 +6013,11 @@ contain targets."
                        'conn--dispatch-restrict-windows)
     (add-function :after-while conn-target-window-predicate
                   'conn--dispatch-restrict-windows))
+  (conn-dispatch-handle-and-redisplay))
+
+(cl-defmethod conn-dispatch-select-command-case ((_cmd (eql undo)))
+  (when conn--dispatch-change-groups
+    (cancel-change-group (pop conn--dispatch-change-groups)))
   (conn-dispatch-handle-and-redisplay))
 
 
