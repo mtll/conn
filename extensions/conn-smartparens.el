@@ -151,7 +151,7 @@
   :suppress t
   "`" 'other-window
   "e" 'conn-pop-state
-  "<escape>" 'conn-command-state
+  "<escape>" 'conn-pop-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun
   "o" 'sp-forward-symbol

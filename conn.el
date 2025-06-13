@@ -1380,8 +1380,8 @@ See also `conn-exit-functions'.")
       (let ((lighter ""))
         (dolist (s conn--state-stack)
           (setq lighter (if (eq s t)
-                            (concat ">[" (substring lighter 1) "]")
-                          (concat ">" (conn-state-get s :lighter) lighter))))
+                            (concat "→[" (substring lighter 1) "]")
+                          (concat "→" (conn-state-get s :lighter) lighter))))
         (setq conn-lighter (concat " " (substring lighter 1))))))
 
 (cl-defgeneric conn-exit-state (state)
@@ -1727,7 +1727,7 @@ The function should accept a single argument, the list of windows to be
 labeled and it should return a list of structs for `conn-label-select',
 which see.")
 
-(defvar conn--target-window-predicate)
+(defvar conn-target-window-predicate)
 
 (defvar conn-dispatch-all-frames 'visible)
 
@@ -1780,9 +1780,9 @@ strings have `conn-dispatch-label-face'."
         (nreverse labels)))))
 
 (defun conn--get-target-windows ()
-  (if conn--target-window-predicate
+  (if conn-target-window-predicate
       (conn--get-windows nil nil conn-dispatch-all-frames
-                         nil conn--target-window-predicate)
+                         nil conn-target-window-predicate)
     (list (selected-window))))
 
 
@@ -3518,8 +3518,11 @@ associated with a command's thing.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
-(cl-defun conn-dispatch-register-command
-    (name &key target-finder bounds-of-command default-action)
+(cl-defun conn-dispatch-register-command (name
+                                          &key
+                                          target-finder
+                                          bounds-of-command
+                                          default-action)
   (when target-finder
     (setf (alist-get name conn-dispatch-target-finders-alist) target-finder))
   (when bounds-of-command
@@ -3791,10 +3794,8 @@ with `conn-dispatch-thing-ignored-modes'."
 
 (defvar conn-dispatch-target-finder nil)
 
-(defvar conn--target-sort-function nil)
 (defvar conn-target-sort-function 'conn-target-sort-nearest)
 
-(defvar conn--target-window-predicate nil)
 (defvar conn-target-window-predicate 'conn-dispatch-ignored-mode
   "Predicate which windows must satisfy in order to be considered during
 dispatch.
@@ -3802,12 +3803,13 @@ dispatch.
 Each function should take a window and return nil if the window should
 be ignored by during dispatch.")
 
-(defvar conn--target-predicate nil)
 (defvar conn-target-predicate
   (lambda (pt length window)
     (not (conn--overlays-in-of-type pt (+ pt length)
                                     'conn-target-overlay
                                     window))))
+
+(defvar conn--dispatch-init-state nil)
 
 (put 'conn-target-overlay 'conn-overlay t)
 (put 'conn-target-overlay 'priority 2002)
@@ -3828,7 +3830,7 @@ be ignored by during dispatch.")
 
 Optionally the overlay may have an associated THING."
   (unless window (setq window (selected-window)))
-  (when (funcall conn--target-predicate pt length window)
+  (when (funcall conn-target-predicate pt length window)
     (conn-protected-let*
         ((line-bounds
           (save-excursion
@@ -4287,7 +4289,7 @@ Target overlays may override this default by setting the
                  (win (posn-window posn))
                  (pt (posn-point posn)))
             (when (and (not (posn-area posn))
-                       (funcall conn--target-window-predicate win))
+                       (funcall conn-target-window-predicate win))
               (throw 'mouse-click (list pt win nil))))))
     (conn-dispatch-select-mode 1)
     (internal-push-keymap conn-dispatch-read-event-map
@@ -5812,21 +5814,21 @@ contain targets."
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
-  `(let ((inhibit-message nil)
-         (recenter-last-op nil)
-         (conn-dispatch-repeat-count nil)
-         (conn-dispatch-other-end nil)
-         (conn-state-loop-last-command nil)
-         (conn--loop-prefix-mag nil)
-         (conn--loop-prefix-sign nil)
-         (conn--dispatch-read-event-handlers nil)
-         (conn--dispatch-read-event-message-prefixes nil)
-         (conn--target-window-predicate nil)
-         (conn--target-predicate nil)
-         (conn--target-sort-function nil)
-         (conn--dispatch-read-event-message-prefixes nil)
-         (conn--dispatch-always-retarget nil)
-         (select-mode conn-dispatch-select-mode))
+  `(pcase-let ((`(,conn-target-window-predicate
+                  ,conn-target-predicate
+                  ,conn-target-sort-function)
+                conn--dispatch-init-state)
+               (inhibit-message nil)
+               (recenter-last-op nil)
+               (conn-dispatch-repeat-count nil)
+               (conn-dispatch-other-end nil)
+               (conn-state-loop-last-command nil)
+               (conn--loop-prefix-mag nil)
+               (conn--loop-prefix-sign nil)
+               (conn--dispatch-read-event-handlers nil)
+               (conn--dispatch-read-event-message-prefixes nil)
+               (conn--dispatch-always-retarget nil)
+               (select-mode conn-dispatch-select-mode))
      (conn-delete-targets)
      (message nil)
      (when select-mode
@@ -5954,10 +5956,10 @@ contain targets."
 
 (cl-defmethod conn-dispatch-select-command-case ((_cmd (eql restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
-                                conn--target-window-predicate)
-      (remove-function conn--target-window-predicate
+                                conn-target-window-predicate)
+      (remove-function conn-target-window-predicate
                        'conn--dispatch-restrict-windows)
-    (add-function :after-while conn--target-window-predicate
+    (add-function :after-while conn-target-window-predicate
                   'conn--dispatch-restrict-windows))
   (conn-dispatch-handle-and-redisplay))
 
@@ -6002,7 +6004,7 @@ contain targets."
                        (restrict-windows
                         (advice-function-member-p
                          'conn--dispatch-restrict-windows
-                         conn--target-window-predicate))
+                         conn-target-window-predicate))
                        (action action)
                        (thing-cmd thing-cmd)
                        (thing-arg thing-arg)
@@ -6082,6 +6084,13 @@ contain targets."
          (eldoc-display-functions nil)
          (recenter-last-op nil)
          (conn-state-loop-last-command nil)
+         (conn--dispatch-init-state
+          (list conn-target-window-predicate
+                conn-target-predicate
+                conn-target-sort-function))
+         (conn-target-window-predicate conn-target-window-predicate)
+         (conn-target-predicate conn-target-predicate)
+         (conn-target-sort-function conn-target-sort-function)
          (conn--dispatch-must-prompt nil)
          (conn--loop-prefix-mag nil)
          (conn--loop-prefix-sign nil)
@@ -6089,11 +6098,7 @@ contain targets."
           (cons #'conn-dispatch-select-command-case
                 conn--dispatch-read-event-handlers))
          (conn-dispatch-target-finder target-finder)
-         (conn--target-window-predicate conn-target-window-predicate)
-         (conn--target-predicate conn-target-predicate)
-         (conn--target-sort-function conn-target-sort-function)
          (conn-dispatch-repeat-count 0)
-         (conn--dispatch-read-event-message-prefixes nil)
          (conn--dispatch-always-retarget
           (or always-retarget
               (oref action always-retarget)))
@@ -6143,15 +6148,15 @@ contain targets."
                   "this win"
                   'face (when (advice-function-member-p
                                'conn--dispatch-restrict-windows
-                               conn--target-window-predicate)
+                               conn-target-window-predicate)
                           'eldoc-highlight-function-argument)))))
             ,@conn--dispatch-read-event-message-prefixes)))
     (when-let* ((predicate (conn-action--window-predicate action)))
-      (add-function :after-while conn--target-window-predicate predicate))
+      (add-function :after-while conn-target-window-predicate predicate))
     (when-let* ((predicate (conn-action--target-predicate action)))
-      (add-function :after-while conn--target-predicate predicate))
+      (add-function :after-while conn-target-predicate predicate))
     (when restrict-windows
-      (add-function :after-while conn--target-window-predicate
+      (add-function :after-while conn-target-window-predicate
                     'conn--dispatch-restrict-windows))
     (catch 'exit-dispatch
       (unwind-protect
@@ -6160,13 +6165,13 @@ contain targets."
           (conn-dispatch-cleanup-target-state target-finder))
         (ignore-errors
           (conn-delete-targets))
-        (let ((inhibit-message nil))
-          (message nil))
         (ignore-errors
           (with-current-buffer (marker-buffer opoint)
             (unless (= (point) opoint)
               (conn--push-mark-ring opoint))))
-        (set-marker opoint nil)))
+        (set-marker opoint nil)
+        (let ((inhibit-message nil))
+          (message nil))))
     (when (> conn-dispatch-repeat-count 0)
       (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat))))
 
@@ -7232,7 +7237,7 @@ Pulses line that was the last visible line before scrolling."
 When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
-   (list (let ((conn--target-window-predicate nil)
+   (list (let ((conn-target-window-predicate nil)
                (pt (point)))
            (conn--read-string-with-timeout
             (lambda (beg _end) (< (window-start) beg pt))))))
@@ -7253,7 +7258,7 @@ When called interactively reads STRING with timeout
 When called interactively reads STRING with timeout
 `conn-read-string-timeout'."
   (interactive
-   (list (let ((conn--target-window-predicate nil)
+   (list (let ((conn-target-window-predicate nil)
                (pt (point)))
            (conn--read-string-with-timeout
             (lambda (beg _end) (< pt beg (window-end)))))))
@@ -8066,8 +8071,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                      thing-cmd
                                      thing-arg
                                      &key &allow-other-keys)
-  (let ((conn--target-window-predicate conn--target-window-predicate))
-    (add-function :after-while conn--target-window-predicate
+  (let ((conn-target-window-predicate conn-target-window-predicate))
+    (add-function :after-while conn-target-window-predicate
                   (lambda (win)
                     (not (buffer-local-value 'buffer-read-only
                                              (window-buffer win)))))
