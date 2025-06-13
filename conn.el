@@ -1322,15 +1322,14 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (body))
            (indent 0))
-  (cl-with-gensyms (stack state buffer)
+  (cl-with-gensyms (stack buffer)
     `(let ((,stack conn--state-stack)
-           (,state conn-current-state)
            (,buffer (current-buffer)))
        (conn-exit-recurive-state)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
-           (conn-enter-state ,state)
+           (conn-enter-state (car ,stack))
            (setq conn--state-stack ,stack))))))
 
 
@@ -1494,6 +1493,11 @@ and specializes the method on all conn states."
                          t 'conn-command-state)))
     (state (conn-enter-state state)
            (pop conn--state-stack))))
+
+(defun conn-peep-stack ()
+  (pcase (cadr conn--state-stack)
+    ('t nil)
+    (state state)))
 
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
@@ -1972,11 +1976,12 @@ themselves once the selection process has concluded."
         (setq-local header-line-format
                     `(,header-line-label (nil ,header-line-format))))
       (prog1
-          (make-conn-window-label :string (propertize string 'face 'conn-window-label-face)
-                                  :window window
-                                  :state (list (window-point window)
-                                               (window-vscroll window)
-                                               (window-hscroll window)))
+          (make-conn-window-label
+           :string (propertize string 'face 'conn-window-label-face)
+           :window window
+           :state (list (window-point window)
+                        (window-vscroll window)
+                        (window-hscroll window)))
         (goto-char (window-start))))))
 
 ;; From ace-window
@@ -8979,7 +8984,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (funcall (conn--without-conn-maps
                     (keymap-lookup nil conn-delete-region-keys t))
                   start end)
-         (conn-push-state 'conn-emacs-state))))
+         (if (eq 'conn-emacs-state (conn-peep-stack))
+             (conn-pop-state)
+           (conn-push-state 'conn-emacs-state)))))
 
 
 ;;;; WinControl
