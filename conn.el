@@ -1306,7 +1306,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
 
-(defmacro conn-with-state (state &rest body)
+(defmacro conn-with-recursive-state (state &rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
@@ -1318,7 +1318,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
          (with-current-buffer ,buffer
            (conn-exit-recurive-state))))))
 
-(defmacro conn-without-state (&rest body)
+(defmacro conn-without-recursive-state (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (body))
            (indent 0))
@@ -2079,7 +2079,7 @@ themselves once the selection process has concluded."
                                     message-function
                                     initial-arg
                                     &allow-other-keys)
-  (conn-with-state state
+  (conn-with-recursive-state state
     (let ((inhibit-message t)
           (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
           (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
@@ -2440,7 +2440,7 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
     (unwind-protect
         (progn
           (add-hook 'pre-command-hook pre)
-          (conn-with-state 'conn-bounds-of-recursive-edit-state
+          (conn-with-recursive-state 'conn-bounds-of-recursive-edit-state
             (funcall pre)
             (recursive-edit))
           (cons (cons (region-beginning) (region-end))
@@ -8708,7 +8708,7 @@ of `conn-recenter-positions'."
 
 (defun conn-outline-insert-heading ()
   (interactive)
-  (conn-with-state 'conn-emacs-state
+  (conn-with-recursive-state 'conn-emacs-state
     (save-mark-and-excursion
       (save-current-buffer
         (outline-insert-heading)
@@ -10124,7 +10124,7 @@ Operates with the selected windows parent window."
   (declare-function calc-dispatch "calc")
 
   (defun conn--calc-dispatch-ad (&rest app)
-    (conn-with-state 'conn-null-state
+    (conn-with-recursive-state 'conn-null-state
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 

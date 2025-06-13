@@ -75,7 +75,7 @@
   (interactive)
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content)
-  (conn-with-state 'conn-emacs-state
+  (conn-with-recursive-state 'conn-emacs-state
     (recursive-edit)))
 
 (conn-register-thing
