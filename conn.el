@@ -806,33 +806,21 @@ of highlighting."
 
 ;;;; States
 
-(defcustom conn-buffer-state-setup-alist
-  `(("COMMIT_EDITMSG" . conn-setup-emacs-state)
-    ((or (derived-mode . calc-mode)
-         (derived-mode . calc-trail-mode)
-         (derived-mode . calc-keypad-mode)
-         (derived-mode . image-mode)
-         (derived-mode . doc-view-mode)
-         (derived-mode . pdf-view-mode))
-     . conn-setup-null-state)
-    ((derived-mode . dired-mode)
-     . conn-setup-dired-state)
-    ((major-mode . minibuffer-mode)
-     . conn-setup-minibuffer-state)
-    ((or (derived-mode . prog-mode)
-         (derived-mode . text-mode)
-         (derived-mode . conf-mode)
-         (major-mode . fundamental-mode))
-     . conn-setup-command-state)
-    (t . conn-setup-emacs-state))
-  "Alist of the form ((CONDITION . STATE-SETUP-FN) ...).
+(defvar conn-null-state-modes
+  (list 'calc-mode
+        'calc-trail-mode
+        'calc-keypad-mode
+        'image-mode
+        'doc-view-mode
+        'pdf-view-mode))
 
-Elements specify a STATE-SETUP-FN that should enter the default state
-and optionally set any of the state variables `'conn-emacs-state' and
-`'conn-command-state' for buffers matching CONDITION.  For the
-meaning of CONDITION see `buffer-match-p'."
-  :type '(list (cons string symbol))
-  :group 'conn-states)
+(defvar conn-command-state-modes
+  (list 'prog-mode
+        'text-mode
+        'conf-mode
+        'fundamental-mode))
+
+(defvar conn-setup-state-hook nil)
 
 (defvar-local conn-hide-mark-alist nil)
 
@@ -844,7 +832,7 @@ meaning of CONDITION see `buffer-match-p'."
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
 
-(defvar-local conn--state-stack (list t)
+(defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
 
 (define-inline conn-state-p (state)
@@ -891,22 +879,46 @@ The returned list is not fresh, don't modify it."
     (inline-quote
      (memq ,parent (conn--state-all-parents ,state)))))
 
-(defun conn-setup-minibuffer-state ()
-  (setf (alist-get 'conn-emacs-state conn-hide-mark-alist) t)
-  (conn-push-state 'conn-emacs-state)
-  (letrec ((hook (lambda ()
-                   (conn--push-ephemeral-mark)
-                   (remove-hook 'minibuffer-setup-hook hook))))
-    (add-hook 'minibuffer-setup-hook hook)))
+(defun conn-setup-commit-state ()
+  (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
+    (conn-push-state 'conn-null-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
+
+(defun conn-setup-edmacro-state ()
+  (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
+    (conn-push-state 'conn-command-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
+
+(defun conn-setup-dired-state ()
+  (when (derived-mode-p 'dired-mode)
+    (conn-push-state 'conn-emacs-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-dired-state -50)
 
 (defun conn-setup-null-state ()
-  (conn-push-state 'conn-null-state))
+  (when (derived-mode-p conn-null-state-modes)
+    (conn-push-state 'conn-null-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-null-state -90)
 
 (defun conn-setup-command-state ()
-  (conn-push-state 'conn-command-state))
+  (when (derived-mode-p conn-command-state-modes)
+    (conn-push-state 'conn-command-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-command-state)
 
-(defun conn-setup-emacs-state ()
-  (conn-push-state 'conn-emacs-state))
+(defun conn-setup-minibuffer-state ()
+  (when (eq major-mode 'minibuffer-mode)
+    (setf (alist-get 'conn-emacs-state conn-hide-mark-alist) t)
+    (conn-push-state 'conn-emacs-state)
+    (letrec ((hook (lambda ()
+                     (conn--push-ephemeral-mark)
+                     (remove-hook 'minibuffer-setup-hook hook))))
+      (add-hook 'minibuffer-setup-hook hook))
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-command-state -95)
 
 
 ;;;;; State Keymap Impl
@@ -1379,10 +1391,10 @@ See also `conn-exit-functions'.")
   (or conn-lighter
       (let ((lighter ""))
         (dolist (s conn--state-stack)
-          (setq lighter (if (eq s t)
-                            (concat "→[" (substring lighter 1) "]")
-                          (concat "→" (conn-state-get s :lighter) lighter))))
-        (setq conn-lighter (concat " " (substring lighter 1))))))
+          (setq lighter (if s
+                            (concat "→" (conn-state-get s :lighter) lighter)
+                          (concat "→[" (substring lighter 1) "]"))))
+        (setq conn-lighter (concat " [" (substring lighter 1) "]")))))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE.
@@ -1487,26 +1499,25 @@ and specializes the method on all conn states."
 
 (defun conn-pop-state ()
   (interactive)
-  (pcase (cadr conn--state-stack)
-    ('t (conn-push-state
-         (conn-state-get conn-current-state :pop-alternate
-                         t 'conn-command-state)))
-    (state (conn-enter-state state)
-           (pop conn--state-stack))))
+  (if-let* ((state (cadr conn--state-stack)))
+      (progn
+        (conn-enter-state state)
+        (pop conn--state-stack))
+    (conn-push-state
+     (conn-state-get conn-current-state :pop-alternate
+                     t 'conn-command-state))))
 
 (defun conn-peek-stack ()
-  (pcase (cadr conn--state-stack)
-    ('t nil)
-    (state state)))
+  (cadr conn--state-stack))
 
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
-  (push t conn--state-stack)
+  (push nil conn--state-stack)
   (push state conn--state-stack))
 
 (defun conn-exit-recurive-state ()
   (interactive)
-  (if-let* ((tail (memq t conn--state-stack)))
+  (if-let* ((tail (memq nil conn--state-stack)))
       (progn
         (conn-enter-state (cadr tail))
         (setq conn--state-stack (cdr tail)))
@@ -10059,9 +10070,8 @@ Operates with the selected windows parent window."
         (add-hook 'input-method-deactivate-hook #'conn--deactivate-input-method nil t)
         (add-hook 'isearch-mode-hook 'conn--isearch-input-method nil t)
         (setq conn--input-method current-input-method)
-        (funcall (alist-get (current-buffer)
-                            conn-buffer-state-setup-alist
-                            nil nil #'buffer-match-p)))
+        (or (run-hook-with-args-until-success 'conn-setup-state-hook)
+            (conn-push-state 'conn-emacs-state)))
     ;; conn-exit-state sets conn-current-state to nil before
     ;; anything else, so if we got here after an error in
     ;; conn-exit-state this prevents an infinite loop.
@@ -10283,9 +10293,6 @@ Operates with the selected windows parent window."
    :state 'conn-dired-dispatch-state
    :no-other-end t
    :initial-arg initial-arg))
-
-(defun conn-setup-dired-state ()
-  (conn-push-state 'conn-emacs-state))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dired-dispatch-state)

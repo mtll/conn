@@ -259,6 +259,12 @@
   "I" 'org-backward-paragraph
   "K" 'org-forward-paragraph)
 
+(defun conn-setup-org-capture-state ()
+  (when (bound-and-true-p org-capture-mode)
+    (conn-push-state 'conn-command-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -50)
+
 (defun conntext-edit-special ()
   (when (or (org-babel-where-is-src-block-head)
             (org-inside-LaTeX-fragment-p (org-element-context)))
