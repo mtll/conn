@@ -806,28 +806,34 @@ of highlighting."
 
 ;;;; States
 
-(defvar conn-null-state-modes
+(defface conn-read-thing-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a read-thing state."
+  :group 'conn-faces)
+
+(defcustom conn-null-state-modes
   (list 'calc-mode
         'calc-trail-mode
         'calc-keypad-mode
         'image-mode
         'doc-view-mode
-        'pdf-view-mode))
+        'pdf-view-mode)
+  "Major modes in which `conn-null-state' should be active."
+  :group 'conn
+  :type '(list symbol))
 
-(defvar conn-command-state-modes
+(defcustom conn-command-state-modes
   (list 'prog-mode
         'text-mode
         'conf-mode
-        'fundamental-mode))
+        'fundamental-mode)
+  "Major modes in which `conn-command-state' should be the base state."
+  :group 'conn
+  :type '(list symbol))
 
 (defvar conn-setup-state-hook nil)
 
 (defvar-local conn-hide-mark-alist nil)
-
-(defface conn-read-thing-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a read-thing state."
-  :group 'conn-faces)
 
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
@@ -881,7 +887,7 @@ The returned list is not fresh, don't modify it."
 
 (defun conn-setup-commit-state ()
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
-    (conn-push-state 'conn-null-state)
+    (conn-push-state 'conn-emacs-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
 
@@ -1453,8 +1459,7 @@ and specializes the method on all conn states."
   ( :method (state &key &allow-other-keys)
     (error "Attempting to enter unknown state: %s" state)))
 
-(cl-defmethod conn-enter-state :around ((state conn-state)
-                                        &key &allow-other-keys)
+(cl-defmethod conn-enter-state :around ((state conn-state))
   (unless (symbol-value state)
     (let ((success nil))
       (unwind-protect
@@ -1633,6 +1638,7 @@ to the abnormal hooks `conn-state-entry-functions' or
   "An empty state.
 
 For use in buffers that should not have any other state."
+  :lighter "NULL"
   :hide-mark-cursor t
   :cursor '(bar . 4))
 
@@ -1659,8 +1665,7 @@ For use in buffers that should not have any other state."
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-read-mover-common-state))
-                                &key &allow-other-keys)
+(cl-defmethod conn-enter-state ((state (conn-substate conn-read-mover-common-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
     (setf (alist-get 'mode-line face-remapping-alist) face))
   (cl-call-next-method))
@@ -3397,8 +3402,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   :group 'conn-faces)
 
 (defvar conn-dispatch-default-target-finder
-  (lambda ()
-    (conn-dispatch-read-n-chars :string-length 2))
+  (lambda () (conn-dispatch-read-n-chars :string-length 2))
   "Default target finder for dispatch.
 
 A target finder function should return a list of overlays.")
@@ -3664,6 +3668,7 @@ associated with a command's thing.")
 
 (cl-defmethod conn-dispatch-command-case (command callback)
   (pcase command
+    ('nil)
     ((pred conn--action-type-p)
      (conn-cancel-action (oref callback action))
      (if (cl-typep (oref callback action) command)
@@ -3671,8 +3676,10 @@ associated with a command's thing.")
        (setf (oref callback action) (condition-case _
                                         (conn-make-action command)
                                       (error nil)))))
-    ((let (and (pred identity) target-finder)
-       (conn--dispatch-target-finder command))
+    ((and (let target-finder
+            (conn--dispatch-target-finder command))
+          (or (pred conn-thing-command-p)
+              (guard (not (eq target-finder conn-dispatch-default-target-finder)))))
      (setf (oref callback target-finder) (funcall target-finder)
            (oref callback thing-cmd) command
            (oref callback thing-arg) (conn-state-loop-consume-prefix-arg))
@@ -6575,8 +6582,7 @@ Expansions and contractions are provided by functions in
   :lighter "↔"
   :mode-line-face 'conn-read-thing-mode-line-face)
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state))
-                                &key &allow-other-keys)
+(cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
     (setf (alist-get 'mode-line face-remapping-alist) face))
   (cl-call-next-method))
