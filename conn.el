@@ -4816,9 +4816,10 @@ contain targets."
 (defvar conn--dispatch-change-groups nil)
 
 (defun conn-dispatch-prepare-undo (&rest buffers)
-  (push (mapcan #'prepare-change-group
-                (or buffers (list (current-buffer))))
-        conn--dispatch-change-groups))
+  (when conn-dispatch-looping
+    (push (mapcan #'prepare-change-group
+                  (or buffers (list (current-buffer))))
+          conn--dispatch-change-groups)))
 
 (defun conn--action-type-p (item)
   (when-let* ((class (and (symbolp item)
@@ -5829,11 +5830,14 @@ contain targets."
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle nil))
 
+(defvar conn-dispatch-looping nil)
+
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
   (let ((rep (gensym "repeat")))
     `(catch 'state-loop-exit
        (let* ((,rep nil)
+              (conn-dispatch-looping t)
               (conn--dispatch-change-groups nil)
               (conn--dispatch-read-event-message-prefixes
                `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
@@ -5869,6 +5873,7 @@ contain targets."
                   ,conn-target-predicate
                   ,conn-target-sort-function)
                 conn--dispatch-init-state)
+               (conn-dispatch-looping nil)
                (conn--dispatch-change-groups nil)
                (inhibit-message nil)
                (recenter-last-op nil)
