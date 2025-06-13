@@ -1494,7 +1494,7 @@ and specializes the method on all conn states."
     (state (conn-enter-state state)
            (pop conn--state-stack))))
 
-(defun conn-peep-stack ()
+(defun conn-peek-stack ()
   (pcase (cadr conn--state-stack)
     ('t nil)
     (state state)))
@@ -8984,7 +8984,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (funcall (conn--without-conn-maps
                     (keymap-lookup nil conn-delete-region-keys t))
                   start end)
-         (if (eq 'conn-emacs-state (conn-peep-stack))
+         (if (eq 'conn-emacs-state (conn-peek-stack))
              (conn-pop-state)
            (conn-push-state 'conn-emacs-state)))))
 
