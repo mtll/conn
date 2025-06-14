@@ -6346,6 +6346,8 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
 
 (defun conn-last-dispatch-at-mouse (event &optional repeat)
   (interactive "e\nP")
+  (unless (mouse-event-p event)
+    (error "conn-last-dispatch-at-mouse must be bound to a mouse event"))
   (unless (conn-ring-list conn-dispatch-ring)
     (user-error "Dispatch ring empty"))
   (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
@@ -6353,8 +6355,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
   (setq unread-command-events `((no-record . ,event)))
-  (let ((map (make-sparse-keymap)))
-    (define-key map `[,(car event)] 'act)
+  (let ((map (define-keymap (key-description `[,(car event)]) 'act)))
     (internal-push-keymap map 'overriding-terminal-local-map)
     (unwind-protect
         (conn-repeat-last-dispatch
