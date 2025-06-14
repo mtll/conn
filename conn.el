@@ -2145,7 +2145,9 @@ themselves once the selection process has concluded."
               ('keyboard-quit
                (conn-state-loop-abort))
               (cmd
-               (funcall case-function cmd callback)))
+               (condition-case err
+                   (funcall case-function cmd callback)
+                 (user-error (conn-state-loop-error (error-message-string err))))))
             (setf conn-state-loop-last-command cmd))))))
   (message nil)
   (funcall callback))
@@ -4843,8 +4845,9 @@ contain targets."
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
-(cl-defgeneric conn-describe-action (action)
-  (:method ((action conn-action)) (oref action description)))
+(cl-defgeneric conn-describe-action (action &optional short)
+  ( :method ((action conn-action) &optional _)
+    (oref action description)))
 
 (cl-defgeneric conn-accept-action (action)
   (:method ((_ conn-action)) "Noop" nil))
@@ -4905,6 +4908,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto
+                    (no-history t)
                     (description "Goto"))
       (window pt bounds-op bounds-arg)
     (select-window window)
@@ -4971,8 +4975,8 @@ contain targets."
                                                      (length seperator)))
                                                (point)))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-to))
-  (if-let* ((sep (oref action seperator)))
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-to) &optional short)
+  (if-let* ((sep (and (not short) (oref action seperator))))
       (format "Copy To <%s>" sep)
     "Copy To"))
 
@@ -5088,8 +5092,8 @@ contain targets."
                                                      (length seperator)))
                                                (point)))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-yank-to))
-  (if-let* ((sep (oref action seperator)))
+(cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
+  (if-let* ((sep (and (not short) (oref action seperator))))
       (format "Yank To <%s>" sep)
     "Yank To"))
 
@@ -5132,8 +5136,8 @@ contain targets."
                                                   (length seperator)))
                                             (point)))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to))
-  (if-let* ((sep (oref action seperator)))
+(cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to) &optional short)
+  (if-let* ((sep (and (not short) (oref action seperator))))
       (format "Yank To <%s>" sep)
     "Yank To"))
 
@@ -5180,8 +5184,8 @@ contain targets."
                                                     (length seperator)))
                                               (point))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-send))
-  (if-let* ((sep (oref action seperator)))
+(cl-defmethod conn-describe-action ((action conn-dispatch-send) &optional short)
+  (if-let* ((sep (and (not short) (oref action seperator))))
       (format "Send <%s>" sep)
     "Send"))
 
@@ -5308,8 +5312,9 @@ contain targets."
              (goto-char (if conn-dispatch-other-end end beg))
              (conn-register-load register))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-register-load))
-  (format "Register <%c>" (oref action register)))
+(cl-defmethod conn-describe-action ((action conn-dispatch-register-load) &optional short)
+  (if short "Register"
+    (format "Register <%c>" (oref action register))))
 
 (oclosure-define (conn-dispatch-register-replace
                   (:parent conn-action))
@@ -5332,8 +5337,9 @@ contain targets."
              (conn-register-load register))
             (_ (user-error "Cannot find thing at point"))))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-register-replace))
-  (format "Register Replace <%c>" (oref action register)))
+(cl-defmethod conn-describe-action ((action conn-dispatch-register-replace) &optional short)
+  (if short "Register Replace"
+    (format "Register Replace <%c>" (oref action register))))
 
 (oclosure-define (conn-dispatch-kill
                   (:parent conn-action))
@@ -5365,9 +5371,10 @@ contain targets."
            (message "Killed thing"))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-kill))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kill) &optional short)
   (if-let* ((register (oref action register)))
-      (format "Kill to Register <%c>" register)
+      (if short "Kill to Reg"
+        (format "Kill to Register <%c>" register))
     "Kill"))
 
 (oclosure-define (conn-dispatch-kill-append (:parent conn-action))
@@ -5398,9 +5405,10 @@ contain targets."
              (message "Appended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-kill-append))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kill-append) &optional short)
   (if-let* ((register (oref action register)))
-      (format "Kill Append Register <%c>" register)
+      (if short "Kill App to Reg"
+        (format "Kill Append Register <%c>" register))
     "Kill Append"))
 
 (oclosure-define (conn-dispatch-kill-prepend
@@ -5432,9 +5440,10 @@ contain targets."
              (message "Prepended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-kill-prepend))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kill-prepend) &optional short)
   (if-let* ((register (oref action register)))
-      (format "Kill Prepend Register <%c>" register)
+      (if short "Kill Pre to Reg"
+        (format "Kill Prepend Register <%c>" register))
     "Kill Prepend"))
 
 (oclosure-define (conn-dispatch-copy-append
@@ -5458,9 +5467,10 @@ contain targets."
              (message "Copy Appended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-append))
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-append) &optional short)
   (if-let* ((register (oref action register)))
-      (format "Copy Append to Register <%c>" register)
+      (if short "Copy App to Reg"
+        (format "Copy Append to Register <%c>" register))
     "Copy Append to Kill"))
 
 (oclosure-define (conn-dispatch-copy-prepend
@@ -5484,9 +5494,10 @@ contain targets."
              (message "Copy Prepended: %s" str)))
           (_ (user-error "Cannot find thing at point")))))))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-copy-prepend))
+(cl-defmethod conn-describe-action ((action conn-dispatch-copy-prepend) &optional short)
   (if-let* ((register (oref action register)))
-      (format "Copy Prepend to Register <%c>" register)
+      (if short "Copy Pre to Reg"
+        (format "Copy Prepend to Register <%c>" register))
     "Copy Prepend to Kill"))
 
 (oclosure-define (conn-dispatch-yank-from
@@ -5645,6 +5656,7 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over
                     (description "Over")
+                    (no-history t)
                     (window-predicate (let ((obuf (current-buffer)))
                                         (lambda (win)
                                           (eq (window-buffer win) obuf)))))
@@ -6107,7 +6119,7 @@ contain targets."
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle backwards through `conn-dispatch-ring'."
   (interactive)
-  (unless conn-dispatch-ring
+  (unless (conn-ring-head conn-dispatch-ring)
     (user-error "Dispatch ring empty"))
   (conn-dispatch-ring-remove-stale)
   (conn-ring-rotate-backward conn-dispatch-ring)
@@ -6118,7 +6130,7 @@ contain targets."
 (defun conn-dispatch-cycle-ring-previous ()
   "Cycle backwards through `conn-dispatch-ring'."
   (interactive)
-  (unless conn-dispatch-ring
+  (unless (conn-ring-head conn-dispatch-ring)
     (user-error "Dispatch ring empty"))
   (conn-dispatch-ring-remove-stale)
   (conn-ring-rotate-forward conn-dispatch-ring)
@@ -6177,7 +6189,10 @@ contain targets."
                  (or other-end conn-dispatch-other-end))))
          (conn--dispatch-action-always-prompt (oref action always-prompt))
          (conn--dispatch-read-event-message-prefixes
-          `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+          `(,(lambda ()
+               (propertize (conn-describe-action action t)
+                           'face 'eldoc-highlight-function-argument))
+            ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                (lambda ()
                  (when-let* ((binding
                               (and (conn-dispatch-has-target-p conn-dispatch-target-finder)

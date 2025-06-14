@@ -670,10 +670,11 @@ A zero means repeat until error."
       (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
     action))
 
-(cl-defmethod conn-describe-action ((action conn-dispatch-kapply))
-  (concat "Kapply"
-          (when-let* ((macro (oref action macro)))
-            (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">"))))
+(cl-defmethod conn-describe-action ((action conn-dispatch-kapply) &optional short)
+  (if short "Kapply"
+    (concat "Kapply"
+            (when-let* ((macro (oref action macro)))
+              (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder
