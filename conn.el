@@ -5861,6 +5861,7 @@ contain targets."
        (let* ((,rep nil)
               (conn-dispatch-looping t)
               (conn-dispatch-change-groups nil)
+              (conn--loop-error-message nil)
               (conn--dispatch-read-event-message-prefixes
                `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                     (lambda ()
