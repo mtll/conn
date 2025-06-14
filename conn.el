@@ -4819,6 +4819,9 @@ contain targets."
   (when conn-dispatch-looping
     (push (let ((cg (mapcan #'prepare-change-group
                             (or buffers (list (current-buffer))))))
+            (dolist (b (or buffers (list (current-buffer))))
+              (with-current-buffer b
+                (undo-boundary)))
             (lambda (do)
               (pcase do
                 (:cancel (cancel-change-group cg))
@@ -5864,11 +5867,9 @@ contain targets."
              (while (or (setq ,rep ,repeat)
                         (< conn-dispatch-repeat-count 1))
                (catch 'dispatch-redisplay
-                 (while (progn
-                          ,@body
-                          (cl-incf conn-dispatch-repeat-count)
-                          ,repeat)
-                   (undo-boundary))))
+                 (progn
+                   ,@body
+                   (cl-incf conn-dispatch-repeat-count))))
            (dolist (u conn-dispatch-change-groups)
              (funcall u :accept)))))))
 
@@ -6282,11 +6283,11 @@ contain targets."
                                        initial-arg
                                        action
                                        restrict-windows
-                                       (case-function 'conn-dispatch-command-case)
-                                       (message-function 'conn-dispatch-message)
-                                       (state 'conn-dispatch-state))
+                                       case-function
+                                       message-function
+                                       state)
   (conn-with-state-loop
-   state
+   (or state 'conn-dispatch-state)
    (oclosure-lambda (conn-dispatch-callback
                      (action action)
                      (non-repeatable non-repeatable)
@@ -6300,8 +6301,8 @@ contain targets."
                             :other-end other-end
                             :no-other-end no-other-end
                             :always-retarget always-retarget))
-   :message-function message-function
-   :case-function case-function
+   :message-function (or message-function 'conn-dispatch-message)
+   :case-function (or case-function 'conn-dispatch-command-case)
    :initial-arg initial-arg))
 
 (defun conn-dispatch-state (&optional initial-arg)
@@ -6343,7 +6344,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (user-error "Last dispatch action stale"))
   (funcall (conn-ring-head conn-dispatch-ring) invert-repeat))
 
-(defun conn-last-dispatch-at-mouse (event invert-other-end)
+(defun conn-last-dispatch-at-mouse (event &optional repeat)
   (interactive "e\nP")
   (unless (conn-ring-list conn-dispatch-ring)
     (user-error "Dispatch ring empty"))
@@ -6351,23 +6352,15 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
                                    action))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (let* ((prev (conn-ring-head conn-dispatch-ring))
-         (posn (event-start event))
-         (conn-dispatch-repeat-count (oref prev repeat-count))
-         (conn-kapply-suppress-message t)
-         (conn-dispatch-other-end (xor (oref prev other-end)
-                                       invert-other-end))
-         (action (oref prev action)))
-    (when (and-let* ((pred (oref action window-predicate)))
-            (not (funcall pred (posn-window posn))))
-      (user-error "Window not valid for %s action"
-                  (conn-describe-action action)))
-    (funcall action
-             (posn-window posn) (posn-point posn)
-             (lambda (arg)
-               (conn-bounds-of-command (oref prev thing-cmd) arg))
-             (oref prev thing-arg))
-    (setf (oref prev repeat-count) conn-dispatch-repeat-count)))
+  (setq unread-command-events `((no-record . ,event)))
+  (let ((map (make-sparse-keymap)))
+    (define-key map `[,(car event)] 'act)
+    (internal-push-keymap map 'overriding-terminal-local-map)
+    (unwind-protect
+        (conn-repeat-last-dispatch
+         (and (oref (conn-ring-head conn-dispatch-ring) repeat)
+              repeat))
+      (internal-pop-keymap map 'overriding-terminal-local-map))))
 
 (defun conn-bind-last-dispatch-to-key ()
   "Bind last dispatch command to a key.
