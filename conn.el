@@ -4265,7 +4265,10 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds
                                            inhibit-message-prefix)
   (let ((inhibit-message nil)
-        (message-log-max 0))
+        (message-log-max 0)
+        (prompt (concat prompt (when conn--loop-error-message
+                                 (propertize conn--loop-error-message
+                                             'face 'error)))))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
@@ -5879,9 +5882,12 @@ contain targets."
              (while (or (setq ,rep ,repeat)
                         (< conn-dispatch-repeat-count 1))
                (catch 'dispatch-redisplay
-                 (progn
-                   ,@body
-                   (cl-incf conn-dispatch-repeat-count))))
+                 (condition-case err
+                     (progn
+                       ,@body
+                       (cl-incf conn-dispatch-repeat-count))
+                   (user-error
+                    (conn-state-loop-error (error-message-string err))))))
            (dolist (u conn-dispatch-change-groups)
              (funcall u :accept)))))))
 
