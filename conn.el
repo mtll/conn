@@ -338,6 +338,29 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
          '(display-line-numbers-disable t line-prefix "" wrap-prefix ""))
         (car (buffer-text-pixel-size nil nil t))))))
 
+(defun conn--open-invisible (beg end)
+  (catch 'return
+    (cl-loop for pt = beg then (next-single-property-change
+                                pt 'invisible nil end)
+             while (and pt (< pt end))
+             when (invisible-p (get-text-property pt 'invisible))
+             do (throw 'return nil))
+    (let (restore)
+      (dolist (ov (overlays-in beg end))
+        (let ((inv (overlay-get ov 'invisible)))
+          (when (invisible-p inv)
+            (unless (overlay-get ov 'isearch-open-invisible)
+              (throw 'return (mapc #'funcall restore)))
+            (push
+             (if-let* ((fun (overlay-get ov 'isearch-open-invisible-temporary)))
+                 (progn
+                   (funcall fun ov nil)
+                   (lambda () (funcall fun ov t)))
+               (overlay-put ov 'invisible nil)
+               (lambda () (overlay-put ov 'invisible inv)))
+             restore))))
+      (or restore t))))
+
 
 ;;;;; Rings
 
@@ -1516,6 +1539,7 @@ and specializes the method on all conn states."
 
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
+  ;; Ensure the lighter gets updates even if we haven't changed state
   (setq conn-lighter nil)
   (push nil conn--state-stack)
   (push state conn--state-stack))
@@ -1526,6 +1550,8 @@ and specializes the method on all conn states."
       (progn
         (conn-enter-state (cadr tail))
         (setq conn--state-stack (cdr tail)
+              ;; Ensure the lighter gets updates
+              ;; even if we haven't changed state
               conn-lighter nil))
     (error "Not in a recursive state")))
 
@@ -2341,9 +2367,6 @@ If `use-region-p' returns non-nil this will always return
     (narrowing . conn--bounds-of-narrowings)
     (heading . ,(lambda (_cmd _arg)
                   (list (bounds-of-thing-at-point 'heading))))
-    (char . ,(lambda (_cmd arg)
-               (list (cons (point) (+ (point) (prefix-numeric-value arg)))
-                     (cons (point) (+ (point) (prefix-numeric-value arg))))))
     (conn-expand . conn--bounds-of-expansion)
     (conn-contract . conn--bounds-of-expansion)
     (recursive-edit . conn--bounds-of-recursive-edit)
@@ -2412,7 +2435,9 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
 
 (defun conn--bounds-of-thing-command-default (cmd arg)
   (deactivate-mark t)
-  (let ((current-prefix-arg (when (> 0 (prefix-numeric-value arg)) '-))
+  (let ((current-prefix-arg (cond ((> (prefix-numeric-value arg) 0) 1)
+                                  ((< (prefix-numeric-value arg) 0) -1)
+                                  (t 0)))
         (conn-this-command-handler (or (conn-get-mark-handler cmd)
                                        'conn-discrete-thing-handler))
         (conn-this-command-thing (get cmd :conn-command-thing))
@@ -2844,29 +2869,6 @@ Possibilities: \\<query-replace-map>
                      (when (markerp end) (set-marker end nil)))
                 finally return ret))
       (:cleanup (funcall iterator state)))))
-
-(defun conn--open-invisible (beg end)
-  (catch 'return
-    (cl-loop for pt = beg then (next-single-property-change
-                                pt 'invisible nil end)
-             while (and pt (< pt end))
-             when (invisible-p (get-text-property pt 'invisible))
-             do (throw 'return nil))
-    (let (restore)
-      (dolist (ov (overlays-in beg end))
-        (let ((inv (overlay-get ov 'invisible)))
-          (when (invisible-p inv)
-            (unless (overlay-get ov 'isearch-open-invisible)
-              (throw 'return (mapc #'funcall restore)))
-            (push
-             (if-let* ((fun (overlay-get ov 'isearch-open-invisible-temporary)))
-                 (progn
-                   (funcall fun ov nil)
-                   (lambda () (funcall fun ov t)))
-               (overlay-put ov 'invisible nil)
-               (lambda () (overlay-put ov 'invisible inv)))
-             restore))))
-      (or restore t))))
 
 (defun conn--kapply-open-invisible (iterator)
   (let (restore)
@@ -5736,7 +5738,8 @@ contain targets."
       (unless (= pt (point))
         (unless (region-active-p)
           (push-mark nil t))
-        (select-window window) (goto-char pt)))))
+        (select-window window)
+        (goto-char pt)))))
 
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
