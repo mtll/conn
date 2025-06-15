@@ -511,11 +511,10 @@ the original binding.  Also see `conn-remap-key'."
 
 (defun conn--region-visible-p (beg end)
   "Return t if the region from BEG to END is visible."
-  (and (not (invisible-p beg))
-       (cl-loop for pt = (next-single-char-property-change
-                          beg 'invisible nil end)
-                while (and pt (< pt end))
-                never (invisible-p pt))))
+  (cl-loop for pt = beg then (next-single-char-property-change
+                              pt 'invisible nil end)
+           while (and pt (< pt end))
+           never (invisible-p pt)))
 
 (defun conn--nnearest-first (list &optional buffer)
   "Move the region nearest point in LIST to the front.
@@ -1677,7 +1676,7 @@ For use in buffers that should not have any other state."
   (cl-call-next-method))
 
 (conn-define-state conn-outline-state ()
-  "State for dispatch in `dired-mode'."
+  "State for editing outline sections."
   :cursor '(hbar . 10)
   :lighter "*"
   :suppress-input-method t)
@@ -2844,25 +2843,47 @@ Possibilities: \\<query-replace-map>
                 finally return ret))
       (:cleanup (funcall iterator state)))))
 
+(defun conn--open-invisible (beg end)
+  (catch 'return
+    (cl-loop for pt = beg then (next-single-property-change
+                                pt 'invisible nil end)
+             while (and pt (< pt end))
+             when (invisible-p (get-text-property pt 'invisible))
+             do (throw 'return nil))
+    (let (restore)
+      (dolist (ov (overlays-in beg end))
+        (let ((inv (overlay-get ov 'invisible)))
+          (when (invisible-p inv)
+            (unless (overlay-get ov 'isearch-open-invisible)
+              (throw 'return (mapc #'funcall restore)))
+            (push
+             (if-let* ((fun (overlay-get ov 'isearch-open-invisible-temporary)))
+                 (progn
+                   (funcall fun ov nil)
+                   (lambda () (funcall fun ov t)))
+               (overlay-put ov 'invisible nil)
+               (lambda () (overlay-put ov 'invisible inv)))
+             restore))))
+      (or restore t))))
+
 (defun conn--kapply-open-invisible (iterator)
   (let (restore)
     (lambda (state)
       (pcase state
         ((or :next :record)
-         (prog1
-             (cl-loop with search-invisible = 'open
-                      for ret = (funcall iterator state)
-                      until (or (null ret)
-                                (isearch-filter-visible (car ret) (cdr ret)))
-                      do (pcase-let ((`(,beg . ,end) ret))
-                           (when (markerp beg) (set-marker beg nil))
-                           (when (markerp end) (set-marker end nil)))
-                      finally return ret)
-           (setq restore (append isearch-opened-overlays restore)
-                 isearch-opened-overlays nil)))
+         (cl-loop for ret = (funcall iterator state)
+                  for res = (or (null ret)
+                                (conn--open-invisible (car ret) (cdr ret)))
+                  until res
+                  do (pcase-let ((`(,beg . ,end) ret))
+                       (when (markerp beg) (set-marker beg nil))
+                       (when (markerp end) (set-marker end nil)))
+                  finally return (prog1 ret
+                                   (when (consp res)
+                                     (setq restore (nconc res restore))))))
         (:cleanup
          (funcall iterator state)
-         (setq isearch-opened-overlays restore))))))
+         (mapc #'funcall restore))))))
 
 (defun conn--kapply-relocate-to-region (iterator)
   (lambda (state)
@@ -3151,8 +3172,7 @@ The iterator must be the first argument in ARGLIST.
                    (message "Kapply completed successfully after %s iterations" ,iterations)))
              (let ((conn-kmacro-apply-error (not success)))
                (funcall ,iterator :cleanup)
-               (run-hooks 'conn-kmacro-apply-end-hook)
-               (isearch-clean-overlays))))))))
+               (run-hooks 'conn-kmacro-apply-end-hook))))))))
 
 (conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
