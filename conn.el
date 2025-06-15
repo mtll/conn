@@ -1516,6 +1516,7 @@ and specializes the method on all conn states."
 
 (defun conn-enter-recursive-state (state)
   (conn-enter-state state)
+  (setq conn-lighter nil)
   (push nil conn--state-stack)
   (push state conn--state-stack))
 
@@ -1524,7 +1525,8 @@ and specializes the method on all conn states."
   (if-let* ((tail (memq nil conn--state-stack)))
       (progn
         (conn-enter-state (cadr tail))
-        (setq conn--state-stack (cdr tail)))
+        (setq conn--state-stack (cdr tail)
+              conn-lighter nil))
     (error "Not in a recursive state")))
 
 
@@ -3082,23 +3084,25 @@ Possibilities: \\<query-replace-map>
       ret)))
 
 (defun conn--kapply-with-state (iterator conn-state)
-  (let (buffer-states)
+  (let (buffer-stacks)
     (lambda (state)
       (prog1
           (funcall iterator state)
         (pcase state
           (:cleanup
-           (pcase-dolist (`(,buf ,state ,state-stack) buffer-states)
-             (when state
-               (with-current-buffer buf
-                 (conn-push-state state)
-                 (setq conn--state-stack state-stack)))))
+           (pcase-dolist (`(,buf . ,stack) buffer-stacks)
+             (with-current-buffer buf
+               (setq conn--state-stack stack
+                     conn-lighter nil)
+               (conn-enter-state (car stack))
+               (force-mode-line-update))))
           ((or :record :next)
            (when conn-local-mode
-             (unless (alist-get (current-buffer) buffer-states)
-               (setf (alist-get (current-buffer) buffer-states)
-                     (list conn-current-state conn--state-stack)))
-             (conn-push-state conn-state))))))))
+             (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
+                 (setf conn--state-stack stack)
+               (setf (alist-get (current-buffer) buffer-stacks)
+                     conn--state-stack))
+             (conn-enter-recursive-state conn-state))))))))
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
