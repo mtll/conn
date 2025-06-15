@@ -1694,11 +1694,18 @@ By default `conn-emacs-state' does not bind anything."
 
 ;;;;; Emacs State
 
+(defvar conn-emacs-state-register nil)
+
 (defvar-local conn-emacs-state-ring nil)
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
   (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
-    (conn-ring-insert-front conn-emacs-state-ring (point-marker))))
+    (conn-ring-insert-front conn-emacs-state-ring (point-marker))
+    (when conn-emacs-state-register
+      (when-let* ((marker (get-register conn-emacs-state-register))
+                  ((markerp marker)))
+        (set-marker marker nil))
+      (set-register conn-emacs-state-register (point-marker)))))
 
 (defun conn-copy-emacs-state-ring ()
   (when (conn-ring-p conn-emacs-state-ring)
