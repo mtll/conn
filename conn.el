@@ -4295,19 +4295,29 @@ Target overlays may override this default by setting the
     (unless (length= prefix 0)
       (concat "(" prefix ") "))))
 
-(defun conn-dispatch-read-event (&optional prompt inherit-input-method seconds
+(defun conn-dispatch-read-event (&optional prompt
+                                           inherit-input-method
+                                           seconds
                                            inhibit-message-prefix)
   (let ((inhibit-message nil)
-        (message-log-max 0)
+        (message-log-max nil)
         (prompt (concat prompt (when conn--loop-error-message
                                  (propertize conn--loop-error-message
                                              'face 'error)))))
     (catch 'return
       (if seconds
-          (while-let ((ev (conn-with-input-method
-                            (read-event prompt
-                                        inherit-input-method
-                                        seconds))))
+          (while-let
+              ((ev (progn
+                     ;; quail-input-method will ignore a key if it is
+                     ;; bound in overriding-terminal-local map so
+                     ;; pop the dispatch event map during this.
+                     (internal-pop-keymap conn-dispatch-read-event-map
+                                          'overriding-terminal-local-map)
+                     (unwind-protect
+                         (conn-with-input-method
+                           (read-event prompt inherit-input-method seconds))
+                       (internal-push-keymap conn-dispatch-read-event-map
+                                             'overriding-terminal-local-map)))))
             (when (characterp ev)
               (throw 'return ev)))
         (while t
@@ -4317,14 +4327,20 @@ Target overlays may override this default by setting the
                    (read-key-sequence-vector)
                    (key-binding t))
             ('dispatch-character-event
-             (setq conn--dispatch-must-prompt nil)
-             (setq unread-command-events `((no-record . ,last-input-event)))
+             (setq conn--dispatch-must-prompt nil
+                   unread-command-events `((no-record . ,last-input-event)))
              (throw 'return
-                    (conn-with-input-method
-                      (read-event
-                       (if inhibit-message-prefix prompt
-                         (concat (conn--dispatch-read-event-prefix) prompt))
-                       inherit-input-method))))
+                    (progn
+                      (internal-pop-keymap conn-dispatch-read-event-map
+                                           'overriding-terminal-local-map)
+                      (unwind-protect
+                          (conn-with-input-method
+                            (read-event
+                             (if inhibit-message-prefix prompt
+                               (concat (conn--dispatch-read-event-prefix) prompt))
+                             inherit-input-method))
+                        (internal-push-keymap conn-dispatch-read-event-map
+                                              'overriding-terminal-local-map)))))
             ('keyboard-quit
              (keyboard-quit))
             (cmd
@@ -4467,7 +4483,7 @@ Target overlays may override this default by setting the
                    (concat prompt
                            (propertize ": " 'face 'minibuffer-prompt)
                            string)
-                   t nil)
+                   t)
                   (char-to-string)
                   (concat string)
                   (setf string))))
@@ -4482,18 +4498,17 @@ Target overlays may override this default by setting the
   (with-slots (string timeout predicate) state
     (if string
         (conn-make-string-target-overlays string predicate)
-      (conn-with-input-method
-        (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt)))
-          (setq string (char-to-string (conn-dispatch-read-event prompt t)))
+      (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt)))
+        (setq string (char-to-string (conn-dispatch-read-event prompt t)))
+        (while-no-input
+          (conn-make-string-target-overlays string predicate))
+        (while-let ((next-char (conn-dispatch-read-event
+                                (concat prompt string)
+                                t timeout)))
+          (conn-delete-targets)
+          (setq string (concat string (char-to-string next-char)))
           (while-no-input
-            (conn-make-string-target-overlays string predicate))
-          (while-let ((next-char (conn-dispatch-read-event
-                                  (concat prompt string)
-                                  t timeout)))
-            (conn-delete-targets)
-            (setq string (concat string (char-to-string next-char)))
-            (while-no-input
-              (conn-make-string-target-overlays string predicate))))))))
+            (conn-make-string-target-overlays string predicate)))))))
 
 (defun conn-dispatch-read-string-with-timeout (&optional predicate)
   (conn-dispatch-read-with-timeout
