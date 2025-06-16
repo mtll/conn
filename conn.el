@@ -2477,7 +2477,8 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
   :keymap (conn-get-state-map 'conn-bounds-of-recursive-edit-state)
   "<escape>" 'exit-recursive-edit
   "e" 'exit-recursive-edit
-  "C-]" 'abort-recursive-edit)
+  "C-]" 'abort-recursive-edit
+  "q" 'abort-recursive-edit)
 
 (defun conn--bounds-of-recursive-edit (_cmd _arg)
   (let* ((eldoc-message-function 'ignore)
@@ -8249,7 +8250,8 @@ region after a `recursive-edit'."
            (buf (current-buffer)))
        (conn-transpose-recursive-edit-mode 1)
        (unwind-protect
-           (recursive-edit)
+           (conn-with-recursive-state 'conn-bounds-of-recursive-edit-state
+             (recursive-edit))
          (conn-transpose-recursive-edit-mode -1))
        (conn--dispatch-transpose-subr
         buf (caar bounds1) (lambda (_) bounds1)
