@@ -262,14 +262,14 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
 CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
   (cl-with-gensyms (success unbound)
-    (let (setf-forms
+    (let (setq-forms
           let-forms
           unwind-body)
       (dolist (form varlist)
         (pcase form
           ((and `(,var ,binding . ,cleanup)
                 (guard cleanup))
-           (push `(setf ,var ,binding) setf-forms)
+           (push `(setq ,var ,binding) setq-forms)
            (setq unwind-body (if unwind-body
                                  `(unwind-protect
                                       ,unwind-body
@@ -282,9 +282,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       `(let* (,@(nreverse let-forms)
               (,success nil))
          (unwind-protect
-             (prog2
-                 ,(macroexp-progn (reverse setf-forms))
-                 ,(macroexp-progn body)
+             (prog1
+                 ,(macroexp-progn `(,@(reverse setq-forms) ,@body))
                (setq ,success t))
            (unless ,success
              ,unwind-body))))))
