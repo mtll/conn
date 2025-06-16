@@ -1045,7 +1045,7 @@ The composed map is a keymap of the form:
                         (conn-get-major-mode-map state pmode)
                         (gethash pmode (gethash state conn--major-mode-maps)))))))
 
-(defun conn-get-mode-map (state mode)
+(defun conn-get-minor-mode-map (state mode)
   "Return keymap for MODE in STATE.
 
 If one does not exists create a new sparse keymap for MODE in STATE and
@@ -1057,11 +1057,11 @@ return it."
              (make-composed-keymap
               (make-sparse-keymap)
               (cl-loop for parent in (cdr (conn--state-all-parents state))
-                       collect (conn-get-mode-map parent mode)))))
+                       collect (conn-get-minor-mode-map parent mode)))))
         (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
               keymap)
         (dolist (child (conn--state-all-children state))
-          (conn-get-mode-map child mode))
+          (conn-get-minor-mode-map child mode))
         (conn--sort-mode-maps state)
         (nth 1 keymap))))
 
@@ -1111,7 +1111,7 @@ Called when the inheritance hierarchy for STATE changes."
     (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
       (setf (cdr map)
             (cl-loop for pstate in parents
-                     collect (conn-get-mode-map pstate mode))))
+                     collect (conn-get-minor-mode-map pstate mode))))
     (maphash
      (lambda (mode map)
        (setf (cdr map)
@@ -1643,7 +1643,7 @@ to the abnormal hooks `conn-state-entry-functions' or
                (dolist (parent new-parents)
                  (pcase-dolist (`(,mode . ,_)
                                 (cdr (gethash parent conn--minor-mode-maps)))
-                   (conn-get-mode-map ',name mode))))
+                   (conn-get-minor-mode-map ',name mode))))
            (let ((record (make-record 'conn-state 3 nil)))
              (setf (aref record 1) state-props
                    (aref record 2) ',parents)
@@ -1657,7 +1657,7 @@ to the abnormal hooks `conn-state-entry-functions' or
            (dolist (parent ',parents)
              (pcase-dolist (`(,mode . ,_)
                             (cdr (gethash parent conn--minor-mode-maps)))
-               (conn-get-mode-map ',name mode)))))
+               (conn-get-minor-mode-map ',name mode)))))
        ',name)))
 
 (conn-define-state conn-null-state ()
@@ -8189,8 +8189,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
     (remove-hook 'post-command-hook 'conn--transpose-recursive-message)))
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-command-state
-                             'conn-transpose-recursive-edit-mode)
+  :keymap (conn-get-minor-mode-map 'conn-command-state
+                                   'conn-transpose-recursive-edit-mode)
   "e" 'exit-recursive-edit
   "q" 'abort-recursive-edit)
 
@@ -9750,7 +9750,7 @@ Operates with the selected windows parent window."
   ">" 'next-error-no-select)
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-command-state 'rectangle-mark-mode)
+  :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
   "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle

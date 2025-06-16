@@ -53,7 +53,7 @@
               (plist-get next :end))))))
 
 (define-keymap
-  :keymap (conn-get-mode-map 'conn-movement-state 'smartparens-mode)
+  :keymap (conn-get-minor-mode-map 'conn-movement-state 'smartparens-mode)
   "]" 'sp-down-sexp
   "[" 'sp-backward-down-sexp
   ")" 'sp-up-sexp
