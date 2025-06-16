@@ -4299,6 +4299,8 @@ Target overlays may override this default by setting the
                                            inherit-input-method
                                            seconds
                                            inhibit-message-prefix)
+  (unless (memq conn-dispatch-read-event-map overriding-terminal-local-map)
+    (error "conn-dispatch-read-event-map must be active"))
   (let ((inhibit-message nil)
         (message-log-max nil)
         (prompt (concat prompt (when conn--loop-error-message
