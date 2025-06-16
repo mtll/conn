@@ -6427,7 +6427,8 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
   (setq unread-command-events `((no-record . ,event)))
-  (let ((map (define-keymap (key-description `[,(car event)]) 'act)))
+  (let ((map (define-keymap (key-description `[,(car event)]) 'act))
+        (conn-state-loop-inhibit-message t))
     (internal-push-keymap map 'overriding-terminal-local-map)
     (unwind-protect
         (conn-repeat-last-dispatch
