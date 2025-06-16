@@ -2065,6 +2065,7 @@ themselves once the selection process has concluded."
 ;;;; State Command Loops
 
 (defvar conn-state-loop-last-command nil)
+(defvar conn-state-loop-inhibit-message nil)
 (defvar conn--loop-prefix-mag nil)
 (defvar conn--loop-prefix-sign nil)
 (defvar conn--loop-error-message nil)
@@ -2101,7 +2102,7 @@ themselves once the selection process has concluded."
   (keyboard-quit))
 
 (defun conn-state-loop-message (format-string args)
-  (let ((inhibit-message nil)
+  (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil))
     (message format-string args))
   (setq conn--loop-message-timer
@@ -2109,7 +2110,7 @@ themselves once the selection process has concluded."
          minibuffer-message-timeout
          nil
          (lambda ()
-           (let ((inhibit-message nil)
+           (let ((inhibit-message conn-state-loop-inhibit-message)
                  (message-log-max nil))
              (funcall conn--loop-message-function))))))
 
@@ -2140,7 +2141,7 @@ themselves once the selection process has concluded."
       (catch 'state-loop-exit
         (while t
           (unless conn--loop-message-timer
-            (let ((inhibit-message nil)
+            (let ((inhibit-message conn-state-loop-inhibit-message)
                   (message-log-max nil))
               (funcall conn--loop-message-function)))
           (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
@@ -4300,7 +4301,7 @@ Target overlays may override this default by setting the
                                            inhibit-message-prefix)
   (unless (memq conn-dispatch-read-event-map overriding-terminal-local-map)
     (error "conn-dispatch-read-event-map must be active"))
-  (let ((inhibit-message nil)
+  (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil)
         (prompt (concat prompt (when conn--loop-error-message
                                  (propertize conn--loop-error-message
@@ -6310,7 +6311,7 @@ contain targets."
             (unless (= (point) opoint)
               (conn--push-mark-ring opoint))))
         (set-marker opoint nil)
-        (let ((inhibit-message nil))
+        (let ((inhibit-message conn-state-loop-inhibit-message))
           (message nil))))
     (when (> conn-dispatch-repeat-count 0)
       (conn-dispatch-push-history action target-finder thing-cmd thing-arg repeat))))
