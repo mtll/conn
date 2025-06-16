@@ -1664,7 +1664,7 @@ to the abnormal hooks `conn-state-entry-functions' or
   "An empty state.
 
 For use in buffers that should not have any other state."
-  :lighter "NULL"
+  :lighter "Ø"
   :hide-mark-cursor t
   :cursor '(bar . 4))
 
@@ -8133,7 +8133,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 ;;;;; Transpose
 
 (conn-define-state conn-transpose-state (conn-read-mover-state)
-  :lighter "⍉")
+  :lighter "T")
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-transpose-state)
