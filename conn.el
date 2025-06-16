@@ -2377,7 +2377,9 @@ If `use-region-p' returns non-nil this will always return
     (isearch-forward-regexp . conn--bounds-of-isearch)
     (isearch-backward-regexp . conn--bounds-of-isearch)
     (conn-previous-emacs-state . conn--bounds-of-emacs-state)
-    (conn-next-emacs-state . conn--bounds-of-emacs-state))
+    (conn-next-emacs-state . conn--bounds-of-emacs-state)
+    (buffer . ,(lambda (_cmd _arg)
+                 (list (cons (point-min) (point-max))))))
   "Alist of bounds-op functions for things or commands.
 
 Has the form ((THING-OR-CMD . bounds-op) ...).")
@@ -2404,13 +2406,10 @@ of 3 sexps moved over as well as the bounds of each individual sexp."
     (save-mark-and-excursion
       (setf (alist-get (recursion-depth) conn--last-bounds-of-command)
             (funcall
-             (or (alist-get cmd conn-bounds-of-command-alist)
-                 (cl-loop for depth from 0 below 30
-                          for thing = (get cmd :conn-command-thing)
-                          then (get thing :conn-command-thing)
+             (or (cl-loop for max-depth from 0 below 16
+                          for thing = cmd then (get thing :conn-command-thing)
                           while thing
-                          for bounds = (alist-get (get thing :conn-command-thing)
-                                                  conn-bounds-of-command-alist)
+                          for bounds = (alist-get thing conn-bounds-of-command-alist)
                           when bounds return bounds)
                  conn-bounds-of-command-default)
              cmd arg)))))
