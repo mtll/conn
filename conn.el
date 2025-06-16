@@ -4328,8 +4328,8 @@ Target overlays may override this default by setting the
                    (read-key-sequence-vector)
                    (key-binding t))
             ('dispatch-character-event
-             (setq conn--dispatch-must-prompt nil
-                   unread-command-events `((no-record . ,last-input-event)))
+             (setq conn--dispatch-must-prompt nil)
+             (push `(no-record . ,last-input-event) unread-command-events)
              (throw 'return
                     (progn
                       (internal-pop-keymap conn-dispatch-read-event-map
@@ -6426,7 +6426,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
                                    action))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (setq unread-command-events `((no-record . ,event)))
+  (push `(no-record . ,event) unread-command-events)
   (let ((map (define-keymap (key-description `[,(car event)]) 'act))
         (conn-state-loop-inhibit-message t))
     (internal-push-keymap map 'overriding-terminal-local-map)
