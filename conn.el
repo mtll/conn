@@ -3546,6 +3546,7 @@ associated with a command's thing.")
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
   "<remap> <conn-expand>" 'conn-expand-remote
   "<remap> <conn-contract>" 'conn-expand-remote
+  "m" 'forward-sexp
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
@@ -9156,7 +9157,6 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--previous-scroll-conservatively)
-(defvar conn--wincontrol-help)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
@@ -9349,7 +9349,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
         (resize-mini-windows t))
-    (message conn--wincontrol-help
+    (message (substitute-command-keys conn--wincontrol-help-format)
              (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                      (if (= conn--wincontrol-arg-sign -1) "-" "")
                      conn--wincontrol-arg))))
@@ -9359,15 +9359,15 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
     (add-hook 'post-command-hook 'conn--wincontrol-post-command)
     (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-    (setq conn--previous-scroll-conservatively scroll-conservatively
-          conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
-          eldoc-message-function #'ignore
-          scroll-conservatively 100)
+    (unless (bound-and-true-p conn--previous-scroll-conservatively)
+      (setq conn--previous-scroll-conservatively scroll-conservatively
+            scroll-conservatively 100))
+    (unless (bound-and-true-p conn--wincontrol-prev-eldoc-msg-fn)
+      (setq conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
+            eldoc-message-function #'ignore))
     (unless preserve-state
       (setq conn--wincontrol-arg (when current-prefix-arg
                                    (prefix-numeric-value current-prefix-arg))
-            conn--wincontrol-help (substitute-command-keys
-                                   conn--wincontrol-help-format)
             conn--wincontrol-arg-sign 1
             conn--wincontrol-initial-window (selected-window)
             conn--wincontrol-initial-winconf (current-window-configuration)))
@@ -9381,8 +9381,12 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
     (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (setq scroll-conservatively conn--previous-scroll-conservatively
-          eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn)
+    (when (bound-and-true-p conn--previous-scroll-conservatively)
+      (setq scroll-conservatively conn--previous-scroll-conservatively
+            conn--previous-scroll-conservatively nil))
+    (when (bound-and-true-p conn--wincontrol-prev-eldoc-msg-fn)
+      (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
+            conn--wincontrol-prev-eldoc-msg-fn nil))
     (setf face-remapping-alist
           (delq (assq 'mode-line face-remapping-alist)
                 face-remapping-alist))))
