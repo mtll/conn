@@ -8643,12 +8643,13 @@ for the meaning of prefix ARG."
                    (?c conn-completion-region-quote-function))
                'regexp-quote)
            'identity)))
-  (insert (pcase conn--minibuffer-initial-region
-            (`(,beg . ,end)
-             (with-minibuffer-selected-window
-               (funcall (or quote-function 'identity)
-                        (buffer-substring-no-properties beg end))))
-            (_ (user-error "No region in buffer")))))
+  (insert-for-yank
+   (pcase conn--minibuffer-initial-region
+     (`(,beg . ,end)
+      (with-minibuffer-selected-window
+        (funcall (or quote-function 'identity)
+                 (filter-buffer-substring beg end))))
+     (_ (user-error "No region in buffer")))))
 
 (defun conn-yank-replace (start end &optional arg)
   "`yank' replacing region between START and END.
@@ -9514,26 +9515,26 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-wincontrol-invert-argument ()
   "Invert sign of wincontrol prefix arg."
   (interactive)
-  (setq conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)
-        conn--wincontrol-preserve-arg t))
+  (setq conn--wincontrol-preserve-arg t
+        conn--wincontrol-arg-sign (- conn--wincontrol-arg-sign)))
 
 (defun conn-wincontrol-digit-argument-reset ()
   "Reset wincontrol prefix arg to nil and sign to +."
   (interactive)
-  (setq conn--wincontrol-arg nil)
-  (setq conn--wincontrol-arg-sign 1))
+  (setq conn--wincontrol-arg-sign 1
+        conn--wincontrol-arg nil))
 
 (defun conn-wincontrol-backward-delete-arg ()
   "Delete least significant digit of prefix arg."
   (interactive)
-  (setq conn--wincontrol-preserve-arg t)
-  (setq conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
+  (setq conn--wincontrol-preserve-arg t
+        conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
 
 (defun conn-wincontrol-forward-delete-arg ()
   "Delete most significant digit of prefix arg."
   (interactive)
-  (setq conn--wincontrol-preserve-arg t)
-  (setq conn--wincontrol-arg (thread-last
+  (setq conn--wincontrol-preserve-arg t
+        conn--wincontrol-arg (thread-last
                                (log conn--wincontrol-arg 10)
                                (floor)
                                (expt 10)
