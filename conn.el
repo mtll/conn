@@ -1747,6 +1747,41 @@ By default `conn-emacs-state' does not bind anything."
                      when pos collect (nth pos new-list))
             conn-emacs-state-ring new-ring))))
 
+;;;;; Autopop
+
+(conn-define-state conn-autopop-state ()
+  :abstract t
+  :keep-predicate #'ignore)
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
+  (unless conn--state-stack
+    (error "An autopop state cannot be the base state"))
+  (letrec ((prefix-command nil)
+           (preserve-state
+            (lambda ()
+              (setq prefix-command t)))
+           (msg-fn (conn-state-get state :message-function))
+           (keep-pred
+            (let ((pred (conn-state-get state :keep-predicate)))
+              (lambda ()
+                (unless (or (prog1 prefix-command
+                              (setq prefix-command nil))
+                            (funcall pred))
+                  (when msg-fn
+                    (remove-hook 'post-command-hook msg-fn t))
+                  (remove-hook 'post-command-hook keep-pred t)
+                  (remove-hook 'prefix-command-preserve-state-hook preserve-state)
+                  (conn-pop-state)))))
+           (setup
+            (lambda ()
+              (remove-hook 'post-command-hook setup t)
+              (add-hook 'prefix-command-preserve-state-hook preserve-state)
+              (when msg-fn
+                (add-hook 'post-command-hook msg-fn 91 t))
+              (add-hook 'post-command-hook keep-pred 90 t))))
+    (add-hook 'post-command-hook setup 99 t)
+    (cl-call-next-method)))
+
 
 ;;;; Labels
 
