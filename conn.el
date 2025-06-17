@@ -965,9 +965,8 @@ The returned list is not fresh, don't modify it."
   (cl-check-type state conn-state)
   (or (gethash state conn--state-maps)
       (unless dont-create
-        (prog1
-            (setf (gethash state conn--state-maps)
-                  (make-sparse-keymap))
+        (prog1 (setf (gethash state conn--state-maps)
+                     (make-sparse-keymap))
           (dolist (child (conn--state-all-children state))
             (when-let* ((map (gethash child conn--state-map-cache)))
               (setf (cdr map)
@@ -997,9 +996,8 @@ The composed keymap is of the form:
   (cl-check-type state conn-state)
   (or (gethash state conn--override-maps)
       (unless dont-create
-        (prog1
-            (setf (gethash state conn--override-maps)
-                  (make-sparse-keymap))
+        (prog1 (setf (gethash state conn--override-maps)
+                     (make-sparse-keymap))
           (dolist (child (conn--state-all-children state))
             (when-let* ((map (gethash child conn--override-map-cache)))
               (setf (cdr map)
@@ -1036,10 +1034,9 @@ return it."
                          when pmap collect (nth 1 pmap))))
     (or (nth 1 (get-map state))
         (unless dont-create
-          (let* ((keymap
-                  (make-composed-keymap
-                   (make-sparse-keymap)
-                   (parent-maps state))))
+          (let* ((keymap (make-composed-keymap
+                          (make-sparse-keymap)
+                          (parent-maps state))))
             (setf (gethash mode (gethash state conn--major-mode-maps))
                   keymap)
             (dolist (child (conn--state-all-children state))
@@ -1089,10 +1086,9 @@ return it."
                          when pmap collect (nth 1 pmap))))
     (or (nth 1 (get-map state))
         (unless dont-create
-          (let ((keymap
-                 (make-composed-keymap
-                  (make-sparse-keymap)
-                  (parent-maps state))))
+          (let ((keymap (make-composed-keymap
+                         (make-sparse-keymap)
+                         (parent-maps state))))
             (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
                   keymap)
             (dolist (child (conn--state-all-children state))
@@ -1387,13 +1383,15 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
-  (cl-with-gensyms (buffer)
-    `(let ((,buffer (current-buffer)))
+  (cl-with-gensyms (buffer stack)
+    `(let ((,stack conn--state-stack)
+           (,buffer (current-buffer)))
        (conn-enter-recursive-state ,state)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
-           (conn-exit-recurive-state))))))
+           (conn-enter-state (car ,stack))
+           (setq conn--state-stack ,stack))))))
 
 (defmacro conn-without-recursive-state (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
