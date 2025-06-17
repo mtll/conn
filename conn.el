@@ -1135,11 +1135,13 @@ Called when the inheritance hierarchy for STATE changes."
     (when-let* ((state-map (gethash state conn--state-map-cache)))
       (setf (cdr state-map)
             (cl-loop for pstate in parents
-                     collect (gethash pstate conn--state-maps))))
+                     for pmap = (gethash pstate conn--state-maps)
+                     when pmap collect pmap)))
     (when-let* ((override-map (gethash state conn--override-map-cache)))
       (setf (cdr override-map)
             (cl-loop for pstate in parents
-                     collect (gethash pstate conn--override-maps))))
+                     for pmap = (gethash pstate conn--override-maps)
+                     when pmap collect pmap)))
     (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
       (setf (cdr map)
             (cl-loop for parent in parents
