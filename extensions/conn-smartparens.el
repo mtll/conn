@@ -149,8 +149,11 @@
 (define-keymap
   :keymap (conn-get-state-map 'conntext-paren-state)
   :suppress t
+  "SPC" 'conn-set-mark-command
+  "v" 'conn-toggle-mark-command
+  "z" 'conn-exchange-mark-command
   "`" 'other-window
-  "e" 'conn-pop-state
+  "e" 'conn-insert-state
   "<escape>" 'conn-pop-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun
