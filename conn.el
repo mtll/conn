@@ -963,18 +963,19 @@ The returned list is not fresh, don't modify it."
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
   (cl-check-type state conn-state)
-  (or (gethash state conn--state-maps)
+  (if (conn-state-get state :no-keymap)
       (unless dont-create
-        (cl-assert (not (conn-state-get state :no-keymap t))
-                   nil "%s :no-keymap property is non-nil" state)
-        (prog1 (setf (gethash state conn--state-maps)
-                     (make-sparse-keymap))
-          (dolist (child (conn--state-all-children state))
-            (when-let* ((map (gethash child conn--state-map-cache)))
-              (setf (cdr map)
-                    (cl-loop for parent in (conn--state-all-parents child)
-                             for pmap = (conn-get-state-map parent t)
-                             when pmap collect pmap))))))))
+        (error "%s has non-nil :no-keymap property" state))
+    (or (gethash state conn--state-maps)
+        (unless dont-create
+          (prog1 (setf (gethash state conn--state-maps)
+                       (make-sparse-keymap))
+            (dolist (child (conn--state-all-children state))
+              (when-let* ((map (gethash child conn--state-map-cache)))
+                (setf (cdr map)
+                      (cl-loop for parent in (conn--state-all-parents child)
+                               for pmap = (conn-get-state-map parent t)
+                               when pmap collect pmap)))))))))
 
 (defconst conn--state-map-cache (make-hash-table :test 'eq))
 
@@ -988,7 +989,7 @@ The composed keymap is of the form:
  (keymap . bindings)  ;; state map for STATE parent
  ...)"
   (with-memoization (gethash state conn--state-map-cache)
-    (cl-assert (not (conn-state-get state :no-keymap t))
+    (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
@@ -998,18 +999,19 @@ The composed keymap is of the form:
 (defun conn-get-overriding-map (state &optional dont-create)
   "Return the overriding keymap for STATE."
   (cl-check-type state conn-state)
-  (or (gethash state conn--override-maps)
+  (if (conn-state-get state :no-keymap)
       (unless dont-create
-        (cl-assert (not (conn-state-get state :no-keymap t))
-                   nil "%s :no-keymap property is non-nil" state)
-        (prog1 (setf (gethash state conn--override-maps)
-                     (make-sparse-keymap))
-          (dolist (child (conn--state-all-children state))
-            (when-let* ((map (gethash child conn--override-map-cache)))
-              (setf (cdr map)
-                    (cl-loop for parent in (conn--state-all-parents child)
-                             for pmap = (conn-get-overriding-map parent t)
-                             when pmap collect pmap))))))))
+        (error "%s has non-nil :no-keymap property" state))
+    (or (gethash state conn--override-maps)
+        (unless dont-create
+          (prog1 (setf (gethash state conn--override-maps)
+                       (make-sparse-keymap))
+            (dolist (child (conn--state-all-children state))
+              (when-let* ((map (gethash child conn--override-map-cache)))
+                (setf (cdr map)
+                      (cl-loop for parent in (conn--state-all-parents child)
+                               for pmap = (conn-get-overriding-map parent t)
+                               when pmap collect pmap)))))))))
 
 (defconst conn--override-map-cache (make-hash-table :test 'eq))
 
@@ -1019,7 +1021,7 @@ The composed keymap is of the form:
 Composed keymap is of the same form as returned by
 `conn--compose-state-map'."
   (with-memoization (gethash state conn--override-map-cache)
-    (cl-assert (not (conn-state-get state :no-keymap t))
+    (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
@@ -1033,26 +1035,29 @@ If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
-  (cl-labels ((get-map (state)
-                (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
-                  (gethash mode mmode-table)))
-              (parent-maps (state)
-                (cl-loop for parent in (cdr (conn--state-all-parents state))
-                         for pmap = (get-map parent)
-                         when pmap collect (nth 1 pmap))))
-    (or (nth 1 (get-map state))
-        (unless dont-create
-          (cl-assert (not (conn-state-get state :no-keymap t))
-                     nil "%s :no-keymap property is non-nil" state)
-          (let* ((keymap (make-composed-keymap
-                          (make-sparse-keymap)
-                          (parent-maps state))))
-            (setf (gethash mode (gethash state conn--major-mode-maps))
-                  keymap)
-            (dolist (child (conn--state-all-children state))
-              (when-let* ((map (get-map child)))
-                (setf (cddr map) (parent-maps child))))
-            (nth 1 keymap))))))
+  (if (conn-state-get state :no-keymap)
+      (unless dont-create
+        (error "%s has non-nil :no-keymap property" state))
+    (cl-labels ((get-map (state)
+                  (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
+                    (gethash mode mmode-table)))
+                (parent-maps (state)
+                  (cl-loop for parent in (cdr (conn--state-all-parents state))
+                           for pmap = (get-map parent)
+                           when pmap collect (nth 1 pmap))))
+      (or (nth 1 (get-map state))
+          (unless dont-create
+            (cl-assert (not (conn-state-get state :no-keymap))
+                       nil "%s :no-keymap property is non-nil" state)
+            (let* ((keymap (make-composed-keymap
+                            (make-sparse-keymap)
+                            (parent-maps state))))
+              (setf (gethash mode (gethash state conn--major-mode-maps))
+                    keymap)
+              (dolist (child (conn--state-all-children state))
+                (when-let* ((map (get-map child)))
+                  (setf (cddr map) (parent-maps child))))
+              (nth 1 keymap)))))))
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1075,7 +1080,7 @@ The composed map is a keymap of the form:
   (with-memoization
       (gethash (cons state (conn--derived-mode-all-parents major-mode))
                conn--major-mode-maps-cache)
-    (cl-assert (not (conn-state-get state :no-keymap t))
+    (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
      (cl-loop for pmode in (conn--derived-mode-all-parents major-mode)
@@ -1090,50 +1095,50 @@ If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
-  (cl-labels ((get-map (state)
-                (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
-              (parent-maps (state)
-                (cl-loop for parent in (cdr (conn--state-all-parents state))
-                         for pmap = (get-map parent)
-                         when pmap collect (nth 1 pmap))))
-    (or (nth 1 (get-map state))
-        (unless dont-create
-          (cl-assert (not (conn-state-get state :no-keymap t))
-                     nil "%s :no-keymap property is non-nil" state)
-          (let ((keymap (make-composed-keymap
-                         (make-sparse-keymap)
-                         (parent-maps state))))
-            (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
-                  keymap)
-            (dolist (child (conn--state-all-children state))
-              (when-let* ((map (get-map child)))
-                (setf (cddr map) (parent-maps child))))
-            (conn--sort-mode-maps state)
-            (nth 1 keymap))))))
+  (if (conn-state-get state :no-keymap)
+      (unless dont-create
+        (error "%s has non-nil :no-keymap property" state))
+    (cl-labels ((get-map (state)
+                  (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
+                (parent-maps (state)
+                  (cl-loop for parent in (cdr (conn--state-all-parents state))
+                           for pmap = (get-map parent)
+                           when pmap collect (nth 1 pmap))))
+      (or (nth 1 (get-map state))
+          (unless dont-create
+            (let ((keymap (make-composed-keymap
+                           (make-sparse-keymap)
+                           (parent-maps state))))
+              (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
+                    keymap)
+              (dolist (child (conn--state-all-children state))
+                (when-let* ((map (get-map child)))
+                  (setf (cddr map) (parent-maps child))))
+              (conn--sort-mode-maps state)
+              (nth 1 keymap)))))))
 
 (defun conn--sort-mode-maps (state)
   (cl-check-type state conn-state)
-  (cl-assert (not (conn-state-get state :no-keymap t))
-             nil "%s :no-keymap property is non-nil" state)
-  (let* ((parents (conn--state-all-parents state))
-         (depths (delq nil (mapcar
-                            (lambda (parent)
-                              (car (gethash parent conn--minor-mode-maps)))
-                            parents))))
-    (setf (cdr (gethash state conn--minor-mode-maps))
-          (compat-call
-           sort (cdr (gethash state conn--minor-mode-maps))
-           :key (lambda (cons)
-                  (or (seq-some (lambda (table) (gethash (car cons) table))
-                                depths)
-                      0))
-           :in-place t))))
+  (unless (conn-state-get state :no-keymap)
+    (let* ((parents (conn--state-all-parents state))
+           (depths (delq nil (mapcar
+                              (lambda (parent)
+                                (car (gethash parent conn--minor-mode-maps)))
+                              parents))))
+      (setf (cdr (gethash state conn--minor-mode-maps))
+            (compat-call
+             sort (cdr (gethash state conn--minor-mode-maps))
+             :key (lambda (cons)
+                    (or (seq-some (lambda (table) (gethash (car cons) table))
+                                  depths)
+                        0))
+             :in-place t)))))
 
 (defun conn-set-mode-map-depth (state mode depth)
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
   (cl-assert (<= -100 depth 100) nil "Depth must be between -100 and 100")
-  (cl-assert (not (conn-state-get state :no-keymap t))
+  (cl-assert (not (conn-state-get state :no-keymap))
              nil "%s :no-keymap property is non-nil" state)
   (let ((map-depths (or (car (gethash state conn--minor-mode-maps))
                         (setf (car (gethash state conn--minor-mode-maps))
@@ -1149,17 +1154,17 @@ return it."
   "Rebuild all composed keymaps for STATE.
 
 Called when the inheritance hierarchy for STATE changes."
-  (unless (conn-state-get state :no-keymap t)
+  (unless (conn-state-get state :no-keymap)
     (let ((parents (conn--state-all-parents state)))
       (when-let* ((state-map (gethash state conn--state-map-cache)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
-                       for pmap = (gethash pstate conn--state-maps)
+                       for pmap = (conn-get-state-map pstate t)
                        when pmap collect pmap)))
       (when-let* ((override-map (gethash state conn--override-map-cache)))
         (setf (cdr override-map)
               (cl-loop for pstate in parents
-                       for pmap = (gethash pstate conn--override-maps)
+                       for pmap = (conn-get-overriding-map pstate t)
                        when pmap collect pmap)))
       (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
         (setf (cdr map)
@@ -1287,61 +1292,64 @@ mouse-3: Describe current input method")
 
 ;;;;; State Properties
 
+(eval-and-compile
+  (defvar conn--static-properties (make-hash-table :test 'eq))
+
+  (defun conn-declare-property-static (property)
+    (cl-assert (symbolp property))
+    (setf (gethash property conn--static-properties) t))
+
+  (defun conn-property-static-p (property)
+    (not (not (gethash property conn--static-properties))))
+
+  (conn-declare-property-static :no-keymap)
+  (conn-declare-property-static :abstract))
+
 (defun conn-state-get (state property &optional no-inherit default)
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
   (declare (compiler-macro conn--state-get-compiler-macro))
-  (if (not no-inherit)
-      (cl-with-gensyms (key-missing)
-        (cl-loop for parent in (conn--state-all-parents state)
-                 for table = (aref (get parent :conn--state) 1)
-                 for prop = (gethash property table key-missing)
-                 unless (eq prop key-missing) return prop
-                 finally return default))
-    (cl-check-type state conn-state)
-    (gethash property (aref (get state :conn--state) 1) default)))
+  (if (or no-inherit (conn-property-static-p property))
+      (progn
+        (cl-check-type state conn-state)
+        (gethash property (aref (get state :conn--state) 1) default))
+    (cl-with-gensyms (key-missing)
+      (cl-loop for parent in (conn--state-all-parents state)
+               for table = (aref (get parent :conn--state) 1)
+               for prop = (gethash property table key-missing)
+               unless (eq prop key-missing) return prop
+               finally return default))))
 
-(defun conn--state-get-compiler-macro (_exp state property &optional no-inherit default)
-  (cl-once-only (state property)
-    (let ((with-parents
-           `(cl-with-gensyms (key-missing)
-              (cl-loop for parent in (conn--state-all-parents ,state)
-                       for table = (aref (get parent :conn--state) 1)
-                       for prop = (gethash ,property table key-missing)
-                       unless (eq prop key-missing) return prop
-                       finally return ,default)))
-          (without-parents
-           `(progn
-              (cl-check-type ,state conn-state)
-              (gethash ,property (aref (get ,state :conn--state) 1) ,default)))
-          (no-inherit (macroexpand-all no-inherit macroexpand-all-environment)))
-      (if (and (macroexp-const-p no-inherit)
-               (if (consp no-inherit) (cadr no-inherit) no-inherit))
-          (if no-inherit without-parents with-parents)
-        `(if ,no-inherit ,without-parents ,with-parents)))))
+(defun conn--state-get-compiler-macro ( exp state property
+                                        &optional
+                                        no-inherit default)
+  (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
+        (prop (macroexpand-all property macroexpand-all-environment)))
+    (if (or (and (macroexp-const-p no-inherit)
+                 (if (consp no-inherit) (cadr no-inherit) no-inherit))
+            (and (symbolp prop)
+                 (conn-property-static-p prop)))
+        (cl-once-only (state)
+          `(progn
+             (cl-check-type ,state conn-state)
+             (gethash ,property (aref (get ,state :conn--state) 1) ,default)))
+      exp)))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
-
-(define-inline conn-state-has-property-p (state property)
-  "Return t if PROPERTY is set for STATE."
-  (inline-letevals (state property)
-    (inline-quote
-     (cl-with-gensyms (key-missing)
-       (cl-check-type ,state conn-state)
-       (not (eq (gethash ,property (aref (get ,state :conn--state) 1) key-missing)
-                key-missing))))))
 
 (define-inline conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
 
 Returns VALUE."
-  (inline-letevals (state)
+  (inline-letevals (state property)
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
+       (cl-assert (not (conn-property-static-p ,property))
+                  t "%s is a static property")
        (puthash ,property ,value (aref (get ,state :conn--state) 1))))))
 
 (define-inline conn-state-unset (state property)
@@ -1353,7 +1361,18 @@ property from its parents."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
+       (cl-assert (not (conn-property-static-p ,property))
+                  t "%s is a static property")
        (remhash (aref (get ,state :conn--state) 1) ,property)))))
+
+(define-inline conn-state-has-property-p (state property)
+  "Return t if PROPERTY is set for STATE."
+  (inline-letevals (state property)
+    (inline-quote
+     (cl-with-gensyms (key-missing)
+       (cl-check-type ,state conn-state)
+       (not (eq (gethash ,property (aref (get ,state :conn--state) 1) key-missing)
+                key-missing))))))
 
 
 ;;;;; State Macros
@@ -1558,7 +1577,7 @@ and specializes the method on all conn states."
     (let ((success nil))
       (unwind-protect
           (progn
-            (when (conn-state-get state :abstract t)
+            (when (conn-state-get state :abstract)
               (error "Attempting to enter abstract state"))
             (conn-exit-state conn-current-state)
             (set state t)
@@ -1704,10 +1723,11 @@ to the abnormal hooks `conn-state-entry-functions' or
                ;; variables will not have to be updated in each buffer
                ;; before these changes take effect.
                (mapc #'conn--rebuild-state-keymaps all-children)
-               (dolist (parent new-parents)
-                 (pcase-dolist (`(,mode . ,_)
-                                (cdr (gethash parent conn--minor-mode-maps)))
-                   (conn-get-minor-mode-map ',name mode))))
+               (unless (gethash :no-keymap state-props)
+                 (dolist (parent new-parents)
+                   (pcase-dolist (`(,mode . ,_)
+                                  (cdr (gethash parent conn--minor-mode-maps)))
+                     (conn-get-minor-mode-map ',name mode)))))
            (let ((record (make-record 'conn-state 3 nil)))
              (setf (aref record 1) state-props
                    (aref record 2) ',parents)
@@ -1716,10 +1736,11 @@ to the abnormal hooks `conn-state-entry-functions' or
              (cl-pushnew ',name (aref (get parent :conn--state) 3)))
            (setf (gethash ',name conn--minor-mode-maps) (list nil)
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))
-           (dolist (parent ',parents)
-             (pcase-dolist (`(,mode . ,_)
-                            (cdr (gethash parent conn--minor-mode-maps)))
-               (conn-get-minor-mode-map ',name mode)))))
+           (unless (gethash :no-keymap state-props)
+             (dolist (parent ',parents)
+               (pcase-dolist (`(,mode . ,_)
+                              (cdr (gethash parent conn--minor-mode-maps)))
+                 (conn-get-minor-mode-map ',name mode))))))
        ',name)))
 
 (conn-define-state conn-null-state ()
