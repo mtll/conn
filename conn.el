@@ -960,10 +960,20 @@ The returned list is not fresh, don't modify it."
 (defvar-local conn--local-major-mode-map)
 (defvar-local conn--local-minor-mode-maps)
 
-(defun conn-get-state-map (state)
+(defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
   (cl-check-type state conn-state)
-  (gethash state conn--state-maps))
+  (or (gethash state conn--state-maps)
+      (unless dont-create
+        (prog1
+            (setf (gethash state conn--state-maps)
+                  (make-sparse-keymap))
+          (dolist (child (conn--state-all-children state))
+            (when-let* ((map (gethash child conn--state-map-cache)))
+              (setf (cdr map)
+                    (cl-loop for parent in (conn--state-all-parents child)
+                             for pmap = (conn-get-state-map parent t)
+                             when pmap collect pmap))))))))
 
 (defconst conn--state-map-cache (make-hash-table :test 'eq))
 
@@ -979,12 +989,23 @@ The composed keymap is of the form:
   (with-memoization (gethash state conn--state-map-cache)
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
-              collect (gethash pstate conn--state-maps)))))
+              for pmap = (gethash pstate conn--state-maps)
+              when pmap collect pmap))))
 
-(defun conn-get-overriding-map (state)
+(defun conn-get-overriding-map (state &optional dont-create)
   "Return the overriding keymap for STATE."
   (cl-check-type state conn-state)
-  (gethash state conn--override-maps))
+  (or (gethash state conn--override-maps)
+      (unless dont-create
+        (prog1
+            (setf (gethash state conn--override-maps)
+                  (make-sparse-keymap))
+          (dolist (child (conn--state-all-children state))
+            (when-let* ((map (gethash child conn--override-map-cache)))
+              (setf (cdr map)
+                    (cl-loop for parent in (conn--state-all-parents child)
+                             for pmap = (conn-get-overriding-map parent t)
+                             when pmap collect pmap))))))))
 
 (defconst conn--override-map-cache (make-hash-table :test 'eq))
 
@@ -996,27 +1017,35 @@ Composed keymap is of the same form as returned by
   (with-memoization (gethash state conn--override-map-cache)
     (make-composed-keymap
      (cl-loop for pstate in (conn--state-all-parents state)
-              collect (gethash pstate conn--override-maps)))))
+              for pmap = (gethash pstate conn--override-maps)
+              when pmap collect pmap))))
 
-(defun conn-get-major-mode-map (state mode)
+(defun conn-get-major-mode-map (state mode &optional dont-create)
   "Return keymap for major MODE in STATE.
 
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
-  (or (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
-        (nth 1 (gethash mode mmode-table)))
-      (let* ((keymap
-              (make-composed-keymap
-               (make-sparse-keymap)
-               (cl-loop for parent in (cdr (conn--state-all-parents state))
-                        collect (conn-get-major-mode-map parent mode)))))
-        (setf (gethash mode (gethash state conn--major-mode-maps))
-              keymap)
-        (dolist (child (conn--state-all-children state))
-          (conn-get-major-mode-map child mode))
-        (nth 1 keymap))))
+  (cl-labels ((get-map (state)
+                (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
+                  (gethash mode mmode-table)))
+              (parent-maps (state)
+                (cl-loop for parent in (cdr (conn--state-all-parents state))
+                         for pmap = (get-map parent)
+                         when pmap collect (nth 1 pmap))))
+    (or (nth 1 (get-map state))
+        (unless dont-create
+          (let* ((keymap
+                  (make-composed-keymap
+                   (make-sparse-keymap)
+                   (parent-maps state))))
+            (setf (gethash mode (gethash state conn--major-mode-maps))
+                  keymap)
+            (dolist (child (conn--state-all-children state))
+              (when-let* ((map (get-map child)))
+                (setf (cddr map) (parent-maps child))))
+            (nth 1 keymap))))))
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1045,25 +1074,32 @@ The composed map is a keymap of the form:
                         (conn-get-major-mode-map state pmode)
                         (gethash pmode (gethash state conn--major-mode-maps)))))))
 
-(defun conn-get-minor-mode-map (state mode)
+(defun conn-get-minor-mode-map (state mode &optional dont-create)
   "Return keymap for MODE in STATE.
 
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type state conn-state)
   (cl-assert (symbolp mode))
-  (or (nth 1 (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
-      (let ((keymap
-             (make-composed-keymap
-              (make-sparse-keymap)
-              (cl-loop for parent in (cdr (conn--state-all-parents state))
-                       collect (conn-get-minor-mode-map parent mode)))))
-        (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
-              keymap)
-        (dolist (child (conn--state-all-children state))
-          (conn-get-minor-mode-map child mode))
-        (conn--sort-mode-maps state)
-        (nth 1 keymap))))
+  (cl-labels ((get-map (state)
+                (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
+              (parent-maps (state)
+                (cl-loop for parent in (cdr (conn--state-all-parents state))
+                         for pmap = (get-map parent)
+                         when pmap collect (nth 1 pmap))))
+    (or (nth 1 (get-map state))
+        (unless dont-create
+          (let ((keymap
+                 (make-composed-keymap
+                  (make-sparse-keymap)
+                  (parent-maps state))))
+            (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
+                  keymap)
+            (dolist (child (conn--state-all-children state))
+              (when-let ((map (get-map child)))
+                (setf (cddr map) (parent-maps child))))
+            (conn--sort-mode-maps state)
+            (nth 1 keymap))))))
 
 (defun conn--sort-mode-maps (state)
   (cl-check-type state conn-state)
@@ -1110,13 +1146,15 @@ Called when the inheritance hierarchy for STATE changes."
                      collect (gethash pstate conn--override-maps))))
     (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
       (setf (cdr map)
-            (cl-loop for pstate in parents
-                     collect (conn-get-minor-mode-map pstate mode))))
+            (cl-loop for parent in parents
+                     for pmap = (conn-get-minor-mode-map parent mode t)
+                     when pmap collect pmap)))
     (maphash
      (lambda (mode map)
        (setf (cdr map)
              (cl-loop for pstate in parents
-                      collect (conn-get-major-mode-map pstate mode))))
+                      for pmap = (conn-get-major-mode-map pstate mode t)
+                      when pmap collect pmap)))
      (gethash state conn--major-mode-maps))))
 
 
@@ -1650,9 +1688,7 @@ to the abnormal hooks `conn-state-entry-functions' or
              (put ',name :conn--state record))
            (dolist (parent (cdr (conn--state-all-parents ',name)))
              (cl-pushnew ',name (aref (get parent :conn--state) 3)))
-           (setf (gethash ',name conn--state-maps) (make-sparse-keymap)
-                 (gethash ',name conn--override-maps) (make-sparse-keymap)
-                 (gethash ',name conn--minor-mode-maps) (list nil)
+           (setf (gethash ',name conn--minor-mode-maps) (list nil)
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))
            (dolist (parent ',parents)
              (pcase-dolist (`(,mode . ,_)
