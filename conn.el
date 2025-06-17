@@ -1096,7 +1096,7 @@ return it."
             (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
                   keymap)
             (dolist (child (conn--state-all-children state))
-              (when-let ((map (get-map child)))
+              (when-let* ((map (get-map child)))
                 (setf (cddr map) (parent-maps child))))
             (conn--sort-mode-maps state)
             (nth 1 keymap))))))
@@ -1817,6 +1817,9 @@ By default `conn-emacs-state' does not bind anything."
               (add-hook 'post-command-hook keep-pred 90 t))))
     (add-hook 'post-command-hook setup 99 t)
     (cl-call-next-method)))
+
+(conn-define-state conn-one-command-state (conn-command-state
+                                           conn-autopop-state))
 
 
 ;;;; Labels
@@ -9071,6 +9074,10 @@ Currently selected window remains selected afterwards."
 (defun conntext-state ()
   (interactive)
   (run-hook-with-args-until-success 'conntext-state-hook))
+
+(defun conn-one-command ()
+  (interactive)
+  (conn-push-state 'conn-one-command-state))
 
 (defun conn-previous-emacs-state (arg)
   (interactive "p")
