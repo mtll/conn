@@ -568,7 +568,7 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover nil t))
-               (`(,_outer . ,regions) (conn-bounds-of-command cmd arg)))
+               (`(,_outer . ,regions) (conn-perform-bounds cmd arg)))
     (conn--kapply-compose-iterator
      (conn--kapply-region-iterator regions)
      'conn--kapply-relocate-to-region
@@ -688,7 +688,7 @@ A zero means repeat until error."
                    (bounds-op
                     (or bounds-op-override
                         (lambda (arg)
-                          (conn-bounds-of-command thing-cmd arg)))))
+                          (conn-perform-bounds thing-cmd arg)))))
         (while
             (condition-case err
                 (progn
