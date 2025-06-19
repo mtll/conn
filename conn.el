@@ -8342,7 +8342,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
      (transpose-subr (lambda (N) (forward-thing thing N))
                      (prefix-numeric-value arg)))))
 
-(cl-defmethod conn-perform-transpose ((cmd (conn-thing recursive-edit)) _arg)
+(cl-defmethod conn-perform-transpose ((_cmd (conn-thing recursive-edit)) _arg)
   (deactivate-mark t)
   (let ((bounds1 (region-bounds))
         (buf (current-buffer)))
@@ -8357,7 +8357,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                 (lambda (_) bounds2))
      nil)))
 
-(cl-defmethod conn-perform-transpose ((cmd (conn-thing dispatch)) arg)
+(cl-defmethod conn-perform-transpose ((_cmd (conn-thing dispatch)) arg)
   (while
       (condition-case err
           (progn
