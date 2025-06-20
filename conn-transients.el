@@ -678,21 +678,19 @@ A zero means repeat until error."
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
                                      target-finder
-                                     thing-cmd
-                                     thing-arg
+                                     bounds-op
+                                     bounds-arg
                                      &key repeat &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
       (pcase-let* ((`(,pt ,win ,bounds-op-override)
-                    (conn-dispatch-select-target target-finder))
-                   (bounds-op
-                    (or bounds-op-override
-                        (lambda (arg)
-                          (conn-perform-bounds thing-cmd arg)))))
+                    (conn-dispatch-select-target target-finder)))
         (while
             (condition-case err
                 (progn
-                  (funcall action win pt bounds-op thing-arg)
+                  (funcall action win pt
+                           (or bounds-op-override bounds-op)
+                           bounds-arg)
                   nil)
               (user-error (message (cadr err)) t))))))
   (message "Kapply completed successfully after %s iterations"
@@ -792,7 +790,8 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,beg . ,end)
                (when (alist-get :in-thing args)
-                 (nth 1 (conn-read-thing-region-dwim)))))
+                 (nth 1 (apply 'conn-perform-dispatch
+                               (conn-read-thing-mover-dwim))))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
