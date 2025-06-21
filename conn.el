@@ -816,18 +816,24 @@ of highlighting."
 
 ;;;;; Thing Command Type
 
-(defvar conn-thing-remapping-alist nil)
+(defvar-local conn--thing-remapping-alist nil)
+
+(defun conn-remap-thing (from to)
+  (let ((new (list to)))
+    (push new conn--thing-remapping-alist)
+    (setf (alist-get from conn--thing-remapping-alist) new)))
 
 (defun conn-thing-command-p (cmd)
   (and (symbolp cmd)
-       (not (not (get cmd :conn-command-thing)))))
+       (and (get cmd :conn-command-thing) t)))
 
 (cl-deftype conn-thing-command () '(satisfies conn-thing-command-p))
 
 (define-inline conn-command-thing (cmd)
   (inline-quote
    (let ((thing (get ,cmd :conn-command-thing)))
-     (alist-get thing conn-thing-remapping-alist thing))))
+     (or (car (last (alist-get thing conn--thing-remapping-alist)))
+         thing))))
 
 (gv-define-setter conn-command-thing (thing cmd)
   `(conn-set-command-thing ,cmd ,thing))
@@ -1311,7 +1317,7 @@ mouse-3: Describe current input method")
     (setf (gethash property conn--static-properties) t))
 
   (defun conn-property-static-p (property)
-    (not (not (gethash property conn--static-properties))))
+    (and (gethash property conn--static-properties) t))
 
   (conn-declare-property-static :no-keymap)
   (conn-declare-property-static :abstract))
@@ -1483,8 +1489,15 @@ These match if the argument is a conn-state."
   (list conn--state-generalizer))
 
 (cl-generic-define-generalizer conn--thing-generalizer
-  40 (lambda (cmd) `(conn-command-thing ,cmd))
-  (lambda (thing &rest _) (when thing `((conn-thing ,thing)))))
+  40 (lambda (cmd) `(get ,cmd :conn-command-thing))
+  (lambda (thing &rest _)
+    (when thing
+      (let ((specs nil))
+        (dolist (rm
+                 (or (assq thing conn--thing-remapping-alist)
+                     (list thing))
+                 specs)
+          (push `(conn-thing ,rm) specs))))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for conn-thing specializers."
@@ -4519,7 +4532,7 @@ Target overlays may override this default by setting the
   t)
 
 (cl-defmethod conn-dispatch-has-target-p ((state conn-dispatch-string-targets))
-  (not (not (oref state string))))
+  (and (oref state string) t))
 
 (defclass conn-dispatch-read-n-chars (conn-dispatch-string-targets)
   ((string-length :initform 1 :initarg :string-length)
