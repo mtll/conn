@@ -816,6 +816,8 @@ of highlighting."
 
 ;;;;; Thing Command Type
 
+(defvar conn-thing-remapping-alist nil)
+
 (defun conn-thing-command-p (cmd)
   (and (symbolp cmd)
        (not (not (get cmd :conn-command-thing)))))
@@ -823,7 +825,9 @@ of highlighting."
 (cl-deftype conn-thing-command () '(satisfies conn-thing-command-p))
 
 (define-inline conn-command-thing (cmd)
-  (inline-quote (get ,cmd :conn-command-thing)))
+  (inline-quote
+   (let ((thing (get ,cmd :conn-command-thing)))
+     (alist-get thing conn-thing-remapping-alist thing))))
 
 (gv-define-setter conn-command-thing (thing cmd)
   `(conn-set-command-thing ,cmd ,thing))
@@ -1479,12 +1483,11 @@ These match if the argument is a conn-state."
   (list conn--state-generalizer))
 
 (cl-generic-define-generalizer conn--thing-generalizer
-  40 (lambda (cmd) `(get ,cmd :conn-command-thing))
+  40 (lambda (cmd) `(conn-command-thing ,cmd))
   (lambda (thing &rest _) (when thing `((conn-thing ,thing)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
-  "Support for conn-state specializers.
-These match if the argument is a conn-state."
+  "Support for conn-thing specializers."
   (list conn--thing-generalizer))
 
 
@@ -1544,9 +1547,10 @@ from PARENT-STATE.
 
 CONN-STATE: this takes the form (STATE conn-state) in a argument list
 and specializes the method on all conn states."
-  ( :method ((_state (eql nil))) "Noop" nil)
-  ( :method ((_state conn-state)) "Noop" nil)
-  ( :method (state) (error "Attempting to exit unknown state: %s" state)))
+  (:method ((_state (eql nil))) "Noop" nil)
+  (:method ((_state conn-state)) "Noop" nil)
+  (:method ((_state (eql conn-null-state))) (error "Cannot exit null-state"))
+  (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
 (cl-defmethod conn-exit-state :around ((state conn-state))
   (when (symbol-value state)
@@ -2493,8 +2497,11 @@ If `use-region-p' returns non-nil this will always return
                    (seq-max (mapcar #'cdr regions)))
              (nreverse regions))))
     ((let (and bounds (guard bounds))
-       (bounds-of-thing-at-point (or (conn-command-thing cmd) cmd)))
+       (bounds-of-thing-at-point (conn-command-thing cmd)))
      (list bounds))))
+
+(cl-defmethod conn-perform-bounds ((_cmd (eql region)) _arg)
+  (region-bounds))
 
 (cl-defmethod conn-perform-bounds ((_cmd (conn-thing buffer)) _arg)
   (list (cons (point-min) (point-max))))
@@ -2503,21 +2510,7 @@ If `use-region-p' returns non-nil this will always return
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
 
-;;;;; Bounds of Command Providers
-
-(cl-defmethod conn-perform-bounds ((cmd (conn-thing emacs-state)) arg)
-  (setq arg (prefix-numeric-value arg))
-  (when (> arg 0) (cl-decf arg))
-  (when (eq cmd 'conn-next-emacs-state)
-    (setq arg (- arg)))
-  (let* ((ring (conn-ring-list conn-emacs-state-ring))
-         (mk (nth (mod arg (length ring)) ring))
-         (pt (point)))
-    (list (cons (min pt mk) (max pt mk)))))
-
-(cl-defmethod conn-perform-bounds ((_cmd (conn-thing region)) _arg)
-  (cons (cons (region-beginning) (region-end))
-        (region-bounds)))
+;;;;; Perform Bounds
 
 (conn-define-state conn-bounds-of-recursive-edit-state (conn-command-state)
   :lighter "R")
@@ -2555,6 +2548,20 @@ If `use-region-p' returns non-nil this will always return
                 (region-bounds)))
       (remove-hook 'pre-command-hook pre))))
 
+(cl-defmethod conn-perform-bounds ((cmd (conn-thing emacs-state)) arg)
+  (setq arg (prefix-numeric-value arg))
+  (when (> arg 0) (cl-decf arg))
+  (when (eq cmd 'conn-next-emacs-state)
+    (setq arg (- arg)))
+  (let* ((ring (conn-ring-list conn-emacs-state-ring))
+         (mk (nth (mod arg (length ring)) ring))
+         (pt (point)))
+    (list (cons (min pt mk) (max pt mk)))))
+
+(cl-defmethod conn-perform-bounds ((_cmd (conn-thing region)) _arg)
+  (cons (cons (region-beginning) (region-end))
+        (region-bounds)))
+
 (cl-defmethod conn-perform-bounds ((_cmd (eql conn-expand-remote)) _arg)
   (conn--push-ephemeral-mark)
   (cl-call-next-method))
@@ -2576,39 +2583,10 @@ If `use-region-p' returns non-nil this will always return
 
 ;;;; Bounds of Things in Region
 
-(defvar conn-bounds-of-things-in-region-alist nil
-  "Alist of ((CMD . THING-IN-REGION-FN) ...).
+(cl-defgeneric conn-perform-things-in-region (thing beg end))
 
-THING-IN-REGION-FN is a function of three arguments (THING BEG END).
-BEG and END define the region and THING is the things to find within the
-region.")
-
-(defvar conn-bounds-of-things-in-region-default
-  'conn--things-in-region-default
-  "Default `conn-bounds-of-things-in-region' finder.
-
-Is function of three arguments (THING BEG END).
-BEG and END define the region and THING is the things to find within the
-region.")
-
-(defun conn-bounds-of-things-in-region (thing bounds)
-  "Bounds of the THINGs contained within the region BOUNDS.
-
-BOUNDS is of the form returned by `region-bounds', which see."
-  (save-mark-and-excursion
-    (mapcan (pcase-lambda (`(,beg . ,end))
-              (funcall (or (alist-get thing conn-bounds-of-things-in-region-alist)
-                           (when (symbolp thing)
-                             (alist-get (get thing :conn-command-thing)
-                                        conn-bounds-of-things-in-region-alist))
-                           conn-bounds-of-things-in-region-default)
-                       thing beg end))
-            bounds)))
-
-(defun conn--things-in-region-default (thing beg end)
-  (let ((thing (or (when (symbolp thing)
-                     (get thing :conn-command-thing))
-                   thing)))
+(cl-defmethod conn-perform-things-in-region (thing beg end)
+  (let ((thing (or (conn-command-thing thing) thing)))
     (ignore-errors
       (goto-char beg)
       (forward-thing thing 1)
@@ -2622,6 +2600,15 @@ BOUNDS is of the form returned by `region-bounds', which see."
                             (forward-thing thing 1)
                             t))
                finally return regions))))
+
+(defun conn-bounds-of-things-in-region (thing bounds)
+  "Bounds of the THINGs contained within the region BOUNDS.
+
+BOUNDS is of the form returned by `region-bounds', which see."
+  (save-mark-and-excursion
+    (mapcan (pcase-lambda (`(,beg . ,end))
+              (conn-perform-things-in-region thing beg end))
+            bounds)))
 
 ;;;; Kapply
 
@@ -4363,17 +4350,15 @@ Target overlays may override this default by setting the
         (overlay-get overlay 'thing)))
 
 (defun conn--dispatch-read-event-prefix ()
-  (let ((prefix
-         (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
-                  for str = (pcase pfx
-                              ((pred functionp) (funcall pfx))
-                              ((pred stringp) pfx))
-                  if str
-                  if (length> result 0) concat "; " into result end
-                  and concat str into result
-                  finally return result)))
-    (unless (length= prefix 0)
-      (concat "(" prefix ") "))))
+  (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+           for str = (pcase pfx
+                       ((pred functionp) (funcall pfx))
+                       ((pred stringp) pfx))
+           if str
+           if (length> result 0) concat "; " into result end
+           and concat str into result
+           finally return (unless (length= result 0)
+                            (concat "(" result ") "))))
 
 (defun conn-dispatch-read-event (&optional prompt
                                            inherit-input-method
@@ -5994,7 +5979,8 @@ contain targets."
               (conn-dispatch-change-groups nil)
               (conn--loop-error-message nil)
               (conn--dispatch-read-event-message-prefixes
-               `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+               `(,(car conn--dispatch-read-event-message-prefixes)
+                 ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                     (lambda ()
                       (when-let* ((binding
                                    (and ,rep
@@ -6009,7 +5995,7 @@ contain targets."
                          (propertize "always retarget"
                                      'face (when conn--dispatch-always-retarget
                                              'eldoc-highlight-function-argument))))))
-                 ,@conn--dispatch-read-event-message-prefixes)))
+                 ,@(cdr conn--dispatch-read-event-message-prefixes))))
          (unwind-protect
              (while (or (setq ,rep ,repeat)
                         (< conn-dispatch-repeat-count 1))
