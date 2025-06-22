@@ -2453,17 +2453,11 @@ If `use-region-p' returns non-nil this will always return
 
 (cl-defgeneric conn-read-thing-state-handler (command ctx))
 
-(cl-defmethod conn-read-thing-state-handler :around (_cmd _ctx)
-  (condition-case _
-      (cl-call-next-method)
-    (cl-no-method
-     (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-read-thing-state-handler (command _ctx)
-  (if (conn-function-thing command)
-      (conn-state-loop-exit
-       (list command (conn-state-loop-prefix-arg)))
-    (cl-call-next-method)))
+  (when (conn-function-thing command)
+    (conn-state-loop-exit
+     (list command (conn-state-loop-prefix-arg)))))
 
 (cl-defmethod conn-read-thing-state-handler ((command (eql recursive-edit))
                                              ctx)
@@ -3831,12 +3825,6 @@ A target finder function should return a list of overlays.")
 
 (cl-defgeneric conn-dispatch-state-handler (command ctx))
 
-(cl-defmethod conn-dispatch-state-handler :around (_cmd _ctx)
-  (condition-case _
-      (cl-call-next-method)
-    (cl-no-method
-     (conn-state-loop-error "Invalid command"))))
-
 (cl-defmethod conn-dispatch-state-handler (command ctx)
   (pcase command
     ((pred conn--action-type-p)
@@ -3846,11 +3834,10 @@ A target finder function should return a list of overlays.")
        (setf (oref ctx action) (condition-case _
                                    (conn-make-action command)
                                  (error nil)))))
-    ((let (and target-finder (guard target-finder))
-       (conn-get-dispatch-target-finder command))
+    ((or (pred conn-thing-p)
+         (pred conn-function-thing))
      (setf (oref ctx thing) command
-           (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg)
-           conn-dispatch-target-finder target-finder)
+           (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg))
      (when (null (oref ctx action))
        (setf (oref ctx action) (conn-make-action
                                 (conn-get-dispatch-action command))))
@@ -3864,7 +3851,7 @@ A target finder function should return a list of overlays.")
                              :other-end (oref ctx other-end)
                              :no-other-end (oref ctx no-other-end)
                              :always-retarget (oref ctx always-retarget))))
-    (_ (cl-call-next-method))))
+    (_ (conn-state-loop-error "Invalid command"))))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql dispatch-other-end))
                                            ctx)
@@ -4487,10 +4474,9 @@ Target overlays may override this default by setting the
             ('keyboard-quit
              (keyboard-quit))
             (cmd
-             (unwind-protect
-                 (catch 'dispatch-handle
-                   (cl-loop for handler in conn--dispatch-read-event-handlers
-                            do (funcall handler cmd)))
+             (when (catch 'dispatch-handle
+                     (cl-loop for handler in conn--dispatch-read-event-handlers
+                              do (funcall handler cmd)))
                (setf conn-state-loop-last-command cmd)))))))))
 
 (cl-defgeneric conn-dispatch-select-target ())
@@ -6049,7 +6035,7 @@ contain targets."
   (throw 'dispatch-redisplay nil))
 
 (defun conn-dispatch-handle ()
-  (throw 'dispatch-handle nil))
+  (throw 'dispatch-handle t))
 
 (defvar conn-dispatch-looping nil)
 
@@ -6124,12 +6110,8 @@ contain targets."
                                'overriding-terminal-local-map)
          (conn-dispatch-select-mode 1)))))
 
-(cl-defgeneric conn-dispatch-select-handler (command))
-
-(cl-defmethod conn-dispatch-select-handler :around (_cmd)
-  (condition-case _
-      (cl-call-next-method)
-    (cl-no-method nil)))
+(cl-defgeneric conn-dispatch-select-handler (command)
+  (:method (_cmd) nil))
 
 (cl-defmethod conn-dispatch-select-handler ((_cmd (eql mwheel-scroll)))
   (mwheel-scroll last-input-event)
@@ -6329,10 +6311,7 @@ contain targets."
          (conn--dispatch-read-event-handlers
           (cons #'conn-dispatch-select-handler
                 conn--dispatch-read-event-handlers))
-         (conn-dispatch-target-finder
-          (or conn-dispatch-target-finder
-              (conn-get-dispatch-target-finder thing)
-              (funcall conn-dispatch-default-target-finder)))
+         (conn-dispatch-target-finder (conn-get-dispatch-target-finder thing))
          (conn-dispatch-repeat-count 0)
          (conn--dispatch-always-retarget
           (or always-retarget
@@ -6554,7 +6533,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
        (oclosure-lambda (conn-dispatch-thing-fn
-                         (thing 'isearch)
                          (target-finder
                           (lambda () target-finder)))
            (_arg)
