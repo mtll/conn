@@ -3698,7 +3698,8 @@ A target finder function should return a list of overlays.")
     'conn-dispatch-jump))
 
 (cl-defmethod conn-get-dispatch-action ((cmd conn-thing-fn))
-  (oref cmd default-action))
+  (or (oref cmd default-action)
+      (cl-call-next-method)))
 
 (cl-defgeneric conn-get-dispatch-target-finder (_cmd)
   (:method (_cmd) nil))
