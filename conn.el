@@ -869,8 +869,23 @@ of highlighting."
 (defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
 
+(defun conn--make-state ()
+  (make-record 'conn-state 4 nil))
+
 (defmacro conn--find-state (state)
   `(get ,state :conn--state))
+
+(defmacro conn--state-name (state)
+  `(aref ,state 1))
+
+(defmacro conn--state-parents (state)
+  `(aref ,state 2))
+
+(defmacro conn--state-all-children (state)
+  `(aref ,state 3))
+
+(defmacro conn--state-properties (state)
+  `(aref ,state 4))
 
 (define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
@@ -879,7 +894,7 @@ of highlighting."
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
 
-(define-inline conn--state-parents (state)
+(define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
   (inline-letevals (state)
     (inline-quote
@@ -887,32 +902,33 @@ of highlighting."
        (cl-check-type ,state conn-state)
        (aref (conn--find-state ,state) 2)))))
 
-(define-inline conn--state-all-children (state)
+(define-inline conn-state-all-children (state)
   "Return all parents for STATE."
   (inline-letevals (state)
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (aref (conn--find-state ,state) 3)))))
+       (conn--state-all-children (conn--find-state ,state))))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
-(defun conn--state-all-parents (state)
+(defun conn-state-all-parents (state)
   "Return all parents of state.
 
 The returned list is not fresh, don't modify it."
   (with-memoization
       (gethash (conn--find-state state) conn--state-all-parents-cache)
+    (cl-check-type state conn-state)
     (cons state
           (merge-ordered-lists
-           (mapcar 'conn--state-all-parents
-                   (aref (conn--find-state state) 2))))))
+           (mapcar 'conn-state-all-parents
+                   (conn--state-parents (conn--find-state state)))))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
   (inline-letevals (state parent)
     (inline-quote
-     (memq ,parent (conn--state-all-parents ,state)))))
+     (memq ,parent (conn-state-all-parents ,state)))))
 
 (defun conn-setup-commit-state ()
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
@@ -978,10 +994,10 @@ The returned list is not fresh, don't modify it."
         (unless dont-create
           (prog1 (setf (gethash state conn--state-maps)
                        (make-sparse-keymap))
-            (dolist (child (conn--state-all-children state))
+            (dolist (child (conn-state-all-children state))
               (when-let* ((map (gethash child conn--state-map-cache)))
                 (setf (cdr map)
-                      (cl-loop for parent in (conn--state-all-parents child)
+                      (cl-loop for parent in (conn-state-all-parents child)
                                for pmap = (conn-get-state-map parent t)
                                when pmap collect pmap)))))))))
 
@@ -1000,7 +1016,7 @@ The composed keymap is of the form:
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
-     (cl-loop for pstate in (conn--state-all-parents state)
+     (cl-loop for pstate in (conn-state-all-parents state)
               for pmap = (gethash pstate conn--state-maps)
               when pmap collect pmap))))
 
@@ -1014,10 +1030,10 @@ The composed keymap is of the form:
         (unless dont-create
           (prog1 (setf (gethash state conn--override-maps)
                        (make-sparse-keymap))
-            (dolist (child (conn--state-all-children state))
+            (dolist (child (conn-state-all-children state))
               (when-let* ((map (gethash child conn--override-map-cache)))
                 (setf (cdr map)
-                      (cl-loop for parent in (conn--state-all-parents child)
+                      (cl-loop for parent in (conn-state-all-parents child)
                                for pmap = (conn-get-overriding-map parent t)
                                when pmap collect pmap)))))))))
 
@@ -1032,7 +1048,7 @@ Composed keymap is of the same form as returned by
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
-     (cl-loop for pstate in (conn--state-all-parents state)
+     (cl-loop for pstate in (conn-state-all-parents state)
               for pmap = (gethash pstate conn--override-maps)
               when pmap collect pmap))))
 
@@ -1050,7 +1066,7 @@ return it."
                   (when-let* ((mmode-table (gethash state conn--major-mode-maps)))
                     (gethash mode mmode-table)))
                 (parent-maps (state)
-                  (cl-loop for parent in (cdr (conn--state-all-parents state))
+                  (cl-loop for parent in (cdr (conn-state-all-parents state))
                            for pmap = (get-map parent)
                            when pmap collect (nth 1 pmap))))
       (or (nth 1 (get-map state))
@@ -1062,7 +1078,7 @@ return it."
                             (parent-maps state))))
               (setf (gethash mode (gethash state conn--major-mode-maps))
                     keymap)
-              (dolist (child (conn--state-all-children state))
+              (dolist (child (conn-state-all-children state))
                 (when-let* ((map (get-map child)))
                   (setf (cddr map) (parent-maps child))))
               (nth 1 keymap)))))))
@@ -1109,7 +1125,7 @@ return it."
     (cl-labels ((get-map (state)
                   (alist-get mode (cdr (gethash state conn--minor-mode-maps))))
                 (parent-maps (state)
-                  (cl-loop for parent in (cdr (conn--state-all-parents state))
+                  (cl-loop for parent in (cdr (conn-state-all-parents state))
                            for pmap = (get-map parent)
                            when pmap collect (nth 1 pmap))))
       (or (nth 1 (get-map state))
@@ -1119,7 +1135,7 @@ return it."
                            (parent-maps state))))
               (setf (alist-get mode (cdr (gethash state conn--minor-mode-maps)))
                     keymap)
-              (dolist (child (conn--state-all-children state))
+              (dolist (child (conn-state-all-children state))
                 (when-let* ((map (get-map child)))
                   (setf (cddr map) (parent-maps child))))
               (conn--sort-mode-maps state)
@@ -1128,7 +1144,7 @@ return it."
 (defun conn--sort-mode-maps (state)
   (cl-check-type state conn-state)
   (unless (conn-state-get state :no-keymap)
-    (let* ((parents (conn--state-all-parents state))
+    (let* ((parents (conn-state-all-parents state))
            (depths (delq nil (mapcar
                               (lambda (parent)
                                 (car (gethash parent conn--minor-mode-maps)))
@@ -1155,7 +1171,7 @@ return it."
       (setf (gethash mode map-depths) depth)
       (when (alist-get mode (gethash state conn--minor-mode-maps))
         (mapc #'conn--sort-mode-maps
-              (cons state (conn--state-all-children state))))))
+              (cons state (conn-state-all-children state))))))
   nil)
 
 (defun conn--rebuild-state-keymaps (state)
@@ -1163,7 +1179,7 @@ return it."
 
 Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
-    (let ((parents (conn--state-all-parents state)))
+    (let ((parents (conn-state-all-parents state)))
       (when-let* ((state-map (gethash state conn--state-map-cache)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
@@ -1322,10 +1338,11 @@ PROPERTY.  If no parent has that property either than nil is returned."
   (if (or no-inherit (conn-property-static-p property))
       (progn
         (cl-check-type state conn-state)
-        (gethash property (aref (conn--find-state state) 4) default))
+        (gethash property (conn--state-properties (conn--find-state state))
+                 default))
     (cl-with-gensyms (key-missing)
-      (cl-loop for parent in (conn--state-all-parents state)
-               for table = (aref (conn--find-state parent) 4)
+      (cl-loop for parent in (conn-state-all-parents state)
+               for table = (conn--state-properties (conn--find-state parent))
                for prop = (gethash property table key-missing)
                unless (eq prop key-missing) return prop
                finally return default))))
@@ -1342,7 +1359,9 @@ PROPERTY.  If no parent has that property either than nil is returned."
         (cl-once-only (state)
           `(progn
              (cl-check-type ,state conn-state)
-             (gethash ,property (aref (conn--find-state ,state) 4) ,default)))
+             (gethash ,property (conn--state-properties
+                                 (conn--find-state ,state))
+                      ,default)))
       exp)))
 
 (gv-define-setter conn-state-get (value state slot)
@@ -1358,7 +1377,8 @@ Returns VALUE."
        (cl-check-type ,state conn-state)
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (puthash ,property ,value (aref (conn--find-state ,state) 4))))))
+       (puthash ,property ,value (conn--state-properties
+                                  (conn--find-state ,state)))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -1371,7 +1391,8 @@ property from its parents."
        (cl-check-type ,state conn-state)
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (remhash (aref (conn--find-state ,state) 4) ,property)))))
+       (remhash (conn--state-properties (conn--find-state ,state))
+                ,property)))))
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
@@ -1379,7 +1400,8 @@ property from its parents."
     (inline-quote
      (cl-with-gensyms (key-missing)
        (cl-check-type ,state conn-state)
-       (not (eq (gethash ,property (aref (conn--find-state ,state) 4)
+       (not (eq (gethash ,property (conn--state-properties
+                                    (conn--find-state ,state))
                          key-missing)
                 key-missing))))))
 
@@ -1467,7 +1489,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   (lambda (state &rest _)
     (when state
       (mapcar (lambda (parent) `(conn-substate ,parent))
-              (conn--state-all-parents (aref state 1))))))
+              (conn-state-all-parents (conn--state-name state))))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers.
@@ -1704,7 +1726,7 @@ to the abnormal hooks `conn-state-entry-functions' or
          (cl-check-type parent conn-state))
        (cl-assert
         (cl-loop for parent in ',parents
-                 never (memq ',name (conn--state-all-parents parent)))
+                 never (memq ',name (conn-state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
        (defvar-local ,name nil ,doc)
        (let ((state-props
@@ -1715,20 +1737,23 @@ to the abnormal hooks `conn-state-entry-functions' or
                        finally return table))
              (new-parents
               (merge-ordered-lists
-               (mapcar 'conn--state-all-parents ',parents))))
+               (mapcar 'conn-state-all-parents ',parents))))
          (if-let* ((record (conn--find-state ',name)))
-             (let ((old-parents (cdr (conn--state-all-parents ',name)))
-                   (all-children (cons ',name (aref record 3))))
+             (let ((old-parents
+                    (cdr (conn-state-all-parents ',name)))
+                   (all-children
+                    (cons ',name (conn--state-all-children record))))
                ;; We are redefining a state and must to take care to
                ;; do it transparently.
-               (setf (aref record 2) ',parents
-                     (aref record 4) state-props)
+               (setf (conn--state-parents record) ',parents
+                     (conn--state-properties record) state-props)
                ;; Remove all children from all former parents.  We
                ;; will take care of the case where a child inherits
                ;; from some parent through multiple paths next.
                (dolist (former (seq-difference old-parents new-parents))
-                 (setf (aref (conn--find-state former) 3)
-                       (seq-difference (aref (conn--find-state former) 3)
+                 (setf (conn--state-all-children (conn--find-state former))
+                       (seq-difference (conn--state-all-children
+                                        (conn--find-state former))
                                        all-children)))
                ;; Recompute all parents for all children and
                ;; re-register all children with all of their parents.
@@ -1736,8 +1761,9 @@ to the abnormal hooks `conn-state-entry-functions' or
                ;; in the previous step we will fix it here.
                (dolist (child all-children)
                  (remhash child conn--state-all-parents-cache)
-                 (dolist (parent (cdr (conn--state-all-parents child)))
-                   (cl-pushnew child (aref (conn--find-state parent) 3))))
+                 (dolist (parent (cdr (conn-state-all-parents child)))
+                   (cl-pushnew child (conn--state-all-children
+                                      (conn--find-state parent)))))
                ;; Rebuild all keymaps for all children with the new
                ;; inheritance hierarchy.  Existing composed keymaps
                ;; are destructively modified so that local map
@@ -1749,13 +1775,14 @@ to the abnormal hooks `conn-state-entry-functions' or
                    (pcase-dolist (`(,mode . ,_)
                                   (cdr (gethash parent conn--minor-mode-maps)))
                      (conn-get-minor-mode-map ',name mode)))))
-           (let ((record (make-record 'conn-state 4 nil)))
-             (setf (aref record 1) ',name
-                   (aref record 2) ',parents
-                   (aref record 4) state-props)
-             (put ',name :conn--state record))
-           (dolist (parent (cdr (conn--state-all-parents ',name)))
-             (cl-pushnew ',name (aref (conn--find-state parent) 3)))
+           (let ((record (conn--make-state)))
+             (setf (conn--state-name record) ',name
+                   (conn--state-parents record) ',parents
+                   (conn--state-properties record) state-props
+                   (conn--find-state ',name) record))
+           (dolist (parent (cdr (conn-state-all-parents ',name)))
+             (cl-pushnew ',name (conn--state-all-children
+                                 (conn--find-state parent))))
            (setf (gethash ',name conn--minor-mode-maps) (list nil)
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))
            (unless (gethash :no-keymap state-props)
@@ -1791,18 +1818,18 @@ For use in buffers that should not have any other state."
   :suppress-input-method t
   :cursor 'box)
 
-(conn-define-state conn-read-mover-common-state (conn-command-state)
+(conn-define-state conn-read-thing-common-state (conn-command-state)
   "Common elements of thing reading states."
   :suppress-input-method t
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
 
-(cl-defmethod conn-enter-state ((state (conn-substate conn-read-mover-common-state)))
+(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
     (setf (alist-get 'mode-line face-remapping-alist) face))
   (cl-call-next-method))
 
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-mover-common-state)))
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
   (setf face-remapping-alist
         (delq (assq 'mode-line face-remapping-alist)
               face-remapping-alist))
@@ -2259,7 +2286,7 @@ themselves once the selection process has concluded."
                                     &key context initial-arg)
   (unwind-protect
       (let* ((inhibit-message t)
-             (callback (conn-state-get state :loop-callback))
+             (callback (conn-state-get state :loop-handler))
              (msg-fn (conn-state-get state :loop-message))
              (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
              (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
@@ -2321,14 +2348,14 @@ themselves once the selection process has concluded."
 
 ;;;;; Read Mover State
 
-(conn-define-state conn-read-mover-state (conn-read-mover-common-state)
-  "A state for reading things."
-  :lighter "M"
-  :loop-message 'conn-read-mover-message
-  :loop-callback 'conn-read-mover-callback)
+(conn-define-state conn-read-thing-state (conn-read-thing-common-state)
+   "A state for reading things."
+   :lighter "M"
+   :loop-message 'conn-read-thing-message
+   :loop-handler 'conn-read-thing-state-handler)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-mover-state)
+  :keymap (conn-get-state-map 'conn-read-thing-state)
   "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "M-DEL" 'reset-arg
@@ -2341,20 +2368,20 @@ themselves once the selection process has concluded."
 
 ;;;;; Read Thing Command Loop
 
-(cl-defstruct (conn-read-mover) recursive-edit)
+(cl-defstruct (conn-read-thing) recursive-edit)
 
-(cl-defmethod conn-with-state-loop ((state (conn-substate conn-read-mover-state))
+(cl-defmethod conn-with-state-loop ((state (conn-substate conn-read-thing-state))
                                     &key initial-arg context)
   (cl-call-next-method
    state
    :initial-arg initial-arg
    :context (if initial-arg
                 (progn
-                  (cl-assert (conn-read-mover-p context))
+                  (cl-assert (conn-read-thing-p context))
                   context)
-              (make-conn-read-mover))))
+              (make-conn-read-thing))))
 
-(defun conn-read-mover-message (ctx error-message)
+(defun conn-read-thing-message (ctx error-message)
   (message
    (substitute-command-keys
     (concat
@@ -2368,11 +2395,6 @@ themselves once the selection process has concluded."
                  "recursive edit):")
        "):")
      " "
-     ;; (if (oref ctx mark-flag)
-     ;;     (concat (propertize "Mark Active"
-     ;;                         'face 'eldoc-highlight-function-argument)
-     ;;             " ")
-     ;;   "")
      (propertize error-message 'face 'error)))))
 
 (defun conn-read-thing-mover (&optional arg recursive-edit)
@@ -2382,9 +2404,9 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command."
   (conn-with-state-loop
-   'conn-read-mover-state
+   'conn-read-thing-state
    :initial-arg arg
-   :context (make-conn-read-mover
+   :context (make-conn-read-thing
              :recursive-edit recursive-edit)))
 
 (defun conn-read-thing-mover-dwim (&optional arg recursive-edit)
@@ -2405,35 +2427,31 @@ If `use-region-p' returns non-nil this will always return
     (cons (get cmd :conn-command-thing)
           (conn-perform-bounds cmd arg))))
 
-(cl-defgeneric conn-read-mover-callback (command ctx))
+(cl-defgeneric conn-read-thing-state-handler (command ctx))
 
-(cl-defmethod conn-read-mover-callback :around (_cmd _ctx)
-  (condition-case _
-      (cl-call-next-method)
-    (cl-no-method
+(cl-defmethod conn-read-thing-state-handler :around (_cmd _ctx)
+   (condition-case _
+          (cl-call-next-method)
+      (cl-no-method
      (conn-state-loop-error "Invalid command"))))
 
-(cl-defmethod conn-read-mover-callback (command _ctx)
+(cl-defmethod conn-read-thing-state-handler (command _ctx)
   (if (and (symbolp command)
            (get command :conn-command-thing))
       (conn-state-loop-exit
        (list command (conn-state-loop-prefix-arg)))
     (cl-call-next-method)))
 
-(cl-defmethod conn-read-mover-callback ((command (eql recursive-edit))
-                                            ctx)
+(cl-defmethod conn-read-thing-state-handler ((command (eql recursive-edit))
+                                             ctx)
   (if (oref ctx recursive-edit)
       (conn-state-loop-exit
        (list command (conn-state-loop-prefix-arg)))
     (conn-state-loop-error "Invalid command")))
 
-;; (cl-defmethod conn-read-mover-callback ((_command (eql conn-set-mark-command))
-;;                                             ctx)
-;;   (setf (oref ctx mark-flag) (not (oref ctx mark-flag))))
-
 (defun conn--completing-read-mover (ctx)
   (save-window-excursion
-    (conn-read-mover-callback
+    (conn-read-thing-state-handler
      (condition-case _
          (intern
           (completing-read
@@ -2453,11 +2471,11 @@ If `use-region-p' returns non-nil this will always return
        (quit nil))
      ctx)))
 
-(cl-defmethod conn-read-mover-callback ((_command (eql execute-extended-command))
-                                            ctx)
+(cl-defmethod conn-read-thing-state-handler ((_cmd (eql execute-extended-command))
+                                             ctx)
   (conn--completing-read-dispatch ctx))
 
-(cl-defmethod conn-read-mover-callback ((_command (eql help)) ctx)
+(cl-defmethod conn-read-thing-state-handler ((_cmd (eql help)) ctx)
   (conn--completing-read-dispatch ctx))
 
 
@@ -3526,11 +3544,11 @@ A target finder function should return a list of overlays.")
 
 (defvar conn--dispatch-always-retarget nil)
 
-(conn-define-state conn-dispatch-mover-state (conn-read-mover-common-state)
+(conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter "D"
   :mode-line-face 'conn-dispatch-mode-line-face
-  :loop-callback 'conn-dispatch-callback
+  :loop-handler 'conn-dispatch-state-handler
   :loop-message 'conn-dispatch-message)
 
 (conn-define-state conn-dispatch-state (conn-dispatch-mover-state)
@@ -3744,15 +3762,15 @@ A target finder function should return a list of overlays.")
       (unless success
         (conn-cancel-action (oref ctx action))))))
 
-(cl-defgeneric conn-dispatch-callback (command ctx))
+(cl-defgeneric conn-dispatch-state-handler (command ctx))
 
-(cl-defmethod conn-dispatch-callback :around (_cmd _ctx)
+(cl-defmethod conn-dispatch-state-handler :around (_cmd _ctx)
   (condition-case _
       (cl-call-next-method)
     (cl-no-method
      (conn-state-loop-error "Invalid command"))))
 
-(cl-defmethod conn-dispatch-callback (command ctx)
+(cl-defmethod conn-dispatch-state-handler (command ctx)
   (pcase command
     ((pred conn--action-type-p)
      (conn-cancel-action (oref ctx action))
@@ -3782,30 +3800,30 @@ A target finder function should return a list of overlays.")
                              :always-retarget (oref ctx always-retarget))))
     (_ (cl-call-next-method))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql dispatch-other-end))
-                                          ctx)
-  (unless (oref ctx no-other-end)
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql dispatch-other-end))
+                                           ctx)
+   (unless (oref ctx no-other-end)
     (setf (oref ctx other-end) (not (oref ctx other-end)))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql repeat-dispatch))
-                                          ctx)
-  (unless (oref ctx non-repeatable)
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql repeat-dispatch))
+                                           ctx)
+   (unless (oref ctx non-repeatable)
     (setf (oref ctx repeat) (not (oref ctx repeat)))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql restrict-windows))
-                                          ctx)
-  (setf (oref ctx restrict-windows) (not (oref ctx restrict-windows))))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql restrict-windows))
+                                           ctx)
+   (setf (oref ctx restrict-windows) (not (oref ctx restrict-windows))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql conn-repeat-last-dispatch))
-                                      ctx)
-  (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-repeat-last-dispatch))
+                                           ctx)
+   (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
                                    action))
     (conn-dispatch-ring-remove-stale)
     (conn-state-loop-error "Last dispatch action stale"))
-  (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
-      (progn
-        (setf conn--dispatch-always-retarget (oref prev always-retarget))
-        (conn-state-loop-exit
+   (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
+          (progn
+          (setf conn--dispatch-always-retarget (oref prev always-retarget))
+          (conn-state-loop-exit
          (conn-perform-dispatch (oref prev action)
                                 (oref prev bounds-op)
                                 (oref prev bounds-arg)
@@ -3816,57 +3834,57 @@ A target finder function should return a list of overlays.")
                                 :always-retarget (oref prev always-retarget))))
     (conn-state-loop-error "Dispatch ring empty")))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql conn-dispatch-cycle-ring-next))
-                                          _cont)
-  (conn-dispatch-cycle-ring-next)
-  (if (bound-and-true-p conn-posframe-mode)
-      (conn-posframe--dispatch-ring-display-subr)
-    (conn-state-loop-message "%s" (conn-describe-dispatch
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-next))
+                                           _cont)
+   (conn-dispatch-cycle-ring-next)
+   (if (bound-and-true-p conn-posframe-mode)
+          (conn-posframe--dispatch-ring-display-subr)
+      (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql conn-dispatch-cycle-ring-previous))
-                                          _cont)
-  (conn-dispatch-cycle-ring-previous)
-  (if (bound-and-true-p conn-posframe-mode)
-      (conn-posframe--dispatch-ring-display-subr)
-    (conn-state-loop-message "%s" (conn-describe-dispatch
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-previous))
+                                           _cont)
+   (conn-dispatch-cycle-ring-previous)
+   (if (bound-and-true-p conn-posframe-mode)
+          (conn-posframe--dispatch-ring-display-subr)
+      (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql conn-dispatch-ring-describe-head))
-                                          _cont)
-  (conn-dispatch-ring-remove-stale)
-  (if (bound-and-true-p conn-posframe-mode)
-      (conn-posframe--dispatch-ring-display-subr)
-    (conn-state-loop-message "%s" (conn-describe-dispatch
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-ring-describe-head))
+                                           _cont)
+   (conn-dispatch-ring-remove-stale)
+   (if (bound-and-true-p conn-posframe-mode)
+          (conn-posframe--dispatch-ring-display-subr)
+      (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
 (defun conn--completing-read-dispatch (ctx)
-  (save-window-excursion
-    (conn-dispatch-callback
+   (save-window-excursion
+      (conn-dispatch-state-handler
      (condition-case _
-         (intern
+             (intern
           (completing-read
            "Command: "
            (lambda (string pred action)
-             (if (eq action 'metadata)
-                 `(metadata
+               (if (eq action 'metadata)
+                     `(metadata
                    ,(cons 'affixation-function
                           'conn--dispatch-command-affixation)
                    (category . conn-dispatch-command))
                (complete-with-action action obarray string pred)))
            (lambda (sym)
-             (or (get sym :conn-command-thing)
+               (or (get sym :conn-command-thing)
                  (conn--action-type-p sym)))
            t))
        (quit nil))
      ctx)))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql help)) ctx)
-  (conn--completing-read-dispatch ctx))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql help)) ctx)
+   (conn--completing-read-dispatch ctx))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql execute-extended-command))
-                                          ctx)
-  (conn--completing-read-dispatch ctx))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql execute-extended-command))
+                                           ctx)
+   (conn--completing-read-dispatch ctx))
 
 
 ;;;;; Dispatch Window Filtering
@@ -4923,9 +4941,9 @@ contain targets."
   (always-retarget :type boolean)
   (always-prompt :type boolean))
 
-(defvar conn-dispatch-change-groups nil)
+(defvar conn--dispatch-loop-change-groups nil)
 
-(defun conn-dispatch-loop-buffer-undo (&rest buffers)
+(defun conn-dispatch-loop-undo-boundary (&rest buffers)
   (when conn-dispatch-looping
     (push (let ((cg (mapcan #'prepare-change-group
                             (or buffers (list (current-buffer))))))
@@ -4936,7 +4954,7 @@ contain targets."
               (pcase do
                 (:cancel (cancel-change-group cg))
                 (:accept (accept-change-group cg)))))
-          conn-dispatch-change-groups)))
+          conn--dispatch-loop-change-groups)))
 
 (defun conn--action-type-p (item)
   (when-let* ((class (and (symbolp item)
@@ -5066,7 +5084,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5103,7 +5121,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5129,7 +5147,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5155,7 +5173,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5183,7 +5201,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5222,7 +5240,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5270,7 +5288,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt bounds-op bounds-arg)
       (with-selected-window window
-        (conn-dispatch-loop-buffer-undo)
+        (conn-dispatch-loop-undo-boundary)
         (save-excursion
           (goto-char pt)
           (pcase (car (funcall bounds-op bounds-arg))
@@ -5322,7 +5340,7 @@ contain targets."
                                               (window-buffer win))))))
         (window pt bounds-op bounds-arg)
       (with-selected-window window
-        (conn-dispatch-loop-buffer-undo)
+        (conn-dispatch-loop-undo-boundary)
         (save-excursion
           (goto-char pt)
           (pcase (car (funcall bounds-op bounds-arg))
@@ -5353,7 +5371,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-mark-and-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5373,7 +5391,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-mark-and-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5393,7 +5411,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-mark-and-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5409,7 +5427,7 @@ contain targets."
                     (register (register-read-with-preview "Register: ")))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
@@ -5433,7 +5451,7 @@ contain targets."
                     (register (register-read-with-preview "Register: ")))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       ;; If there is a keyboard macro in the register we would like to
       ;; amalgamate the undo
       (with-undo-amalgamate
@@ -5464,7 +5482,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5499,7 +5517,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5534,7 +5552,7 @@ contain targets."
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
     (with-selected-window window
-      (conn-dispatch-loop-buffer-undo)
+      (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
         (pcase (car (funcall bounds-op bounds-arg))
@@ -5636,7 +5654,7 @@ contain targets."
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
       (with-current-buffer (marker-buffer opoint)
-        (conn-dispatch-loop-buffer-undo)
+        (conn-dispatch-loop-undo-boundary)
         (cond ((null str)
                (user-error "Cannot find thing at point"))
               ((/= (point) opoint)
@@ -5666,7 +5684,7 @@ contain targets."
            (copy-region-as-kill beg end)
            (conn--dispatch-fixup-whitespace))
           (_ (user-error "Cannot find thing at point")))))
-    (conn-dispatch-loop-buffer-undo)
+    (conn-dispatch-loop-undo-boundary)
     (delete-region (region-beginning) (region-end))
     (yank)))
 
@@ -5698,7 +5716,7 @@ contain targets."
                           (buffer-local-value 'buffer-read-only
                                               (window-buffer win))))))
         (window pt bounds-op bounds-arg)
-      (conn-dispatch-loop-buffer-undo (current-buffer) (window-buffer window))
+      (conn-dispatch-loop-undo-boundary (current-buffer) (window-buffer window))
       (with-selected-window window
         (save-excursion
           (goto-char pt)
@@ -5743,7 +5761,7 @@ contain targets."
                         (buffer-local-value 'buffer-read-only
                                             (window-buffer win))))))
       (window pt bounds-op bounds-arg)
-    (conn-dispatch-loop-buffer-undo (current-buffer) (window-buffer window))
+    (conn-dispatch-loop-undo-boundary (current-buffer) (window-buffer window))
     (with-selected-window window
       (save-excursion
         (goto-char pt)
@@ -5825,8 +5843,8 @@ contain targets."
                        (not (buffer-local-value 'buffer-read-only
                                                 (window-buffer win))))))
       (window1 pt1 bounds-op1 window2 pt2 bounds-op2 bounds-arg)
-    (conn-dispatch-loop-buffer-undo (window-buffer window1)
-                                    (window-buffer window2))
+    (conn-dispatch-loop-undo-boundary (window-buffer window1)
+                                      (window-buffer window2))
     (conn--dispatch-transpose-subr
      (window-buffer window1) pt1 bounds-op1
      (window-buffer window2) pt2 bounds-op2
@@ -5886,12 +5904,12 @@ contain targets."
           (insert str2)))
       (accept-change-group cg))))
 
-(cl-defmethod conn-dispatch-callback ((_command (eql conn-dispatch-over-or-goto))
-                                          ctx)
-  (conn-cancel-action (oref ctx action))
-  (setf (oref ctx action)
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-over-or-goto))
+                                           ctx)
+   (conn-cancel-action (oref ctx action))
+   (setf (oref ctx action)
         (condition-case _
-            (pcase (oref ctx action)
+                (pcase (oref ctx action)
               ((cl-type conn-dispatch-over)
                (conn-make-action 'conn-dispatch-goto))
               ((cl-type conn-dispatch-goto) nil)
@@ -5966,7 +5984,7 @@ contain targets."
     `(catch 'state-loop-exit
        (let* ((,rep nil)
               (conn-dispatch-looping t)
-              (conn-dispatch-change-groups nil)
+              (conn--dispatch-loop-change-groups nil)
               (conn--loop-error-message nil)
               (conn--dispatch-read-event-message-prefixes
                `(,(car conn--dispatch-read-event-message-prefixes)
@@ -5996,7 +6014,7 @@ contain targets."
                        (cl-incf conn-dispatch-repeat-count))
                    (user-error
                     (conn-state-loop-error (error-message-string err))))))
-           (dolist (u conn-dispatch-change-groups)
+           (dolist (u conn--dispatch-loop-change-groups)
              (funcall u :accept)))))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
@@ -6006,7 +6024,7 @@ contain targets."
                   ,conn-target-sort-function)
                 conn--dispatch-init-state)
                (conn-dispatch-looping nil)
-               (conn-dispatch-change-groups nil)
+               (conn--dispatch-loop-change-groups nil)
                (inhibit-message nil)
                (recenter-last-op nil)
                (conn-dispatch-repeat-count nil)
@@ -6031,119 +6049,97 @@ contain targets."
                                'overriding-terminal-local-map)
          (conn-dispatch-select-mode 1)))))
 
-(cl-defgeneric conn-dispatch-select-command-handler (command))
+(cl-defgeneric conn-dispatch-select-handler (command))
 
-(cl-defmethod conn-dispatch-select-command-handler :extra "Prefix" (cmd)
-  (catch 'dont-handle
-    (pcase cmd
-      ('digit-argument
-       (let* ((char (if (integerp last-input-event)
-                        last-input-event
-                      (get last-input-event 'ascii-character)))
-              (digit (- (logand char ?\177) ?0)))
-         (setf conn--loop-prefix-mag
-               (if (integerp conn--loop-prefix-mag)
-                   (+ (* 10 conn--loop-prefix-mag) digit)
-                 (when (/= 0 digit) digit)))))
-      ('forward-delete-arg
-       (when conn--loop-prefix-mag
-         (setf conn--loop-prefix-mag
-               (mod conn--loop-prefix-mag
-                    (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
-      ('backward-delete-arg
-       (when conn--loop-prefix-mag
-         (setf conn--loop-prefix-mag (floor conn--loop-prefix-mag 10))))
-      ('reset-arg
-       (setf conn--loop-prefix-mag nil))
-      ('negative-argument
-       (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
-      (_ (throw 'dont-handle nil)))
-    (conn-dispatch-handle)))
+(cl-defmethod conn-dispatch-select-handler :around (_cmd)
+  (condition-case _
+      (cl-call-next-method)
+    (cl-no-method nil)))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql mwheel-scroll)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql mwheel-scroll)))
   (mwheel-scroll last-input-event)
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql recursive-edit)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql recursive-edit)))
   (conn-with-dispatch-suspended
     (recursive-edit))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql recenter-top-bottom)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql recenter-top-bottom)))
   (let ((this-command 'recenter-top-bottom)
         (last-command conn-state-loop-last-command))
     (recenter-top-bottom (conn-state-loop-prefix-arg)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql toggle-input-method)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql set-input-method)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql set-input-method)))
   (let ((inhibit-message nil))
     (call-interactively 'set-input-method))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql isearch-forward)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-forward)))
   (conn-with-dispatch-suspended
     (isearch-forward))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql isearch-backward)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-backward)))
   (conn-with-dispatch-suspended
     (isearch-backward))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql isearch-forward-regexp)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-forward-regexp)))
   (conn-with-dispatch-suspended
     (isearch-forward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql isearch-backward-regexp)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-backward-regexp)))
   (conn-with-dispatch-suspended
     (isearch-backward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql scroll-up)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql scroll-up)))
   (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-up))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql scroll-down)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql scroll-down)))
   (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-down))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_command (eql conn-goto-window)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql conn-goto-window)))
   (conn-goto-window
    (conn-prompt-for-window
     (delq (selected-window)
           (conn--get-windows nil 'nomini 'visible))))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_cmd (eql finish)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql finish)))
   (conn-state-loop-exit))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_cmd (eql dispatch-other-end)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql dispatch-other-end)))
   (unless conn-dispath-no-other-end
     (setf conn-dispatch-other-end (not conn-dispatch-other-end))
     (conn-dispatch-handle-and-redisplay :prompt nil)))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_cmd (eql retarget)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql retarget)))
   (conn-dispatch-retarget conn-dispatch-target-finder)
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_cmd (eql always-retarget)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql always-retarget)))
   (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_cmd (eql restrict-windows)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
                                 conn-target-window-predicate)
       (remove-function conn-target-window-predicate
@@ -6152,9 +6148,9 @@ contain targets."
                   'conn--dispatch-restrict-windows))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-command-handler ((_cmd (eql undo)))
-  (when conn-dispatch-change-groups
-    (funcall (pop conn-dispatch-change-groups) :cancel))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql undo)))
+  (when conn--dispatch-loop-change-groups
+    (funcall (pop conn--dispatch-loop-change-groups) :cancel))
   (conn-dispatch-handle-and-redisplay))
 
 
@@ -6251,7 +6247,7 @@ contain targets."
          (conn--loop-prefix-mag nil)
          (conn--loop-prefix-sign nil)
          (conn--dispatch-read-event-handlers
-          (cons #'conn-dispatch-select-command-handler
+          (cons #'conn-dispatch-select-handler
                 conn--dispatch-read-event-handlers))
          (conn-dispatch-target-finder (conn-get-dispatch-target-finder
                                        (oref bounds-op command)))
@@ -6674,7 +6670,7 @@ Expansions and contractions are provided by functions in
   "State for expanding."
   :lighter "↔"
   :mode-line-face 'conn-read-thing-mode-line-face
-  :loop-callback 'conn--read-expand-case
+  :loop-handler 'conn--read-expand-case
   :loop-message 'conn--read-expand-message)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state)))
@@ -8051,9 +8047,9 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 ;;;;; Transpose
 
-(conn-define-state conn-transpose-state (conn-read-mover-state)
+(conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "T"
-  :loop-callback 'conn-transpose-state-callback
+  :loop-handler 'conn-transpose-state-handler
   :loop-message 'conn--transpose-message)
 
 (define-keymap
@@ -8073,11 +8069,11 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "DEL" 'scroll-down
   "C-o" 'other-window)
 
-(defun conn-transpose-state-callback (command ctx)
+(defun conn-transpose-state-handler (command ctx)
   (pcase command
     ((or 'conn-expand 'conn-contract)
      (conn-state-loop-error "Invalid command"))
-    (_ (conn-read-mover-callback command ctx))))
+    (_ (conn-read-thing-state-handler command ctx))))
 
 (defun conn--transpose-recursive-message ()
   (message
@@ -8912,8 +8908,8 @@ Currently selected window remains selected afterwards."
 
 ;;;;; Change
 
-(conn-define-state conn-change-state (conn-read-mover-state)
-  :loop-callback 'conn-read-change-case)
+(conn-define-state conn-change-state (conn-read-thing-state)
+  :loop-handler 'conn-read-change-case)
 
 (cl-defgeneric conn-perform-change (cmd arg &optional kill))
 
@@ -8942,7 +8938,7 @@ Currently selected window remains selected afterwards."
 (cl-defgeneric conn-read-change-case (cmd ctx))
 
 (cl-defmethod conn-read-change-case (cmd ctx)
-  (conn-read-mover-callback cmd ctx))
+  (conn-read-thing-state-handler cmd ctx))
 
 (defun conn-change-thing (cmd arg &optional kill)
   "Change region defined by CMD and ARG."
@@ -9898,7 +9894,7 @@ Operates with the selected windows parent window."
   "<escape>" 'conn-pop-state)
 
 (define-keymap
-  :keymap (conn-get-state-map 'conn-read-mover-common-state)
+  :keymap (conn-get-state-map 'conn-read-thing-common-state)
   "C-s" 'isearch-forward
   "s" 'isearch-forward
   "C-r" 'isearch-backward
