@@ -959,6 +959,8 @@ The returned list is not fresh, don't modify it."
 (defvar-local conn--local-major-mode-map)
 (defvar-local conn--local-minor-mode-maps)
 
+(defconst conn--state-map-cache (make-hash-table :test 'eq))
+
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
   (cl-check-type state conn-state)
@@ -975,8 +977,6 @@ The returned list is not fresh, don't modify it."
                       (cl-loop for parent in (conn-state-all-parents child)
                                for pmap = (conn-get-state-map parent t)
                                when pmap collect pmap)))))))))
-
-(defconst conn--state-map-cache (make-hash-table :test 'eq))
 
 (defun conn--compose-state-map (state)
   "Return composed state map for STATE.
@@ -995,6 +995,8 @@ The composed keymap is of the form:
               for pmap = (gethash pstate conn--state-maps)
               when pmap collect pmap))))
 
+(defconst conn--override-map-cache (make-hash-table :test 'eq))
+
 (defun conn-get-overriding-map (state &optional dont-create)
   "Return the overriding keymap for STATE."
   (cl-check-type state conn-state)
@@ -1011,8 +1013,6 @@ The composed keymap is of the form:
                       (cl-loop for parent in (conn-state-all-parents child)
                                for pmap = (conn-get-overriding-map parent t)
                                when pmap collect pmap)))))))))
-
-(defconst conn--override-map-cache (make-hash-table :test 'eq))
 
 (defun conn--compose-overide-map (state)
   "Return composed override map for STATE.
@@ -1302,7 +1302,24 @@ mouse-3: Describe current input method")
     (and (gethash property conn--static-properties) t))
 
   (conn-declare-property-static :no-keymap)
-  (conn-declare-property-static :abstract))
+  (conn-declare-property-static :abstract)
+
+  (defun conn--state-get-compiler-macro ( exp state property
+                                          &optional
+                                          no-inherit default)
+    (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
+          (prop (macroexpand-all property macroexpand-all-environment)))
+      (if (or (and (macroexp-const-p no-inherit)
+                   (if (consp no-inherit) (cadr no-inherit) no-inherit))
+              (and (symbolp prop)
+                   (conn-property-static-p prop)))
+          (cl-once-only (state)
+            `(progn
+               (cl-check-type ,state conn-state)
+               (gethash ,property (conn--state-properties
+                                   (conn--find-state ,state))
+                        ,default)))
+        exp))))
 
 (defun conn-state-get (state property &optional no-inherit default)
   "Return the value of PROPERTY for STATE.
@@ -1321,23 +1338,6 @@ PROPERTY.  If no parent has that property either than nil is returned."
                for prop = (gethash property table key-missing)
                unless (eq prop key-missing) return prop
                finally return default))))
-
-(defun conn--state-get-compiler-macro ( exp state property
-                                        &optional
-                                        no-inherit default)
-  (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
-        (prop (macroexpand-all property macroexpand-all-environment)))
-    (if (or (and (macroexp-const-p no-inherit)
-                 (if (consp no-inherit) (cadr no-inherit) no-inherit))
-            (and (symbolp prop)
-                 (conn-property-static-p prop)))
-        (cl-once-only (state)
-          `(progn
-             (cl-check-type ,state conn-state)
-             (gethash ,property (conn--state-properties
-                                 (conn--find-state ,state))
-                      ,default)))
-      exp)))
 
 (gv-define-setter conn-state-get (value state slot)
   `(conn-state-set ,state ,slot ,value))
@@ -1806,13 +1806,11 @@ For use in buffers that should not have any other state."
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf (alist-get 'mode-line face-remapping-alist) face))
+    (face-remap-set-base 'mode-line face))
   (cl-call-next-method))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
-  (setf face-remapping-alist
-        (delq (assq 'mode-line face-remapping-alist)
-              face-remapping-alist))
+  (face-remap-reset-base 'mode-line)
   (cl-call-next-method))
 
 (conn-define-state conn-outline-state ()
@@ -3752,6 +3750,8 @@ A target finder function should return a list of overlays.")
 
 ;;;;; Dispatch Command Loop
 
+(defvar conn-dispatch-target-finder nil)
+
 (cl-defstruct (conn-dispatch
                (:copier conn--dispatch-copy))
   no-other-end
@@ -3976,8 +3976,6 @@ with `conn-dispatch-thing-ignored-modes'."
 (defvar conn-targets nil)
 
 (defvar conn-target-count 0)
-
-(defvar conn-dispatch-target-finder nil)
 
 (defvar conn-target-sort-function 'conn-target-sort-nearest)
 
@@ -4992,6 +4990,8 @@ contain targets."
 
 
 ;;;;; Dispatch Actions
+
+(defvar conn-dispatch-looping)
 
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
@@ -6027,7 +6027,7 @@ contain targets."
       (when-let* ((face (conn-state-get 'conn-dispatch-state :mode-line-face)))
         (setf (alist-get 'mode-line face-remapping-alist) face))
     (setf face-remapping-alist
-          (delq (assq 'mode-line face-remapping-alist)
+          (remq (assq 'mode-line face-remapping-alist)
                 face-remapping-alist))))
 
 (cl-defun conn-dispatch-handle-and-redisplay (&key (prompt t))
@@ -6728,13 +6728,11 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf (alist-get 'mode-line face-remapping-alist) face))
+    (face-remap-set-base 'mode-line face))
   (cl-call-next-method))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-expand-state)))
-  (setf face-remapping-alist
-        (delq (assq 'mode-line face-remapping-alist)
-              face-remapping-alist))
+  (face-remap-reset-base 'mode-line)
   (cl-call-next-method))
 
 (define-keymap
@@ -9385,7 +9383,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
       (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
             conn--wincontrol-prev-eldoc-msg-fn nil))
     (setf face-remapping-alist
-          (delq (assq 'mode-line face-remapping-alist)
+          (remq (assq 'mode-line face-remapping-alist)
                 face-remapping-alist))))
 
 (defun conn--wincontrol-minibuffer-exit ()
