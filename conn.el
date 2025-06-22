@@ -930,47 +930,6 @@ The returned list is not fresh, don't modify it."
     (inline-quote
      (memq ,parent (conn-state-all-parents ,state)))))
 
-(defun conn-setup-commit-state ()
-  (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
-    (conn-push-state 'conn-emacs-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
-
-(defun conn-setup-edmacro-state ()
-  (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
-    (conn-push-state 'conn-command-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
-
-(defun conn-setup-dired-state ()
-  (when (derived-mode-p 'dired-mode)
-    (conn-push-state 'conn-emacs-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-dired-state -50)
-
-(defun conn-setup-null-state ()
-  (when (derived-mode-p conn-null-state-modes)
-    (conn-push-state 'conn-null-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-null-state -90)
-
-(defun conn-setup-command-state ()
-  (when (derived-mode-p conn-command-state-modes)
-    (conn-push-state 'conn-command-state)
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-command-state)
-
-(defun conn-setup-minibuffer-state ()
-  (when (eq major-mode 'minibuffer-mode)
-    (setf (alist-get 'conn-emacs-state conn-hide-mark-alist) t)
-    (conn-push-state 'conn-emacs-state)
-    (letrec ((hook (lambda ()
-                     (conn--push-ephemeral-mark)
-                     (remove-hook 'minibuffer-setup-hook hook))))
-      (add-hook 'minibuffer-setup-hook hook))
-    t))
-(add-hook 'conn-setup-state-hook 'conn-setup-command-state -95)
-
 
 ;;;;; State Keymap Impl
 
@@ -1532,13 +1491,18 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
+(defvar conn-state-lighter-seperator "→")
+
 (defun conn--get-lighter ()
   (or conn-lighter
       (let ((lighter ""))
         (dolist (s conn--state-stack)
           (setq lighter (if s
-                            (concat "→" (conn-state-get s :lighter) lighter)
-                          (concat "→[" (substring lighter 1) "]"))))
+                            (concat conn-state-lighter-seperator
+                                    (conn-state-get s :lighter)
+                                    lighter)
+                          (concat conn-state-lighter-seperator
+                                  "[" (substring lighter 1) "]"))))
         (setq conn-lighter (concat " [" (substring lighter 1) "]")))))
 
 (defun conn--setup-state-properties (state)
@@ -1918,6 +1882,50 @@ By default `conn-emacs-state' does not bind anything."
 
 (conn-define-state conn-one-command-state (conn-command-state
                                            conn-autopop-state))
+
+
+;;;;; State Setup Functions
+
+(defun conn-setup-commit-state ()
+  (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
+    (conn-push-state 'conn-emacs-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
+
+(defun conn-setup-edmacro-state ()
+  (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
+    (conn-push-state 'conn-command-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
+
+(defun conn-setup-dired-state ()
+  (when (derived-mode-p 'dired-mode)
+    (conn-push-state 'conn-emacs-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-dired-state -50)
+
+(defun conn-setup-null-state ()
+  (when (derived-mode-p conn-null-state-modes)
+    (conn-push-state 'conn-null-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-null-state -90)
+
+(defun conn-setup-command-state ()
+  (when (derived-mode-p conn-command-state-modes)
+    (conn-push-state 'conn-command-state)
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-command-state)
+
+(defun conn-setup-minibuffer-state ()
+  (when (eq major-mode 'minibuffer-mode)
+    (setf (alist-get 'conn-emacs-state conn-hide-mark-alist) t)
+    (conn-push-state 'conn-emacs-state)
+    (letrec ((hook (lambda ()
+                     (conn--push-ephemeral-mark)
+                     (remove-hook 'minibuffer-setup-hook hook))))
+      (add-hook 'minibuffer-setup-hook hook))
+    t))
+(add-hook 'conn-setup-state-hook 'conn-setup-command-state -95)
 
 
 ;;;; Labels
@@ -3647,8 +3655,12 @@ A target finder function should return a list of overlays.")
       'conn-dispatch-goto
     'conn-dispatch-jump))
 
-(cl-defgeneric conn-get-dispatch-target-finder (_cmd)
-  (:method (_cmd) nil))
+(cl-defgeneric conn-get-dispatch-target-finder (_cmd))
+
+(cl-defmethod conn-get-dispatch-target-finder :around (_cmd)
+  (condition-case _
+      (cl-call-next-method)
+    (cl-no-method nil)))
 
 (defun conn--dispatch-restrict-windows (win)
   (eq win (selected-window)))
@@ -3748,6 +3760,7 @@ A target finder function should return a list of overlays.")
                                     &key context initial-arg)
   (require 'conn-transients)
   (let ((success nil)
+        (conn-dispatch-target-finder nil)
         (ctx (if context
                  (progn
                    (cl-assert (conn-dispatch-p context))
@@ -3779,12 +3792,14 @@ A target finder function should return a list of overlays.")
        (setf (oref ctx action) (condition-case _
                                    (conn-make-action command)
                                  (error nil)))))
-    ((pred conn-thing-command-p)
+    ((let (and target-finder (guard target-finder))
+       (conn-get-dispatch-target-finder command))
      (setf (oref ctx bounds-op) (oclosure-lambda (conn-dispatch-bounds-op
                                                   (command command))
                                     (arg)
                                   (conn-perform-bounds command arg))
-           (oref ctx bounds-arg) (conn-state-loop-consume-prefix-arg))
+           (oref ctx bounds-arg) (conn-state-loop-consume-prefix-arg)
+           conn-dispatch-target-finder target-finder)
      (when (null (oref ctx action))
        (setf (oref ctx action) (conn-make-action
                                 (conn-get-dispatch-action command))))
@@ -3835,27 +3850,27 @@ A target finder function should return a list of overlays.")
     (conn-state-loop-error "Dispatch ring empty")))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-next))
-                                           _cont)
-   (conn-dispatch-cycle-ring-next)
-   (if (bound-and-true-p conn-posframe-mode)
-          (conn-posframe--dispatch-ring-display-subr)
-      (conn-state-loop-message "%s" (conn-describe-dispatch
+                                           _ctx)
+  (conn-dispatch-cycle-ring-next)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-previous))
-                                           _cont)
-   (conn-dispatch-cycle-ring-previous)
-   (if (bound-and-true-p conn-posframe-mode)
-          (conn-posframe--dispatch-ring-display-subr)
-      (conn-state-loop-message "%s" (conn-describe-dispatch
+                                           _ctx)
+  (conn-dispatch-cycle-ring-previous)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-ring-describe-head))
-                                           _cont)
-   (conn-dispatch-ring-remove-stale)
-   (if (bound-and-true-p conn-posframe-mode)
-          (conn-posframe--dispatch-ring-display-subr)
-      (conn-state-loop-message "%s" (conn-describe-dispatch
+                                           _ctx)
+  (conn-dispatch-ring-remove-stale)
+  (if (bound-and-true-p conn-posframe-mode)
+      (conn-posframe--dispatch-ring-display-subr)
+    (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
 (defun conn--completing-read-dispatch (ctx)
@@ -6171,11 +6186,10 @@ contain targets."
   (conn-action-cleanup (oref dispatch action)))
 
 (defun conn-describe-dispatch (dispatch)
-  (concat
-   (conn-describe-action (oref dispatch action))
-   " @ "
-   (symbol-name (oref (oref dispatch bounds-op) command))
-   (format " <%s>" (oref dispatch bounds-arg))))
+  (format "%s @ %s <%s>"
+          (conn-describe-action (oref dispatch action))
+          (oref (oref dispatch bounds-op) command)
+          (oref dispatch bounds-arg)))
 
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
@@ -6249,8 +6263,10 @@ contain targets."
          (conn--dispatch-read-event-handlers
           (cons #'conn-dispatch-select-handler
                 conn--dispatch-read-event-handlers))
-         (conn-dispatch-target-finder (conn-get-dispatch-target-finder
-                                       (oref bounds-op command)))
+         (conn-dispatch-target-finder
+          (or conn-dispatch-target-finder
+              (conn-get-dispatch-target-finder (oref bounds-op command))
+              conn-dispatch-default-target-finder))
          (conn-dispatch-repeat-count 0)
          (conn--dispatch-always-retarget
           (or always-retarget
@@ -6696,7 +6712,7 @@ Expansions and contractions are provided by functions in
   "S-<mouse-1>" 'conn-contract
   "<escape>" 'end)
 
-(defun conn--read-expand-case (command _cont)
+(defun conn--read-expand-case (command _ctx)
   (ignore-error user-error
     (pcase command
       ('conn-expand-exchange
@@ -6713,7 +6729,7 @@ Expansions and contractions are provided by functions in
        (conn-state-loop-abort))
       (_ (conn-state-loop-error "Invalid command")))))
 
-(defun conn--read-expand-message (_cont error-message)
+(defun conn--read-expand-message (_ctx error-message)
   (message
    (substitute-command-keys
     (concat (propertize "Expansion: " 'face 'minibuffer-prompt)
@@ -8080,10 +8096,10 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
    (substitute-command-keys
     (concat
      "Define region. "
-     "Press \\[exit-recursive-edit] to end and use current region. "
+     "Press \\[exit-recursive-edit] to end and use current region."
      "Press \\[abort-recursive-edit] to abort."))))
 
-(defun conn--transpose-message (_cont error-message)
+(defun conn--transpose-message (_ctx error-message)
   (message
    (substitute-command-keys
     (concat
