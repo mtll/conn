@@ -78,80 +78,77 @@
   (conn-with-recursive-state 'conn-emacs-state
     (recursive-edit)))
 
-(conn-register-thing
- 'org-inner-math
- :bounds-op (lambda ()
-              (let ((node (org-element-context)))
-                (save-excursion
-                  (pcase (org-element-type node)
-                    ('latex-environment
-                     (cons (progn
-                             (goto-char (org-element-begin node))
-                             (re-search-forward "\\\\begin{[^}]*}")
-                             (skip-chars-forward "\n\t ")
-                             (point))
-                           (progn
-                             (goto-char (org-element-end node))
-                             (re-search-backward "\\\\end")
-                             (skip-chars-backward "\n\t ")
-                             (point))))
-                    ('latex-fragment
-                     (cons (progn
-                             (goto-char (org-element-begin node))
-                             (re-search-forward (regexp-opt '("\\(" "\\[")))
-                             (point))
-                           (progn
-                             (goto-char (org-element-end node))
-                             (re-search-backward (regexp-opt '("\\)" "\\]")))
-                             (point))))
-                    (_ (error "no math at point")))))))
+(put 'org-inner-math 'bounds-of-thing-at-point
+     (lambda ()
+       (let ((node (org-element-context)))
+         (save-excursion
+           (pcase (org-element-type node)
+             ('latex-environment
+              (cons (progn
+                      (goto-char (org-element-begin node))
+                      (re-search-forward "\\\\begin{[^}]*}")
+                      (skip-chars-forward "\n\t ")
+                      (point))
+                    (progn
+                      (goto-char (org-element-end node))
+                      (re-search-backward "\\\\end")
+                      (skip-chars-backward "\n\t ")
+                      (point))))
+             ('latex-fragment
+              (cons (progn
+                      (goto-char (org-element-begin node))
+                      (re-search-forward (regexp-opt '("\\(" "\\[")))
+                      (point))
+                    (progn
+                      (goto-char (org-element-end node))
+                      (re-search-backward (regexp-opt '("\\)" "\\]")))
+                      (point))))
+             (_ (error "no math at point")))))))
 
 (conn-define-mark-command conn-mark-org-inner-math org-inner-math)
 
-(conn-register-thing
- 'org-math
- :bounds-op (lambda ()
-              (let ((node (org-element-context)))
-                (save-excursion
-                  (pcase (org-element-type node)
-                    ('latex-environment
-                     (cons (org-element-begin node)
-                           (- (org-element-end node)
-                              (org-element-post-blank node))))
-                    ('latex-fragment
-                     (cons (org-element-begin node)
-                           (- (org-element-end node)
-                              (org-element-post-blank node))))
-                    (_ (error "no math at point")))))))
+(put 'org-math 'bounds-of-thing-at-point
+     (lambda ()
+       (let ((node (org-element-context)))
+         (save-excursion
+           (pcase (org-element-type node)
+             ('latex-environment
+              (cons (org-element-begin node)
+                    (- (org-element-end node)
+                       (org-element-post-blank node))))
+             ('latex-fragment
+              (cons (org-element-begin node)
+                    (- (org-element-end node)
+                       (org-element-post-blank node))))
+             (_ (error "no math at point")))))))
 
 (conn-define-mark-command conn-mark-org-math org-math)
 
 (defun conn--org-window-p (win)
   (eq 'org-mode (buffer-local-value 'major-mode (window-buffer win))))
 
-(conn-register-thing
- 'org-link
- :dispatch-target-finder (lambda ()
-                           (let ((fn (conn-dispatch-re-matches org-link-any-re)))
-                             (lambda ()
-                               (let ((conn-target-window-predicate conn-target-window-predicate))
-                                 (add-function :before-while
-                                               conn-target-window-predicate
-                                               'conn--org-window-p)
-                                 (funcall fn)))))
- :bounds-op (lambda () (org-in-regexp org-link-any-re)))
+(put 'org-link 'bounds-of-thing-at-point
+     (lambda () (org-in-regexp org-link-any-re)))
 
-(conn-register-thing
- 'org-paragraph
- :dispatch-target-finder (lambda ()
-                           (let ((fn (conn-dispatch-all-things 'org-paragraph)))
-                             (lambda ()
-                               (let ((conn-target-window-predicate conn-target-window-predicate))
-                                 (add-function :before-while
-                                               conn-target-window-predicate
-                                               'conn--org-window-p)
-                                 (funcall fn)))))
- :forward-op 'org-forward-paragraph)
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing org-link)))
+  (let ((fn (conn-dispatch-re-matches org-link-any-re)))
+    (lambda ()
+      (let ((conn-target-window-predicate conn-target-window-predicate))
+        (add-function :before-while
+                      conn-target-window-predicate
+                      'conn--org-window-p)
+        (funcall fn)))))
+
+(put 'org-paragraph 'forward-op 'org-forward-paragraph)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing org-paragraph)))
+  (let ((fn (conn-dispatch-all-things 'org-paragraph)))
+    (lambda ()
+      (let ((conn-target-window-predicate conn-target-window-predicate))
+        (add-function :before-while
+                      conn-target-window-predicate
+                      'conn--org-window-p)
+        (funcall fn)))))
 
 (conn-register-thing-commands
  'org-paragraph 'conn-continuous-thing-handler
@@ -169,8 +166,8 @@
         (goto-char pt)
         (org-open-at-point-global)))))
 
-(setf (alist-get 'org-link conn-dispatch-default-action-alist)
-      'conn-open-org-link)
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing org-link)))
+  'conn-open-org-link)
 
 (defun conn-org-sentence-forward (arg)
   (interactive "p")
@@ -178,23 +175,20 @@
       (org-forward-sentence arg)
     (org-backward-sentence (abs arg))))
 
-(conn-register-thing
- 'org-sentence
- :forward-op 'conn-org-sentence-forward)
+(put 'org-sentence 'forward-op 'conn-org-sentence-forward)
 
 (conn-register-thing-commands
  'org-sentence 'conn-continuous-thing-handler
  'conn-org-sentence-forward
  'org-forward-sentence 'org-backward-sentence)
 
-(conn-register-thing
- 'org-element
- :bounds-op (lambda ()
-              (save-mark-and-excursion
-                (org-mark-element)
-                (cons (region-beginning) (region-end))))
- :beg-op 'org-backward-element
- :end-op 'org-forward-element)
+(put 'org-element 'bounds-of-thing-at-point
+     (lambda ()
+       (save-mark-and-excursion
+         (org-mark-element)
+         (cons (region-beginning) (region-end)))))
+(put 'org-element 'beginning-op 'org-backward-element)
+(put 'org-element 'end-op 'org-forward-element)
 
 ;; FIXME: org-element all broken
 (conn-register-thing-commands
@@ -221,16 +215,16 @@
  'org-up-element
  'org-up-heading)
 
-(conn-register-thing
- 'org-heading
- :bounds-op (lambda () (bounds-of-thing-at-point 'org-element))
- :dispatch-target-finder (lambda ()
-                           (let ((conn-target-window-predicate conn-target-window-predicate))
-                             (add-function :before-while
-                                           conn-target-window-predicate
-                                           'conn--org-window-p)
-                             (conn-dispatch-all-things 'org-heading)))
- :forward-op 'org-next-visible-heading)
+(put 'org-heading 'bounds-of-thing-at-point
+     (lambda () (bounds-of-thing-at-point 'org-element)))
+(put 'org-heading 'forward-op 'org-next-visible-heading)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing org-heading)))
+  (let ((conn-target-window-predicate conn-target-window-predicate))
+    (add-function :before-while
+                  conn-target-window-predicate
+                  'conn--org-window-p)
+    (conn-dispatch-all-things 'org-heading)))
 
 (conn-register-thing-commands
  'org-heading 'conn-continuous-thing-handler

@@ -120,12 +120,11 @@
                (while (and (> (point) beg-sexp) (sp-backward-sexp))))))
       (conn--push-ephemeral-mark))))
 
-(conn-register-thing
- 'sp-sexp
- :forward-op 'conn-sp-forward-sexp-op
- :bounds-op 'conn-sp-bounds-of-sexp
- :dispatch-target-finder (lambda () (conn-dispatch-things-read-prefix 'sp-sexp 1))
- :default-action 'conn-dispatch-goto)
+(put 'sp-sexp 'forward-op 'conn-sp-forward-sexp-op)
+(put 'sp-sexp 'bounds-of-thing-at-point 'conn-sp-bounds-of-sexp)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing sp-sexp)))
+  (conn-dispatch-things-read-prefix 'sp-sexp 1))
 
 (conn-register-thing-commands
  'sp-sexp 'conn-sp-sexp-handler

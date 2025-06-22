@@ -816,13 +816,6 @@ of highlighting."
 
 ;;;;; Thing Command Type
 
-(defvar-local conn--thing-remapping-alist nil)
-
-(defun conn-remap-thing (from to)
-  (let ((new (list to)))
-    (push new conn--thing-remapping-alist)
-    (setf (alist-get from conn--thing-remapping-alist) new)))
-
 (defun conn-thing-command-p (cmd)
   (and (symbolp cmd)
        (and (get cmd :conn-command-thing) t)))
@@ -830,10 +823,7 @@ of highlighting."
 (cl-deftype conn-thing-command () '(satisfies conn-thing-command-p))
 
 (define-inline conn-command-thing (cmd)
-  (inline-quote
-   (let ((thing (get ,cmd :conn-command-thing)))
-     (or (car (last (alist-get thing conn--thing-remapping-alist)))
-         thing))))
+  (inline-quote (get ,cmd :conn-command-thing)))
 
 (gv-define-setter conn-command-thing (thing cmd)
   `(conn-set-command-thing ,cmd ,thing))
@@ -879,10 +869,13 @@ of highlighting."
 (defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
 
+(defmacro conn--find-state (state)
+  `(get ,state :conn--state))
+
 (define-inline conn-state-p (state)
   "Return non-nil if STATE is a conn-state."
   (inline-quote
-   (eq 'conn-state (type-of (get ,state :conn--state)))))
+   (eq 'conn-state (type-of (conn--find-state ,state)))))
 
 (cl-deftype conn-state () '(satisfies conn-state-p))
 
@@ -892,7 +885,7 @@ of highlighting."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (aref (get ,state :conn--state) 2)))))
+       (aref (conn--find-state ,state) 2)))))
 
 (define-inline conn--state-all-children (state)
   "Return all parents for STATE."
@@ -900,22 +893,20 @@ of highlighting."
     (inline-quote
      (progn
        (cl-check-type ,state conn-state)
-       (aref (get ,state :conn--state) 3)))))
+       (aref (conn--find-state ,state) 3)))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
-(define-inline conn--state-all-parents (state)
+(defun conn--state-all-parents (state)
   "Return all parents of state.
 
 The returned list is not fresh, don't modify it."
-  (inline-letevals (state)
-    (inline-quote
-     (with-memoization (gethash ,state conn--state-all-parents-cache)
-       (cl-check-type ,state conn-state)
-       (cons ,state
-             (merge-ordered-lists
-              (mapcar 'conn--state-all-parents
-                      (aref (get ,state :conn--state) 2))))))))
+  (with-memoization
+      (gethash (conn--find-state state) conn--state-all-parents-cache)
+    (cons state
+          (merge-ordered-lists
+           (mapcar 'conn--state-all-parents
+                   (aref (conn--find-state state) 2))))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
@@ -1331,10 +1322,10 @@ PROPERTY.  If no parent has that property either than nil is returned."
   (if (or no-inherit (conn-property-static-p property))
       (progn
         (cl-check-type state conn-state)
-        (gethash property (aref (get state :conn--state) 1) default))
+        (gethash property (aref (conn--find-state state) 4) default))
     (cl-with-gensyms (key-missing)
       (cl-loop for parent in (conn--state-all-parents state)
-               for table = (aref (get parent :conn--state) 1)
+               for table = (aref (conn--find-state parent) 4)
                for prop = (gethash property table key-missing)
                unless (eq prop key-missing) return prop
                finally return default))))
@@ -1351,7 +1342,7 @@ PROPERTY.  If no parent has that property either than nil is returned."
         (cl-once-only (state)
           `(progn
              (cl-check-type ,state conn-state)
-             (gethash ,property (aref (get ,state :conn--state) 1) ,default)))
+             (gethash ,property (aref (conn--find-state ,state) 4) ,default)))
       exp)))
 
 (gv-define-setter conn-state-get (value state slot)
@@ -1367,7 +1358,7 @@ Returns VALUE."
        (cl-check-type ,state conn-state)
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (puthash ,property ,value (aref (get ,state :conn--state) 1))))))
+       (puthash ,property ,value (aref (conn--find-state ,state) 4))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -1380,7 +1371,7 @@ property from its parents."
        (cl-check-type ,state conn-state)
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (remhash (aref (get ,state :conn--state) 1) ,property)))))
+       (remhash (aref (conn--find-state ,state) 4) ,property)))))
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
@@ -1388,7 +1379,8 @@ property from its parents."
     (inline-quote
      (cl-with-gensyms (key-missing)
        (cl-check-type ,state conn-state)
-       (not (eq (gethash ,property (aref (get ,state :conn--state) 1) key-missing)
+       (not (eq (gethash ,property (aref (conn--find-state ,state) 4)
+                         key-missing)
                 key-missing))))))
 
 
@@ -1468,11 +1460,14 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 ;;;;; Cl-Generic Specializers
 
 (cl-generic-define-generalizer conn--substate-generalizer
-  90 (lambda (state) `(and (conn-state-p ,state) ,state))
+  90 (lambda (state)
+       `(when-let* ((record (conn--find-state ,state))
+                    ((eq 'conn-state (type-of record))))
+          record))
   (lambda (state &rest _)
     (when state
       (mapcar (lambda (parent) `(conn-substate ,parent))
-              (conn--state-all-parents state)))))
+              (conn--state-all-parents (aref state 1))))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers.
@@ -1490,14 +1485,7 @@ These match if the argument is a conn-state."
 
 (cl-generic-define-generalizer conn--thing-generalizer
   40 (lambda (cmd) `(get ,cmd :conn-command-thing))
-  (lambda (thing &rest _)
-    (when thing
-      (let ((specs nil))
-        (dolist (rm
-                 (or (assq thing conn--thing-remapping-alist)
-                     (list thing))
-                 specs)
-          (push `(conn-thing ,rm) specs))))))
+  (lambda (thing &rest _) (when thing `((conn-thing ,thing)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for conn-thing specializers."
@@ -1728,19 +1716,19 @@ to the abnormal hooks `conn-state-entry-functions' or
              (new-parents
               (merge-ordered-lists
                (mapcar 'conn--state-all-parents ',parents))))
-         (if-let* ((record (get ',name :conn--state)))
+         (if-let* ((record (conn--find-state ',name)))
              (let ((old-parents (cdr (conn--state-all-parents ',name)))
                    (all-children (cons ',name (aref record 3))))
                ;; We are redefining a state and must to take care to
                ;; do it transparently.
-               (setf (aref record 1) state-props
-                     (aref record 2) ',parents)
+               (setf (aref record 2) ',parents
+                     (aref record 4) state-props)
                ;; Remove all children from all former parents.  We
                ;; will take care of the case where a child inherits
                ;; from some parent through multiple paths next.
                (dolist (former (seq-difference old-parents new-parents))
-                 (setf (aref (get former :conn--state) 3)
-                       (seq-difference (aref (get former :conn--state) 3)
+                 (setf (aref (conn--find-state former) 3)
+                       (seq-difference (aref (conn--find-state former) 3)
                                        all-children)))
                ;; Recompute all parents for all children and
                ;; re-register all children with all of their parents.
@@ -1749,7 +1737,7 @@ to the abnormal hooks `conn-state-entry-functions' or
                (dolist (child all-children)
                  (remhash child conn--state-all-parents-cache)
                  (dolist (parent (cdr (conn--state-all-parents child)))
-                   (cl-pushnew child (aref (get parent :conn--state) 3))))
+                   (cl-pushnew child (aref (conn--find-state parent) 3))))
                ;; Rebuild all keymaps for all children with the new
                ;; inheritance hierarchy.  Existing composed keymaps
                ;; are destructively modified so that local map
@@ -1761,12 +1749,13 @@ to the abnormal hooks `conn-state-entry-functions' or
                    (pcase-dolist (`(,mode . ,_)
                                   (cdr (gethash parent conn--minor-mode-maps)))
                      (conn-get-minor-mode-map ',name mode)))))
-           (let ((record (make-record 'conn-state 3 nil)))
-             (setf (aref record 1) state-props
-                   (aref record 2) ',parents)
+           (let ((record (make-record 'conn-state 4 nil)))
+             (setf (aref record 1) ',name
+                   (aref record 2) ',parents
+                   (aref record 4) state-props)
              (put ',name :conn--state record))
            (dolist (parent (cdr (conn--state-all-parents ',name)))
-             (cl-pushnew ',name (aref (get parent :conn--state) 3)))
+             (cl-pushnew ',name (aref (conn--find-state parent) 3)))
            (setf (gethash ',name conn--minor-mode-maps) (list nil)
                  (gethash ',name conn--major-mode-maps) (make-hash-table :test 'eq))
            (unless (gethash :no-keymap state-props)
@@ -3477,7 +3466,46 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
     (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
 
 
+;;;; Things
+
+;; Definitions for various things and thing commands.
+
+(defun conn-register-thing-commands (thing handler &rest commands)
+  "Associate COMMANDS with a THING and a HANDLER.
+
+HANDLER will be run from the `post-command-hook' and should be a
+function of one argument, the location of `point' before the command
+ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
+order to mark the region that should be defined by any of COMMANDS."
+  (dolist (cmd commands)
+    (put cmd :conn-command-thing thing)
+    (put cmd :conn-mark-handler handler)))
+
+(defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
+  `(progn
+     (defun ,name ()
+       (interactive)
+       (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
+         (`(,beg . ,end)
+          (if ,(unless ignore-mark-active '(region-active-p))
+              (pcase (car (read-multiple-choice
+                           "Mark to?"
+                           '((?e "end")
+                             (?a "beginning"))))
+                (?e (goto-char end))
+                (?b (goto-char beg)))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end)))))
+     (conn-register-thing-commands ',thing 'ignore ',name)))
+
+
 ;;;; Dispatch State
+
+(defvar conn-dispatch-default-target-finder
+  (lambda () (conn-dispatch-read-n-chars :string-length 2))
+  "Default target finder for dispatch.
+
+A target finder function should return a list of overlays.")
 
 (defvar conn-dispatch-ring)
 
@@ -3489,38 +3517,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
   '((t (:inherit mode-line :inverse-video t)))
   "Face for mode-line in a dispatch state."
   :group 'conn-faces)
-
-(defvar conn-dispatch-default-target-finder
-  (lambda () (conn-dispatch-read-n-chars :string-length 2))
-  "Default target finder for dispatch.
-
-A target finder function should return a list of overlays.")
-
-(defvar conn-dispatch-target-finders-alist
-  `((move-end-of-line . ,(lambda () 'conn-dispatch-lines))
-    (conn-backward-symbol . ,(lambda () (conn-dispatch-all-things 'symbol)))
-    (backward-word . ,(lambda () (conn-dispatch-all-things 'word))))
-  "Default target finders for for things or commands.
-
-Is an alist of the form (((or THING CMD) . TARGET-FINDER) ...).  When
-determining the target finder for a command in `conn-dispatch-state'
-actions associated with a command have higher precedence than actions
-associated with a thing.
-
-For the meaning of TARGET-FINDER see
-`conn-dispatch-default-target-finder'.")
-
-(defvar conn-dispatch-action-default 'conn-dispatch-goto
-  "Default action function for `conn-dispatch-state'.")
-
-(defvar conn-dispatch-default-action-alist
-  (list (cons 'button 'conn-dispatch-push-button))
-  "Default action functions for things or commands.
-
-Is an alist of the form (((or THING CMD) . ACTION) ...).  When
-determining the default action for a command in `conn-dispatch-state'
-actions associated with a command have higher precedence than actions
-associated with a command's thing.")
 
 (defvar conn-dispatch-repeat-count nil)
 
@@ -3626,27 +3622,15 @@ associated with a command's thing.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
-(cl-defun conn-dispatch-register-command (name
-                                          &key
-                                          target-finder
-                                          thing
-                                          default-action)
-  (when target-finder
-    (setf (alist-get name conn-dispatch-target-finders-alist) target-finder))
-  (when thing
-    (setf (conn-command-thing name) thing))
-  (when default-action
-    (setf (alist-get name conn-dispatch-default-action-alist) default-action)))
+(cl-defgeneric conn-get-dispatch-action (cmd))
 
-(defun conn--dispatch-default-action (command)
-  (or (alist-get command conn-dispatch-default-action-alist)
-      (alist-get (get command :conn-command-thing) conn-dispatch-default-action-alist)
-      conn-dispatch-action-default))
+(cl-defmethod conn-get-dispatch-action (cmd)
+  (if (conn-thing-command-p cmd)
+      'conn-dispatch-goto
+    'conn-dispatch-jump))
 
-(defun conn--dispatch-target-finder (command)
-  (or (alist-get command conn-dispatch-target-finders-alist)
-      (alist-get (get command :conn-command-thing) conn-dispatch-target-finders-alist)
-      conn-dispatch-default-target-finder))
+(cl-defgeneric conn-get-dispatch-target-finder (_cmd)
+  (:method (_cmd) nil))
 
 (defun conn--dispatch-restrict-windows (win)
   (eq win (selected-window)))
@@ -3696,8 +3680,7 @@ associated with a command's thing.")
   restrict-windows
   bounds-op
   bounds-arg
-  action
-  target-finder)
+  action)
 
 (oclosure-define (conn-dispatch-bounds-op)
   command)
@@ -3778,23 +3761,18 @@ associated with a command's thing.")
        (setf (oref ctx action) (condition-case _
                                    (conn-make-action command)
                                  (error nil)))))
-    ((and (let target-finder
-            (conn--dispatch-target-finder command))
-          (or (pred conn-thing-command-p)
-              (guard (not (eq target-finder conn-dispatch-default-target-finder)))))
-     (setf (oref ctx target-finder) target-finder
-           (oref ctx bounds-op) (oclosure-lambda (conn-dispatch-bounds-op
+    ((pred conn-thing-command-p)
+     (setf (oref ctx bounds-op) (oclosure-lambda (conn-dispatch-bounds-op
                                                   (command command))
                                     (arg)
                                   (conn-perform-bounds command arg))
            (oref ctx bounds-arg) (conn-state-loop-consume-prefix-arg))
      (when (null (oref ctx action))
-       (setf (oref ctx action)
-             (conn-make-action (conn--dispatch-default-action command))))
+       (setf (oref ctx action) (conn-make-action
+                                (conn-get-dispatch-action command))))
      (conn-dispatch-push-history ctx)
      (conn-state-loop-exit
       (conn-perform-dispatch (oref ctx action)
-                             (funcall (oref ctx target-finder))
                              (oref ctx bounds-op)
                              (oref ctx bounds-arg)
                              :repeat (oref ctx repeat)
@@ -3819,7 +3797,7 @@ associated with a command's thing.")
   (setf (oref ctx restrict-windows) (not (oref ctx restrict-windows))))
 
 (cl-defmethod conn-dispatch-callback ((_command (eql conn-repeat-last-dispatch))
-                                          ctx)
+                                      ctx)
   (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring)
                                    action))
     (conn-dispatch-ring-remove-stale)
@@ -3829,7 +3807,6 @@ associated with a command's thing.")
         (setf conn--dispatch-always-retarget (oref prev always-retarget))
         (conn-state-loop-exit
          (conn-perform-dispatch (oref prev action)
-                                (funcall (oref prev target-finder))
                                 (oref prev bounds-op)
                                 (oref prev bounds-arg)
                                 :repeat (oref ctx repeat)
@@ -4430,9 +4407,9 @@ Target overlays may override this default by setting the
                             do (funcall handler cmd)))
                (setf conn-state-loop-last-command cmd)))))))))
 
-(cl-defgeneric conn-dispatch-select-target (target-finder))
+(cl-defgeneric conn-dispatch-select-target ())
 
-(cl-defmethod conn-dispatch-select-target :around (_target-finder)
+(cl-defmethod conn-dispatch-select-target :around ()
   (conn-with-dispatch-event-handler 'mouse-click
       nil
       (lambda (cmd)
@@ -4454,12 +4431,12 @@ Target overlays may override this default by setting the
                            'overriding-terminal-local-map)
       (conn-dispatch-select-mode -1))))
 
-(cl-defmethod conn-dispatch-select-target (target-finder)
+(cl-defmethod conn-dispatch-select-target ()
   (unwind-protect
       (progn
         (when conn--dispatch-always-retarget
           (conn-dispatch-retarget conn-dispatch-target-finder))
-        (conn-dispatch-update-targets target-finder)
+        (conn-dispatch-update-targets conn-dispatch-target-finder)
         (thread-first
           (funcall conn-dispatch-label-function)
           (conn-label-select #'conn-dispatch-read-event
@@ -6242,7 +6219,6 @@ contain targets."
 ;;;;; Dispatch Commands
 
 (cl-defgeneric conn-perform-dispatch (action
-                                      target-finder
                                       bounds-op
                                       bounds-arg
                                       &key
@@ -6252,8 +6228,7 @@ contain targets."
                                       &allow-other-keys))
 
 (cl-defmethod conn-perform-dispatch :around ((action conn-action)
-                                             target-finder
-                                             _bounds-op
+                                             bounds-op
                                              _bounds-arg
                                              &key
                                              restrict-windows
@@ -6278,7 +6253,8 @@ contain targets."
          (conn--dispatch-read-event-handlers
           (cons #'conn-dispatch-select-command-handler
                 conn--dispatch-read-event-handlers))
-         (conn-dispatch-target-finder target-finder)
+         (conn-dispatch-target-finder (conn-get-dispatch-target-finder
+                                       (oref bounds-op command)))
          (conn-dispatch-repeat-count 0)
          (conn--dispatch-always-retarget
           (or always-retarget
@@ -6286,7 +6262,8 @@ contain targets."
          (conn-dispath-no-other-end no-other-end)
          (conn-dispatch-other-end
           (unless no-other-end
-            (xor (conn-dispatch-targets-other-end-p target-finder)
+            (xor (conn-dispatch-targets-other-end-p
+                  conn-dispatch-target-finder)
                  (or other-end conn-dispatch-other-end))))
          (conn--dispatch-action-always-prompt (oref action always-prompt))
          (conn--dispatch-read-event-message-prefixes
@@ -6346,7 +6323,7 @@ contain targets."
       (unwind-protect
           (cl-call-next-method)
         (ignore-errors
-          (conn-dispatch-cleanup-target-state target-finder))
+          (conn-dispatch-cleanup-target-state conn-dispatch-target-finder))
         (ignore-errors
           (conn-delete-targets))
         (ignore-errors
@@ -6358,7 +6335,6 @@ contain targets."
           (message nil))))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-action)
-                                     target-finder
                                      bounds-op
                                      bounds-arg
                                      &key
@@ -6366,13 +6342,12 @@ contain targets."
                                      &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let* ((`(,pt ,win ,bounds-op-override)
-                  (conn-dispatch-select-target target-finder)))
+                  (conn-dispatch-select-target)))
       (funcall action win pt
                (or bounds-op-override bounds-op)
                bounds-arg))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-transpose)
-                                     target-finder
                                      bounds-op
                                      bounds-arg
                                      &key
@@ -6380,9 +6355,9 @@ contain targets."
                                      &allow-other-keys)
   (conn-perform-dispatch-loop repeat
     (pcase-let ((`(,pt1 ,win1 ,bounds-op-override1)
-                 (conn-dispatch-select-target target-finder))
+                 (conn-dispatch-select-target))
                 (`(,pt2 ,win2 ,bounds-op-override2)
-                 (conn-dispatch-select-target target-finder)))
+                 (conn-dispatch-select-target)))
       (funcall action
                win1 pt1 (or bounds-op-override1 bounds-op)
                win2 pt2 (or bounds-op-override2 bounds-op)
@@ -6503,43 +6478,34 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-jump)
    nil nil nil))
 
-(conn-dispatch-register-command
- 'conn-dispatch-open-parens
- :thing 'forward-sexp
- :target-finder (lambda ()
-                  (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
+(conn-register-thing-commands 'sexp nil 'conn-dispatch-open-parens)
 
-(conn-dispatch-register-command
- 'conn-dispatch-all-buttons
- :thing 'button
- :target-finder (lambda () 'conn-dispatch-all-buttons))
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-dispatch-open-parens)))
+  (conn-dispatch-things-with-re-prefix 'sexp "\\s("))
 
-(conn-dispatch-register-command
- 'conn-dispatch-all-symbols
- :thing 'forward-symbol
- :target-finder (lambda ()
-                  (conn-dispatch-all-things 'symbol)))
+(conn-register-thing-commands 'button nil 'conn-dispatch-all-buttons)
 
-(conn-dispatch-register-command
- 'conn-dispatch-all-words
- :thing 'conn-forward-word
- :target-finder (lambda ()
-                  (conn-dispatch-all-things 'word)))
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-dispatch-all-buttons)))
+  'conn-dispatch-all-buttons)
 
-(conn-dispatch-register-command
- 'conn-previous-emacs-state
- :target-finder 'conn-dispatch-previous-emacs-state
- :default-action 'conn-dispatch-jump)
+(conn-register-thing-commands 'symbol nil 'conn-dispatch-all-symbols)
 
-(conn-dispatch-register-command
- 'conn-forward-inner-line
- :target-finder (lambda () 'conn-dispatch-end-of-inner-lines)
- :default-action 'conn-dispatch-goto)
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-dispatch-all-symbols)))
+  (conn-dispatch-all-things 'symbol))
 
-(conn-dispatch-register-command
- 'move-end-of-line
- :target-finder (lambda () 'conn-dispatch-end-of-lines)
- :default-action 'conn-dispatch-goto)
+(conn-register-thing-commands 'word nil 'conn-dispatch-all-words)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-dispatch-all-words)))
+  (conn-dispatch-all-things 'word))
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-dispatch-previous-emacs-state)))
+  'conn-dispatch-previous-emacs-state)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-forward-inner-line)))
+  'conn-dispatch-end-of-inner-lines)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql move-end-of-line)))
+  'conn-dispatch-end-of-lines)
 
 ;;;;; Dispatch Registers
 
@@ -6770,105 +6736,43 @@ Expansions and contractions are provided by functions in
   (conn-with-state-loop 'conn-expand-state :initial-arg arg))
 
 
-;;;;; Thing Definitions
-
-;; Definitions for various things and thing commands.
-
-(defun conn-register-thing (thing &rest rest)
-  "Register a new THING.
-
-THINGs may have several optional properties that control how they
-function in various conn features
-
-FORWARD-OP, BEG-OP, END-OP and BOUNDS-OP provide operations for
-`thingatpt', which see.
-
-TARGET-FINDER is a function that produces targets for
-`conn-dispatch-state'.
-
-DEFAULT-ACTION is the default action for THING in
-`conn-dispatch-state'.
-
-\(fn THING &key TARGET-FINDER DEFAULT-ACTION FORWARD-OP BEG-OP END-OP BOUNDS-OP)"
-  (intern (symbol-name thing))
-  (cl-loop for (prop val) on rest by #'cddr
-           do (pcase prop
-                (:dispatch-target-finder
-                 (setf (alist-get thing conn-dispatch-target-finders-alist) val))
-                (:default-action
-                 (setf (alist-get thing conn-dispatch-default-action-alist) val))
-                (:forward-op (put thing 'forward-op val))
-                (:beg-op (put thing 'beginning-op val))
-                (:end-op (put thing 'end-op val))
-                (:bounds-op (put thing 'bounds-of-thing-at-point val))
-                (_ (error "Unknown property: %s" prop)))))
-
-(defun conn-register-thing-commands (thing handler &rest commands)
-  "Associate COMMANDS with a THING and a HANDLER.
-
-HANDLER will be run from the `post-command-hook' and should be a
-function of one argument, the location of `point' before the command
-ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
-order to mark the region that should be defined by any of COMMANDS."
-  (dolist (cmd commands)
-    (put cmd :conn-command-thing thing)
-    (put cmd :conn-mark-handler handler)))
-
-(defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
-  `(progn
-     (defun ,name ()
-       (interactive)
-       (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
-         (`(,beg . ,end)
-          (if ,(unless ignore-mark-active '(region-active-p))
-              (pcase (car (read-multiple-choice
-                           "Mark to?"
-                           '((?e "end")
-                             (?a "beginning"))))
-                (?e (goto-char end))
-                (?b (goto-char beg)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)))))
-     (conn-register-thing-commands ',thing 'ignore ',name)))
+;;;; Thing Definitions
 
 (conn-define-mark-command conn-mark-email email)
 (conn-define-mark-command conn-mark-uuid uuid)
 (conn-define-mark-command conn-mark-string string)
 (conn-define-mark-command conn-mark-filename filename)
 
-(conn-register-thing
- 'defun
- :forward-op 'conn-forward-defun
- :dispatch-target-finder 'conn-dispatch-all-defuns)
+(put 'defun 'forward-op 'conn-forward-defun)
 
-(conn-register-thing
- 'visual-line
- :dispatch-target-finder (lambda () 'conn-dispatch-visual-lines)
- :forward-op (lambda (&optional N)
-               (let ((line-move-visual t))
-                 (vertical-motion 0)
-                 (line-move N t))))
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing defun)))
+  'conn-dispatch-all-defuns)
+
+(put 'visual-line 'forward-op
+     (lambda (&optional N)
+       (let ((line-move-visual t))
+         (vertical-motion 0)
+         (line-move N t))))
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing visual-line)))
+  'conn-dispatch-visual-lines)
 
 (conn-define-mark-command conn-mark-visual-line visual-line)
 
-(conn-register-thing
- 'region
- :bounds-op (lambda () (cons (region-beginning) (region-end))))
+(put 'region 'bounds-of-thing-at-point
+     (lambda () (cons (region-beginning) (region-end))))
 
-(conn-register-thing
- 'buffer-after-point
- :bounds-op (lambda () (cons (point) (point-max))))
+(put 'buffer-after-point 'bounds-of-thing-at-point
+     (lambda () (cons (point) (point-max))))
 
-(conn-register-thing
- 'buffer-before-point
- :bounds-op (lambda () (cons (point-min) (point))))
+(put 'buffer-before-point ''bounds-of-thing-at-point
+     (lambda () (cons (point-min) (point))))
 
 (conn-define-mark-command conn-mark-after-point buffer-after-point t)
 (conn-define-mark-command conn-mark-before-point buffer-before-point t)
 
-(conn-register-thing
- 'visible
- :bounds-op (lambda () (cons (window-start) (window-end))))
+(put 'visible ''bounds-of-thing-at-point
+     (lambda () (cons (window-start) (window-end))))
 
 (conn-define-mark-command conn-mark-visible visible)
 
@@ -6899,19 +6803,16 @@ order to mark the region that should be defined by any of COMMANDS."
  'region nil
  'conn-toggle-mark-command)
 
-(conn-register-thing
- 'symbol
- :forward-op 'forward-symbol
- :dispatch-target-finder (lambda ()
-                           (conn-dispatch-things-read-prefix 'symbol 1)))
+(put 'symbol 'forward-op 'forward-symbol)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing symbol)))
+  (conn-dispatch-things-read-prefix 'symbol 1))
 
 (conn-register-thing-commands
  'symbol 'conn-continuous-thing-handler
  'forward-symbol 'conn-backward-symbol)
 
-(conn-register-thing
- 'page
- :forward-op 'forward-page)
+(put 'page 'forward-op 'forward-page)
 
 (conn-register-thing-commands
  'page 'conn-discrete-thing-handler
@@ -6925,10 +6826,8 @@ order to mark the region that should be defined by any of COMMANDS."
  'char 'conn-char-mark-handler
  'forward-char 'backward-char)
 
-(conn-register-thing
- 'word
- :forward-op 'forward-word
- :dispatch-target-finder (lambda () (conn-dispatch-things-read-prefix 'word 1)))
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing word)))
+  (conn-dispatch-things-read-prefix 'word 1))
 
 (conn-register-thing-commands
  'word 'conn-symbol-handler
@@ -6936,18 +6835,16 @@ order to mark the region that should be defined by any of COMMANDS."
  'upcase-word 'downcase-word 'capitalize-word
  'upcase-dwim 'downcase-dwim 'capitalize-dwim)
 
-(conn-register-thing
- 'sexp
- :forward-op 'forward-sexp
- :dispatch-target-finder (lambda () (conn-dispatch-things-read-prefix 'sexp 1)))
+(put 'sexp 'forward-op 'forward-sexp)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing sexp)))
+  (conn-dispatch-things-read-prefix 'sexp 1))
 
 (conn-register-thing-commands
  'sexp 'conn-continuous-thing-handler
  'forward-sexp 'backward-sexp)
 
-(conn-register-thing
- 'list
- :forward-op 'forward-list)
+(put 'list 'forward-op 'forward-list)
 
 (conn-register-thing-commands
  'list 'conn-continuous-thing-handler
@@ -6993,27 +6890,25 @@ order to mark the region that should be defined by any of COMMANDS."
  'list 'conn--down-list-mark-handler
  'down-list)
 
-(conn-register-thing
- 'whitespace
- :forward-op 'forward-whitespace)
+(put 'whitespace 'forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
  'whitespace 'conn-discrete-thing-handler
  'forward-whitespace 'conn-backward-whitespace)
 
-(conn-register-thing
- 'sentence
- :forward-op 'forward-sentence
- :dispatch-target-finder (lambda () (conn-dispatch-all-things 'sentence)))
+(put 'sentence 'forward-op 'forward-sentence)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing sentence)))
+  (conn-dispatch-all-things 'sentence))
 
 (conn-register-thing-commands
  'sentence 'conn-continuous-thing-handler
  'forward-sentence 'backward-sentence)
 
-(conn-register-thing
- 'paragraph
- :forward-op 'forward-paragraph
- :dispatch-target-finder (lambda () (conn-dispatch-all-things 'paragraph)))
+(put 'paragraph 'forward-op 'forward-paragraph)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing paragraph)))
+  (conn-dispatch-all-things 'paragraph))
 
 (conn-register-thing-commands
  'paragraph 'conn-continuous-thing-handler
@@ -7024,18 +6919,18 @@ order to mark the region that should be defined by any of COMMANDS."
  'end-of-defun 'beginning-of-defun
  'conn-forward-defun)
 
-(conn-register-thing
- 'char
- :default-action 'conn-dispatch-jump
- :dispatch-target-finder 'conn-dispatch-read-string-with-timeout)
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing char)))
+  'conn-dispatch-read-string-with-timeout)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing char)))
+  'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'buffer 'conn-discrete-thing-handler
  'end-of-buffer 'beginning-of-buffer)
 
-(conn-register-thing
- 'line
- :dispatch-target-finder (lambda () 'conn-dispatch-lines))
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing line)))
+  'conn-dispatch-lines)
 
 (conn-register-thing-commands
  'line 'conn-continuous-thing-handler
@@ -7043,11 +6938,13 @@ order to mark the region that should be defined by any of COMMANDS."
  'conn-line-forward-op
  'conn-goto-line)
 
-(conn-register-thing
- 'line-column
- :forward-op 'next-line
- :dispatch-target-finder (lambda () 'conn-dispatch-columns)
- :default-action 'conn-dispatch-jump)
+(put 'line-column 'forward-op 'next-line)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing line-column)))
+  'conn-dispatch-columns)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing line-column)))
+  'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
@@ -7056,11 +6953,11 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-register-thing-commands 'line nil 'comment-line)
 
-(conn-register-thing
- 'outer-line
- :beg-op (lambda () (move-beginning-of-line nil))
- :end-op (lambda () (move-end-of-line nil))
- :dispatch-target-finder (lambda () 'conn-dispatch-lines))
+(put 'outer-line 'beginning-op (lambda () (move-beginning-of-line nil)))
+(put 'outer-line 'end-op (lambda () (move-end-of-line nil)))
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing outer-line)))
+  'conn-dispatch-lines)
 
 (conn-register-thing-commands
  'outer-line 'conn-discrete-thing-handler
@@ -7076,11 +6973,11 @@ order to mark the region that should be defined by any of COMMANDS."
      (conn--end-of-inner-line-1)
      (point))))
 
-(conn-register-thing
- 'inner-line
- :bounds-op 'conn--bounds-of-inner-line
- :forward-op 'conn-forward-inner-line
- :dispatch-target-finder (lambda () 'conn-dispatch-inner-lines))
+(put 'inner-line 'bounds-of-thing-at-point 'conn--bounds-of-inner-line)
+(put 'inner-line 'forward-op 'conn-forward-inner-line)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing inner-line)))
+  'conn-dispatch-inner-lines)
 
 (conn-register-thing-commands
  'inner-line 'conn-continuous-thing-handler
@@ -7099,13 +6996,12 @@ order to mark the region that should be defined by any of COMMANDS."
  'org-link nil
  'org-insert-link-global 'org-store-link 'org-insert-link)
 
-(conn-register-thing
- 'expansion
- :dispatch-target-finder 'conn-dispatch-read-string-with-timeout)
-
 (conn-register-thing-commands
  'expansion nil
  'conn-expand 'conn-contract)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing expansion)))
+  'conn-dispatch-read-string-with-timeout)
 
 (conn-register-thing-commands
  'list 'conn--down-list-mark-handler
@@ -8231,7 +8127,6 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   (bounds-op :type function))
 
 (cl-defmethod conn-perform-dispatch ((action conn-transpose-command)
-                                     target-finder
                                      bounds-op
                                      bounds-arg
                                      &key &allow-other-keys)
@@ -8242,7 +8137,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                              (window-buffer win)))))
     (pcase-let* ((`(,pt ,win ,bounds-op-override)
                   (save-mark-and-excursion
-                    (conn-dispatch-select-target target-finder))))
+                    (conn-dispatch-select-target))))
       (funcall action win pt
                (or bounds-op-override bounds-op)
                bounds-arg))))
@@ -10363,14 +10258,15 @@ Operates with the selected windows parent window."
 (declare-function outline-on-heading-p "outline")
 (declare-function outline-up-heading "outline")
 
-(conn-register-thing
- 'heading
- :dispatch-target-finder 'conn-dispatch-headings
- :bounds-op (lambda ()
-              (save-mark-and-excursion
-                (outline-mark-subtree)
-                (cons (region-beginning) (region-end))))
- :forward-op 'outline-next-visible-heading)
+(put 'heading 'bounds-of-thing-at-point
+     (lambda ()
+       (save-mark-and-excursion
+         (outline-mark-subtree)
+         (cons (region-beginning) (region-end)))))
+(put 'heading 'forward-op 'outline-next-visible-heading)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing heading)))
+  'conn-dispatch-headings)
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler
@@ -10584,33 +10480,36 @@ Operates with the selected windows parent window."
             (conn-make-target-overlay
              (+ 2 marker) (- (line-end-position) marker 2))))))))
 
-(conn-register-thing
- 'dired-line
- :dispatch-target-finder 'conn--dispatch-dired-lines
- :default-action 'conn-dispatch-jump)
-
 (conn-register-thing-commands
  'dired-line nil
  'dired-previous-line 'dired-next-line)
 
-(conn-register-thing
- 'dired-subdir
- :dispatch-target-finder 'conn--dispatch-dired-subdir
- :default-action 'conn-dispatch-jump)
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing dired-line)))
+  'conn--dispatch-dired-lines)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing dired-line)))
+  'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'dired-subdir nil
  'dired-next-subdir 'dired-prev-subdir
  'dired-tree-up 'dired-tree-down)
 
-(conn-register-thing
- 'dired-dirline
- :dispatch-target-finder 'conn--dispatch-dired-dirline
- :default-action 'conn-dispatch-jump)
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing dired-subdir)))
+  'conn--dispatch-dired-subdir)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing dired-subdir)))
+  'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'dired-dirline nil
  'dired-next-dirline 'dired-prev-dirline)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing dired-dirline)))
+  'conn--dispatch-dired-dirline)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing dired-dirline)))
+  'conn-dispatch-jump)
 
 (oclosure-define (conn-dispatch-dired-mark
                   (:parent conn-action)))
@@ -10731,24 +10630,26 @@ Operates with the selected windows parent window."
                        (point)))
             (conn-make-target-overlay (point) 0)))))))
 
-(conn-register-thing
- 'ibuffer-line
- :dispatch-target-finder 'conn--dispatch-ibuffer-lines
- :default-action 'conn-dispatch-jump)
-
 (conn-register-thing-commands
  'ibuffer-line nil
  'ibuffer-backward-line 'ibuffer-forward-line)
 
-(conn-register-thing
- 'ibuffer-filter-group
- :dispatch-target-finder 'conn--dispatch-ibuffer-filter-group
- :default-action 'conn-dispatch-jump)
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing ibuffer-line)))
+  'conn--dispatch-ibuffer-lines)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing ibuffer-line)))
+  'conn-dispatch-jump)
 
 (conn-register-thing-commands
  'ibuffer-filter-group nil
  'ibuffer-forward-filter-group
  'ibuffer-backward-filter-group)
+
+(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing ibuffer-filter-group)))
+  'conn--dispatch-ibuffer-filter-group)
+
+(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing ibuffer-filter-group)))
+  'conn-dispatch-jump)
 
 (oclosure-define (conn-dispatch-ibuffer-mark
                   (:parent conn-action)))
@@ -10819,9 +10720,7 @@ Operates with the selected windows parent window."
 
 ;;;; Markdown
 
-(conn-register-thing
- 'md-paragraph
- :forward-op 'markdown-forward-paragraph)
+(put 'md-paragraph 'forward-op 'markdown-forward-paragraph)
 
 (conn-register-thing-commands
  'md-paragraph 'conn-continuous-thing-handler
