@@ -6511,7 +6511,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (conn-dispatch-all-things 'word))
 
 (cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-dispatch-previous-emacs-state)))
-  'conn-dispatch-previous-emacs-state)
+  (conn-dispatch-previous-emacs-state))
 
 (cl-defmethod conn-get-dispatch-target-finder ((_cmd (eql conn-forward-inner-line)))
   'conn-dispatch-end-of-inner-lines)
@@ -6758,7 +6758,7 @@ Expansions and contractions are provided by functions in
 (put 'defun 'forward-op 'conn-forward-defun)
 
 (cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing defun)))
-  'conn-dispatch-all-defuns)
+  (conn-dispatch-all-defuns))
 
 (put 'visual-line 'forward-op
      (lambda (&optional N)
@@ -10278,7 +10278,7 @@ Operates with the selected windows parent window."
 (put 'heading 'forward-op 'outline-next-visible-heading)
 
 (cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing heading)))
-  'conn-dispatch-headings)
+  (conn-dispatch-headings))
 
 (conn-register-thing-commands
  'heading 'conn-discrete-thing-handler
