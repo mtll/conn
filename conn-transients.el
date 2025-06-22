@@ -677,19 +677,18 @@ A zero means repeat until error."
               (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
-                                     bounds-op
-                                     bounds-arg
+                                     thing thing-arg
                                      &key repeat &allow-other-keys)
   (let ((conn-label-select-always-prompt t))
     (conn-perform-dispatch-loop repeat
-      (pcase-let* ((`(,pt ,win ,bounds-op-override)
+      (pcase-let* ((`(,pt ,win ,thing-override)
                     (conn-dispatch-select-target)))
         (while
             (condition-case err
                 (progn
                   (funcall action win pt
-                           (or bounds-op-override bounds-op)
-                           bounds-arg)
+                           (or thing-override thing)
+                           thing-arg)
                   nil)
               (user-error (message (cadr err)) t))))))
   (message "Kapply completed successfully after %s iterations"
@@ -712,7 +711,7 @@ A zero means repeat until error."
     (thread-last
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil))
-          (window pt bounds-op bounds-arg)
+          (window pt thing thing-arg)
         (conn-dispatch-loop-undo-boundary (window-buffer window))
         (let ((conn-kapply-suppress-message t))
           (conn-with-dispatch-suspended
@@ -722,7 +721,7 @@ A zero means repeat until error."
                        (conn--kapply-region-iterator
                         (save-excursion
                           (goto-char pt)
-                          (pcase (funcall bounds-op bounds-arg)
+                          (pcase (conn-perform-bounds thing thing-arg)
                             ('nil (user-error "Cannot find thing at point"))
                             (`(,region) (list region))
                             (`(,_ . ,subregions) subregions))))
