@@ -1458,22 +1458,15 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
           record))
   (lambda (state &rest _)
     (when state
-      (mapcar (lambda (parent) `(conn-substate ,parent))
-              (conn-state-all-parents (conn--state-name state))))))
+      (append
+       (mapcar (lambda (parent) `(conn-substate ,parent))
+               (conn-state-all-parents (conn--state-name state)))
+       (list (list 'conn-substate t))))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers.
 These match if the argument is a substate of STATE."
   (list conn--substate-generalizer))
-
-(cl-generic-define-generalizer conn--state-generalizer
-  15 (lambda (state &rest _) `(and (conn-state-p ,state) 'conn-state))
-  (lambda (tag &rest _) (when tag (list tag))))
-
-(cl-defmethod cl-generic-generalizers ((_specializer (eql 'conn-state)))
-  "Support for conn-state specializers.
-These match if the argument is a conn-state."
-  (list conn--state-generalizer))
 
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (cmd &rest _)
@@ -1550,11 +1543,11 @@ from PARENT-STATE.
 CONN-STATE: this takes the form (STATE conn-state) in a argument list
 and specializes the method on all conn states."
   (:method ((_state (eql 'nil))) "Noop" nil)
-  (:method ((_state conn-state)) "Noop" nil)
+  (:method ((_state (conn-substate t))) "Noop" nil)
   (:method ((_state (eql 'conn-null-state))) (error "Cannot exit null-state"))
   (:method (state) (error "Attempting to exit unknown state: %s" state)))
 
-(cl-defmethod conn-exit-state :around ((state conn-state))
+(cl-defmethod conn-exit-state :around ((state (conn-substate t)))
   (when (symbol-value state)
     (let ((success nil))
       (unwind-protect
@@ -1590,11 +1583,11 @@ from PARENT-STATE.
 CONN-STATE: this takes the form (STATE conn-state) in a argument list
 and specializes the method on all conn states."
   ( :method ((_state (eql 'nil)) &key &allow-other-keys) "Noop" nil)
-  ( :method ((_state conn-state) &key &allow-other-keys) "Noop" nil)
+  ( :method ((_state (conn-substate t)) &key &allow-other-keys) "Noop" nil)
   ( :method (state &key &allow-other-keys)
     (error "Attempting to enter unknown state: %s" state)))
 
-(cl-defmethod conn-enter-state :around ((state conn-state))
+(cl-defmethod conn-enter-state :around ((state (conn-substate t)))
   (unless (symbol-value state)
     (let ((success nil))
       (unwind-protect
@@ -2303,7 +2296,7 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-with-state-loop (conn-state &key context initial-arg))
 
-(cl-defmethod conn-with-state-loop ((state conn-state)
+(cl-defmethod conn-with-state-loop ((state (conn-substate t))
                                     &key context initial-arg)
   (unwind-protect
       (let* ((inhibit-message t)
@@ -2498,7 +2491,7 @@ If `use-region-p' returns non-nil this will always return
 
 (defvar conn--last-perform-bounds nil)
 
-(defclass conn-bounds-override (conn-thing-object)
+(defclass conn-bounds-object (conn-thing-object)
   ((bounds-op :initform nil :initarg :bounds-op)))
 
 (cl-defgeneric conn-perform-bounds (cmd arg))
@@ -2536,7 +2529,7 @@ If `use-region-p' returns non-nil this will always return
              (nreverse regions))))
     (_ (list (bounds-of-thing-at-point (or (conn-command-thing cmd) cmd))))))
 
-(cl-defmethod conn-perform-bounds ((cmd conn-bounds-override) arg)
+(cl-defmethod conn-perform-bounds ((cmd conn-bounds-object) arg)
   (if-let* ((bounds-op (oref cmd bounds-op)))
       (funcall bounds-op arg)
     (conn-perform-bounds (oref cmd thing) arg)))
@@ -2624,12 +2617,12 @@ If `use-region-p' returns non-nil this will always return
 
 ;;;; Bounds of Things in Region
 
-(defclass conn-things-in-region-override (conn-thing-object)
+(defclass conn-things-in-region-object (conn-thing-object)
   ((things-in-region-op :initform nil :initarg :things-in-region-op)))
 
 (cl-defgeneric conn-perform-things-in-region (thing beg end))
 
-(cl-defmethod conn-perform-things-in-region ((cmd conn-things-in-region-override) beg end)
+(cl-defmethod conn-perform-things-in-region ((cmd conn-things-in-region-object) beg end)
   (if-let* ((op (oref cmd things-in-region-op)))
       (funcall op beg end)
     (conn-perform-things-in-region (oref cmd thing) beg end)))
@@ -3524,6 +3517,8 @@ function of one argument, the location of `point' before the command
 ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
 order to mark the region that should be defined by any of COMMANDS."
   (dolist (cmd commands)
+    (cl-assert (not (conn-state-p cmd))
+               nil "States and thing commands must be disjoint")
     (put cmd :conn-command-thing thing)
     (put cmd :conn-mark-handler handler)))
 
@@ -3572,7 +3567,7 @@ A target finder function should return a list of overlays.")
 
 (defvar conn--dispatch-always-retarget nil)
 
-(defclass conn-dispatch-object (conn-bounds-override)
+(defclass conn-dispatch-object (conn-bounds-object)
   ((description :initform nil :initarg :description)
    (action :initform nil :initarg :action)
    (target-finder :initform nil :initarg :target-finder)))
@@ -8954,12 +8949,12 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-change-state (conn-read-thing-state)
   :loop-handler 'conn-change-state-handler)
 
-(defclass conn-change-override (conn-thing-object)
+(defclass conn-change-object (conn-thing-object)
   ((change-op :initform nil :initarg :change-op)))
 
 (cl-defgeneric conn-perform-change (cmd arg &optional kill))
 
-(cl-defmethod conn-perform-change ((cmd conn-change-override) arg &optional kill)
+(cl-defmethod conn-perform-change ((cmd conn-change-object) arg &optional kill)
   (if-let* ((change-op (oref cmd change-op)))
       (funcall change-op arg kill)
     (conn-perform-change (oref cmd thing) arg kill)))
