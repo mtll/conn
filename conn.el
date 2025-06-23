@@ -359,6 +359,31 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
              restore))))
       (or restore t))))
 
+;;;;; Buffer Properties
+
+(defvar-local conn--buffer-properties nil)
+
+(defun conn-get-buffer-property (property &optional buffer default)
+  (alist-get property
+             (buffer-local-value 'conn--buffer-properties
+                                 (or buffer (current-buffer)))
+             default))
+
+(gv-define-setter conn-get-buffer-property (value prop &optional buffer)
+  `(conn-set-buffer-property ,prop ,value ,buffer))
+
+(defun conn-set-buffer-property (property value &optional buffer)
+  (setf (alist-get property
+                   (buffer-local-value 'conn--buffer-properties
+                                       (or buffer (current-buffer))))
+        value))
+
+(defun conn-unset-buffer-property (property &optional buffer)
+  (let ((buffer (or buffer (current-buffer))))
+    (setf (buffer-local-value 'conn--buffer-properties buffer)
+          (remq (assq property (buffer-local-value 'conn--buffer-properties buffer))
+                (buffer-local-value 'conn--buffer-properties buffer)))))
+
 
 ;;;;; Rings
 
@@ -612,21 +637,29 @@ If BUFFER is nil check `current-buffer'."
            for prop = (get mode property)
            when prop return prop))
 
-(defun conn-get-mode-property (mode propname)
-  (cl-with-gensyms (key-missing)
-    (cl-loop for mode in (conn--derived-mode-all-parents mode)
-             for prop = (if-let* ((table (get mode :conn-properties)))
-                            (gethash propname table key-missing)
-                          key-missing)
-             unless (eq key-missing prop) return prop)))
+(defun conn-get-mode-property (mode property &optional no-inherit default)
+  (if no-inherit
+      (when-let* ((table (get mode :conn-properties)))
+        (gethash property table default))
+    (cl-with-gensyms (key-missing)
+      (cl-loop for mode in (conn--derived-mode-all-parents mode)
+               for prop = (if-let* ((table (get mode :conn-properties)))
+                              (gethash property table key-missing)
+                            key-missing)
+               unless (eq key-missing prop) return prop
+               finally return default))))
+
+(gv-define-setter conn-get-mode-property (value mode prop)
+  `(conn-set-mode-property ,mode ,prop ,value))
 
 (defun conn-set-mode-property (mode prop value)
   (let ((table (or (get mode :conn-properties)
                    (put mode :conn-properties (make-hash-table :test 'eq)))))
     (puthash prop value table)))
 
-(gv-define-setter conn-get-mode-property (value mode prop)
-  `(conn-set-mode-property ,mode ,prop ,value))
+(defun conn-unset-mode-property (mode prop)
+  (when-let* ((table (get mode :conn-properties)))
+    (remhash prop table)))
 
 
 ;;;;; Misc Utils
@@ -871,8 +904,6 @@ of highlighting."
   :type '(list symbol))
 
 (defvar conn-setup-state-hook nil)
-
-(defvar-local conn-hide-mark-alist nil)
 
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
@@ -1520,9 +1551,14 @@ See also `conn-exit-functions'.")
           conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
           conn--local-major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
           conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)))
-  (setf conn--hide-mark-cursor (or (alist-get state conn-hide-mark-alist)
-                                   (alist-get t conn-hide-mark-alist)
-                                   (conn-get-mode-property major-mode :hide-mark-cursor)
+  (setf conn--hide-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
+                                                      :hide-mark-cursor)))
+                                     (if (eq hide t) t
+                                       (alist-get state hide)))
+                                   (when-let* ((hide (conn-get-mode-property
+                                                      major-mode :hide-mark-cursor)))
+                                     (if (eq hide t) t
+                                       (alist-get state hide)))
                                    (conn-state-get state :hide-mark-cursor))
         cursor-type (or (conn-state-get state :cursor) t)))
 
@@ -1852,7 +1888,7 @@ By default `conn-emacs-state' does not bind anything."
 (conn-define-state conn-autopop-state ()
   :abstract t
   :no-keymap t
-  :keep-predicate #'ignore)
+  :pop-predicate #'ignore)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
   (unless conn--state-stack
@@ -1863,7 +1899,7 @@ By default `conn-emacs-state' does not bind anything."
               (setq prefix-command t)))
            (msg-fn (conn-state-get state :message-function))
            (keep-pred
-            (let ((pred (conn-state-get state :keep-predicate)))
+            (let ((pred (conn-state-get state :pop-predicate)))
               (lambda ()
                 (unless (or (prog1 prefix-command
                               (setq prefix-command nil))
@@ -1899,7 +1935,7 @@ By default `conn-emacs-state' does not bind anything."
   (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
     (conn-push-state 'conn-command-state)
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
+(add-hook 'conn-setup-state-hook 'conn-setup-edmacro-state -80)
 
 (defun conn-setup-dired-state ()
   (when (derived-mode-p 'dired-mode)
@@ -1921,14 +1957,16 @@ By default `conn-emacs-state' does not bind anything."
 
 (defun conn-setup-minibuffer-state ()
   (when (eq major-mode 'minibuffer-mode)
-    (setf (alist-get 'conn-emacs-state conn-hide-mark-alist) t)
+    (setf (alist-get 'conn-emacs-state
+                     (conn-get-buffer-property :hide-mark-cursor))
+          t)
     (conn-push-state 'conn-emacs-state)
     (letrec ((hook (lambda ()
                      (conn--push-ephemeral-mark)
                      (remove-hook 'minibuffer-setup-hook hook))))
       (add-hook 'minibuffer-setup-hook hook))
     t))
-(add-hook 'conn-setup-state-hook 'conn-setup-command-state -95)
+(add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
 
 
 ;;;; Labels
