@@ -130,25 +130,19 @@
 (put 'org-link 'bounds-of-thing-at-point
      (lambda () (org-in-regexp org-link-any-re)))
 
-(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing org-link)))
-  (let ((fn (conn-dispatch-re-matches org-link-any-re)))
-    (lambda ()
-      (let ((conn-target-window-predicate conn-target-window-predicate))
-        (add-function :before-while
-                      conn-target-window-predicate
-                      'conn--org-window-p)
-        (funcall fn)))))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-link)))
+  (add-function :before-while
+                conn-target-window-predicate
+                'conn--org-window-p)
+  (conn-dispatch-re-matches org-link-any-re))
 
 (put 'org-paragraph 'forward-op 'org-forward-paragraph)
 
-(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing org-paragraph)))
-  (let ((fn (conn-dispatch-all-things 'org-paragraph)))
-    (lambda ()
-      (let ((conn-target-window-predicate conn-target-window-predicate))
-        (add-function :before-while
-                      conn-target-window-predicate
-                      'conn--org-window-p)
-        (funcall fn)))))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-paragraph)))
+  (add-function :before-while
+                conn-target-window-predicate
+                'conn--org-window-p)
+  (conn-dispatch-all-things 'org-paragraph))
 
 (conn-register-thing-commands
  'org-paragraph 'conn-continuous-thing-handler
@@ -166,7 +160,7 @@
         (goto-char pt)
         (org-open-at-point-global)))))
 
-(cl-defmethod conn-get-dispatch-action ((_cmd (conn-thing org-link)))
+(cl-defmethod conn-get-action ((_cmd (conn-thing org-link)))
   'conn-open-org-link)
 
 (defun conn-org-sentence-forward (arg)
@@ -219,7 +213,7 @@
      (lambda () (bounds-of-thing-at-point 'org-element)))
 (put 'org-heading 'forward-op 'org-next-visible-heading)
 
-(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing org-heading)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing org-heading)))
   (let ((conn-target-window-predicate conn-target-window-predicate))
     (add-function :before-while
                   conn-target-window-predicate

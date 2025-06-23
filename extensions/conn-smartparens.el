@@ -123,7 +123,7 @@
 (put 'sp-sexp 'forward-op 'conn-sp-forward-sexp-op)
 (put 'sp-sexp 'bounds-of-thing-at-point 'conn-sp-bounds-of-sexp)
 
-(cl-defmethod conn-get-dispatch-target-finder ((_cmd (conn-thing sp-sexp)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sp-sexp)))
   (conn-dispatch-things-read-prefix 'sp-sexp 1))
 
 (conn-register-thing-commands
