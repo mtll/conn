@@ -1888,7 +1888,7 @@ By default `conn-emacs-state' does not bind anything."
 (conn-define-state conn-autopop-state ()
   :abstract t
   :no-keymap t
-  :pop-predicate #'ignore)
+  :pop-predicate #'always)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-autopop-state)))
   (unless conn--state-stack
@@ -1898,29 +1898,32 @@ By default `conn-emacs-state' does not bind anything."
             (lambda ()
               (setq prefix-command t)))
            (msg-fn (conn-state-get state :message-function))
-           (keep-pred
+           (pop-pred
             (let ((pred (conn-state-get state :pop-predicate)))
               (lambda ()
                 (unless (or (prog1 prefix-command
                               (setq prefix-command nil))
-                            (funcall pred))
+                            (not (funcall pred)))
                   (when msg-fn
                     (remove-hook 'post-command-hook msg-fn t))
-                  (remove-hook 'post-command-hook keep-pred t)
+                  (remove-hook 'post-command-hook pop-pred t)
                   (remove-hook 'prefix-command-preserve-state-hook preserve-state)
-                  (conn-pop-state)))))
+                  (if (eq conn-current-state state)
+                      (conn-pop-state)
+                    (setq conn--state-stack (delq state conn--state-stack)))))))
            (setup
             (lambda ()
               (remove-hook 'post-command-hook setup t)
               (add-hook 'prefix-command-preserve-state-hook preserve-state)
               (when msg-fn
                 (add-hook 'post-command-hook msg-fn 91 t))
-              (add-hook 'post-command-hook keep-pred 90 t))))
+              (add-hook 'post-command-hook pop-pred 90 t))))
     (add-hook 'post-command-hook setup 99 t)
     (cl-call-next-method)))
 
 (conn-define-state conn-one-command-state (conn-command-state
-                                           conn-autopop-state))
+                                           conn-autopop-state)
+  :lighter "1C")
 
 
 ;;;;; State Setup Functions
