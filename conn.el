@@ -818,34 +818,6 @@ of highlighting."
     (remove-overlays nil nil 'conn-overlay t)))
 
 
-;;;;; Append/Prepend Keymaps
-
-(defun conn--keymap-parent-member-p (elt keymap)
-  (cl-loop for map = keymap then (keymap-parent map)
-           while map thereis (eq elt map)))
-
-(defun conn--append-keymap-parent (keymap new-parent)
-  "Append NEW-PARENT to KEYMAP\\='s parents."
-  (cl-assert (not (conn--keymap-parent-member-p new-parent keymap))
-             nil "Keymap is already a member of parents")
-  (cl-loop for map = keymap then parent
-           for parent = (keymap-parent map)
-           while parent
-           finally return (set-keymap-parent map new-parent)))
-
-(defun conn--remove-keymap-parent (keymap parent-to-remove)
-  "Remove PARENT-TO-REMOVE from KEYMAP\\='s parents."
-  (cl-assert (keymapp parent-to-remove))
-  (cl-loop for map = keymap then parent
-           for parent = (keymap-parent map)
-           while (keymapp parent)
-           when (eq parent parent-to-remove)
-           return (progn
-                    (set-keymap-parent map (keymap-parent parent-to-remove))
-                    (set-keymap-parent parent-to-remove nil)
-                    keymap)))
-
-
 ;;;; Thing Types
 
 (defclass conn-thing-object ()
@@ -9023,12 +8995,7 @@ Currently selected window remains selected afterwards."
   (pcase-let ((`((,beg . ,end) . ,_)
                (conn-perform-bounds cmd arg)))
     (goto-char beg)
-    (cond ((and (bound-and-true-p rectangle-mark-mode) kill)
-           (copy-rectangle-as-kill beg end)
-           (call-interactively #'string-rectangle))
-          ((bound-and-true-p rectangle-mark-mode)
-           (call-interactively #'string-rectangle))
-          (kill
+    (cond (kill
            (funcall (conn--without-conn-maps
                       (keymap-lookup nil conn-kill-region-keys t))
                     beg end)
@@ -9803,6 +9770,7 @@ Operates with the selected windows parent window."
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-command-state 'rectangle-mark-mode)
+  "t" 'string-rectangle
   "z" 'rectangle-exchange-point-and-mark
   "C-y" 'conn-yank-replace-rectangle
   "*" 'calc-grab-rectangle
@@ -10196,15 +10164,7 @@ Operates with the selected windows parent window."
         (cl-pushnew 'conn--local-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
-        (cl-pushnew 'conn--local-override-map emulation-mode-map-alists)
-        (conn--append-keymap-parent isearch-mode-map conn-isearch-map)
-        (conn--append-keymap-parent search-map conn-search-map)
-        (conn--append-keymap-parent goto-map conn-goto-map)
-        (conn--append-keymap-parent indent-rigidly-map conn-indent-rigidly-map))
-    (conn--remove-keymap-parent isearch-mode-map conn-isearch-map)
-    (conn--remove-keymap-parent search-map conn-search-map)
-    (conn--remove-keymap-parent goto-map conn-goto-map)
-    (conn--remove-keymap-parent indent-rigidly-map conn-indent-rigidly-map)
+        (cl-pushnew 'conn--local-override-map emulation-mode-map-alists))
     (setq emulation-mode-map-alists
           (seq-difference '(conn--local-state-map
                             conn--local-major-mode-map
