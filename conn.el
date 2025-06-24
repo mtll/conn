@@ -238,19 +238,6 @@ dynamically.")
 
 ;;;; Utilities
 
-(eval-and-compile
-  (defun conn--stringify (&rest symbols-or-strings)
-    "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (cl-loop for s in symbols-or-strings
-             concat (pcase s
-                      ((pred stringp) s)
-                      ('nil "")
-                      ((pred symbolp) (symbol-name s)))))
-
-  (defun conn--symbolicate (&rest symbols-or-strings)
-    "Concatenate all SYMBOLS-OR-STRINGS to create a new symbol."
-    (intern (apply #'conn--stringify symbols-or-strings))))
-
 (defmacro conn-protected-let* (varlist &rest body)
   "Bind variables according to VARLIST then eval body as in `let*'.
 
@@ -1788,7 +1775,7 @@ to the abnormal hooks `conn-state-entry-functions' or
            (indent 2))
   (let ((doc (or (and (stringp (car properties))
                       (pop properties))
-                 (conn--stringify "Non-nil when `" name "' is active."))))
+                 (format "Non-nil when `%s' is active." name))))
     (cl-assert (plistp properties))
     `(progn
        (dolist (parent ',parents)
@@ -1799,7 +1786,8 @@ to the abnormal hooks `conn-state-entry-functions' or
         nil "Cycle detected in %s inheritance hierarchy" ',name)
        (defvar-local ,name nil ,doc)
        (conn--define-state ',name
-                           (list ,@(mapcar 'macroexp-quote parents))
+                           (list ,@(mapcar (lambda (v) (list 'quote v))
+                                           parents))
                            (list ,@properties))
        ',name)))
 
