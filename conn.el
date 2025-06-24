@@ -835,8 +835,9 @@ of highlighting."
 
 (defun conn--append-keymap-parent (keymap new-parent)
   "Append NEW-PARENT to KEYMAP\\='s parents."
-  (if-let* ((parent (keymap-parent keymap)))
-      (set-keymap-parent keymap (append parent (list new-parent)))
+  (if-let* ((parents (keymap-parent keymap)))
+      (unless (memq new-parent parents)
+        (set-keymap-parent keymap (append parents (list new-parent))))
     (set-keymap-parent keymap (make-composed-keymap new-parent))))
 
 (defun conn--remove-keymap-parent (keymap parent-to-remove)
@@ -2475,13 +2476,16 @@ If `use-region-p' returns non-nil this will always return
     (cons (conn-command-thing cmd)
           (conn-perform-bounds cmd arg))))
 
-(cl-defgeneric conn-read-thing-state-handler (command ctx))
+(cl-defgeneric conn-read-thing-state-handler (command ctx)
+  (:method (_ _) (conn-state-loop-error "Invalid command")))
 
-(cl-defmethod conn-read-thing-state-handler (command _ctx)
-  (when (or (conn-command-thing command)
-            (cl-typep command 'conn-thing-object))
-    (conn-state-loop-exit
-     (list command (conn-state-loop-prefix-arg)))))
+(cl-defmethod conn-read-thing-state-handler ((command (conn-thing t)) _ctx)
+  (conn-state-loop-exit
+   (list command (conn-state-loop-prefix-arg))))
+
+(cl-defmethod conn-read-thing-state-handler ((command conn-thing-object) _ctx)
+  (conn-state-loop-exit
+   (list command (conn-state-loop-prefix-arg))))
 
 (cl-defmethod conn-read-thing-state-handler ((cmd (conn-thing 'dispatch))
                                              _ctx)
@@ -2539,6 +2543,11 @@ If `use-region-p' returns non-nil this will always return
     (setf (alist-get (recursion-depth) conn--last-perform-bounds)
           (cl-call-next-method))))
 
+(cl-defmethod conn-perform-bounds ((cmd conn-bounds-object) arg)
+  (if-let* ((bounds-op (oref cmd bounds-op)))
+      (funcall bounds-op arg)
+    (conn-perform-bounds (oref cmd thing) arg)))
+
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing t)) arg)
   (pcase cmd
     ((let (and conn-this-command-handler (guard conn-this-command-handler))
@@ -2566,11 +2575,6 @@ If `use-region-p' returns non-nil this will always return
                    (seq-max (mapcar #'cdr regions)))
              (nreverse regions))))
     (_ (list (bounds-of-thing-at-point (or (conn-command-thing cmd) cmd))))))
-
-(cl-defmethod conn-perform-bounds ((cmd conn-bounds-object) arg)
-  (if-let* ((bounds-op (oref cmd bounds-op)))
-      (funcall bounds-op arg)
-    (conn-perform-bounds (oref cmd thing) arg)))
 
 (cl-defmethod conn-perform-bounds ((_cmd (eql 'region)) _arg)
   (region-bounds))
@@ -2665,7 +2669,7 @@ If `use-region-p' returns non-nil this will always return
       (funcall op beg end)
     (conn-perform-things-in-region (oref cmd thing) beg end)))
 
-(cl-defmethod conn-perform-things-in-region (thing beg end)
+(cl-defmethod conn-perform-things-in-region ((thing (conn-thing t)) beg end)
   (let ((thing (or (conn-command-thing thing) thing)))
     (ignore-errors
       (goto-char beg)
@@ -3720,12 +3724,11 @@ A target finder function should return a list of overlays.")
 
 (cl-defgeneric conn-get-action (cmd))
 
-(cl-defmethod conn-get-action (cmd)
-  (if (or (conn-command-thing cmd)
-          (conn-thing-p cmd)
-          (conn-dispatch-object-p cmd))
-      'conn-dispatch-goto
-    'conn-dispatch-jump))
+(cl-defmethod conn-get-action (_cmd)
+  'conn-dispatch-jump)
+
+(cl-defmethod conn-get-action ((_cmd (conn-thing t)))
+  'conn-dispatch-goto)
 
 (cl-defmethod conn-get-action ((cmd conn-dispatch-object))
   (or (oref cmd action)
@@ -3863,24 +3866,39 @@ A target finder function should return a list of overlays.")
        (setf (oref ctx action) (condition-case _
                                    (conn-make-action command)
                                  (error nil)))))
-    ((or (pred conn-thing-p)
-         (pred conn-command-thing)
-         (pred conn-dispatch-object-p))
-     (setf (oref ctx thing) command
-           (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg))
-     (when (null (oref ctx action))
-       (setf (oref ctx action) (conn-make-action (conn-get-action command))))
-     (conn-dispatch-push-history ctx)
-     (conn-state-loop-exit
-      (conn-perform-dispatch (oref ctx action)
-                             (oref ctx thing)
-                             (oref ctx thing-arg)
-                             :repeat (oref ctx repeat)
-                             :restrict-windows (oref ctx restrict-windows)
-                             :other-end (oref ctx other-end)
-                             :no-other-end (oref ctx no-other-end)
-                             :always-retarget (oref ctx always-retarget))))
     (_ (conn-state-loop-error "Invalid command"))))
+
+(cl-defmethod conn-dispatch-state-handler ((command (conn-thing t)) ctx)
+  (setf (oref ctx thing) command
+        (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg))
+  (when (null (oref ctx action))
+    (setf (oref ctx action) (conn-make-action (conn-get-action command))))
+  (conn-dispatch-push-history ctx)
+  (conn-state-loop-exit
+   (conn-perform-dispatch (oref ctx action)
+                          (oref ctx thing)
+                          (oref ctx thing-arg)
+                          :repeat (oref ctx repeat)
+                          :restrict-windows (oref ctx restrict-windows)
+                          :other-end (oref ctx other-end)
+                          :no-other-end (oref ctx no-other-end)
+                          :always-retarget (oref ctx always-retarget))))
+
+(cl-defmethod conn-dispatch-state-handler ((command conn-dispatch-object) ctx)
+  (setf (oref ctx thing) command
+        (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg))
+  (when (null (oref ctx action))
+    (setf (oref ctx action) (conn-make-action (conn-get-action command))))
+  (conn-dispatch-push-history ctx)
+  (conn-state-loop-exit
+   (conn-perform-dispatch (oref ctx action)
+                          (oref ctx thing)
+                          (oref ctx thing-arg)
+                          :repeat (oref ctx repeat)
+                          :restrict-windows (oref ctx restrict-windows)
+                          :other-end (oref ctx other-end)
+                          :no-other-end (oref ctx no-other-end)
+                          :always-retarget (oref ctx always-retarget))))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'dispatch-other-end))
                                            ctx)
