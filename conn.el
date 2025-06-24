@@ -820,19 +820,30 @@ of highlighting."
 
 ;;;;; Append/Prepend Keymaps
 
+(defun conn--keymap-parent-member-p (elt keymap)
+  (cl-loop for map = keymap then (keymap-parent map)
+           while map thereis (eq elt map)))
+
 (defun conn--append-keymap-parent (keymap new-parent)
   "Append NEW-PARENT to KEYMAP\\='s parents."
-  (if-let* ((parents (keymap-parent keymap)))
-      (unless (memq new-parent parents)
-        (set-keymap-parent keymap (append parents (list new-parent))))
-    (set-keymap-parent keymap (make-composed-keymap new-parent))))
+  (cl-assert (not (conn--keymap-parent-member-p new-parent keymap))
+             nil "Keymap is already a member of parents")
+  (cl-loop for map = keymap then parent
+           for parent = (keymap-parent map)
+           while parent
+           finally return (set-keymap-parent map new-parent)))
 
 (defun conn--remove-keymap-parent (keymap parent-to-remove)
   "Remove PARENT-TO-REMOVE from KEYMAP\\='s parents."
-  (when-let* ((parent (keymap-parent keymap)))
-    (setf (cdr parent) (delq parent-to-remove (cdr parent)))
-    (unless (cdr parent)
-      (set-keymap-parent keymap nil))))
+  (cl-assert (keymapp parent-to-remove))
+  (cl-loop for map = keymap then parent
+           for parent = (keymap-parent map)
+           while (keymapp parent)
+           when (eq parent parent-to-remove)
+           return (progn
+                    (set-keymap-parent map (keymap-parent parent-to-remove))
+                    (set-keymap-parent parent-to-remove nil)
+                    keymap)))
 
 
 ;;;; Thing Types
