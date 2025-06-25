@@ -856,7 +856,7 @@ of highlighting."
     (put thing 'beginning-op beg-op)
     (put thing 'end-op beg-op))
   (when bounds-op
-    (put thing 'bounds-of-thing-at-point)))
+    (put thing 'bounds-of-thing-at-point bounds-op)))
 
 
 ;;;; States
@@ -3347,6 +3347,12 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
   (and (symbolp command)
        (get command :conn-mark-handler)))
 
+(gv-define-setter conn-command-mark-handler (handler command)
+  `(conn-set-command-mark-handler ,command ,handler))
+
+(defun conn-set-command-mark-handler (command handler)
+  (put command :conn-mark-handler handler))
+
 (defun conn-symbol-handler (beg)
   "Mark handler for symbols."
   (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
@@ -3545,8 +3551,8 @@ order to mark the region that should be defined by any of COMMANDS."
   (dolist (cmd commands)
     (cl-assert (not (conn-state-name-p cmd))
                nil "States and thing commands must be disjoint")
-    (put cmd :conn-command-thing thing)
-    (put cmd :conn-mark-handler handler)))
+    (setf (conn-command-thing cmd) thing
+          (conn-command-mark-handler cmd) handler)))
 
 (defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
   `(progn
