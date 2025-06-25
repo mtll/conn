@@ -2614,10 +2614,6 @@ If `use-region-p' returns non-nil this will always return
   (cons (cons (region-beginning) (region-end))
         (region-bounds)))
 
-(cl-defmethod conn-perform-bounds ((_cmd (eql 'conn-expand-remote)) _arg)
-  (conn--push-ephemeral-mark)
-  (cl-call-next-method))
-
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing isearch)) _arg)
   (let ((start (point))
         (name (symbol-name cmd))
@@ -3660,8 +3656,11 @@ A target finder function should return a list of overlays.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
-  "<remap> <conn-expand>" 'conn-expand-remote
-  "<remap> <conn-contract>" 'conn-expand-remote
+  "<remap> <conn-expand>" (conn-dispatch-object
+                           :thing 'expansion
+                           :bounds-op (lambda (arg)
+                                        (conn--push-ephemeral-mark)
+                                        (conn-perform-bounds 'conn-expand arg)))
   "m" 'forward-sexp
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
@@ -3844,7 +3843,7 @@ A target finder function should return a list of overlays.")
                                  (error nil)))))
     (_ (conn-state-loop-error "Invalid command"))))
 
-(cl-defmethod conn-dispatch-state-handler ((command (conn-thing t)) ctx)
+(defun conn--dispatch-handle-thing-command (command ctx)
   (setf (oref ctx thing) command
         (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg))
   (when (null (oref ctx action))
@@ -3860,21 +3859,11 @@ A target finder function should return a list of overlays.")
                           :no-other-end (oref ctx no-other-end)
                           :always-retarget (oref ctx always-retarget))))
 
+(cl-defmethod conn-dispatch-state-handler ((command (conn-thing t)) ctx)
+  (conn--dispatch-handle-thing-command command ctx))
+
 (cl-defmethod conn-dispatch-state-handler ((command conn-dispatch-object) ctx)
-  (setf (oref ctx thing) command
-        (oref ctx thing-arg) (conn-state-loop-consume-prefix-arg))
-  (when (null (oref ctx action))
-    (setf (oref ctx action) (conn-make-action (conn-get-action command))))
-  (conn-dispatch-push-history ctx)
-  (conn-state-loop-exit
-   (conn-perform-dispatch (oref ctx action)
-                          (oref ctx thing)
-                          (oref ctx thing-arg)
-                          :repeat (oref ctx repeat)
-                          :restrict-windows (oref ctx restrict-windows)
-                          :other-end (oref ctx other-end)
-                          :no-other-end (oref ctx no-other-end)
-                          :always-retarget (oref ctx always-retarget))))
+  (conn--dispatch-handle-thing-command command ctx))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'dispatch-other-end))
                                            ctx)
@@ -6611,6 +6600,8 @@ potential expansions.  Functions may return invalid expansions
   "h" 'conn-expand
   "l" 'conn-expand)
 
+(put 'expansion :conn-thing t)
+
 (defun conn--expand-filter-regions (regions)
   (let (result)
     (pcase-dolist ((and reg `(,beg . ,end))
@@ -7058,9 +7049,6 @@ Expansions and contractions are provided by functions in
 (conn-register-thing-commands
  'expansion nil
  'conn-expand 'conn-contract)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing expansion)))
-  (conn-dispatch-read-string-with-timeout))
 
 (conn-register-thing-commands
  'list 'conn--down-list-mark-handler
