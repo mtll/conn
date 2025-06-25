@@ -846,6 +846,18 @@ of highlighting."
 (defun conn-set-command-thing (cmd thing)
   (put cmd :conn-command-thing thing))
 
+(cl-defun conn-register-thing (thing &key forward-op beg-op end-op bounds-op)
+  (put thing :conn-thing t)
+  (when forward-op
+    (put thing 'forward-op forward-op))
+  (when (or beg-op end-op)
+    (cl-assert (and beg-op end-op)
+               nil "If either beg-op or end-op is specified both must be")
+    (put thing 'beginning-op beg-op)
+    (put thing 'end-op beg-op))
+  (when bounds-op
+    (put thing 'bounds-of-thing-at-point)))
+
 
 ;;;; States
 
@@ -3699,9 +3711,6 @@ A target finder function should return a list of overlays.")
 
 (cl-defgeneric conn-get-action (cmd))
 
-(cl-defmethod conn-get-action (_cmd)
-  'conn-dispatch-jump)
-
 (cl-defmethod conn-get-action ((_cmd (conn-thing t)))
   'conn-dispatch-goto)
 
@@ -3711,11 +3720,8 @@ A target finder function should return a list of overlays.")
 
 (cl-defgeneric conn-get-target-finder (cmd))
 
-(cl-defmethod conn-get-target-finder (cmd)
-  (when (or (conn-command-thing cmd)
-            (conn-thing-p cmd)
-            (conn-dispatch-object-p cmd))
-    (funcall conn-dispatch-default-target-finder)))
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing t)))
+  (funcall conn-dispatch-default-target-finder))
 
 (cl-defmethod conn-get-target-finder ((cmd conn-dispatch-object))
   (if-let* ((tf (oref cmd target-finder)))
@@ -6600,7 +6606,7 @@ potential expansions.  Functions may return invalid expansions
   "h" 'conn-expand
   "l" 'conn-expand)
 
-(put 'expansion :conn-thing t)
+(conn-register-thing 'expansion)
 
 (defun conn--expand-filter-regions (regions)
   (let (result)
@@ -6793,36 +6799,41 @@ Expansions and contractions are provided by functions in
 (conn-define-mark-command conn-mark-string string)
 (conn-define-mark-command conn-mark-filename filename)
 
-(put 'defun 'forward-op 'conn-forward-defun)
+(conn-register-thing 'defun :forward-op 'conn-forward-defun)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing defun)))
   (conn-dispatch-all-defuns))
 
-(put 'visual-line 'forward-op
-     (lambda (&optional N)
-       (let ((line-move-visual t))
-         (vertical-motion 0)
-         (line-move N t))))
+(conn-register-thing
+ 'visual-line
+ :forward-op (lambda (&optional N)
+               (let ((line-move-visual t))
+                 (vertical-motion 0)
+                 (line-move N t))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line)))
   'conn-dispatch-visual-lines)
 
 (conn-define-mark-command conn-mark-visual-line visual-line)
 
-(put 'region 'bounds-of-thing-at-point
-     (lambda () (cons (region-beginning) (region-end))))
+(conn-register-thing
+ 'region
+ :bounds-op (lambda () (cons (region-beginning) (region-end))))
 
-(put 'buffer-after-point 'bounds-of-thing-at-point
-     (lambda () (cons (point) (point-max))))
+(conn-register-thing
+ 'buffer-after-point
+ :bounds-op (lambda () (cons (point) (point-max))))
 
-(put 'buffer-before-point 'bounds-of-thing-at-point
-     (lambda () (cons (point-min) (point))))
+(conn-register-thing
+ 'buffer-before-point
+ :bounds-op (lambda () (cons (point-min) (point))))
 
 (conn-define-mark-command conn-mark-after-point buffer-after-point t)
 (conn-define-mark-command conn-mark-before-point buffer-before-point t)
 
-(put 'visible 'bounds-of-thing-at-point
-     (lambda () (cons (window-start) (window-end))))
+(conn-register-thing
+ 'visible
+ :bounds-op (lambda () (cons (window-start) (window-end))))
 
 (conn-define-mark-command conn-mark-visible visible)
 
@@ -6853,7 +6864,7 @@ Expansions and contractions are provided by functions in
  'region nil
  'conn-toggle-mark-command)
 
-(put 'symbol 'forward-op 'forward-symbol)
+(conn-register-thing 'symbol :forward-op 'forward-symbol)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing symbol)))
   (conn-dispatch-things-read-prefix 'symbol 1))
@@ -6862,7 +6873,7 @@ Expansions and contractions are provided by functions in
  'symbol 'conn-continuous-thing-handler
  'forward-symbol 'conn-backward-symbol)
 
-(put 'page 'forward-op 'forward-page)
+(conn-register-thing 'page :forward-op 'forward-page)
 
 (conn-register-thing-commands
  'page 'conn-discrete-thing-handler
@@ -6885,7 +6896,7 @@ Expansions and contractions are provided by functions in
  'upcase-word 'downcase-word 'capitalize-word
  'upcase-dwim 'downcase-dwim 'capitalize-dwim)
 
-(put 'sexp 'forward-op 'forward-sexp)
+(conn-register-thing 'sexp :forward-op 'forward-sexp)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sexp)))
   (conn-dispatch-things-read-prefix 'sexp 1))
@@ -6894,7 +6905,7 @@ Expansions and contractions are provided by functions in
  'sexp 'conn-continuous-thing-handler
  'forward-sexp 'backward-sexp)
 
-(put 'list 'forward-op 'forward-list)
+(conn-register-thing 'list :forward-op 'forward-list)
 
 (conn-register-thing-commands
  'list 'conn-continuous-thing-handler
@@ -6940,13 +6951,13 @@ Expansions and contractions are provided by functions in
  'list 'conn--down-list-mark-handler
  'down-list)
 
-(put 'whitespace 'forward-op 'forward-whitespace)
+(conn-register-thing 'whitespace :forward-op 'forward-whitespace)
 
 (conn-register-thing-commands
  'whitespace 'conn-discrete-thing-handler
  'forward-whitespace 'conn-backward-whitespace)
 
-(put 'sentence 'forward-op 'forward-sentence)
+(conn-register-thing 'sentence :forward-op 'forward-sentence)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence)))
   (conn-dispatch-all-things 'sentence))
@@ -6955,7 +6966,7 @@ Expansions and contractions are provided by functions in
  'sentence 'conn-continuous-thing-handler
  'forward-sentence 'backward-sentence)
 
-(put 'paragraph 'forward-op 'forward-paragraph)
+(conn-register-thing 'paragraph :forward-op 'forward-paragraph)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph)))
   (conn-dispatch-all-things 'paragraph))
@@ -6988,7 +6999,7 @@ Expansions and contractions are provided by functions in
  'conn-line-forward-op
  'conn-goto-line)
 
-(put 'line-column 'forward-op 'next-line)
+(conn-register-thing 'line-column :forward-op 'next-line)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column)))
   'conn-dispatch-columns)
@@ -7003,8 +7014,10 @@ Expansions and contractions are provided by functions in
 
 (conn-register-thing-commands 'line nil 'comment-line)
 
-(put 'outer-line 'beginning-op (lambda () (move-beginning-of-line nil)))
-(put 'outer-line 'end-op (lambda () (move-end-of-line nil)))
+(conn-register-thing
+ 'outer-line
+ :beg-op (lambda () (move-beginning-of-line nil))
+ :end-op (lambda () (move-end-of-line nil)))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line)))
   'conn-dispatch-lines)
@@ -7023,8 +7036,10 @@ Expansions and contractions are provided by functions in
      (conn--end-of-inner-line-1)
      (point))))
 
-(put 'inner-line 'bounds-of-thing-at-point 'conn--bounds-of-inner-line)
-(put 'inner-line 'forward-op 'conn-forward-inner-line)
+(conn-register-thing
+ 'inner-line
+ :bounds-op 'conn--bounds-of-inner-line
+ :forward-op 'conn-forward-inner-line)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line)))
   'conn-dispatch-inner-lines)
@@ -8098,8 +8113,6 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 
 ;;;;; Transpose
 
-(put 'dispatch :conn-thing t)
-
 (conn-define-state conn-transpose-state (conn-read-thing-state)
   :lighter "T"
   :loop-handler 'conn-transpose-state-handler
@@ -8122,6 +8135,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "SPC" 'scroll-up
   "DEL" 'scroll-down
   "C-o" 'other-window)
+
+(conn-register-thing 'dispatch)
 
 (defun conn-transpose-state-handler (command ctx)
   (pcase command
@@ -10308,12 +10323,13 @@ Operates with the selected windows parent window."
 (declare-function outline-on-heading-p "outline")
 (declare-function outline-up-heading "outline")
 
-(put 'heading 'bounds-of-thing-at-point
-     (lambda ()
-       (save-mark-and-excursion
-         (outline-mark-subtree)
-         (cons (region-beginning) (region-end)))))
-(put 'heading 'forward-op 'outline-next-visible-heading)
+(conn-register-thing
+ 'heading
+ :bounds-op (lambda ()
+              (save-mark-and-excursion
+                (outline-mark-subtree)
+                (cons (region-beginning) (region-end))))
+ :forward-op 'outline-next-visible-heading)
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing heading)))
   (conn-dispatch-headings))
@@ -10765,7 +10781,9 @@ Operates with the selected windows parent window."
 
 ;;;; Markdown
 
-(put 'md-paragraph 'forward-op 'markdown-forward-paragraph)
+(conn-register-thing
+ 'md-paragraph
+ :forward-op 'markdown-forward-paragraph)
 
 (conn-register-thing-commands
  'md-paragraph 'conn-continuous-thing-handler
