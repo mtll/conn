@@ -1043,7 +1043,7 @@ Composed keymap is of the same form as returned by
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type (conn--find-state state) conn-state)
-  (cl-assert (symbolp mode))
+  (cl-check-type mode symbol)
   (if (conn-state-get state :no-keymap)
       (unless dont-create
         (error "%s has non-nil :no-keymap property" state))
@@ -1103,7 +1103,7 @@ The composed map is a keymap of the form:
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (cl-check-type (conn--find-state state) conn-state)
-  (cl-assert (symbolp mode))
+  (cl-check-type mode symbol)
   (if (conn-state-get state :no-keymap)
       (unless dont-create
         (error "%s has non-nil :no-keymap property" state))
@@ -1145,7 +1145,7 @@ return it."
 
 (defun conn-set-mode-map-depth (state mode depth)
   (cl-check-type (conn--find-state state) conn-state)
-  (cl-assert (symbolp mode))
+  (cl-check-type mode symbol)
   (cl-assert (<= -100 depth 100) nil "Depth must be between -100 and 100")
   (cl-assert (not (conn-state-get state :no-keymap))
              nil "%s :no-keymap property is non-nil" state)
@@ -1304,15 +1304,15 @@ mouse-3: Describe current input method")
 (eval-and-compile
   (defvar conn--static-properties (make-hash-table :test 'eq))
 
-  (defun conn-declare-property-static (property)
-    (cl-assert (symbolp property))
-    (setf (gethash property conn--static-properties) t))
-
   (defun conn-property-static-p (property)
     (and (gethash property conn--static-properties) t))
 
-  (conn-declare-property-static :no-keymap)
-  (conn-declare-property-static :abstract)
+  (defun conn-set-property-static (property)
+    (cl-check-type property symbol)
+    (setf (gethash property conn--static-properties) t))
+
+  (conn-set-property-static :no-keymap)
+  (conn-set-property-static :abstract)
 
   (defun conn--state-get-compiler-macro ( exp state property
                                           &optional
@@ -1484,8 +1484,11 @@ These match if the argument is a substate of STATE."
        `(or (conn-command-thing ,cmd)
             (and (conn-thing-p ,cmd) ,cmd)))
   (lambda (thing &rest _)
-    (when thing `((conn-thing ,thing)
-                  (conn-thing t)))))
+    (pcase thing
+      ('nil nil)
+      ('t `((conn-thing t)))
+      (_ `((conn-thing ,thing)
+           (conn-thing t))))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for conn-thing specializers."
@@ -4064,7 +4067,8 @@ Optionally the overlay may have an associated THING."
 
 (defun conn-delete-target-overlay (ov)
   (let ((win (overlay-get ov 'window)))
-    (cl-assert (memq ov (alist-get win conn-targets)))
+    (cl-assert (memq ov (alist-get win conn-targets))
+               nil "Not a target overlay")
     (conn-label-delete (overlay-get ov 'conn-label))
     (setf (alist-get win conn-targets)
           (delq ov (alist-get win conn-targets))))
@@ -9208,6 +9212,10 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
 (defvar-keymap conn-other-window-repeat-map
   :repeat t
   "o" 'other-window)
+
+(defvar-keymap conn-wincontrol-next-window-repeat-map
+  :repeat t
+  "o" 'conn-wincontrol-next-window)
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
