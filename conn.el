@@ -1484,11 +1484,8 @@ These match if the argument is a substate of STATE."
        `(or (conn-command-thing ,cmd)
             (and (conn-thing-p ,cmd) ,cmd)))
   (lambda (thing &rest _)
-    (pcase thing
-      ('nil nil)
-      ('t `((conn-thing t)))
-      (_ `((conn-thing ,thing)
-           (conn-thing t))))))
+    (and thing `((conn-thing ,thing)
+                 (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for conn-thing specializers."
@@ -3700,9 +3697,16 @@ A target finder function should return a list of overlays.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-state)
-  "]" (conn-dispatch-object
+  ")" (conn-dispatch-object
        :thing 'sexp
-       :description "lists"
+       :description "list"
+       :target-finder (lambda ()
+                        (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
+  "]" (conn-dispatch-object
+       :thing 'list
+       :description "inner-list"
+       :bounds-op (lambda (arg)
+                    (conn-perform-bounds 'down-list arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
   "M-r" (conn-remap-key "<conn-region-map>")
