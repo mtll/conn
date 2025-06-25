@@ -9180,8 +9180,8 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
 ;;;;; Wincontrol Internals
 
 (defvar-keymap conn-window-resize-map
-  "i" 'conn-wincontrol-maximize-vertically
-  "l" 'conn-wincontrol-maximize-horizontally
+  "v" 'conn-wincontrol-maximize-vertically
+  "r" 'conn-wincontrol-maximize-horizontally
   "m" 'maximize-window
   "b" 'balance-windows
   "n" 'conn-wincontrol-narrow-window
@@ -9202,10 +9202,10 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
 
 (defvar-keymap conn-wincontrol-scroll-repeat-map
   :repeat t
-  "SPC" 'conn-wincontrol-scroll-up
-  "DEL" 'conn-wincontrol-scroll-down
-  "M-TAB" 'conn-wincontrol-other-window-scroll-up
-  "TAB" 'conn-wincontrol-other-window-scroll-down)
+  "i" 'conn-wincontrol-scroll-down
+  "k" 'conn-wincontrol-scroll-up
+  "SPC" 'conn-wincontrol-other-window-scroll-up
+  "DEL" 'conn-wincontrol-other-window-scroll-down)
 
 (defvar-keymap conn-wincontrol-text-scale-repeat-map
   :repeat t
@@ -9216,10 +9216,10 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   :repeat t
   "C" 'tab-bar-duplicate-tab
   "c" 'tab-bar-duplicate-tab
-  "I" 'tab-new
-  "i" 'tab-next
-  "K" 'tab-close
-  "k" 'tab-previous
+  "M" 'tab-new
+  "m" 'tab-next
+  "N" 'tab-close
+  "n" 'tab-previous
   "b" 'tab-bar-move-window-to-tab
   "U" 'tab-bar-detach-tab
   "u" 'tab-bar-detach-tab)
@@ -9270,17 +9270,15 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   "M-k" 'conn-wincontrol-windmove-down
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "M-<tab>" 'conn-wincontrol-other-window-scroll-up
-  "M-TAB" 'conn-wincontrol-other-window-scroll-up
-  "DEL" 'conn-wincontrol-scroll-down
-  "SPC" 'conn-wincontrol-scroll-up
-  "TAB" 'conn-wincontrol-other-window-scroll-down
-  "<tab>" 'conn-wincontrol-other-window-scroll-down
+  "TAB" 'delete-other-windows
+  "<tab>" 'delete-other-windows
+  "SPC" 'conn-wincontrol-other-window-scroll-up
+  "DEL" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
+  "g" (conn-remap-key "M-g" t)
   "e" 'conn-wincontrol-exit
-  "m" 'conn-wincontrol-quit-other-window-for-scrolling
   "C" 'tab-bar-duplicate-tab
   "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
@@ -9290,14 +9288,12 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   "<return>" 'conn-other-place-prefix
   "F" 'toggle-frame-fullscreen
   "f" 'conn-goto-window
-  "g" 'delete-other-windows
-  "M" 'tab-swith
-  "I" 'tab-new
-  "i" 'tab-next
   "j" 'previous-buffer
   "J" 'bury-buffer
-  "K" 'tab-close
-  "k" 'tab-previous
+  "I" 'beginning-of-buffer
+  "K" 'end-of-buffer
+  "i" 'conn-wincontrol-scroll-down
+  "k" 'conn-wincontrol-scroll-up
   "l" 'next-buffer
   "L" 'unbury-buffer
   "b" 'tab-bar-move-window-to-tab
@@ -9318,7 +9314,11 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   "t" 'conn-transpose-window
   "y" 'conn-yank-window
   "z" 'text-scale-decrease
-  "Z" 'text-scale-increase)
+  "Z" 'text-scale-increase
+  "M" 'tab-new
+  "m" 'tab-next
+  "N" 'tab-close
+  "n" 'tab-previous)
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
