@@ -368,7 +368,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (defun conn-unset-buffer-property (property &optional buffer)
   (let ((buffer (or buffer (current-buffer))))
     (setf (buffer-local-value 'conn--buffer-properties buffer)
-          (remq (assq property (buffer-local-value 'conn--buffer-properties buffer))
+          (delq (assq property (buffer-local-value 'conn--buffer-properties buffer))
                 (buffer-local-value 'conn--buffer-properties buffer)))))
 
 
@@ -2480,7 +2480,7 @@ If `use-region-p' returns non-nil this will always return
   (conn-state-loop-exit
    (list cmd (conn-state-loop-prefix-arg))))
 
-(cl-defmethod conn-read-thing-state-handler ((command (eql 'recursive-edit))
+(cl-defmethod conn-read-thing-state-handler ((command (eql recursive-edit))
                                              ctx)
   (if (oref ctx recursive-edit)
       (conn-state-loop-exit
@@ -2509,11 +2509,11 @@ If `use-region-p' returns non-nil this will always return
        (quit nil))
      ctx)))
 
-(cl-defmethod conn-read-thing-state-handler ((_cmd (eql 'execute-extended-command))
+(cl-defmethod conn-read-thing-state-handler ((_cmd (eql execute-extended-command))
                                              ctx)
   (conn--completing-read-dispatch ctx))
 
-(cl-defmethod conn-read-thing-state-handler ((_cmd (eql 'help)) ctx)
+(cl-defmethod conn-read-thing-state-handler ((_cmd (eql help)) ctx)
   (conn--completing-read-dispatch ctx))
 
 
@@ -2564,13 +2564,13 @@ If `use-region-p' returns non-nil this will always return
              (nreverse regions))))
     (_ (list (bounds-of-thing-at-point (or (conn-command-thing cmd) cmd))))))
 
-(cl-defmethod conn-perform-bounds ((_cmd (eql 'region)) _arg)
+(cl-defmethod conn-perform-bounds ((_cmd (eql region)) _arg)
   (region-bounds))
 
 (cl-defmethod conn-perform-bounds ((_cmd (conn-thing buffer)) _arg)
   (list (cons (point-min) (point-max))))
 
-(cl-defmethod conn-perform-bounds ((_cmd (eql 'conn-perform-bounds)) _arg)
+(cl-defmethod conn-perform-bounds ((_cmd (eql conn-perform-bounds)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
 
@@ -3131,6 +3131,7 @@ Possibilities: \\<query-replace-map>
                (redisplay)
                (catch 'end
                  (while t
+                   (ding t)
                    (pcase (let ((executing-kbd-macro nil)
                                 (defining-kbd-macro nil))
                             (message "%s" msg)
@@ -3157,8 +3158,7 @@ Possibilities: \\<query-replace-map>
 \\[edit]	Enter recursive edit; resume executing the keyboard macro afterwards.
 \\[automatic]	Continue iteration and don't ask to save again."))
                         (with-current-buffer standard-output
-                          (help-mode))))
-                     (_ (ding t)))))))))))))
+                          (help-mode)))))))))))))))
 
 (defun conn--kapply-save-restriction (iterator)
   (let (kapply-saved-restrictions)
@@ -3884,21 +3884,21 @@ A target finder function should return a list of overlays.")
 (cl-defmethod conn-dispatch-state-handler ((command conn-dispatch-object) ctx)
   (conn--dispatch-handle-thing-command command ctx))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'dispatch-other-end))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql dispatch-other-end))
                                            ctx)
   (unless (oref ctx no-other-end)
     (setf (oref ctx other-end) (not (oref ctx other-end)))))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'repeat-dispatch))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql repeat-dispatch))
                                            ctx)
   (unless (oref ctx non-repeatable)
     (setf (oref ctx repeat) (not (oref ctx repeat)))))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'restrict-windows))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql restrict-windows))
                                            ctx)
   (setf (oref ctx restrict-windows) (not (oref ctx restrict-windows))))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'conn-repeat-last-dispatch))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-repeat-last-dispatch))
                                            ctx)
   (if-let* ((prev (conn-ring-head conn-dispatch-ring)))
       (if (conn-action-stale-p (oref prev action))
@@ -3917,7 +3917,7 @@ A target finder function should return a list of overlays.")
                                 :always-retarget (oref prev always-retarget))))
     (conn-state-loop-error "Dispatch ring empty")))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'conn-dispatch-cycle-ring-next))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-next))
                                            _ctx)
   (conn-dispatch-cycle-ring-next)
   (if (bound-and-true-p conn-posframe-mode)
@@ -3925,7 +3925,7 @@ A target finder function should return a list of overlays.")
     (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'conn-dispatch-cycle-ring-previous))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-previous))
                                            _ctx)
   (conn-dispatch-cycle-ring-previous)
   (if (bound-and-true-p conn-posframe-mode)
@@ -3933,7 +3933,7 @@ A target finder function should return a list of overlays.")
     (conn-state-loop-message "%s" (conn-describe-dispatch
                                    (conn-ring-head conn-dispatch-ring)))))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'conn-dispatch-ring-describe-head))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-ring-describe-head))
                                            _ctx)
   (conn-dispatch-ring-remove-stale)
   (if (bound-and-true-p conn-posframe-mode)
@@ -3962,10 +3962,10 @@ A target finder function should return a list of overlays.")
        (quit nil))
      ctx)))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'help)) ctx)
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql help)) ctx)
   (conn--completing-read-dispatch ctx))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'execute-extended-command))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql execute-extended-command))
                                            ctx)
   (conn--completing-read-dispatch ctx))
 
@@ -4941,7 +4941,7 @@ contain targets."
                                  (propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay (point) 0)))))))))
 
-(cl-defmethod conn-dispatch-targets-other-end-p ((_ (eql 'conn-dispatch-end-of-lines)))
+(cl-defmethod conn-dispatch-targets-other-end-p ((_ (eql conn-dispatch-end-of-lines)))
   t)
 
 (defun conn-dispatch-inner-lines ()
@@ -5124,7 +5124,7 @@ contain targets."
 (oclosure-define (conn-dispatch-goto
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-goto)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-goto)))
   (oclosure-lambda (conn-dispatch-goto
                     (no-history t)
                     (description "Goto"))
@@ -5148,7 +5148,7 @@ contain targets."
 (oclosure-define (conn-dispatch-push-button
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-push-button)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-push-button)))
   (oclosure-lambda (conn-dispatch-push-button
                     (description "Push Button")
                     (no-history t))
@@ -5164,7 +5164,7 @@ contain targets."
   (str :type string)
   (seperator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-copy-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
   (oclosure-lambda (conn-dispatch-copy-to
                     (str (funcall region-extract-function nil))
                     (seperator (when (conn-state-loop-consume-prefix-arg)
@@ -5202,7 +5202,7 @@ contain targets."
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-copy-replace-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-replace-to)))
   (oclosure-lambda (conn-dispatch-copy-replace-to
                     (description "Copy Region and Replace To")
                     (str (funcall region-extract-function nil))
@@ -5228,7 +5228,7 @@ contain targets."
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-yank-replace-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-replace-to
                     (description "Yank and Replace To")
                     (str (current-kill 0))
@@ -5254,7 +5254,7 @@ contain targets."
                   (:parent conn-action))
   (str :type string))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-yank-read-replace-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-read-replace-to)))
   (oclosure-lambda (conn-dispatch-yank-read-replace-to
                     (description "Yank and Replace To")
                     (str (read-from-kill-ring "Yank: "))
@@ -5281,7 +5281,7 @@ contain targets."
   (str :type string)
   (seperator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-yank-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
   (oclosure-lambda (conn-dispatch-yank-to
                     (str (current-kill 0))
                     (seperator (when (conn-state-loop-consume-prefix-arg)
@@ -5320,7 +5320,7 @@ contain targets."
   (str :type string)
   (seperator :type string))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-reading-yank-to)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
   (oclosure-lambda (conn-dispatch-reading-yank-to
                     (str (read-from-kill-ring "Yank To: "))
                     (seperator (when (conn-state-loop-consume-prefix-arg)
@@ -5365,7 +5365,7 @@ contain targets."
   (seperator :type string)
   (change-group))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-send)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
   (let ((sep (when (conn-state-loop-consume-prefix-arg)
                (read-string "Seperator: " nil nil nil t)))
         (cg (conn--action-buffer-change-group)))
@@ -5419,7 +5419,7 @@ contain targets."
   (str :type string)
   (change-group))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-send-replace)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-send-replace)))
   (let ((cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send-replace
                       (description "Send and Replace")
@@ -5453,7 +5453,7 @@ contain targets."
 (oclosure-define (conn-dispatch-downcase
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-downcase)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-downcase)))
   (oclosure-lambda (conn-dispatch-downcase
                     (description "Downcase")
                     (window-predicate
@@ -5473,7 +5473,7 @@ contain targets."
 (oclosure-define (conn-dispatch-upcase
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-upcase)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-upcase)))
   (oclosure-lambda (conn-dispatch-upcase
                     (description "Upcase")
                     (window-predicate
@@ -5493,7 +5493,7 @@ contain targets."
 (oclosure-define (conn-dispatch-capitalize
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-capitalize)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-capitalize)))
   (oclosure-lambda (conn-dispatch-capitalize
                     (description "Capitalize")
                     (window-predicate
@@ -5514,7 +5514,7 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-register-load)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-load)))
   (oclosure-lambda (conn-dispatch-register-load
                     (register (register-read-with-preview "Register: ")))
       (window pt thing thing-arg)
@@ -5538,7 +5538,7 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-register-replace)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-register-replace)))
   (oclosure-lambda (conn-dispatch-register-replace
                     (register (register-read-with-preview "Register: ")))
       (window pt thing thing-arg)
@@ -5563,7 +5563,7 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-kill)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill)))
   (oclosure-lambda (conn-dispatch-kill
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: ")))
@@ -5598,7 +5598,7 @@ contain targets."
 (oclosure-define (conn-dispatch-kill-append (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-kill-append)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-append)))
   (oclosure-lambda (conn-dispatch-kill-append
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: ")))
@@ -5633,7 +5633,7 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-kill-prepend)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-prepend)))
   (oclosure-lambda (conn-dispatch-kill-prepend
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: ")))
@@ -5668,7 +5668,7 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-copy-append)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-append)))
   (oclosure-lambda (conn-dispatch-copy-append
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
@@ -5695,7 +5695,7 @@ contain targets."
                   (:parent conn-action))
   (register :type integer))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-copy-prepend)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-prepend)))
   (oclosure-lambda (conn-dispatch-copy-prepend
                     (register (when (conn-state-loop-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
@@ -5732,7 +5732,7 @@ contain targets."
 (cl-defmethod conn-action-copy ((action conn-dispatch-yank-from))
   (conn-dispatch-yank-from-copy action (copy-marker (oref action opoint) t)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-yank-from)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from)))
   (oclosure-lambda (conn-dispatch-yank-from
                     (description "Yank From")
                     (opoint (copy-marker (point) t)))
@@ -5763,7 +5763,7 @@ contain targets."
 (oclosure-define (conn-dispatch-yank-from-replace
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-yank-from-replace)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-from-replace)))
   (oclosure-lambda (conn-dispatch-yank-from-replace
                     (description "Yank From and Replace"))
       (window pt thing thing-arg)
@@ -5795,7 +5795,7 @@ contain targets."
 (cl-defmethod conn-action-copy ((action conn-dispatch-take-replace))
   (conn-dispatch-take-replace-copy action (copy-marker (oref action opoint) t)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-take-replace)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take-replace)))
   (let ((cg (conn--action-buffer-change-group)))
     (delete-region (region-beginning) (region-end))
     (oclosure-lambda (conn-dispatch-take-replace
@@ -5843,7 +5843,7 @@ contain targets."
 (cl-defmethod conn-action-copy ((action conn-dispatch-take))
   (conn-dispatch-take-copy action (copy-marker (oref action opoint) t)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-take)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-take)))
   (oclosure-lambda (conn-dispatch-take
                     (description "Take From")
                     (opoint (copy-marker (point) t))
@@ -5871,7 +5871,7 @@ contain targets."
 (oclosure-define (conn-dispatch-over
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-over)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-over)))
   (oclosure-lambda (conn-dispatch-over
                     (description "Over")
                     (no-history t)
@@ -5911,7 +5911,7 @@ contain targets."
 (oclosure-define (conn-dispatch-jump
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-jump)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-jump)))
   (oclosure-lambda (conn-dispatch-jump
                     (description "Jump")
                     (no-history t))
@@ -5926,7 +5926,7 @@ contain targets."
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-transpose)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-transpose)))
   (oclosure-lambda (conn-dispatch-transpose
                     (description "Transpose")
                     (always-retarget t)
@@ -5996,7 +5996,7 @@ contain targets."
           (insert str2)))
       (accept-change-group cg))))
 
-(cl-defmethod conn-dispatch-state-handler ((_cmd (eql 'conn-dispatch-over-or-goto))
+(cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-over-or-goto))
                                            ctx)
   (conn-cancel-action (oref ctx action))
   (setf (oref ctx action)
@@ -6144,90 +6144,90 @@ contain targets."
 (cl-defgeneric conn-dispatch-select-handler (command)
   (:method (_cmd) nil))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'mwheel-scroll)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql mwheel-scroll)))
   (mwheel-scroll last-input-event)
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'recursive-edit)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql recursive-edit)))
   (conn-with-dispatch-suspended
     (recursive-edit))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'recenter-top-bottom)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql recenter-top-bottom)))
   (let ((this-command 'recenter-top-bottom)
         (last-command conn-state-loop-last-command))
     (recenter-top-bottom (conn-state-loop-prefix-arg)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'toggle-input-method)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql toggle-input-method)))
   (let ((inhibit-message nil))
     (toggle-input-method))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'set-input-method)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql set-input-method)))
   (let ((inhibit-message nil))
     (call-interactively 'set-input-method))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'isearch-forward)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-forward)))
   (conn-with-dispatch-suspended
     (isearch-forward))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'isearch-backward)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-backward)))
   (conn-with-dispatch-suspended
     (isearch-backward))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'isearch-forward-regexp)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-forward-regexp)))
   (conn-with-dispatch-suspended
     (isearch-forward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'isearch-backward-regexp)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql isearch-backward-regexp)))
   (conn-with-dispatch-suspended
     (isearch-backward-regexp))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'scroll-up)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql scroll-up)))
   (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-up))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'scroll-down)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql scroll-down)))
   (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-down))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'conn-goto-window)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql conn-goto-window)))
   (conn-goto-window
    (conn-prompt-for-window
     (delq (selected-window)
           (conn--get-windows nil 'nomini 'visible))))
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'finish)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql finish)))
   (conn-state-loop-exit))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'dispatch-other-end)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql dispatch-other-end)))
   (unless conn-dispath-no-other-end
     (setf conn-dispatch-other-end (not conn-dispatch-other-end))
     (conn-dispatch-handle-and-redisplay :prompt nil)))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'retarget)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql retarget)))
   (conn-dispatch-retarget conn-dispatch-target-finder)
   (conn-dispatch-handle-and-redisplay :prompt nil))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'always-retarget)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql always-retarget)))
   (setq conn--dispatch-always-retarget (not conn--dispatch-always-retarget))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'restrict-windows)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql restrict-windows)))
   (if (advice-function-member-p 'conn--dispatch-restrict-windows
                                 conn-target-window-predicate)
       (remove-function conn-target-window-predicate
@@ -6236,7 +6236,7 @@ contain targets."
                   'conn--dispatch-restrict-windows))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql 'undo)))
+(cl-defmethod conn-dispatch-select-handler ((_cmd (eql undo)))
   (when conn--dispatch-loop-change-groups
     (funcall (pop conn--dispatch-loop-change-groups) :cancel))
   (conn-dispatch-handle-and-redisplay))
@@ -6568,13 +6568,13 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-jump)
    nil nil))
 
-(cl-defmethod conn-get-target-finder ((_cmd (eql 'conn-previous-emacs-state)))
+(cl-defmethod conn-get-target-finder ((_cmd (eql conn-previous-emacs-state)))
   (conn-dispatch-previous-emacs-state))
 
-(cl-defmethod conn-get-target-finder ((_cmd (eql 'conn-forward-inner-line)))
+(cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line)))
   'conn-dispatch-end-of-inner-lines)
 
-(cl-defmethod conn-get-target-finder ((_cmd (eql 'move-end-of-line)))
+(cl-defmethod conn-get-target-finder ((_cmd (eql move-end-of-line)))
   'conn-dispatch-end-of-lines)
 
 ;;;;; Dispatch Registers
@@ -10595,7 +10595,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-mark
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-dired-mark)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-mark)))
   (oclosure-lambda (conn-dispatch-dired-mark
                     (description "Mark")
                     (window-predicate
@@ -10616,7 +10616,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-kill-line
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-dired-kill-line)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-line)))
   (oclosure-lambda (conn-dispatch-dired-kill-line
                     (description "Kill Line")
                     (window-predicate
@@ -10633,7 +10633,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-dired-kill-subdir
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-dired-kill-subdir)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-dired-kill-subdir)))
   (oclosure-lambda (conn-dispatch-dired-kill-subdir
                     (description "Kill Subdir")
                     (window-predicate
@@ -10733,7 +10733,7 @@ Operates with the selected windows parent window."
 (oclosure-define (conn-dispatch-ibuffer-mark
                   (:parent conn-action)))
 
-(cl-defmethod conn-make-action ((_type (eql 'conn-dispatch-ibuffer-mark)))
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-ibuffer-mark)))
   (oclosure-lambda (conn-dispatch-ibuffer-mark
                     (description "Mark")
                     (window-predicate
