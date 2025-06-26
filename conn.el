@@ -3634,6 +3634,7 @@ A target finder function should return a list of overlays.")
   "C-/" 'undo
   "C-'" 'recursive-edit
   "<mouse-1>" 'act
+  "<mouse-3>" 'undo
   "DEL" 'backward-delete-char
   "<backspace>" 'backward-delete-char
   "M-DEL" 'reset-arg
@@ -4512,14 +4513,17 @@ Target overlays may override this default by setting the
   (conn-with-dispatch-event-handler 'mouse-click
       nil
       (lambda (cmd)
-        (when (and (eq cmd 'act)
-                   (mouse-event-p last-input-event))
-          (let* ((posn (event-start last-input-event))
-                 (win (posn-window posn))
-                 (pt (posn-point posn)))
-            (when (and (not (posn-area posn))
-                       (funcall conn-target-window-predicate win))
-              (throw 'mouse-click (list pt win nil))))))
+        (pcase last-input-event
+          ((or `(conn-dispatch-mouse-repeat ,event)
+               (and (pred mouse-event-p)
+                    (guard (eq cmd 'act))
+                    event))
+           (let* ((posn (event-start event))
+                  (win (posn-window posn))
+                  (pt (posn-point posn)))
+             (when (and (not (posn-area posn))
+                        (funcall conn-target-window-predicate win))
+               (throw 'mouse-click (list pt win nil)))))))
     (conn-dispatch-select-mode 1)
     (internal-push-keymap conn-dispatch-read-event-map
                           'overriding-terminal-local-map)
@@ -4569,7 +4573,7 @@ Target overlays may override this default by setting the
   (:method ((target-finder function)) (funcall target-finder))
   (:method ((target-finder symbol)) (funcall target-finder)))
 
-(cl-defgeneric conn-dispatch-cleanup-target-state (target-finder)
+(cl-defgeneric conn-dispatch-cleanup-target-finder (target-finder)
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-dispatch-retarget (target-finder)
@@ -4678,7 +4682,7 @@ Target overlays may override this default by setting the
 contain targets."
   :abstract t)
 
-(cl-defmethod conn-dispatch-cleanup-target-state ((state conn-dispatch-focus-targets))
+(cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-focus-targets))
   (mapc #'delete-overlay (oref state hidden)))
 
 (cl-defmethod conn-dispatch-update-targets :after ((state conn-dispatch-focus-targets))
@@ -6106,8 +6110,8 @@ contain targets."
                        (cl-incf conn-dispatch-repeat-count))
                    (user-error
                     (conn-state-loop-error (error-message-string err))))))
-           (dolist (u conn--dispatch-loop-change-groups)
-             (funcall u :accept)))))))
+           (dolist (undo conn--dispatch-loop-change-groups)
+             (funcall undo :accept)))))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -6409,7 +6413,7 @@ contain targets."
       (unwind-protect
           (cl-call-next-method)
         (ignore-errors
-          (conn-dispatch-cleanup-target-state conn-dispatch-target-finder))
+          (conn-dispatch-cleanup-target-finder conn-dispatch-target-finder))
         (ignore-errors
           (conn-delete-targets))
         (ignore-errors
@@ -6490,7 +6494,15 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
   (when (conn-action-stale-p (oref (conn-ring-head conn-dispatch-ring) action))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (funcall (conn-ring-head conn-dispatch-ring) invert-repeat))
+  (let ((prev (conn-ring-head conn-dispatch-ring)))
+    (conn-perform-dispatch (oref prev action)
+                           (oref prev thing)
+                           (oref prev thing-arg)
+                           :repeat (xor (oref prev repeat) invert-repeat)
+                           :restrict-windows (oref prev restrict-windows)
+                           :other-end (oref prev other-end)
+                           :no-other-end (oref prev no-other-end)
+                           :always-retarget (oref prev always-retarget))))
 
 (defun conn-last-dispatch-at-mouse (event &optional repeat)
   (interactive "e\nP")
@@ -6502,15 +6514,13 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
                                    action))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (push `(no-record . ,event) unread-command-events)
-  (let ((map (define-keymap (key-description `[,(car event)]) 'act))
-        (conn-state-loop-inhibit-message t))
-    (internal-push-keymap map 'overriding-terminal-local-map)
-    (unwind-protect
-        (conn-repeat-last-dispatch
-         (and (oref (conn-ring-head conn-dispatch-ring) repeat)
-              repeat))
-      (internal-pop-keymap map 'overriding-terminal-local-map))))
+  (push `(no-record . (conn-dispatch-mouse-repeat ,event))
+        unread-command-events)
+  (let ((conn-state-loop-inhibit-message t)
+        (conn-kapply-suppress-message t))
+    (conn-repeat-last-dispatch
+     (and (oref (conn-ring-head conn-dispatch-ring) repeat)
+          repeat))))
 
 (defun conn-bind-last-dispatch-to-key ()
   "Bind last dispatch command to a key.

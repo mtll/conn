@@ -691,8 +691,9 @@ A zero means repeat until error."
                            thing-arg)
                   nil)
               (user-error (message (cadr err)) t))))))
-  (message "Kapply completed successfully after %s iterations"
-           conn-dispatch-repeat-count))
+  (unless conn-kapply-suppress-message
+    (message "Kapply completed successfully after %s iterations"
+             conn-dispatch-repeat-count)))
 
 (transient-define-suffix conn--kapply-dispatch-suffix (callback args)
   "Apply keyboard macro on dispatch targets."
