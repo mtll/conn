@@ -187,6 +187,21 @@
   "?" 'undo-redo
   "x" (conn-remap-key "C-x"))
 
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-state 'smartparens-mode)
+  ")" (conn-dispatch-object
+       :thing 'sp-sexp
+       :description "list"
+       :target-finder (lambda ()
+                        (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
+  "]" (conn-dispatch-object
+       :thing 'list
+       :description "inner-list"
+       :bounds-op (lambda (arg)
+                    (conn-perform-bounds 'sp-down-sexp arg))
+       :target-finder (lambda ()
+                        (conn-dispatch-things-with-re-prefix 'sexp "[\\\"\\s(]"))))
+
 (defun conntext-paren-state ()
   (conn-push-state 'conntext-paren-state)
   t)

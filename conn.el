@@ -3697,6 +3697,12 @@ A target finder function should return a list of overlays.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-state)
+  "M-r" (conn-remap-key "<conn-region-map>")
+  "," (conn-remap-key "<conn-thing-map>"))
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-dispatch-state)
+  "\\" 'conn-dispatch-kapply
   ")" (conn-dispatch-object
        :thing 'sexp
        :description "list"
@@ -3708,13 +3714,7 @@ A target finder function should return a list of overlays.")
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'down-list arg))
        :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
-  "M-r" (conn-remap-key "<conn-region-map>")
-  "," (conn-remap-key "<conn-thing-map>"))
-
-(define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-state)
-  "\\" 'conn-dispatch-kapply)
+                        (conn-dispatch-things-with-re-prefix 'sexp "\\s)"))))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
