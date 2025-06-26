@@ -4513,17 +4513,16 @@ Target overlays may override this default by setting the
   (conn-with-dispatch-event-handler 'mouse-click
       nil
       (lambda (cmd)
-        (pcase last-input-event
-          ((or `(conn-dispatch-mouse-repeat ,event)
-               (and (pred mouse-event-p)
-                    (guard (eq cmd 'act))
-                    event))
-           (let* ((posn (event-start event))
-                  (win (posn-window posn))
-                  (pt (posn-point posn)))
-             (when (and (not (posn-area posn))
-                        (funcall conn-target-window-predicate win))
-               (throw 'mouse-click (list pt win nil)))))))
+        (when (or (and (eq cmd 'act)
+                       (mouse-event-p last-input-event))
+                  (eq 'dispatch-mouse-repeat
+                      (event-basic-type last-input-event)))
+          (let* ((posn (event-start last-input-event))
+                 (win (posn-window posn))
+                 (pt (posn-point posn)))
+            (when (and (not (posn-area posn))
+                       (funcall conn-target-window-predicate win))
+              (throw 'mouse-click (list pt win nil))))))
     (conn-dispatch-select-mode 1)
     (internal-push-keymap conn-dispatch-read-event-map
                           'overriding-terminal-local-map)
@@ -6514,7 +6513,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
                                    action))
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
-  (push `(no-record . (conn-dispatch-mouse-repeat ,event))
+  (push `(no-record . (dispatch-mouse-repeat ,@(cdr event)))
         unread-command-events)
   (let ((conn-state-loop-inhibit-message t)
         (conn-kapply-suppress-message t))
