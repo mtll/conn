@@ -10087,7 +10087,8 @@ Operates with the selected windows parent window."
   :suppress t
   "C-<return>" 'conn-join-lines
   "<escape>" 'conn-pop-state
-  "T" 'conn-copy-thing
+  "T" 'conn-change-thing
+  "G" 'conn-copy-thing
   "D" 'conn-duplicate-region
   "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-seperator
