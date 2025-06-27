@@ -820,9 +820,6 @@ of highlighting."
 
 ;;;; Thing Types
 
-(defclass conn-thing-object ()
-  ((thing :initform nil :initarg :thing)))
-
 (define-inline conn-command-thing (cmd)
   (inline-letevals (cmd)
     (inline-quote
@@ -857,6 +854,47 @@ of highlighting."
     (put thing 'end-op beg-op))
   (when bounds-op
     (put thing 'bounds-of-thing-at-point bounds-op)))
+
+(defvar conn--thing-object-props nil)
+
+(cl-defstruct (conn-thing-object
+               (:constructor nil)
+               (:constructor conn--make-thing-object))
+  (thing nil :read-only t)
+  (properties nil :read-only t))
+
+(defun conn-make-thing-object (thing &rest properties)
+  "Make an anonymous thing object."
+  (conn--make-thing-object
+   :thing thing
+   :properties properties))
+
+(put 'conn-make-thing-object 'function-documentation
+     '(conn--make-thing-object-documentation))
+
+;; from cl--generic-make-defmethod-docstring, pcase--make-docstring
+(defun conn--make-thing-object-documentation ()
+  (let* ((main (documentation (symbol-function 'conn-make-thing-object) 'raw))
+         (ud (help-split-fundoc main 'conn-make-thing-object)))
+    (require 'help-fns)
+    (with-temp-buffer
+      (insert (or (cdr ud) main))
+      (insert "\n\n\tCurrently supported properties for thing objects:\n\n")
+      (pcase-dolist (`(,prop . ,fn) conn--thing-object-props)
+        (if (stringp fn)
+            (insert (format "%s - %s" prop fn))
+          (insert (format "%s - `%s' method for this object" prop fn)))
+        (insert "\n\n"))
+      (let ((combined-doc (buffer-string)))
+        (if ud
+            (help-add-fundoc-usage combined-doc (car ud))
+          combined-doc)))))
+
+(defun conn-register-thing-object-property (property function-or-string)
+  (setf (alist-get property conn--thing-object-props) function-or-string))
+
+(defun conn-thing-object-property (object property)
+  (plist-get (oref object properties) property))
 
 
 ;;;; States
@@ -2521,9 +2559,6 @@ If `use-region-p' returns non-nil this will always return
 
 (defvar conn--last-perform-bounds nil)
 
-(defclass conn-bounds-object (conn-thing-object)
-  ((bounds-op :initform nil :initarg :bounds-op)))
-
 (cl-defgeneric conn-perform-bounds (cmd arg))
 
 (cl-defmethod conn-perform-bounds :around (_cmd _arg)
@@ -2531,10 +2566,11 @@ If `use-region-p' returns non-nil this will always return
     (setf (alist-get (recursion-depth) conn--last-perform-bounds)
           (cl-call-next-method))))
 
-(cl-defmethod conn-perform-bounds ((cmd conn-bounds-object) arg)
-  (if-let* ((bounds-op (oref cmd bounds-op)))
+(cl-defmethod conn-perform-bounds ((cmd conn-thing-object) arg)
+  (if-let* ((bounds-op (conn-thing-object-property cmd :bounds-op)))
       (funcall bounds-op arg)
-    (conn-perform-bounds (oref cmd thing) arg)))
+    (conn-perform-bounds (conn-thing-object-thing cmd) arg)))
+(conn-register-thing-object-property :bounds-op 'conn-perform-bounds)
 
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing t)) arg)
   (pcase cmd
@@ -2643,15 +2679,14 @@ If `use-region-p' returns non-nil this will always return
 
 ;;;; Bounds of Things in Region
 
-(defclass conn-things-in-region-object (conn-thing-object)
-  ((things-in-region-op :initform nil :initarg :things-in-region-op)))
-
 (cl-defgeneric conn-perform-things-in-region (thing beg end))
 
-(cl-defmethod conn-perform-things-in-region ((cmd conn-things-in-region-object) beg end)
-  (if-let* ((op (oref cmd things-in-region-op)))
+(cl-defmethod conn-perform-things-in-region ((cmd conn-thing-object) beg end)
+  (if-let* ((op (conn-thing-object-property cmd :thing-in-region)))
       (funcall op beg end)
-    (conn-perform-things-in-region (oref cmd thing) beg end)))
+    (conn-perform-things-in-region (conn-thing-object-thing cmd) beg end)))
+(conn-register-thing-object-property
+ :thing-in-region 'conn-perform-things-in-region)
 
 (cl-defmethod conn-perform-things-in-region ((thing (conn-thing t)) beg end)
   (let ((thing (or (conn-command-thing thing) thing)))
@@ -3599,11 +3634,6 @@ A target finder function should return a list of overlays.")
 
 (defvar conn--dispatch-always-retarget nil)
 
-(defclass conn-dispatch-object (conn-bounds-object)
-  ((description :initform nil :initarg :description)
-   (action :initform nil :initarg :action)
-   (target-finder :initform nil :initarg :target-finder)))
-
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
   :lighter "D"
@@ -3675,8 +3705,8 @@ A target finder function should return a list of overlays.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
-  "<remap> <conn-expand>" (conn-dispatch-object
-                           :thing 'expansion
+  "<remap> <conn-expand>" (conn-make-thing-object
+                           'expansion
                            :bounds-op (lambda (arg)
                                         (conn--push-ephemeral-mark)
                                         (conn-perform-bounds 'conn-expand arg)))
@@ -3684,13 +3714,13 @@ A target finder function should return a list of overlays.")
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
-  "O" (conn-dispatch-object
-       :thing 'word
+  "O" (conn-make-thing-object
+       'word
        :description "all-words"
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'word)))
-  "U" (conn-dispatch-object
-       :thing 'symbol
+  "U" (conn-make-thing-object
+       'symbol
        :description "all-symbols"
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'symbol)))
@@ -3704,13 +3734,13 @@ A target finder function should return a list of overlays.")
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "\\" 'conn-dispatch-kapply
-  ")" (conn-dispatch-object
-       :thing 'sexp
+  ")" (conn-make-thing-object
+       'sexp
        :description "list"
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
-  "]" (conn-dispatch-object
-       :thing 'list
+  "]" (conn-make-thing-object
+       'list
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'down-list arg))
@@ -3728,19 +3758,21 @@ A target finder function should return a list of overlays.")
 (cl-defmethod conn-get-action ((_cmd (conn-thing t)))
   'conn-dispatch-goto)
 
-(cl-defmethod conn-get-action ((cmd conn-dispatch-object))
-  (or (oref cmd action)
-      (conn-get-action (oref cmd thing))))
+(cl-defmethod conn-get-action ((cmd conn-thing-object))
+  (or (conn-thing-object-property cmd :action)
+      (conn-get-action (conn-thing-object-thing cmd))))
+(conn-register-thing-object-property :action 'conn-get-action)
 
 (cl-defgeneric conn-get-target-finder (cmd))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t)))
   (funcall conn-dispatch-default-target-finder))
 
-(cl-defmethod conn-get-target-finder ((cmd conn-dispatch-object))
-  (if-let* ((tf (oref cmd target-finder)))
+(cl-defmethod conn-get-target-finder ((cmd conn-thing-object))
+  (if-let* ((tf (conn-thing-object-property cmd :target-finder)))
       (funcall tf)
-    (conn-get-target-finder (oref cmd thing))))
+    (conn-get-target-finder (conn-thing-object-thing cmd))))
+(conn-register-thing-object-property :target-finder 'conn-get-target-finder)
 
 (defun conn--dispatch-restrict-windows (win)
   (eq win (selected-window)))
@@ -3882,7 +3914,7 @@ A target finder function should return a list of overlays.")
 (cl-defmethod conn-dispatch-state-handler ((command (conn-thing t)) ctx)
   (conn--dispatch-handle-thing-command command ctx))
 
-(cl-defmethod conn-dispatch-state-handler ((command conn-dispatch-object) ctx)
+(cl-defmethod conn-dispatch-state-handler ((command conn-thing-object) ctx)
   (conn--dispatch-handle-thing-command command ctx))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql dispatch-other-end))
@@ -4745,8 +4777,8 @@ contain targets."
                        'outline-mode)))))))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
-  (let ((thing (conn-dispatch-object
-                :thing 'region
+  (let ((thing (conn-make-thing-object
+                'region
                 :bounds-op (lambda (_arg)
                              (save-mark-and-excursion
                                (outline-mark-subtree)
@@ -4948,8 +4980,8 @@ contain targets."
   t)
 
 (defun conn-dispatch-inner-lines ()
-  (let ((thing (conn-dispatch-object
-                :thing 'inner-line
+  (let ((thing (conn-make-thing-object
+                'inner-line
                 :bounds-op
                 (lambda (arg)
                   (save-excursion
@@ -4970,8 +5002,8 @@ contain targets."
                  :thing thing)))))))))
 
 (defun conn-dispatch-end-of-inner-lines ()
-  (let ((thing (conn-dispatch-object
-                :thing 'inner-line
+  (let ((thing (conn-make-thing-object
+                'inner-line
                 :description "end-of-inner-line"
                 :bounds-op
                 (lambda (arg)
@@ -6265,11 +6297,13 @@ contain targets."
   (format "%s @ %s <%s>"
           (conn-describe-action (oref dispatch action))
           (pcase (oref dispatch thing)
-            ((and op (cl-type conn-dispatch-object))
-             (or (oref op description)
-                 (oref op thing)))
+            ((and op (cl-type conn-thing-object))
+             (or (conn-thing-object-property op :description)
+                 (conn-thing-object-thing op)))
             (op op))
           (oref dispatch thing-arg)))
+(conn-register-thing-object-property
+ :description "dispatch description for this object")
 
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
@@ -6547,8 +6581,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-push-button)
-   (conn-dispatch-object
-    :thing 'button
+   (conn-make-thing-object
+    'button
     :description "all-buttons"
     :target-finder (lambda () 'conn-dispatch-all-buttons))
    nil))
@@ -6567,7 +6601,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
         (isearch-exit)
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
-       (conn-dispatch-object :target-finder (lambda () target-finder))
+       (conn-make-thing-object
+        nil :target-finder (lambda () target-finder))
        nil :restrict-windows t))))
 
 (defun conn-goto-char-2 ()
@@ -9007,15 +9042,12 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-change-state (conn-read-thing-state)
   :loop-handler 'conn-change-state-handler)
 
-(defclass conn-change-object (conn-thing-object)
-  ((change-op :initform nil :initarg :change-op)))
-
 (cl-defgeneric conn-perform-change (cmd arg &optional kill))
 
-(cl-defmethod conn-perform-change ((cmd conn-change-object) arg &optional kill)
-  (if-let* ((change-op (oref cmd change-op)))
+(cl-defmethod conn-perform-change ((cmd conn-thing-object) arg &optional kill)
+  (if-let* ((change-op (conn-thing-object-property cmd :perform-change)))
       (funcall change-op arg kill)
-    (conn-perform-change (oref cmd thing) arg kill)))
+    (conn-perform-change (conn-thing-object-thing cmd) arg kill)))
 
 (cl-defmethod conn-perform-change (cmd arg &optional kill)
   (pcase-let ((`((,beg . ,end) . ,_)
