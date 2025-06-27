@@ -193,14 +193,17 @@
        'sp-sexp
        :description "list"
        :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
+                        (conn-dispatch-things-with-re-prefix
+                         'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-make-thing-object
        'list
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'sp-down-sexp arg))
        :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix 'sexp "[\\\"\\s(]"))))
+                        (conn-dispatch-things-with-re-prefix
+                         'sexp (rx (or (syntax open-parenthesis)
+                                       (syntax string-quote)))))))
 
 (defun conntext-paren-state ()
   (conn-push-state 'conntext-paren-state)
