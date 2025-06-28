@@ -274,6 +274,9 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
            (unless ,success
              ,unwind-body))))))
 
+(defmacro conn--thread-flip (fn arg1 &rest args)
+  `(,fn ,@args ,arg1))
+
 (defmacro conn-make-thing-command (name region-fn &rest body)
   (declare (indent 2))
   `(progn
@@ -367,9 +370,9 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defun conn-unset-buffer-property (property &optional buffer)
   (let ((buffer (or buffer (current-buffer))))
-    (setf (buffer-local-value 'conn--buffer-properties buffer)
-          (delq (assq property (buffer-local-value 'conn--buffer-properties buffer))
-                (buffer-local-value 'conn--buffer-properties buffer)))))
+    (cl-callf2 delq
+        (assq property (buffer-local-value 'conn--buffer-properties buffer))
+        (buffer-local-value 'conn--buffer-properties buffer))))
 
 
 ;;;;; Rings
@@ -394,14 +397,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (setf (conn-ring-list ring)
-        (cons item (delete item (conn-ring-list ring))))
+  (cl-callf thread-last (conn-ring-list ring) (delete item) (cons item))
   (conn-ring--visit ring item)
   (when-let* ((old (drop (conn-ring-capacity ring) (conn-ring-history ring))))
-    (setf (conn-ring-history ring)
-          (take (conn-ring-capacity ring) (conn-ring-history ring)))
+    (cl-callf2 take (conn-ring-capacity ring) (conn-ring-history ring))
     (dolist (mk old)
-      (setf (conn-ring-list ring) (delete mk (conn-ring-list ring)))
+      (cl-callf2 delete mk (conn-ring-list ring))
       (when-let* ((cleanup (conn-ring-cleanup ring)))
         (funcall cleanup mk)))))
 
@@ -443,8 +444,8 @@ If ring is (1 2 3 4) 4 would be returned."
   (car (last (conn-ring-list ring))))
 
 (defun conn-ring-delete (ring elem)
-  (setf (conn-ring-list ring) (delete elem (conn-ring-list ring))
-        (conn-ring-history ring) (delete elem (conn-ring-history ring))))
+  (cl-callf2 delete elem (conn-ring-list ring))
+  (cl-callf2 delete elem (conn-ring-history ring)))
 
 
 ;;;;; Keymap Utils
@@ -855,8 +856,6 @@ of highlighting."
   (when bounds-op
     (put thing 'bounds-of-thing-at-point bounds-op)))
 
-(defvar conn--thing-object-props nil)
-
 (cl-defstruct (conn-thing-object
                (:constructor nil)
                (:constructor conn--make-thing-object))
@@ -869,9 +868,6 @@ of highlighting."
    :thing thing
    :properties properties))
 
-(put 'conn-make-thing-object 'function-documentation
-     '(conn--make-thing-object-documentation))
-
 ;; from cl--generic-make-defmethod-docstring, pcase--make-docstring
 (defun conn--make-thing-object-documentation ()
   (let* ((main (documentation (symbol-function 'conn-make-thing-object) 'raw))
@@ -880,7 +876,7 @@ of highlighting."
     (with-temp-buffer
       (insert (or (cdr ud) main))
       (insert "\n\n\tCurrently supported properties for thing objects:\n\n")
-      (pcase-dolist (`(,prop . ,fn) conn--thing-object-props)
+      (pcase-dolist (`(,prop . ,fn) (get 'conn-thing-object :known-properties))
         (if (stringp fn)
             (insert (format "%s - %s" prop fn))
           (insert (format "%s - `%s' method for this object" prop fn)))
@@ -890,11 +886,15 @@ of highlighting."
             (help-add-fundoc-usage combined-doc (car ud))
           combined-doc)))))
 
+(put 'conn-make-thing-object 'function-documentation
+     '(conn--make-thing-object-documentation))
+
 (defun conn-register-thing-object-property (property function-or-string)
-  (setf (alist-get property conn--thing-object-props) function-or-string))
+  (setf (alist-get property (get 'conn-thing-object :known-properties))
+        function-or-string))
 
 (defun conn-thing-object-property (object property)
-  (plist-get (oref object properties) property))
+  (plist-get (conn-thing-object-properties object) property))
 
 
 ;;;; States
@@ -1340,17 +1340,15 @@ mouse-3: Describe current input method")
 ;;;;; State Properties
 
 (eval-and-compile
-  (defvar conn--static-properties (make-hash-table :test 'eq))
-
   (defun conn-property-static-p (property)
-    (and (gethash property conn--static-properties) t))
+    (and (get property :conn-static-property) t))
 
-  (defun conn-set-property-static (property)
+  (defun conn-declare-property-static (property)
     (cl-check-type property symbol)
-    (setf (gethash property conn--static-properties) t))
+    (setf (get property :conn-static-property) t))
 
-  (conn-set-property-static :no-keymap)
-  (conn-set-property-static :abstract)
+  (conn-declare-property-static :no-keymap)
+  (conn-declare-property-static :abstract)
 
   (defun conn--state-get-compiler-macro ( exp state property
                                           &optional
@@ -1817,11 +1815,16 @@ to the abnormal hooks `conn-state-entry-functions' or
         (cl-loop for parent in ',parents
                  never (memq ',name (conn-state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
+       (conn--define-state
+        ',name
+        (list ,@(mapcar (lambda (v) (macroexp-quote v)) parents))
+        ,(cl-loop for (name value) on properties by #'cddr
+                  nconc (pcase name
+                          ((pred keywordp) (list name value))
+                          ((pred symbolp) `((quote ,name) ,value))
+                          (_ (error "State property name must be a symbol")))
+                  into props finally return (cons 'list props)))
        (defvar-local ,name nil ,doc)
-       (conn--define-state ',name
-                           (list ,@(mapcar (lambda (v) (list 'quote v))
-                                           parents))
-                           (list ,@properties))
        ',name)))
 
 (conn-define-state conn-null-state ()
@@ -2033,7 +2036,7 @@ which see.")
 
 (cl-defstruct (conn-dispatch-label
                (:constructor conn--make-dispatch-label))
-  "Store the state for a dispatch label."
+  "State for a dispatch label."
   string
   narrowed-string
   overlay
@@ -2042,7 +2045,7 @@ which see.")
   padding-function)
 
 (cl-defstruct (conn-window-label)
-  "Store the state for a window label."
+  "State for a window label."
   string
   window
   state)
@@ -2124,11 +2127,10 @@ returned.")
   (setf (overlay-get (conn-dispatch-label-target label) 'conn-label) nil))
 
 (cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (pcase-let (((cl-struct conn-dispatch-label narrowed-string) label))
-    (if (not (eql prefix-char (aref narrowed-string 0)))
-        (setf (oref label narrowed-string) nil)
-      (setf (oref label narrowed-string) (substring narrowed-string 1))
-      label)))
+  (if (not (eql prefix-char (aref (oref label narrowed-string) 0)))
+      (setf (oref label narrowed-string) nil)
+    (cl-callf substring (oref label narrowed-string) 1)
+    label))
 
 (cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
   (pcase-let (((cl-struct conn-dispatch-label
@@ -2390,7 +2392,7 @@ themselves once the selection process has concluded."
                            (fboundp 'posframe-hide))
                   (posframe-hide " *conn-list-posframe*"))
                 (pcase cmd
-                  ('nil nil)
+                  ('nil)
                   ('digit-argument
                    (let* ((char (if (integerp last-input-event)
                                     last-input-event
@@ -2402,16 +2404,15 @@ themselves once the selection process has concluded."
                              (when (/= 0 digit) digit)))))
                   ('forward-delete-arg
                    (when conn--loop-prefix-mag
-                     (setf conn--loop-prefix-mag
-                           (mod conn--loop-prefix-mag
-                                (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
+                     (cl-callf mod conn--loop-prefix-mag
+                       (expt 10 (floor (log conn--loop-prefix-mag 10))))))
                   ('backward-delete-arg
                    (when conn--loop-prefix-mag
-                     (setf conn--loop-prefix-mag (floor conn--loop-prefix-mag 10))))
+                     (cl-callf floor conn--loop-prefix-mag 10)))
                   ('reset-arg
                    (setf conn--loop-prefix-mag nil))
                   ('negative-argument
-                   (setf conn--loop-prefix-sign (not conn--loop-prefix-sign)))
+                   (cl-callf not conn--loop-prefix-sign))
                   ('keyboard-quit
                    (conn-state-loop-abort))
                   (cmd
@@ -3536,9 +3537,9 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
-    (setf conn--last-perform-bounds
-          (delq (assq (recursion-depth) conn--last-perform-bounds)
-                conn--last-perform-bounds))
+    (cl-callf2 delq
+        (assq (recursion-depth) conn--last-perform-bounds)
+        conn--last-perform-bounds)
     (unless conn-this-command-thing
       (setq conn-this-command-thing (or (conn-command-thing this-command)
                                         (conn-command-thing real-this-command))))
@@ -3738,14 +3739,16 @@ A target finder function should return a list of overlays.")
        'sexp
        :description "list"
        :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix 'sexp "\\s(")))
+                        (conn-dispatch-things-with-re-prefix
+                         'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-make-thing-object
        'list
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'down-list arg))
        :target-finder (lambda ()
-                        (conn-dispatch-things-with-re-prefix 'sexp "\\s)"))))
+                        (conn-dispatch-things-with-re-prefix
+                         'sexp (rx (syntax open-parenthesis))))))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
 
@@ -3920,16 +3923,16 @@ A target finder function should return a list of overlays.")
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql dispatch-other-end))
                                            ctx)
   (unless (oref ctx no-other-end)
-    (setf (oref ctx other-end) (not (oref ctx other-end)))))
+    (cl-callf not (oref ctx other-end))))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql repeat-dispatch))
                                            ctx)
   (unless (oref ctx non-repeatable)
-    (setf (oref ctx repeat) (not (oref ctx repeat)))))
+    (cl-callf not (oref ctx repeat))))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql restrict-windows))
                                            ctx)
-  (setf (oref ctx restrict-windows) (not (oref ctx restrict-windows))))
+  (cl-callf not (oref ctx restrict-windows)))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-repeat-last-dispatch))
                                            ctx)
@@ -4107,8 +4110,7 @@ Optionally the overlay may have an associated THING."
     (cl-assert (memq ov (alist-get win conn-targets))
                nil "Not a target overlay")
     (conn-label-delete (overlay-get ov 'conn-label))
-    (setf (alist-get win conn-targets)
-          (delq ov (alist-get win conn-targets))))
+    (cl-callf2 delq ov (alist-get win conn-targets)))
   (delete-overlay ov))
 
 (defun conn-make-string-target-overlays (string &optional predicate)
@@ -4667,17 +4669,13 @@ Target overlays may override this default by setting the
                   (lambda (cmd)
                     (when (eq cmd 'backspace)
                       (when (length> string 0)
-                        (setf string (substring string 0 -1)))
+                        (cl-callf substring string 0 -1))
                       (throw 'backspace nil)))
-                (thread-last
-                  (conn-dispatch-read-event
-                   (concat prompt
-                           (propertize ": " 'face 'minibuffer-prompt)
-                           string)
-                   t)
+                (cl-callf thread-last string
+                  (concat prompt (propertize ": " 'face 'minibuffer-prompt))
+                  (conn--thread-flip conn-dispatch-read-event t)
                   (char-to-string)
-                  (concat string)
-                  (setf string))))
+                  (concat string))))
             (conn-delete-targets))
           (conn-make-string-target-overlays string predicate))))))
 
@@ -5080,7 +5078,8 @@ contain targets."
             (lambda (do)
               (pcase do
                 (:cancel (cancel-change-group cg))
-                (:accept (accept-change-group cg)))))
+                (:accept (accept-change-group cg))
+                (_ (error "Dispatch loop undo unknown message %s" do)))))
           conn--dispatch-loop-change-groups)))
 
 (defun conn--action-type-p (item)
@@ -6091,9 +6090,7 @@ contain targets."
   (if conn-dispatch-select-mode
       (when-let* ((face (conn-state-get 'conn-dispatch-state :mode-line-face)))
         (setf (alist-get 'mode-line face-remapping-alist) face))
-    (setf face-remapping-alist
-          (remq (assq 'mode-line face-remapping-alist)
-                face-remapping-alist))))
+    (cl-callf2 remq (assq 'mode-line face-remapping-alist) face-remapping-alist)))
 
 (cl-defun conn-dispatch-handle-and-redisplay (&key (prompt t))
   (redisplay)
@@ -6251,7 +6248,7 @@ contain targets."
 
 (cl-defmethod conn-dispatch-select-handler ((_cmd (eql dispatch-other-end)))
   (unless conn-dispath-no-other-end
-    (setf conn-dispatch-other-end (not conn-dispatch-other-end))
+    (cl-callf not conn-dispatch-other-end)
     (conn-dispatch-handle-and-redisplay :prompt nil)))
 
 (cl-defmethod conn-dispatch-select-handler ((_cmd (eql retarget)))
@@ -7227,7 +7224,7 @@ Expansions and contractions are provided by functions in
     (setq conn-narrow-ring
           (cons narrowing (delete narrowing conn-narrow-ring)))
     (when-let* ((old (drop conn-narrow-ring-max conn-narrow-ring)))
-      (setf conn-narrow-ring (take conn-narrow-ring-max conn-narrow-ring))
+      (cl-callf2 take conn-narrow-ring-max conn-narrow-ring)
       (cl-loop for (beg . end) in old do
                (set-marker beg nil)
                (set-marker end nil)))))
@@ -7480,7 +7477,7 @@ Behaves as `thingatpt' expects a \\='forward-op to behave."
                  unless (eolp)
                  do (cl-decf N))
         (conn--end-of-inner-line-1))
-    (setf N (abs N))
+    (cl-callf abs N)
     (let ((pt (point)))
       (back-to-indentation)
       (unless (= pt (point)) (cl-decf N))
@@ -9464,9 +9461,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
     (when (bound-and-true-p conn--wincontrol-prev-eldoc-msg-fn)
       (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
             conn--wincontrol-prev-eldoc-msg-fn nil))
-    (setf face-remapping-alist
-          (remq (assq 'mode-line face-remapping-alist)
-                face-remapping-alist))))
+    (cl-callf2 remq (assq 'mode-line face-remapping-alist) face-remapping-alist)))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
