@@ -278,7 +278,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   `(,fn ,@args ,arg1))
 
 (defmacro conn--flip-first (fn &rest args)
-  `(,fn ,@(last args) ,@(cdr args)))
+  `(,fn ,@(last args) ,@(butlast args)))
 
 (defmacro conn-make-thing-command (name region-fn &rest body)
   (declare (indent 2))
@@ -892,7 +892,7 @@ of highlighting."
 (put 'conn-make-thing-object 'function-documentation
      '(conn--make-thing-object-documentation))
 
-(defun conn-register-thing-object-property (property function-or-string)
+(defun conn-declare-thing-object-property (property function-or-string)
   (setf (alist-get property (get 'conn-thing-object :known-properties))
         function-or-string))
 
@@ -2574,7 +2574,7 @@ If `use-region-p' returns non-nil this will always return
   (if-let* ((bounds-op (conn-thing-object-property cmd :bounds-op)))
       (funcall bounds-op arg)
     (conn-perform-bounds (conn-thing-object-thing cmd) arg)))
-(conn-register-thing-object-property :bounds-op 'conn-perform-bounds)
+(conn-declare-thing-object-property :bounds-op 'conn-perform-bounds)
 
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing t)) arg)
   (pcase cmd
@@ -2689,7 +2689,7 @@ If `use-region-p' returns non-nil this will always return
   (if-let* ((op (conn-thing-object-property cmd :thing-in-region)))
       (funcall op beg end)
     (conn-perform-things-in-region (conn-thing-object-thing cmd) beg end)))
-(conn-register-thing-object-property
+(conn-declare-thing-object-property
  :thing-in-region 'conn-perform-things-in-region)
 
 (cl-defmethod conn-perform-things-in-region ((thing (conn-thing t)) beg end)
@@ -3767,7 +3767,7 @@ A target finder function should return a list of overlays.")
 (cl-defmethod conn-get-action ((cmd conn-thing-object))
   (or (conn-thing-object-property cmd :action)
       (conn-get-action (conn-thing-object-thing cmd))))
-(conn-register-thing-object-property :action 'conn-get-action)
+(conn-declare-thing-object-property :action 'conn-get-action)
 
 (cl-defgeneric conn-get-target-finder (cmd))
 
@@ -3778,7 +3778,7 @@ A target finder function should return a list of overlays.")
   (if-let* ((tf (conn-thing-object-property cmd :target-finder)))
       (funcall tf)
     (conn-get-target-finder (conn-thing-object-thing cmd))))
-(conn-register-thing-object-property :target-finder 'conn-get-target-finder)
+(conn-declare-thing-object-property :target-finder 'conn-get-target-finder)
 
 (defun conn--dispatch-restrict-windows (win)
   (eq win (selected-window)))
@@ -6302,7 +6302,7 @@ contain targets."
                  (conn-thing-object-thing op)))
             (op op))
           (oref dispatch thing-arg)))
-(conn-register-thing-object-property
+(conn-declare-thing-object-property
  :description "dispatch description for this object")
 
 (defun conn-dispatch-push-history (dispatch)
