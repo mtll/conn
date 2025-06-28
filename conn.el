@@ -395,8 +395,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (define-inline conn-ring--visit (ring item)
   (inline-quote
-   (setf (conn-ring-history ,ring)
-         (cons ,item (delete ,item (conn-ring-history ,ring))))))
+   (cl-callf thread-last (conn-ring-history ,ring)
+     (delete ,item) (cons ,item))))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
@@ -892,9 +892,12 @@ of highlighting."
 (put 'conn-make-thing-object 'function-documentation
      '(conn--make-thing-object-documentation))
 
-(defun conn-declare-thing-object-property (property function-or-string)
-  (setf (alist-get property (get 'conn-thing-object :known-properties))
-        function-or-string))
+(eval-and-compile
+  (defun conn--set-object-property (f _args property &optional description)
+    `(setf (alist-get ,property (get 'conn-thing-object :known-properties))
+           (or ,description ',f)))
+  (setf (alist-get 'conn-thing-object-property defun-declarations-alist)
+        (list #'conn--set-object-property)))
 
 (defun conn-thing-object-property (object property)
   (plist-get (conn-thing-object-properties object) property))
@@ -2563,7 +2566,8 @@ If `use-region-p' returns non-nil this will always return
 
 (defvar conn--last-perform-bounds nil)
 
-(cl-defgeneric conn-perform-bounds (cmd arg))
+(cl-defgeneric conn-perform-bounds (cmd arg)
+  (declare (conn-thing-object-property :bounds-op)))
 
 (cl-defmethod conn-perform-bounds :around (_cmd _arg)
   (save-mark-and-excursion
@@ -2574,7 +2578,6 @@ If `use-region-p' returns non-nil this will always return
   (if-let* ((bounds-op (conn-thing-object-property cmd :bounds-op)))
       (funcall bounds-op arg)
     (conn-perform-bounds (conn-thing-object-thing cmd) arg)))
-(conn-declare-thing-object-property :bounds-op 'conn-perform-bounds)
 
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing t)) arg)
   (pcase cmd
@@ -2683,14 +2686,13 @@ If `use-region-p' returns non-nil this will always return
 
 ;;;; Bounds of Things in Region
 
-(cl-defgeneric conn-perform-things-in-region (thing beg end))
+(cl-defgeneric conn-perform-things-in-region (thing beg end)
+  (declare (conn-thing-object-property :things-in-region)))
 
 (cl-defmethod conn-perform-things-in-region ((cmd conn-thing-object) beg end)
   (if-let* ((op (conn-thing-object-property cmd :thing-in-region)))
       (funcall op beg end)
     (conn-perform-things-in-region (conn-thing-object-thing cmd) beg end)))
-(conn-declare-thing-object-property
- :thing-in-region 'conn-perform-things-in-region)
 
 (cl-defmethod conn-perform-things-in-region ((thing (conn-thing t)) beg end)
   (let ((thing (or (conn-command-thing thing) thing)))
@@ -3759,7 +3761,8 @@ A target finder function should return a list of overlays.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
-(cl-defgeneric conn-get-action (cmd))
+(cl-defgeneric conn-get-action (cmd)
+  (declare (conn-thing-object-property :action)))
 
 (cl-defmethod conn-get-action ((_cmd (conn-thing t)))
   'conn-dispatch-goto)
@@ -3767,9 +3770,9 @@ A target finder function should return a list of overlays.")
 (cl-defmethod conn-get-action ((cmd conn-thing-object))
   (or (conn-thing-object-property cmd :action)
       (conn-get-action (conn-thing-object-thing cmd))))
-(conn-declare-thing-object-property :action 'conn-get-action)
 
-(cl-defgeneric conn-get-target-finder (cmd))
+(cl-defgeneric conn-get-target-finder (cmd)
+  (declare (conn-thing-object-property :target-finder)))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t)))
   (funcall conn-dispatch-default-target-finder))
@@ -3778,7 +3781,6 @@ A target finder function should return a list of overlays.")
   (if-let* ((tf (conn-thing-object-property cmd :target-finder)))
       (funcall tf)
     (conn-get-target-finder (conn-thing-object-thing cmd))))
-(conn-declare-thing-object-property :target-finder 'conn-get-target-finder)
 
 (defun conn--dispatch-restrict-windows (win)
   (eq win (selected-window)))
@@ -6294,6 +6296,9 @@ contain targets."
   (conn-action-cleanup (oref dispatch action)))
 
 (defun conn-describe-dispatch (dispatch)
+  (declare (conn-thing-object-property
+            :description
+            "dispatch description for this object"))
   (format "%s @ %s <%s>"
           (conn-describe-action (oref dispatch action))
           (pcase (oref dispatch thing)
@@ -6302,8 +6307,6 @@ contain targets."
                  (conn-thing-object-thing op)))
             (op op))
           (oref dispatch thing-arg)))
-(conn-declare-thing-object-property
- :description "dispatch description for this object")
 
 (defun conn-dispatch-push-history (dispatch)
   (conn-dispatch-ring-remove-stale)
