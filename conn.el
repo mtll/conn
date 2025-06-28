@@ -274,8 +274,11 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
            (unless ,success
              ,unwind-body))))))
 
-(defmacro conn--thread-flip (fn arg1 &rest args)
+(defmacro conn--flip-last (arg1 fn &rest args)
   `(,fn ,@args ,arg1))
+
+(defmacro conn--flip-first (fn &rest args)
+  `(,fn ,@(last args) ,@(cdr args)))
 
 (defmacro conn-make-thing-command (name region-fn &rest body)
   (declare (indent 2))
@@ -4673,7 +4676,7 @@ Target overlays may override this default by setting the
                       (throw 'backspace nil)))
                 (cl-callf thread-last string
                   (concat prompt (propertize ": " 'face 'minibuffer-prompt))
-                  (conn--thread-flip conn-dispatch-read-event t)
+                  (conn--flip-first conn-dispatch-read-event t)
                   (char-to-string)
                   (concat string))))
             (conn-delete-targets))
