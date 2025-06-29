@@ -466,7 +466,9 @@
 
 (defvar conn-posframe-window-label-poshandler 'posframe-poshandler-window-center)
 
-(cl-defstruct (conn-posframe-window-label)
+(cl-defstruct (conn-posframe-window-label
+               ( :constructor conn--make-posframe-window-label
+                 (string window bufname overlay)))
   "Store the state for a window label."
   string window bufname overlay)
 
@@ -483,11 +485,7 @@
                                    (current-buffer))))
         (overlay-put overlay 'window window)
         (overlay-put overlay 'face 'shadow)
-        (make-conn-posframe-window-label
-         :string string
-         :window window
-         :bufname bufname
-         :overlay overlay)))))
+        (conn--make-posframe-window-label string window bufname overlay)))))
 
 (cl-defmethod conn-label-delete ((label conn-posframe-window-label))
   (delete-overlay (conn-posframe-window-label-overlay label))
