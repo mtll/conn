@@ -1437,7 +1437,7 @@ A zero means repeat until error."
   [[ :description "Narrow Ring"
      ("n" "To Register" conn-narrow-ring-to-register)
      ("v" "Push Region" conn-push-region-to-narrow-register)
-     ("t" "Push Thing" conn-push-thing-to-narrow-register)]
+     ("T" "Push Thing" conn-push-thing-to-narrow-register)]
    [ :description "Kill"
      ("w" "Append to Register"
       (lambda ()

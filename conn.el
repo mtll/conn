@@ -388,7 +388,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   capacity
   cleanup)
 
-(cl-defun conn-ring (capacity &key cleanup)
+(cl-defun conn-make-ring (capacity &key cleanup)
   (cl-assert (and (integerp capacity)
                   (> capacity 0)))
   (conn--make-ring capacity cleanup))
@@ -864,26 +864,26 @@ of highlighting."
                (:constructor conn--make-anonymous-thing)
                ;; This would be nice but the cl-defsubst it expands
                ;; into seems to cause PROPERTIES to be evaluated.
-               ;; (:constructor conn-anonymous-thing (thing &rest properties))
+               ;; (:constructor conn-make-anonymous-thing (thing &rest properties))
                )
   (parent nil :read-only t)
   (properties nil :read-only t))
 
-(defun conn-anonymous-thing (parent &rest properties)
+(defun conn-make-anonymous-thing (parent &rest properties)
   "Make an anonymous thing object."
   (conn--make-anonymous-thing
    :parent parent
    :properties properties))
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
-(defun conn--make-thing-object-docstring ()
-  (let* ((main (documentation (symbol-function 'conn-anonymous-thing) 'raw))
-         (ud (help-split-fundoc main 'conn-anonymous-thing)))
+(defun conn--make-anonymous-thing-docstring ()
+  (let* ((main (documentation (symbol-function 'conn-make-anonymous-thing) 'raw))
+         (ud (help-split-fundoc main 'conn-make-anonymous-thing)))
     (require 'help-fns)
     (with-temp-buffer
       (insert (or (cdr ud) main))
       (insert "\n\n\tCurrently supported properties for thing objects:\n\n")
-      (pcase-dolist (`(,prop . ,fn) (get 'conn-anonymous-thing :known-properties))
+      (pcase-dolist (`(,prop . ,fn) (get 'conn-make-anonymous-thing :known-properties))
         (if (stringp fn)
             (insert (format "%s - %s" prop fn))
           (insert (format "%s - `%s' method for this object" prop fn)))
@@ -893,15 +893,15 @@ of highlighting."
             (help-add-fundoc-usage combined-doc (car ud))
           combined-doc)))))
 
-(put 'conn-anonymous-thing 'function-documentation
-     '(conn--make-thing-object-docstring))
+(put 'conn-make-anonymous-thing 'function-documentation
+     '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
-  (defun conn--set-object-property (f _args property &optional description)
-    `(setf (alist-get ,property (get 'conn-anonymous-thing :known-properties))
+  (defun conn--set-anonymouse-thing-property (f _args property &optional description)
+    `(setf (alist-get ,property (get 'conn-make-anonymous-thing :known-properties))
            (or ,description ',f)))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
-        (list #'conn--set-object-property)))
+        (list #'conn--set-anonymouse-thing-property)))
 
 (defun conn-anonymous-thing-property (object property)
   (plist-get (conn-anonymous-thing-properties object) property))
@@ -1252,11 +1252,14 @@ Called when the inheritance hierarchy for STATE changes."
                conn--input-method-title current-input-method-title))
         ((and 'nil (guard conn--input-method))
          (activate-input-method conn--input-method))
-        ((guard (and current-input-method conn--input-method))
+        ((guard (and current-input-method
+                     conn--input-method
+                     deactivate-current-input-method-function))
          (setq conn--input-method current-input-method
                conn--input-method-title current-input-method-title)
          (deactivate-input-method))
-        ((guard current-input-method)
+        ((guard (and current-input-method
+                     deactivate-current-input-method-function))
          (setq conn--input-method current-input-method
                conn--input-method-title current-input-method-title)
          (deactivate-input-method))))))
@@ -2031,9 +2034,7 @@ which see.")
 
 (defvar conn-dispatch-all-frames 'visible)
 
-(cl-defstruct (conn-dispatch-label
-               (:constructor nil)
-               (:constructor conn--make-dispatch-label))
+(cl-defstruct (conn-dispatch-label)
   "State for a dispatch label."
   string
   narrowed-string
@@ -2044,18 +2045,16 @@ which see.")
 
 (cl-defstruct (conn-window-label
                (:constructor nil)
-               ( :constructor conn--make-window-label
-                 (string window state)))
+               ( :constructor conn-window-label
+                 ( string window
+                   &aux
+                   (state (list (window-point window)
+                                (window-vscroll window)
+                                (window-hscroll window))))))
   "State for a window label."
   string
   window
   state)
-
-(defun conn-window-label (string window)
-  (conn--make-window-label string window
-                           (list (window-point window)
-                                 (window-vscroll window)
-                                 (window-hscroll window))))
 
 (defun conn-simple-labels (count &optional face)
   "Return a list of label strings of length COUNT.
@@ -2454,7 +2453,6 @@ themselves once the selection process has concluded."
 ;;;;; Read Thing Command Loop
 
 (cl-defstruct (conn-read-thing
-               (:constructor nil)
                (:constructor conn-read-thing (&optional recursive-edit)))
   recursive-edit)
 
@@ -3712,7 +3710,7 @@ A target finder function should return a list of overlays.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
-  "<remap> <conn-expand>" (conn-anonymous-thing
+  "<remap> <conn-expand>" (conn-make-anonymous-thing
                            'expansion
                            :bounds-op (lambda (arg)
                                         (conn--push-ephemeral-mark)
@@ -3721,12 +3719,12 @@ A target finder function should return a list of overlays.")
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
-  "O" (conn-anonymous-thing
+  "O" (conn-make-anonymous-thing
        'word
        :description "all-words"
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'word)))
-  "U" (conn-anonymous-thing
+  "U" (conn-make-anonymous-thing
        'symbol
        :description "all-symbols"
        :target-finder (lambda ()
@@ -3741,13 +3739,13 @@ A target finder function should return a list of overlays.")
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "\\" 'conn-dispatch-kapply
-  ")" (conn-anonymous-thing
+  ")" (conn-make-anonymous-thing
        'sexp
        :description "list"
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
-  "]" (conn-anonymous-thing
+  "]" (conn-make-anonymous-thing
        'list
        :description "inner-list"
        :bounds-op (lambda (arg)
@@ -3823,8 +3821,7 @@ A target finder function should return a list of overlays.")
 
 (cl-defstruct (conn-dispatch-context
                (:conc-name conn-dispatch-)
-               (:constructor nil)
-               (:constructor conn-dispatch-context)
+               (:constructor conn-make-dispatch-context)
                (:copier conn--dispatch-copy))
   no-other-end
   other-end
@@ -3882,7 +3879,7 @@ A target finder function should return a list of overlays.")
   (require 'conn-transients)
   (let ((success nil)
         (conn-dispatch-target-finder nil)
-        (ctx (or context (conn-dispatch-context))))
+        (ctx (or context (conn-make-dispatch-context))))
     (unwind-protect
         (prog1 (cl-call-next-method
                 state
@@ -4399,7 +4396,7 @@ Target overlays may override this default by setting the
         (setf (overlay-get ov 'category) 'conn-label-overlay
               (overlay-get ov 'window) window
               (overlay-get target 'conn-label)
-              (conn--make-dispatch-label
+              (make-conn-dispatch-label
                :setup-function (if (conn-dispatch-pixelwise-label-p ov)
                                    'conn--dispatch-setup-label-pixelwise
                                  'conn--dispatch-setup-label-charwise)
@@ -4784,7 +4781,7 @@ contain targets."
                        'outline-mode)))))))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
-  (let ((thing (conn-anonymous-thing
+  (let ((thing (conn-make-anonymous-thing
                 'region
                 :bounds-op (lambda (_arg)
                              (save-mark-and-excursion
@@ -4987,7 +4984,7 @@ contain targets."
   t)
 
 (defun conn-dispatch-inner-lines ()
-  (let ((thing (conn-anonymous-thing
+  (let ((thing (conn-make-anonymous-thing
                 'inner-line
                 :bounds-op
                 (lambda (arg)
@@ -5009,7 +5006,7 @@ contain targets."
                  :thing thing)))))))))
 
 (defun conn-dispatch-end-of-inner-lines ()
-  (let ((thing (conn-anonymous-thing
+  (let ((thing (conn-make-anonymous-thing
                 'inner-line
                 :description "end-of-inner-line"
                 :bounds-op
@@ -6306,8 +6303,8 @@ contain targets."
 (defvar conn-dispatch-ring-max 12)
 
 (defvar conn-dispatch-ring
-  (conn-ring conn-dispatch-ring-max
-             :cleanup 'conn-dispatch--cleanup))
+  (conn-make-ring conn-dispatch-ring-max
+                  :cleanup 'conn-dispatch--cleanup))
 
 (defun conn-dispatch-copy (dispatch)
   (let ((copy (conn--dispatch-copy dispatch)))
@@ -6524,7 +6521,7 @@ contain targets."
      'conn-dispatch-mover-state
      :initial-arg arg
      :context
-     (conn-dispatch-context
+     (conn-make-dispatch-context
       :no-other-end t
       :action (oclosure-lambda (conn-action
                                 (description "Bounds")
@@ -6609,7 +6606,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-push-button)
-   (conn-anonymous-thing
+   (conn-make-anonymous-thing
     'button
     :description "all-buttons"
     :target-finder (lambda () 'conn-dispatch-all-buttons))
@@ -6629,8 +6626,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
         (isearch-exit)
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
-       (conn-anonymous-thing
-        nil :target-finder (lambda () target-finder))
+       (conn-make-anonymous-thing nil :target-finder (lambda () target-finder))
        nil :restrict-windows t))))
 
 (defun conn-goto-char-2 ()
@@ -7822,7 +7818,17 @@ instances of from-string.")
 ;;;;; Tab Registers
 
 (cl-defstruct (conn-tab-register
-               (:constructor %conn--make-tab-register (cookie frame)))
+               (:constructor nil)
+               ( :constructor conn--make-tab-register
+                 (&aux
+                  (cookie
+                   (let ((current-tab (thread-first
+                                        (funcall tab-bar-tabs-function)
+                                        tab-bar--current-tab-find)))
+                     (or (alist-get 'conn-tab-cookie current-tab)
+                         (setf (alist-get 'conn-tab-cookie (cdr current-tab))
+                               (gensym "conn-tab-cookie")))))
+                  (frame (selected-frame)))))
   (cookie nil :read-only t)
   (frame nil :read-only t))
 
@@ -7831,15 +7837,6 @@ instances of from-string.")
                 cookie
                 (lambda (tab c)
                   (eq c (alist-get 'conn-tab-cookie tab)))))
-
-(defun conn--make-tab-register ()
-  (let* ((tabs (funcall tab-bar-tabs-function))
-         (current-tab (tab-bar--current-tab-find tabs)))
-    (%conn--make-tab-register
-     (or (alist-get 'conn-tab-cookie current-tab)
-         (setf (alist-get 'conn-tab-cookie (cdr current-tab))
-               (gensym "conn-tab-cookie")))
-     (selected-frame))))
 
 (cl-defmethod register-val-jump-to ((val conn-tab-register) _arg)
   (when-let* ((frame (conn-tab-register-frame val))
@@ -8074,8 +8071,8 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
 (defun conn--push-mark-ring (location &optional back)
   (when (not conn-mark-ring)
     (setq conn-mark-ring
-          (conn-ring conn-mark-ring-max
-                     :cleanup (lambda (mk) (set-marker mk nil)))))
+          (conn-make-ring conn-mark-ring-max
+                          :cleanup (lambda (mk) (set-marker mk nil)))))
   (pcase-let ((ptb (conn-ring-tail conn-mark-ring))
               (ptf (conn-ring-head conn-mark-ring)))
     (cond
@@ -8141,10 +8138,10 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 (defun conn-push-region (point mark &optional back)
   (unless (conn-ring-p conn-movement-ring)
     (setq conn-movement-ring
-          (conn-ring conn-movement-ring-max
-                     :cleanup (pcase-lambda (`(,pt . ,mk))
-                                (set-marker pt nil)
-                                (set-marker mk nil)))))
+          (conn-make-ring conn-movement-ring-max
+                          :cleanup (pcase-lambda (`(,pt . ,mk))
+                                     (set-marker pt nil)
+                                     (set-marker mk nil)))))
   (pcase-let ((`(,ptf . ,mkf) (conn-ring-head conn-movement-ring))
               (`(,ptb . ,mkb) (conn-ring-tail conn-movement-ring)))
     (cond
@@ -8338,7 +8335,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
              'conn-dispatch-transpose-state
              :initial-arg arg
              :context
-             (conn-dispatch-context
+             (conn-make-dispatch-context
               :no-other-end t
               :non-repeatable t
               :action (oclosure-lambda
@@ -10278,7 +10275,7 @@ Operates with the selected windows parent window."
                     conn--local-override-map (list (list 'conn-local-mode))
                     conn--local-major-mode-map (list (list 'conn-local-mode))
                     conn-emacs-state-ring
-                    (conn-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
+                    (conn-make-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
         ;; We would like to be able to do the same to
         ;; query-replace-read-from-regexp-default but it must be
         ;; either nil, a string, a list of strings, or a symbol with a
@@ -10522,7 +10519,7 @@ Operates with the selected windows parent window."
   (conn-with-state-loop
    'conn-dired-dispatch-state
    :initial-arg initial-arg
-   :context (conn-dispatch-context :no-other-end t)))
+   :context (conn-make-dispatch-context :no-other-end t)))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dired-dispatch-state)
