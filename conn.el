@@ -383,12 +383,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (cl-defstruct (conn-ring
                (:constructor conn--make-ring (capacity cleanup)))
   "A ring that removes elements in least recently visited order."
-  list
-  history
-  capacity
-  cleanup)
+  (list nil :type list)
+  (history nil :type list)
+  (capacity 0 :type integer)
+  (cleanup nil :type (or nil function)))
 
-(cl-defun conn-make-ring (capacity &key cleanup)
+(cl-defsubst conn-make-ring (capacity &key cleanup)
   (cl-assert (and (integerp capacity)
                   (> capacity 0)))
   (conn--make-ring capacity cleanup))
@@ -862,15 +862,21 @@ of highlighting."
 (cl-defstruct (conn-anonymous-thing
                (:constructor nil)
                (:constructor conn--make-anonymous-thing)
-               ;; This would be nice but the cl-defsubst it expands
-               ;; into seems to cause PROPERTIES to be evaluated.
-               ;; (:constructor conn-make-anonymous-thing (thing &rest properties))
+               ;; This would be nice but cl-defsubst does not handle
+               ;; &rest arguments properly and so PROPERTIES gets
+               ;; evaluated.
+               ;; (:constructor conn-make-anonymous-thing (parent &rest properties))
                )
   (parent nil :read-only t)
   (properties nil :read-only t))
 
+(defun conn-make-anonymous-thing--cmacro (_exp parent &rest properties)
+  `(conn--make-anonymous-thing
+    :parent ,parent
+    :properties (list ,@properties)))
+
 (defun conn-make-anonymous-thing (parent &rest properties)
-  "Make an anonymous thing object."
+  (declare (compiler-macro conn-make-anonymous-thing--cmacro))
   (conn--make-anonymous-thing
    :parent parent
    :properties properties))
@@ -1352,28 +1358,28 @@ mouse-3: Describe current input method")
     (setf (get property :conn-static-property) t))
 
   (conn-declare-property-static :no-keymap)
-  (conn-declare-property-static :abstract)
+  (conn-declare-property-static :abstract))
 
-  (defun conn--state-get-compiler-macro ( exp state property
-                                          &optional
-                                          no-inherit default)
-    (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
-          (prop (macroexpand-all property macroexpand-all-environment)))
-      (if (or (and (macroexp-const-p no-inherit)
-                   (if (consp no-inherit) (cadr no-inherit) no-inherit))
-              (and (symbolp prop)
-                   (conn-property-static-p prop)))
-          `(let ((state-obj (conn--find-state ,state)))
-             (cl-check-type state-obj conn-state)
-             (gethash ,property (conn--state-properties state-obj) ,default))
-        exp))))
+(defun conn--state-get--cmacro ( exp state property
+                                 &optional
+                                 no-inherit default)
+  (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
+        (prop (macroexpand-all property macroexpand-all-environment)))
+    (if (or (and (macroexp-const-p no-inherit)
+                 (if (consp no-inherit) (cadr no-inherit) no-inherit))
+            (and (symbolp prop)
+                 (conn-property-static-p prop)))
+        `(let ((state-obj (conn--find-state ,state)))
+           (cl-check-type state-obj conn-state)
+           (gethash ,property (conn--state-properties state-obj) ,default))
+      exp)))
 
 (defun conn-state-get (state property &optional no-inherit default)
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
-  (declare (compiler-macro conn--state-get-compiler-macro))
+  (declare (compiler-macro conn--state-get--cmacro))
   (if (or no-inherit (conn-property-static-p property))
       (let ((state-obj (conn--find-state state)))
         (cl-check-type state-obj conn-state)
@@ -2036,12 +2042,12 @@ which see.")
 
 (cl-defstruct (conn-dispatch-label)
   "State for a dispatch label."
-  string
-  narrowed-string
-  overlay
-  target
-  setup-function
-  padding-function)
+  (string nil :type string)
+  (narrowed-string nil :type string)
+  (overlay nil :type overlay)
+  (target nil :type overlay)
+  (setup-function nil :type function)
+  (padding-function nil :type function))
 
 (cl-defstruct (conn-window-label
                (:constructor nil)
@@ -2052,8 +2058,8 @@ which see.")
                                 (window-vscroll window)
                                 (window-hscroll window))))))
   "State for a window label."
-  string
-  window
+  (string nil :type string)
+  (window nil :type window)
   state)
 
 (defun conn-simple-labels (count &optional face)
@@ -2454,7 +2460,7 @@ themselves once the selection process has concluded."
 
 (cl-defstruct (conn-read-thing
                (:constructor conn-read-thing (&optional recursive-edit)))
-  recursive-edit)
+  (recursive-edit nil :type boolean))
 
 (cl-defmethod conn-with-state-loop ((state (conn-substate conn-read-thing-state))
                                     &key initial-arg context)
@@ -3823,15 +3829,35 @@ A target finder function should return a list of overlays.")
                (:conc-name conn-dispatch-)
                (:constructor conn-make-dispatch-context)
                (:copier conn--dispatch-copy))
-  no-other-end
-  other-end
-  always-retarget
-  repeat
-  non-repeatable
-  restrict-windows
-  thing
-  thing-arg
-  action)
+  (no-other-end nil :type boolean)
+  (other-end nil :type boolean)
+  (always-retarget nil :type boolean)
+  (repeat nil :type boolean)
+  (non-repeatable nil :type boolean)
+  (restrict-windows nil :type boolean)
+  (thing nil :type (or symbol conn-anonymous-thing))
+  (thing-arg nil :type (or nil integer))
+  (action nil :type conn-action))
+
+(cl-defun conn--call-dispatch-context (context
+                                       &key
+                                       action
+                                       thing
+                                       thing-arg
+                                       repeat
+                                       restrict-windows
+                                       other-end
+                                       no-other-end
+                                       always-retarget)
+  (conn-perform-dispatch
+   (or action (conn-dispatch-action context))
+   (or thing (conn-dispatch-thing context))
+   (or thing-arg (conn-dispatch-thing-arg context))
+   :repeat (or repeat (conn-dispatch-repeat context))
+   :restrict-windows (or restrict-windows (conn-dispatch-restrict-windows context))
+   :other-end (or other-end (conn-dispatch-other-end context))
+   :no-other-end (or no-other-end (conn-dispatch-no-other-end context))
+   :always-retarget (or always-retarget (conn-dispatch-always-retarget context))))
 
 (defun conn-dispatch-message (ctx error-message)
   (let ((action-description
@@ -3908,16 +3934,7 @@ A target finder function should return a list of overlays.")
   (when (null (conn-dispatch-action ctx))
     (setf (conn-dispatch-action ctx) (conn-make-action (conn-get-action command))))
   (conn-dispatch-push-history ctx)
-  (conn-state-loop-exit
-   (conn-perform-dispatch
-    (conn-dispatch-action ctx)
-    (conn-dispatch-thing ctx)
-    (conn-dispatch-thing-arg ctx)
-    :repeat (conn-dispatch-repeat ctx)
-    :restrict-windows (conn-dispatch-restrict-windows ctx)
-    :other-end (conn-dispatch-other-end ctx)
-    :no-other-end (conn-dispatch-no-other-end ctx)
-    :always-retarget (conn-dispatch-always-retarget ctx))))
+  (conn-state-loop-exit (conn--call-dispatch-context ctx)))
 
 (cl-defmethod conn-dispatch-state-handler ((command (conn-thing t)) ctx)
   (conn--dispatch-handle-thing-command command ctx))
@@ -3948,15 +3965,11 @@ A target finder function should return a list of overlays.")
             (conn-state-loop-error "Last dispatch action stale"))
         (setf conn--dispatch-always-retarget (conn-dispatch-action prev))
         (conn-state-loop-exit
-         (conn-perform-dispatch
-          (conn-dispatch-action prev)
-          (conn-dispatch-thing prev)
-          (conn-dispatch-thing-arg prev)
+         (conn--call-dispatch-context
+          prev
           :repeat (conn-dispatch-repeat ctx)
           :restrict-windows (conn-dispatch-restrict-windows ctx)
-          :other-end (conn-dispatch-other-end prev)
-          :no-other-end (conn-dispatch-no-other-end ctx)
-          :always-retarget (conn-dispatch-always-retarget prev))))
+          :no-other-end (conn-dispatch-no-other-end ctx))))
     (conn-state-loop-error "Dispatch ring empty")))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-next))
@@ -6552,15 +6565,9 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
   (let ((prev (conn-ring-head conn-dispatch-ring)))
-    (conn-perform-dispatch
-     (conn-dispatch-action prev)
-     (conn-dispatch-thing prev)
-     (conn-dispatch-thing-arg prev)
-     :repeat (xor (conn-dispatch-repeat prev) invert-repeat)
-     :restrict-windows (conn-dispatch-restrict-windows prev)
-     :other-end (conn-dispatch-other-end prev)
-     :no-other-end (conn-dispatch-no-other-end prev)
-     :always-retarget (conn-dispatch-always-retarget prev))))
+    (conn--call-dispatch-context
+     prev
+     :repeat (xor invert-repeat (conn-dispatch-repeat prev)))))
 
 (defun conn-last-dispatch-at-mouse (event &optional repeat)
   (interactive "e\nP")
@@ -6649,10 +6656,12 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
 
 (cl-defstruct (conn-dispatch-register
                (:constructor conn--make-dispatch-register (dispatch-command)))
-  dispatch-command)
+  (dispatch-command nil :type conn-dispatch-context))
 
 (cl-defmethod register-val-jump-to ((val conn-dispatch-register) arg)
-  (funcall (conn-dispatch-register-dispatch-command val) arg))
+  (conn--call-dispatch-context
+   val
+   :repeat (xor arg (conn-dispatch-repeat val))))
 
 (cl-defmethod register-val-describe ((_val conn-dispatch-register) _arg)
   (princ "Dispatch Register"))
