@@ -861,11 +861,15 @@ of highlighting."
 
 (cl-defstruct (conn-thing-object
                (:constructor nil)
-               (:constructor conn--make-thing-object))
+               (:constructor conn--make-thing-object)
+               ;; This would be nice but the cl-defsubst it expands
+               ;; into seems to cause PROPERTIES to be evaluated.
+               ;; (:constructor conn-thing-object (thing &rest properties))
+               )
   (thing nil :read-only t)
   (properties nil :read-only t))
 
-(defun conn-make-thing-object (thing &rest properties)
+(defun conn-thing-object (thing &rest properties)
   "Make an anonymous thing object."
   (conn--make-thing-object
    :thing thing
@@ -873,8 +877,8 @@ of highlighting."
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-thing-object-docstring ()
-  (let* ((main (documentation (symbol-function 'conn-make-thing-object) 'raw))
-         (ud (help-split-fundoc main 'conn-make-thing-object)))
+  (let* ((main (documentation (symbol-function 'conn-thing-object) 'raw))
+         (ud (help-split-fundoc main 'conn-thing-object)))
     (require 'help-fns)
     (with-temp-buffer
       (insert (or (cdr ud) main))
@@ -889,7 +893,7 @@ of highlighting."
             (help-add-fundoc-usage combined-doc (car ud))
           combined-doc)))))
 
-(put 'conn-make-thing-object 'function-documentation
+(put 'conn-thing-object 'function-documentation
      '(conn--make-thing-object-docstring))
 
 (eval-and-compile
@@ -3696,7 +3700,7 @@ A target finder function should return a list of overlays.")
 
 (define-keymap
   :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
-  "<remap> <conn-expand>" (conn-make-thing-object
+  "<remap> <conn-expand>" (conn-thing-object
                            'expansion
                            :bounds-op (lambda (arg)
                                         (conn--push-ephemeral-mark)
@@ -3705,12 +3709,12 @@ A target finder function should return a list of overlays.")
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
-  "O" (conn-make-thing-object
+  "O" (conn-thing-object
        'word
        :description "all-words"
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'word)))
-  "U" (conn-make-thing-object
+  "U" (conn-thing-object
        'symbol
        :description "all-symbols"
        :target-finder (lambda ()
@@ -3725,13 +3729,13 @@ A target finder function should return a list of overlays.")
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "\\" 'conn-dispatch-kapply
-  ")" (conn-make-thing-object
+  ")" (conn-thing-object
        'sexp
        :description "list"
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
-  "]" (conn-make-thing-object
+  "]" (conn-thing-object
        'list
        :description "inner-list"
        :bounds-op (lambda (arg)
@@ -4763,7 +4767,7 @@ contain targets."
                        'outline-mode)))))))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-headings))
-  (let ((thing (conn-make-thing-object
+  (let ((thing (conn-thing-object
                 'region
                 :bounds-op (lambda (_arg)
                              (save-mark-and-excursion
@@ -4966,7 +4970,7 @@ contain targets."
   t)
 
 (defun conn-dispatch-inner-lines ()
-  (let ((thing (conn-make-thing-object
+  (let ((thing (conn-thing-object
                 'inner-line
                 :bounds-op
                 (lambda (arg)
@@ -4988,7 +4992,7 @@ contain targets."
                  :thing thing)))))))))
 
 (defun conn-dispatch-end-of-inner-lines ()
-  (let ((thing (conn-make-thing-object
+  (let ((thing (conn-thing-object
                 'inner-line
                 :description "end-of-inner-line"
                 :bounds-op
@@ -6567,7 +6571,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-push-button)
-   (conn-make-thing-object
+   (conn-thing-object
     'button
     :description "all-buttons"
     :target-finder (lambda () 'conn-dispatch-all-buttons))
@@ -6587,7 +6591,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
         (isearch-exit)
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
-       (conn-make-thing-object
+       (conn-thing-object
         nil :target-finder (lambda () target-finder))
        nil :restrict-windows t))))
 
