@@ -3622,6 +3622,8 @@ A target finder function should return a list of overlays.")
 
 (defvar conn-dispatch-ring)
 
+(defvar conn--dispatch-action-description nil)
+
 (defvar conn--dispatch-must-prompt nil)
 
 (defvar conn--dispatch-action-always-prompt nil)
@@ -3910,14 +3912,15 @@ A target finder function should return a list of overlays.")
     (setf (conn-dispatch-action ctx) (conn-make-action (conn-get-action command))))
   (conn-dispatch-push-history ctx)
   (conn-state-loop-exit
-   (conn-perform-dispatch (conn-dispatch-action ctx)
-                          (conn-dispatch-thing ctx)
-                          (conn-dispatch-thing-arg ctx)
-                          :repeat (conn-dispatch-repeat ctx)
-                          :restrict-windows (conn-dispatch-restrict-windows ctx)
-                          :other-end (conn-dispatch-other-end ctx)
-                          :no-other-end (conn-dispatch-no-other-end ctx)
-                          :always-retarget (conn-dispatch-always-retarget ctx))))
+   (conn-perform-dispatch
+    (conn-dispatch-action ctx)
+    (conn-dispatch-thing ctx)
+    (conn-dispatch-thing-arg ctx)
+    :repeat (conn-dispatch-repeat ctx)
+    :restrict-windows (conn-dispatch-restrict-windows ctx)
+    :other-end (conn-dispatch-other-end ctx)
+    :no-other-end (conn-dispatch-no-other-end ctx)
+    :always-retarget (conn-dispatch-always-retarget ctx))))
 
 (cl-defmethod conn-dispatch-state-handler ((command (conn-thing t)) ctx)
   (conn--dispatch-handle-thing-command command ctx))
@@ -3948,14 +3951,15 @@ A target finder function should return a list of overlays.")
             (conn-state-loop-error "Last dispatch action stale"))
         (setf conn--dispatch-always-retarget (conn-dispatch-action prev))
         (conn-state-loop-exit
-         (conn-perform-dispatch (conn-dispatch-action prev)
-                                (conn-dispatch-thing prev)
-                                (conn-dispatch-thing-arg prev)
-                                :repeat (conn-dispatch-repeat ctx)
-                                :restrict-windows (conn-dispatch-restrict-windows ctx)
-                                :other-end (conn-dispatch-other-end prev)
-                                :no-other-end (conn-dispatch-no-other-end ctx)
-                                :always-retarget (conn-dispatch-always-retarget prev))))
+         (conn-perform-dispatch
+          (conn-dispatch-action prev)
+          (conn-dispatch-thing prev)
+          (conn-dispatch-thing-arg prev)
+          :repeat (conn-dispatch-repeat ctx)
+          :restrict-windows (conn-dispatch-restrict-windows ctx)
+          :other-end (conn-dispatch-other-end prev)
+          :no-other-end (conn-dispatch-no-other-end ctx)
+          :always-retarget (conn-dispatch-always-retarget prev))))
     (conn-state-loop-error "Dispatch ring empty")))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-next))
@@ -4480,15 +4484,15 @@ Target overlays may override this default by setting the
         (overlay-get overlay 'thing)))
 
 (defun conn--dispatch-read-event-prefix ()
-  (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
-           for str = (pcase pfx
-                       ((pred functionp) (funcall pfx))
-                       ((pred stringp) pfx))
-           if str
-           if (length> result 0) concat "; " into result end
-           and concat str into result
-           finally return (unless (length= result 0)
-                            (concat "(" result ") "))))
+  (concat
+   "("
+   conn--dispatch-action-description
+   (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+            for str = (pcase pfx
+                        ((pred functionp) (funcall pfx))
+                        ((pred stringp) pfx))
+            if str concat "; " and concat str)
+   ") "))
 
 (defun conn-dispatch-read-event (&optional prompt
                                            inherit-input-method
@@ -6135,8 +6139,7 @@ contain targets."
               (conn--dispatch-loop-change-groups nil)
               (conn--loop-error-message nil)
               (conn--dispatch-read-event-message-prefixes
-               `(,(car conn--dispatch-read-event-message-prefixes)
-                 ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+               `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                     (lambda ()
                       (when-let* ((binding
                                    (and ,rep
@@ -6151,7 +6154,7 @@ contain targets."
                          (propertize "always retarget"
                                      'face (when conn--dispatch-always-retarget
                                              'eldoc-highlight-function-argument))))))
-                 ,@(cdr conn--dispatch-read-event-message-prefixes))))
+                 ,@conn--dispatch-read-event-message-prefixes)))
          (unwind-protect
              (while (or (setq ,rep ,repeat)
                         (< conn-dispatch-repeat-count 1))
@@ -6317,8 +6320,7 @@ contain targets."
 
 (defun conn-describe-dispatch (dispatch)
   (declare (conn-thing-object-property
-            :description
-            "dispatch description for this object"))
+            :description "dispatch description for this object"))
   (format "%s @ %s <%s>"
           (conn-describe-action (conn-dispatch-action dispatch))
           (pcase (conn-dispatch-thing dispatch)
@@ -6398,6 +6400,9 @@ contain targets."
          (conn--dispatch-must-prompt nil)
          (conn--loop-prefix-mag nil)
          (conn--loop-prefix-sign nil)
+         (conn--dispatch-action-description
+          (propertize (conn-describe-action action t)
+                      'face 'eldoc-highlight-function-argument))
          (conn--dispatch-read-event-handlers
           (cons #'conn-dispatch-select-handler
                 conn--dispatch-read-event-handlers))
@@ -6414,10 +6419,7 @@ contain targets."
                  (or other-end conn-dispatch-other-end))))
          (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn--dispatch-read-event-message-prefixes
-          `(,(lambda ()
-               (propertize (conn-describe-action action t)
-                           'face 'eldoc-highlight-function-argument))
-            ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+          `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                (lambda ()
                  (when-let* ((binding
                               (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
@@ -6553,14 +6555,15 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (conn-dispatch-ring-remove-stale)
     (user-error "Last dispatch action stale"))
   (let ((prev (conn-ring-head conn-dispatch-ring)))
-    (conn-perform-dispatch (conn-dispatch-action prev)
-                           (conn-dispatch-thing prev)
-                           (conn-dispatch-thing-arg prev)
-                           :repeat (xor (conn-dispatch-repeat prev) invert-repeat)
-                           :restrict-windows (conn-dispatch-restrict-windows prev)
-                           :other-end (conn-dispatch-other-end prev)
-                           :no-other-end (conn-dispatch-no-other-end prev)
-                           :always-retarget (conn-dispatch-always-retarget prev))))
+    (conn-perform-dispatch
+     (conn-dispatch-action prev)
+     (conn-dispatch-thing prev)
+     (conn-dispatch-thing-arg prev)
+     :repeat (xor (conn-dispatch-repeat prev) invert-repeat)
+     :restrict-windows (conn-dispatch-restrict-windows prev)
+     :other-end (conn-dispatch-other-end prev)
+     :no-other-end (conn-dispatch-no-other-end prev)
+     :always-retarget (conn-dispatch-always-retarget prev))))
 
 (defun conn-last-dispatch-at-mouse (event &optional repeat)
   (interactive "e\nP")
