@@ -871,8 +871,8 @@ of highlighting."
    :thing thing
    :properties properties))
 
-;; from cl--generic-make-defmethod-docstring, pcase--make-docstring
-(defun conn--make-thing-object-documentation ()
+;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
+(defun conn--make-thing-object-docstring ()
   (let* ((main (documentation (symbol-function 'conn-make-thing-object) 'raw))
          (ud (help-split-fundoc main 'conn-make-thing-object)))
     (require 'help-fns)
@@ -890,7 +890,7 @@ of highlighting."
           combined-doc)))))
 
 (put 'conn-make-thing-object 'function-documentation
-     '(conn--make-thing-object-documentation))
+     '(conn--make-thing-object-docstring))
 
 (eval-and-compile
   (defun conn--set-object-property (f _args property &optional description)
@@ -938,47 +938,39 @@ of highlighting."
 (defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
 
-(defun conn--make-state ()
-  (make-record 'conn-state 4 nil))
+(cl-defstruct (conn-state
+               (:constructor nil)
+               ( :constructor conn--make-state
+                 (name docstring parents properties))
+               (:conc-name conn--state-)
+               (:copier nil))
+  (name nil :type symbol :read-only t)
+  (docstring nil :type string)
+  (parents nil :type (list-of symbol))
+  (all-children nil :type (list-of symbol))
+  (properties nil :type hash-table))
 
 (defmacro conn--find-state (state)
   `(get ,state :conn--state))
-
-(defmacro conn--state-name (state)
-  `(aref ,state 1))
-
-(defmacro conn--state-parents (state)
-  `(aref ,state 2))
-
-(defmacro conn--state-all-children (state)
-  `(aref ,state 3))
-
-(defmacro conn--state-properties (state)
-  `(aref ,state 4))
 
 (define-inline conn-state-name-p (state)
   "Return non-nil if STATE is a conn-state."
   (inline-quote
    (eq 'conn-state (type-of (conn--find-state ,state)))))
 
-(define-inline conn-state-p (state)
-  (inline-quote (eq 'conn-state (type-of ,state))))
-
-(cl-deftype conn-state () '(satisfies conn-state-p))
-
 (define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
   (inline-quote
-   (let ((record (conn--find-state ,state)))
-     (cl-check-type record conn-state)
-     (conn--state-parents record))))
+   (let ((state-obj (conn--find-state ,state)))
+     (cl-check-type state-obj conn-state)
+     (conn--state-parents state-obj))))
 
 (define-inline conn-state-all-children (state)
   "Return all parents for STATE."
   (inline-quote
-   (let ((record (conn--find-state ,state)))
-     (cl-check-type record conn-state)
-     (conn--state-all-children record))))
+   (let ((state-obj (conn--find-state ,state)))
+     (cl-check-type state-obj conn-state)
+     (conn--state-all-children state-obj))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
@@ -986,14 +978,13 @@ of highlighting."
   "Return all parents of state.
 
 The returned list is not fresh, don't modify it."
-  (with-memoization
-      (gethash (conn--find-state state) conn--state-all-parents-cache)
-    (let ((record (conn--find-state state)))
-      (cl-check-type record conn-state)
+  (with-memoization (gethash state conn--state-all-parents-cache)
+    (let ((state-obj (conn--find-state state)))
+      (cl-check-type state-obj conn-state)
       (cons state
             (merge-ordered-lists
              (mapcar 'conn-state-all-parents
-                     (conn--state-parents record)))))))
+                     (conn--state-parents state-obj)))))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
@@ -1365,9 +1356,9 @@ mouse-3: Describe current input method")
                    (if (consp no-inherit) (cadr no-inherit) no-inherit))
               (and (symbolp prop)
                    (conn-property-static-p prop)))
-          `(let ((record (conn--find-state ,state)))
-             (cl-check-type record conn-state)
-             (gethash ,property (conn--state-properties record) ,default))
+          `(let ((state-obj (conn--find-state ,state)))
+             (cl-check-type state-obj conn-state)
+             (gethash ,property (conn--state-properties state-obj) ,default))
         exp))))
 
 (defun conn-state-get (state property &optional no-inherit default)
@@ -1377,9 +1368,9 @@ If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
   (declare (compiler-macro conn--state-get-compiler-macro))
   (if (or no-inherit (conn-property-static-p property))
-      (let ((record (conn--find-state state)))
-        (cl-check-type record conn-state)
-        (gethash property (conn--state-properties record) default))
+      (let ((state-obj (conn--find-state state)))
+        (cl-check-type state-obj conn-state)
+        (gethash property (conn--state-properties state-obj) default))
     (cl-with-gensyms (key-missing)
       (cl-loop for parent in (conn-state-all-parents state)
                for table = (conn--state-properties (conn--find-state parent))
@@ -1396,11 +1387,11 @@ PROPERTY.  If no parent has that property either than nil is returned."
 Returns VALUE."
   (inline-letevals (property)
     (inline-quote
-     (let ((record (conn--find-state ,state)))
-       (cl-check-type record conn-state)
+     (let ((state-obj (conn--find-state ,state)))
+       (cl-check-type state-obj conn-state)
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (puthash ,property ,value (conn--state-properties record))))))
+       (puthash ,property ,value (conn--state-properties state-obj))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -1409,20 +1400,20 @@ If a property is unset in a state it will inherit the value of that
 property from its parents."
   (inline-letevals (property)
     (inline-quote
-     (let ((record (conn--find-state ,state)))
-       (cl-check-type record conn-state)
+     (let ((state-obj (conn--find-state ,state)))
+       (cl-check-type state-obj conn-state)
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (remhash (conn--state-properties record) ,property)))))
+       (remhash (conn--state-properties state-obj) ,property)))))
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
   (inline-letevals (property)
     (inline-quote
-     (let ((record (conn--find-state ,state)))
+     (let ((state-obj (conn--find-state ,state)))
        (cl-with-gensyms (key-missing)
-         (cl-check-type record conn-state)
-         (not (eq (gethash ,property (conn--state-properties record)
+         (cl-check-type state-obj conn-state)
+         (not (eq (gethash ,property (conn--state-properties state-obj)
                            key-missing)
                   key-missing)))))))
 
@@ -1506,9 +1497,9 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state &rest _)
-       `(when-let* ((record (conn--find-state ,state))
-                    ((eq 'conn-state (type-of record))))
-          record))
+       `(when-let* ((state-obj (conn--find-state ,state))
+                    ((eq 'conn-state (type-of state-obj))))
+          state-obj))
   (lambda (state &rest _)
     (when state
       (append
@@ -1713,7 +1704,7 @@ and specializes the method on all conn states."
 
 ;;;;; State Definitions
 
-(defun conn--define-state (name parents properties)
+(defun conn--define-state (name doc parents properties)
   (let ((state-props
          (cl-loop with kvs = properties
                   with table = (make-hash-table :test 'eq)
@@ -1723,23 +1714,22 @@ and specializes the method on all conn states."
         (new-parents
          (merge-ordered-lists
           (mapcar 'conn-state-all-parents parents))))
-    (if-let* ((record (conn--find-state name)))
+    (if-let* ((state-obj (conn--find-state name)))
         (let ((old-parents
                (cdr (conn-state-all-parents name)))
               (all-children
-               (cons name (conn--state-all-children record))))
+               (cons name (conn--state-all-children state-obj))))
           ;; We are redefining a state and must to take care to
           ;; do it transparently.
-          (setf (conn--state-parents record) parents
-                (conn--state-properties record) state-props)
+          (setf (conn--state-parents state-obj) parents
+                (conn--state-properties state-obj) state-props)
           ;; Remove all children from all former parents.  We
           ;; will take care of the case where a child inherits
           ;; from some parent through multiple paths next.
           (dolist (former (seq-difference old-parents new-parents))
-            (setf (conn--state-all-children (conn--find-state former))
-                  (seq-difference (conn--state-all-children
-                                   (conn--find-state former))
-                                  all-children)))
+            (cl-callf seq-difference
+                (conn--state-all-children (conn--find-state former))
+              all-children))
           ;; Recompute all parents for all children and
           ;; re-register all children with all of their parents.
           ;; If we overzealously removed a child from some parent
@@ -1760,11 +1750,8 @@ and specializes the method on all conn states."
               (pcase-dolist (`(,mode . ,_)
                              (cdr (gethash parent conn--minor-mode-maps)))
                 (conn-get-minor-mode-map name mode)))))
-      (let ((record (conn--make-state)))
-        (setf (conn--find-state name) record
-              (conn--state-name record) name
-              (conn--state-parents record) parents
-              (conn--state-properties record) state-props))
+      (setf (conn--find-state name)
+            (conn--make-state name doc parents state-props))
       (dolist (parent (cdr (conn-state-all-parents name)))
         (cl-pushnew name (conn--state-all-children
                           (conn--find-state parent))))
@@ -1822,7 +1809,7 @@ to the abnormal hooks `conn-state-entry-functions' or
                  never (memq ',name (conn-state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
        (conn--define-state
-        ',name
+        ',name ,doc
         (list ,@(mapcar (lambda (v) (macroexp-quote v)) parents))
         ,(cl-loop for (name value) on properties by #'cddr
                   nconc (pcase name
@@ -2567,17 +2554,16 @@ If `use-region-p' returns non-nil this will always return
 (defvar conn--last-perform-bounds nil)
 
 (cl-defgeneric conn-perform-bounds (cmd arg)
-  (declare (conn-thing-object-property :bounds-op)))
+  (declare (conn-thing-object-property :bounds-op))
+  ( :method ((cmd conn-thing-object) arg)
+    (if-let* ((bounds-op (conn-thing-object-property cmd :bounds-op)))
+        (funcall bounds-op arg)
+      (conn-perform-bounds (conn-thing-object-thing cmd) arg))))
 
 (cl-defmethod conn-perform-bounds :around (_cmd _arg)
   (save-mark-and-excursion
     (setf (alist-get (recursion-depth) conn--last-perform-bounds)
           (cl-call-next-method))))
-
-(cl-defmethod conn-perform-bounds ((cmd conn-thing-object) arg)
-  (if-let* ((bounds-op (conn-thing-object-property cmd :bounds-op)))
-      (funcall bounds-op arg)
-    (conn-perform-bounds (conn-thing-object-thing cmd) arg)))
 
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing t)) arg)
   (pcase cmd
@@ -2687,12 +2673,11 @@ If `use-region-p' returns non-nil this will always return
 ;;;; Bounds of Things in Region
 
 (cl-defgeneric conn-perform-things-in-region (thing beg end)
-  (declare (conn-thing-object-property :things-in-region)))
-
-(cl-defmethod conn-perform-things-in-region ((cmd conn-thing-object) beg end)
-  (if-let* ((op (conn-thing-object-property cmd :thing-in-region)))
-      (funcall op beg end)
-    (conn-perform-things-in-region (conn-thing-object-thing cmd) beg end)))
+  (declare (conn-thing-object-property :things-in-region))
+  ( :method ((cmd conn-thing-object) beg end)
+    (if-let* ((op (conn-thing-object-property cmd :thing-in-region)))
+        (funcall op beg end)
+      (conn-perform-things-in-region (conn-thing-object-thing cmd) beg end))))
 
 (cl-defmethod conn-perform-things-in-region ((thing (conn-thing t)) beg end)
   (let ((thing (or (conn-command-thing thing) thing)))
@@ -3762,25 +3747,23 @@ A target finder function should return a list of overlays.")
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
 (cl-defgeneric conn-get-action (cmd)
-  (declare (conn-thing-object-property :action)))
+  (declare (conn-thing-object-property :action))
+  ( :method ((cmd conn-thing-object))
+    (or (conn-thing-object-property cmd :action)
+        (conn-get-action (conn-thing-object-thing cmd)))))
 
 (cl-defmethod conn-get-action ((_cmd (conn-thing t)))
   'conn-dispatch-goto)
 
-(cl-defmethod conn-get-action ((cmd conn-thing-object))
-  (or (conn-thing-object-property cmd :action)
-      (conn-get-action (conn-thing-object-thing cmd))))
-
 (cl-defgeneric conn-get-target-finder (cmd)
-  (declare (conn-thing-object-property :target-finder)))
+  (declare (conn-thing-object-property :target-finder))
+  ( :method ((cmd conn-thing-object))
+    (if-let* ((tf (conn-thing-object-property cmd :target-finder)))
+        (funcall tf)
+      (conn-get-target-finder (conn-thing-object-thing cmd)))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t)))
   (funcall conn-dispatch-default-target-finder))
-
-(cl-defmethod conn-get-target-finder ((cmd conn-thing-object))
-  (if-let* ((tf (conn-thing-object-property cmd :target-finder)))
-      (funcall tf)
-    (conn-get-target-finder (conn-thing-object-thing cmd))))
 
 (defun conn--dispatch-restrict-windows (win)
   (eq win (selected-window)))
@@ -9045,12 +9028,12 @@ Currently selected window remains selected afterwards."
 (conn-define-state conn-change-state (conn-read-thing-state)
   :loop-handler 'conn-change-state-handler)
 
-(cl-defgeneric conn-perform-change (cmd arg &optional kill))
-
-(cl-defmethod conn-perform-change ((cmd conn-thing-object) arg &optional kill)
-  (if-let* ((change-op (conn-thing-object-property cmd :perform-change)))
-      (funcall change-op arg kill)
-    (conn-perform-change (conn-thing-object-thing cmd) arg kill)))
+(cl-defgeneric conn-perform-change (cmd arg &optional kill)
+  (declare (conn-thing-object-property :change-op))
+  ( :method ((cmd conn-thing-object) arg &optional kill)
+    (if-let* ((change-op (conn-thing-object-property cmd :change-op)))
+        (funcall change-op arg kill)
+      (conn-perform-change (conn-thing-object-thing cmd) arg kill))))
 
 (cl-defmethod conn-perform-change (cmd arg &optional kill)
   (pcase-let ((`((,beg . ,end) . ,_)
