@@ -876,6 +876,7 @@ of highlighting."
     :properties (list ,@properties)))
 
 (defun conn-make-anonymous-thing (parent &rest properties)
+  "Make an anonymous thing."
   (declare (compiler-macro conn-make-anonymous-thing--cmacro))
   (conn--make-anonymous-thing
    :parent parent
@@ -887,12 +888,12 @@ of highlighting."
          (ud (help-split-fundoc main 'conn-make-anonymous-thing)))
     (require 'help-fns)
     (with-temp-buffer
-      (insert (or (cdr ud) main))
-      (insert "\n\n\tCurrently supported properties for thing objects:\n\n")
+      (insert (or (cdr ud) main ""))
+      (insert "\n\n\tCurrently supported properties for anonymous things:\n\n")
       (pcase-dolist (`(,prop . ,fn) (get 'conn-make-anonymous-thing :known-properties))
         (if (stringp fn)
             (insert (format "%s - %s" prop fn))
-          (insert (format "%s - `%s' method for this object" prop fn)))
+          (insert (format "%s - `%s' method for this thing" prop fn)))
         (insert "\n\n"))
       (let ((combined-doc (buffer-string)))
         (if ud
@@ -2060,7 +2061,7 @@ which see.")
   "State for a window label."
   (string nil :type string)
   (window nil :type window)
-  state)
+  (state nil :type list))
 
 (defun conn-simple-labels (count &optional face)
   "Return a list of label strings of length COUNT.
@@ -6330,7 +6331,7 @@ contain targets."
 
 (defun conn-describe-dispatch (dispatch)
   (declare (conn-anonymous-thing-property
-            :description "dispatch description for this object"))
+            :description "dispatch description for this thing"))
   (format "%s @ %s <%s>"
           (conn-describe-action (conn-dispatch-action dispatch))
           (pcase (conn-dispatch-thing dispatch)
@@ -7171,7 +7172,7 @@ Expansions and contractions are provided by functions in
 
 (cl-defstruct (conn-narrow-register
                (:constructor conn--make-narrow-register (narrow-ring)))
-  (narrow-ring nil))
+  (narrow-ring nil :type list))
 
 (defun conn--narrow-ring-to-register ()
   (conn--make-narrow-register
