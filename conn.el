@@ -2567,7 +2567,7 @@ If `use-region-p' returns non-nil this will always return
   (conn--completing-read-dispatch ctx))
 
 
-;;;; Bounds of Command
+;;;; Bounds of Thing
 
 (defvar conn--last-perform-bounds nil)
 
@@ -2612,7 +2612,7 @@ If `use-region-p' returns non-nil this will always return
     (_ (list (bounds-of-thing-at-point (or (conn-command-thing cmd) cmd))))))
 
 (cl-defmethod conn-perform-bounds ((_cmd (eql region)) _arg)
-  (region-bounds))
+  (cons (cons (region-beginning) (region-end)) (region-bounds)))
 
 (cl-defmethod conn-perform-bounds ((_cmd (conn-thing buffer)) _arg)
   (list (cons (point-min) (point-max))))
@@ -7207,8 +7207,7 @@ Expansions and contractions are provided by functions in
          (region-end)
          (register-read-with-preview "Push region to register: ")))
   (pcase (get-register register)
-    ((and (cl-struct conn-narrow-register narrow-ring)
-          struct)
+    ((and (cl-struct conn-narrow-register narrow-ring) struct)
      (setf (conn-narrow-register-narrow-ring struct)
            (cons (cons (conn--create-marker beg)
                        (conn--create-marker end))
@@ -7235,8 +7234,7 @@ Expansions and contractions are provided by functions in
                            collect (cons (conn--create-marker b)
                                          (conn--create-marker e))))))
     (pcase (get-register register)
-      ((and (cl-struct conn-narrow-register narrow-ring)
-            struct)
+      ((and (cl-struct conn-narrow-register narrow-ring) struct)
        (setf (conn-narrow-register-narrow-ring struct)
              (nconc narrowings narrow-ring)))
       (_
