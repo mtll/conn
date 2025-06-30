@@ -53,6 +53,7 @@
 (declare-function project-files "project")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
+(declare-function face-remap-remove-relative "face-remap")
 
 
 ;;;;; Mark Variables
@@ -461,8 +462,7 @@ If ring is (1 2 3 4) 4 would be returned."
           (seq-difference emulation-mode-map-alists
                           '(conn--local-minor-mode-maps
                             conn--local-major-mode-map
-                            conn--local-state-map
-                            conn--local-override-map)
+                            conn--local-state-map)
                           #'eq)))
      ,(macroexp-progn body)))
 
@@ -1006,12 +1006,10 @@ The returned list is not fresh, don't modify it."
 ;;;;; State Keymap Impl
 
 (defvar conn--state-maps (make-hash-table :test 'eq))
-(defvar conn--override-maps (make-hash-table :test 'eq))
 (defvar conn--major-mode-maps (make-hash-table :test 'eq))
 (defvar conn--minor-mode-maps (make-hash-table :test 'eq))
 
 (defvar-local conn--local-state-map nil)
-(defvar-local conn--local-override-map nil)
 (defvar-local conn--local-major-mode-map nil)
 (defvar-local conn--local-minor-mode-maps nil)
 
@@ -1049,38 +1047,6 @@ The composed keymap is of the form:
     (make-composed-keymap
      (cl-loop for pstate in (conn-state-all-parents state)
               for pmap = (gethash pstate conn--state-maps)
-              when pmap collect pmap))))
-
-(defconst conn--override-map-cache (make-hash-table :test 'eq))
-
-(defun conn-get-overriding-map (state &optional dont-create)
-  "Return the overriding keymap for STATE."
-  (cl-check-type (conn--find-state state) conn-state)
-  (if (conn-state-get state :no-keymap)
-      (unless dont-create
-        (error "%s has non-nil :no-keymap property" state))
-    (or (gethash state conn--override-maps)
-        (unless dont-create
-          (prog1 (setf (gethash state conn--override-maps)
-                       (make-sparse-keymap))
-            (dolist (child (conn-state-all-children state))
-              (when-let* ((map (gethash child conn--override-map-cache)))
-                (setf (cdr map)
-                      (cl-loop for parent in (conn-state-all-parents child)
-                               for pmap = (conn-get-overriding-map parent t)
-                               when pmap collect pmap)))))))))
-
-(defun conn--compose-overide-map (state)
-  "Return composed override map for STATE.
-
-Composed keymap is of the same form as returned by
-`conn--compose-state-map'."
-  (with-memoization (gethash state conn--override-map-cache)
-    (cl-assert (not (conn-state-get state :no-keymap))
-               nil "%s :no-keymap property is non-nil" state)
-    (make-composed-keymap
-     (cl-loop for pstate in (conn-state-all-parents state)
-              for pmap = (gethash pstate conn--override-maps)
               when pmap collect pmap))))
 
 (defun conn-get-major-mode-map (state mode &optional dont-create)
@@ -1215,11 +1181,6 @@ Called when the inheritance hierarchy for STATE changes."
         (setf (cdr state-map)
               (cl-loop for pstate in parents
                        for pmap = (conn-get-state-map pstate t)
-                       when pmap collect pmap)))
-      (when-let* ((override-map (gethash state conn--override-map-cache)))
-        (setf (cdr override-map)
-              (cl-loop for pstate in parents
-                       for pmap = (conn-get-overriding-map pstate t)
                        when pmap collect pmap)))
       (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
         (setf (cdr map)
@@ -1557,6 +1518,8 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
+(defvar-local conn--face-remap-cookie nil)
+
 (defvar conn-state-lighter-seperator "→")
 
 (defun conn--get-lighter ()
@@ -1573,12 +1536,10 @@ See also `conn-exit-functions'.")
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
-      (setf conn--local-override-map nil
-            conn--local-state-map nil
+      (setf conn--local-state-map nil
             conn--local-major-mode-map nil
             conn--local-minor-mode-maps nil)
-    (setf conn--local-override-map `((conn-local-mode . ,(conn--compose-overide-map state)))
-          conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
+    (setf conn--local-state-map `((conn-local-mode . ,(conn--compose-state-map state)))
           conn--local-major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
           conn--local-minor-mode-maps (gethash state conn--minor-mode-maps)))
   (setf conn--hide-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
@@ -1867,11 +1828,11 @@ For use in buffers that should not have any other state."
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
-    (face-remap-set-base 'mode-line face))
+    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
   (cl-call-next-method))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
-  (face-remap-reset-base 'mode-line)
+  (face-remap-remove-relative conn--face-remap-cookie)
   (cl-call-next-method))
 
 (conn-define-state conn-outline-state ()
@@ -3716,7 +3677,7 @@ A target finder function should return a list of overlays.")
   "," (conn-remap-key "<conn-thing-map>"))
 
 (define-keymap
-  :keymap (conn-get-overriding-map 'conn-dispatch-mover-state)
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state :override)
   "<remap> <conn-expand>" (conn-make-anonymous-thing
                            'expansion
                            :bounds-op (lambda (arg)
@@ -3737,11 +3698,13 @@ A target finder function should return a list of overlays.")
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'symbol)))
   "b" 'conn-dispatch-buttons)
+(conn-set-mode-map-depth 'conn-dispatch-mover-state :override -80)
 
 (define-keymap
-  :keymap (conn-get-overriding-map 'conn-dispatch-state)
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-state :override)
   "M-r" (conn-remap-key "<conn-region-map>")
   "," (conn-remap-key "<conn-thing-map>"))
+(conn-set-mode-map-depth 'conn-dispatch-state :override -80)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
@@ -6605,7 +6568,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
                    (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
                                         (format-kbd-macro key-seq)
                                         binding))))
-      (define-key (conn-get-overriding-map conn-current-state)
+      (define-key (conn-get-minor-mode-map conn-current-state :dispatch)
                   key-seq (conn-dispatch-copy (conn-ring-head conn-dispatch-ring)))
       (message "Dispatch bound to %s" (format-kbd-macro key-seq)))))
 
@@ -6829,11 +6792,11 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state)))
   (when-let* ((face (conn-state-get state :mode-line-face)))
-    (face-remap-set-base 'mode-line face))
+    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
   (cl-call-next-method))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-expand-state)))
-  (face-remap-reset-base 'mode-line)
+  (face-remap-remove-relative conn--face-remap-cookie)
   (cl-call-next-method))
 
 (define-keymap
@@ -7370,7 +7333,7 @@ execution."
                      (yes-or-no-p (format "%s runs command %S.  Bind anyway? "
                                           (format-kbd-macro key-seq)
                                           binding))))
-        (define-key (conn-get-overriding-map conn-current-state)
+        (define-key (conn-get-minor-mode-map conn-current-state :kmacro)
                     key-seq
                     `(menu-item
                       "Keyboard Macro"
@@ -10258,13 +10221,11 @@ Operates with the selected windows parent window."
       (progn
         (cl-pushnew 'conn--local-state-map emulation-mode-map-alists)
         (cl-pushnew 'conn--local-major-mode-map emulation-mode-map-alists)
-        (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists)
-        (cl-pushnew 'conn--local-override-map emulation-mode-map-alists))
+        (cl-pushnew 'conn--local-minor-mode-maps emulation-mode-map-alists))
     (setq emulation-mode-map-alists
           (seq-difference '(conn--local-state-map
                             conn--local-major-mode-map
-                            conn--local-minor-mode-maps
-                            conn--local-override-map)
+                            conn--local-minor-mode-maps)
                           emulation-mode-map-alists #'eq))))
 
 (define-minor-mode conn-local-mode
@@ -10280,7 +10241,6 @@ Operates with the selected windows parent window."
         (kill-local-variable 'conn--state-stack)
         (setq-local conn-lighter (seq-copy conn-lighter)
                     conn--local-state-map (list (list 'conn-local-mode))
-                    conn--local-override-map (list (list 'conn-local-mode))
                     conn--local-major-mode-map (list (list 'conn-local-mode))
                     conn-emacs-state-ring
                     (conn-make-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
