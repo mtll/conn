@@ -223,7 +223,7 @@
       (add-hook 'conntext-state-hook 'conntext-paren-state 95 t)
     (remove-hook 'conntext-state-hook 'conntext-paren-state t)))
 
-(conn-set-mode-map-depth 'conn-command-state 'conntext-smartparens-mode -90)
+(conn-set-mode-map-depth 'conntext-smartparens-mode -90 'conn-command-state)
 
 (provide 'conn-smartparens)
 
