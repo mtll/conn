@@ -977,16 +977,12 @@ of highlighting."
 (define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
   (inline-quote
-   (let ((state-obj (conn--find-state ,state)))
-     (cl-check-type state-obj conn-state)
-     (conn-state--parents state-obj))))
+   (conn-state--parents (conn--find-state ,state))))
 
 (define-inline conn-state-all-children (state)
   "Return all parents for STATE."
   (inline-quote
-   (let ((state-obj (conn--find-state ,state)))
-     (cl-check-type state-obj conn-state)
-     (conn-state--all-children state-obj))))
+   (conn-state--all-children (conn--find-state ,state))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
@@ -995,12 +991,12 @@ of highlighting."
 
 The returned list is not fresh, don't modify it."
   (with-memoization (gethash state conn--state-all-parents-cache)
-    (let ((state-obj (conn--find-state state)))
-      (cl-check-type state-obj conn-state)
-      (cons state
-            (merge-ordered-lists
-             (mapcar 'conn-state-all-parents
-                     (conn-state--parents state-obj)))))))
+    (thread-last
+      (conn--find-state state)
+      (conn-state--parents)
+      (mapcar 'conn-state-all-parents)
+      merge-ordered-lists
+      (cons state))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
@@ -1030,9 +1026,9 @@ The returned list is not fresh, don't modify it."
                  (if (consp no-inherit) (cadr no-inherit) no-inherit))
             (and (symbolp prop)
                  (conn-property-static-p prop)))
-        `(let ((state-obj (conn--find-state ,state)))
-           (cl-check-type state-obj conn-state)
-           (gethash ,property (conn-state--properties state-obj) ,default))
+        `(gethash ,property
+                  (conn-state--properties (conn--find-state ,state))
+                  ,default)
       exp)))
 
 (defun conn-state-get (state property &optional no-inherit default)
@@ -1042,9 +1038,9 @@ If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
   (declare (compiler-macro conn--state-get--cmacro))
   (if (or no-inherit (conn-property-static-p property))
-      (let ((state-obj (conn--find-state state)))
-        (cl-check-type state-obj conn-state)
-        (gethash property (conn-state--properties state-obj) default))
+      (gethash property
+               (conn-state--properties (conn--find-state state))
+               default)
     (cl-with-gensyms (key-missing)
       (cl-loop for parent in (conn-state-all-parents state)
                for table = (conn-state--properties (conn--find-state parent))
@@ -1061,11 +1057,12 @@ PROPERTY.  If no parent has that property either than nil is returned."
 Returns VALUE."
   (inline-letevals (property)
     (inline-quote
-     (let ((state-obj (conn--find-state ,state)))
-       (cl-check-type state-obj conn-state)
+     (progn
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (puthash ,property ,value (conn-state--properties state-obj))))))
+       (thread-last
+         (conn--find-state ,state)
+         conn-state--properties (puthash ,property ,value))))))
 
 (define-inline conn-state-unset (state property)
   "Make PROPERTY unset in STATE.
@@ -1074,22 +1071,22 @@ If a property is unset in a state it will inherit the value of that
 property from its parents."
   (inline-letevals (property)
     (inline-quote
-     (let ((state-obj (conn--find-state ,state)))
-       (cl-check-type state-obj conn-state)
+     (progn
        (cl-assert (not (conn-property-static-p ,property))
                   t "%s is a static property")
-       (remhash (conn-state--properties state-obj) ,property)))))
+       (remhash (conn-state--properties (conn--find-state ,state))
+                ,property)))))
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
   (inline-letevals (property)
     (inline-quote
-     (let ((state-obj (conn--find-state ,state)))
-       (cl-with-gensyms (key-missing)
-         (cl-check-type state-obj conn-state)
-         (not (eq (gethash ,property (conn-state--properties state-obj)
-                           key-missing)
-                  key-missing)))))))
+     (cl-with-gensyms (key-missing)
+       (thread-first
+         (gethash ,property
+                  (conn-state--properties (conn--find-state ,state))
+                  key-missing)
+         (eq key-missing) not)))))
 
 
 ;;;;; State Keymap Impl
