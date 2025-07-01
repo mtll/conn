@@ -1018,6 +1018,47 @@ The returned list is not fresh, don't modify it."
 
 (defconst conn--state-map-cache (make-hash-table :test 'eq))
 
+(defvar conn--mode-map-sort-tick 0)
+
+(cl-defstruct (conn--mode-depth-table
+               (:conc-name conn--mode-depth-)
+               (:constructor nil)
+               ( :constructor conn--make-mode-depth-table
+                 (&aux
+                  (table (make-hash-table :test 'eq))
+                  (sort-tick conn--mode-map-sort-tick))))
+  (table nil :type hash-table)
+  (sort-tick nil :type (or nil integer)))
+
+(define-inline conn--get-mode-map-depth (mode table)
+  (inline-quote
+   (gethash ,mode (conn--mode-depth-table ,table))))
+
+(gv-define-setter conn--get-mode-map-depth (value mode table)
+  `(setf (gethash ,mode (conn--mode-depth-table ,table)) ,value))
+
+(define-inline conn--mode-maps-sorted-p (state)
+  (inline-quote
+   (eql conn--mode-map-sort-tick
+        (conn--mode-depth-sort-tick
+         (car (gethash ,state conn--minor-mode-maps))))))
+
+(define-inline conn--set-mode-maps-unsorted (state)
+  (inline-quote
+   (setf (conn--mode-depth-sort-tick
+          (car (gethash ,state conn--minor-mode-maps)))
+         nil)))
+
+(define-inline conn--set-mode-maps-sorted (state)
+  (inline-quote
+   (setf (conn--mode-depth-sort-tick
+          (car (gethash ,state conn--minor-mode-maps)))
+         conn--mode-map-sort-tick)))
+
+;; setup special mode maps
+(conn-set-mode-map-depth :override -80)
+(conn-set-mode-map-depth :bind-last -90)
+
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
   (cl-check-type (conn--find-state state) conn-state)
@@ -1147,43 +1188,6 @@ return it."
           (unless dont-create
             (create-map state))))))
 
-(defvar conn--mode-map-sort-tick 0)
-
-(cl-defstruct (conn--mode-depth-table
-               (:conc-name conn--mode-depth-)
-               (:constructor nil)
-               ( :constructor conn--make-mode-depth-table
-                 (&aux
-                  (table (make-hash-table :test 'eq))
-                  (sort-tick conn--mode-map-sort-tick))))
-  (table nil :type hash-table)
-  (sort-tick nil :type (or nil integer)))
-
-(define-inline conn--get-mode-map-depth (mode table)
-  (inline-quote
-   (gethash ,mode (conn--mode-depth-table ,table))))
-
-(gv-define-setter conn--get-mode-map-depth (value mode table)
-  `(setf (gethash ,mode (conn--mode-depth-table ,table)) ,value))
-
-(define-inline conn--mode-maps-sort-p (state)
-  (inline-quote
-   (eql conn--mode-map-sort-tick
-        (conn--mode-depth-sort-tick
-         (car (gethash ,state conn--minor-mode-maps))))))
-
-(define-inline conn--set-mode-maps-unsorted (state)
-  (inline-quote
-   (setf (conn--mode-depth-sort-tick
-          (car (gethash ,state conn--minor-mode-maps)))
-         nil)))
-
-(define-inline conn--set-mode-maps-sorted (state)
-  (inline-quote
-   (setf (conn--mode-depth-sort-tick
-          (car (gethash ,state conn--minor-mode-maps)))
-         conn--mode-map-sort-tick)))
-
 (defun conn--sort-mode-maps (state)
   (cl-check-type (conn--find-state state) conn-state)
   (unless (conn-state-get state :no-keymap)
@@ -1221,10 +1225,6 @@ return it."
         (when (alist-get mode (gethash state conn--minor-mode-maps))
           (conn--sort-mode-maps state)))))
   nil)
-
-;; setup special mode maps
-(conn-set-mode-map-depth :override -80)
-(conn-set-mode-map-depth :bind-last -90)
 
 (defun conn--rebuild-state-keymaps (state)
   "Rebuild all composed keymaps for STATE.
@@ -1678,7 +1678,7 @@ and specializes the method on all conn states."
             (setf conn-current-state state)
             (conn--setup-state-properties state)
             (conn--activate-input-method)
-            (unless (conn--mode-maps-sort-p state)
+            (unless (conn--mode-maps-sorted-p state)
               (conn--sort-mode-maps state))
             (cl-call-next-method)
             (setq conn-lighter nil)
