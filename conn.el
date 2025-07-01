@@ -838,6 +838,7 @@ of highlighting."
   (when (symbolp thing)
     (or (get thing :conn-thing)
         (get thing 'forward-op)
+        (intern-soft (format "forward-%s" thing))
         (get thing 'end-op)
         (get thing 'bounds-of-thing-at-point))))
 
@@ -1155,8 +1156,8 @@ return it."
                  (&aux
                   (table (make-hash-table :test 'eq))
                   (sort-tick conn--mode-map-sort-tick))))
-  table
-  sort-tick)
+  (table nil :type hash-table)
+  (sort-tick nil :type (or nil integer)))
 
 (define-inline conn--get-mode-map-depth (mode table)
   (inline-quote
@@ -1221,7 +1222,7 @@ return it."
           (conn--sort-mode-maps state)))))
   nil)
 
-;; Set depths for special mode maps
+;; setup special mode maps
 (conn-set-mode-map-depth :override -80)
 (conn-set-mode-map-depth :bind-last -90)
 
@@ -1230,20 +1231,20 @@ return it."
 
 Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
-    (let ((parents (conn-state-all-parents state)))
+    (let ((parents (cdr (conn-state-all-parents state))))
       (when-let* ((state-map (gethash state conn--state-map-cache)))
-        (setf (cdr state-map)
+        (setf (cddr state-map)
               (cl-loop for pstate in parents
                        for pmap = (conn-get-state-map pstate t)
                        when pmap collect pmap)))
       (pcase-dolist (`(,mode . ,map) (cdr (gethash state conn--minor-mode-maps)))
-        (setf (cdr map)
+        (setf (cddr map)
               (cl-loop for parent in parents
                        for pmap = (conn-get-minor-mode-map parent mode t)
                        when pmap collect pmap)))
       (maphash
        (lambda (mode map)
-         (setf (cdr map)
+         (setf (cddr map)
                (cl-loop for pstate in parents
                         for pmap = (conn-get-major-mode-map pstate mode t)
                         when pmap collect pmap)))
@@ -2850,13 +2851,14 @@ Possibilities: \\<query-replace-map>
                     (boundp 'hi-lock-interactive-lighters))
            (if read-patterns
                (mapcar (lambda (regexp)
-                         (alist-get regexp hi-lock-interactive-lighters nil nil #'equal))
+                         (alist-get regexp hi-lock-interactive-lighters
+                                    nil nil #'equal))
                        (completing-read-multiple
                         "Regexps for kapply: "
                         (mapcar (lambda (pattern)
-                                  (cons (or (car (rassq pattern hi-lock-interactive-lighters))
-                                            (car pattern))
-                                        pattern))
+                                  (thread-first
+                                    (rassq pattern hi-lock-interactive-lighters)
+                                    car (or (car pattern)) (cons pattern)))
                                 hi-lock-interactive-patterns)
                         nil t nil nil))
              hi-lock-interactive-patterns)))
@@ -9263,11 +9265,6 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   :prefix "conn-wincontrol-"
   :group 'conn)
 
-(defface conn-wincontrol-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a `conn-wincontrol-mode'."
-  :group 'conn-faces)
-
 (defvar conn--wincontrol-help-format
   (concat
    "\\<conn-wincontrol-map>"
@@ -9499,8 +9496,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
             conn--wincontrol-arg-sign 1
             conn--wincontrol-initial-window (selected-window)
             conn--wincontrol-initial-winconf (current-window-configuration)))
-    (setf (alist-get 'mode-line face-remapping-alist)
-          'conn-wincontrol-mode-line-face)
+    (set-face-inverse-video 'mode-line t)
     (conn--wincontrol-message)))
 
 (defun conn--wincontrol-exit ()
@@ -9515,7 +9511,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
     (when (bound-and-true-p conn--wincontrol-prev-eldoc-msg-fn)
       (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
             conn--wincontrol-prev-eldoc-msg-fn nil))
-    (cl-callf2 remq (assq 'mode-line face-remapping-alist) face-remapping-alist)))
+    (set-face-inverse-video 'mode-line nil)))
 
 (defun conn--wincontrol-minibuffer-exit ()
   (when (= (minibuffer-depth) 1)
