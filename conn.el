@@ -357,6 +357,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (defvar-local conn--buffer-properties nil)
 
 (defun conn-get-buffer-property (property &optional buffer default)
+  (declare (side-effect-free t)
+           (important-return-value t))
   (alist-get property
              (buffer-local-value 'conn--buffer-properties
                                  (or buffer (current-buffer)))
@@ -389,6 +391,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (cleanup nil :type (or nil function)))
 
 (cl-defsubst conn-make-ring (capacity &key cleanup)
+  (declare (important-return-value t))
   (cl-assert (and (integerp capacity)
                   (> capacity 0)))
   (conn--make-ring capacity cleanup))
@@ -438,12 +441,16 @@ Takes (1 2 3 4) to (4 1 2 3)."
   "Return the front element of RING.
 
 If ring is (1 2 3 4) 1 would be returned."
+  (declare (side-effect-free t)
+           (important-return-value t))
   (car (conn-ring-list ring)))
 
 (defun conn-ring-tail (ring)
   "Return the back element of RING.
 
 If ring is (1 2 3 4) 4 would be returned."
+  (declare (side-effect-free t)
+           (important-return-value t))
   (car (last (conn-ring-list ring))))
 
 (defun conn-ring-delete (ring elem)
@@ -630,6 +637,8 @@ If BUFFER is nil check `current-buffer'."
            when prop return prop))
 
 (defun conn-get-mode-property (mode property &optional no-inherit default)
+  (declare (side-effect-free t)
+           (important-return-value t))
   (if no-inherit
       (when-let* ((table (get mode :conn-properties)))
         (gethash property table default))
@@ -826,6 +835,7 @@ of highlighting."
 ;;;; Thing Types
 
 (define-inline conn-command-thing (cmd)
+  (declare (side-effect-free t))
   (inline-letevals (cmd)
     (inline-quote
      (and (symbolp ,cmd)
@@ -834,6 +844,7 @@ of highlighting."
 (cl-deftype conn-thing-function () '(satisfies conn-command-thing))
 
 (define-inline conn-thing-p (thing)
+  (declare (side-effect-free t))
   (inline-letevals (thing)
     (inline-quote
      (when (symbolp ,thing)
@@ -881,7 +892,8 @@ of highlighting."
 
 (defun conn-make-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
-  (declare (compiler-macro conn-make-anonymous-thing--cmacro))
+  (declare (compiler-macro conn-make-anonymous-thing--cmacro)
+           (important-return-value t))
   (conn--make-anonymous-thing
    :parent parent
    :properties properties))
@@ -915,6 +927,7 @@ of highlighting."
         (list #'conn--set-anonymouse-thing-property)))
 
 (defun conn-anonymous-thing-property (object property)
+  (declare (side-effect-free t))
   (plist-get (conn-anonymous-thing-properties object) property))
 
 
@@ -968,26 +981,30 @@ of highlighting."
   (parents nil :type (list-of symbol))
   (all-children nil :type (list-of symbol))
   (properties nil :type hash-table)
-  (keymap nil :type keymap)
+  (keymap nil :type (or nil keymap))
   (mode-depths nil :type conn--mode-depth-table)
   (minor-mode-maps nil :type list)
   (major-mode-maps nil :type hash-table))
 
 (defmacro conn--find-state (state)
+  (declare (side-effect-free t))
   `(get ,state :conn--state))
 
 (define-inline conn-state-name-p (state)
   "Return non-nil if STATE is a conn-state."
+  (declare (side-effect-free t))
   (inline-quote
    (eq 'conn-state (type-of (conn--find-state ,state)))))
 
 (define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
+  (declare (side-effect-free t))
   (inline-quote
    (conn-state--parents (conn--find-state ,state))))
 
 (define-inline conn-state-all-children (state)
   "Return all parents for STATE."
+  (declare (side-effect-free t))
   (inline-quote
    (conn-state--all-children (conn--find-state ,state))))
 
@@ -995,6 +1012,7 @@ of highlighting."
   "Return all parents of state.
 
 The returned list is not fresh, don't modify it."
+  (declare (side-effect-free t))
   (cons state (thread-last
                 (conn--find-state state)
                 (conn-state--parents)
@@ -1003,6 +1021,7 @@ The returned list is not fresh, don't modify it."
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
+  (declare (side-effect-free t))
   (inline-quote
    (memq ,parent (conn-state-all-parents ,state))))
 
@@ -1014,6 +1033,7 @@ The returned list is not fresh, don't modify it."
     (setf (get property :conn-static-property) t))
 
   (define-inline conn-property-static-p (property)
+    (declare (side-effect-free t))
     (inline-quote
      (and (get ,property :conn-static-property) t)))
 
@@ -1039,7 +1059,8 @@ The returned list is not fresh, don't modify it."
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
-  (declare (compiler-macro conn--state-get--cmacro))
+  (declare (compiler-macro conn--state-get--cmacro)
+           (side-effect-free t))
   (if (or no-inherit (conn-property-static-p property))
       (gethash property
                (conn-state--properties (conn--find-state state))
@@ -1082,6 +1103,7 @@ property from its parents."
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
+  (declare (side-effect-free t))
   (inline-letevals (property)
     (inline-quote
      (cl-with-gensyms (key-missing)
@@ -1098,8 +1120,6 @@ property from its parents."
 (defvar-local conn--major-mode-map nil)
 (defvar-local conn--minor-mode-maps nil)
 
-(defconst conn--state-map-cache (make-hash-table :test 'eq))
-
 (defvar conn--mode-map-sort-tick 0)
 
 (cl-defstruct (conn--mode-depth-table
@@ -1113,6 +1133,8 @@ property from its parents."
   (sort-tick nil :type (or nil integer)))
 
 (define-inline conn--get-mode-map-depth (mode table)
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-quote
    (gethash ,mode (conn--mode-depth-table ,table))))
 
@@ -1120,6 +1142,8 @@ property from its parents."
   `(setf (gethash ,mode (conn--mode-depth-table ,table)) ,value))
 
 (define-inline conn--mode-maps-sorted-p (state)
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-quote
    (eql conn--mode-map-sort-tick
         (conn--mode-depth-sort-tick
@@ -1148,18 +1172,15 @@ property from its parents."
                              (conn-state--mode-depths
                               (conn--find-state s)))
                            parents)))
-      (setf (cdr (conn-state--minor-mode-maps
-                  (conn--find-state state)))
-            (compat-call
-             sort (cdr (conn-state--minor-mode-maps
-                        (conn--find-state state)))
-             :key (lambda (cons)
-                    (or (seq-some (lambda (table)
-                                    (conn--get-mode-map-depth (car cons) table))
-                                  tables)
-                        (get (car cons) :conn-mode-depth)
-                        0))
-             :in-place t))
+      (cl-callf2 compat-call sort (cdr (conn-state--minor-mode-maps
+                                        (conn--find-state state)))
+        :key (lambda (cons)
+               (or (seq-some (lambda (table)
+                               (conn--get-mode-map-depth (car cons) table))
+                             tables)
+                   (get (car cons) :conn-mode-depth)
+                   0))
+        :in-place t)
       (conn--set-mode-maps-sorted state))))
 
 (defun conn-set-mode-map-depth (mode depth &optional state)
@@ -1188,6 +1209,7 @@ property from its parents."
 
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
+  (declare (important-return-value t))
   (let ((state-obj (conn--find-state state)))
     (if (conn-state-get state :no-keymap)
         (unless dont-create
@@ -1197,11 +1219,13 @@ property from its parents."
             (prog1 (setf (conn-state--keymap state-obj)
                          (make-sparse-keymap))
               (dolist (child (conn-state-all-children state))
-                (when-let* ((map (gethash child conn--state-map-cache)))
+                (when-let* ((map (gethash child conn--composed-state-map-cache)))
                   (setf (cdr map)
                         (cl-loop for parent in (conn-state-all-parents child)
                                  for pmap = (conn-get-state-map parent t)
                                  when pmap collect pmap))))))))))
+
+(defconst conn--composed-state-map-cache (make-hash-table :test 'eq))
 
 (defun conn--compose-state-map (state)
   "Return composed state map for STATE.
@@ -1212,13 +1236,29 @@ The composed keymap is of the form:
  (keymap . bindings)  ;; state map for STATE
  (keymap . bindings)  ;; state map for STATE parent
  ...)"
-  (with-memoization (gethash state conn--state-map-cache)
+  (declare (important-return-value t))
+  (with-memoization (gethash state conn--composed-state-map-cache)
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
      (cl-loop for pstate in (conn-state-all-parents state)
               for pmap = (conn-state--keymap (conn--find-state pstate))
               when pmap collect pmap))))
+
+(defun conn--ensure-major-mode-map (state mode)
+  (declare (important-return-value t))
+  (cl-macrolet ((get-map (state)
+                  `(gethash (cons ,state mode) conn--major-mode-maps-cache))
+                (get-composed-map (state)
+                  `(gethash mode (conn-state--major-mode-maps
+                                  (conn--find-state ,state))))
+                (parent-maps (state)
+                  `(cl-loop for parent in (conn-state-all-parents ,state)
+                            for pmap = (get-map parent)
+                            when pmap collect pmap)))
+    (or (get-composed-map state)
+        (setf (get-composed-map state)
+              (make-composed-keymap (parent-maps state))))))
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1227,6 +1267,7 @@ The composed keymap is of the form:
 
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
+  (declare (important-return-value t))
   (cl-check-type (conn--find-state state) conn-state)
   (cl-check-type mode symbol)
   (if (conn-state-get state :no-keymap)
@@ -1274,17 +1315,15 @@ The composed map is a keymap of the form:
          (keymap . bindings)  ;; map in STATE-parent for parent-mode
          ..)
  ...)"
+  (declare (important-return-value t))
   (with-memoization
       (gethash (cons state (conn--derived-mode-all-parents major-mode))
                conn--composed-major-mode-maps-cache)
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
-     (let (maps)
-       (dolist (pmode (conn--derived-mode-all-parents major-mode) maps)
-         (conn-get-major-mode-map state pmode)
-         (push (gethash (cons state pmode) conn--major-mode-maps-cache)
-               maps))))))
+     (cl-loop for pmode in (conn--derived-mode-all-parents major-mode)
+              collect (conn--ensure-major-mode-map state pmode)))))
 
 (defun conn--ensure-minor-mode-map (state mode)
   (cl-macrolet ((get-map (state)
@@ -1309,6 +1348,7 @@ The composed map is a keymap of the form:
 
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
+  (declare (important-return-value t))
   (if (conn-state-get state :no-keymap)
       (unless dont-create
         (error "%s has non-nil :no-keymap property" state))
@@ -1342,7 +1382,7 @@ return it."
 Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
     (let ((parents (conn-state-all-parents state)))
-      (when-let* ((state-map (gethash state conn--state-map-cache)))
+      (when-let* ((state-map (gethash state conn--composed-state-map-cache)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
                        for pmap = (conn-get-state-map pstate t)
@@ -1742,6 +1782,7 @@ and specializes the method on all conn states."
                      t 'conn-command-state))))
 
 (defun conn-peek-stack ()
+  (declare (side-effect-free t))
   (cadr conn--state-stack))
 
 (defun conn-enter-recursive-state (state)
@@ -2157,7 +2198,8 @@ If LABEL contains PREFIX then the label state should be updated to
 reflect that prefix has been processed and LABEL should be returned.  If
 the label does not contain the prefix then the label state be updated
 to reflect that the label is no longer active and nil should be
-returned.")
+returned."
+  (declare (important-return-value t)))
 
 (cl-defgeneric conn-label-redisplay (label)
   (:method (_) "Noop" nil))
@@ -2166,7 +2208,8 @@ returned.")
   "Reset LABEL to its initial state.")
 
 (cl-defgeneric conn-label-payload (label)
-  "Return LABEL\'s payload.")
+  "Return LABEL\'s payload."
+  (declare (important-return-value t)))
 
 (cl-defmethod conn-label-payload ((label conn-dispatch-label))
   (conn-dispatch-label-target label))
@@ -2252,6 +2295,7 @@ for the label to process and `conn-label-reset' is called when the user
 has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
+  (declare (important-return-value t))
   (let* ((prompt (propertize (or prompt "chars")
                              'face 'minibuffer-prompt))
          (prompt-flag (or conn-label-select-always-prompt
@@ -2338,6 +2382,7 @@ themselves once the selection process has concluded."
 
 ;; From ace-window
 (defun conn--get-windows (&optional window minibuffer all-frames dedicated predicate)
+  (declare (important-return-value t))
   (cl-loop for win in (window-list-1 window minibuffer all-frames)
            unless (or ;; ignore child frames
                    (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
@@ -2351,6 +2396,7 @@ themselves once the selection process has concluded."
 
 (defun conn-prompt-for-window (windows &optional always-prompt)
   "Label and prompt for a window among WINDOWS."
+  (declare (important-return-value t))
   (cond
    ((null windows) nil)
    (t
@@ -2376,6 +2422,8 @@ themselves once the selection process has concluded."
 (defvar conn--loop-message-function nil)
 
 (defun conn-state-loop-format-prefix-arg ()
+  (declare (important-return-value t)
+           (side-effect-free t))
   (cond (conn--loop-prefix-mag
          (number-to-string
           (* (if conn--loop-prefix-sign -1 1)
@@ -2384,6 +2432,8 @@ themselves once the selection process has concluded."
         (t "[1]")))
 
 (defun conn-state-loop-prefix-arg ()
+  (declare (important-return-value t)
+           (side-effect-free t))
   (cond (conn--loop-prefix-mag
          (* (if conn--loop-prefix-sign -1 1) conn--loop-prefix-mag))
         (conn--loop-prefix-sign -1)))
@@ -2531,6 +2581,7 @@ themselves once the selection process has concluded."
 ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command."
+  (declare (important-return-value t))
   (conn-with-state-loop
    'conn-read-thing-state
    :initial-arg arg
@@ -2545,11 +2596,13 @@ command.
 
 If `use-region-p' returns non-nil this will always return
 `conn-toggle-mark-command' as the mover."
+  (declare (important-return-value t))
   (if (use-region-p)
       (list 'region nil)
     (conn-read-thing-mover arg recursive-edit)))
 
 (defun conn-read-thing-region (&optional arg)
+  (declare (important-return-value t))
   (pcase-let ((`(,cmd ,arg) (conn-read-thing-mover arg t)))
     (cons (conn-command-thing cmd)
           (conn-perform-bounds cmd arg))))
@@ -2612,7 +2665,8 @@ If `use-region-p' returns non-nil this will always return
 (defvar conn--last-perform-bounds nil)
 
 (cl-defgeneric conn-perform-bounds (cmd arg)
-  (declare (conn-anonymous-thing-property :bounds-op))
+  (declare (conn-anonymous-thing-property :bounds-op)
+           (important-return-value t))
   ( :method ((cmd conn-anonymous-thing) arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
@@ -2731,7 +2785,8 @@ If `use-region-p' returns non-nil this will always return
 ;;;; Bounds of Things in Region
 
 (cl-defgeneric conn-perform-things-in-region (thing beg end)
-  (declare (conn-anonymous-thing-property :things-in-region))
+  (declare (conn-anonymous-thing-property :things-in-region)
+           (important-return-value t))
   ( :method ((cmd conn-anonymous-thing) beg end)
     (if-let* ((op (conn-anonymous-thing-property cmd :thing-in-region)))
         (funcall op beg end)
@@ -2757,6 +2812,7 @@ If `use-region-p' returns non-nil this will always return
   "Bounds of the THINGs contained within the region BOUNDS.
 
 BOUNDS is of the form returned by `region-bounds', which see."
+  (declare (important-return-value t))
   (save-mark-and-excursion
     (mapcan (pcase-lambda (`(,beg . ,end))
               (conn-perform-things-in-region thing beg end))
@@ -3427,10 +3483,14 @@ Is an alist of the form ((CMD . MARK-HANDLER) ...).
 
 For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 
-(defun conn-command-mark-handler (command)
+(define-inline conn-command-mark-handler (command)
   "Return the mark handler for COMMAND."
-  (and (symbolp command)
-       (get command :conn-mark-handler)))
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (inline-letevals (command)
+    (inline-quote
+     (and (symbolp ,command)
+          (get ,command :conn-mark-handler)))))
 
 (gv-define-setter conn-command-mark-handler (handler command)
   `(conn-set-command-mark-handler ,command ,handler))
@@ -3808,7 +3868,8 @@ A target finder function should return a list of overlays.")
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
 (cl-defgeneric conn-get-action (cmd)
-  (declare (conn-anonymous-thing-property :action))
+  (declare (conn-anonymous-thing-property :action)
+           (important-return-value t))
   ( :method ((cmd conn-anonymous-thing))
     (or (conn-anonymous-thing-property cmd :action)
         (conn-get-action (conn-anonymous-thing-parent cmd)))))
@@ -3817,7 +3878,8 @@ A target finder function should return a list of overlays.")
   'conn-dispatch-goto)
 
 (cl-defgeneric conn-get-target-finder (cmd)
-  (declare (conn-anonymous-thing-property :target-finder))
+  (declare (conn-anonymous-thing-property :target-finder)
+           (important-return-value t))
   ( :method ((cmd conn-anonymous-thing))
     (if-let* ((tf (conn-anonymous-thing-property cmd :target-finder)))
         (funcall tf)
@@ -3827,6 +3889,7 @@ A target finder function should return a list of overlays.")
   (funcall conn-dispatch-default-target-finder))
 
 (defun conn--dispatch-restrict-windows (win)
+  (declare (side-effect-free t))
   (eq win (selected-window)))
 
 (defun conn--dispatch-command-affixation (command-names)
@@ -4121,6 +4184,7 @@ be ignored by during dispatch.")
 (put 'conn-target-overlay 'priority 2002)
 
 (defun conn--overlays-in-of-type (beg end category &optional window)
+  (declare (important-return-value t))
   (cl-loop for ov in (overlays-in beg end)
            when (and (eq (overlay-get ov 'category) category)
                      (or (null window)
@@ -4234,11 +4298,13 @@ Target overlays may override this default by setting the
   'conn--pixelwise-labels-target-p)
 
 (defun conn--pixelwise-labels-window-p (win)
+  (declare (important-return-value t))
   (and (eq (selected-frame) (window-frame win))
        (length< (alist-get win conn-targets)
                 conn-pixelwise-label-target-limit)))
 
 (defun conn--pixelwise-labels-target-p (target)
+  (declare (important-return-value t))
   (cl-loop with ov-beg = (overlay-start target)
            for (beg . end) in (conn--dispatch-window-lines
                                (overlay-get target 'window))
@@ -4273,6 +4339,7 @@ Target overlays may override this default by setting the
                   'face 'conn-dispatch-label-face))))
 
 (defun conn--dispatch-eol (pt window)
+  (declare (important-return-value t))
   (cl-loop for (beg . end) in (conn--dispatch-window-lines window)
            when (and (<= beg pt) (< pt end))
            return (1- end)))
@@ -4414,6 +4481,7 @@ Target overlays may override this default by setting the
 (defvar conn--dispatch-window-lines-cache (make-hash-table :test 'eq))
 
 (defun conn--dispatch-window-lines (window)
+  (declare (important-return-value t))
   (with-memoization (gethash window conn--dispatch-window-lines-cache)
     (let (lines prev)
       (with-current-buffer (window-buffer window)
@@ -4430,6 +4498,7 @@ Target overlays may override this default by setting the
 (defvar conn--pixelwise-window-cache (make-hash-table :test 'eq))
 
 (defun conn-dispatch-pixelwise-label-p (ov)
+  (declare (important-return-value t))
   (and (with-memoization
            (gethash (overlay-get ov 'window) conn--pixelwise-window-cache)
          (funcall conn-pixelwise-labels-window-predicate
@@ -4437,6 +4506,7 @@ Target overlays may override this default by setting the
        (funcall conn-pixelwise-labels-target-predicate ov)))
 
 (defun conn-disptach-label-target (target string)
+  (declare (important-return-value t))
   (let ((window (overlay-get target 'window)))
     (when (<= (window-start window)
               (overlay-start target)
@@ -4461,6 +4531,7 @@ Target overlays may override this default by setting the
                :target target))))))
 
 (defun conn-dispatch-get-targets (&optional sort-function)
+  (declare (important-return-value t))
   (let ((result nil))
     (setq conn-target-count 0)
     (pcase-dolist (`(,window . ,targets) conn-targets)
@@ -4482,6 +4553,7 @@ Target overlays may override this default by setting the
     result))
 
 (defun conn-dispatch-simple-labels ()
+  (declare (important-return-value t))
   (let* ((all-targets (conn-dispatch-get-targets conn-target-sort-function))
          (label-strings (conn-simple-labels (1+ conn-target-count)))
          (labels nil))
@@ -4510,6 +4582,7 @@ Target overlays may override this default by setting the
             labels))))
 
 (defun conn-dispatch-stable-labels ()
+  (declare (important-return-value t))
   (conn--ensure-window-labels)
   (pcase-let* ((`(,bchars ,achars) conn-disptach-stable-label-characters)
                (labels nil))
@@ -4525,11 +4598,13 @@ Target overlays may override this default by setting the
     (apply #'nconc labels)))
 
 (defun conn-dispatch-smart-labels ()
+  (declare (important-return-value t))
   (if (or executing-kbd-macro defining-kbd-macro)
       (conn-dispatch-stable-labels)
     (conn-dispatch-simple-labels)))
 
 (defun conn--target-label-payload (overlay)
+  (declare (important-return-value t))
   (list (overlay-start overlay)
         (overlay-get overlay 'window)
         (overlay-get overlay 'thing)))
@@ -4601,7 +4676,8 @@ Target overlays may override this default by setting the
                               do (funcall handler cmd)))
                (setf conn-state-loop-last-command cmd)))))))))
 
-(cl-defgeneric conn-dispatch-select-target ())
+(cl-defgeneric conn-dispatch-select-target ()
+  (declare (important-return-value t)))
 
 (cl-defmethod conn-dispatch-select-target :around ()
   (conn-with-dispatch-event-handler 'mouse-click
@@ -4649,6 +4725,7 @@ Target overlays may override this default by setting the
 ;;;;; Dispatch Target Finders
 
 (defun conn-target-sort-nearest (a b)
+  (declare (side-effect-free t))
   (< (abs (- (overlay-end a) (point)))
      (abs (- (overlay-end b) (point)))))
 
@@ -4673,12 +4750,15 @@ Target overlays may override this default by setting the
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-dispatch-retargetable-p (target-finder)
+  (declare (important-return-value t))
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-dispatch-has-target-p (target-finder)
+  (declare (important-return-value t))
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-dispatch-targets-other-end-p (target-finder)
+  (declare (important-return-value t))
   (:method (_) nil))
 
 (defclass conn-dispatch-target-window-predicate ()
@@ -4760,6 +4840,7 @@ Target overlays may override this default by setting the
             (conn-make-string-target-overlays string predicate)))))))
 
 (defun conn-dispatch-read-string-with-timeout (&optional predicate)
+  (declare (important-return-value t))
   (conn-dispatch-read-with-timeout
    :timeout conn-read-string-timeout
    :predicate predicate))
@@ -4818,6 +4899,7 @@ contain targets."
             (conn-make-target-overlay pt 0)))))))
 
 (defun conn-dispatch-chars-in-thing (thing)
+  (declare (important-return-value t))
   (conn-dispatch-read-with-timeout
    :timeout conn-read-string-timeout
    :predicate (lambda (beg _end)
@@ -4885,6 +4967,7 @@ contain targets."
                 (conn-make-target-overlay (point) 0 :window win)))))))))
 
 (defun conn-dispatch-all-things (thing)
+  (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -4899,6 +4982,7 @@ contain targets."
               (conn-make-target-overlay (point) 0))))))))
 
 (defun conn-dispatch-all-buttons ()
+  (declare (important-return-value t))
   (dolist (win (conn--get-target-windows))
     (with-selected-window win
       (with-restriction (window-start) (window-end)
@@ -4912,6 +4996,7 @@ contain targets."
               (conn-make-target-overlay (point) 0))))))))
 
 (defun conn-dispatch-re-matches (regexp)
+  (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -4921,6 +5006,7 @@ contain targets."
             (conn-make-target-overlay beg (- end beg))))))))
 
 (defun conn-dispatch-things-read-prefix (thing prefix-length)
+  (declare (important-return-value t))
   (conn-dispatch-read-n-chars
    :string-length prefix-length
    :predicate (lambda (beg _end)
@@ -4930,6 +5016,7 @@ contain targets."
                     (`(,tbeg . ,_tend) (= beg tbeg)))))))
 
 (defun conn-dispatch-things-with-prefix (thing prefix-string)
+  (declare (important-return-value t))
   (lambda ()
     (conn-make-string-target-overlays
      prefix-string
@@ -4940,6 +5027,7 @@ contain targets."
            (`(,tbeg . ,_tend) (= beg tbeg))))))))
 
 (defun conn-dispatch-things-with-re-prefix (thing prefix-regex)
+  (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -4955,6 +5043,7 @@ contain targets."
           (conn-make-target-overlay beg (- end beg)))))))
 
 (defun conn-dispatch-things-matching-re (thing regexp)
+  (declare (important-return-value t))
   (lambda ()
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
@@ -5145,21 +5234,28 @@ contain targets."
           conn--dispatch-loop-change-groups)))
 
 (defun conn--action-type-p (item)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (when-let* ((class (and (symbolp item)
                           (cl--find-class item))))
     (and (oclosure--class-p class)
          (memq 'conn-action (oclosure--class-allparents class)))))
 
 (cl-defgeneric conn-action-stale-p (action)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (:method ((_action conn-action)) nil))
 
 (cl-defgeneric conn-action-copy (action)
+  (declare (important-return-value t))
   (:method (action) (conn-action--copy action)))
 
 (cl-defgeneric conn-action-cleanup (action)
   (:method (_action) "Noop" nil))
 
 (cl-defgeneric conn-describe-action (action &optional short)
+  (declare (important-return-value t)
+           (side-effect-free t))
   ( :method ((action conn-action) &optional _)
     (conn-action--description action)))
 
@@ -5170,6 +5266,7 @@ contain targets."
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-make-action (type)
+  (declare (important-return-value t))
   (:method (type) (error "Unknown action type %s" type))
   (:method :after (_type) (conn-state-loop-consume-prefix-arg)))
 
@@ -5181,6 +5278,7 @@ contain targets."
       (set-window-configuration wconf))))
 
 (defun conn--action-buffer-change-group ()
+  (declare (important-return-value t))
   (let ((change-group (prepare-change-group)))
     (activate-change-group change-group)
     (list change-group (point) (mark t) mark-active)))
@@ -6362,6 +6460,7 @@ contain targets."
                   :cleanup 'conn-dispatch--cleanup))
 
 (defun conn-dispatch-copy (dispatch)
+  (declare (important-return-value t))
   (let ((copy (conn--dispatch-copy dispatch)))
     (setf (conn-dispatch-action copy)
           (conn-action-copy (conn-dispatch-action dispatch)))
@@ -6372,7 +6471,8 @@ contain targets."
 
 (defun conn-describe-dispatch (dispatch)
   (declare (conn-anonymous-thing-property
-            :description "dispatch description for this thing"))
+            :description "dispatch description for this thing")
+           (side-effect-free t))
   (format "%s @ %s <%s>"
           (conn-describe-action (conn-dispatch-action dispatch))
           (pcase (conn-dispatch-thing dispatch)
@@ -6742,6 +6842,7 @@ potential expansions.  Functions may return invalid expansions
 (conn-register-thing 'expansion)
 
 (defun conn--expand-filter-regions (regions)
+  (declare (important-return-value t))
   (let (result)
     (pcase-dolist ((and reg `(,beg . ,end))
                    (delete-dups regions))
@@ -6753,6 +6854,8 @@ potential expansions.  Functions may return invalid expansions
     result))
 
 (defun conn--valid-expansions-p ()
+  (declare (important-return-value t)
+           (side-effect-free t))
   (and (eql conn--current-expansions-tick (buffer-chars-modified-tick))
        (or (and conn--current-expansions
                 (region-active-p)
