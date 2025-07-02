@@ -1372,7 +1372,7 @@ return it."
               (dolist (child (conn-state-all-children state))
                 (if-let* ((map (get-composed-map child)))
                     (setf (cdr map) (parent-maps child))
-                  (conn--ensure-minor-mode-map state mode)))
+                  (conn--ensure-minor-mode-map child mode)))
               (conn--sort-mode-maps state)
               (nth 1 keymap)))))))
 
@@ -1852,8 +1852,9 @@ and specializes the method on all conn states."
                           (conn--find-state parent))))))
   (unless (conn-state-get name :no-keymap)
     (dolist (parent parents)
-      (pcase-dolist (`(,mode . ,_) (cdr (conn-state--minor-mode-maps
-                                         (conn--find-state parent))))
+      (pcase-dolist (`(,mode . ,_)
+                     (cdr (conn-state--minor-mode-maps
+                           (conn--find-state parent))))
         (conn--ensure-minor-mode-map name mode)))))
 
 (defmacro conn-define-state (name parents &rest properties)
@@ -1939,21 +1940,6 @@ For use in buffers that should not have any other state."
   :suppress-input-method t
   :cursor 'box)
 
-(conn-define-state conn-read-thing-common-state (conn-command-state)
-  "Common elements of thing reading states."
-  :suppress-input-method t
-  :mode-line-face 'conn-read-thing-mode-line-face
-  :abstract t)
-
-(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state)))
-  (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
-  (face-remap-remove-relative conn--face-remap-cookie)
-  (cl-call-next-method))
-
 (conn-define-state conn-outline-state ()
   "State for editing outline sections."
   :cursor '(hbar . 10)
@@ -1969,6 +1955,28 @@ For use in buffers that should not have any other state."
 By default `conn-emacs-state' does not bind anything."
   :lighter "E"
   :cursor '(bar . 4))
+
+;;;;; Read Thing State
+
+(defface conn-read-thing-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a read-thing state."
+  :group 'conn-faces)
+
+(conn-define-state conn-read-thing-common-state (conn-command-state)
+  "Common elements of thing reading states."
+  :suppress-input-method t
+  :mode-line-face 'conn-read-thing-mode-line-face
+  :abstract t)
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state)))
+  (when-let* ((face (conn-state-get state :mode-line-face)))
+    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
+  (face-remap-remove-relative conn--face-remap-cookie)
+  (cl-call-next-method))
 
 ;;;;; Emacs State
 
