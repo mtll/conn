@@ -4770,27 +4770,28 @@ contain targets."
                           (context-lines (oref state context-lines)))
       (pcase-dolist (`(,win . ,targets) conn-targets)
         (with-selected-window win
-          (let* ((regions
-                  (save-excursion
-                    (cl-loop for tar in targets
-                             collect
-                             (or (overlay-get tar 'context)
-                                 (progn
-                                   (goto-char (overlay-start tar))
-                                   (cons (pos-bol (- 1 context-lines))
-                                         (pos-bol (+ 2 context-lines)))))))))
+          (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
+            (save-excursion
+              (dolist (tar targets)
+                (push (or (overlay-get tar 'context)
+                          (progn
+                            (goto-char (overlay-start tar))
+                            (cons (pos-bol (- 1 context-lines))
+                                  (pos-bol (+ 2 context-lines)))))
+                      regions)))
+            (cl-callf conn--merge-regions regions t)
+            (cl-callf2 compat-call sort regions
+              :key #'car
+              :in-place t)
             (cl-loop for beg = (point-min) then next-beg
-                     for (end . next-beg) in (compat-call
-                                              sort (conn--merge-regions
-                                                    (cons (cons (pos-bol) (pos-bol 2))
-                                                          regions)
-                                                    t)
-                                              :key #'car
-                                              :in-place t)
+                     for (end . next-beg) in regions
                      while end
-                     do (push (make-overlay beg end) hidden)
-                     finally (push (make-overlay beg (point-max)) hidden))
-            (cl-loop for ov in hidden do (overlay-put ov 'invisible t)))
+                     do (thread-first
+                          (push (make-overlay beg end) hidden)
+                          car (overlay-put 'invisible t))
+                     finally (thread-first
+                               (push (make-overlay beg (point-max)) hidden)
+                               car (overlay-put 'invisible t))))
           (recenter)))
       (setf (oref state hidden) hidden)
       (sit-for 0))))
