@@ -958,7 +958,6 @@ of highlighting."
                ( :constructor conn--make-state
                  ( name docstring parents properties
                    &aux
-                   (keymap (make-sparse-keymap))
                    (mode-depths (conn--make-mode-depth-table))
                    (minor-mode-maps (list :conn-minor-mode-map-alist))
                    (major-mode-maps (make-hash-table :test 'eq))))
@@ -1800,13 +1799,7 @@ and specializes the method on all conn states."
         ;; are destructively modified so that local map
         ;; variables will not have to be updated in each buffer
         ;; before these changes take effect.
-        (mapc #'conn--rebuild-state-keymaps children)
-        (unless (gethash :no-keymap (conn-state--properties state-obj))
-          (dolist (parent new-all-parents)
-            (pcase-dolist (`(,mode . ,_)
-                           (cdr (conn-state--minor-mode-maps
-                                 (conn--find-state parent))))
-              (conn--ensure-minor-mode-map name mode)))))
+        (mapc #'conn--rebuild-state-keymaps children))
     (let* ((prop-table (make-hash-table :test 'eq))
            (state-obj (conn--make-state name docstring parents prop-table)))
       (setf (conn--find-state name) state-obj)
@@ -1815,13 +1808,12 @@ and specializes the method on all conn states."
                do (puthash k v prop-table))
       (dolist (parent (cdr (conn-state-all-parents name)))
         (cl-pushnew name (conn-state--all-children
-                          (conn--find-state parent))))
-      (unless (gethash :no-keymap prop-table)
-        (dolist (parent parents)
-          (pcase-dolist (`(,mode . ,_)
-                         (cdr (conn-state--minor-mode-maps
-                               (conn--find-state parent))))
-            (conn--ensure-minor-mode-map name mode)))))))
+                          (conn--find-state parent))))))
+  (unless (conn-state-get name :no-keymap)
+    (dolist (parent parents)
+      (pcase-dolist (`(,mode . ,_) (cdr (conn-state--minor-mode-maps
+                                         (conn--find-state parent))))
+        (conn--ensure-minor-mode-map name mode)))))
 
 (defmacro conn-define-state (name parents &rest properties)
   "Define a conn state NAME.
