@@ -933,11 +933,6 @@ of highlighting."
 
 ;;;; States
 
-(defface conn-read-thing-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a read-thing state."
-  :group 'conn-faces)
-
 (defcustom conn-null-state-modes
   (list 'calc-mode
         'calc-trail-mode
