@@ -8031,10 +8031,9 @@ instances of from-string.")
 
 Exiting the recursive edit will resume the isearch."
   (interactive)
-  (thread-first
-    (recursive-edit)
-    (with-isearch-suspended)
-    (save-selected-window)))
+  (save-selected-window
+    (with-isearch-suspended
+     (recursive-edit))))
 
 (defun conn--isearch-in-thing (thing-cmd thing-arg &optional backward regexp)
   (let* ((regions (conn-perform-bounds thing-cmd thing-arg))
@@ -10654,7 +10653,7 @@ Operates with the selected windows parent window."
 
 ;;;; Dired
 
-(conn-define-state conn-dired-dispatch-state (conn-emacs-state conn-dispatch-state)
+(conn-define-state conn-dired-dispatch-state (conn-dispatch-state)
   "State for dispatch in `dired-mode'."
   :cursor 'box
   :lighter "D"
