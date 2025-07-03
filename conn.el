@@ -964,8 +964,9 @@ of highlighting."
 (cl-defstruct (conn-state
                (:constructor nil)
                ( :constructor conn--make-state
-                 ( name docstring parents properties
+                 ( name docstring parents
                    &aux
+                   (properties (make-hash-table :test 'eq))
                    (mode-depths (conn--make-mode-depth-table))
                    (minor-mode-maps (list :conn-minor-mode-map-alist))
                    (major-mode-maps (make-hash-table :test 'eq))))
@@ -1802,49 +1803,48 @@ and specializes the method on all conn states."
 ;;;;; State Definitions
 
 (defun conn--define-state (name docstring parents properties)
-  (if-let* ((state-obj (conn--find-state name)))
-      (let ((old-all-parents (cdr (conn-state-all-parents name)))
-            (new-all-parents
-             (merge-ordered-lists
-              (mapcar 'conn-state-all-parents parents)))
-            (children (cons name (conn-state--all-children state-obj))))
-        ;; We are redefining a state and must to take care to
-        ;; do it transparently.
-        (setf (conn-state--parents state-obj) parents)
-        (cl-loop with kvs = properties
-                 with table = (conn-state--properties state-obj)
-                 for (k v) on kvs by #'cddr
-                 do (puthash k v table))
-        ;; Remove all children from all former parents.  We
-        ;; will take care of the case where a child inherits
-        ;; from some parent through multiple paths next.
-        (dolist (former (seq-difference old-all-parents new-all-parents))
-          (cl-callf seq-difference
-              (conn-state--all-children (conn--find-state former))
-            children))
-        ;; Recompute all parents for all children and
-        ;; re-register all children with all of their parents.
-        ;; If we overzealously removed a child from some parent
-        ;; in the previous step we will fix it here.
-        (dolist (child children)
-          (dolist (parent (cdr (conn-state-all-parents child)))
-            (cl-pushnew child (conn-state--all-children
-                               (conn--find-state parent)))))
-        ;; Rebuild all keymaps for all children with the new
-        ;; inheritance hierarchy.  Existing composed keymaps
-        ;; are destructively modified so that local map
-        ;; variables will not have to be updated in each buffer
-        ;; before these changes take effect.
-        (mapc #'conn--rebuild-state-keymaps children))
-    (let* ((prop-table (make-hash-table :test 'eq))
-           (state-obj (conn--make-state name docstring parents prop-table)))
-      (setf (conn--find-state name) state-obj)
-      (cl-loop with kvs = properties
-               for (k v) on kvs by #'cddr
-               do (puthash k v prop-table))
-      (dolist (parent (cdr (conn-state-all-parents name)))
-        (cl-pushnew name (conn-state--all-children
-                          (conn--find-state parent))))))
+  (cl-labels ((setup-properties (table)
+                (cl-loop with kvs = properties
+                         for (k v) on kvs by #'cddr
+                         do (puthash k v table))))
+    (if-let* ((state-obj (conn--find-state name)))
+        (let ((old-all-parents (cdr (conn-state-all-parents name)))
+              (new-all-parents
+               (merge-ordered-lists
+                (mapcar 'conn-state-all-parents parents)))
+              (state-and-children (cons name (conn-state--all-children state-obj))))
+          ;; We are redefining a state and must to take care to
+          ;; do it transparently.
+          (setf (conn-state--parents state-obj) parents)
+          (setup-properties (setf (conn-state--properties state-obj)
+                                  (make-hash-table :test 'eq)))
+          ;; Remove all children from all former parents.  We
+          ;; will take care of the case where a child inherits
+          ;; from some parent through multiple paths next.
+          (dolist (former (seq-difference old-all-parents new-all-parents))
+            (cl-callf seq-difference
+                (conn-state--all-children (conn--find-state former))
+              state-and-children))
+          ;; Recompute all parents for all children and
+          ;; re-register all children with all of their parents.
+          ;; If we overzealously removed a child from some parent
+          ;; in the previous step we will fix it here.
+          (dolist (child state-and-children)
+            (dolist (parent (cdr (conn-state-all-parents child)))
+              (cl-pushnew child (conn-state--all-children
+                                 (conn--find-state parent)))))
+          ;; Rebuild all keymaps for all children with the new
+          ;; inheritance hierarchy.  Existing composed keymaps
+          ;; are destructively modified so that local map
+          ;; variables will not have to be updated in each buffer
+          ;; before these changes take effect.
+          (mapc #'conn--rebuild-state-keymaps state-and-children))
+      (let* ((state-obj (conn--make-state name docstring parents)))
+        (setf (conn--find-state name) state-obj)
+        (setup-properties (conn-state--properties state-obj))
+        (dolist (parent (cdr (conn-state-all-parents name)))
+          (cl-pushnew name (conn-state--all-children
+                            (conn--find-state parent)))))))
   (unless (conn-state-get name :no-keymap)
     (dolist (parent parents)
       (pcase-dolist (`(,mode . ,_)
