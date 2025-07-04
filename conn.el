@@ -898,15 +898,14 @@ of highlighting."
   (parent nil :read-only t)
   (properties nil :read-only t))
 
-(defun conn-make-anonymous-thing--cmacro (_exp parent &rest properties)
-  `(conn--make-anonymous-thing
-    :parent ,parent
-    :properties (list ,@properties)))
-
 (defun conn-make-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
-  (declare (compiler-macro conn-make-anonymous-thing--cmacro)
-           (important-return-value t))
+  (declare (important-return-value t)
+           (compiler-macro
+            (lambda (_exp)
+              `(conn--make-anonymous-thing
+                :parent ,parent
+                :properties (list ,@properties)))))
   (conn--make-anonymous-thing
    :parent parent
    :properties properties))
@@ -1222,13 +1221,13 @@ property from its parents."
             (prog1 (setf (conn-state--keymap state-obj)
                          (make-sparse-keymap))
               (dolist (child (conn-state-all-children state))
-                (when-let* ((map (gethash child conn--composed-state-map-cache)))
+                (when-let* ((map (gethash child conn--composed-state-maps)))
                   (setf (cdr map)
                         (cl-loop for parent in (conn-state-all-parents child)
                                  for pmap = (conn-get-state-map parent t)
                                  when pmap collect pmap))))))))))
 
-(defconst conn--composed-state-map-cache (make-hash-table :test 'eq))
+(defconst conn--composed-state-maps (make-hash-table :test 'eq))
 
 (defun conn--compose-state-map (state)
   "Return composed state map for STATE.
@@ -1240,7 +1239,7 @@ The composed keymap is of the form:
  (keymap . bindings)  ;; state map for STATE parent
  ...)"
   (declare (important-return-value t))
-  (with-memoization (gethash state conn--composed-state-map-cache)
+  (with-memoization (gethash state conn--composed-state-maps)
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
@@ -1300,7 +1299,7 @@ return it."
                           (make-composed-keymap (parent-maps child))))))
               (nth 1 keymap)))))))
 
-(defconst conn--composed-major-mode-maps-cache (make-hash-table :test 'equal))
+(defconst conn--composed-major-mode-maps (make-hash-table :test 'equal))
 
 (defun conn--compose-major-mode-map (state)
   "Return composed major mode maps for STATE.
@@ -1321,7 +1320,7 @@ The composed map is a keymap of the form:
   (declare (important-return-value t))
   (with-memoization
       (gethash (cons state (conn--derived-mode-all-parents major-mode))
-               conn--composed-major-mode-maps-cache)
+               conn--composed-major-mode-maps)
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
@@ -1386,7 +1385,7 @@ Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
     (let ((parents (conn-state-all-parents state))
           (state-obj (conn--find-state state)))
-      (when-let* ((state-map (gethash state conn--composed-state-map-cache)))
+      (when-let* ((state-map (gethash state conn--composed-state-maps)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
                        for pmap = (conn-get-state-map pstate t)
@@ -4554,7 +4553,7 @@ Target overlays may override this default by setting the
 (defun conn-dispatch-simple-labels ()
   (declare (important-return-value t))
   (let* ((all-targets (conn-dispatch-get-targets conn-target-sort-function))
-         (label-strings (conn-simple-labels (1+ conn-target-count)))
+         (label-strings (conn-simple-labels conn-target-count))
          (labels nil))
     (pcase-dolist (`(,_window . ,targets) all-targets)
       (dolist (tar targets)
@@ -9435,8 +9434,8 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   :repeat t
   "i" 'conn-wincontrol-scroll-down
   "k" 'conn-wincontrol-scroll-up
-  "SPC" 'conn-wincontrol-other-window-scroll-up
-  "DEL" 'conn-wincontrol-other-window-scroll-down)
+  "K" 'conn-wincontrol-other-window-scroll-up
+  "I" 'conn-wincontrol-other-window-scroll-down)
 
 (defvar-keymap conn-wincontrol-text-scale-repeat-map
   :repeat t
@@ -9503,8 +9502,8 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   "<prior>" 'conn-wincontrol-scroll-down
   "TAB" 'delete-other-windows
   "<tab>" 'delete-other-windows
-  "SPC" 'conn-wincontrol-other-window-scroll-up
-  "DEL" 'conn-wincontrol-other-window-scroll-down
+  "K" 'conn-wincontrol-other-window-scroll-up
+  "I" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
@@ -9521,8 +9520,8 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   "f" 'conn-goto-window
   "j" 'previous-buffer
   "J" 'bury-buffer
-  "I" 'beginning-of-buffer
-  "K" 'end-of-buffer
+  "DEL" 'beginning-of-buffer
+  "SPC" 'end-of-buffer
   "i" 'conn-wincontrol-scroll-down
   "k" 'conn-wincontrol-scroll-up
   "l" 'next-buffer
