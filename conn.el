@@ -280,6 +280,21 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (defmacro conn--flip-first (fn &rest args)
   `(,fn ,@(last args) ,@(butlast args)))
 
+(defmacro conn--compat-callf (func place &rest args)
+  (declare (indent 2) (debug (cl-function place &rest form)))
+  (gv-letplace (getter setter) place
+    (let* ((rargs (cons getter args)))
+      (funcall setter `(compat-call ,func ,@rargs)))))
+
+(defmacro conn--compat-callf2 (func arg1 place &rest args)
+  (declare (indent 3) (debug (cl-function form place &rest form)))
+  (if (and (cl--safe-expr-p arg1) (cl--simple-expr-p place) (symbolp func))
+      `(setf ,place (compat-call ,func ,arg1 ,place ,@args))
+    (macroexp-let2 nil a1 arg1
+      (gv-letplace (getter setter) place
+        (let* ((rargs (cl-list* a1 getter args)))
+          (funcall setter `(compat-call ,func ,@rargs)))))))
+
 (defmacro conn-make-thing-command (name region-fn &rest body)
   (declare (indent 2))
   `(progn
@@ -364,8 +379,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                                  (or buffer (current-buffer)))
              default))
 
-(gv-define-setter conn-get-buffer-property (value prop &optional buffer)
-  `(conn-set-buffer-property ,prop ,value ,buffer))
+(gv-define-setter conn-get-buffer-property (value property &optional buffer _default)
+  `(conn-set-buffer-property ,property ,value ,buffer))
 
 (defun conn-set-buffer-property (property value &optional buffer)
   (setf (alist-get property
@@ -650,8 +665,8 @@ If BUFFER is nil check `current-buffer'."
                unless (eq key-missing prop) return prop
                finally return default))))
 
-(gv-define-setter conn-get-mode-property (value mode prop)
-  `(conn-set-mode-property ,mode ,prop ,value))
+(gv-define-setter conn-get-mode-property (value mode property &rest _)
+  `(conn-set-mode-property ,mode ,property ,value))
 
 (defun conn-set-mode-property (mode prop value)
   (let ((table (or (get mode :conn-properties)
@@ -835,11 +850,15 @@ of highlighting."
 ;;;; Thing Types
 
 (define-inline conn-command-thing (cmd)
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (gv-setter conn-set-command-thing))
   (inline-letevals (cmd)
     (inline-quote
      (and (symbolp ,cmd)
           (get ,cmd :conn-command-thing)))))
+
+(defun conn-set-command-thing (cmd thing)
+  (put cmd :conn-command-thing thing))
 
 (cl-deftype conn-thing-function () '(satisfies conn-command-thing))
 
@@ -855,12 +874,6 @@ of highlighting."
            (get ,thing 'bounds-of-thing-at-point))))))
 
 (cl-deftype conn-thing () '(satisfies conn-thing-p))
-
-(gv-define-setter conn-command-thing (thing cmd)
-  `(conn-set-command-thing ,cmd ,thing))
-
-(defun conn-set-command-thing (cmd thing)
-  (put cmd :conn-command-thing thing))
 
 (cl-defun conn-register-thing (thing &key forward-op beg-op end-op bounds-op)
   (put thing :conn-thing t)
@@ -975,7 +988,7 @@ of highlighting."
   (name nil :type symbol :read-only t)
   (docstring nil :type string)
   (parents nil :type (list-of symbol))
-  (all-children nil :type (list-of symbol))
+  (children nil :type (list-of symbol))
   (properties nil :type hash-table)
   (keymap nil :type (or nil keymap))
   (mode-depths nil :type conn--mode-depth-table)
@@ -983,7 +996,6 @@ of highlighting."
   (major-mode-maps nil :type hash-table))
 
 (defmacro conn--find-state (state)
-  (declare (side-effect-free t))
   `(get ,state :conn--state))
 
 (define-inline conn-state-name-p (state)
@@ -998,11 +1010,14 @@ of highlighting."
   (inline-quote
    (conn-state--parents (conn--find-state ,state))))
 
-(define-inline conn-state-all-children (state)
+(defun conn-state-all-children (state)
   "Return all parents for STATE."
   (declare (side-effect-free t))
-  (inline-quote
-   (conn-state--all-children (conn--find-state ,state))))
+  (delete-dups
+   (append
+    (conn-state--children (conn--find-state state))
+    (mapcan 'conn-state-all-children
+            (conn-state--children (conn--find-state state))))))
 
 (defun conn-state-all-parents (state)
   "Return all parents of state.
@@ -1056,7 +1071,8 @@ The returned list is not fresh, don't modify it."
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
   (declare (compiler-macro conn--state-get--cmacro)
-           (side-effect-free t))
+           (side-effect-free t)
+           (gv-setter conn-state-set))
   (if (or no-inherit (conn-property-static-p property))
       (gethash property
                (conn-state--properties (conn--find-state state))
@@ -1067,9 +1083,6 @@ PROPERTY.  If no parent has that property either than nil is returned."
                for prop = (gethash property table key-missing)
                unless (eq prop key-missing) return prop
                finally return default))))
-
-(gv-define-setter conn-state-get (value state slot)
-  `(conn-state-set ,state ,slot ,value))
 
 (define-inline conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
@@ -1130,35 +1143,36 @@ property from its parents."
 
 (define-inline conn--get-mode-map-depth (mode table)
   (declare (side-effect-free t)
-           (important-return-value t))
+           (important-return-value t)
+           (gv-setter
+            (lambda (value)
+              `(setf (gethash ,mode (conn--mode-depth-table ,table))
+                     ,value))))
   (inline-quote
    (gethash ,mode (conn--mode-depth-table ,table))))
 
-(gv-define-setter conn--get-mode-map-depth (value mode table)
-  `(setf (gethash ,mode (conn--mode-depth-table ,table)) ,value))
-
 (define-inline conn--mode-maps-sorted-p (state)
   (declare (side-effect-free t)
-           (important-return-value t))
+           (important-return-value t)
+           (gv-setter
+            (lambda (value)
+              (cl-labels ((set (v)
+                            `(setf (conn--mode-depth-sort-tick
+                                    (conn-state--mode-depths
+                                     (conn--find-state ,state)))
+                                   ,v)))
+                (pcase value
+                  ('nil (set nil))
+                  ((pred macroexp-const-p) (set 'conn--mode-map-sort-tick))
+                  (_ (cl-once-only (value)
+                       `(progn
+                          ,(set `(when ,value conn--mode-map-sort-tick))
+                          ,value))))))))
   (inline-quote
    (eql conn--mode-map-sort-tick
         (conn--mode-depth-sort-tick
          (conn-state--mode-depths
           (conn--find-state ,state))))))
-
-(define-inline conn--set-mode-maps-unsorted (state)
-  (inline-quote
-   (setf (conn--mode-depth-sort-tick
-          (conn-state--mode-depths
-           (conn--find-state ,state)))
-         nil)))
-
-(define-inline conn--set-mode-maps-sorted (state)
-  (inline-quote
-   (setf (conn--mode-depth-sort-tick
-          (conn-state--mode-depths
-           (conn--find-state ,state)))
-         conn--mode-map-sort-tick)))
 
 (defun conn--sort-mode-maps (state)
   (cl-check-type (conn--find-state state) conn-state)
@@ -1168,8 +1182,8 @@ property from its parents."
                              (conn-state--mode-depths
                               (conn--find-state s)))
                            parents)))
-      (cl-callf2 compat-call sort (cdr (conn-state--minor-mode-maps
-                                        (conn--find-state state)))
+      (conn--compat-callf sort (cdr (conn-state--minor-mode-maps
+                                     (conn--find-state state)))
         :key (lambda (cons)
                (or (seq-some (lambda (table)
                                (conn--get-mode-map-depth (car cons) table))
@@ -1177,7 +1191,7 @@ property from its parents."
                    (get (car cons) :conn-mode-depth)
                    0))
         :in-place t)
-      (conn--set-mode-maps-sorted state))))
+      (setf (conn--mode-maps-sorted-p state) t))))
 
 (defun conn-set-mode-map-depth (mode depth &optional state)
   (cl-check-type mode symbol)
@@ -1194,7 +1208,7 @@ property from its parents."
       (unless (eql depth (conn--get-mode-map-depth mode table))
         (setf (conn--get-mode-map-depth mode table) depth)
         (dolist (child (conn-state-all-children state))
-          (conn--set-mode-maps-unsorted child))
+          (setf (conn--mode-maps-sorted-p child) nil))
         (when (alist-get mode mmode-maps)
           (conn--sort-mode-maps state)))))
   nil)
@@ -1335,7 +1349,7 @@ The composed map is a keymap of the form:
                 (get-map state))
       (setf (get-composed-map state)
             (make-composed-keymap (parent-maps state)))
-      (conn--set-mode-maps-unsorted state))))
+      (setf (conn--mode-maps-sorted-p state) nil))))
 
 (defconst conn--minor-mode-maps-cache (make-hash-table :test 'equal))
 
@@ -1377,26 +1391,31 @@ return it."
 
 Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
-    (let ((parents (conn-state-all-parents state)))
+    (let ((parents (conn-state-all-parents state))
+          (state-obj (conn--find-state state)))
       (when-let* ((state-map (gethash state conn--composed-state-map-cache)))
         (setf (cdr state-map)
               (cl-loop for pstate in parents
                        for pmap = (conn-get-state-map pstate t)
                        when pmap collect pmap)))
-      (pcase-dolist (`(,mode . ,map) (cdr (conn-state--minor-mode-maps
-                                           (conn--find-state state))))
-        (setf (cdr map)
-              (cl-loop for parent in parents
-                       for pmap = (conn-get-minor-mode-map parent mode t)
-                       when pmap collect pmap)))
+      (let (to-remove)
+        (pcase-dolist ((and `(,mode . ,map) cons)
+                       (cdr (conn-state--minor-mode-maps state-obj)))
+          (setf (cdr map)
+                (cl-loop for parent in parents
+                         for pmap = (conn-get-minor-mode-map parent mode t)
+                         when pmap collect pmap))
+          (unless (cdr map)
+            (push cons to-remove)))
+        (dolist (cons to-remove)
+          (cl-callf2 delq cons (cdr (conn-state--minor-mode-maps state-obj)))))
       (maphash
        (lambda (mode map)
          (setf (cdr map)
                (cl-loop for pstate in parents
                         for pmap = (conn-get-major-mode-map pstate mode t)
                         when pmap collect pmap)))
-       (conn-state--major-mode-maps
-        (conn--find-state state))))))
+       (conn-state--major-mode-maps state-obj)))))
 
 
 ;;;;; State Input Methods
@@ -1808,49 +1827,35 @@ and specializes the method on all conn states."
                          for (k v) on kvs by #'cddr
                          do (puthash k v table))))
     (if-let* ((state-obj (conn--find-state name)))
-        (let ((old-all-parents (cdr (conn-state-all-parents name)))
-              (new-all-parents
-               (merge-ordered-lists
-                (mapcar 'conn-state-all-parents parents)))
-              (state-and-children (cons name (conn-state--all-children state-obj))))
-          ;; We are redefining a state and must to take care to
-          ;; do it transparently.
-          (setf (conn-state--parents state-obj) parents)
+        (let ((prev-parents (conn-state--parents state-obj))
+              (all-children (conn-state-all-children name)))
           (setup-properties (setf (conn-state--properties state-obj)
                                   (make-hash-table :test 'eq)))
-          ;; Remove all children from all former parents.  We
-          ;; will take care of the case where a child inherits
-          ;; from some parent through multiple paths next.
-          (dolist (former (seq-difference old-all-parents new-all-parents))
-            (cl-callf seq-difference
-                (conn-state--all-children (conn--find-state former))
-              state-and-children))
-          ;; Recompute all parents for all children and
-          ;; re-register all children with all of their parents.
-          ;; If we overzealously removed a child from some parent
-          ;; in the previous step we will fix it here.
-          (dolist (child state-and-children)
-            (dolist (parent (cdr (conn-state-all-parents child)))
-              (cl-pushnew child (conn-state--all-children
-                                 (conn--find-state parent)))))
-          ;; Rebuild all keymaps for all children with the new
-          ;; inheritance hierarchy.  Existing composed keymaps
-          ;; are destructively modified so that local map
-          ;; variables will not have to be updated in each buffer
-          ;; before these changes take effect.
-          (mapc #'conn--rebuild-state-keymaps state-and-children))
+          (setf (conn-state--parents state-obj) parents)
+          (dolist (former (seq-difference prev-parents parents))
+            (cl-callf2 delq name (conn-state--children
+                                  (conn--find-state former))))
+          (dolist (parent (seq-difference parents prev-parents))
+            (pcase-dolist (`(,mode . ,_)
+                           (cdr (conn-state--minor-mode-maps
+                                 (conn--find-state parent))))
+              (unless (conn-state-get name :no-keymap)
+                (conn--ensure-minor-mode-map name mode))
+              (dolist (child all-children)
+                (conn--ensure-minor-mode-map child mode))))
+          (mapc #'conn--rebuild-state-keymaps (cons name all-children)))
       (let* ((state-obj (conn--make-state name docstring parents)))
         (setf (conn--find-state name) state-obj)
         (setup-properties (conn-state--properties state-obj))
-        (dolist (parent (cdr (conn-state-all-parents name)))
-          (cl-pushnew name (conn-state--all-children
-                            (conn--find-state parent)))))))
-  (unless (conn-state-get name :no-keymap)
-    (dolist (parent parents)
-      (pcase-dolist (`(,mode . ,_)
-                     (cdr (conn-state--minor-mode-maps
-                           (conn--find-state parent))))
-        (conn--ensure-minor-mode-map name mode)))))
+        (dolist (parent parents)
+          (cl-pushnew name (conn-state--children
+                            (conn--find-state parent))))
+        (unless (conn-state-get name :no-keymap)
+          (dolist (parent parents)
+            (pcase-dolist (`(,mode . ,_)
+                           (cdr (conn-state--minor-mode-maps
+                                 (conn--find-state parent))))
+              (conn--ensure-minor-mode-map name mode))))))))
 
 (defmacro conn-define-state (name parents &rest properties)
   "Define a conn state NAME.
@@ -3489,14 +3494,12 @@ For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
 (define-inline conn-command-mark-handler (command)
   "Return the mark handler for COMMAND."
   (declare (important-return-value t)
-           (side-effect-free t))
+           (side-effect-free t)
+           (gv-setter conn-set-command-mark-handler))
   (inline-letevals (command)
     (inline-quote
      (and (symbolp ,command)
           (get ,command :conn-mark-handler)))))
-
-(gv-define-setter conn-command-mark-handler (handler command)
-  `(conn-set-command-mark-handler ,command ,handler))
 
 (defun conn-set-command-mark-handler (command handler)
   (put command :conn-mark-handler handler))
@@ -4874,9 +4877,7 @@ contain targets."
                                   (pos-bol (+ 2 context-lines)))))
                       regions)))
             (cl-callf conn--merge-regions regions t)
-            (cl-callf2 compat-call sort regions
-              :key #'car
-              :in-place t)
+            (conn--compat-callf sort regions :key #'car :in-place t)
             (cl-loop for beg = (point-min) then next-beg
                      for (end . next-beg) in regions
                      while end
