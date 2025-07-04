@@ -1011,24 +1011,17 @@ of highlighting."
    (conn-state--parents (conn--find-state ,state))))
 
 (defun conn-state-all-children (state)
-  "Return all parents for STATE."
   (declare (side-effect-free t))
   (delete-dups
-   (append
-    (conn-state--children (conn--find-state state))
-    (mapcan 'conn-state-all-children
-            (conn-state--children (conn--find-state state))))))
+   (append (conn-state--children (conn--find-state state))
+           (mapcan 'conn-state-all-children
+                   (conn-state--children (conn--find-state state))))))
 
 (defun conn-state-all-parents (state)
-  "Return all parents of state.
-
-The returned list is not fresh, don't modify it."
   (declare (side-effect-free t))
-  (cons state (thread-last
-                (conn--find-state state)
-                (conn-state--parents)
-                (mapcar 'conn-state-all-parents)
-                merge-ordered-lists)))
+  (cons state (merge-ordered-lists
+               (mapcar 'conn-state-all-parents
+                       (conn-state--parents (conn--find-state state))))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
