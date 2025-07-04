@@ -160,8 +160,8 @@
         (goto-char pt)
         (org-open-at-point-global)))))
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing org-link)))
-  'conn-open-org-link)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing org-link)))
+  (conn-make-action 'conn-open-org-link))
 
 (defun conn-org-sentence-forward (arg)
   (interactive "p")

@@ -2446,8 +2446,8 @@ themselves once the selection process has concluded."
 (defun conn-state-loop-error (string)
   (setf conn--loop-error-message string))
 
-(defun conn-state-loop-exit (&optional value)
-  (throw 'state-loop-exit value))
+(defmacro conn-state-loop-exit (&optional value)
+  `(throw 'state-loop-exit (lambda () ,value)))
 
 (defun conn-state-loop-abort ()
   (keyboard-quit))
@@ -2466,61 +2466,62 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-with-state-loop ((state (conn-substate t))
                                     &key context initial-arg)
   (unwind-protect
-      (let* ((inhibit-message t)
-             (callback (conn-state-get state :loop-handler))
-             (msg-fn (conn-state-get state :loop-message))
-             (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
-             (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
-             (conn--loop-error-message "")
-             (conn--loop-message-timer nil)
-             (conn--loop-message-function
-              (lambda ()
-                (let ((inhibit-message conn-state-loop-inhibit-message)
-                      (message-log-max nil))
-                  (funcall msg-fn context conn--loop-error-message)))))
-        (conn-with-recursive-state state
-          (catch 'state-loop-exit
-            (while t
-              (unless conn--loop-message-timer
-                (funcall conn--loop-message-function))
-              (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
-                           (setf conn--loop-error-message ""))))
-                (when conn--loop-message-timer
-                  (cancel-timer conn--loop-message-timer)
-                  (setq conn--loop-message-timer nil))
-                (when (and (bound-and-true-p conn-posframe-mode)
-                           (fboundp 'posframe-hide))
-                  (posframe-hide " *conn-list-posframe*"))
-                (pcase cmd
-                  ('nil)
-                  ('digit-argument
-                   (let* ((char (if (integerp last-input-event)
-                                    last-input-event
-                                  (get last-input-event 'ascii-character)))
-                          (digit (- (logand char ?\177) ?0)))
-                     (setf conn--loop-prefix-mag
-                           (if (integerp conn--loop-prefix-mag)
-                               (+ (* 10 conn--loop-prefix-mag) digit)
-                             (when (/= 0 digit) digit)))))
-                  ('forward-delete-arg
-                   (when conn--loop-prefix-mag
-                     (cl-callf mod conn--loop-prefix-mag
-                       (expt 10 (floor (log conn--loop-prefix-mag 10))))))
-                  ('backward-delete-arg
-                   (when conn--loop-prefix-mag
-                     (cl-callf floor conn--loop-prefix-mag 10)))
-                  ('reset-arg
-                   (setf conn--loop-prefix-mag nil))
-                  ('negative-argument
-                   (cl-callf not conn--loop-prefix-sign))
-                  ('keyboard-quit
-                   (conn-state-loop-abort))
-                  (cmd
-                   (condition-case err
-                       (funcall callback cmd context)
-                     (user-error
-                      (conn-state-loop-error (error-message-string err))))))
-                (setf conn-state-loop-last-command cmd))))))
+      (funcall
+       (catch 'state-loop-exit
+         (let* ((inhibit-message t)
+                (callback (conn-state-get state :loop-handler))
+                (msg-fn (conn-state-get state :loop-message))
+                (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
+                (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
+                (conn--loop-error-message "")
+                (conn--loop-message-timer nil)
+                (conn--loop-message-function
+                 (lambda ()
+                   (let ((inhibit-message conn-state-loop-inhibit-message)
+                         (message-log-max nil))
+                     (funcall msg-fn context conn--loop-error-message)))))
+           (conn-with-recursive-state state
+             (while t
+               (unless conn--loop-message-timer
+                 (funcall conn--loop-message-function))
+               (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
+                            (setf conn--loop-error-message ""))))
+                 (when conn--loop-message-timer
+                   (cancel-timer conn--loop-message-timer)
+                   (setq conn--loop-message-timer nil))
+                 (when (and (bound-and-true-p conn-posframe-mode)
+                            (fboundp 'posframe-hide))
+                   (posframe-hide " *conn-list-posframe*"))
+                 (pcase cmd
+                   ('nil)
+                   ('digit-argument
+                    (let* ((char (if (integerp last-input-event)
+                                     last-input-event
+                                   (get last-input-event 'ascii-character)))
+                           (digit (- (logand char ?\177) ?0)))
+                      (setf conn--loop-prefix-mag
+                            (if (integerp conn--loop-prefix-mag)
+                                (+ (* 10 conn--loop-prefix-mag) digit)
+                              (when (/= 0 digit) digit)))))
+                   ('forward-delete-arg
+                    (when conn--loop-prefix-mag
+                      (cl-callf mod conn--loop-prefix-mag
+                        (expt 10 (floor (log conn--loop-prefix-mag 10))))))
+                   ('backward-delete-arg
+                    (when conn--loop-prefix-mag
+                      (cl-callf floor conn--loop-prefix-mag 10)))
+                   ('reset-arg
+                    (setf conn--loop-prefix-mag nil))
+                   ('negative-argument
+                    (cl-callf not conn--loop-prefix-sign))
+                   ('keyboard-quit
+                    (conn-state-loop-abort))
+                   (cmd
+                    (condition-case err
+                        (funcall callback cmd context)
+                      (user-error
+                       (conn-state-loop-error (error-message-string err))))))
+                 (setf conn-state-loop-last-command cmd)))))))
     (message nil)))
 
 
@@ -3865,15 +3866,16 @@ A target finder function should return a list of overlays.")
   :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
   "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
-(cl-defgeneric conn-get-action (cmd)
-  (declare (conn-anonymous-thing-property :action)
+(cl-defgeneric conn-make-default-action (cmd)
+  (declare (conn-anonymous-thing-property :default-action)
            (important-return-value t))
   ( :method ((cmd conn-anonymous-thing))
-    (or (conn-anonymous-thing-property cmd :action)
-        (conn-get-action (conn-anonymous-thing-parent cmd)))))
+    (if-let* ((action (conn-anonymous-thing-property cmd :default-action)))
+        (funcall action)
+      (conn-make-default-action (conn-anonymous-thing-parent cmd)))))
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing t)))
-  'conn-dispatch-goto)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
+  (conn-make-action 'conn-dispatch-goto))
 
 (cl-defgeneric conn-get-target-finder (cmd)
   (declare (conn-anonymous-thing-property :target-finder)
@@ -4034,7 +4036,7 @@ A target finder function should return a list of overlays.")
   (setf (conn-dispatch-thing ctx) command
         (conn-dispatch-thing-arg ctx) (conn-state-loop-consume-prefix-arg))
   (when (null (conn-dispatch-action ctx))
-    (setf (conn-dispatch-action ctx) (conn-make-action (conn-get-action command))))
+    (setf (conn-dispatch-action ctx) (conn-make-default-action command)))
   (conn-dispatch-push-history ctx)
   (conn-state-loop-exit (conn--call-dispatch-context ctx)))
 
@@ -5200,7 +5202,7 @@ contain targets."
 
 ;;;;; Dispatch Actions
 
-(defvar conn-dispatch-looping)
+(defvar conn-dispatch-looping nil)
 
 (oclosure-define (conn-action
                   (:predicate conn-action-p)
@@ -5225,8 +5227,7 @@ contain targets."
             (lambda (do)
               (pcase do
                 (:cancel (cancel-change-group cg))
-                (:accept (accept-change-group cg))
-                (_ (error "Dispatch loop undo unknown message %s" do)))))
+                (:accept (accept-change-group cg)))))
           conn--dispatch-loop-change-groups)))
 
 (defun conn--action-type-p (item)
@@ -6240,6 +6241,7 @@ contain targets."
   "w" 'conn-dispatch-kill
   "q" 'conn-dispatch-transpose
   "C-SPC" 'conn-dispatch-jump
+  "R" 'conn-dispatch-register-load
   "<remap> <downcase-word>" 'conn-dispatch-downcase
   "<remap> <downcase-region>" 'conn-dispatch-downcase
   "<remap> <downcase-dwim>" 'conn-dispatch-downcase
@@ -6249,11 +6251,22 @@ contain targets."
   "<remap> <capitalize-word>" 'conn-dispatch-capitalize
   "<remap> <capitalize-region>" 'conn-dispatch-capitalize
   "<remap> <capitalize-dwim>" 'conn-dispatch-capitalize
-  "<remap> <conn-register-prefix>" 'conn-dispatch-register-load
   "<remap> <conn-kill-append-region>" 'conn-dispatch-kill-append
   "<remap> <conn-kill-prepend-region>" 'conn-dispatch-kill-prepend
   "<remap> <conn-append-region>" 'conn-dispatch-copy-append
-  "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend)
+  "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend
+  "<remap> <conn-previous-emacs-state>"
+  (conn-make-anonymous-thing
+   'char
+   :default-action (lambda ()
+                     (let ((jump (conn-make-action 'conn-dispatch-jump)))
+                       (oclosure-lambda (conn-action
+                                         (description "Previous Emacs State")
+                                         (no-history t))
+                           (&rest args)
+                         (apply jump args)
+                         (conn-push-state 'conn-emacs-state))))
+   :target-finder (lambda () (conn-dispatch-previous-emacs-state))))
 
 ;;;;; Perform Dispatch Loop
 
@@ -6273,8 +6286,6 @@ contain targets."
 
 (defun conn-dispatch-handle ()
   (throw 'dispatch-handle t))
-
-(defvar conn-dispatch-looping nil)
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
@@ -6781,9 +6792,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-jump)
    nil nil))
 
-(cl-defmethod conn-get-target-finder ((_cmd (eql conn-previous-emacs-state)))
-  (conn-dispatch-previous-emacs-state))
-
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line)))
   'conn-dispatch-end-of-inner-lines)
 
@@ -7215,8 +7223,8 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing char)))
   (conn-dispatch-read-string-with-timeout))
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing char)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing char)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (conn-register-thing-commands
  'buffer 'conn-discrete-thing-handler
@@ -7236,8 +7244,8 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column)))
   'conn-dispatch-columns)
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing line-column)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (conn-register-thing-commands
  'line-column 'conn-jump-handler
@@ -10772,8 +10780,8 @@ Operates with the selected windows parent window."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-line)))
   'conn--dispatch-dired-lines)
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing dired-line)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-line)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (conn-register-thing-commands
  'dired-subdir nil
@@ -10783,8 +10791,8 @@ Operates with the selected windows parent window."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-subdir)))
   'conn--dispatch-dired-subdir)
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing dired-subdir)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-subdir)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (conn-register-thing-commands
  'dired-dirline nil
@@ -10793,8 +10801,8 @@ Operates with the selected windows parent window."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing dired-dirline)))
   'conn--dispatch-dired-dirline)
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing dired-dirline)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing dired-dirline)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (oclosure-define (conn-dispatch-dired-mark
                   (:parent conn-action)))
@@ -10920,8 +10928,8 @@ Operates with the selected windows parent window."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-line)))
   'conn--dispatch-ibuffer-lines)
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing ibuffer-line)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-line)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (conn-register-thing-commands
  'ibuffer-filter-group nil
@@ -10931,8 +10939,8 @@ Operates with the selected windows parent window."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing ibuffer-filter-group)))
   'conn--dispatch-ibuffer-filter-group)
 
-(cl-defmethod conn-get-action ((_cmd (conn-thing ibuffer-filter-group)))
-  'conn-dispatch-jump)
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing ibuffer-filter-group)))
+  (conn-make-action 'conn-dispatch-jump))
 
 (oclosure-define (conn-dispatch-ibuffer-mark
                   (:parent conn-action)))
