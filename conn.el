@@ -2447,6 +2447,7 @@ themselves once the selection process has concluded."
   (setf conn--loop-error-message string))
 
 (defmacro conn-state-loop-exit (&optional value)
+  (declare (indent 0))
   `(throw 'state-loop-exit (lambda () ,value)))
 
 (defun conn-state-loop-abort ()
@@ -2613,22 +2614,22 @@ If `use-region-p' returns non-nil this will always return
 
 (cl-defmethod conn-read-thing-state-handler ((command (conn-thing t)) _ctx)
   (conn-state-loop-exit
-   (list command (conn-state-loop-prefix-arg))))
+    (list command (conn-state-loop-prefix-arg))))
 
 (cl-defmethod conn-read-thing-state-handler ((command conn-anonymous-thing) _ctx)
   (conn-state-loop-exit
-   (list command (conn-state-loop-prefix-arg))))
+    (list command (conn-state-loop-prefix-arg))))
 
 (cl-defmethod conn-read-thing-state-handler ((cmd (conn-thing 'dispatch))
                                              _ctx)
   (conn-state-loop-exit
-   (list cmd (conn-state-loop-prefix-arg))))
+    (list cmd (conn-state-loop-prefix-arg))))
 
 (cl-defmethod conn-read-thing-state-handler ((command (eql recursive-edit))
                                              ctx)
   (if (conn-read-thing-recursive-edit ctx)
       (conn-state-loop-exit
-       (list command (conn-state-loop-prefix-arg)))
+        (list command (conn-state-loop-prefix-arg)))
     (conn-state-loop-error "Invalid command")))
 
 (defun conn--completing-read-mover (ctx)
@@ -4069,11 +4070,11 @@ A target finder function should return a list of overlays.")
             (conn-state-loop-error "Last dispatch action stale"))
         (setf conn--dispatch-always-retarget (conn-dispatch-action prev))
         (conn-state-loop-exit
-         (conn--call-dispatch-context
-          prev
-          :repeat (conn-dispatch-repeat ctx)
-          :restrict-windows (conn-dispatch-restrict-windows ctx)
-          :no-other-end (conn-dispatch-no-other-end ctx))))
+          (conn--call-dispatch-context
+           prev
+           :repeat (conn-dispatch-repeat ctx)
+           :restrict-windows (conn-dispatch-restrict-windows ctx)
+           :no-other-end (conn-dispatch-no-other-end ctx))))
     (conn-state-loop-error "Dispatch ring empty")))
 
 (cl-defmethod conn-dispatch-state-handler ((_cmd (eql conn-dispatch-cycle-ring-next))
@@ -6290,40 +6291,41 @@ contain targets."
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
   (let ((rep (gensym "repeat")))
-    `(catch 'state-loop-exit
-       (let* ((,rep nil)
-              (conn-dispatch-looping t)
-              (conn--dispatch-loop-change-groups nil)
-              (conn--loop-error-message nil)
-              (conn--dispatch-read-event-message-prefixes
-               `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
-                    (lambda ()
-                      (when-let* ((binding
-                                   (and ,rep
-                                        (where-is-internal
-                                         'always-retarget
-                                         conn-dispatch-read-event-map
-                                         t))))
-                        (concat
-                         (propertize (key-description binding)
-                                     'face 'help-key-binding)
-                         " "
-                         (propertize "always retarget"
-                                     'face (when conn--dispatch-always-retarget
-                                             'eldoc-highlight-function-argument))))))
-                 ,@conn--dispatch-read-event-message-prefixes)))
-         (unwind-protect
-             (while (or (setq ,rep ,repeat)
-                        (< conn-dispatch-repeat-count 1))
-               (catch 'dispatch-redisplay
-                 (condition-case err
-                     (progn
-                       ,@body
-                       (cl-incf conn-dispatch-repeat-count))
-                   (user-error
-                    (conn-state-loop-error (error-message-string err))))))
-           (dolist (undo conn--dispatch-loop-change-groups)
-             (funcall undo :accept)))))))
+    `(funcall
+      (catch 'state-loop-exit
+        (let* ((,rep nil)
+               (conn-dispatch-looping t)
+               (conn--dispatch-loop-change-groups nil)
+               (conn--loop-error-message nil)
+               (conn--dispatch-read-event-message-prefixes
+                `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+                     (lambda ()
+                       (when-let* ((binding
+                                    (and ,rep
+                                         (where-is-internal
+                                          'always-retarget
+                                          conn-dispatch-read-event-map
+                                          t))))
+                         (concat
+                          (propertize (key-description binding)
+                                      'face 'help-key-binding)
+                          " "
+                          (propertize "always retarget"
+                                      'face (when conn--dispatch-always-retarget
+                                              'eldoc-highlight-function-argument))))))
+                  ,@conn--dispatch-read-event-message-prefixes)))
+          (unwind-protect
+              (while (or (setq ,rep ,repeat)
+                         (< conn-dispatch-repeat-count 1))
+                (catch 'dispatch-redisplay
+                  (condition-case err
+                      (progn
+                        ,@body
+                        (cl-incf conn-dispatch-repeat-count))
+                    (user-error
+                     (conn-state-loop-error (error-message-string err))))))
+            (dolist (undo conn--dispatch-loop-change-groups)
+              (funcall undo :accept))))))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -9465,6 +9467,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
+  "C-S-l" 'move-to-window-line-top-bottom
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-DEL" 'conn-wincontrol-digit-argument-reset
   "C-w" 'conn-wincontrol-backward-delete-arg
