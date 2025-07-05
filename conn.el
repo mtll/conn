@@ -3853,7 +3853,7 @@ A target finder function should return a list of overlays.")
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
   "]" (conn-make-anonymous-thing
-       'list
+       'sexp
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'down-list arg))
@@ -6325,7 +6325,8 @@ contain targets."
                     (user-error
                      (conn-state-loop-error (error-message-string err))))))
             (dolist (undo conn--dispatch-loop-change-groups)
-              (funcall undo :accept))))))))
+              (funcall undo :accept))))
+        (lambda ())))))
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
@@ -9114,112 +9115,6 @@ Interactively `region-beginning' and `region-end'."
     (occur search-string)))
 
 
-;;;;; Window Commands
-
-(defun conn-other-buffer ()
-  "Switch to the most recently selected buffer.
-
-Repeated calls allow one to switch back and forth between another
-buffer."
-  (interactive)
-  (switch-to-buffer nil))
-
-(defun conn-other-place-prefix ()
-  "Display next buffer in another place.
-
-Choose from among the following options:
-
-Window: `other-window-prefix'
-Frame: `other-frame-prefix'
-Tab: `other-tab-prefix'
-Prompt: `conn-other-window-prompt-prefix'
-Current Window: `conn-this-window-prefix'"
-  (interactive)
-  (pcase (car (read-multiple-choice
-               "Place:"
-               '((?w "window")
-                 (?f "frame")
-                 (?t "tab")
-                 (?c "current window")
-                 (?g "prompt"))))
-    (?w (other-window-prefix))
-    (?f (other-frame-prefix))
-    (?t (other-tab-prefix))
-    (?c (conn-this-window-prefix))
-    (?g (conn-other-window-prompt-prefix))))
-
-(defun conn-other-window-prefix (&optional this-window)
-  (interactive "P")
-  (if this-window
-      (conn-this-window-prefix)
-    (let ((windows (conn--get-windows nil 'nomini)))
-      (if (length= windows 1)
-          (other-window-prefix)
-        (display-buffer-override-next-command
-         (lambda (_ _)
-           (cons (conn-prompt-for-window
-                  (conn--get-windows nil 'nomini nil nil
-                                     (lambda (win)
-                                       (not (eq win (selected-window))))))
-                 'reuse))
-         nil "[select]")
-        (message "Display next command in selected buffer…")))))
-
-(defun conn-other-window-prompt-prefix ()
-  "Display next buffer in a window selected by `conn-prompt-for-window'."
-  (interactive)
-  (display-buffer-override-next-command
-   (lambda (_ _)
-     (cons (conn-prompt-for-window (conn--get-windows nil 'nomini) t)
-           'reuse))
-   nil "[select]")
-  (message "Display next command in selected buffer…"))
-
-(defun conn-this-window-prefix ()
-  "Display next buffer in the currently selected window."
-  (interactive)
-  (display-buffer-override-next-command
-   'display-buffer-same-window
-   nil "[current-window]")
-  (message "Display next command buffer in current window…"))
-
-(defun conn-transpose-window (window)
-  "Prompt for window and swap current window and other window."
-  (interactive
-   (list (conn-prompt-for-window
-          (delq (selected-window) (conn--get-windows nil 'nomini 'visible)))))
-  (unless (eq window (selected-window))
-    (if window
-        (window-swap-states nil window)
-      (user-error "No other visible windows"))))
-
-(defun conn-throw-buffer ()
-  "Send current buffer to another window and `switch-to-prev-buffer'."
-  (interactive)
-  (let ((buf (current-buffer)))
-    (switch-to-prev-buffer)
-    (save-selected-window
-      (display-buffer
-       buf
-       (lambda (_ _)
-         (cons (conn-prompt-for-window
-                (delq (selected-window)
-                      (conn--get-windows nil 'nomini)))
-               'reuse))))))
-
-(defun conn-yank-window (window)
-  "Swap selected window and another window.
-
-Currently selected window remains selected afterwards."
-  (interactive
-   (list (conn-prompt-for-window
-          (delq (selected-window)
-                (conn--get-windows nil 'nomini 'visible)))))
-  (unless (eq window (selected-window))
-    (if window
-        (save-selected-window (window-swap-states nil window))
-      (user-error "No other visible windows"))))
-
 ;;;;; Change
 
 (conn-define-state conn-change-state (conn-read-thing-state)
@@ -9384,6 +9279,113 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   "Enter emacs state in `binary-overwrite-mode'."
   (interactive)
   (conn-emacs-state-overwrite 1))
+
+
+;;;;; Window Commands
+
+(defun conn-other-buffer ()
+  "Switch to the most recently selected buffer.
+
+Repeated calls allow one to switch back and forth between another
+buffer."
+  (interactive)
+  (switch-to-buffer nil))
+
+(defun conn-other-place-prefix ()
+  "Display next buffer in another place.
+
+Choose from among the following options:
+
+Window: `other-window-prefix'
+Frame: `other-frame-prefix'
+Tab: `other-tab-prefix'
+Prompt: `conn-other-window-prompt-prefix'
+Current Window: `conn-this-window-prefix'"
+  (interactive)
+  (pcase (car (read-multiple-choice
+               "Place:"
+               '((?w "window")
+                 (?f "frame")
+                 (?t "tab")
+                 (?c "current window")
+                 (?g "prompt"))))
+    (?w (other-window-prefix))
+    (?f (other-frame-prefix))
+    (?t (other-tab-prefix))
+    (?c (conn-this-window-prefix))
+    (?g (conn-other-window-prompt-prefix))))
+
+(defun conn-other-window-prefix (&optional this-window)
+  (interactive "P")
+  (if this-window
+      (conn-this-window-prefix)
+    (let ((windows (conn--get-windows nil 'nomini)))
+      (if (length= windows 1)
+          (other-window-prefix)
+        (display-buffer-override-next-command
+         (lambda (_ _)
+           (cons (conn-prompt-for-window
+                  (conn--get-windows nil 'nomini nil nil
+                                     (lambda (win)
+                                       (not (eq win (selected-window))))))
+                 'reuse))
+         nil "[select]")
+        (message "Display next command in selected buffer…")))))
+
+(defun conn-other-window-prompt-prefix ()
+  "Display next buffer in a window selected by `conn-prompt-for-window'."
+  (interactive)
+  (display-buffer-override-next-command
+   (lambda (_ _)
+     (cons (conn-prompt-for-window (conn--get-windows nil 'nomini) t)
+           'reuse))
+   nil "[select]")
+  (message "Display next command in selected buffer…"))
+
+(defun conn-this-window-prefix ()
+  "Display next buffer in the currently selected window."
+  (interactive)
+  (display-buffer-override-next-command
+   'display-buffer-same-window
+   nil "[current-window]")
+  (message "Display next command buffer in current window…"))
+
+(defun conn-transpose-window (window)
+  "Prompt for window and swap current window and other window."
+  (interactive
+   (list (conn-prompt-for-window
+          (delq (selected-window) (conn--get-windows nil 'nomini 'visible)))))
+  (unless (eq window (selected-window))
+    (if window
+        (window-swap-states nil window)
+      (user-error "No other visible windows"))))
+
+(defun conn-throw-buffer ()
+  "Send current buffer to another window and `switch-to-prev-buffer'."
+  (interactive)
+  (let ((buf (current-buffer)))
+    (switch-to-prev-buffer)
+    (save-selected-window
+      (display-buffer
+       buf
+       (lambda (_ _)
+         (cons (conn-prompt-for-window
+                (delq (selected-window)
+                      (conn--get-windows nil 'nomini)))
+               'reuse))))))
+
+(defun conn-yank-window (window)
+  "Swap selected window and another window.
+
+Currently selected window remains selected afterwards."
+  (interactive
+   (list (conn-prompt-for-window
+          (delq (selected-window)
+                (conn--get-windows nil 'nomini 'visible)))))
+  (unless (eq window (selected-window))
+    (if window
+        (save-selected-window (window-swap-states nil window))
+      (user-error "No other visible windows"))))
 
 
 ;;;; WinControl

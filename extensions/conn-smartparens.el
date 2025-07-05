@@ -190,13 +190,14 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-state 'smartparens-mode)
   ")" (conn-make-anonymous-thing
-       'sp-sexp
+       'sexp
        :description "list"
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
-                         'sexp (rx (syntax open-parenthesis)))))
+                         'sexp (rx (or (syntax open-parenthesis)
+                                       (syntax string-quote))))))
   "]" (conn-make-anonymous-thing
-       'list
+       'sexp
        :description "inner-list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'sp-down-sexp arg))
