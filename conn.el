@@ -1016,11 +1016,17 @@ of highlighting."
            (mapcan 'conn-state-all-children
                    (conn-state--children (conn--find-state state))))))
 
+(defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
+
 (defun conn-state-all-parents (state)
-  (declare (side-effect-free t))
-  (cons state (merge-ordered-lists
-               (mapcar 'conn-state-all-parents
-                       (conn-state--parents (conn--find-state state))))))
+  ;; Nominally the hash table speeds this up but primarily it is to
+  ;; ensure that we get the same list each time which allows this
+  ;; function to be used as the tag function for the conn-substate
+  ;; generalizer.
+  (with-memoization (gethash state conn--state-all-parents-cache)
+    (cons state (merge-ordered-lists
+                 (mapcar 'conn-state-all-parents
+                         (conn-state--parents (conn--find-state state)))))))
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
@@ -1602,15 +1608,12 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 
 (cl-generic-define-generalizer conn--substate-generalizer
   90 (lambda (state &rest _)
-       `(when-let* ((state-obj (conn--find-state ,state))
-                    ((eq 'conn-state (type-of state-obj))))
-          state-obj))
-  (lambda (state &rest _)
-    (when state
-      (append
-       (mapcar (lambda (parent) `(conn-substate ,parent))
-               (conn-state-all-parents (conn-state--name state)))
-       (list (list 'conn-substate t))))))
+       `(and (conn-state-name-p ,state)
+             (conn-state-all-parents ,state)))
+  (lambda (tag &rest _)
+    (when tag
+      `(,@(mapcar (lambda (state) `(conn-substate ,state)) tag)
+        (conn-substate t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-substate)))
   "Support for (conn-substate STATE) specializers.
@@ -1821,6 +1824,7 @@ and specializes the method on all conn states."
     (if-let* ((state-obj (conn--find-state name)))
         (let ((prev-parents (conn-state--parents state-obj))
               (all-children (conn-state-all-children name)))
+          (remhash name conn--state-all-parents-cache)
           (setup-properties (setf (conn-state--properties state-obj)
                                   (make-hash-table :test 'eq)))
           (setf (conn-state--parents state-obj) parents)
@@ -2466,21 +2470,21 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-with-state-loop ((state (conn-substate t))
                                     &key context initial-arg)
-  (unwind-protect
-      (funcall
-       (catch 'state-loop-exit
-         (let* ((inhibit-message t)
-                (callback (conn-state-get state :loop-handler))
-                (msg-fn (conn-state-get state :loop-message))
-                (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
-                (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
-                (conn--loop-error-message "")
-                (conn--loop-message-timer nil)
-                (conn--loop-message-function
-                 (lambda ()
-                   (let ((inhibit-message conn-state-loop-inhibit-message)
-                         (message-log-max nil))
-                     (funcall msg-fn context conn--loop-error-message)))))
+  (let* ((inhibit-message t)
+         (callback (conn-state-get state :loop-handler))
+         (msg-fn (conn-state-get state :loop-message))
+         (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
+         (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
+         (conn--loop-error-message "")
+         (conn--loop-message-timer nil)
+         (conn--loop-message-function
+          (lambda ()
+            (let ((inhibit-message conn-state-loop-inhibit-message)
+                  (message-log-max nil))
+              (funcall msg-fn context conn--loop-error-message)))))
+    (funcall
+     (unwind-protect
+         (catch 'state-loop-exit
            (conn-with-recursive-state state
              (while t
                (unless conn--loop-message-timer
@@ -2522,8 +2526,9 @@ themselves once the selection process has concluded."
                         (funcall callback cmd context)
                       (user-error
                        (conn-state-loop-error (error-message-string err))))))
-                 (setf conn-state-loop-last-command cmd)))))))
-    (message nil)))
+                 (setf conn-state-loop-last-command cmd)))))
+       (let ((inhibit-message nil))
+         (message nil))))))
 
 
 ;;;; Read Things
