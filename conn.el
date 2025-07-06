@@ -1016,6 +1016,19 @@ of highlighting."
            (mapcan 'conn-state-all-children
                    (conn-state--children (conn--find-state state))))))
 
+(defmacro conn-do-all-children (state var &rest body)
+  (declare (indent 2))
+  (cl-with-gensyms (stack seen)
+    `(let ((,stack (conn-state--children (conn--find-state ,state)))
+           (,seen (make-hash-table :test 'eq))
+           (,var nil))
+       (while (setq ,var (pop ,stack))
+         ,@body
+         (dolist (new (conn-state--children (conn--find-state ,var)))
+           (unless (gethash new ,seen)
+             (setf (gethash new ,seen) t)
+             (push new ,stack)))))))
+
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (defun conn-state-all-parents (state)
@@ -1205,7 +1218,7 @@ property from its parents."
                  nil "%s :no-keymap property is non-nil" state)
       (unless (eql depth (conn--get-mode-map-depth mode table))
         (setf (conn--get-mode-map-depth mode table) depth)
-        (dolist (child (conn-state-all-children state))
+        (conn-do-all-children state child
           (setf (conn--mode-maps-sorted-p child) nil))
         (when (alist-get mode mmode-maps)
           (conn--sort-mode-maps state)))))
@@ -1226,7 +1239,7 @@ property from its parents."
           (unless dont-create
             (prog1 (setf (conn-state--keymap state-obj)
                          (make-sparse-keymap))
-              (dolist (child (conn-state-all-children state))
+              (conn-do-all-children state child
                 (when-let* ((map (gethash child conn--composed-state-maps)))
                   (setf (cdr map)
                         (cl-loop for parent in (conn-state-all-parents child)
@@ -1297,7 +1310,7 @@ return it."
                                   (parent-maps state)))))
               (setf (get-composed-map state) keymap
                     (get-map state) (nth 1 keymap))
-              (dolist (child (conn-state-all-children state))
+              (conn-do-all-children state child
                 (if-let* ((map (get-composed-map child)))
                     (setf (cdr map) (parent-maps child))
                   (unless (conn-state-get child :no-keymap)
@@ -1377,7 +1390,7 @@ return it."
                                  (parent-maps state)))))
               (setf (get-composed-map state) keymap
                     (get-map state) (nth 1 keymap))
-              (dolist (child (conn-state-all-children state))
+              (conn-do-all-children state child
                 (if-let* ((map (get-composed-map child)))
                     (setf (cdr map) (parent-maps child))
                   (conn--ensure-minor-mode-map child mode)))
@@ -1822,8 +1835,7 @@ and specializes the method on all conn states."
                          for (k v) on kvs by #'cddr
                          do (puthash k v table))))
     (if-let* ((state-obj (conn--find-state name)))
-        (let ((prev-parents (conn-state--parents state-obj))
-              (all-children (conn-state-all-children name)))
+        (let ((prev-parents (conn-state--parents state-obj)))
           (remhash name conn--state-all-parents-cache)
           (setup-properties (setf (conn-state--properties state-obj)
                                   (make-hash-table :test 'eq)))
@@ -1831,15 +1843,20 @@ and specializes the method on all conn states."
           (dolist (former (seq-difference prev-parents parents))
             (cl-callf2 delq name (conn-state--children
                                   (conn--find-state former))))
-          (dolist (parent (seq-difference parents prev-parents))
-            (pcase-dolist (`(,mode . ,_)
-                           (cdr (conn-state--minor-mode-maps
-                                 (conn--find-state parent))))
-              (unless (conn-state-get name :no-keymap)
-                (conn--ensure-minor-mode-map name mode))
-              (dolist (child all-children)
-                (conn--ensure-minor-mode-map child mode))))
-          (mapc #'conn--rebuild-state-keymaps (cons name all-children)))
+          (let (new-mode-maps)
+            (dolist (parent (seq-difference parents prev-parents))
+              (pcase-dolist (`(,mode . ,_)
+                             (cdr (conn-state--minor-mode-maps
+                                   (conn--find-state parent))))
+                (unless (gethash (cons name mode) conn--minor-mode-maps-cache)
+                  (conn--ensure-minor-mode-map name mode)
+                  (push mode new-mode-maps))))
+            (conn--rebuild-state-keymaps name)
+            (conn-do-all-children name child
+              (remhash child conn--state-all-parents-cache)
+              (dolist (mode new-mode-maps)
+                (conn--ensure-minor-mode-map child mode))
+              (conn--rebuild-state-keymaps child))))
       (let* ((state-obj (conn--make-state name docstring parents)))
         (setf (conn--find-state name) state-obj)
         (setup-properties (conn-state--properties state-obj))
