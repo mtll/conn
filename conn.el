@@ -390,9 +390,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defun conn-unset-buffer-property (property &optional buffer)
   (let ((buffer (or buffer (current-buffer))))
-    (cl-callf2 delq
-        (assq property (buffer-local-value 'conn--buffer-properties buffer))
-        (buffer-local-value 'conn--buffer-properties buffer))))
+    (cl-callf2 assq-delete-all
+        property (buffer-local-value 'conn--buffer-properties buffer))))
 
 
 ;;;;; Rings
@@ -3655,9 +3654,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 (defun conn--mark-post-command-hook ()
   (unless conn--hide-mark-cursor
-    (cl-callf2 delq
-        (assq (recursion-depth) conn--last-perform-bounds)
-        conn--last-perform-bounds)
+    (cl-callf2 assq-delete-all (recursion-depth) conn--last-perform-bounds)
     (unless conn-this-command-thing
       (setq conn-this-command-thing (or (conn-command-thing this-command)
                                         (conn-command-thing real-this-command))))
