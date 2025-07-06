@@ -978,7 +978,8 @@ of highlighting."
                  ( name docstring parents
                    &aux
                    (properties (make-hash-table :test 'eq))
-                   (mode-depths (conn--make-mode-depth-table))
+                   (minor-mode-depths (make-hash-table :test 'eq))
+                   (minor-mode-sort-tick conn--minor-mode-maps-sort-tick)
                    (minor-mode-maps (list :conn-minor-mode-map-alist))
                    (major-mode-maps (make-hash-table :test 'eq))))
                (:conc-name conn-state--)
@@ -989,12 +990,24 @@ of highlighting."
   (children nil :type (list-of symbol))
   (properties nil :type hash-table)
   (keymap nil :type (or nil keymap))
-  (mode-depths nil :type conn--mode-depth-table)
-  (minor-mode-maps nil :type list)
+  (minor-mode-depths nil :type hash-table)
+  (minor-mode-sort-tick nil :type (or nil integer))
+  (minor-mode-maps nil :type alist)
   (major-mode-maps nil :type hash-table))
 
 (defmacro conn--find-state (state)
   `(get ,state :conn--state))
+
+(define-inline conn-state-minor-mode-maps-alist (state)
+  (declare (side-effect-free t)
+           (gv-setter
+            (lambda (value)
+              `(setf (conn-state--minor-mode-maps
+                      (conn--find-state ,state))
+                     ,value))))
+  (inline-quote
+   (conn-state--minor-mode-maps
+    (conn--find-state ,state))))
 
 (define-inline conn-state-name-p (state)
   "Return non-nil if STATE is a conn-state."
@@ -1011,10 +1024,6 @@ of highlighting."
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (defun conn-state-all-parents (state)
-  ;; Nominally the hash table speeds this up but primarily it is to
-  ;; ensure that we get the same list each time which allows this
-  ;; function to be used as the tag function for the conn-substate
-  ;; generalizer.
   (with-memoization (gethash state conn--state-all-parents-cache)
     (cons state (merge-ordered-lists
                  (mapcar 'conn-state-all-parents
@@ -1126,27 +1135,7 @@ property from its parents."
 (defvar-local conn--major-mode-map nil)
 (defvar-local conn--minor-mode-maps nil)
 
-(defvar conn--mode-map-sort-tick 0)
-
-(cl-defstruct (conn--mode-depth-table
-               (:conc-name conn--mode-depth-)
-               (:constructor nil)
-               ( :constructor conn--make-mode-depth-table
-                 (&aux
-                  (table (make-hash-table :test 'eq))
-                  (sort-tick conn--mode-map-sort-tick))))
-  (table nil :type hash-table)
-  (sort-tick nil :type (or nil integer)))
-
-(define-inline conn--get-mode-map-depth (mode table)
-  (declare (side-effect-free t)
-           (important-return-value t)
-           (gv-setter
-            (lambda (value)
-              `(setf (gethash ,mode (conn--mode-depth-table ,table))
-                     ,value))))
-  (inline-quote
-   (gethash ,mode (conn--mode-depth-table ,table))))
+(defvar conn--minor-mode-maps-sort-tick 0)
 
 (define-inline conn--mode-maps-sorted-p (state)
   (declare (side-effect-free t)
@@ -1154,36 +1143,34 @@ property from its parents."
            (gv-setter
             (lambda (value)
               (cl-labels ((set (v)
-                            `(setf (conn--mode-depth-sort-tick
-                                    (conn-state--mode-depths
-                                     (conn--find-state ,state)))
+                            `(setf (conn-state--minor-mode-sort-tick
+                                    (conn--find-state ,state))
                                    ,v)))
                 (pcase value
                   ('nil (set nil))
-                  ((pred macroexp-const-p) (set 'conn--mode-map-sort-tick))
+                  ((pred macroexp-const-p)
+                   (set 'conn--minor-mode-maps-sort-tick))
                   (_ (cl-once-only (value)
                        `(progn
-                          ,(set `(when ,value conn--mode-map-sort-tick))
+                          ,(set `(when ,value conn--minor-mode-maps-sort-tick))
                           ,value))))))))
   (inline-quote
-   (eql conn--mode-map-sort-tick
-        (conn--mode-depth-sort-tick
-         (conn-state--mode-depths
-          (conn--find-state ,state))))))
+   (eql conn--minor-mode-maps-sort-tick
+        (conn-state--minor-mode-sort-tick
+         (conn--find-state ,state)))))
 
 (defun conn--sort-mode-maps (state)
   (cl-check-type (conn--find-state state) conn-state)
   (unless (conn-state-get state :no-keymap)
     (let* ((parents (conn-state-all-parents state))
            (tables (mapcar (lambda (s)
-                             (conn-state--mode-depths
+                             (conn-state--minor-mode-depths
                               (conn--find-state s)))
                            parents)))
-      (conn--compat-callf sort (cdr (conn-state--minor-mode-maps
-                                     (conn--find-state state)))
+      (conn--compat-callf sort (cdr (conn-state-minor-mode-maps-alist state))
         :key (lambda (cons)
                (or (seq-some (lambda (table)
-                               (conn--get-mode-map-depth (car cons) table))
+                               (gethash (car cons) table))
                              tables)
                    (get (car cons) :conn-mode-depth)
                    0))
@@ -1196,14 +1183,14 @@ property from its parents."
   (if (null state)
       (progn
         (setf (get mode :conn-mode-depth) depth)
-        (cl-incf conn--mode-map-sort-tick))
+        (cl-incf conn--minor-mode-maps-sort-tick))
     (let* ((state-obj (conn--find-state state))
-           (mmode-maps (cdr (conn-state--minor-mode-maps state-obj)))
-           (table (conn-state--mode-depths state-obj)))
+           (mmode-maps (cdr (conn-state-minor-mode-maps-alist state)))
+           (table (conn-state--minor-mode-depths state-obj)))
       (cl-assert (not (conn-state-get state :no-keymap))
                  nil "%s :no-keymap property is non-nil" state)
-      (unless (eql depth (conn--get-mode-map-depth mode table))
-        (setf (conn--get-mode-map-depth mode table) depth)
+      (unless (eql depth (gethash mode table))
+        (setf (gethash mode table) depth)
         (dolist (child (conn-state-all-children state))
           (setf (conn--mode-maps-sorted-p child) nil))
         (when (alist-get mode mmode-maps)
@@ -1336,8 +1323,7 @@ The composed map is a keymap of the form:
   (cl-macrolet ((get-map (state)
                   `(gethash (cons ,state mode) conn--minor-mode-maps-cache))
                 (get-composed-map (state)
-                  `(alist-get mode (cdr (conn-state--minor-mode-maps
-                                         (conn--find-state ,state)))))
+                  `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
                 (parent-maps (state)
                   `(cl-loop for parent in (conn-state-all-parents ,state)
                             for pmap = (get-map parent)
@@ -1363,8 +1349,7 @@ return it."
     (cl-macrolet ((get-map (state)
                     `(gethash (cons ,state mode) conn--minor-mode-maps-cache))
                   (get-composed-map (state)
-                    `(alist-get mode (cdr (conn-state--minor-mode-maps
-                                           (conn--find-state ,state)))))
+                    `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
                   (parent-maps (state)
                     `(cl-loop for parent in (conn-state-all-parents ,state)
                               for pmap = (get-map parent)
@@ -1397,7 +1382,7 @@ Called when the inheritance hierarchy for STATE changes."
                        when pmap collect pmap)))
       (let (to-remove)
         (pcase-dolist ((and `(,mode . ,map) cons)
-                       (cdr (conn-state--minor-mode-maps state-obj)))
+                       (cdr (conn-state-minor-mode-maps-alist state)))
           (setf (cdr map)
                 (cl-loop for parent in parents
                          for pmap = (conn-get-minor-mode-map parent mode t)
@@ -1405,7 +1390,7 @@ Called when the inheritance hierarchy for STATE changes."
           (unless (cdr map)
             (push cons to-remove)))
         (dolist (cons to-remove)
-          (cl-callf2 delq cons (cdr (conn-state--minor-mode-maps state-obj)))))
+          (cl-callf2 delq cons (cdr (conn-state-minor-mode-maps-alist state)))))
       (maphash
        (lambda (mode map)
          (setf (cdr map)
@@ -1673,8 +1658,7 @@ See also `conn-exit-functions'.")
             conn--minor-mode-maps nil)
     (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map state)))
           conn--major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
-          conn--minor-mode-maps (conn-state--minor-mode-maps
-                                 (conn--find-state state))))
+          conn--minor-mode-maps (conn-state-minor-mode-maps-alist state)))
   (setf conn--hide-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
                                                       :hide-mark-cursor)))
                                      (if (eq hide t) t
@@ -1832,8 +1816,7 @@ and specializes the method on all conn states."
           (let (new-mode-maps)
             (dolist (parent (seq-difference parents prev-parents))
               (pcase-dolist (`(,mode . ,_)
-                             (cdr (conn-state--minor-mode-maps
-                                   (conn--find-state parent))))
+                             (cdr (conn-state-minor-mode-maps-alist parent)))
                 (unless (gethash (cons name mode) conn--minor-mode-maps-cache)
                   (conn--ensure-minor-mode-map name mode)
                   (push mode new-mode-maps))))
@@ -1852,8 +1835,7 @@ and specializes the method on all conn states."
         (unless (conn-state-get name :no-keymap)
           (dolist (parent parents)
             (pcase-dolist (`(,mode . ,_)
-                           (cdr (conn-state--minor-mode-maps
-                                 (conn--find-state parent))))
+                           (cdr (conn-state-minor-mode-maps-alist parent)))
               (conn--ensure-minor-mode-map name mode))))))))
 
 (defmacro conn-define-state (name parents &rest properties)
@@ -1904,10 +1886,10 @@ to the abnormal hooks `conn-state-entry-functions' or
        (conn--define-state
         ',name ,docstring
         (list ,@(mapcar (lambda (v) (macroexp-quote v)) parents))
-        ,(cl-loop for (name value) on properties by #'cddr
-                  nconc (pcase name
-                          ((pred keywordp) (list name value))
-                          ((pred symbolp) `((quote ,name) ,value))
+        ,(cl-loop for (key value) on properties by #'cddr
+                  nconc (pcase key
+                          ((pred keywordp) (list key value))
+                          ((pred symbolp) `(',key ,value))
                           (_ (error "State property name must be a symbol")))
                   into props finally return (cons 'list props)))
        (defvar-local ,name nil ,docstring)
@@ -4170,7 +4152,7 @@ with `conn-dispatch-thing-ignored-modes'."
 
 (defvar conn-target-count 0)
 
-(defvar conn-target-sort-function 'conn-target-sort-nearest)
+(defvar conn-target-sort-function 'conn-target-nearest-op)
 
 (defvar conn-target-window-predicate 'conn-dispatch-ignored-mode
   "Predicate which windows must satisfy in order to be considered during
@@ -4594,7 +4576,7 @@ Target overlays may override this default by setting the
   (pcase-let* ((`(,bchars ,achars) conn-disptach-stable-label-characters)
                (labels nil))
     (pcase-dolist (`(,win . ,targets)
-                   (conn-dispatch-get-targets 'conn-target-sort-nearest))
+                   (conn-dispatch-get-targets 'conn-target-nearest-op))
       (let (before after)
         (dolist (tar targets)
           (if (> (window-point win) (overlay-start tar))
@@ -4731,7 +4713,7 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Target Finders
 
-(defun conn-target-sort-nearest (a b)
+(defun conn-target-nearest-op (a b)
   (declare (side-effect-free t))
   (< (abs (- (overlay-end a) (point)))
      (abs (- (overlay-end b) (point)))))
@@ -9415,7 +9397,6 @@ Currently selected window remains selected afterwards."
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--wincontrol-preserve-arg nil)
-(defvar conn--previous-scroll-conservatively)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
@@ -9623,12 +9604,7 @@ Currently selected window remains selected afterwards."
     (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
     (add-hook 'post-command-hook 'conn--wincontrol-post-command)
     (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
-    (unless (bound-and-true-p conn--previous-scroll-conservatively)
-      (setq conn--previous-scroll-conservatively scroll-conservatively
-            scroll-conservatively 100))
-    (unless (bound-and-true-p conn--wincontrol-prev-eldoc-msg-fn)
-      (setq conn--wincontrol-prev-eldoc-msg-fn eldoc-message-function
-            eldoc-message-function #'ignore))
+    (add-function :override eldoc-message-function 'ignore)
     (unless preserve-state
       (setq conn--wincontrol-arg (when current-prefix-arg
                                    (prefix-numeric-value current-prefix-arg))
@@ -9644,12 +9620,7 @@ Currently selected window remains selected afterwards."
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
     (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
-    (when (bound-and-true-p conn--previous-scroll-conservatively)
-      (setq scroll-conservatively conn--previous-scroll-conservatively
-            conn--previous-scroll-conservatively nil))
-    (when (bound-and-true-p conn--wincontrol-prev-eldoc-msg-fn)
-      (setq eldoc-message-function conn--wincontrol-prev-eldoc-msg-fn
-            conn--wincontrol-prev-eldoc-msg-fn nil))
+    (remove-function eldoc-message-function 'ignore)
     (set-face-inverse-video 'mode-line nil)))
 
 (defun conn--wincontrol-minibuffer-exit ()
