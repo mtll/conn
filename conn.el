@@ -1055,28 +1055,28 @@ of highlighting."
      (and (get ,property :conn-static-property) t)))
 
   (conn-declare-property-static :no-keymap)
-  (conn-declare-property-static :abstract))
+  (conn-declare-property-static :abstract)
 
-(defun conn--state-get--cmacro ( exp state property
-                                 &optional
-                                 no-inherit default)
-  (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
-        (prop (macroexpand-all property macroexpand-all-environment)))
-    (if (or (and (macroexp-const-p no-inherit)
-                 (if (consp no-inherit) (cadr no-inherit) no-inherit))
-            (and (symbolp prop)
-                 (conn-property-static-p prop)))
-        `(gethash ,property
-                  (conn-state--properties (conn--find-state ,state))
-                  ,default)
-      exp)))
+  (defun conn-state-get--cmacro ( exp state property
+                                  &optional
+                                  no-inherit default)
+    (let ((no-inherit (macroexpand-all no-inherit macroexpand-all-environment))
+          (prop (macroexpand-all property macroexpand-all-environment)))
+      (if (or (and (macroexp-const-p no-inherit)
+                   (if (consp no-inherit) (cadr no-inherit) no-inherit))
+              (and (symbolp prop)
+                   (conn-property-static-p prop)))
+          `(gethash ,property
+                    (conn-state--properties (conn--find-state ,state))
+                    ,default)
+        exp))))
 
 (defun conn-state-get (state property &optional no-inherit default)
   "Return the value of PROPERTY for STATE.
 
 If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
-  (declare (compiler-macro conn--state-get--cmacro)
+  (declare (compiler-macro conn-state-get--cmacro)
            (side-effect-free t)
            (gv-setter conn-state-set))
   (if (or no-inherit (conn-property-static-p property))
