@@ -1002,7 +1002,9 @@ of highlighting."
   `(get ,state :conn--state))
 
 (define-inline conn-state-minor-mode-maps-alist (state)
+  "Return the minor mode maps alist for STATE."
   (declare (side-effect-free t)
+           (important-return-value t)
            (gv-setter
             (lambda (value)
               `(setf (conn-state--minor-mode-maps
@@ -1014,26 +1016,31 @@ of highlighting."
 
 (define-inline conn-state-name-p (state)
   "Return non-nil if STATE is a conn-state."
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-quote
    (eq 'conn-state (type-of (conn--find-state ,state)))))
 
 (define-inline conn-state-parents (state)
   "Return only the immediate parents for STATE."
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-quote
    (conn-state--parents (conn--find-state ,state))))
 
 (defconst conn--state-all-parents-cache (make-hash-table :test 'eq))
 
 (defun conn-state-all-parents (state)
+  "Return all parents for STATE."
   (with-memoization (gethash state conn--state-all-parents-cache)
     (cons state (merge-ordered-lists
                  (mapcar 'conn-state-all-parents
                          (conn-state--parents (conn--find-state state)))))))
 
 (defun conn-state-all-children (state)
-  (declare (side-effect-free t))
+  "Return all children for STATE."
+  (declare (side-effect-free t)
+           (important-return-value t))
   (cl-labels ((all-children (state)
                 (let ((children (conn-state--children
                                  (conn--find-state state))))
@@ -1042,7 +1049,8 @@ of highlighting."
 
 (define-inline conn-substate-p (state parent)
   "Return non-nil if STATE is a substate of PARENT."
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-quote
    (memq ,parent (conn-state-all-parents ,state))))
 
@@ -1051,10 +1059,16 @@ of highlighting."
 
 (eval-and-compile
   (defun conn-declare-property-static (property)
+    "Declare a state PROPERTY static.
+
+Static state properties can only be changed by redefining a state and
+are not inherited."
     (setf (get property :conn-static-property) t))
 
   (define-inline conn-property-static-p (property)
-    (declare (side-effect-free t))
+    "Return non-nil if PROPERTY is static."
+    (declare (side-effect-free t)
+             (important-return-value t))
     (inline-quote
      (and (get ,property :conn-static-property) t)))
 
@@ -1082,6 +1096,7 @@ If PROPERTY is not set for STATE then check all of STATE's parents for
 PROPERTY.  If no parent has that property either than nil is returned."
   (declare (compiler-macro conn-state-get--cmacro)
            (side-effect-free t)
+           (important-return-value t)
            (gv-setter conn-state-set))
   (if (or no-inherit (conn-property-static-p property))
       (gethash property
@@ -1122,7 +1137,8 @@ property from its parents."
 
 (define-inline conn-state-has-property-p (state property)
   "Return t if PROPERTY is set for STATE."
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-letevals (property)
     (inline-quote
      (cl-with-gensyms (key-missing)
@@ -1234,7 +1250,7 @@ The composed keymap is of the form:
           (unless dont-create
             (prog1 (setf (conn-state--keymap state-obj)
                          (make-sparse-keymap))
-              (dolist (child (conn-state-all-children state))
+              (dolist (child (cons state (conn-state-all-children state)))
                 (when-let* ((map (gethash child conn--composed-state-maps)))
                   (setf (cdr map)
                         (cl-loop for parent in (conn-state-all-parents child)
@@ -1673,18 +1689,7 @@ See also `conn-exit-functions'.")
         cursor-type (or (conn-state-get state :cursor) t)))
 
 (cl-defgeneric conn-exit-state (state)
-  "Exit conn state STATE.
-
-Methods can be added to this generic function in order to run code every
-time a state is exited.  Conn provides two additional specializers for
-methods to facilitate this:
-
-CONN-SUBSTATE: this takes the form (STATE (conn-substate PARENT-STATE))
-in an argument list and specializes the method on states that inherit
-from PARENT-STATE.
-
-CONN-STATE: this takes the form (STATE conn-state) in a argument list
-and specializes the method on all conn states."
+  "Exit conn state STATE."
   (:method ((_state (eql 'nil))) "Noop" nil)
   (:method ((_state (conn-substate t))) "Noop" nil)
   (:method ((_state (eql 'conn-null-state))) (error "Cannot exit null-state"))
@@ -1713,18 +1718,7 @@ and specializes the method on all conn states."
           (message "Error in conn-exit-functions %s" (car err))))))))
 
 (cl-defgeneric conn-enter-state (state &key &allow-other-keys)
-  "Enter conn state STATE.
-
-Methods can be added to this generic function in order to run code every
-time a state is entered.  Conn provides two additional specializers for
-methods to facilitate this:
-
-CONN-SUBSTATE: this takes the form (STATE (conn-substate PARENT-STATE))
-in an argument list and specializes the method on states that inherit
-from PARENT-STATE.
-
-CONN-STATE: this takes the form (STATE conn-state) in a argument list
-and specializes the method on all conn states."
+  "Enter conn state STATE."
   ( :method ((_state (eql 'nil)) &key &allow-other-keys) "Noop" nil)
   ( :method ((_state (conn-substate t)) &key &allow-other-keys) "Noop" nil)
   ( :method (state &key &allow-other-keys)
@@ -1777,7 +1771,8 @@ and specializes the method on all conn states."
                      t 'conn-command-state))))
 
 (defun conn-peek-stack ()
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (cadr conn--state-stack))
 
 (defun conn-enter-recursive-state (state)
@@ -1939,6 +1934,19 @@ By default `conn-emacs-state' does not bind anything."
   :lighter "E"
   :cursor '(bar . 4))
 
+(conn-define-state conn-mode-line-face-state ()
+  :abstract t
+  :no-keymap t)
+
+(cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
+  (when-let* ((face (conn-state-get state :mode-line-face)))
+    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
+  (cl-call-next-method))
+
+(cl-defmethod conn-exit-state ((_state (conn-substate conn-mode-line-face-state)))
+  (face-remap-remove-relative conn--face-remap-cookie)
+  (cl-call-next-method))
+
 ;;;;; Read Thing State
 
 (defface conn-read-thing-mode-line-face
@@ -1946,20 +1954,12 @@ By default `conn-emacs-state' does not bind anything."
   "Face for mode-line in a read-thing state."
   :group 'conn-faces)
 
-(conn-define-state conn-read-thing-common-state (conn-command-state)
+(conn-define-state conn-read-thing-common-state (conn-command-state
+                                                 conn-mode-line-face-state)
   "Common elements of thing reading states."
   :suppress-input-method t
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
-
-(cl-defmethod conn-enter-state ((state (conn-substate conn-read-thing-common-state)))
-  (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-read-thing-common-state)))
-  (face-remap-remove-relative conn--face-remap-cookie)
-  (cl-call-next-method))
 
 ;;;;; Emacs State
 
@@ -6962,21 +6962,12 @@ Expansions and contractions are provided by functions in
 
 ;;;;; Bounds of expansion
 
-(conn-define-state conn-expand-state ()
+(conn-define-state conn-expand-state (conn-mode-line-face-state)
   "State for expanding."
   :lighter "↔"
   :mode-line-face 'conn-read-thing-mode-line-face
   :loop-handler 'conn--read-expand-case
   :loop-message 'conn--read-expand-message)
-
-(cl-defmethod conn-enter-state ((state (conn-substate conn-expand-state)))
-  (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-expand-state)))
-  (face-remap-remove-relative conn--face-remap-cookie)
-  (cl-call-next-method))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-expand-state)
@@ -9106,10 +9097,113 @@ Interactively `region-beginning' and `region-end'."
     (occur search-string)))
 
 
+;;;;; Surround
+
+(defface conn-read-surround-with-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a read-thing state."
+  :group 'conn-faces)
+
+(conn-define-state conn-surround-thing-state (conn-read-thing-state)
+  :loop-handler 'conn-surround-thing-state-handler)
+
+(defun conn-surround-with-message (_ctx error-message)
+  (message
+   (substitute-command-keys
+    (concat
+     (propertize "Surround With" 'face 'minibuffer-prompt)
+     " (arg: "
+     (propertize (conn-state-loop-format-prefix-arg)
+                 'face 'read-multiple-choice-face)
+     "; \\[reset-arg] reset arg"
+     "): "
+     (propertize error-message 'face 'error)))))
+
+(conn-define-state conn-surround-with-state (conn-mode-line-face-state)
+  :loop-handler 'conn-surround-with-state-handler
+  :loop-message 'conn-surround-with-message
+  :mode-line-face 'conn-read-surround-with-mode-line-face)
+
+(define-keymap
+  :keymap (conn-get-state-map 'conn-surround-with-state)
+  "0" 'digit-argument
+  "1" 'digit-argument
+  "2" 'digit-argument
+  "3" 'digit-argument
+  "4" 'digit-argument
+  "5" 'digit-argument
+  "6" 'digit-argument
+  "7" 'digit-argument
+  "8" 'digit-argument
+  "9" 'digit-argument
+  "C-w" 'backward-delete-arg
+  "C-d" 'forward-delete-arg
+  "M-DEL" 'reset-arg
+  "M-<backspace>" 'reset-arg)
+
+(cl-defgeneric conn-surround-thing-state-handler (cmd ctx))
+
+(cl-defmethod conn-surround-thing-state-handler (cmd ctx)
+  (conn-read-thing-state-handler cmd ctx))
+
+(cl-defgeneric conn-surround-with-state-handler (cmd _ctx))
+
+(cl-defmethod conn-surround-with-state-handler ((cmd (eql self-insert-command)) _ctx)
+  (conn-state-loop-exit
+    (list cmd (conn-state-loop-prefix-arg))))
+
+(cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
+
+(cl-defmethod conn-perform-surround ((_with (eql self-insert-command)) arg
+                                     &key &allow-other-keys)
+  (pcase (assoc last-input-event insert-pair-alist)
+    ('nil
+     (user-error "No matching insert-pair-alist entry for %c"
+                 last-input-event))
+    ((or `(,_cmd ,open ,close)
+         `(,open ,close))
+     (dotimes (_ (prefix-numeric-value arg))
+       (insert-pair nil open close)))))
+
+(cl-defgeneric conn-prepare-surround (cmd arg)
+  (declare (conn-anonymous-thing-property :prepare-surround-op))
+  ( :method ((cmd conn-anonymous-thing) arg)
+    (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
+        (funcall op arg)
+      (conn-prepare-surround (conn-anonymous-thing-parent cmd) arg))))
+
+(cl-defmethod conn-prepare-surround (cmd arg)
+  (pcase-let ((`(,beg . ,end) (car (conn-perform-bounds cmd arg))))
+    (goto-char beg)
+    (conn--push-ephemeral-mark end))
+  nil)
+
+(defun conn-surround (cmd cmd-arg with with-arg)
+  (interactive
+   (append
+    (if (use-region-p)
+        (list 'region current-prefix-arg)
+      (conn-with-state-loop 'conn-surround-thing-state))
+    (conn-with-state-loop 'conn-surround-with-state)))
+  (save-mark-and-excursion
+    (thread-last
+      (conn-prepare-surround cmd cmd-arg)
+      (apply #'conn-perform-surround with with-arg))))
+
+
 ;;;;; Change
 
 (conn-define-state conn-change-state (conn-read-thing-state)
   :loop-handler 'conn-change-state-handler)
+
+(cl-defgeneric conn-change-state-handler (cmd ctx))
+
+(cl-defmethod conn-change-state-handler (cmd ctx)
+  (conn-read-thing-state-handler cmd ctx))
+
+(cl-defmethod conn-change-state-handler ((cmd (eql 'conn-surround)) _ctx)
+  (conn-state-loop-exit
+    (list cmd (conn-state-loop-prefix-arg))))
 
 (cl-defgeneric conn-perform-change (cmd arg &optional kill)
   (declare (conn-anonymous-thing-property :change-op))
@@ -9135,11 +9229,6 @@ Interactively `region-beginning' and `region-end'."
                (conn-pop-state)
              (conn-push-state 'conn-emacs-state))))))
 
-(cl-defgeneric conn-change-state-handler (cmd ctx))
-
-(cl-defmethod conn-change-state-handler (cmd ctx)
-  (conn-read-thing-state-handler cmd ctx))
-
 (defun conn-change-thing (cmd arg &optional kill)
   "Change region defined by CMD and ARG."
   (interactive
@@ -9156,6 +9245,73 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 `rectangle-mark-mode' defer to `string-rectangle'."
   (interactive "P")
   (conn-perform-change 'region nil kill))
+
+;;;;;; Change Surround
+
+(conn-define-state conn-change-surround-state (conn-surround-with-state)
+  :loop-handler 'conn-change-surround-state-handler
+  :loop-message 'conn-change-surround-message)
+
+(keymap-set (conn-get-state-map 'conn-change-state) "s" 'conn-surround)
+
+(defun conn-change-surround-message (_ctx error-message)
+  (message
+   (substitute-command-keys
+    (concat
+     (propertize "Change Surrounding" 'face 'minibuffer-prompt)
+     " (arg: "
+     (propertize (conn-state-loop-format-prefix-arg)
+                 'face 'read-multiple-choice-face)
+     "; \\[reset-arg] reset arg"
+     "): "
+     (propertize error-message 'face 'error)))))
+
+(cl-defgeneric conn-change-surround-state-handler (cmd ctx))
+
+(cl-defmethod conn-change-surround-state-handler (cmd ctx)
+  (conn-surround-with-state-handler cmd ctx))
+
+(cl-defgeneric conn-prepare-change-surround (cmd arg)
+  (declare (conn-anonymous-thing-property :prepare-change-surround-op))
+  ( :method ((cmd conn-anonymous-thing) arg)
+    (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
+        (funcall op arg)
+      (conn-prepare-change-surround (conn-anonymous-thing-parent cmd) arg))))
+
+(cl-defmethod conn-prepare-change-surround ((_cmd (eql self-insert-command)) arg)
+  (catch 'return
+    (pcase-let* ((n (prefix-numeric-value arg))
+                 ((or `(,_cmd ,open ,close)
+                      `(,open ,close))
+                  (or (assoc last-input-event insert-pair-alist)
+                      (list last-input-event last-input-event)))
+                 (open (string open))
+                 (close (string close)))
+      (deactivate-mark t)
+      (conn--expand-create-expansions)
+      (pcase-dolist (`(,beg . ,end) conn--current-expansions)
+        (when (and (progn
+                     (goto-char beg)
+                     (= n (skip-chars-forward open (+ beg n))))
+                   (progn
+                     (goto-char end)
+                     (= (- n) (skip-chars-backward close (- end n)))))
+          (goto-char end)
+          (conn--push-ephemeral-mark beg)
+          (delete-char (- n))
+          (exchange-point-and-mark)
+          (delete-char n)
+          (throw 'return nil))))
+    (user-error "No %c found surrounding point" last-input-event)))
+
+(cl-defmethod conn-perform-change ((_cmd (eql conn-surround)) _arg
+                                   &optional _kill)
+  (save-mark-and-excursion
+    (atomic-change-group
+      (let* ((prep (apply #'conn-prepare-change-surround
+                          (conn-with-state-loop 'conn-change-surround-state)))
+             (with (conn-with-state-loop 'conn-surround-with-state)))
+        (apply #'conn-perform-surround (append with prep))))))
 
 
 ;;;;; Transition Functions
