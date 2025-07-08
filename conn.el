@@ -9158,8 +9158,8 @@ Interactively `region-beginning' and `region-end'."
                                      &key &allow-other-keys)
   (pcase (assoc last-input-event insert-pair-alist)
     ('nil
-     (user-error "No matching insert-pair-alist entry for %c"
-                 last-input-event))
+     (dotimes (_ (prefix-numeric-value arg))
+       (insert-pair nil last-input-event last-input-event)))
     ((or `(,_cmd ,open ,close)
          `(,open ,close))
      (dotimes (_ (prefix-numeric-value arg))
@@ -9280,27 +9280,23 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (cl-defmethod conn-prepare-change-surround ((_cmd (eql self-insert-command)) arg)
   (catch 'return
-    (pcase-let* ((n (prefix-numeric-value arg))
-                 ((or `(,_cmd ,open ,close)
+    (pcase-let* (((or `(,_cmd ,open ,close)
                       `(,open ,close))
                   (or (assoc last-input-event insert-pair-alist)
                       (list last-input-event last-input-event)))
-                 (open (string open))
-                 (close (string close)))
+                 (n (prefix-numeric-value arg)))
       (deactivate-mark t)
       (conn--expand-create-expansions)
       (pcase-dolist (`(,beg . ,end) conn--current-expansions)
-        (when (and (progn
-                     (goto-char beg)
-                     (= n (skip-chars-forward open (+ beg n))))
-                   (progn
-                     (goto-char end)
-                     (= (- n) (skip-chars-backward close (- end n)))))
-          (goto-char end)
-          (conn--push-ephemeral-mark beg)
-          (delete-char (- n))
+        (when (and (eql open (char-after beg))
+                   (eql close (char-before end))
+                   (= 0 (cl-decf n)))
+          (goto-char beg)
+          (conn--push-ephemeral-mark end)
+          (delete-char 1)
           (exchange-point-and-mark)
-          (delete-char n)
+          (delete-char -1)
+          (exchange-point-and-mark)
           (throw 'return nil))))
     (user-error "No %c found surrounding point" last-input-event)))
 
