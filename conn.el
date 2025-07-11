@@ -277,9 +277,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
-  (macroexp-let2 (lambda (exp)
-                   (or (symbolp exp) (macroexp-const-p exp)))
-      keymap keymap
+  (macroexp-let2 symbolp keymap keymap
     (cl-with-gensyms (body-fn)
       `(cl-labels ((,body-fn () ,@body))
          (if (null ,keymap)
@@ -291,9 +289,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-without-overriding-map (keymap &rest body)
   (declare (indent 1))
-  (macroexp-let2 (lambda (exp)
-                   (or (symbolp exp) (macroexp-const-p exp)))
-      keymap keymap
+  (macroexp-let2 symbolp keymap keymap
     (cl-with-gensyms (body-fn)
       `(cl-labels ((,body-fn () ,@body))
          (if (null ,keymap)
@@ -1065,6 +1061,15 @@ of highlighting."
                  (mapcar 'conn-state-all-parents
                          (conn-state--parents (conn--find-state state)))))))
 
+(defun conn-state-all-keymap-parents (state)
+  "Return all parents for STATE."
+  (cons state
+        (merge-ordered-lists
+         (cl-loop with no-inherit = (conn-state-get state :no-inherit-keymaps)
+                  for parent in (conn-state--parents (conn--find-state state))
+                  unless (memq parent no-inherit)
+                  collect (conn-state-all-keymap-parents parent)))))
+
 (defun conn-state-all-children (state)
   "Return all children for STATE."
   (declare (side-effect-free t)
@@ -1101,6 +1106,7 @@ are not inherited."
      (and (get ,property :conn-static-property) t)))
 
   (conn-declare-property-static :no-keymap)
+  (conn-declare-property-static :no-inherit-keymaps)
   (conn-declare-property-static :abstract)
 
   (defun conn-state-get--cmacro ( exp state property
@@ -1196,7 +1202,7 @@ property from its parents."
                   ('nil (set nil))
                   ((pred macroexp-const-p)
                    (set 'conn--minor-mode-maps-sort-tick))
-                  (_ (cl-once-only (value)
+                  (_ (macroexp-let2 nil value value
                        `(progn
                           ,(set `(when ,value conn--minor-mode-maps-sort-tick))
                           ,value))))))))
@@ -1208,7 +1214,7 @@ property from its parents."
 (defun conn--sort-mode-maps (state)
   (cl-check-type (conn--find-state state) conn-state)
   (unless (conn-state-get state :no-keymap)
-    (let* ((parents (conn-state-all-parents state))
+    (let* ((parents (conn-state-all-keymap-parents state))
            (tables (mapcar (lambda (s)
                              (conn-state--minor-mode-depths
                               (conn--find-state s)))
@@ -1263,7 +1269,7 @@ The composed keymap is of the form:
     (cl-assert (not (conn-state-get state :no-keymap))
                nil "%s :no-keymap property is non-nil" state)
     (make-composed-keymap
-     (cl-loop for pstate in (conn-state-all-parents state)
+     (cl-loop for pstate in (conn-state-all-keymap-parents state)
               for pmap = (conn-state--keymap (conn--find-state pstate))
               when pmap collect pmap))))
 
@@ -1281,7 +1287,7 @@ The composed keymap is of the form:
               (dolist (child (cons state (conn-state-all-children state)))
                 (when-let* ((map (gethash child conn--composed-state-maps)))
                   (setf (cdr map)
-                        (cl-loop for parent in (conn-state-all-parents child)
+                        (cl-loop for parent in (conn-state-all-keymap-parents child)
                                  for pmap = (conn-get-state-map parent t)
                                  when pmap collect pmap))))))))))
 
@@ -1293,7 +1299,7 @@ The composed keymap is of the form:
                   `(gethash mode (conn-state--major-mode-maps
                                   (conn--find-state ,state))))
                 (parent-maps (state)
-                  `(cl-loop for parent in (conn-state-all-parents ,state)
+                  `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                             for pmap = (get-map parent)
                             when pmap collect pmap)))
     (or (get-composed-map state)
@@ -1319,7 +1325,7 @@ return it."
                     `(gethash mode (conn-state--major-mode-maps
                                     (conn--find-state ,state))))
                   (parent-maps (state)
-                    `(cl-loop for parent in (conn-state-all-parents ,state)
+                    `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                               for pmap = (get-map parent)
                               when pmap collect pmap)))
       (or (get-map state)
@@ -1382,7 +1388,7 @@ return it."
                   (get-composed-map (state)
                     `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
                   (parent-maps (state)
-                    `(cl-loop for parent in (conn-state-all-parents ,state)
+                    `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                               for pmap = (get-map parent)
                               when pmap collect pmap)))
       (or (get-map state)
@@ -1405,7 +1411,7 @@ return it."
                 (get-composed-map (state)
                   `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
                 (parent-maps (state)
-                  `(cl-loop for parent in (conn-state-all-parents ,state)
+                  `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                             for pmap = (get-map parent)
                             when pmap collect pmap)))
     (unless (or (conn-state-get state :no-keymap)
@@ -1419,7 +1425,7 @@ return it."
 
 Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
-    (let ((parents (conn-state-all-parents state))
+    (let ((parents (conn-state-all-keymap-parents state))
           (state-obj (conn--find-state state)))
       (when-let* ((state-map (gethash state conn--composed-state-maps)))
         (setf (cdr state-map)
@@ -1824,11 +1830,13 @@ See also `conn-exit-functions'.")
 
 ;;;;; State Definitions
 
-(defun conn--define-state (name docstring parents properties)
+(defun conn--define-state (name docstring parents properties no-inherit-keymaps)
   (cl-labels ((setup-properties (table)
                 (cl-loop with kvs = properties
                          for (k v) on kvs by #'cddr
-                         do (puthash k v table))))
+                         do (puthash k v table))
+                (cl-callf seq-union (gethash :no-inherit-keymaps table)
+                  no-inherit-keymaps)))
     (if-let* ((state-obj (conn--find-state name)))
         (let ((prev-parents (conn-state--parents state-obj)))
           (remhash name conn--state-all-parents-cache)
@@ -1909,14 +1917,21 @@ to the abnormal hooks `conn-state-entry-functions' or
                  never (memq ',name (conn-state-all-parents parent)))
         nil "Cycle detected in %s inheritance hierarchy" ',name)
        (conn--define-state
-        ',name ,docstring
-        (list ,@(mapcar (lambda (v) (macroexp-quote v)) parents))
+        ',name
+        ,docstring
+        (list ,@(mapcar (lambda (p)
+                          `',(or (car-safe p) p))
+                        parents))
         ,(cl-loop for (key value) on properties by #'cddr
                   nconc (pcase key
                           ((pred keywordp) (list key value))
                           ((pred symbolp) `(',key ,value))
                           (_ (error "State property name must be a symbol")))
-                  into props finally return (cons 'list props)))
+                  into props finally return (cons 'list props))
+        (list ,@(cl-loop for p in parents
+                         when (and (consp p)
+                                   (eq (cadr p) :no-inherit-keymap))
+                         collect `',(car p))))
        (defvar-local ,name nil ,docstring)
        ',name)))
 
@@ -9115,10 +9130,15 @@ Interactively `region-beginning' and `region-end'."
   "Face for mode-line in a read-thing state."
   :group 'conn-faces)
 
+(cl-defstruct (conn-surround-with-context
+               (:conc-name conn-surround-with-)
+               (:constructor conn-make-surround-with-context))
+  (padding-flag nil :type boolean))
+
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
   :loop-handler 'conn-surround-thing-state-handler)
 
-(defun conn-surround-with-message (_ctx error-message)
+(defun conn-surround-with-message (ctx error-message)
   (message
    (substitute-command-keys
     (concat
@@ -9128,6 +9148,11 @@ Interactively `region-beginning' and `region-end'."
                  'face 'read-multiple-choice-face)
      "; \\[reset-arg] reset arg"
      "): "
+     (when-let* ((padding (conn-surround-with-padding-flag ctx)))
+       (propertize
+        (format "Padding <%s>" padding)
+        'face 'eldoc-highlight-function-argument))
+     " "
      (propertize error-message 'face 'error)))))
 
 (conn-define-state conn-surround-with-state (conn-mode-line-face-state)
@@ -9147,7 +9172,7 @@ Interactively `region-beginning' and `region-end'."
   "7" 'digit-argument
   "8" 'digit-argument
   "9" 'digit-argument
-  "-" 'negative-argument
+  "RET" 'conn-padding-flag
   "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
   "M-DEL" 'reset-arg
@@ -9158,24 +9183,42 @@ Interactively `region-beginning' and `region-end'."
 (cl-defmethod conn-surround-thing-state-handler (cmd ctx)
   (conn-read-thing-state-handler cmd ctx))
 
-(cl-defgeneric conn-surround-with-state-handler (cmd _ctx))
+(cl-defgeneric conn-surround-with-state-handler (cmd ctx))
 
-(cl-defmethod conn-surround-with-state-handler ((cmd (eql self-insert-command)) _ctx)
+(cl-defmethod conn-surround-with-state-handler ((cmd (eql self-insert-command)) ctx)
   (conn-state-loop-exit
-    (list cmd (conn-state-loop-prefix-arg))))
+    (list cmd
+          (conn-state-loop-prefix-arg)
+          (conn-surround-with-padding-flag ctx))))
+
+(cl-defmethod conn-surround-with-state-handler ((_cmd (eql conn-padding-flag)) ctx)
+  (if (conn-surround-with-padding-flag ctx)
+      (setf (conn-surround-with-padding-flag ctx) nil)
+    (setf (conn-surround-with-padding-flag ctx)
+          (if (conn-state-loop-consume-prefix-arg)
+              (read-string "Padding: ")
+            " "))))
 
 (cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
 
 (cl-defmethod conn-perform-surround ((_with (eql self-insert-command)) arg
-                                     &key &allow-other-keys)
-  (pcase (assoc last-input-event insert-pair-alist)
-    ('nil
-     (dotimes (_ (prefix-numeric-value arg))
-       (insert-pair nil last-input-event last-input-event)))
-    ((or `(,_cmd ,open ,close)
-         `(,open ,close))
-     (dotimes (_ (prefix-numeric-value arg))
-       (insert-pair nil open close)))))
+                                     &key padding &allow-other-keys)
+  (unless (= (point) (region-beginning))
+    (exchange-point-and-mark))
+  (cl-labels ((ins-pair (open &optional close)
+                (save-excursion (insert open))
+                (exchange-point-and-mark)
+                (insert (or close open))
+                (exchange-point-and-mark)))
+    (when padding (ins-pair padding))
+    (pcase (assoc last-input-event insert-pair-alist)
+      ('nil
+       (dotimes (_ (prefix-numeric-value arg))
+         (ins-pair last-input-event)))
+      ((or `(,_cmd ,open ,close)
+           `(,open ,close))
+       (dotimes (_ (prefix-numeric-value arg))
+         (ins-pair open close))))))
 
 (cl-defgeneric conn-prepare-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-surround-op))
@@ -9190,17 +9233,19 @@ Interactively `region-beginning' and `region-end'."
     (conn--push-ephemeral-mark end))
   nil)
 
-(defun conn-surround (cmd cmd-arg with with-arg)
+(defun conn-surround (cmd cmd-arg with with-arg &optional padding)
   (interactive
    (append
     (if (use-region-p)
         (list 'region current-prefix-arg)
       (conn-with-state-loop 'conn-surround-thing-state))
-    (conn-with-state-loop 'conn-surround-with-state)))
+    (conn-with-state-loop
+     'conn-surround-with-state
+     :context (conn-make-surround-with-context))))
   (save-mark-and-excursion
     (thread-last
       (conn-prepare-surround cmd cmd-arg)
-      (apply #'conn-perform-surround with with-arg))))
+      (apply #'conn-perform-surround with with-arg :padding padding))))
 
 
 ;;;;; Change
@@ -9297,7 +9342,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                   (or (assoc last-input-event insert-pair-alist)
                       (list last-input-event last-input-event)))
                  (n (prefix-numeric-value arg)))
-      (deactivate-mark t)
+      (conn--push-ephemeral-mark)
       (conn--expand-create-expansions)
       (pcase-dolist (`(,beg . ,end) conn--current-expansions)
         (when (and (eql open (char-after beg))
@@ -9439,7 +9484,7 @@ If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
     (overwrite-mode 1)))
 
 (defun conn-emacs-state-overwrite-binary ()
-  "Enter emacs state in `binary-overwrite-mode'."
+  "Enter Emacs state in `binary-overwrite-mode'."
   (interactive)
   (conn-emacs-state-overwrite 1))
 
@@ -10415,6 +10460,7 @@ Operates with the selected windows parent window."
 (define-keymap
   :keymap (conn-get-state-map 'conn-command-state)
   :suppress t
+  "S" 'conn-surround
   "C-<return>" 'conn-join-lines
   "<escape>" 'conn-pop-state
   "T" 'conn-change-thing
