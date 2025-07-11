@@ -460,9 +460,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   "Rotate ring forward.
 
 Takes (1 2 3 4) to (2 3 4 1)."
-  (let ((head (car (setf (conn-ring-list ring)
-                         (nconc (cdr (conn-ring-list ring))
-                                (list (car (conn-ring-list ring))))))))
+  (let ((head (car (cl-callf thread-last (conn-ring-list ring)
+                     car list (nconc (cdr (conn-ring-list ring)))))))
     (conn-ring--visit ring head)
     head))
 
@@ -470,9 +469,8 @@ Takes (1 2 3 4) to (2 3 4 1)."
   "Rotate ring backward.
 
 Takes (1 2 3 4) to (4 1 2 3)."
-  (let ((head (car (setf (conn-ring-list ring)
-                         (nconc (last (conn-ring-list ring))
-                                (butlast (conn-ring-list ring)))))))
+  (let ((head (car (cl-callf thread-last (conn-ring-list ring)
+                     butlast (nconc (last (conn-ring-list ring)))))))
     (conn-ring--visit ring head)
     head))
 
@@ -1720,7 +1718,7 @@ See also `conn-exit-functions'.")
                                      (if (eq hide t) t
                                        (alist-get state hide)))
                                    (conn-state-get state :hide-mark-cursor))
-        cursor-type (or (conn-state-get state :cursor) t)))
+        cursor-type (conn-state-get state :cursor nil t)))
 
 (cl-defgeneric conn-exit-state (state)
   "Exit conn state STATE."
@@ -9063,7 +9061,8 @@ of `conn-recenter-positions'."
        (save-excursion
          (goto-char end)
          (recenter -1))))
-    (when conn-recenter-pulse
+    (when (and conn-recenter-pulse
+               (not (region-active-p)))
       (pulse-momentary-highlight-region beg end))))
 
 (defun conn-recenter-on-region-other-window ()
@@ -9187,24 +9186,24 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defmethod conn-surround-with-state-handler ((cmd (eql self-insert-command)) ctx)
   (conn-state-loop-exit
-    (list cmd
-          (conn-state-loop-prefix-arg)
-          (conn-surround-with-padding-flag ctx))))
+    (list cmd (conn-state-loop-prefix-arg)
+          :padding (conn-surround-with-padding-flag ctx))))
 
 (cl-defmethod conn-surround-with-state-handler ((_cmd (eql conn-padding-flag)) ctx)
-  (if (conn-surround-with-padding-flag ctx)
-      (setf (conn-surround-with-padding-flag ctx) nil)
-    (setf (conn-surround-with-padding-flag ctx)
-          (if (conn-state-loop-consume-prefix-arg)
-              (read-string "Padding: ")
-            " "))))
+  (cl-callf unless (conn-surround-with-padding-flag ctx)
+    (if (conn-state-loop-consume-prefix-arg)
+        (read-string "Padding: ")
+      " ")))
 
 (cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
 
+(cl-defmethod conn-perform-surround :before (_with _arg &key &allow-other-keys)
+  ;; Normalize point/mark
+  (unless (= (point) (region-beginning))
+    (exchange-point-and-mark)))
+
 (cl-defmethod conn-perform-surround ((_with (eql self-insert-command)) arg
                                      &key padding &allow-other-keys)
-  (unless (= (point) (region-beginning))
-    (exchange-point-and-mark))
   (cl-labels ((ins-pair (open &optional close)
                 (save-excursion (insert open))
                 (exchange-point-and-mark)
@@ -9230,22 +9229,23 @@ Interactively `region-beginning' and `region-end'."
 (cl-defmethod conn-prepare-surround (cmd arg)
   (pcase-let ((`(,beg . ,end) (car (conn-perform-bounds cmd arg))))
     (goto-char beg)
-    (conn--push-ephemeral-mark end))
+    (conn--push-ephemeral-mark end nil t))
   nil)
 
-(defun conn-surround (cmd cmd-arg with with-arg &optional padding)
-  (interactive
-   (append
-    (if (use-region-p)
-        (list 'region current-prefix-arg)
-      (conn-with-state-loop 'conn-surround-thing-state))
-    (conn-with-state-loop
-     'conn-surround-with-state
-     :context (conn-make-surround-with-context))))
+(defun conn-surround ()
+  (interactive)
   (save-mark-and-excursion
-    (thread-last
-      (conn-prepare-surround cmd cmd-arg)
-      (apply #'conn-perform-surround with with-arg :padding padding))))
+    (pcase-let* ((`(,cmd ,cmd-arg)
+                  (if (use-region-p)
+                      (list 'region current-prefix-arg)
+                    (conn-with-state-loop 'conn-surround-thing-state)))
+                 (prep-props (conn-prepare-surround cmd cmd-arg))
+                 (`(,with ,with-arg . ,with-props)
+                  (conn-with-state-loop
+                   'conn-surround-with-state
+                   :context (conn-make-surround-with-context))))
+      (apply #'conn-perform-surround
+             `(,with ,with-arg ,@prep-props ,@with-props)))))
 
 
 ;;;;; Change
