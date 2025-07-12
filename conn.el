@@ -903,9 +903,9 @@ of highlighting."
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
     (cl-assert (and beg-op end-op)
-               nil "If either beg-op or end-op is specified both must be")
+               nil "If either beg-op or end-op is specified then both must be")
     (put thing 'beginning-op beg-op)
-    (put thing 'end-op beg-op))
+    (put thing 'end-op end-op))
   (when bounds-op
     (put thing 'bounds-of-thing-at-point bounds-op)))
 
