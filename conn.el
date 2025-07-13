@@ -506,7 +506,7 @@ If ring is (1 2 3 4) 4 would be returned."
                (conn--without-conn-maps
                  (key-binding (vector last-input-event) t)))))
 
-(defun conn-remap-key (from-keys &optional without-conn-maps)
+(defun conn-remap-key (from-keys &optional without-conn-maps no-accept-default)
   "Map to whatever is bound at FROM-KEYS.
 
 This allows for transparently binding keys to commands which may be
@@ -515,12 +515,12 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
   (let ((from-keys (key-parse from-keys)))
     `(menu-item
       ,(format "Remap %s" (key-description from-keys))
-      ,(conn--without-conn-maps (key-binding from-keys t))
+      ,(conn--without-conn-maps (key-binding from-keys (not no-accept-default)))
       :filter ,(lambda (_real-binding)
                  (if without-conn-maps
                      (conn--without-conn-maps
-                       (key-binding from-keys t))
-                   (key-binding from-keys t))))))
+                       (key-binding from-keys (not no-accept-default)))
+                   (key-binding from-keys (not no-accept-default)))))))
 
 (defun conn-remap-keymap (from-keys &optional without-conn-maps)
   "Map to the keymap at FROM-KEYS.
@@ -9720,18 +9720,20 @@ Currently selected window remains selected afterwards."
   "M-k" 'conn-wincontrol-windmove-down
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "TAB" 'delete-other-windows
-  "<tab>" 'delete-other-windows
+  "x" 'delete-other-windows
   "K" 'conn-wincontrol-other-window-scroll-up
   "I" 'conn-wincontrol-other-window-scroll-down
   "C-s" 'conn-wincontrol-isearch
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
-  "g" (conn-remap-key "M-g" t)
+  "g" (conn-remap-key "M-g" t t)
+  "," (conn-remap-key "<conn-thing-map>" nil t)
+  "c" (conn-remap-key "C-c" nil t)
   "C" 'tab-bar-duplicate-tab
   "d" 'delete-window
   "h" 'kill-buffer-and-window
   "H" 'conn-kill-this-buffer
+  "e" 'conn-wincontrol-exit
   "<escape>" 'conn-wincontrol-exit
   "<return>" 'conn-other-place-prefix
   "F" 'toggle-frame-fullscreen
@@ -9739,6 +9741,7 @@ Currently selected window remains selected afterwards."
   "j" 'previous-buffer
   "J" 'bury-buffer
   "DEL" 'beginning-of-buffer
+  "<backspace>" 'beginning-of-buffer
   "SPC" 'end-of-buffer
   "i" 'conn-wincontrol-scroll-down
   "k" 'conn-wincontrol-scroll-up
@@ -9749,7 +9752,7 @@ Currently selected window remains selected afterwards."
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-prefix
-  "C-h" (conn-remap-key "C-h" t)
+  "C-h" 'help-command
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
