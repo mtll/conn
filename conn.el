@@ -9803,8 +9803,7 @@ Currently selected window remains selected afterwards."
               (when-let* ((fn (symbol-function this-command))
                           ((autoloadp fn)))
                 (autoload-do-load fn))
-              (or (car (last (function-alias-p this-command)))
-                  this-command)))
+              this-command))
            (advice
             (lambda (fn &rest args)
               (interactive
@@ -9814,7 +9813,7 @@ Currently selected window remains selected afterwards."
                    (unwind-protect
                        (prog1
                            (advice-eval-interactive-spec spec)
-                         (setq abort t))
+                         (setq abort nil))
                      (when (and abort command)
                        (remove-function (symbol-function command) advice))))))
               (unwind-protect
