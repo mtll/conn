@@ -9798,32 +9798,31 @@ Currently selected window remains selected afterwards."
 
 ;; From transient
 (defun conn--wincontrol-wrap-this-command ()
-  (when-let* (((symbolp this-command))
-              (fn (symbol-function this-command))
-              ((autoloadp fn)))
-    (autoload-do-load fn))
-  (letrec ((command this-command)
+  (letrec ((command
+            (when (symbolp this-command)
+              (when-let* ((fn (symbol-function this-command))
+                          ((autoloadp fn)))
+                (autoload-do-load fn))
+              (or (car (last (function-alias-p this-command)))
+                  this-command)))
            (advice
             (lambda (fn &rest args)
               (interactive
                (lambda (spec)
                  (let ((debugger #'conn--wincontrol-exit-and-debug)
-                       (success nil))
+                       (abort t))
                    (unwind-protect
                        (prog1
                            (advice-eval-interactive-spec spec)
-                         (setq success t))
-                     (unless success
-                       (when (symbolp command)
-                         (remove-function (symbol-function command) advice)))))))
+                         (setq abort t))
+                     (when (and abort command)
+                       (remove-function (symbol-function command) advice))))))
               (unwind-protect
                   (let ((debugger #'conn--wincontrol-exit-and-debug))
                     (apply fn args))
-                (when (symbolp command)
+                (when command
                   (remove-function (symbol-function command) advice))))))
-    (add-function :around (if (symbolp this-command)
-                              (symbol-function this-command)
-                            this-command)
+    (add-function :around (if command command this-command)
                   advice '((depth . -99)))))
 
 (defun conn--wincontrol-pre-command ()

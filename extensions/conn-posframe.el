@@ -306,9 +306,8 @@
 
 (defun conn-posframe--switch-tab-display (&rest _)
   (when (and (not executing-kbd-macro)
-             (when (symbolp this-command)
-               (cl-loop for fn in (cons this-command (function-alias-p this-command))
-                        thereis (advice-member-p 'conn-posframe--switch-tab-display fn))))
+             (cl-loop for fn in (cons this-command (function-alias-p this-command))
+                      thereis (advice-member-p 'conn-posframe--switch-tab-display fn)))
     (posframe-show
      " *conn-list-posframe*"
      :string (concat
