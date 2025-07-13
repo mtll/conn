@@ -4643,6 +4643,7 @@ Target overlays may override this default by setting the
         (overlay-get overlay 'thing)))
 
 (defun conn--dispatch-read-event-prefix ()
+  (declare (important-return-value t))
   (concat
    "("
    conn--dispatch-action-description
@@ -4657,6 +4658,7 @@ Target overlays may override this default by setting the
                                            inherit-input-method
                                            seconds
                                            inhibit-message-prefix)
+  (declare (important-return-value t))
   (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil)
         (prompt (concat prompt (when conn--loop-error-message
@@ -7991,6 +7993,7 @@ instances of from-string.")
   (frame nil :read-only t))
 
 (defun conn--get-tab-index-by-cookie (cookie)
+  (declare (important-return-value t))
   (seq-position (funcall tab-bar-tabs-function)
                 cookie
                 (lambda (tab c)
@@ -8441,17 +8444,12 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                      thing
                                      thing-arg
                                      &key &allow-other-keys)
-  (let ((conn-target-window-predicate conn-target-window-predicate))
-    (add-function :after-while conn-target-window-predicate
-                  (lambda (win)
-                    (not (buffer-local-value 'buffer-read-only
-                                             (window-buffer win)))))
-    (pcase-let* ((`(,pt ,win ,thing-override)
-                  (save-mark-and-excursion
-                    (conn-dispatch-select-target))))
-      (funcall action win pt
-               (or thing-override thing)
-               thing-arg))))
+  (pcase-let* ((`(,pt ,win ,thing-override)
+                (save-mark-and-excursion
+                  (conn-dispatch-select-target))))
+    (funcall action win pt
+             (or thing-override thing)
+             thing-arg)))
 
 (cl-defgeneric conn-perform-transpose (cmd arg))
 
@@ -9792,10 +9790,6 @@ Currently selected window remains selected afterwards."
       (conn-wincontrol-mode 1)
     (user-error "Cannot activate wincontrol while minibuffer is active.")))
 
-(defun conn--wincontrol-exit-and-debug (&rest args)
-  (conn-wincontrol-mode -1)
-  (apply #'debug args))
-
 ;; From transient
 (defun conn--wincontrol-wrap-this-command ()
   (letrec ((command
@@ -9804,11 +9798,15 @@ Currently selected window remains selected afterwards."
                           ((autoloadp fn)))
                 (autoload-do-load fn))
               this-command))
+           (exit-and-debug
+            (lambda (&rest args)
+              (conn-wincontrol-mode -1)
+              (apply #'debug args)))
            (advice
             (lambda (fn &rest args)
               (interactive
                (lambda (spec)
-                 (let ((debugger #'conn--wincontrol-exit-and-debug)
+                 (let ((debugger exit-and-debug)
                        (abort t))
                    (unwind-protect
                        (prog1
@@ -9817,7 +9815,7 @@ Currently selected window remains selected afterwards."
                      (when (and abort command)
                        (remove-function (symbol-function command) advice))))))
               (unwind-protect
-                  (let ((debugger #'conn--wincontrol-exit-and-debug))
+                  (let ((debugger exit-and-debug))
                     (apply fn args))
                 (when command
                   (remove-function (symbol-function command) advice))))))
