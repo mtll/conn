@@ -9610,7 +9610,7 @@ Currently selected window remains selected afterwards."
    "(arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset]: reset arg; "
-   "\\[conn-wincontrol-exit]: exit): "
+   "\\[conn-wincontrol-exit]: exit):"
    "%s"))
 
 (defvar conn--wincontrol-arg nil)
@@ -9853,7 +9853,9 @@ Currently selected window remains selected afterwards."
              (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                      (if (= conn--wincontrol-arg-sign -1) "-" "")
                      conn--wincontrol-arg)
-             conn--wincontrol-error-message)))
+             (concat
+              (if conn--wincontrol-error-message " ")
+              conn--wincontrol-error-message))))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
   (unless (memq conn-wincontrol-map overriding-terminal-local-map)
@@ -9902,8 +9904,7 @@ Currently selected window remains selected afterwards."
 
 (defun conn-wincontrol-ignore ()
   (interactive)
-  (setq conn--wincontrol-error-message (propertize "Invalid Command"
-                                                   'face 'error)
+  (setq conn--wincontrol-error-message (propertize "Invalid Command" 'face 'error)
         conn--wincontrol-preserve-arg t))
 
 
