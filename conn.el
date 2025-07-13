@@ -9216,7 +9216,8 @@ Interactively `region-beginning' and `region-end'."
          (ins-pair open close))))))
 
 (cl-defgeneric conn-prepare-surround (cmd arg)
-  (declare (conn-anonymous-thing-property :prepare-surround-op))
+  (declare (conn-anonymous-thing-property :prepare-surround-op)
+           (important-return-value t))
   ( :method ((cmd conn-anonymous-thing) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
         (funcall op arg)
@@ -9231,17 +9232,25 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-surround ()
   (interactive)
   (save-mark-and-excursion
-    (pcase-let* ((`(,cmd ,cmd-arg)
-                  (if (use-region-p)
-                      (list 'region current-prefix-arg)
-                    (conn-with-state-loop 'conn-surround-thing-state)))
-                 (prep-props (conn-prepare-surround cmd cmd-arg))
-                 (`(,with ,with-arg . ,with-props)
-                  (conn-with-state-loop
-                   'conn-surround-with-state
-                   :context (conn-make-surround-with-context))))
-      (apply #'conn-perform-surround
-             `(,with ,with-arg ,@prep-props ,@with-props)))))
+    (let* ((prep-keys
+            (apply #'conn-prepare-surround
+                   (if (use-region-p)
+                       (list 'region current-prefix-arg)
+                     (conn-with-state-loop 'conn-surround-thing-state))))
+           (cleanup (plist-get prep-keys :cleanup))
+           (keymap (plist-get prep-keys :keymap))
+           (success nil))
+      (unwind-protect
+          (pcase-let ((`(,with ,with-arg . ,with-keys)
+                       (conn-with-overriding-map keymap
+                         (conn-with-state-loop
+                          'conn-surround-with-state
+                          :context (conn-make-surround-with-context)))))
+            (apply #'conn-perform-surround
+                   `(,with ,with-arg ,@prep-keys ,@with-keys))
+            (setq success t))
+        (when cleanup
+          (funcall cleanup (if success :accept :cancel)))))))
 
 
 ;;;;; Change
@@ -9321,11 +9330,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 (cl-defgeneric conn-change-surround-state-handler (cmd ctx))
 
-(cl-defmethod conn-change-surround-state-handler (cmd ctx)
-  (conn-surround-with-state-handler cmd ctx))
+(cl-defmethod conn-change-surround-state-handler ((cmd (eql self-insert-command))
+                                                  _ctx)
+  (conn-state-loop-exit
+    (list cmd (conn-state-loop-prefix-arg))))
 
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
-  (declare (conn-anonymous-thing-property :prepare-change-surround-op))
+  (declare (conn-anonymous-thing-property :prepare-change-surround-op)
+           (important-return-value t))
   ( :method ((cmd conn-anonymous-thing) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
         (funcall op arg)
@@ -9357,15 +9369,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                                    &optional _kill)
   (save-mark-and-excursion
     (atomic-change-group
-      (let* ((prep (apply #'conn-prepare-change-surround
-                          (conn-with-state-loop 'conn-change-surround-state)))
-             (cleanup (plist-get prep :cleanup))
-             (success))
+      (let* ((prep-keys
+              (apply #'conn-prepare-change-surround
+                     (conn-with-state-loop 'conn-change-surround-state)))
+             (cleanup (plist-get prep-keys :cleanup))
+             (keymap (plist-get prep-keys :keymap))
+             (success nil))
         (unwind-protect
-            (conn-with-overriding-map (plist-get prep :keymap)
+            (pcase-let ((`(,with ,with-arg . ,with-keys)
+                         (conn-with-overriding-map keymap
+                           (conn-with-state-loop
+                            'conn-surround-with-state
+                            :context (conn-make-surround-with-context)))))
               (apply #'conn-perform-surround
-                     (append (conn-with-state-loop 'conn-surround-with-state)
-                             prep))
+                     `(,with ,with-arg ,@prep-keys ,@with-keys))
               (setq success t))
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
