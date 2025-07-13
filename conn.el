@@ -6120,9 +6120,9 @@ contain targets."
          (if (> beg2 end1)
              (progn
                (conn--push-ephemeral-mark beg1)
-               (goto-char end2))
+               (goto-char (if conn-dispatch-other-end beg2 end2)))
            (conn--push-ephemeral-mark end1)
-           (goto-char beg2)))
+           (goto-char (if conn-dispatch-other-end end2 beg2))))
         ((and `(,point . (,beg . ,end))
               (guard (integerp point)))
          (cond ((<= point beg end)
@@ -8030,6 +8030,28 @@ instances of from-string.")
 
 
 ;;;;; Isearch Commands
+
+(defun conn-isearch-dispatch-region ()
+  (interactive)
+  (isearch-done)
+  (conn-dispatch))
+
+(defun conn-isearch-kill-region (&optional arg)
+  (interactive "P")
+  (isearch-done)
+  (if arg
+      (delete-region (region-beginning) (region-end))
+    (kill-region (region-beginning) (region-end))))
+
+(defun conn-isearch-kill-region-other-end (&optional arg)
+  (interactive "P")
+  (if isearch-forward
+      (isearch-repeat-backward)
+    (isearch-repeat-forward))
+  (isearch-done)
+  (if arg
+      (delete-region (region-beginning) (region-end))
+    (kill-region (region-beginning) (region-end))))
 
 (defun conn-isearch-yank-region ()
   "Yank the current region to isearch."
