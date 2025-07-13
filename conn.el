@@ -943,11 +943,11 @@ of highlighting."
      '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
-  (defun conn--set-anonymouse-thing-property (f _args property &optional description)
+  (defun conn--set-anonymous-thing-property (f _args property &optional description)
     `(setf (alist-get ,property (get 'conn-make-anonymous-thing :known-properties))
            (or ,description ',f)))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
-        (list #'conn--set-anonymouse-thing-property)))
+        (list #'conn--set-anonymous-thing-property)))
 
 (defun conn-anonymous-thing-property (object property)
   (declare (side-effect-free t))
@@ -9606,17 +9606,19 @@ Currently selected window remains selected afterwards."
 (defvar conn--wincontrol-help-format
   (concat
    "\\<conn-wincontrol-map>"
-   (propertize "WinControl: " 'face 'minibuffer-prompt)
-   "arg: "
+   (propertize "WinControl " 'face 'minibuffer-prompt)
+   "(arg: "
    (propertize "%s" 'face 'read-multiple-choice-face) ", "
    "\\[conn-wincontrol-digit-argument-reset]: reset arg; "
-   "\\[conn-wincontrol-exit]: exit"))
+   "\\[conn-wincontrol-exit]: exit): "
+   "%s"))
 
 (defvar conn--wincontrol-arg nil)
 (defvar conn--wincontrol-arg-sign 1)
 (defvar conn--wincontrol-preserve-arg nil)
 (defvar conn--wincontrol-initial-window nil)
 (defvar conn--wincontrol-initial-winconf nil)
+(defvar conn--wincontrol-error-message nil)
 (defvar conn--wincontrol-prev-eldoc-msg-fn)
 
 
@@ -9726,9 +9728,7 @@ Currently selected window remains selected afterwards."
   "C-r" 'conn-wincontrol-isearch-backward
   ";" 'conn-wincontrol-exit-to-initial-win
   "g" (conn-remap-key "M-g" t)
-  "e" 'conn-wincontrol-exit
   "C" 'tab-bar-duplicate-tab
-  "c" (conn-remap-key "C-c" t)
   "d" 'delete-window
   "h" 'kill-buffer-and-window
   "H" 'conn-kill-this-buffer
@@ -9744,11 +9744,12 @@ Currently selected window remains selected afterwards."
   "k" 'conn-wincontrol-scroll-up
   "l" 'next-buffer
   "L" 'unbury-buffer
-  "b" 'tab-bar-move-window-to-tab
+  "b" 'switch-to-buffer
+  "B" 'tab-bar-move-window-to-tab
   "o" 'conn-wincontrol-next-window
   "O" 'tear-off-window
   "p" 'conn-register-prefix
-  "x" (conn-remap-key "C-x" t)
+  "C-h" (conn-remap-key "C-h" t)
   "r" 'conn-wincontrol-split-right
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
@@ -9766,7 +9767,8 @@ Currently selected window remains selected afterwards."
   "M" 'tab-new
   "m" 'tab-next
   "N" 'tab-close
-  "n" 'tab-previous)
+  "n" 'tab-previous
+  "<t>" 'conn-wincontrol-ignore)
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
 
@@ -9787,9 +9789,28 @@ Currently selected window remains selected afterwards."
       (conn-wincontrol-mode 1)
     (user-error "Cannot activate wincontrol while minibuffer is active.")))
 
+(defun conn--wincontrol-exit-and-debug (&rest args)
+  (conn-wincontrol-mode -1)
+  (apply #'debug args))
+
+(defun conn--wincontrol-wrap-this-command ()
+  (add-function :around (if (symbolp this-command)
+                            (symbol-function this-command)
+                          this-command)
+                (lambda (fn &rest args)
+                  (interactive
+                   (lambda (spec)
+                     (let ((debugger #'conn--wincontrol-exit-and-debug))
+                       (advice-eval-interactive-spec spec))))
+                  (let ((debugger #'conn--wincontrol-exit-and-debug))
+                    (apply fn args)))
+                '((depth . -99))))
+
 (defun conn--wincontrol-pre-command ()
   (when (or conn--wincontrol-arg (< conn--wincontrol-arg-sign 0))
     (setq prefix-arg (* conn--wincontrol-arg-sign (or conn--wincontrol-arg 1))))
+  (conn--wincontrol-wrap-this-command)
+  (setq conn--wincontrol-error-message nil)
   (let ((message-log-max nil)
         (resize-mini-windows t))
     (message nil)))
@@ -9815,7 +9836,8 @@ Currently selected window remains selected afterwards."
     (message (substitute-command-keys conn--wincontrol-help-format)
              (format (if conn--wincontrol-arg "%s%s" "[%s1]")
                      (if (= conn--wincontrol-arg-sign -1) "-" "")
-                     conn--wincontrol-arg))))
+                     conn--wincontrol-arg)
+             conn--wincontrol-error-message)))
 
 (defun conn--wincontrol-setup (&optional preserve-state)
   (unless (memq conn-wincontrol-map overriding-terminal-local-map)
@@ -9861,6 +9883,12 @@ Currently selected window remains selected afterwards."
                     (conn-wincontrol-exit)))))
     (add-hook 'pre-command-hook pre 99))
   (conn-wincontrol))
+
+(defun conn-wincontrol-ignore ()
+  (interactive)
+  (setq conn--wincontrol-error-message (propertize "Invalid Command"
+                                                   'face 'error)
+        conn--wincontrol-preserve-arg t))
 
 
 ;;;;; Wincontrol Prefix Arg
