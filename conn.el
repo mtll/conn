@@ -277,27 +277,16 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
-  (macroexp-let2 symbolp keymap keymap
-    (cl-with-gensyms (body-fn)
-      `(cl-labels ((,body-fn () ,@body))
-         (if (null ,keymap)
-             (,body-fn)
-           (internal-push-keymap ,keymap 'overriding-terminal-local-map)
-           (unwind-protect
-               (,body-fn)
-             (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))))))
-
-(defmacro conn-without-overriding-map (keymap &rest body)
-  (declare (indent 1))
-  (macroexp-let2 symbolp keymap keymap
-    (cl-with-gensyms (body-fn)
-      `(cl-labels ((,body-fn () ,@body))
-         (if (null ,keymap)
-             (,body-fn)
-           (internal-pop-keymap ,keymap 'overriding-terminal-local-map)
-           (unwind-protect
-               (,body-fn)
-             (internal-push-keymap ,keymap 'overriding-terminal-local-map)))))))
+  (macroexp-let2
+      (lambda (form)
+        (and (symbolp form)
+             (eq form (macroexpand-all form macroexpand-all-environment))))
+      keymap keymap
+    `(progn
+       (if ,keymap (internal-push-keymap ,keymap 'overriding-terminal-local-map))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (if ,keymap (internal-pop-keymap ,keymap 'overriding-terminal-local-map))))))
 
 (defmacro conn--flip-last (arg1 fn &rest args)
   `(,fn ,@args ,arg1))
@@ -2439,7 +2428,19 @@ themselves once the selection process has concluded."
                                      win (window-parameter win 'conn-label-string))))
           (conn-label-select-always-prompt always-prompt))
       (unwind-protect
-          (conn-label-select labels #'read-char)
+          (conn-with-dispatch-event-handler 'mouse-click
+              nil
+              (lambda (cmd)
+                (when (or (and (eq cmd 'act)
+                               (mouse-event-p last-input-event))
+                          (eq 'dispatch-mouse-repeat
+                              (event-basic-type last-input-event)))
+                  (let* ((posn (event-start last-input-event))
+                         (win (posn-window posn)))
+                    (when (and (not (posn-area posn))
+                               (funcall conn-target-window-predicate win))
+                      (throw 'mouse-click win)))))
+            (conn-label-select labels #'conn-dispatch-read-event))
         (mapc #'conn-label-delete labels))))))
 
 
@@ -3801,6 +3802,8 @@ A target finder function should return a list of overlays.")
              do (define-key map (vector i) 'dispatch-character-event))
     map))
 
+(defvar conn--dispatch-event-handler-maps nil)
+
 (define-keymap
   :keymap conn-dispatch-read-event-map
   :parent conn-dispatch-common-map
@@ -3950,7 +3953,8 @@ A target finder function should return a list of overlays.")
                    ,@body)))
       `(catch ,tag
          ,(if keymap
-              `(conn-with-overriding-map ,keymap
+              `(let ((conn--dispatch-event-handler-maps
+                      (cons ,keymap conn--dispatch-event-handler-maps)))
                  ,body)
             body)))))
 
@@ -4653,8 +4657,6 @@ Target overlays may override this default by setting the
                                            inherit-input-method
                                            seconds
                                            inhibit-message-prefix)
-  (unless (memq conn-dispatch-read-event-map overriding-terminal-local-map)
-    (error "conn-dispatch-read-event-map must be active"))
   (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil)
         (prompt (concat prompt (when conn--loop-error-message
@@ -4662,31 +4664,28 @@ Target overlays may override this default by setting the
                                              'face 'error)))))
     (catch 'return
       (if seconds
-          (while-let
-              ((ev (conn-without-overriding-map conn-dispatch-read-event-map
-                     ;; quail-input-method will ignore a key if it is
-                     ;; bound in overriding-terminal-local map so
-                     ;; pop the dispatch event map during this.
-                     (conn-with-input-method
-                       (read-event prompt inherit-input-method seconds)))))
+          (while-let ((ev (conn-with-input-method
+                            (read-event prompt inherit-input-method seconds))))
             (when (characterp ev)
               (throw 'return ev)))
         (while t
-          (pcase (thread-first
-                   (if inhibit-message-prefix prompt
-                     (concat (conn--dispatch-read-event-prefix) prompt))
-                   (read-key-sequence-vector)
-                   (key-binding t))
+          (pcase (conn-with-overriding-map
+                     (make-composed-keymap conn--dispatch-event-handler-maps
+                                           conn-dispatch-read-event-map)
+                   (thread-first
+                     (if inhibit-message-prefix prompt
+                       (concat (conn--dispatch-read-event-prefix) prompt))
+                     (read-key-sequence-vector)
+                     (key-binding t)))
             ('dispatch-character-event
              (setq conn--dispatch-must-prompt nil)
              (push `(no-record . ,last-input-event) unread-command-events)
              (throw 'return
-                    (conn-without-overriding-map conn-dispatch-read-event-map
-                      (conn-with-input-method
-                        (read-event
-                         (if inhibit-message-prefix prompt
-                           (concat (conn--dispatch-read-event-prefix) prompt))
-                         inherit-input-method)))))
+                    (conn-with-input-method
+                      (read-event
+                       (if inhibit-message-prefix prompt
+                         (concat (conn--dispatch-read-event-prefix) prompt))
+                       inherit-input-method))))
             ('keyboard-quit
              (keyboard-quit))
             (cmd
@@ -4713,11 +4712,10 @@ Target overlays may override this default by setting the
                        (funcall conn-target-window-predicate win))
               (throw 'mouse-click (list pt win nil))))))
     (conn-dispatch-select-mode 1)
-    (conn-with-overriding-map conn-dispatch-read-event-map
-      (unwind-protect
-          (let ((inhibit-message t))
-            (cl-call-next-method))
-        (conn-dispatch-select-mode -1)))))
+    (unwind-protect
+        (let ((inhibit-message t))
+          (cl-call-next-method))
+      (conn-dispatch-select-mode -1))))
 
 (cl-defmethod conn-dispatch-select-target ()
   (unwind-protect
@@ -6345,34 +6343,29 @@ contain targets."
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
-  (cl-with-gensyms (body-fn)
-    `(pcase-let ((`(,conn-target-window-predicate
-                    ,conn-target-predicate
-                    ,conn-target-sort-function)
-                  conn--dispatch-init-state)
-                 (conn-dispatch-looping nil)
-                 (conn--dispatch-loop-change-groups nil)
-                 (inhibit-message nil)
-                 (recenter-last-op nil)
-                 (conn-dispatch-repeat-count nil)
-                 (conn-dispatch-other-end nil)
-                 (conn-state-loop-last-command nil)
-                 (conn--loop-prefix-mag nil)
-                 (conn--loop-prefix-sign nil)
-                 (conn--dispatch-read-event-handlers nil)
-                 (conn--dispatch-read-event-message-prefixes nil)
-                 (conn--dispatch-always-retarget nil)
-                 (select-mode conn-dispatch-select-mode))
-       (conn-delete-targets)
-       (message nil)
-       (cl-labels ((,body-fn () ,@body))
-         (if (null select-mode)
-             (,body-fn)
-           (conn-dispatch-select-mode -1)
-           (unwind-protect
-               (conn-without-overriding-map conn-dispatch-read-event-map
-                 (,body-fn))
-             (conn-dispatch-select-mode 1)))))))
+  `(pcase-let ((`(,conn-target-window-predicate
+                  ,conn-target-predicate
+                  ,conn-target-sort-function)
+                conn--dispatch-init-state)
+               (conn-dispatch-looping nil)
+               (conn--dispatch-loop-change-groups nil)
+               (inhibit-message nil)
+               (recenter-last-op nil)
+               (conn-dispatch-repeat-count nil)
+               (conn-dispatch-other-end nil)
+               (conn-state-loop-last-command nil)
+               (conn--loop-prefix-mag nil)
+               (conn--loop-prefix-sign nil)
+               (conn--dispatch-read-event-handlers nil)
+               (conn--dispatch-read-event-message-prefixes nil)
+               (conn--dispatch-always-retarget nil)
+               (select-mode conn-dispatch-select-mode))
+     (conn-delete-targets)
+     (message nil)
+     (if select-mode (conn-dispatch-select-mode -1))
+     (unwind-protect
+         ,(macroexp-progn body)
+       (if select-mode (conn-dispatch-select-mode 1)))))
 
 (cl-defgeneric conn-dispatch-select-handler (command)
   (:method (_cmd) nil))
@@ -8035,23 +8028,6 @@ instances of from-string.")
   (interactive)
   (isearch-done)
   (conn-dispatch))
-
-(defun conn-isearch-kill-region (&optional arg)
-  (interactive "P")
-  (isearch-done)
-  (if arg
-      (delete-region (region-beginning) (region-end))
-    (kill-region (region-beginning) (region-end))))
-
-(defun conn-isearch-kill-region-other-end (&optional arg)
-  (interactive "P")
-  (if isearch-forward
-      (isearch-repeat-backward)
-    (isearch-repeat-forward))
-  (isearch-done)
-  (if arg
-      (delete-region (region-beginning) (region-end))
-    (kill-region (region-beginning) (region-end))))
 
 (defun conn-isearch-yank-region ()
   "Yank the current region to isearch."
