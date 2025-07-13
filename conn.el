@@ -9669,7 +9669,7 @@ Currently selected window remains selected afterwards."
   "m" 'tab-next
   "N" 'tab-close
   "n" 'tab-previous
-  "b" 'tab-bar-move-window-to-tab
+  "B" 'tab-bar-move-window-to-tab
   "U" 'tab-bar-detach-tab
   "u" 'tab-bar-detach-tab)
 
@@ -9798,6 +9798,10 @@ Currently selected window remains selected afterwards."
 
 ;; From transient
 (defun conn--wincontrol-wrap-this-command ()
+  (when-let* (((symbolp this-command))
+              (fn (symbol-function this-command))
+              ((autoloadp fn)))
+    (autoload-do-load fn))
   (letrec ((command this-command)
            (advice
             (lambda (fn &rest args)
