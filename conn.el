@@ -6245,6 +6245,8 @@ contain targets."
   "v" 'conn-dispatch-over-or-goto
   "x" 'conn-dispatch-yank-replace-to
   "X" 'conn-dispatch-yank-read-replace-to
+  "C-y" 'conn-dispatch-yank-replace-to
+  "M-y" 'conn-dispatch-yank-read-replace-to
   "y" 'conn-dispatch-yank-to
   "Y" 'conn-dispatch-reading-yank-to
   "F" 'conn-dispatch-yank-from-replace
@@ -9201,11 +9203,10 @@ Interactively `region-beginning' and `region-end'."
 (cl-defmethod conn-perform-surround ((_with (eql self-insert-command)) arg
                                      &key padding &allow-other-keys)
   (cl-labels ((ins-pair (open &optional close)
-                (save-excursion (insert open))
+                (insert-before-markers open)
                 (exchange-point-and-mark)
-                (insert (or close open))
+                (save-excursion (insert (or close open)))
                 (exchange-point-and-mark)))
-    (when padding (ins-pair padding))
     (pcase (assoc last-input-event insert-pair-alist)
       ('nil
        (dotimes (_ (prefix-numeric-value arg))
@@ -9213,7 +9214,8 @@ Interactively `region-beginning' and `region-end'."
       ((or `(,_cmd ,open ,close)
            `(,open ,close))
        (dotimes (_ (prefix-numeric-value arg))
-         (ins-pair open close))))))
+         (ins-pair open close))))
+    (when padding (ins-pair padding))))
 
 (cl-defgeneric conn-prepare-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
