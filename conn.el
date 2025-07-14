@@ -9734,7 +9734,7 @@ Currently selected window remains selected afterwards."
   "M-j" 'conn-wincontrol-windmove-left
   "M-k" 'conn-wincontrol-windmove-down
   "M-l" 'conn-wincontrol-windmove-right
-  "C-o" 'other-frame
+  "M-o" 'other-frame
   "<down>" 'conn-wincontrol-windmove-down
   "<escape>" 'conn-wincontrol-exit
   "<left>" 'conn-wincontrol-windmove-left
@@ -9862,6 +9862,9 @@ Currently selected window remains selected afterwards."
     (add-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit))
    (t (conn--wincontrol-message))))
 
+(defun conn--wincontrol-new-frame (frame)
+  (set-face-inverse-video 'mode-line t frame))
+
 (defun conn--wincontrol-message ()
   (let ((message-log-max nil)
         (resize-mini-windows t))
@@ -9878,6 +9881,7 @@ Currently selected window remains selected afterwards."
     (internal-push-keymap conn-wincontrol-map 'overriding-terminal-local-map)
     (add-hook 'post-command-hook 'conn--wincontrol-post-command)
     (add-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+    (add-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
     (add-function :override eldoc-message-function 'ignore)
     (unless preserve-state
       (setq conn--wincontrol-arg (when current-prefix-arg
@@ -9893,6 +9897,7 @@ Currently selected window remains selected afterwards."
     (internal-pop-keymap conn-wincontrol-map 'overriding-terminal-local-map)
     (remove-hook 'post-command-hook 'conn--wincontrol-post-command)
     (remove-hook 'pre-command-hook 'conn--wincontrol-pre-command)
+    (remove-hook 'after-make-frame-functions 'conn--wincontrol-new-frame)
     (remove-hook 'minibuffer-exit-hook 'conn--wincontrol-minibuffer-exit)
     (remove-function eldoc-message-function 'ignore)
     (set-face-inverse-video 'mode-line nil)))
@@ -10063,7 +10068,9 @@ Currently selected window remains selected afterwards."
   (interactive
    (list (conn-prompt-for-window
           (delq (selected-window)
-                (conn--get-windows nil 'nomini 'visible)))))
+                (conn--get-windows
+                 nil 'nomini
+                 (if current-prefix-arg 'visible))))))
   (if (null window)
       (user-error "No other windows available to select")
     (select-window window)))
