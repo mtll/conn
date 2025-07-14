@@ -277,16 +277,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
-  (macroexp-let2
-      (lambda (form)
-        (and (symbolp form)
-             (eq form (macroexpand-all form macroexpand-all-environment))))
-      keymap keymap
+  (cl-once-only (keymap)
     `(progn
        (if ,keymap (internal-push-keymap ,keymap 'overriding-terminal-local-map))
        (unwind-protect
            ,(macroexp-progn body)
-         (if ,keymap (internal-pop-keymap ,keymap 'overriding-terminal-local-map))))))
+         (internal-pop-keymap ,keymap 'overriding-terminal-local-map)))))
 
 (defmacro conn--flip-last (arg1 fn &rest args)
   `(,fn ,@args ,arg1))
@@ -4691,10 +4687,14 @@ Target overlays may override this default by setting the
             ('keyboard-quit
              (keyboard-quit))
             (cmd
-             (when (catch 'dispatch-handle
+             (let ((unhandled nil))
+               (unwind-protect
+                   (catch 'dispatch-handle
                      (cl-loop for handler in conn--dispatch-read-event-handlers
-                              do (funcall handler cmd)))
-               (setf conn-state-loop-last-command cmd)))))))))
+                              do (funcall handler cmd))
+                     (setq unhandled t))
+                 (unless unhandled
+                   (setf conn-state-loop-last-command cmd)))))))))))
 
 (cl-defgeneric conn-dispatch-select-target ()
   (declare (important-return-value t)))
@@ -6385,8 +6385,8 @@ contain targets."
     (recursive-edit))
   (conn-dispatch-handle-and-redisplay))
 
-(cl-defmethod conn-dispatch-select-handler ((_cmd (eql recenter-top-bottom)))
-  (let ((this-command 'recenter-top-bottom)
+(cl-defmethod conn-dispatch-select-handler ((cmd (eql recenter-top-bottom)))
+  (let ((this-command cmd)
         (last-command conn-state-loop-last-command))
     (recenter-top-bottom (conn-state-loop-prefix-arg)))
   (conn-dispatch-handle-and-redisplay))
@@ -9240,11 +9240,10 @@ Interactively `region-beginning' and `region-end'."
                        (list 'region current-prefix-arg)
                      (conn-with-state-loop 'conn-surround-thing-state))))
            (cleanup (plist-get prep-keys :cleanup))
-           (keymap (plist-get prep-keys :keymap))
            (success nil))
       (unwind-protect
           (pcase-let ((`(,with ,with-arg . ,with-keys)
-                       (conn-with-overriding-map keymap
+                       (conn-with-overriding-map (plist-get prep-keys :keymap)
                          (conn-with-state-loop
                           'conn-surround-with-state
                           :context (conn-make-surround-with-context)))))
