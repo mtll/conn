@@ -3940,19 +3940,20 @@ A target finder function should return a list of overlays.")
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
 
-(defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
-  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
-  (declare (indent 3))
-  (cl-once-only (keymap)
-    (let ((body `(let ((conn--dispatch-read-event-handlers
-                        (cons ,handler conn--dispatch-read-event-handlers)))
-                   ,@body)))
-      `(catch ,tag
-         ,(if keymap
-              `(let ((conn--dispatch-event-handler-maps
-                      (cons ,keymap conn--dispatch-event-handler-maps)))
-                 ,body)
-            body)))))
+(eval-and-compile
+  (defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
+    "\(fn (DESCRIPTION &rest CASE) &body BODY)"
+    (declare (indent 3))
+    (cl-once-only (keymap)
+      (let ((body `(let ((conn--dispatch-read-event-handlers
+                          (cons ,handler conn--dispatch-read-event-handlers)))
+                     ,@body)))
+        `(catch ,tag
+           ,(if keymap
+                `(let ((conn--dispatch-event-handler-maps
+                        (cons ,keymap conn--dispatch-event-handler-maps)))
+                   ,body)
+              body))))))
 
 ;;;;; Dispatch Command Loop
 
@@ -9692,20 +9693,8 @@ Currently selected window remains selected afterwards."
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
-  "C-S-l" 'move-to-window-line-top-bottom
-  "M-<backspace>" 'conn-wincontrol-digit-argument-reset
-  "M-DEL" 'conn-wincontrol-digit-argument-reset
-  "C-w" 'conn-wincontrol-backward-delete-arg
-  "C-d" 'conn-wincontrol-forward-delete-arg
-  "C-]" 'conn-wincontrol-abort
-  "C-M-d" 'delete-other-frames
-  "M-/" 'undelete-frame
-  "M-o" 'other-frame
-  "M-c" 'clone-frame
-  "M-d" 'delete-frame
-  "C-u" 'conn-wincontrol-universal-arg
+  "," (conn-remap-key "<conn-thing-map>" nil t)
   "-" 'conn-wincontrol-invert-argument
-  "/" 'tab-bar-history-back
   "0" 'conn-wincontrol-digit-argument
   "1" 'conn-wincontrol-digit-argument
   "2" 'conn-wincontrol-digit-argument
@@ -9716,77 +9705,86 @@ Currently selected window remains selected afterwards."
   "7" 'conn-wincontrol-digit-argument
   "8" 'conn-wincontrol-digit-argument
   "9" 'conn-wincontrol-digit-argument
+  ";" 'conn-wincontrol-exit-to-initial-win
+  "/" 'tab-bar-history-back
   "?" 'tab-bar-history-forward
-  "_" 'shrink-window-if-larger-than-buffer
-  "<down>" 'conn-wincontrol-windmove-down
-  "<left>" 'conn-wincontrol-windmove-left
-  "<right>" 'conn-wincontrol-windmove-right
-  "<up>" 'conn-wincontrol-windmove-up
+  "C-M-d" 'delete-other-frames
+  "C-S-l" 'move-to-window-line-top-bottom
+  "C-]" 'conn-wincontrol-abort
+  "C-d" 'conn-wincontrol-forward-delete-arg
+  "C-h" 'help-command
+  "C-r" 'conn-wincontrol-isearch-backward
+  "C-s" 'conn-wincontrol-isearch
+  "C-u" 'conn-wincontrol-universal-arg
+  "C-w" 'conn-wincontrol-backward-delete-arg
+  "M-/" 'undelete-frame
+  "M-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-<down>" 'windmove-swap-states-down
   "M-<left>" 'windmove-swap-states-left
   "M-<right>" 'windmove-swap-states-right
   "M-<up>" 'windmove-swap-states-up
+  "M-DEL" 'conn-wincontrol-digit-argument-reset
   "M-I" 'windmove-swap-states-up
   "M-J" 'windmove-swap-states-left
-  "M-L" 'windmove-swap-states-right
   "M-K" 'windmove-swap-states-down
+  "M-L" 'windmove-swap-states-right
+  "M-c" 'clone-frame
+  "M-d" 'delete-frame
   "M-i" 'conn-wincontrol-windmove-up
   "M-j" 'conn-wincontrol-windmove-left
-  "M-l" 'conn-wincontrol-windmove-right
   "M-k" 'conn-wincontrol-windmove-down
+  "M-l" 'conn-wincontrol-windmove-right
+  "C-o" 'other-frame
+  "<down>" 'conn-wincontrol-windmove-down
+  "<escape>" 'conn-wincontrol-exit
+  "<left>" 'conn-wincontrol-windmove-left
   "<next>" 'conn-wincontrol-scroll-up
   "<prior>" 'conn-wincontrol-scroll-down
-  "x" 'delete-other-windows
-  "K" 'conn-wincontrol-other-window-scroll-up
-  "I" 'conn-wincontrol-other-window-scroll-down
-  "C-s" 'conn-wincontrol-isearch
-  "C-r" 'conn-wincontrol-isearch-backward
-  ";" 'conn-wincontrol-exit-to-initial-win
-  "g" (conn-remap-key "M-g" t t)
-  "," (conn-remap-key "<conn-thing-map>" nil t)
-  "c" (conn-remap-key "C-c" nil t)
-  "C" 'tab-bar-duplicate-tab
-  "d" 'delete-window
-  "h" 'kill-buffer-and-window
-  "H" 'conn-kill-this-buffer
-  "e" 'conn-wincontrol-exit
-  "<escape>" 'conn-wincontrol-exit
   "<return>" 'conn-other-place-prefix
-  "F" 'toggle-frame-fullscreen
-  "f" 'conn-goto-window
-  "j" 'previous-buffer
-  "J" 'bury-buffer
-  "DEL" 'beginning-of-buffer
-  "<backspace>" 'beginning-of-buffer
-  "SPC" 'end-of-buffer
-  "i" 'conn-wincontrol-scroll-down
-  "k" 'conn-wincontrol-scroll-up
-  "l" 'next-buffer
-  "L" 'unbury-buffer
-  "b" 'switch-to-buffer
+  "<right>" 'conn-wincontrol-windmove-right
+  "<up>" 'conn-wincontrol-windmove-up
   "B" 'tab-bar-move-window-to-tab
-  "o" 'conn-wincontrol-next-window
-  "O" 'tear-off-window
-  "p" 'conn-register-prefix
-  "C-h" 'help-command
-  "r" 'conn-wincontrol-split-right
+  "C" 'tab-bar-duplicate-tab
+  "D" 'tab-bar-detach-tab
+  "F" 'toggle-frame-fullscreen
+  "H" 'conn-kill-this-buffer
+  "I" 'conn-wincontrol-other-window-scroll-down
+  "J" 'bury-buffer
+  "K" 'conn-wincontrol-other-window-scroll-up
+  "L" 'unbury-buffer
+  "O" 'tab-new
   "R" 'conn-wincontrol-isearch-other-window-backward
   "S" 'conn-wincontrol-isearch-other-window
-  "s" conn-window-resize-map
+  "U" 'tab-close
+  "Z" 'text-scale-increase
+  "T" 'tear-off-window
+  "_" 'shrink-window-if-larger-than-buffer
   "`" 'conn-wincontrol-mru-window
-  "w" 'conn-throw-buffer
-  "u" 'conn-wincontrol-previous-window
-  "U" 'tab-bar-detach-tab
-  "v" 'conn-wincontrol-split-vertically
+  "b" 'switch-to-buffer
+  "c" (conn-remap-key "C-c" nil t)
+  "d" 'delete-window
+  "e" 'conn-wincontrol-exit
+  "f" 'conn-goto-window
+  "g" (conn-remap-key "M-g" t t)
+  "h" 'kill-buffer-and-window
+  "i" 'conn-wincontrol-scroll-down
+  "j" 'previous-buffer
+  "k" 'conn-wincontrol-scroll-up
+  "l" 'next-buffer
+  "m" 'end-of-buffer
+  "n" 'beginning-of-buffer
+  "o" 'tab-next
+  "p" 'conn-register-prefix
   "q" 'quit-window
+  "r" 'conn-wincontrol-split-right
+  "s" conn-window-resize-map
   "t" 'conn-transpose-window
+  "u" 'tab-previous
+  "v" 'conn-wincontrol-split-vertically
+  "w" 'conn-throw-buffer
+  "x" 'delete-other-windows
   "y" 'conn-yank-window
   "z" 'text-scale-decrease
-  "Z" 'text-scale-increase
-  "M" 'tab-new
-  "m" 'tab-next
-  "N" 'tab-close
-  "n" 'tab-previous
   "<t>" 'conn-wincontrol-ignore)
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
@@ -10302,8 +10300,8 @@ Operates with the selected windows parent window."
   "$" 'ispell-region
   "*" 'calc-grab-region
   ";" 'comment-or-uncomment-region
-  "e" 'conn-duplicate
-  "D" 'conn-duplicate-and-comment
+  "d" 'conn-duplicate-region
+  "D" 'conn-duplicate-and-comment-region
   "b" 'conn-comment-or-uncomment
   "g" 'conn-rgrep-region
   "k" 'delete-region
@@ -10323,6 +10321,7 @@ Operates with the selected windows parent window."
   "L" 'conn-append-region)
 
 (defvar-keymap conn-default-edit-map
+  "l" 'duplicate-line
   "\\" 'conn-kapply-on-thing-prefix
   "v" 'diff-buffer-with-file
   "F" 'conn-bind-last-dispatch-to-key
@@ -10335,7 +10334,8 @@ Operates with the selected windows parent window."
   "o" 'conn-emacs-state-open-line-above
   "j" 'conn-emacs-state-open-line
   "g" 'conn-emacs-state-overwrite
-  "d" 'duplicate-line
+  "d" 'conn-duplicate
+  "D" 'conn-duplicate-and-comment
   "b" 'conn-emacs-state-overwrite-binary
   "c" 'copy-from-above-command
   "y" 'yank-in-context
