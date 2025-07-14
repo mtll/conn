@@ -1256,23 +1256,28 @@ The composed keymap is of the form:
               for pmap = (conn-state--keymap (conn--find-state pstate))
               when pmap collect pmap))))
 
+(gv-define-setter conn-get-state-map (val state)
+  (macroexp-let2 nil val val
+    `(progn
+       (cl-assert (keymapp ,val))
+       (prog1
+           (setf (conn-state--keymap (conn--find-state ,state)) ,val)
+         (dolist (child (cons ,state (conn-state-all-children ,state)))
+           (when-let* ((map (gethash child conn--composed-state-maps)))
+             (cl-loop for parent in (conn-state-all-keymap-parents child)
+                      for pmap = (conn-get-state-map parent t)
+                      when pmap collect pmap into pmaps
+                      finally (setf (cdr map) pmaps))))))))
+
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
   (declare (important-return-value t))
-  (let ((state-obj (conn--find-state state)))
-    (if (conn-state-get state :no-keymap)
+  (if (conn-state-get state :no-keymap)
+      (unless dont-create
+        (error "%s has non-nil :no-keymap property" state))
+    (or (conn-state--keymap (conn--find-state state))
         (unless dont-create
-          (error "%s has non-nil :no-keymap property" state))
-      (or (conn-state--keymap state-obj)
-          (unless dont-create
-            (prog1 (setf (conn-state--keymap state-obj)
-                         (make-sparse-keymap))
-              (dolist (child (cons state (conn-state-all-children state)))
-                (when-let* ((map (gethash child conn--composed-state-maps)))
-                  (setf (cdr map)
-                        (cl-loop for parent in (conn-state-all-keymap-parents child)
-                                 for pmap = (conn-get-state-map parent t)
-                                 when pmap collect pmap))))))))))
+          (setf (conn-get-state-map state) (make-sparse-keymap))))))
 
 (defun conn--ensure-major-mode-map (state mode)
   (declare (important-return-value t))
@@ -1291,40 +1296,44 @@ The composed keymap is of the form:
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
+(gv-define-setter conn-get-major-mode-map (val state mode)
+  (macroexp-let2 nil val val
+    `(cl-macrolet ((get-map (state)
+                     `(gethash (cons ,state ,',mode) conn--major-mode-maps-cache))
+                   (get-composed-map (state)
+                     `(gethash ,',mode (conn-state--major-mode-maps
+                                        (conn--find-state ,state))))
+                   (parent-maps (state)
+                     `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
+                               for pmap = (get-map parent)
+                               when pmap collect pmap)))
+       (cl-assert (keymapp ,val))
+       (cl-check-type (conn--find-state ,state) conn-state)
+       (cl-check-type ,mode symbol)
+       (let* ((keymap (make-composed-keymap (cons ,val (parent-maps state)))))
+         (setf (get-composed-map state) keymap
+               (get-map state) (nth 1 keymap))
+         (dolist (child (conn-state-all-children state))
+           (if-let* ((map (get-composed-map child)))
+               (setf (cdr map) (parent-maps child))
+             (unless (conn-state-get child :no-keymap)
+               (setf (get-composed-map child)
+                     (make-composed-keymap (parent-maps child))))))
+         (nth 1 keymap)))))
+
 (defun conn-get-major-mode-map (state mode &optional dont-create)
   "Return keymap for major MODE in STATE.
 
 If one does not exists create a new sparse keymap for MODE in STATE and
 return it."
   (declare (important-return-value t))
-  (cl-check-type (conn--find-state state) conn-state)
-  (cl-check-type mode symbol)
   (if (conn-state-get state :no-keymap)
       (unless dont-create
         (error "%s has non-nil :no-keymap property" state))
-    (cl-macrolet ((get-map (state)
-                    `(gethash (cons ,state mode) conn--major-mode-maps-cache))
-                  (get-composed-map (state)
-                    `(gethash mode (conn-state--major-mode-maps
-                                    (conn--find-state ,state))))
-                  (parent-maps (state)
-                    `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                              for pmap = (get-map parent)
-                              when pmap collect pmap)))
-      (or (get-map state)
-          (unless dont-create
-            (let* ((keymap (make-composed-keymap
-                            (cons (make-sparse-keymap)
-                                  (parent-maps state)))))
-              (setf (get-composed-map state) keymap
-                    (get-map state) (nth 1 keymap))
-              (dolist (child (conn-state-all-children state))
-                (if-let* ((map (get-composed-map child)))
-                    (setf (cdr map) (parent-maps child))
-                  (unless (conn-state-get child :no-keymap)
-                    (setf (get-composed-map child)
-                          (make-composed-keymap (parent-maps child))))))
-              (nth 1 keymap)))))))
+    (or (gethash (cons state mode) conn--major-mode-maps-cache)
+        (unless dont-create
+          (setf (conn-get-major-mode-map state mode)
+                (make-sparse-keymap))))))
 
 (defconst conn--composed-major-mode-maps (make-hash-table :test 'equal))
 
@@ -1356,6 +1365,29 @@ The composed map is a keymap of the form:
 
 (defconst conn--minor-mode-maps-cache (make-hash-table :test 'equal))
 
+(gv-define-setter conn-get-minor-mode-map (val state mode)
+  (macroexp-let2 nil val val
+    `(cl-macrolet ((get-map (state)
+                     `(gethash (cons ,state ,',mode) conn--minor-mode-maps-cache))
+                   (get-composed-map (state)
+                     `(alist-get ,',mode (cdr (conn-state-minor-mode-maps-alist ,state))))
+                   (parent-maps (state)
+                     `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
+                               for pmap = (get-map parent)
+                               when pmap collect pmap)))
+       (cl-assert (keymapp ,val))
+       (cl-check-type (conn--find-state ,state) conn-state)
+       (cl-check-type ,mode symbol)
+       (let ((keymap (make-composed-keymap (cons ,val (parent-maps ,state)))))
+         (setf (get-composed-map ,state) keymap
+               (get-map ,state) (nth 1 keymap))
+         (dolist (child (conn-state-all-children ,state))
+           (if-let* ((map (get-composed-map child)))
+               (setf (cdr map) (parent-maps child))
+             (conn--ensure-minor-mode-map child ,mode)))
+         (conn--sort-mode-maps ,state)
+         (nth 1 keymap)))))
+
 (defun conn-get-minor-mode-map (state mode &optional dont-create)
   "Return keymap for MODE in STATE.
 
@@ -1365,28 +1397,9 @@ return it."
   (if (conn-state-get state :no-keymap)
       (unless dont-create
         (error "%s has non-nil :no-keymap property" state))
-    (cl-check-type mode symbol)
-    (cl-macrolet ((get-map (state)
-                    `(gethash (cons ,state mode) conn--minor-mode-maps-cache))
-                  (get-composed-map (state)
-                    `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
-                  (parent-maps (state)
-                    `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                              for pmap = (get-map parent)
-                              when pmap collect pmap)))
-      (or (get-map state)
-          (unless dont-create
-            (let ((keymap (make-composed-keymap
-                           (cons (make-sparse-keymap)
-                                 (parent-maps state)))))
-              (setf (get-composed-map state) keymap
-                    (get-map state) (nth 1 keymap))
-              (dolist (child (conn-state-all-children state))
-                (if-let* ((map (get-composed-map child)))
-                    (setf (cdr map) (parent-maps child))
-                  (conn--ensure-minor-mode-map child mode)))
-              (conn--sort-mode-maps state)
-              (nth 1 keymap)))))))
+    (or (gethash (cons state mode) conn--minor-mode-maps-cache)
+        (unless dont-create
+          (setf (conn-get-minor-mode-map state mode) (make-sparse-keymap))))))
 
 (defun conn--ensure-minor-mode-map (state mode)
   (cl-macrolet ((get-map (state)
