@@ -1309,16 +1309,15 @@ The composed keymap is of the form:
        (cl-assert (keymapp ,val))
        (cl-check-type (conn--find-state ,state) conn-state)
        (cl-check-type ,mode symbol)
-       (let* ((keymap (make-composed-keymap (cons ,val (parent-maps state)))))
-         (setf (get-composed-map state) keymap
-               (get-map state) (nth 1 keymap))
-         (dolist (child (conn-state-all-children state))
-           (if-let* ((map (get-composed-map child)))
-               (setf (cdr map) (parent-maps child))
-             (unless (conn-state-get child :no-keymap)
-               (setf (get-composed-map child)
-                     (make-composed-keymap (parent-maps child))))))
-         (nth 1 keymap)))))
+       (prog1 (setf (get-map state) ,val)
+         (let* ((keymap (make-composed-keymap (parent-maps state))))
+           (setf (get-composed-map state) keymap)
+           (dolist (child (conn-state-all-children state))
+             (if-let* ((map (get-composed-map child)))
+                 (setf (cdr map) (parent-maps child))
+               (unless (conn-state-get child :no-keymap)
+                 (setf (get-composed-map child)
+                       (make-composed-keymap (parent-maps child)))))))))))
 
 (defun conn-get-major-mode-map (state mode &optional dont-create)
   "Return keymap for major MODE in STATE.
@@ -1377,15 +1376,14 @@ The composed map is a keymap of the form:
        (cl-assert (keymapp ,val))
        (cl-check-type (conn--find-state ,state) conn-state)
        (cl-check-type ,mode symbol)
-       (let ((keymap (make-composed-keymap (cons ,val (parent-maps ,state)))))
-         (setf (get-composed-map ,state) keymap
-               (get-map ,state) (nth 1 keymap))
-         (dolist (child (conn-state-all-children ,state))
-           (if-let* ((map (get-composed-map child)))
-               (setf (cdr map) (parent-maps child))
-             (conn--ensure-minor-mode-map child ,mode)))
-         (conn--sort-mode-maps ,state)
-         (nth 1 keymap)))))
+       (prog1 (setf (get-map ,state) ,val)
+         (let ((keymap (make-composed-keymap (parent-maps ,state))))
+           (setf (get-composed-map ,state) keymap)
+           (dolist (child (conn-state-all-children ,state))
+             (if-let* ((map (get-composed-map child)))
+                 (setf (cdr map) (parent-maps child))
+               (conn--ensure-minor-mode-map child ,mode)))
+           (conn--sort-mode-maps ,state))))))
 
 (defun conn-get-minor-mode-map (state mode &optional dont-create)
   "Return keymap for MODE in STATE.
@@ -1800,7 +1798,7 @@ See also `conn-exit-functions'.")
      (conn-state-get conn-current-state :pop-alternate
                      t 'conn-command-state))))
 
-(defun conn-peek-stack ()
+(defun conn-peek-state ()
   (declare (side-effect-free t)
            (important-return-value t))
   (cadr conn--state-stack))
@@ -9302,7 +9300,7 @@ Interactively `region-beginning' and `region-end'."
            (funcall (conn--without-conn-maps
                       (keymap-lookup nil conn-delete-region-keys t))
                     beg end)
-           (if (eq 'conn-emacs-state (conn-peek-stack))
+           (if (eq 'conn-emacs-state (conn-peek-state))
                (conn-pop-state)
              (conn-push-state 'conn-emacs-state))))))
 
