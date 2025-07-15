@@ -1260,14 +1260,13 @@ The composed keymap is of the form:
   (macroexp-let2 nil val val
     `(progn
        (cl-assert (keymapp ,val))
-       (prog1
-           (setf (conn-state--keymap (conn--find-state ,state)) ,val)
-         (dolist (child (cons ,state (conn-state-all-children ,state)))
-           (when-let* ((map (gethash child conn--composed-state-maps)))
-             (cl-loop for parent in (conn-state-all-keymap-parents child)
-                      for pmap = (conn-get-state-map parent t)
-                      when pmap collect pmap into pmaps
-                      finally (setf (cdr map) pmaps))))))))
+       (setf (conn-state--keymap (conn--find-state ,state)) ,val)
+       (dolist (child (cons ,state (conn-state-all-children ,state)) ,val)
+         (when-let* ((map (gethash child conn--composed-state-maps)))
+           (cl-loop for parent in (conn-state-all-keymap-parents child)
+                    for pmap = (conn-get-state-map parent t)
+                    when pmap collect pmap into pmaps
+                    finally (setf (cdr map) pmaps)))))))
 
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
@@ -1399,7 +1398,8 @@ return it."
         (error "%s has non-nil :no-keymap property" state))
     (or (gethash (cons state mode) conn--minor-mode-maps-cache)
         (unless dont-create
-          (setf (conn-get-minor-mode-map state mode) (make-sparse-keymap))))))
+          (setf (conn-get-minor-mode-map state mode)
+                (make-sparse-keymap))))))
 
 (defun conn--ensure-minor-mode-map (state mode)
   (cl-macrolet ((get-map (state)
@@ -10465,7 +10465,8 @@ Operates with the selected windows parent window."
   "<conn-thing-map> )" 'forward-list
   "<conn-thing-map> (" 'backward-list
   "<conn-thing-map> a" 'beginning-of-buffer
-  "<conn-thing-map> e" 'end-of-buffer)
+  "<conn-thing-map> e" 'end-of-buffer
+  "<conn-thing-map> h" 'outline-previous-visible-heading)
 
 (static-if (<= 30 emacs-major-version)
     (progn
