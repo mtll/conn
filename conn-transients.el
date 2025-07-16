@@ -568,9 +568,10 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover nil t))
-               (`(,_outer . ,regions) (conn-perform-bounds cmd arg)))
+               ((map :outer :contents)
+                (conn-perform-bounds cmd arg)))
     (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions)
+     (conn--kapply-region-iterator (or contents (list outer)))
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-point-invisible
      (alist-get :undo args)
@@ -724,8 +725,8 @@ A zero means repeat until error."
                           (goto-char pt)
                           (pcase (conn-perform-bounds thing thing-arg)
                             ('nil (user-error "Cannot find thing at point"))
-                            (`(,region) (list region))
-                            (`(,_ . ,subregions) subregions))))
+                            ((map :outer :contents)
+                             (or contents (list outer))))))
                        `(,@pipeline
                          ,(pcase (alist-get :kmacro args)
                             ('conn--kmacro-apply
