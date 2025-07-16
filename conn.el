@@ -945,9 +945,10 @@ of highlighting."
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
 
-(defun conn-anonymous-thing-property (object property)
+(define-inline conn-anonymous-thing-property (object property)
   (declare (side-effect-free t))
-  (plist-get (conn-anonymous-thing-properties object) property))
+  (inline-quote
+   (plist-get (conn-anonymous-thing-properties ,object) ,property)))
 
 
 ;;;; States
@@ -1650,6 +1651,38 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 These match if the argument is a substate of STATE."
   (list conn--substate-generalizer))
 
+(defconst conn--anonymous-thing-tag-cache (make-hash-table :test 'eq))
+
+(cl-generic-define-generalizer conn--anonymous-thing-generalizer
+  70 (lambda (cmd &rest _)
+       `(when-let* ((thing (and (conn-anonymous-thing-p ,cmd)
+                                (conn-anonymous-thing-parent ,cmd))))
+          (with-memoization (gethash thing conn--anonymous-thing-tag-cache)
+            (cons 'anonymous thing))))
+  (lambda (thing &rest _)
+    (when thing
+      `((conn-thing anonymous-thing-override)
+        ,@(cl-loop for parent = (cdr thing) then (get :conn-thing parent)
+                   while (and parent (not (eq parent t)))
+                   collect `(conn-thing ,parent))
+        (conn-thing anonymous-thing)
+        (conn-thing t)))))
+
+(defconst conn--thing-cmd-tag-cache (make-hash-table :test 'eq))
+
+(cl-generic-define-generalizer conn--thing-command-generalizer
+  70 (lambda (cmd &rest _)
+       `(when-let* ((thing (conn-command-thing ,cmd)))
+          (with-memoization (gethash thing conn--thing-cmd-tag-cache)
+            (cons 'command thing))))
+  (lambda (thing &rest _)
+    (when thing
+      `(,@(cl-loop for parent = (cdr thing) then (get :conn-thing parent)
+                   while (and parent (not (eq parent t)))
+                   collect `(conn-thing ,parent))
+        (conn-thing thing-command)
+        (conn-thing t)))))
+
 (cl-generic-define-generalizer conn--thing-generalizer
   70 (lambda (cmd &rest _) `(and (conn-thing-p ,cmd) ,cmd))
   (lambda (thing &rest _)
@@ -1657,28 +1690,6 @@ These match if the argument is a substate of STATE."
       `(,@(cl-loop for parent = thing then (get :conn-thing parent)
                    while (and parent (not (eq parent t)))
                    collect `(conn-thing ,parent))
-        (conn-thing t)))))
-
-(cl-generic-define-generalizer conn--anonymous-thing-generalizer
-  70 (lambda (cmd &rest _) `(or (and (conn-anonymous-thing-p ,cmd)
-                                     (conn-anonymous-thing-parent ,cmd))))
-  (lambda (thing &rest _)
-    (when thing
-      `((conn-thing conn-anonymous-thing-override)
-        ,@(cl-loop for parent = thing then (get :conn-thing parent)
-                   while (and parent (not (eq parent t)))
-                   collect `(conn-thing ,parent))
-        (conn-thing conn-anonymous-thing)
-        (conn-thing t)))))
-
-(cl-generic-define-generalizer conn--thing-command-generalizer
-  70 (lambda (cmd &rest _) `(conn-command-thing ,cmd))
-  (lambda (thing &rest _)
-    (when thing
-      `(,@(cl-loop for parent = thing then (get :conn-thing parent)
-                   while (and parent (not (eq parent t)))
-                   collect `(conn-thing ,parent))
-        (conn-thing conn-thing-command)
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
@@ -2726,10 +2737,10 @@ If `use-region-p' returns non-nil this will always return
 (cl-defgeneric conn-perform-bounds (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
-      (cl-call-next-method))))
+      (cl-call-next-method cmd arg))))
 
 (cl-defmethod conn-perform-bounds :around (_cmd _arg)
   (save-mark-and-excursion
@@ -2739,10 +2750,10 @@ If `use-region-p' returns non-nil this will always return
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing t)) _arg)
   (list :outer (bounds-of-thing-at-point cmd)))
 
-(cl-defmethod conn-perform-bounds ((cmd (conn-thing conn-anonymous-thing)))
+(cl-defmethod conn-perform-bounds ((cmd (conn-thing anonymous-thing)) _arg)
   (list :outer (bounds-of-thing-at-point (conn-anonymous-thing-parent cmd))))
 
-(cl-defmethod conn-perform-bounds ((cmd (conn-thing conn-thing-command)) arg)
+(cl-defmethod conn-perform-bounds ((cmd (conn-thing thing-command)) arg)
   (let ((conn-this-command-handler (conn-command-mark-handler cmd)))
     (deactivate-mark t)
     (let ((current-prefix-arg (cond ((> (prefix-numeric-value arg) 0) 1)
@@ -2850,7 +2861,7 @@ If `use-region-p' returns non-nil this will always return
 (cl-defgeneric conn-perform-things-in-region (thing beg end)
   (declare (conn-anonymous-thing-property :things-in-region)
            (important-return-value t))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)) beg end)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) beg end)
     (if-let* ((op (conn-anonymous-thing-property cmd :thing-in-region)))
         (funcall op beg end)
       (cl-call-next-method))))
@@ -3932,7 +3943,7 @@ A target finder function should return a list of overlays.")
 (cl-defgeneric conn-make-default-action (cmd)
   (declare (conn-anonymous-thing-property :default-action)
            (important-return-value t))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)))
+  ( :method ((cmd (conn-thing anonymous-thing-override)))
     (if-let* ((action (conn-anonymous-thing-property cmd :default-action)))
         (funcall action)
       (cl-call-next-method))))
@@ -3943,7 +3954,7 @@ A target finder function should return a list of overlays.")
 (cl-defgeneric conn-get-target-finder (cmd)
   (declare (conn-anonymous-thing-property :target-finder)
            (important-return-value t))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)))
+  ( :method ((cmd (conn-thing anonymous-thing-override)))
     (if-let* ((tf (conn-anonymous-thing-property cmd :target-finder)))
         (funcall tf)
       (cl-call-next-method))))
@@ -9260,7 +9271,7 @@ Interactively `region-beginning' and `region-end'."
 (cl-defgeneric conn-prepare-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
         (funcall op arg)
       (cl-call-next-method))))
@@ -9311,7 +9322,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defgeneric conn-perform-change (cmd arg &optional kill)
   (declare (conn-anonymous-thing-property :change-op))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)) arg &optional kill)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg &optional kill)
     (if-let* ((change-op (conn-anonymous-thing-property cmd :change-op)))
         (funcall change-op arg kill)
       (cl-call-next-method))))
@@ -9380,7 +9391,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing conn-anonymous-thing-override)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
         (funcall op arg)
       (cl-call-next-method))))
