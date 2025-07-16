@@ -1650,43 +1650,42 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 These match if the argument is a substate of STATE."
   (list conn--substate-generalizer))
 
-(defconst conn--thing-tag-cache (make-hash-table :test 'eq))
-
 (cl-generic-define-generalizer conn--thing-generalizer
-  70 (lambda (cmd &rest _)
-       `(or (when-let* ((thing (conn-command-thing ,cmd)))
-              (with-memoization (gethash thing conn--thing-tag-cache)
-                (cons 'conn-thing-command thing)))
-            (when-let* ((thing (and (conn-anonymous-thing-p ,cmd)
-                                    (conn-anonymous-thing-parent ,cmd))))
-              (with-memoization (gethash thing conn--thing-tag-cache)
-                (cons 'conn-anonymous-thing thing)))
-            (and (conn-thing-p ,cmd) ,cmd)))
+  70 (lambda (cmd &rest _) `(and (conn-thing-p ,cmd) ,cmd))
   (lambda (thing &rest _)
-    (pcase thing
-      ('nil)
-      (`(conn-anonymous-thing . ,parent)
-       `((conn-thing conn-anonymous-thing-override)
-         ,@(cl-loop for par = parent then (get :conn-thing par)
-                    while (and par (not (eq par t)))
-                    collect `(conn-thing ,par))
-         (conn-thing conn-anonymous-thing)
-         (conn-thing t)))
-      (`(conn-thing-command . ,thing)
-       `(,@(cl-loop for parent = thing then (get :conn-thing parent)
-                    while (and parent (not (eq parent t)))
-                    collect `(conn-thing ,parent))
-         (conn-thing conn-thing-command)
-         (conn-thing t)))
-      (_
-       `(,@(cl-loop for parent = parent then (get :conn-thing parent)
-                    while (and parent (not (eq parent t)))
-                    collect `(conn-thing ,parent))
-         (conn-thing t))))))
+    (when thing
+      `(,@(cl-loop for parent = thing then (get :conn-thing parent)
+                   while (and parent (not (eq parent t)))
+                   collect `(conn-thing ,parent))
+        (conn-thing t)))))
+
+(cl-generic-define-generalizer conn--anonymous-thing-generalizer
+  70 (lambda (cmd &rest _) `(or (and (conn-anonymous-thing-p ,cmd)
+                                     (conn-anonymous-thing-parent ,cmd))))
+  (lambda (thing &rest _)
+    (when thing
+      `((conn-thing conn-anonymous-thing-override)
+        ,@(cl-loop for parent = thing then (get :conn-thing parent)
+                   while (and parent (not (eq parent t)))
+                   collect `(conn-thing ,parent))
+        (conn-thing conn-anonymous-thing)
+        (conn-thing t)))))
+
+(cl-generic-define-generalizer conn--thing-command-generalizer
+  70 (lambda (cmd &rest _) `(conn-command-thing ,cmd))
+  (lambda (thing &rest _)
+    (when thing
+      `(,@(cl-loop for parent = thing then (get :conn-thing parent)
+                   while (and parent (not (eq parent t)))
+                   collect `(conn-thing ,parent))
+        (conn-thing conn-thing-command)
+        (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
   "Support for conn-thing specializers."
-  (list conn--thing-generalizer))
+  (list conn--anonymous-thing-generalizer
+        conn--thing-command-generalizer
+        conn--thing-generalizer))
 
 
 ;;;;; Enter/Exit Functions
