@@ -917,6 +917,16 @@ of highlighting."
    :parent parent
    :properties properties))
 
+(define-inline conn-get-thing (thing)
+  (declare (side-effect-free t)
+           (important-return-value t))
+  (inline-letevals (thing)
+    (inline-quote
+     (or (when (conn-anonymous-thing-p ,thing)
+           (conn-anonymous-thing-parent ,thing))
+         (conn-command-thing ,thing)
+         ,thing))))
+
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()
   (let* ((main (documentation (symbol-function 'conn-make-anonymous-thing) 'raw))
@@ -1661,17 +1671,16 @@ These match if the argument is a substate of STATE."
             (cons 'anonymous thing))))
   (lambda (thing &rest _)
     (when thing
-      `((conn-thing anonymous-thing-override)
+      `((conn-thing anonymous-thing)
         ,@(cl-loop for parent = (cdr thing) then (get :conn-thing parent)
                    while (and parent (not (eq parent t)))
                    collect `(conn-thing ,parent))
-        (conn-thing anonymous-thing)
         (conn-thing t)))))
 
 (defconst conn--thing-cmd-tag-cache (make-hash-table :test 'eq))
 
 (cl-generic-define-generalizer conn--thing-command-generalizer
-  70 (lambda (cmd &rest _)
+  71 (lambda (cmd &rest _)
        `(when-let* ((thing (conn-command-thing ,cmd)))
           (with-memoization (gethash thing conn--thing-cmd-tag-cache)
             (cons 'command thing))))
@@ -1679,8 +1688,9 @@ These match if the argument is a substate of STATE."
     (when thing
       `(,@(cl-loop for parent = (cdr thing) then (get :conn-thing parent)
                    while (and parent (not (eq parent t)))
-                   collect `(conn-thing ,parent))
-        (conn-thing thing-command)
+                   nconc `((conn-thing-command ,parent)
+                           (conn-thing ,parent)))
+        (conn-thing-command t)
         (conn-thing t)))))
 
 (cl-generic-define-generalizer conn--thing-generalizer
@@ -1690,7 +1700,6 @@ These match if the argument is a substate of STATE."
       `(,@(cl-loop for parent = thing then (get :conn-thing parent)
                    while (and parent (not (eq parent t)))
                    collect `(conn-thing ,parent))
-        (conn-thing thingatpt)
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
@@ -1698,6 +1707,10 @@ These match if the argument is a substate of STATE."
   (list conn--anonymous-thing-generalizer
         conn--thing-command-generalizer
         conn--thing-generalizer))
+
+(cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing-command)))
+  "Support for conn-thing specializers."
+  (list conn--thing-command-generalizer))
 
 
 ;;;;; Enter/Exit Functions
@@ -2738,25 +2751,21 @@ If `use-region-p' returns non-nil this will always return
 (cl-defgeneric conn-perform-bounds (cmd &optional arg)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) &optional arg)
+  ( :method ((cmd (conn-thing anonymous-thing)) &optional arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
-      (cl-call-next-method cmd arg))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
 
 (cl-defmethod conn-perform-bounds :around (_cmd &optional _arg)
   (save-mark-and-excursion
     (setf (alist-get (recursion-depth) conn--last-perform-bounds)
           (cl-call-next-method))))
 
-(cl-defmethod conn-perform-bounds ((cmd (conn-thing thingatpt))
+(cl-defmethod conn-perform-bounds ((thing (conn-thing t))
                                    &optional _arg)
-  (list :outer (bounds-of-thing-at-point cmd)))
+  (list :outer (bounds-of-thing-at-point (conn-get-thing thing))))
 
-(cl-defmethod conn-perform-bounds ((cmd (conn-thing anonymous-thing))
-                                   &optional _arg)
-  (list :outer (bounds-of-thing-at-point (conn-anonymous-thing-parent cmd))))
-
-(cl-defmethod conn-perform-bounds ((cmd (conn-thing thing-command))
+(cl-defmethod conn-perform-bounds ((cmd (conn-thing-command t))
                                    &optional arg)
   (let ((conn-this-command-handler (conn-command-mark-handler cmd)))
     (deactivate-mark t)
@@ -2888,21 +2897,14 @@ If `use-region-p' returns non-nil this will always return
 (cl-defgeneric conn-perform-things-in-region (thing beg end)
   (declare (conn-anonymous-thing-property :things-in-region)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) beg end)
+  ( :method ((cmd (conn-thing anonymous-thing)) beg end)
     (if-let* ((op (conn-anonymous-thing-property cmd :thing-in-region)))
         (funcall op beg end)
-      (cl-call-next-method))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) beg end))))
 
-(cl-defmethod conn-perform-things-in-region ((thing (conn-thing thingatpt)) beg end)
-  (conn--things-in-region-subr thing beg end))
-
-(cl-defmethod conn-perform-things-in-region ((cmd (conn-thing thing-command))
+(cl-defmethod conn-perform-things-in-region ((thing (conn-thing t))
                                              beg end)
-  (conn--things-in-region-subr (conn-command-thing cmd) beg end))
-
-(cl-defmethod conn-perform-things-in-region ((thing (conn-thing anonymous-thing))
-                                             beg end)
-  (conn--things-in-region-subr (conn-anonymous-thing-parent thing) beg end))
+  (conn--things-in-region-subr (conn-get-thing thing) beg end))
 
 (defun conn-bounds-of-things-in-region (thing bounds)
   "Bounds of the THINGs contained within the region BOUNDS.
@@ -3959,10 +3961,10 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defgeneric conn-make-default-action (cmd)
   (declare (conn-anonymous-thing-property :default-action)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)))
+  ( :method ((cmd (conn-thing anonymous-thing)))
     (if-let* ((action (conn-anonymous-thing-property cmd :default-action)))
         (funcall action)
-      (cl-call-next-method))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd)))))
 
 (cl-defmethod conn-make-default-action ((_cmd (conn-thing t)))
   (conn-make-action 'conn-dispatch-goto))
@@ -3970,10 +3972,10 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defgeneric conn-get-target-finder (cmd)
   (declare (conn-anonymous-thing-property :target-finder)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)))
+  ( :method ((cmd (conn-thing anonymous-thing)))
     (if-let* ((tf (conn-anonymous-thing-property cmd :target-finder)))
         (funcall tf)
-      (cl-call-next-method))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd)))))
 
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing t)))
   (conn-dispatch-read-n-chars :string-length 2))
@@ -9285,10 +9287,10 @@ Interactively `region-beginning' and `region-end'."
 (cl-defgeneric conn-prepare-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing)) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
         (funcall op arg)
-      (cl-call-next-method))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg))))
 
 (cl-defmethod conn-prepare-surround (cmd arg)
   (pcase-let (((map (:outer `(,beg . ,end)))
@@ -9336,10 +9338,10 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defgeneric conn-perform-change (cmd arg &optional kill)
   (declare (conn-anonymous-thing-property :change-op))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg &optional kill)
+  ( :method ((cmd (conn-thing anonymous-thing)) arg &optional kill)
     (if-let* ((change-op (conn-anonymous-thing-property cmd :change-op)))
         (funcall change-op arg kill)
-      (cl-call-next-method))))
+      (cl-call-next-method (conn-anonymous-thing-parent cmd) arg kill))))
 
 (cl-defmethod conn-perform-change (cmd arg &optional kill)
   (pcase-let (((map (:outer `(,beg . ,end)))
@@ -9405,7 +9407,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing-override)) arg)
+  ( :method ((cmd (conn-thing anonymous-thing)) arg)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-change-surround-op)))
         (funcall op arg)
       (cl-call-next-method))))
