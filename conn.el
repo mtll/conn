@@ -1183,69 +1183,38 @@ property from its parents."
 (defvar-local conn--major-mode-map nil)
 (defvar-local conn--minor-mode-maps nil)
 
-(define-inline conn--mode-maps-sorted-p (state)
-  (declare (side-effect-free t)
-           (important-return-value t)
-           (gv-setter
-            (lambda (value)
-              (cl-labels ((set (v)
-                            `(setf (conn-state--minor-mode-sort-tick
-                                    (conn--find-state ,state))
-                                   ,v)))
-                (pcase value
-                  ('nil (set nil))
-                  ((pred macroexp-const-p)
-                   (set 'conn--minor-mode-maps-sort-tick))
-                  (_ (macroexp-let2 nil value value
-                       `(progn
-                          ,(set `(when ,value conn--minor-mode-maps-sort-tick))
-                          ,value))))))))
-  (inline-quote
-   (eql conn--minor-mode-maps-sort-tick
-        (conn-state--minor-mode-sort-tick
-         (conn--find-state ,state)))))
+(defun conn--rebuild-state-keymaps (state)
+  "Rebuild all composed keymaps for STATE.
 
-(defun conn--sort-mode-maps (state)
-  (cl-check-type (conn--find-state state) conn-state)
+Called when the inheritance hierarchy for STATE changes."
   (unless (conn-state-get state :no-keymap)
-    (let* ((parents (conn-state-all-keymap-parents state))
-           (tables (mapcar (lambda (s)
-                             (conn-state--minor-mode-depths
-                              (conn--find-state s)))
-                           parents)))
-      (conn--compat-callf sort (cdr (conn-state-minor-mode-maps-alist state))
-        :key (lambda (cons)
-               (or (seq-some (lambda (table)
-                               (gethash (car cons) table))
-                             tables)
-                   (get (car cons) :conn-mode-depth)
-                   0))
-        :in-place t)
-      (setf (conn--mode-maps-sorted-p state) t))))
+    (let ((parents (conn-state-all-keymap-parents state))
+          (state-obj (conn--find-state state)))
+      (when-let* ((state-map (gethash state conn--composed-state-maps)))
+        (setf (cdr state-map)
+              (cl-loop for pstate in parents
+                       for pmap = (conn-get-state-map pstate t)
+                       when pmap collect pmap)))
+      (let (to-remove)
+        (pcase-dolist ((and `(,mode . ,map) cons)
+                       (cdr (conn-state--minor-mode-maps state-obj)))
+          (setf (cdr map)
+                (cl-loop for parent in parents
+                         for pmap = (conn-get-minor-mode-map parent mode t)
+                         when pmap collect pmap))
+          (unless (cdr map)
+            (push cons to-remove)))
+        (cl-callf seq-difference (cdr (conn-state--minor-mode-maps state-obj))
+          to-remove #'eq))
+      (maphash
+       (lambda (mode map)
+         (setf (cdr map)
+               (cl-loop for pstate in parents
+                        for pmap = (conn-get-major-mode-map pstate mode t)
+                        when pmap collect pmap)))
+       (conn-state--major-mode-maps state-obj)))))
 
-(defun conn-set-mode-map-depth (mode depth &optional state)
-  (cl-check-type mode symbol)
-  (cl-assert (<= -100 depth 100) nil "Depth must be between -100 and 100")
-  (if (null state)
-      (progn
-        (setf (get mode :conn-mode-depth) depth)
-        (cl-incf conn--minor-mode-maps-sort-tick))
-    (let* ((state-obj (conn--find-state state))
-           (mmode-maps (cdr (conn-state--minor-mode-maps state-obj)))
-           (table (conn-state--minor-mode-depths state-obj)))
-      (cl-assert (not (conn-state-get state :no-keymap))
-                 nil "%s :no-keymap property is non-nil" state)
-      (unless (eql depth (gethash mode table))
-        (setf (gethash mode table) depth)
-        (dolist (child (conn-state-all-children state))
-          (setf (conn--mode-maps-sorted-p child) nil))
-        (when (alist-get mode mmode-maps)
-          (conn--sort-mode-maps state)))))
-  nil)
-
-;; setup special mode maps
-(conn-set-mode-map-depth :override -80)
-(conn-set-mode-map-depth :bind-last -90)
+;;;;;; State Maps
 
 (defconst conn--composed-state-maps (make-hash-table :test 'eq))
 
@@ -1288,6 +1257,8 @@ The composed keymap is of the form:
     (or (conn-state--keymap (conn--find-state state))
         (unless dont-create
           (setf (conn-get-state-map state) (make-sparse-keymap))))))
+
+;;;;;; Major Mode Maps
 
 (defun conn--ensure-major-mode-map (state mode)
   (declare (important-return-value t))
@@ -1372,6 +1343,72 @@ The composed map is a keymap of the form:
      (cl-loop for pmode in (conn--derived-mode-all-parents major-mode)
               collect (conn--ensure-major-mode-map state pmode)))))
 
+;;;;;; Minor Mode Maps
+
+(define-inline conn--mode-maps-sorted-p (state)
+  (declare (side-effect-free t)
+           (important-return-value t)
+           (gv-setter
+            (lambda (value)
+              (cl-labels ((set (v)
+                            `(setf (conn-state--minor-mode-sort-tick
+                                    (conn--find-state ,state))
+                                   ,v)))
+                (pcase value
+                  ('nil (set nil))
+                  ((pred macroexp-const-p)
+                   (set 'conn--minor-mode-maps-sort-tick))
+                  (_ (macroexp-let2 nil value value
+                       `(progn
+                          ,(set `(when ,value conn--minor-mode-maps-sort-tick))
+                          ,value))))))))
+  (inline-quote
+   (eql conn--minor-mode-maps-sort-tick
+        (conn-state--minor-mode-sort-tick
+         (conn--find-state ,state)))))
+
+(defun conn--sort-mode-maps (state)
+  (cl-check-type (conn--find-state state) conn-state)
+  (unless (conn-state-get state :no-keymap)
+    (let* ((parents (conn-state-all-keymap-parents state))
+           (tables (mapcar (lambda (s)
+                             (conn-state--minor-mode-depths
+                              (conn--find-state s)))
+                           parents)))
+      (conn--compat-callf sort (cdr (conn-state-minor-mode-maps-alist state))
+        :key (lambda (cons)
+               (or (seq-some (lambda (table)
+                               (gethash (car cons) table))
+                             tables)
+                   (get (car cons) :conn-mode-depth)
+                   0))
+        :in-place t)
+      (setf (conn--mode-maps-sorted-p state) t))))
+
+(defun conn-set-mode-map-depth (mode depth &optional state)
+  (cl-check-type mode symbol)
+  (cl-assert (<= -100 depth 100) nil "Depth must be between -100 and 100")
+  (if (null state)
+      (progn
+        (setf (get mode :conn-mode-depth) depth)
+        (cl-incf conn--minor-mode-maps-sort-tick))
+    (let* ((state-obj (conn--find-state state))
+           (mmode-maps (cdr (conn-state--minor-mode-maps state-obj)))
+           (table (conn-state--minor-mode-depths state-obj)))
+      (cl-assert (not (conn-state-get state :no-keymap))
+                 nil "%s :no-keymap property is non-nil" state)
+      (unless (eql depth (gethash mode table))
+        (setf (gethash mode table) depth)
+        (dolist (child (conn-state-all-children state))
+          (setf (conn--mode-maps-sorted-p child) nil))
+        (when (alist-get mode mmode-maps)
+          (conn--sort-mode-maps state)))))
+  nil)
+
+;; setup special mode maps
+(conn-set-mode-map-depth :override -80)
+(conn-set-mode-map-depth :bind-last -90)
+
 (defconst conn--minor-mode-maps-cache (make-hash-table :test 'equal))
 
 (gv-define-setter conn-get-minor-mode-map (val state mode)
@@ -1424,37 +1461,6 @@ return it."
       (setf (get-composed-map state)
             (make-composed-keymap (parent-maps state)))
       (setf (conn--mode-maps-sorted-p state) nil))))
-
-(defun conn--rebuild-state-keymaps (state)
-  "Rebuild all composed keymaps for STATE.
-
-Called when the inheritance hierarchy for STATE changes."
-  (unless (conn-state-get state :no-keymap)
-    (let ((parents (conn-state-all-keymap-parents state))
-          (state-obj (conn--find-state state)))
-      (when-let* ((state-map (gethash state conn--composed-state-maps)))
-        (setf (cdr state-map)
-              (cl-loop for pstate in parents
-                       for pmap = (conn-get-state-map pstate t)
-                       when pmap collect pmap)))
-      (let (to-remove)
-        (pcase-dolist ((and `(,mode . ,map) cons)
-                       (cdr (conn-state--minor-mode-maps state-obj)))
-          (setf (cdr map)
-                (cl-loop for parent in parents
-                         for pmap = (conn-get-minor-mode-map parent mode t)
-                         when pmap collect pmap))
-          (unless (cdr map)
-            (push cons to-remove)))
-        (dolist (cons to-remove)
-          (cl-callf2 delq cons (cdr (conn-state--minor-mode-maps state-obj)))))
-      (maphash
-       (lambda (mode map)
-         (setf (cdr map)
-               (cl-loop for pstate in parents
-                        for pmap = (conn-get-major-mode-map pstate mode t)
-                        when pmap collect pmap)))
-       (conn-state--major-mode-maps state-obj)))))
 
 
 ;;;;; State Input Methods
@@ -1680,7 +1686,7 @@ These match if the argument is a substate of STATE."
 (defconst conn--thing-cmd-tag-cache (make-hash-table :test 'eq))
 
 (cl-generic-define-generalizer conn--thing-command-generalizer
-  71 (lambda (cmd &rest _)
+  70 (lambda (cmd &rest _)
        `(when-let* ((thing (conn-command-thing ,cmd)))
           (with-memoization (gethash thing conn--thing-cmd-tag-cache)
             (cons 'command thing))))
@@ -2053,6 +2059,10 @@ By default `conn-emacs-state' does not bind anything."
 (defvar conn-emacs-state-register nil)
 
 (defvar-local conn-emacs-state-ring nil)
+
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
+  (run-hooks 'prefix-command-preserve-state-hook)
+  (prefix-command-update))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
   (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
@@ -2552,10 +2562,10 @@ themselves once the selection process has concluded."
                         nil
                         'conn--loop-message-function)))
 
-(cl-defgeneric conn-with-state-loop (conn-state &key context initial-arg))
+(cl-defgeneric conn-with-state-loop (conn-state &key context initial-arg pre post))
 
 (cl-defmethod conn-with-state-loop ((state (conn-substate t))
-                                    &key context initial-arg)
+                                    &key context initial-arg pre post)
   (let* ((inhibit-message t)
          (callback (conn-state-get state :loop-handler))
          (msg-fn (conn-state-get state :loop-message))
@@ -2580,9 +2590,7 @@ themselves once the selection process has concluded."
                  (when conn--loop-message-timer
                    (cancel-timer conn--loop-message-timer)
                    (setq conn--loop-message-timer nil))
-                 (when (and (bound-and-true-p conn-posframe-mode)
-                            (fboundp 'posframe-hide))
-                   (posframe-hide " *conn-list-posframe*"))
+                 (mapc #'funcall pre)
                  (pcase cmd
                    ('nil)
                    ('digit-argument
@@ -2612,7 +2620,8 @@ themselves once the selection process has concluded."
                         (funcall callback cmd context)
                       (user-error
                        (conn-state-loop-error (error-message-string err))))))
-                 (setf conn-state-loop-last-command cmd)))))
+                 (setf conn-state-loop-last-command cmd)
+                 (mapc #'funcall post)))))
        (let ((inhibit-message nil))
          (message nil))))))
 
@@ -2646,9 +2655,12 @@ themselves once the selection process has concluded."
   (recursive-edit nil :type boolean))
 
 (cl-defmethod conn-with-state-loop ((state (conn-substate conn-read-thing-state))
-                                    &key initial-arg context)
+                                    &key context initial-arg pre post)
+  (unless context (setq context (conn-read-thing)))
   (cl-call-next-method
    state
+   :pre pre
+   :post post
    :initial-arg initial-arg
    :context (or context (conn-read-thing))))
 
@@ -4096,19 +4108,26 @@ order to mark the region that should be defined by any of COMMANDS."
        (propertize error-message 'face 'error))))))
 
 (cl-defmethod conn-with-state-loop ((state (conn-substate conn-dispatch-mover-state))
-                                    &key context initial-arg)
+                                    &key context pre post initial-arg)
   (require 'conn-transients)
   (let ((success nil)
         (conn-dispatch-target-finder nil)
-        (ctx (or context (conn-make-dispatch-context))))
+        (context (or context (conn-make-dispatch-context)))
+        (pre (if (and (bound-and-true-p conn-posframe-mode)
+                      (fboundp 'posframe-hide))
+                 (cons (lambda () (posframe-hide " *conn-list-posframe*"))
+                       pre)
+               pre)))
     (unwind-protect
         (prog1 (cl-call-next-method
                 state
-                :initial-arg initial-arg
-                :context ctx)
+                :context context
+                :pre pre
+                :post post
+                :initial-arg initial-arg)
           (setq success t))
       (unless success
-        (conn-cancel-action (conn-dispatch-action ctx))))))
+        (conn-cancel-action (conn-dispatch-action context))))))
 
 (cl-defgeneric conn-dispatch-state-handler (command ctx))
 
