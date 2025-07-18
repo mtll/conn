@@ -856,6 +856,10 @@ of highlighting."
 
 ;;;; Thing Types
 
+(cl-deftype conn-thing-function () '(satisfies conn-command-thing))
+
+(cl-deftype conn-thing () '(satisfies conn-thing-p))
+
 (define-inline conn-command-thing (cmd)
   (declare (side-effect-free t)
            (gv-setter conn-set-command-thing))
@@ -867,10 +871,9 @@ of highlighting."
 (defun conn-set-command-thing (cmd thing)
   (put cmd :conn-command-thing thing))
 
-(cl-deftype conn-thing-function () '(satisfies conn-command-thing))
-
 (define-inline conn-thing-p (thing)
-  (declare (side-effect-free t))
+  (declare (side-effect-free t)
+           (important-return-value t))
   (inline-letevals (thing)
     (inline-quote
      (when (symbolp ,thing)
@@ -879,8 +882,6 @@ of highlighting."
            (intern-soft (format "forward-%s" ,thing))
            (get ,thing 'end-op)
            (get ,thing 'bounds-of-thing-at-point))))))
-
-(cl-deftype conn-thing () '(satisfies conn-thing-p))
 
 (cl-defun conn-register-thing (thing &key parent forward-op beg-op end-op bounds-op)
   (put thing :conn-thing (or parent t))
@@ -898,14 +899,14 @@ of highlighting."
                (:constructor nil)
                (:constructor conn--make-anonymous-thing)
                ;; This would be nice but cl-defsubst does not handle
-               ;; &rest arguments properly and so PROPERTIES gets
-               ;; evaluated.
-               ;; (:constructor conn-make-anonymous-thing (parent &rest properties))
+               ;; &rest arguments properly and as a result PROPERTIES
+               ;; gets evaluated twice in the expansion.
+               ;; (:constructor conn-anonymous-thing (parent &rest properties))
                )
   (parent nil :read-only t)
   (properties nil :read-only t))
 
-(defun conn-make-anonymous-thing (parent &rest properties)
+(defun conn-anonymous-thing (parent &rest properties)
   "Make an anonymous thing."
   (declare (important-return-value t)
            (compiler-macro
@@ -929,13 +930,13 @@ of highlighting."
 
 ;; from cl--generic-make-defmethod-docstring/pcase--make-docstring
 (defun conn--make-anonymous-thing-docstring ()
-  (let* ((main (documentation (symbol-function 'conn-make-anonymous-thing) 'raw))
-         (ud (help-split-fundoc main 'conn-make-anonymous-thing)))
+  (let* ((main (documentation (symbol-function 'conn-anonymous-thing) 'raw))
+         (ud (help-split-fundoc main 'conn-anonymous-thing)))
     (require 'help-fns)
     (with-temp-buffer
       (insert (or (cdr ud) main ""))
       (insert "\n\n\tCurrently supported properties for anonymous things:\n\n")
-      (pcase-dolist (`(,prop . ,fn) (get 'conn-make-anonymous-thing :known-properties))
+      (pcase-dolist (`(,prop . ,fn) (get 'conn-anonymous-thing :known-properties))
         (if (stringp fn)
             (insert (format "%s - %s" prop fn))
           (insert (format "%s - `%s' method for this thing" prop fn)))
@@ -945,12 +946,12 @@ of highlighting."
             (help-add-fundoc-usage combined-doc (car ud))
           combined-doc)))))
 
-(put 'conn-make-anonymous-thing 'function-documentation
+(put 'conn-anonymous-thing 'function-documentation
      '(conn--make-anonymous-thing-docstring))
 
 (eval-and-compile
   (defun conn--set-anonymous-thing-property (f _args property &optional description)
-    `(setf (alist-get ,property (get 'conn-make-anonymous-thing :known-properties))
+    `(setf (alist-get ,property (get 'conn-anonymous-thing :known-properties))
            (or ,description ',f)))
   (setf (alist-get 'conn-anonymous-thing-property defun-declarations-alist)
         (list #'conn--set-anonymous-thing-property)))
@@ -1050,6 +1051,7 @@ of highlighting."
 
 (defun conn-state-all-parents (state)
   "Return all parents for STATE."
+  (declare (important-return-value t))
   (with-memoization (gethash state conn--state-all-parents-cache)
     (cons state (merge-ordered-lists
                  (mapcar 'conn-state-all-parents
@@ -1057,6 +1059,8 @@ of highlighting."
 
 (defun conn-state-all-keymap-parents (state)
   "Return all parents for STATE."
+  (declare (side-effect-free t)
+           (important-return-value t))
   (cons state
         (merge-ordered-lists
          (cl-loop with no-inherit = (conn-state-get state :no-inherit-keymaps)
@@ -2591,37 +2595,38 @@ themselves once the selection process has concluded."
                    (cancel-timer conn--loop-message-timer)
                    (setq conn--loop-message-timer nil))
                  (mapc #'funcall pre)
-                 (pcase cmd
-                   ('nil)
-                   ('digit-argument
-                    (let* ((char (if (integerp last-input-event)
-                                     last-input-event
-                                   (get last-input-event 'ascii-character)))
-                           (digit (- (logand char ?\177) ?0)))
-                      (setf conn--loop-prefix-mag
-                            (if (integerp conn--loop-prefix-mag)
-                                (+ (* 10 conn--loop-prefix-mag) digit)
-                              (when (/= 0 digit) digit)))))
-                   ('forward-delete-arg
-                    (when conn--loop-prefix-mag
-                      (cl-callf mod conn--loop-prefix-mag
-                        (expt 10 (floor (log conn--loop-prefix-mag 10))))))
-                   ('backward-delete-arg
-                    (when conn--loop-prefix-mag
-                      (cl-callf floor conn--loop-prefix-mag 10)))
-                   ('reset-arg
-                    (setf conn--loop-prefix-mag nil))
-                   ('negative-argument
-                    (cl-callf not conn--loop-prefix-sign))
-                   ('keyboard-quit
-                    (conn-state-loop-abort))
-                   (cmd
-                    (condition-case err
-                        (funcall callback cmd context)
-                      (user-error
-                       (conn-state-loop-error (error-message-string err))))))
-                 (setf conn-state-loop-last-command cmd)
-                 (mapc #'funcall post)))))
+                 (unwind-protect
+                     (pcase cmd
+                       ('nil)
+                       ('digit-argument
+                        (let* ((char (if (integerp last-input-event)
+                                         last-input-event
+                                       (get last-input-event 'ascii-character)))
+                               (digit (- (logand char ?\177) ?0)))
+                          (setf conn--loop-prefix-mag
+                                (if (integerp conn--loop-prefix-mag)
+                                    (+ (* 10 conn--loop-prefix-mag) digit)
+                                  (when (/= 0 digit) digit)))))
+                       ('forward-delete-arg
+                        (when conn--loop-prefix-mag
+                          (cl-callf mod conn--loop-prefix-mag
+                            (expt 10 (floor (log conn--loop-prefix-mag 10))))))
+                       ('backward-delete-arg
+                        (when conn--loop-prefix-mag
+                          (cl-callf floor conn--loop-prefix-mag 10)))
+                       ('reset-arg
+                        (setf conn--loop-prefix-mag nil))
+                       ('negative-argument
+                        (cl-callf not conn--loop-prefix-sign))
+                       ('keyboard-quit
+                        (conn-state-loop-abort))
+                       (cmd
+                        (condition-case err
+                            (funcall callback cmd context)
+                          (user-error
+                           (conn-state-loop-error (error-message-string err))))))
+                   (mapc #'funcall post))
+                 (setf conn-state-loop-last-command cmd)))))
        (let ((inhibit-message nil))
          (message nil))))))
 
@@ -3920,7 +3925,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state :override)
-  "<remap> <conn-expand>" (conn-make-anonymous-thing
+  "<remap> <conn-expand>" (conn-anonymous-thing
                            'expansion
                            :bounds-op (lambda (arg)
                                         (conn--push-ephemeral-mark)
@@ -3929,12 +3934,12 @@ order to mark the region that should be defined by any of COMMANDS."
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
   "<conn-thing-map> a" 'move-beginning-of-line
-  "O" (conn-make-anonymous-thing
+  "O" (conn-anonymous-thing
        'word
        :description "all-words"
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'word)))
-  "U" (conn-make-anonymous-thing
+  "U" (conn-anonymous-thing
        'symbol
        :description "all-symbols"
        :target-finder (lambda ()
@@ -3949,13 +3954,13 @@ order to mark the region that should be defined by any of COMMANDS."
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-state)
   "\\" 'conn-dispatch-kapply
-  ")" (conn-make-anonymous-thing
+  ")" (conn-anonymous-thing
        'sexp
        :description "list"
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis)))))
-  "]" (conn-make-anonymous-thing
+  "]" (conn-anonymous-thing
        'sexp
        :description "inner-list"
        :bounds-op (lambda (arg)
@@ -5213,7 +5218,7 @@ contain targets."
   t)
 
 (defun conn-dispatch-inner-lines ()
-  (let ((thing (conn-make-anonymous-thing
+  (let ((thing (conn-anonymous-thing
                 'inner-line
                 :bounds-op
                 (lambda (arg)
@@ -5235,7 +5240,7 @@ contain targets."
                  :thing thing)))))))))
 
 (defun conn-dispatch-end-of-inner-lines ()
-  (let ((thing (conn-make-anonymous-thing
+  (let ((thing (conn-anonymous-thing
                 'inner-line
                 :description "end-of-inner-line"
                 :bounds-op
@@ -6348,7 +6353,7 @@ contain targets."
   "<remap> <conn-append-region>" 'conn-dispatch-copy-append
   "<remap> <conn-prepend-region>" 'conn-dispatch-copy-prepend
   "<remap> <conn-previous-emacs-state>"
-  (conn-make-anonymous-thing
+  (conn-anonymous-thing
    'char
    :default-action (lambda ()
                      (let ((jump (conn-make-action 'conn-dispatch-jump)))
@@ -6854,7 +6859,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-push-button)
-   (conn-make-anonymous-thing
+   (conn-anonymous-thing
     'button
     :description "all-buttons"
     :target-finder (lambda () 'conn-dispatch-all-buttons))
@@ -6874,7 +6879,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
         (isearch-exit)
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
-       (conn-make-anonymous-thing nil :target-finder (lambda () target-finder))
+       (conn-anonymous-thing nil :target-finder (lambda () target-finder))
        nil :restrict-windows t))))
 
 (defun conn-goto-char-2 ()
