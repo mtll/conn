@@ -2517,6 +2517,7 @@ themselves once the selection process has concluded."
 
 ;;;; State Command Loops
 
+(defvar conn-state-loop-thing-command nil)
 (defvar conn-state-loop-last-command nil)
 (defvar conn-state-loop-inhibit-message nil)
 (defvar conn--loop-prefix-mag nil)
@@ -2589,14 +2590,15 @@ themselves once the selection process has concluded."
              (while t
                (unless conn--loop-message-timer
                  (funcall conn--loop-message-function))
-               (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
-                            (setf conn--loop-error-message ""))))
+               (let ((conn-state-loop-thing-command
+                      (prog1 (key-binding (read-key-sequence nil) t)
+                        (setf conn--loop-error-message ""))))
                  (when conn--loop-message-timer
                    (cancel-timer conn--loop-message-timer)
                    (setq conn--loop-message-timer nil))
                  (mapc #'funcall pre)
                  (unwind-protect
-                     (pcase cmd
+                     (pcase conn-state-loop-thing-command
                        ('nil)
                        ('digit-argument
                         (let* ((char (if (integerp last-input-event)
@@ -2620,13 +2622,15 @@ themselves once the selection process has concluded."
                         (cl-callf not conn--loop-prefix-sign))
                        ('keyboard-quit
                         (conn-state-loop-abort))
-                       (cmd
+                       (_
                         (condition-case err
-                            (funcall callback cmd context)
+                            (funcall callback conn-state-loop-thing-command context)
                           (user-error
                            (conn-state-loop-error (error-message-string err))))))
-                   (mapc #'funcall post))
-                 (setf conn-state-loop-last-command cmd)))))
+                   (cl-shiftf conn-state-loop-last-command
+                              conn-state-loop-thing-command
+                              nil)
+                   (mapc #'funcall post))))))
        (let ((inhibit-message nil))
          (message nil))))))
 
@@ -9772,14 +9776,12 @@ Currently selected window remains selected afterwards."
 (defvar-keymap conn-wincontrol-tab-repeat-map
   :repeat t
   "C" 'tab-bar-duplicate-tab
-  "c" 'tab-bar-duplicate-tab
-  "M" 'tab-new
-  "m" 'tab-next
-  "N" 'tab-close
-  "n" 'tab-previous
+  "O" 'tab-new
+  "o" 'tab-next
+  "U" 'tab-close
+  "u" 'tab-previous
   "B" 'tab-bar-move-window-to-tab
-  "U" 'tab-bar-detach-tab
-  "u" 'tab-bar-detach-tab)
+  "D" 'tab-bar-detach-tab)
 
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
