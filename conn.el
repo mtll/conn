@@ -254,7 +254,8 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
           cleanup-seen
           bindings)
       (dolist (form (reverse varlist))
-        (if (length> form 2)
+        (if (and (consp form)
+                 (length> form 2))
             (setq protected-body (macroexp-let*
                                   (cons (take 2 form) bindings)
                                   `(unwind-protect
@@ -263,10 +264,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
                   bindings nil
                   cleanup-seen t)
           (push form bindings)))
-      (if cleanup-seen
-          (macroexp-let* (cons `(,success nil) bindings)
-                         protected-body)
-        `(let* ,bindings ,@body)))))
+      (cond (cleanup-seen
+             (macroexp-let* (cons `(,success nil) bindings)
+                            protected-body))
+            (bindings
+             `(let* ,bindings ,@body))
+            (t (macroexp-progn body))))))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
@@ -9776,6 +9779,7 @@ Currently selected window remains selected afterwards."
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
+  "C-l" 'recenter-top-bottom
   "," (conn-remap-key "<conn-thing-map>" nil t)
   "-" 'conn-wincontrol-invert-argument
   "0" 'conn-wincontrol-digit-argument
