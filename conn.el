@@ -256,11 +256,10 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
       (dolist (form (reverse varlist))
         (if (and (consp form)
                  (length> form 2))
-            (setq protected-body (macroexp-let*
-                                  (cons (take 2 form) bindings)
-                                  `(unwind-protect
-                                       ,protected-body
-                                     (unless ,success ,@(drop 2 form))))
+            (setq protected-body `(let* (,(take 2 form))
+                                    (unwind-protect
+                                        ,(macroexp-let* bindings protected-body)
+                                      (unless ,success ,@(drop 2 form))))
                   bindings nil
                   cleanup-seen t)
           (push form bindings)))
@@ -4117,14 +4116,14 @@ order to mark the region that should be defined by any of COMMANDS."
   (require 'conn-transients)
   (conn-protected-let*
       ((conn-dispatch-target-finder nil)
-       (context (or context (conn-make-dispatch-context))
-                (conn-cancel-action
-                 (conn-dispatch-action context)))
        (pre (if (and (bound-and-true-p conn-posframe-mode)
                      (fboundp 'posframe-hide))
                 (cons (lambda () (posframe-hide " *conn-list-posframe*"))
                       pre)
-              pre)))
+              pre))
+       (context (or context (conn-make-dispatch-context))
+                (conn-cancel-action
+                 (conn-dispatch-action context))))
     (cl-call-next-method state
                          :context context
                          :pre pre
