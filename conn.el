@@ -248,32 +248,25 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
 
 CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
-  (cl-with-gensyms (success unbound)
-    (let (setq-forms
-          let-forms
-          unwind-body)
-      (dolist (form varlist)
-        (pcase form
-          ((and `(,var ,binding . ,cleanup)
-                (guard cleanup))
-           (push `(setq ,var ,binding) setq-forms)
-           (setq unwind-body (if unwind-body
-                                 `(unwind-protect
-                                      ,unwind-body
-                                    (unless (eq ',unbound ,var)
-                                      ,@cleanup))
-                               `(unless (eq ',unbound ,var)
-                                  ,@cleanup)))
-           (push `(,var ',unbound) let-forms))
-          (_ (push form let-forms))))
-      `(let* (,@(nreverse let-forms)
-              (,success nil))
-         (unwind-protect
-             (prog1
-                 ,(macroexp-progn `(,@(reverse setq-forms) ,@body))
-               (setq ,success t))
-           (unless ,success
-             ,unwind-body))))))
+  (cl-with-gensyms (success)
+    (let ((protected-body `(prog1 ,(macroexp-progn body)
+                             (setq ,success t)))
+          cleanup-seen
+          bindings)
+      (dolist (form (reverse varlist))
+        (if (length> form 2)
+            (setq protected-body (macroexp-let*
+                                  (cons (take 2 form) bindings)
+                                  `(unwind-protect
+                                       ,protected-body
+                                     (unless ,success ,@(drop 2 form))))
+                  bindings nil
+                  cleanup-seen t)
+          (push form bindings)))
+      (if cleanup-seen
+          (macroexp-let* (cons `(,success nil) bindings)
+                         protected-body)
+        `(let* ,bindings ,@body)))))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
@@ -4119,24 +4112,21 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-with-state-loop ((state (conn-substate conn-dispatch-mover-state))
                                     &key context pre post initial-arg)
   (require 'conn-transients)
-  (let ((success nil)
-        (conn-dispatch-target-finder nil)
-        (context (or context (conn-make-dispatch-context)))
-        (pre (if (and (bound-and-true-p conn-posframe-mode)
-                      (fboundp 'posframe-hide))
-                 (cons (lambda () (posframe-hide " *conn-list-posframe*"))
-                       pre)
-               pre)))
-    (unwind-protect
-        (prog1 (cl-call-next-method
-                state
-                :context context
-                :pre pre
-                :post post
-                :initial-arg initial-arg)
-          (setq success t))
-      (unless success
-        (conn-cancel-action (conn-dispatch-action context))))))
+  (conn-protected-let*
+      ((conn-dispatch-target-finder nil)
+       (context (or context (conn-make-dispatch-context))
+                (conn-cancel-action
+                 (conn-dispatch-action context)))
+       (pre (if (and (bound-and-true-p conn-posframe-mode)
+                     (fboundp 'posframe-hide))
+                (cons (lambda () (posframe-hide " *conn-list-posframe*"))
+                      pre)
+              pre)))
+    (cl-call-next-method state
+                         :context context
+                         :pre pre
+                         :post post
+                         :initial-arg initial-arg)))
 
 (cl-defgeneric conn-dispatch-state-handler (command ctx))
 
