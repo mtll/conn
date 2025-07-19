@@ -249,20 +249,20 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
 CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
   (cl-with-gensyms (success)
-    (named-let protect ((binding (list success nil))
-                        (rest varlist)
+    (named-let protect ((binding (car (last varlist)))
+                        (rest (reverse (cons success (butlast varlist))))
                         (body `(prog1 ,(macroexp-progn body)
                                  (setq ,success t))))
       (pcase binding
         ('nil body)
         ((and `(,var ,val . ,cleanup) (guard cleanup))
-         `(let* ((,var ,val))
-            (unwind-protect
-                ,(protect (car rest) (cdr rest) body)
-              (unless ,success ,@cleanup))))
-        (_ (macroexp-let*
-            (list binding)
-            (protect (car rest) (cdr rest) body)))))))
+         (protect (car rest) (cdr rest)
+                  `(let* ((,var ,val))
+                     (unwind-protect
+                         ,body
+                       (unless ,success ,@cleanup)))))
+        (_ (protect (car rest) (cdr rest)
+                    (macroexp-let* (list binding) body)))))))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
@@ -396,18 +396,12 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 ;;;;; Rings
 
 (cl-defstruct (conn-ring
-               (:constructor conn--make-ring (capacity cleanup)))
+               (:constructor conn-make-ring (capacity &key cleanup)))
   "A ring that removes elements in least recently visited order."
   (list nil :type list)
   (history nil :type list)
   (capacity 0 :type integer)
   (cleanup nil :type (or nil function)))
-
-(cl-defsubst conn-make-ring (capacity &key cleanup)
-  (declare (important-return-value t))
-  (cl-assert (and (integerp capacity)
-                  (> capacity 0)))
-  (conn--make-ring capacity cleanup))
 
 (define-inline conn-ring--visit (ring item)
   (inline-quote
