@@ -249,26 +249,20 @@ VALUEFORM and if BODY exits non-locally runs CLEANUP-FORMS.
 CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (declare (indent 1))
   (cl-with-gensyms (success)
-    (let ((protected-body `(prog1 ,(macroexp-progn body)
-                             (setq ,success t)))
-          cleanup-seen
-          bindings)
-      (dolist (form (reverse varlist))
-        (if (and (consp form)
-                 (length> form 2))
-            (setq protected-body `(let* (,(take 2 form))
-                                    (unwind-protect
-                                        ,(macroexp-let* bindings protected-body)
-                                      (unless ,success ,@(drop 2 form))))
-                  bindings nil
-                  cleanup-seen t)
-          (push form bindings)))
-      (cond (cleanup-seen
-             (macroexp-let* (cons `(,success nil) bindings)
-                            protected-body))
-            (bindings
-             `(let* ,bindings ,@body))
-            (t (macroexp-progn body))))))
+    (named-let protect ((binding (list success nil))
+                        (rest varlist)
+                        (body `(prog1 ,(macroexp-progn body)
+                                 (setq ,success t))))
+      (pcase binding
+        ('nil body)
+        ((and `(,var ,val . ,cleanup) (guard cleanup))
+         `(let* ((,var ,val))
+            (unwind-protect
+                ,(protect (car rest) (cdr rest) body)
+              (unless ,success ,@cleanup))))
+        (_ (macroexp-let*
+            (list binding)
+            (protect (car rest) (cdr rest) body)))))))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
   (declare (indent 1))
