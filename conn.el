@@ -294,16 +294,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
         (let* ((rargs (cl-list* a1 getter args)))
           (funcall setter `(compat-call ,func ,@rargs)))))))
 
-(defmacro conn-make-thing-command (name region-fn &rest body)
-  (declare (indent 2))
-  `(progn
-     (defalias ',name ,region-fn)
-     (advice-add ',name :around
-                 (lambda (&rest app)
-                   (save-mark-and-excursion
-                     ,@body
-                     (apply app))))))
-
 ;; From repeat-mode
 (defun conn--command-property (propname)
   "Return the value of the current commands PROPNAME property."
@@ -1223,17 +1213,17 @@ The composed keymap is of the form:
               for pmap = (conn-state--keymap (conn--find-state pstate))
               when pmap collect pmap))))
 
-(gv-define-setter conn-get-state-map (val state)
-  (macroexp-let2 nil val val
-    `(progn
-       (cl-assert (keymapp ,val))
-       (setf (conn-state--keymap (conn--find-state ,state)) ,val)
-       (dolist (child (cons ,state (conn-state-all-children ,state)) ,val)
-         (when-let* ((map (gethash child conn--composed-state-maps)))
-           (cl-loop for parent in (conn-state-all-keymap-parents child)
-                    for pmap = (conn-get-state-map parent t)
-                    when pmap collect pmap into pmaps
-                    finally (setf (cdr map) pmaps)))))))
+(defun conn-set-state-map (state map)
+  (cl-assert (keymapp map))
+  (setf (conn-state--keymap (conn--find-state state)) map)
+  (dolist (child (cons state (conn-state-all-children state)) map)
+    (when-let* ((map (gethash child conn--composed-state-maps)))
+      (cl-loop for parent in (conn-state-all-keymap-parents child)
+               for pmap = (conn-get-state-map parent t)
+               when pmap collect pmap into pmaps
+               finally (setf (cdr map) pmaps)))))
+
+(gv-define-simple-setter conn-get-state-map conn-set-state-map)
 
 (defun conn-get-state-map (state &optional dont-create)
   "Return the state keymap for STATE."
@@ -1264,29 +1254,30 @@ The composed keymap is of the form:
 
 (defconst conn--major-mode-maps-cache (make-hash-table :test 'equal))
 
-(gv-define-setter conn-get-major-mode-map (val state mode)
-  (macroexp-let2 nil val val
-    `(cl-macrolet ((get-map (state)
-                     `(gethash (cons ,state ,',mode) conn--major-mode-maps-cache))
-                   (get-composed-map (state)
-                     `(gethash ,',mode (conn-state--major-mode-maps
-                                        (conn--find-state ,state))))
-                   (parent-maps (state)
-                     `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                               for pmap = (get-map parent)
-                               when pmap collect pmap)))
-       (cl-assert (keymapp ,val))
-       (cl-check-type (conn--find-state ,state) conn-state)
-       (cl-check-type ,mode symbol)
-       (prog1 (setf (get-map state) ,val)
-         (let* ((keymap (make-composed-keymap (parent-maps state))))
-           (setf (get-composed-map state) keymap)
-           (dolist (child (conn-state-all-children state))
-             (if-let* ((map (get-composed-map child)))
-                 (setf (cdr map) (parent-maps child))
-               (unless (conn-state-get child :no-keymap)
-                 (setf (get-composed-map child)
-                       (make-composed-keymap (parent-maps child)))))))))))
+(defun conn-set-major-mode-map (state mode map)
+  (cl-macrolet ((get-map (state)
+                  `(gethash (cons ,state mode) conn--major-mode-maps-cache))
+                (get-composed-map (state)
+                  `(gethash mode (conn-state--major-mode-maps
+                                  (conn--find-state ,state))))
+                (parent-maps (state)
+                  `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
+                            for pmap = (get-map parent)
+                            when pmap collect pmap)))
+    (cl-assert (keymapp map))
+    (cl-check-type (conn--find-state state) conn-state)
+    (cl-check-type mode symbol)
+    (setf (get-map state) map)
+    (let* ((keymap (make-composed-keymap (parent-maps state))))
+      (setf (get-composed-map state) keymap)
+      (dolist (child (conn-state-all-children state) map)
+        (if-let* ((map (get-composed-map child)))
+            (setf (cdr map) (parent-maps child))
+          (unless (conn-state-get child :no-keymap)
+            (setf (get-composed-map child)
+                  (make-composed-keymap (parent-maps child)))))))))
+
+(gv-define-simple-setter conn-get-major-mode-map conn-set-major-mode-map)
 
 (defun conn-get-major-mode-map (state mode &optional dont-create)
   "Return keymap for major MODE in STATE.
@@ -1398,27 +1389,28 @@ The composed map is a keymap of the form:
 
 (defconst conn--minor-mode-maps-cache (make-hash-table :test 'equal))
 
-(gv-define-setter conn-get-minor-mode-map (val state mode)
-  (macroexp-let2 nil val val
-    `(cl-macrolet ((get-map (state)
-                     `(gethash (cons ,state ,',mode) conn--minor-mode-maps-cache))
-                   (get-composed-map (state)
-                     `(alist-get ,',mode (cdr (conn-state-minor-mode-maps-alist ,state))))
-                   (parent-maps (state)
-                     `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
-                               for pmap = (get-map parent)
-                               when pmap collect pmap)))
-       (cl-assert (keymapp ,val))
-       (cl-check-type (conn--find-state ,state) conn-state)
-       (cl-check-type ,mode symbol)
-       (prog1 (setf (get-map ,state) ,val)
-         (let ((keymap (make-composed-keymap (parent-maps ,state))))
-           (setf (get-composed-map ,state) keymap)
-           (dolist (child (conn-state-all-children ,state))
-             (if-let* ((map (get-composed-map child)))
-                 (setf (cdr map) (parent-maps child))
-               (conn--ensure-minor-mode-map child ,mode)))
-           (conn--sort-mode-maps ,state))))))
+(defun conn-set-minor-mode-map (state mode map)
+  (cl-macrolet ((get-map (state)
+                  `(gethash (cons ,state mode) conn--minor-mode-maps-cache))
+                (get-composed-map (state)
+                  `(alist-get mode (cdr (conn-state-minor-mode-maps-alist ,state))))
+                (parent-maps (state)
+                  `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
+                            for pmap = (get-map parent)
+                            when pmap collect pmap)))
+    (cl-assert (keymapp map))
+    (cl-check-type (conn--find-state state) conn-state)
+    (cl-check-type mode symbol)
+    (setf (get-map state) map)
+    (let ((keymap (make-composed-keymap (parent-maps state))))
+      (setf (get-composed-map state) keymap)
+      (conn--sort-mode-maps state)
+      (dolist (child (conn-state-all-children state) map)
+        (if-let* ((map (get-composed-map child)))
+            (setf (cdr map) (parent-maps child))
+          (conn--ensure-minor-mode-map child mode))))))
+
+(gv-define-simple-setter conn-get-minor-mode-map conn-set-minor-mode-map)
 
 (defun conn-get-minor-mode-map (state mode &optional dont-create)
   "Return keymap for MODE in STATE.
@@ -1956,15 +1948,12 @@ to the abnormal hooks `conn-state-entry-functions' or
        (conn--define-state
         ',name
         ,docstring
-        (list ,@(mapcar (lambda (p)
-                          `',(or (car-safe p) p))
-                        parents))
-        ,(cl-loop for (key value) on properties by #'cddr
-                  nconc (pcase key
-                          ((pred keywordp) (list key value))
-                          ((pred symbolp) `(',key ,value))
-                          (_ (error "State property name must be a symbol")))
-                  into props finally return (cons 'list props))
+        (list ,@(mapcar (lambda (p) `',(or (car-safe p) p)) parents))
+        (list ,@(cl-loop for (key value) on properties by #'cddr
+                         nconc (pcase key
+                                 ((pred keywordp) (list key value))
+                                 ((pred symbolp) `(',key ,value))
+                                 (_ (error "State property name must be a symbol")))))
         (list ,@(cl-loop for p in parents
                          when (and (consp p)
                                    (eq (cadr p) :no-inherit-keymap))
