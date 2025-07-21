@@ -8516,12 +8516,13 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                                      thing
                                      thing-arg
                                      &key &allow-other-keys)
-  (pcase-let* ((`(,pt ,win ,thing-override)
-                (save-mark-and-excursion
-                  (conn-dispatch-select-target))))
-    (funcall action win pt
-             (or thing-override thing)
-             thing-arg)))
+  (conn-perform-dispatch-loop nil
+    (pcase-let* ((`(,pt ,win ,thing-override)
+                  (save-mark-and-excursion
+                    (conn-dispatch-select-target))))
+      (funcall action win pt
+               (or thing-override thing)
+               thing-arg))))
 
 (cl-defgeneric conn-perform-transpose (cmd arg))
 
