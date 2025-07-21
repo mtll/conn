@@ -1656,11 +1656,20 @@ These match if the argument is a substate of STATE."
             (cons 'anonymous thing))))
   (lambda (thing &rest _)
     (when thing
-      `((conn-thing anonymous-thing)
-        ,@(cl-loop for parent = (cdr thing) then (get :conn-thing parent)
-                   while (and parent (not (eq parent t)))
-                   collect `(conn-thing ,parent))
-        (conn-thing t)))))
+      (let ((parent (cdr thing)))
+        (if-let* ((parent (conn-command-thing parent)))
+            `((conn-thing anonymous-thing)
+              ,@(cl-loop for p = parent then (get :conn-thing p)
+                         while (and p (not (eq p t)))
+                         nconc `((conn-thing-command ,p)
+                                 (conn-thing ,p)))
+              (conn-thing-command t)
+              (conn-thing t))
+          `((conn-thing anonymous-thing)
+            ,@(cl-loop for p = parent then (get :conn-thing p)
+                       while (and p (not (eq p t)))
+                       collect `(conn-thing ,p))
+            (conn-thing t)))))))
 
 (defconst conn--thing-cmd-tag-cache (make-hash-table :test 'eq))
 
@@ -1671,10 +1680,10 @@ These match if the argument is a substate of STATE."
             (cons 'command thing))))
   (lambda (thing &rest _)
     (when thing
-      `(,@(cl-loop for parent = (cdr thing) then (get :conn-thing parent)
-                   while (and parent (not (eq parent t)))
-                   nconc `((conn-thing-command ,parent)
-                           (conn-thing ,parent)))
+      `(,@(cl-loop for p = (cdr thing) then (get :conn-thing p)
+                   while (and p (not (eq p t)))
+                   nconc `((conn-thing-command ,p)
+                           (conn-thing ,p)))
         (conn-thing-command t)
         (conn-thing t)))))
 
@@ -1682,9 +1691,9 @@ These match if the argument is a substate of STATE."
   70 (lambda (cmd &rest _) `(and (conn-thing-p ,cmd) ,cmd))
   (lambda (thing &rest _)
     (when thing
-      `(,@(cl-loop for parent = thing then (get :conn-thing parent)
-                   while (and parent (not (eq parent t)))
-                   collect `(conn-thing ,parent))
+      `(,@(cl-loop for p = thing then (get :conn-thing p)
+                   while (and p (not (eq p t)))
+                   collect `(conn-thing ,p))
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
@@ -2035,10 +2044,6 @@ By default `conn-emacs-state' does not bind anything."
 (defvar conn-emacs-state-register nil)
 
 (defvar-local conn-emacs-state-ring nil)
-
-(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
-  (run-hooks 'prefix-command-preserve-state-hook)
-  (prefix-command-update))
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
   (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
@@ -3807,6 +3812,11 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;; Dispatch State
 
+(defface conn-dispatch-mode-line-face
+  '((t (:inherit mode-line :inverse-video t)))
+  "Face for mode-line in a dispatch state."
+  :group 'conn-faces)
+
 (defvar conn-dispatch-ring)
 
 (defvar conn--dispatch-action-description nil)
@@ -3814,11 +3824,6 @@ order to mark the region that should be defined by any of COMMANDS."
 (defvar conn--dispatch-must-prompt nil)
 
 (defvar conn--dispatch-action-always-prompt nil)
-
-(defface conn-dispatch-mode-line-face
-  '((t (:inherit mode-line :inverse-video t)))
-  "Face for mode-line in a dispatch state."
-  :group 'conn-faces)
 
 (defvar conn-dispatch-repeat-count nil)
 
@@ -3927,11 +3932,19 @@ order to mark the region that should be defined by any of COMMANDS."
   "M-r" (conn-remap-key "<conn-region-map>")
   "," (conn-remap-key "<conn-thing-map>"))
 
+(keymap-set (conn-get-state-map 'conn-dispatch-state)
+            "\\" 'conn-dispatch-kapply)
+
 (define-keymap
-  :keymap (conn-get-state-map 'conn-dispatch-state)
-  "\\" 'conn-dispatch-kapply
+  :keymap (conn-get-state-map 'conn-dispatch-mover-state)
   ")" (conn-anonymous-thing
-       'sexp
+       'forward-sexp
+       :description "list"
+       :target-finder (lambda ()
+                        (conn-dispatch-things-with-re-prefix
+                         'sexp (rx (syntax open-parenthesis)))))
+  "." (conn-anonymous-thing
+       'forward-sexp
        :description "list"
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
@@ -3946,10 +3959,6 @@ order to mark the region that should be defined by any of COMMANDS."
                          'sexp (rx (syntax open-parenthesis))))))
 
 (put 'repeat-dispatch :advertised-binding (key-parse "TAB"))
-
-(define-keymap
-  :keymap (conn-get-major-mode-map 'conn-dispatch-mover-state 'lisp-data-mode)
-  "." `(forward-sexp ,(lambda () (conn-make-string-target-overlays "("))))
 
 (cl-defgeneric conn-make-default-action (cmd)
   (declare (conn-anonymous-thing-property :default-action)
@@ -6397,32 +6406,31 @@ contain targets."
               (funcall undo :accept))))
         (lambda ())))))
 
-(eval-and-compile
-  (defmacro conn-with-dispatch-suspended (&rest body)
-    (declare (indent 0))
-    `(pcase-let ((`(,conn-target-window-predicate
-                    ,conn-target-predicate
-                    ,conn-target-sort-function)
-                  conn--dispatch-init-state)
-                 (conn-dispatch-looping nil)
-                 (conn--dispatch-loop-change-groups nil)
-                 (inhibit-message nil)
-                 (recenter-last-op nil)
-                 (conn-dispatch-repeat-count nil)
-                 (conn-dispatch-other-end nil)
-                 (conn-state-loop-last-command nil)
-                 (conn--loop-prefix-mag nil)
-                 (conn--loop-prefix-sign nil)
-                 (conn--dispatch-read-event-handlers nil)
-                 (conn--dispatch-read-event-message-prefixes nil)
-                 (conn--dispatch-always-retarget nil)
-                 (select-mode conn-dispatch-select-mode))
-       (conn-delete-targets)
-       (message nil)
-       (if select-mode (conn-dispatch-select-mode -1))
-       (unwind-protect
-           ,(macroexp-progn body)
-         (if select-mode (conn-dispatch-select-mode 1))))))
+(defmacro conn-with-dispatch-suspended (&rest body)
+  (declare (indent 0))
+  `(pcase-let ((`(,conn-target-window-predicate
+                  ,conn-target-predicate
+                  ,conn-target-sort-function)
+                conn--dispatch-init-state)
+               (conn-dispatch-looping nil)
+               (conn--dispatch-loop-change-groups nil)
+               (inhibit-message nil)
+               (recenter-last-op nil)
+               (conn-dispatch-repeat-count nil)
+               (conn-dispatch-other-end nil)
+               (conn-state-loop-last-command nil)
+               (conn--loop-prefix-mag nil)
+               (conn--loop-prefix-sign nil)
+               (conn--dispatch-read-event-handlers nil)
+               (conn--dispatch-read-event-message-prefixes nil)
+               (conn--dispatch-always-retarget nil)
+               (select-mode conn-dispatch-select-mode))
+     (conn-delete-targets)
+     (message nil)
+     (if select-mode (conn-dispatch-select-mode -1))
+     (unwind-protect
+         ,(macroexp-progn body)
+       (if select-mode (conn-dispatch-select-mode 1)))))
 
 (cl-defgeneric conn-dispatch-select-handler (command)
   (:method (_cmd) nil))
@@ -8568,12 +8576,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                            (no-history t)
                            (buffer (current-buffer))
                            (point (point))
-                           (thing
-                            (prog1
-                                (when (use-region-p)
-                                  (let ((bounds (region-bounds)))
-                                    (lambda (_) bounds)))
-                              (deactivate-mark t)))
+                           (thing (and (use-region-p) 'region))
                            (window-predicate
                             (lambda (win)
                               (not (buffer-local-value 'buffer-read-only

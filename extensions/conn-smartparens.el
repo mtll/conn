@@ -191,10 +191,21 @@
   "x" (conn-remap-key "C-x"))
 
 (define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-dispatch-state 'smartparens-mode)
+  :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state 'smartparens-mode)
   ")" (conn-anonymous-thing
-       'sexp
+       'sp-forward-sexp
        :description "list"
+       :bounds-op (lambda (arg)
+                    (conn-perform-bounds 'forward-sexp arg))
+       :target-finder (lambda ()
+                        (conn-dispatch-things-with-re-prefix
+                         'sexp (rx (or (syntax open-parenthesis)
+                                       (syntax string-quote))))))
+  "." (conn-anonymous-thing
+       'sp-forward-sexp
+       :description "list"
+       :bounds-op (lambda (arg)
+                    (conn-perform-bounds 'forward-sexp arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)
