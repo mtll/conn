@@ -193,7 +193,7 @@
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state 'smartparens-mode)
   ")" (conn-anonymous-thing
-       'sp-forward-sexp
+       'forward-sexp
        :description "list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'forward-sexp arg))
@@ -202,7 +202,7 @@
                          'sexp (rx (or (syntax open-parenthesis)
                                        (syntax string-quote))))))
   "." (conn-anonymous-thing
-       'sp-forward-sexp
+       'forward-sexp
        :description "list"
        :bounds-op (lambda (arg)
                     (conn-perform-bounds 'forward-sexp arg))
