@@ -362,21 +362,22 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defvar-local conn--buffer-properties nil)
 
-(defun conn-get-buffer-property (property &optional buffer default)
+(define-inline conn-get-buffer-property (property &optional buffer default)
   (declare (side-effect-free t)
            (important-return-value t))
-  (alist-get property
-             (buffer-local-value 'conn--buffer-properties
-                                 (or buffer (current-buffer)))
-             default))
+  (inline-quote
+   (or (plist-get (buffer-local-value 'conn--buffer-properties
+                                      (or ,buffer (current-buffer)))
+                  ,property)
+       ,default)))
 
 (gv-define-setter conn-get-buffer-property (value property &optional buffer _default)
   `(conn-set-buffer-property ,property ,value ,buffer))
 
 (defun conn-set-buffer-property (property value &optional buffer)
-  (setf (alist-get property
-                   (buffer-local-value 'conn--buffer-properties
-                                       (or buffer (current-buffer))))
+  (setf (plist-get (buffer-local-value 'conn--buffer-properties
+                                       (or buffer (current-buffer)))
+                   property)
         value))
 
 (defun conn-unset-buffer-property (property &optional buffer)
@@ -633,9 +634,18 @@ If BUFFER is nil check `current-buffer'."
            for prop = (get mode property)
            when prop return prop))
 
+(eval-and-compile
+  (defun conn-get-mode-property--cmacro (exp mode property &optional no-inherit default)
+    (if (and (macroexp-const-p no-inherit)
+             (if (consp no-inherit) (cadr no-inherit) no-inherit))
+        `(when-let* ((table (get ,mode :conn-properties)))
+           (gethash ,property table ,default))
+      exp)))
+
 (defun conn-get-mode-property (mode property &optional no-inherit default)
   (declare (side-effect-free t)
-           (important-return-value t))
+           (important-return-value t)
+           (compiler-macro conn-get-mode-property--cmacro))
   (if no-inherit
       (when-let* ((table (get mode :conn-properties)))
         (gethash property table default))
@@ -1711,17 +1721,16 @@ See also `conn-exit-functions'.")
 
 (defun conn--get-lighter ()
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
-    (named-let rec ((lighter "")
-                    (stack conn--state-stack))
+    (named-let rec ((lighter (conn-state-get conn-current-state :lighter))
+                    (stack (cdr conn--state-stack)))
       (pcase stack
-        ('nil (concat " [" (substring lighter 1) "]"))
+        ('nil
+         (concat " [" lighter "]"))
         (`(nil . ,rest)
-         (rec (concat conn-state-lighter-seperator
-                      "[" (substring lighter 1) "]")
-              rest))
+         (rec (concat "[" lighter "]") rest))
         (`(,state . ,rest)
-         (rec (concat conn-state-lighter-seperator
-                      (conn-state-get state :lighter)
+         (rec (concat (conn-state-get state :lighter)
+                      conn-state-lighter-seperator
                       lighter)
               rest))))))
 
@@ -1795,7 +1804,8 @@ See also `conn-exit-functions'.")
             (unless (conn--mode-maps-sorted-p state)
               (conn--sort-mode-maps state))
             (cl-call-next-method)
-            (setq conn-lighter nil)
+            (setq-local conn-lighter nil)
+            (force-mode-line-update)
             (setq success t))
         (unless success
           (conn-local-mode -1)
@@ -10734,8 +10744,8 @@ Operates with the selected windows parent window."
       (progn
         (setq conn-current-state nil)
         (kill-local-variable 'conn--state-stack)
-        (setq-local conn-lighter (seq-copy conn-lighter)
-                    conn--state-map (list (list 'conn-local-mode))
+        (make-local-variable 'conn-lighter)
+        (setq-local conn--state-map (list (list 'conn-local-mode))
                     conn--major-mode-map (list (list 'conn-local-mode))
                     conn-emacs-state-ring
                     (conn-make-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
