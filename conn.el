@@ -239,6 +239,8 @@ dynamically.")
 
 ;;;; Utilities
 
+(defconst conn--key-missing (gensym "key-missing"))
+
 (defmacro conn-protected-let* (varlist &rest body)
   "Bind variables according to VARLIST then eval body as in `let*'.
 
@@ -637,13 +639,12 @@ If BUFFER is nil check `current-buffer'."
   (if no-inherit
       (when-let* ((table (get mode :conn-properties)))
         (gethash property table default))
-    (cl-with-gensyms (key-missing)
-      (cl-loop for mode in (conn--derived-mode-all-parents mode)
-               for prop = (if-let* ((table (get mode :conn-properties)))
-                              (gethash property table key-missing)
-                            key-missing)
-               unless (eq key-missing prop) return prop
-               finally return default))))
+    (cl-loop for mode in (conn--derived-mode-all-parents mode)
+             for prop = (if-let* ((table (get mode :conn-properties)))
+                            (gethash property table conn--key-missing)
+                          conn--key-missing)
+             unless (eq conn--key-missing prop) return prop
+             finally return default)))
 
 (gv-define-setter conn-get-mode-property (value mode property &rest _)
   `(conn-set-mode-property ,mode ,property ,value))
@@ -1107,12 +1108,11 @@ PROPERTY.  If no parent has that property either than nil is returned."
       (gethash property
                (conn-state--properties (conn--find-state state))
                default)
-    (cl-with-gensyms (key-missing)
-      (cl-loop for parent in (conn-state-all-parents state)
-               for table = (conn-state--properties (conn--find-state parent))
-               for prop = (gethash property table key-missing)
-               unless (eq prop key-missing) return prop
-               finally return default))))
+    (cl-loop for parent in (conn-state-all-parents state)
+             for table = (conn-state--properties (conn--find-state parent))
+             for prop = (gethash property table conn--key-missing)
+             unless (eq prop conn--key-missing) return prop
+             finally return default)))
 
 (define-inline conn-state-set (state property value)
   "Set the value of PROPERTY in STATE to VALUE.
@@ -1146,12 +1146,11 @@ property from its parents."
            (important-return-value t))
   (inline-letevals (property)
     (inline-quote
-     (cl-with-gensyms (key-missing)
-       (thread-first
-         (gethash ,property
-                  (conn-state--properties (conn--find-state ,state))
-                  key-missing)
-         (eq key-missing) not)))))
+     (thread-first
+       (gethash ,property
+                (conn-state--properties (conn--find-state ,state))
+                conn--key-missing)
+       (eq conn--key-missing) not))))
 
 
 ;;;;; State Keymap Impl
@@ -1655,8 +1654,8 @@ These match if the argument is a substate of STATE."
             (cons 'command thing))))
   (lambda (thing &rest _)
     (when thing
-      `((conn-thing-command ,thing)
-        (conn-thing ,thing)
+      `((conn-thing-command ,(cdr thing))
+        (conn-thing ,(cdr thing))
         (conn-thing-command t)
         (conn-thing t)))))
 
@@ -10836,7 +10835,8 @@ Operates with the selected windows parent window."
 ;;;; Completion
 
 (defun conn--exit-completion (_state)
-  (completion-in-region-mode -1))
+  (when completion-in-region-mode
+    (completion-in-region-mode -1)))
 (add-hook 'conn-state-exit-functions 'conn--exit-completion)
 
 
