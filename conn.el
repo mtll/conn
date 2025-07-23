@@ -1711,16 +1711,20 @@ See also `conn-exit-functions'.")
 (defvar conn-state-lighter-seperator "→")
 
 (defun conn--get-lighter ()
-  (or conn-lighter
-      (let ((lighter ""))
-        (dolist (s conn--state-stack)
-          (setq lighter (if s
-                            (concat conn-state-lighter-seperator
-                                    (conn-state-get s :lighter)
-                                    lighter)
-                          (concat conn-state-lighter-seperator
-                                  "[" (substring lighter 1) "]"))))
-        (setq conn-lighter (concat " [" (substring lighter 1) "]")))))
+  (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
+    (named-let rec ((lighter "")
+                    (stack conn--state-stack))
+      (pcase stack
+        ('nil (concat " [" (substring lighter 1) "]"))
+        (`(nil . ,rest)
+         (rec (concat conn-state-lighter-seperator
+                      "[" (substring lighter 1) "]")
+              rest))
+        (`(,state . ,rest)
+         (rec (concat conn-state-lighter-seperator
+                      (conn-state-get state :lighter)
+                      lighter)
+              rest))))))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -1793,8 +1797,6 @@ See also `conn-exit-functions'.")
               (conn--sort-mode-maps state))
             (cl-call-next-method)
             (setq conn-lighter nil)
-            (unless executing-kbd-macro
-              (force-mode-line-update))
             (setq success t))
         (unless success
           (conn-local-mode -1)
@@ -3423,8 +3425,7 @@ Possibilities: \\<query-replace-map>
              (with-current-buffer buf
                (setq conn--state-stack stack
                      conn-lighter nil)
-               (conn-enter-state (car stack))
-               (force-mode-line-update))))
+               (conn-enter-state (car stack)))))
           ((or :record :next)
            (when conn-local-mode
              (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
