@@ -856,8 +856,8 @@ of highlighting."
            (get ,thing 'end-op)
            (get ,thing 'bounds-of-thing-at-point))))))
 
-(cl-defun conn-register-thing (thing &key parent forward-op beg-op end-op bounds-op)
-  (put thing :conn-thing (or parent t))
+(cl-defun conn-register-thing (thing &key forward-op beg-op end-op bounds-op)
+  (put thing :conn-thing t)
   (when forward-op
     (put thing 'forward-op forward-op))
   (when (or beg-op end-op)
@@ -1655,10 +1655,8 @@ These match if the argument is a substate of STATE."
             (cons 'command thing))))
   (lambda (thing &rest _)
     (when thing
-      `(,@(cl-loop for p = (cdr thing) then (get :conn-thing p)
-                   while (and p (not (eq p t)))
-                   nconc `((conn-thing-command ,p)
-                           (conn-thing ,p)))
+      `((conn-thing-command ,thing)
+        (conn-thing ,thing)
         (conn-thing-command t)
         (conn-thing t)))))
 
@@ -1676,9 +1674,7 @@ These match if the argument is a substate of STATE."
   70 (lambda (cmd &rest _) `(and (conn-thing-p ,cmd) ,cmd))
   (lambda (thing &rest _)
     (when thing
-      `(,@(cl-loop for p = thing then (get :conn-thing p)
-                   while (and p (not (eq p t)))
-                   collect `(conn-thing ,p))
+      `((conn-thing ,thing)
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
@@ -3803,20 +3799,15 @@ order to mark the region that should be defined by any of COMMANDS."
   :group 'conn-faces)
 
 (defvar conn-dispatch-ring)
-
 (defvar conn--dispatch-action-description nil)
 
 (defvar conn--dispatch-must-prompt nil)
-
 (defvar conn--dispatch-action-always-prompt nil)
+(defvar conn--dispatch-always-retarget nil)
 
 (defvar conn-dispatch-repeat-count nil)
-
 (defvar conn-dispatch-other-end nil)
-
 (defvar conn-dispath-no-other-end nil)
-
-(defvar conn--dispatch-always-retarget nil)
 
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
@@ -6393,29 +6384,30 @@ contain targets."
 
 (defmacro conn-with-dispatch-suspended (&rest body)
   (declare (indent 0))
-  `(pcase-let ((`(,conn-target-window-predicate
-                  ,conn-target-predicate
-                  ,conn-target-sort-function)
-                conn--dispatch-init-state)
-               (conn-dispatch-looping nil)
-               (conn--dispatch-loop-change-groups nil)
-               (inhibit-message nil)
-               (recenter-last-op nil)
-               (conn-dispatch-repeat-count nil)
-               (conn-dispatch-other-end nil)
-               (conn-state-loop-last-command nil)
-               (conn--loop-prefix-mag nil)
-               (conn--loop-prefix-sign nil)
-               (conn--dispatch-read-event-handlers nil)
-               (conn--dispatch-read-event-message-prefixes nil)
-               (conn--dispatch-always-retarget nil)
-               (select-mode conn-dispatch-select-mode))
-     (conn-delete-targets)
-     (message nil)
-     (if select-mode (conn-dispatch-select-mode -1))
-     (unwind-protect
-         ,(macroexp-progn body)
-       (if select-mode (conn-dispatch-select-mode 1)))))
+  (cl-with-gensyms (select-mode)
+    `(pcase-let ((`(,conn-target-window-predicate
+                    ,conn-target-predicate
+                    ,conn-target-sort-function)
+                  conn--dispatch-init-state)
+                 (conn-dispatch-looping nil)
+                 (conn--dispatch-loop-change-groups nil)
+                 (inhibit-message nil)
+                 (recenter-last-op nil)
+                 (conn-dispatch-repeat-count nil)
+                 (conn-dispatch-other-end nil)
+                 (conn-state-loop-last-command nil)
+                 (conn--loop-prefix-mag nil)
+                 (conn--loop-prefix-sign nil)
+                 (conn--dispatch-read-event-handlers nil)
+                 (conn--dispatch-read-event-message-prefixes nil)
+                 (conn--dispatch-always-retarget nil)
+                 (,select-mode conn-dispatch-select-mode))
+       (conn-delete-targets)
+       (message nil)
+       (if ,select-mode (conn-dispatch-select-mode -1))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (if ,select-mode (conn-dispatch-select-mode 1))))))
 
 (cl-defgeneric conn-dispatch-select-handler (command)
   (:method (_cmd) nil))
