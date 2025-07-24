@@ -2219,7 +2219,7 @@ strings have `conn-dispatch-label-face'."
                                  (length conn-simple-label-characters)))))
         (push (pop labels) prefixes))
       (if (and (null labels) (> count 0))
-          (let ((new-labels))
+          (let (new-labels)
             (dolist (a prefixes)
               (dolist (b conn-simple-label-characters)
                 (push (concat a b) new-labels)))
@@ -2540,68 +2540,67 @@ themselves once the selection process has concluded."
 
 (cl-defmethod conn-with-state-loop ((state (conn-substate t))
                                     &key context initial-arg pre post)
-  (let* ((inhibit-message t)
-         (callback (conn-state-get state :loop-handler))
-         (msg-fn (conn-state-get state :loop-message))
-         (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
-         (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
-         (conn--loop-error-message "")
-         (conn--loop-message-timer nil)
-         (conn--loop-message-function
-          (lambda ()
-            (let ((inhibit-message conn-state-loop-inhibit-message)
-                  (message-log-max nil))
-              (funcall msg-fn context conn--loop-error-message)))))
+  (let ((handler (conn-state-get state :loop-handler))
+        (conn--loop-prefix-mag (when initial-arg (abs initial-arg)))
+        (conn--loop-prefix-sign (when initial-arg (> 0 initial-arg)))
+        (conn--loop-error-message "")
+        (conn--loop-message-timer nil)
+        (conn--loop-message-function
+         (let ((msg-fn (conn-state-get state :loop-message)))
+           (lambda ()
+             (let ((inhibit-message conn-state-loop-inhibit-message)
+                   (message-log-max nil))
+               (funcall msg-fn context conn--loop-error-message))))))
     (funcall
      (unwind-protect
-         (catch 'state-loop-exit
-           (conn-with-recursive-state state
-             (while t
-               (unless conn--loop-message-timer
-                 (funcall conn--loop-message-function))
-               (let ((conn-state-loop-thing-command
-                      (prog1 (key-binding (read-key-sequence nil) t)
-                        (setf conn--loop-error-message ""))))
-                 (when conn--loop-message-timer
-                   (cancel-timer conn--loop-message-timer)
-                   (setq conn--loop-message-timer nil))
-                 (mapc #'funcall pre)
-                 (unwind-protect
-                     (pcase conn-state-loop-thing-command
-                       ('nil)
-                       ('digit-argument
-                        (let* ((char (if (integerp last-input-event)
-                                         last-input-event
-                                       (get last-input-event 'ascii-character)))
-                               (digit (- (logand char ?\177) ?0)))
-                          (setf conn--loop-prefix-mag
-                                (if (integerp conn--loop-prefix-mag)
-                                    (+ (* 10 conn--loop-prefix-mag) digit)
-                                  (when (/= 0 digit) digit)))))
-                       ('forward-delete-arg
-                        (when conn--loop-prefix-mag
-                          (cl-callf mod conn--loop-prefix-mag
-                            (expt 10 (floor (log conn--loop-prefix-mag 10))))))
-                       ('backward-delete-arg
-                        (when conn--loop-prefix-mag
-                          (cl-callf floor conn--loop-prefix-mag 10)))
-                       ('reset-arg
-                        (setf conn--loop-prefix-mag nil))
-                       ('negative-argument
-                        (cl-callf not conn--loop-prefix-sign))
-                       ('keyboard-quit
-                        (conn-state-loop-abort))
-                       (_
-                        (condition-case err
-                            (funcall callback conn-state-loop-thing-command context)
-                          (user-error
-                           (conn-state-loop-error (error-message-string err))))))
-                   (cl-shiftf conn-state-loop-last-command
-                              conn-state-loop-thing-command
-                              nil)
-                   (mapc #'funcall post))))))
-       (let ((inhibit-message nil))
-         (message nil))))))
+         (let ((inhibit-message t))
+           (catch 'state-loop-exit
+             (conn-with-recursive-state state
+               (while t
+                 (unless conn--loop-message-timer
+                   (funcall conn--loop-message-function))
+                 (let ((conn-state-loop-thing-command
+                        (prog1 (key-binding (read-key-sequence nil) t)
+                          (setf conn--loop-error-message ""))))
+                   (when conn--loop-message-timer
+                     (cancel-timer conn--loop-message-timer)
+                     (setq conn--loop-message-timer nil))
+                   (mapc #'funcall pre)
+                   (unwind-protect
+                       (pcase conn-state-loop-thing-command
+                         ('nil)
+                         ('digit-argument
+                          (let* ((char (if (integerp last-input-event)
+                                           last-input-event
+                                         (get last-input-event 'ascii-character)))
+                                 (digit (- (logand char ?\177) ?0)))
+                            (setf conn--loop-prefix-mag
+                                  (if (integerp conn--loop-prefix-mag)
+                                      (+ (* 10 conn--loop-prefix-mag) digit)
+                                    (when (/= 0 digit) digit)))))
+                         ('forward-delete-arg
+                          (when conn--loop-prefix-mag
+                            (cl-callf mod conn--loop-prefix-mag
+                              (expt 10 (floor (log conn--loop-prefix-mag 10))))))
+                         ('backward-delete-arg
+                          (when conn--loop-prefix-mag
+                            (cl-callf floor conn--loop-prefix-mag 10)))
+                         ('reset-arg
+                          (setf conn--loop-prefix-mag nil))
+                         ('negative-argument
+                          (cl-callf not conn--loop-prefix-sign))
+                         ('keyboard-quit
+                          (conn-state-loop-abort))
+                         (_
+                          (condition-case err
+                              (funcall handler conn-state-loop-thing-command context)
+                            (user-error
+                             (conn-state-loop-error (error-message-string err))))))
+                     (cl-shiftf conn-state-loop-last-command
+                                conn-state-loop-thing-command
+                                nil)
+                     (mapc #'funcall post)))))))
+       (message nil)))))
 
 
 ;;;; Read Things
@@ -2757,29 +2756,28 @@ If `use-region-p' returns non-nil this will always return
 
 (cl-defmethod conn-perform-bounds ((cmd (conn-thing-command t))
                                    &optional arg)
-  (let ((conn-this-command-handler (conn-command-mark-handler cmd)))
-    (deactivate-mark t)
-    (let ((current-prefix-arg (cond ((> (prefix-numeric-value arg) 0) 1)
-                                    ((< (prefix-numeric-value arg) 0) -1)
-                                    (t 0)))
-          (conn-this-command-thing (conn-command-thing cmd))
-          (conn-this-command-start (point-marker))
-          (this-command cmd)
-          (regions))
-      (catch 'done
-        (ignore-errors
-          (dotimes (_ (abs (prefix-numeric-value arg)))
-            (call-interactively cmd)
-            (unless (region-active-p)
-              (funcall conn-this-command-handler conn-this-command-start))
-            (move-marker conn-this-command-start (point))
-            (let ((reg (cons (region-beginning) (region-end))))
-              (if (equal reg (car regions))
-                  (throw 'done nil)
-                (push reg regions))))))
-      (list :outer (cons (seq-min (mapcar #'car regions))
-                         (seq-max (mapcar #'cdr regions)))
-            :contents (nreverse regions)))))
+  (deactivate-mark t)
+  (let ((current-prefix-arg (cond ((> (prefix-numeric-value arg) 0) 1)
+                                  ((< (prefix-numeric-value arg) 0) -1)
+                                  (t 0)))
+        (conn-this-command-handler (conn-command-mark-handler cmd))
+        (conn-this-command-thing (conn-command-thing cmd))
+        (conn-this-command-start (point-marker))
+        (this-command cmd)
+        (regions))
+    (catch 'done
+      (ignore-errors
+        (dotimes (_ (abs (prefix-numeric-value arg)))
+          (call-interactively cmd)
+          (funcall conn-this-command-handler conn-this-command-start)
+          (move-marker conn-this-command-start (point))
+          (let ((reg (cons (region-beginning) (region-end))))
+            (if (equal reg (car regions))
+                (throw 'done nil)
+              (push reg regions))))))
+    (list :outer (cons (seq-min (mapcar #'car regions))
+                       (seq-max (mapcar #'cdr regions)))
+          :contents (nreverse regions))))
 
 (cl-defmethod conn-perform-bounds ((_cmd (conn-thing region))
                                    &optional _arg)
