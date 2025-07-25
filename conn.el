@@ -2759,10 +2759,9 @@ If `use-region-p' returns non-nil this will always return
 
 (defvar conn--last-perform-bounds nil)
 
-(define-inline conn-get-bounds (thing &optional arg)
-  (inline-quote
-   (save-mark-and-excursion
-     (conn-get-bounds-subr ,thing ,arg))))
+(defun conn-get-bounds (thing &optional arg)
+  (save-mark-and-excursion
+    (conn-get-bounds-subr thing arg)))
 
 (defun conn-add-bounds (&rest bounds)
   (cl-callf nconc conn-current-bounds bounds))
@@ -7143,6 +7142,28 @@ Expansions and contractions are provided by functions in
 (conn-define-mark-command conn-mark-uuid uuid)
 (conn-define-mark-command conn-mark-string string)
 (conn-define-mark-command conn-mark-filename filename)
+(conn-define-mark-command conn-mark-comment comment)
+
+(conn-register-thing
+ 'comment
+ :bounds-op (lambda ()
+              (if (conn--point-in-comment-p)
+                  (cons (save-excursion
+                          (while (and (conn--point-in-comment-p)
+                                      (not (eobp)))
+                            (forward-char 1)
+                            (skip-chars-forward "\n\r"))
+                          (skip-chars-backward "\n\r")
+                          (point))
+                        (save-excursion
+                          (while (conn--point-in-comment-p)
+                            (forward-char -1)
+                            (skip-chars-backward "\n\r"))
+                          (skip-chars-forward "\n\r")
+                          (unless (conn--point-in-comment-p)
+                            (forward-char 1))
+                          (point)))
+                (error "Point not in comment"))))
 
 (conn-register-thing 'defun :forward-op 'conn-forward-defun)
 
@@ -9320,7 +9341,10 @@ Interactively `region-beginning' and `region-end'."
   "7" 'digit-argument
   "8" 'digit-argument
   "9" 'digit-argument
+  "c" 'surround-comment
+  "C" 'surround-uncomment
   "<remap> <self-insert-command>" 'surround-self-insert
+  "C-q <t>" 'surround-self-insert
   "RET" 'conn-padding-flag
   "C-w" 'backward-delete-arg
   "C-d" 'forward-delete-arg
@@ -9329,6 +9353,7 @@ Interactively `region-beginning' and `region-end'."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-thing-state)
+  ";" 'comment
   "SPC" 'toggle-expanse
   "TAB" 'toggle-parts
   "<tab>" 'toggle-parts)
@@ -9379,6 +9404,14 @@ Interactively `region-beginning' and `region-end'."
   ;; Normalize point and mark
   (unless (= (point) (region-beginning))
     (exchange-point-and-mark)))
+
+(cl-defmethod conn-perform-surround ((_with (eql surround-comment)) arg
+                                     &key &allow-other-keys)
+  (comment-region (region-beginning) (region-end) arg))
+
+(cl-defmethod conn-perform-surround ((_with (eql surround-uncomment)) arg
+                                     &key &allow-other-keys)
+  (uncomment-region (region-beginning) (region-end) arg))
 
 (cl-defmethod conn-perform-surround ((_with (eql surround-self-insert)) arg
                                      &key padding &allow-other-keys)
@@ -10638,6 +10671,7 @@ Operates with the selected windows parent window."
   :keymap global-map
   "<conn-region-map>" conn-default-region-map
   "<conn-edit-map>" conn-default-edit-map
+  "<conn-thing-map> ;" 'conn-mark-comment
   "<conn-thing-map> V" 'conn-mark-visual-line
   "<conn-thing-map> ," 'conn-goto-line
   "<conn-thing-map> <" 'conn-mark-before-point
