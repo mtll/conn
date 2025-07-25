@@ -9361,7 +9361,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defgeneric conn-surround-with-state-handler (cmd ctx))
 
-(cl-defmethod conn-surround-with-state-handler ((cmd (eql surround-self-insert)) ctx)
+(cl-defmethod conn-surround-with-state-handler (cmd ctx)
   (conn-state-loop-exit
     (list cmd (conn-state-loop-prefix-arg)
           :padding (conn-surround-with-padding-flag ctx))))
@@ -9375,7 +9375,7 @@ Interactively `region-beginning' and `region-end'."
 (cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
 
 (cl-defmethod conn-perform-surround :before (_with _arg &key &allow-other-keys)
-  ;; Normalize point/mark
+  ;; Normalize point and mark
   (unless (= (point) (region-beginning))
     (exchange-point-and-mark)))
 
@@ -9399,6 +9399,7 @@ Interactively `region-beginning' and `region-end'."
 (cl-defgeneric conn-prepare-surround (cmd arg &key &allow-other-keys)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
            (important-return-value t))
+  ( :method ((_ (eql nil)) _ &rest _ &key &allow-other-keys) nil)
   ( :method ((cmd (conn-thing anonymous-thing)) arg &rest keys &key &allow-other-keys)
     (if-let* ((op (conn-anonymous-thing-property cmd :prepare-surround-op)))
         (apply op arg keys)
@@ -9438,7 +9439,7 @@ Interactively `region-beginning' and `region-end'."
             (pcase-dolist ((app conn--overlay-bounds `(,beg . ,end))
                            regions)
               (goto-char beg)
-              (conn--push-ephemeral-mark end)
+              (conn--push-ephemeral-mark end nil t)
               (apply #'conn-perform-surround
                      `(,with ,with-arg ,@prep-keys ,@with-keys)))
             (setq success t))
@@ -9579,7 +9580,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                             'conn-surround-with-state
                             :context (conn-make-surround-with-context)))))
               (goto-char (overlay-start ov))
-              (conn--push-ephemeral-mark (overlay-end ov))
+              (conn--push-ephemeral-mark (overlay-end ov) nil t)
               (apply #'conn-perform-surround
                      `(,with ,with-arg ,@prep-keys ,@with-keys))
               (setq success t))

@@ -269,4 +269,54 @@
 
 (add-hook 'org-mode-hook 'conntext-org-hook)
 
+;;;; Surround
+
+(define-keymap
+  :keymap (conn-get-major-mode-map 'conn-surround-with-state 'org-mode)
+  "q" 'org-quote
+  "c" 'org-center
+  "C" 'org-comment
+  "s" 'org-src
+  "v" 'org-verse
+  "a" 'org-export-ascii
+  "h" 'org-export-html
+  "l" 'org-export-latex
+  "e" 'org-example)
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-quote)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "quote"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-comment)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "comment"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-center)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "center"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-src)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "src"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-verse)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "verse"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-export-ascii)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "export ascii"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-export-html)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "export html"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-export-latex)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "export latex"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-example)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "example"))
+
 (provide 'conn-org)
