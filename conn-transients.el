@@ -484,7 +484,7 @@ Begins the keyboard macro in `conn-command-state'."
 (transient-define-suffix conn--kapply-string-suffix (args)
   "Apply keyboard macro to every occurrence of a string within a region."
   :transient 'transient--do-exit
-  :key "j"
+  :key "m"
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
@@ -813,7 +813,7 @@ A zero means repeat until error."
 (transient-define-suffix conn--kapply-occur (args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
-  :key "m"
+  :key "l"
   :description "Occur Matches"
   :if (lambda () (eq major-mode 'occur-mode))
   (interactive (list (transient-args transient-current-command)))
@@ -1596,7 +1596,7 @@ A zero means repeat until error."
   (transient-define-suffix conn--kapply-compilation (args)
     "Apply keyboard macro on regions of text with a specified text property."
     :transient 'transient--do-exit
-    :key "m"
+    :key "l"
     :description "Compilation Matches"
     :if (lambda () (derived-mode-p 'compilation-mode))
     (interactive (list (transient-args transient-current-command)))
