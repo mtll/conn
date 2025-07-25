@@ -569,7 +569,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover nil t))
                ((map :outer :contents)
-                (conn-perform-bounds cmd arg)))
+                (conn-get-bounds cmd arg)))
     (conn--kapply-compose-iterator
      (conn--kapply-region-iterator (or contents (list outer)))
      'conn--kapply-relocate-to-region
@@ -723,7 +723,7 @@ A zero means repeat until error."
                        (conn--kapply-region-iterator
                         (save-excursion
                           (goto-char pt)
-                          (pcase (conn-perform-bounds thing thing-arg)
+                          (pcase (conn-get-bounds thing thing-arg)
                             ('nil (user-error "Cannot find thing at point"))
                             ((map :outer :contents)
                              (or contents (list outer))))))
