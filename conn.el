@@ -1846,6 +1846,7 @@ See also `conn-exit-functions'.")
   (conn-enter-state state)
   ;; Ensure the lighter gets updates even if we haven't changed state
   (setq conn-lighter nil)
+  (force-mode-line-update)
   (push nil conn--state-stack)
   (push state conn--state-stack))
 
@@ -1854,11 +1855,11 @@ See also `conn-exit-functions'.")
   (if-let* ((tail (memq nil conn--state-stack)))
       (progn
         (conn-enter-state (cadr tail))
-        (force-mode-line-update)
         (setq conn--state-stack (cdr tail)
               ;; Ensure the lighter gets updates
               ;; even if we haven't changed state
-              conn-lighter nil))
+              conn-lighter nil)
+        (force-mode-line-update))
     (error "Not in a recursive state")))
 
 
@@ -2781,9 +2782,9 @@ If `use-region-p' returns non-nil this will always return
     conn-current-bounds))
 
 (cl-defmethod conn-get-bounds-subr :after ((_ (conn-thing t)) &optional _)
-  (unless (plist-get conn-current-bounds :inner)
+  (unless (plist-get conn-current-bounds :trim)
     (pcase conn-current-bounds
-      ((map (:outer (and outer `(,beg . ,end))))
+      ((map (:outer `(,beg . ,end)))
        (let ((trimmed
               (cons (progn
                       (goto-char beg)
@@ -2793,8 +2794,7 @@ If `use-region-p' returns non-nil this will always return
                       (goto-char end)
                       (skip-chars-backward conn-bounds-trim-chars beg)
                       (point)))))
-         (unless (equal trimmed outer)
-           (conn-add-bounds :inner trimmed)))))))
+         (conn-add-bounds :trim trimmed))))))
 
 (cl-defmethod conn-get-bounds-subr ((thing (conn-thing t))
                                     &optional _arg)
@@ -7152,14 +7152,14 @@ Expansions and contractions are provided by functions in
                           (while (and (conn--point-in-comment-p)
                                       (not (eobp)))
                             (forward-char 1)
-                            (skip-chars-forward "\n\r"))
-                          (skip-chars-backward "\n\r")
+                            (skip-chars-forward " \t\n\r"))
+                          (skip-chars-backward " \t\n\r")
                           (point))
                         (save-excursion
                           (while (conn--point-in-comment-p)
                             (forward-char -1)
-                            (skip-chars-backward "\n\r"))
-                          (skip-chars-forward "\n\r")
+                            (skip-chars-backward " \t\n\r"))
+                          (skip-chars-forward " \t\n\r")
                           (unless (conn--point-in-comment-p)
                             (forward-char 1))
                           (point)))
@@ -9281,7 +9281,8 @@ Interactively `region-beginning' and `region-end'."
                (:include conn-read-thing)
                (:conc-name conn-surround-thing-)
                (:constructor conn-make-surround-thing-context))
-  (expanse :outer :type keyword)
+  (expanse :trim :type keyword)
+  (trim t :type keyword)
   (parts nil :type boolean))
 
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
@@ -9314,14 +9315,14 @@ Interactively `region-beginning' and `region-end'."
      (propertize (conn-state-loop-format-prefix-arg)
                  'face 'read-multiple-choice-face)
      "; \\[reset-arg] reset arg"
-     "; \\[toggle-expanse] "
-     (propertize (substring (symbol-name (conn-surround-thing-expanse ctx)) 1)
-                 'face 'eldoc-highlight-function-argument)
      "; \\[toggle-parts] "
      (propertize "parts"
                  'face (when (conn-surround-thing-parts ctx)
                          'eldoc-highlight-function-argument))
      "): "
+     (propertize (substring (symbol-name (conn-surround-thing-expanse ctx)) 1)
+                 'face 'eldoc-highlight-function-argument)
+     " "
      (propertize error-message 'face 'error)))))
 
 (conn-define-state conn-surround-with-state (conn-mode-line-face-state)
@@ -9353,12 +9354,15 @@ Interactively `region-beginning' and `region-end'."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-thing-state)
-  "SPC" 'toggle-expanse
+  "DEL" 'trim-thing
+  "<backspace>" 'trim-thing
+  "H" 'outer-thing
+  "." 'inner-thing
   "TAB" 'toggle-parts
   "<tab>" 'toggle-parts)
 
 (put 'conn-surround-overlay 'face 'region)
-(put 'conn-surround-overlay 'priority 100)
+(put 'conn-surround-overlay 'priority 1000)
 (put 'conn-surround-overlay 'conn-overlay t)
 
 (defun conn-surround-create-regions (regions)
@@ -9374,12 +9378,17 @@ Interactively `region-beginning' and `region-end'."
       (conn-read-thing-state-handler cmd ctx)
     `(,@return-value
       :expanse ,(conn-surround-thing-expanse ctx)
+      :trim ,(conn-surround-thing-trim ctx)
       :parts ,(conn-surround-thing-parts ctx))))
 
-(cl-defmethod conn-surround-thing-state-handler ((_cmd (eql toggle-expanse)) ctx)
-  (cl-callf pcase (conn-surround-thing-expanse ctx)
-    (:outer :inner)
-    (:inner :outer)))
+(cl-defmethod conn-surround-thing-state-handler ((_cmd (eql inner-thing)) ctx)
+  (setf (conn-surround-thing-expanse ctx) :inner))
+
+(cl-defmethod conn-surround-thing-state-handler ((_cmd (eql trim-thing)) ctx)
+  (setf (conn-surround-thing-expanse ctx) :trim))
+
+(cl-defmethod conn-surround-thing-state-handler ((_cmd (eql outer-thing)) ctx)
+  (setf (conn-surround-thing-expanse ctx) :outer))
 
 (cl-defmethod conn-surround-thing-state-handler ((_cmd (eql toggle-parts)) ctx)
   (cl-callf not (conn-surround-thing-parts ctx)))
