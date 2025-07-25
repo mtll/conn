@@ -9353,7 +9353,6 @@ Interactively `region-beginning' and `region-end'."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-thing-state)
-  ";" 'comment
   "SPC" 'toggle-expanse
   "TAB" 'toggle-parts
   "<tab>" 'toggle-parts)
@@ -10713,6 +10712,7 @@ Operates with the selected windows parent window."
   "C-r" 'isearch-backward
   "C-M-s" 'isearch-forward-regexp
   "C-M-r" 'isearch-backward-regexp
+  ";" 'comment
   "d" 'conn-forward-defun
   "y" 'forward-symbol
   "t" 'conn-forward-inner-line
