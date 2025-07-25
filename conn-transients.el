@@ -320,13 +320,12 @@ Begins the keyboard macro by deleting the string at each match."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--kapply-compose-iterator
-   (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`((,beg . ,end) . ,regions)
-                 (cdr (conn-read-thing-region)))
-                (string (filter-buffer-substring
-                         (region-beginning) (region-end))))
+   (let* ((delimited (oref transient-current-prefix scope))
+          (regions (conn-read-thing-region nil))
+          (string (filter-buffer-substring
+                   (region-beginning) (region-end))))
      (conn--kapply-match-iterator
-      string (or regions (list (cons beg end)))
+      string regions
       'conn--nnearest-first nil delimited))
    'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
@@ -352,13 +351,12 @@ Begins the keyboard macro in `conn-emacs-state'."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--kapply-compose-iterator
-   (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`((,beg . ,end) . ,regions)
-                 (cdr (conn-read-thing-region)))
-                (string (filter-buffer-substring
-                         (region-beginning) (region-end))))
+   (let* ((delimited (oref transient-current-prefix scope))
+          (regions (conn-read-thing-region nil))
+          (string (filter-buffer-substring
+                   (region-beginning) (region-end))))
      (conn--kapply-match-iterator
-      string (or regions (list (cons beg end)))
+      string regions
       'conn--nnearest-first nil delimited))
    'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
@@ -383,13 +381,12 @@ Begins the keyboard macro in `conn-command-state'."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (conn--kapply-compose-iterator
-   (pcase-let* ((delimited (oref transient-current-prefix scope))
-                (`((,beg . ,end) . ,regions)
-                 (cdr (conn-read-thing-region)))
-                (string (filter-buffer-substring
-                         (region-beginning) (region-end))))
+   (let* ((delimited (oref transient-current-prefix scope))
+          (regions (conn-read-thing-region nil))
+          (string (filter-buffer-substring
+                   (region-beginning) (region-end))))
      (conn--kapply-match-iterator
-      string (or regions (list (cons beg end)))
+      string regions
       'conn--nnearest-first nil delimited))
    'conn--kapply-relocate-to-region
    (if (eq search-invisible 'open)
@@ -488,21 +485,19 @@ Begins the keyboard macro in `conn-command-state'."
   :description "String"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (pcase-let* ((delimited (oref transient-current-prefix scope))
-               (`((,beg . ,end) . ,regions)
-                (cdr (conn-read-thing-region)))
-               (conn-query-flag conn-query-flag)
-               (string (minibuffer-with-setup-hook
-                           (lambda ()
-                             (thread-last
-                               (current-local-map)
-                               (make-composed-keymap conn-replace-to-map)
-                               (use-local-map)))
-                         (conn--read-from-with-preview
-                          "String" (or regions (list (cons beg end))) nil))))
+  (let* ((delimited (oref transient-current-prefix scope))
+         (regions (conn-read-thing-region nil))
+         (conn-query-flag conn-query-flag)
+         (string (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (make-composed-keymap conn-replace-to-map)
+                         (use-local-map)))
+                   (conn--read-from-with-preview "String" regions nil))))
     (conn--kapply-compose-iterator
      (conn--kapply-match-iterator
-      string (or regions (list (cons beg end)))
+      string regions
       (or (alist-get :sort args)
           'conn--nnearest-first)
       nil delimited)
@@ -526,20 +521,19 @@ Begins the keyboard macro in `conn-command-state'."
   :key "u"
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let* ((delimited (oref transient-current-prefix scope))
-               (`((,beg . ,end) . ,regions)
-                (cdr (conn-read-thing-region)))
-               (conn-query-flag conn-query-flag)
-               (regexp (minibuffer-with-setup-hook
-                           (lambda ()
-                             (thread-last
-                               (current-local-map)
-                               (use-local-map)))
-                         (conn--read-from-with-preview
-                          "Regexp" (or regions (list (cons beg end))) t))))
+  (let* ((delimited (oref transient-current-prefix scope))
+         (regions (conn-read-thing-region nil))
+         (conn-query-flag conn-query-flag)
+         (regexp (minibuffer-with-setup-hook
+                     (lambda ()
+                       (thread-last
+                         (current-local-map)
+                         (use-local-map)))
+                   (conn--read-from-with-preview
+                    "Regexp" regions t))))
     (conn--kapply-compose-iterator
      (conn--kapply-match-iterator
-      regexp (or regions (list (cons beg end)))
+      regexp regions
       (or (alist-get :sort args)
           'conn--nnearest-first)
       t delimited)
@@ -593,7 +587,8 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,cmd ,n) (conn-read-thing-mover)))
+  (pcase-let ((`(,cmd ,n . ,_)
+               (conn-read-thing-mover nil)))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
      'conn--kapply-relocate-to-region
@@ -789,9 +784,8 @@ A zero means repeat until error."
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,beg . ,end)
-               (when (alist-get :in-thing args)
-                 (nth 1 (apply 'conn-perform-dispatch
-                               (conn-read-thing-mover-dwim))))))
+               (apply #'conn-get-bounds
+                      (take 2 (conn-read-thing-mover-dwim nil)))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
