@@ -1854,6 +1854,7 @@ See also `conn-exit-functions'.")
   (if-let* ((tail (memq nil conn--state-stack)))
       (progn
         (conn-enter-state (cadr tail))
+        (force-mode-line-update)
         (setq conn--state-stack (cdr tail)
               ;; Ensure the lighter gets updates
               ;; even if we haven't changed state
@@ -2535,8 +2536,8 @@ themselves once the selection process has concluded."
   (cl-with-gensyms (return)
     `(let ((,return (catch 'state-loop-exit ,body)))
        (if conn--state-loop-exiting
-           (let ((,var (funcall ,return)))
-             (conn-state-loop-exit
+           (conn-state-loop-exit
+             (let ((,var (funcall ,return)))
                ,@exit-forms))
          ,return))))
 
