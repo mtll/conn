@@ -281,6 +281,7 @@
   "a" 'org-export-ascii
   "h" 'org-export-html
   "l" 'org-export-latex
+  "E" 'org-export
   "e" 'org-example)
 
 (cl-defmethod conn-perform-surround ((_cmd (eql org-quote)) _arg
@@ -297,7 +298,10 @@
 
 (cl-defmethod conn-perform-surround ((_cmd (eql org-src)) _arg
                                      &key &allow-other-keys)
-  (org-insert-structure-template "src"))
+  (org-insert-structure-template "src")
+  (undo-boundary)
+  (conn-with-recursive-state 'conn-emacs-state
+    (recursive-edit)))
 
 (cl-defmethod conn-perform-surround ((_cmd (eql org-verse)) _arg
                                      &key &allow-other-keys)
@@ -318,5 +322,12 @@
 (cl-defmethod conn-perform-surround ((_cmd (eql org-example)) _arg
                                      &key &allow-other-keys)
   (org-insert-structure-template "example"))
+
+(cl-defmethod conn-perform-surround ((_cmd (eql org-export)) _arg
+                                     &key &allow-other-keys)
+  (org-insert-structure-template "export")
+  (undo-boundary)
+  (conn-with-recursive-state 'conn-emacs-state
+    (recursive-edit)))
 
 (provide 'conn-org)
