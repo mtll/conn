@@ -2869,7 +2869,8 @@ If `use-region-p' returns non-nil this will always return
   (pcase (prefix-numeric-value arg)
     (0 nil)
     ((and n (or 1 -1))
-     (let ((current-prefix-arg n)
+     (let ((start (cons (point) (mark)))
+           (current-prefix-arg n)
            (conn-this-command-handler (conn-command-mark-handler cmd))
            (conn-this-command-thing (conn-command-thing cmd))
            (conn-this-command-start (point-marker))
@@ -2877,11 +2878,16 @@ If `use-region-p' returns non-nil this will always return
        (ignore-errors
          (call-interactively cmd)
          (funcall conn-this-command-handler conn-this-command-start))
-       (conn-add-bounds :outer (cons (region-beginning) (region-end)))))
+       (let ((region (cons (region-beginning) (region-end))))
+         (unless (equal region start)
+           (conn-add-bounds :outer region)))))
     (n
      (let (contents)
-       (dotimes (_ n)
-         (push (conn-get-bounds-subr cmd (cl-signum arg)) contents))
+       (catch 'break
+         (dotimes (_ n)
+           (if-let* ((bound (conn-get-bounds-subr cmd (cl-signum arg))))
+               (push bound contents)
+             (throw 'break nil))))
        (conn-add-bounds
         :outer (cl-loop for bound in contents
                         for (b . e) = (plist-get bound :outer)
