@@ -783,9 +783,9 @@ A zero means repeat until error."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,beg . ,end)
+  (pcase-let (((map (:outer `(,beg . ,end)))
                (apply #'conn-get-bounds
-                      (take 2 (conn-read-thing-mover-dwim nil)))))
+                      (conn-read-thing-mover-dwim nil))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))

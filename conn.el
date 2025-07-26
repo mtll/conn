@@ -2735,14 +2735,15 @@ If `use-region-p' returns non-nil this will always return
 
 (cl-defun conn-read-thing-region (arg &key recursive-edit subregions trim)
   (declare (important-return-value t))
-  (pcase-let* ((`(,cmd ,arg . ,props)
-                (conn-read-thing-mover arg
-                                       :recursive-edit recursive-edit
-                                       :subregions-flag subregions
-                                       :trim-flag trim))
+  (pcase-let* ((`(,cmd ,arg . ,keys)
+                (conn-read-thing-mover-dwim
+                 arg
+                 :recursive-edit recursive-edit
+                 :subregions subregions
+                 :trim trim))
                ((map :outer :contents)
                 (conn-get-bounds cmd arg)))
-    (if (and (plist-get props :subregions) contents)
+    (if (and (plist-get keys :subregions) contents)
         contents
       (list outer))))
 
@@ -2765,14 +2766,15 @@ If `use-region-p' returns non-nil this will always return
 
 (cl-defmethod conn-read-thing-state-handler ((command (conn-thing t)) ctx)
   (conn-state-loop-exit
-    (list command (conn-state-loop-prefix-arg)
-          :trim (and (conn-read-thing-trim-flag ctx) t)
-          :subregions (and (conn-read-thing-subregions-flag ctx) t))))
+    (append (list command (conn-state-loop-prefix-arg))
+            (when (conn-read-thing-trim-flag ctx)
+              (list :trim (eq (conn-read-thing-trim-flag ctx) :active)))
+            (when (conn-read-thing-subregions-flag ctx)
+              (list :subregions (eq (conn-read-thing-subregions-flag ctx) :active))))))
 
-(cl-defmethod conn-read-thing-state-handler ((command (conn-thing region)) ctx)
+(cl-defmethod conn-read-thing-state-handler ((command (conn-thing region)) _ctx)
   (conn-state-loop-exit
     (list command (conn-state-loop-prefix-arg)
-          :trim (conn-read-thing-trim-flag ctx)
           :subregions t)))
 
 (cl-defmethod conn-read-thing-state-handler ((command (eql recursive-edit))
@@ -2843,7 +2845,7 @@ If `use-region-p' returns non-nil this will always return
     conn-current-bounds))
 
 (cl-defmethod conn-get-bounds-subr :after ((_ (conn-thing t)) &optional _)
-  (unless (plist-get conn-current-bounds :trim)
+  (unless (plist-get conn-current-bounds :trimmed)
     (pcase conn-current-bounds
       ((map (:outer `(,beg . ,end)))
        (let ((trimmed
@@ -2855,7 +2857,7 @@ If `use-region-p' returns non-nil this will always return
                       (goto-char end)
                       (skip-chars-backward conn-bounds-trim-chars beg)
                       (point)))))
-         (conn-add-bounds :trim trimmed))))))
+         (conn-add-bounds :trimmed trimmed))))))
 
 (cl-defmethod conn-get-bounds-subr ((thing (conn-thing t))
                                     &optional _arg)
@@ -7554,8 +7556,7 @@ Expansions and contractions are provided by functions in
                              (list (cons (conn--create-marker beg)
                                          (conn--create-marker end))))))))
 
-(defun conn-push-thing-to-narrow-register ( thing-cmd thing-arg register
-                                            &key subregions &allow-other-keys)
+(defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register &key subregions)
   "Prepend thing regions to narrow register."
   (interactive
    (pcase-let ((`(,thing-cmd ,thing-arg . ,keys)
@@ -7580,8 +7581,7 @@ Expansions and contractions are provided by functions in
       (_
        (set-register register (conn--make-narrow-register narrowings))))))
 
-(cl-defun conn-thing-to-narrow-ring ( thing-cmd thing-arg
-                                      &key subregions &allow-other-keys)
+(cl-defun conn-thing-to-narrow-ring (thing-cmd thing-arg &key subregions)
   "Push thing regions to narrow ring."
   (interactive (conn-read-thing-mover-dwim nil :subregions t))
   (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
@@ -8299,8 +8299,7 @@ Exiting the recursive edit will resume the isearch."
         (isearch-backward regexp t)
       (isearch-forward regexp t))))
 
-(cl-defun conn-isearch-forward ( thing-cmd thing-arg
-                                 &key regexp subregions &allow-other-keys)
+(cl-defun conn-isearch-forward (thing-cmd thing-arg &key regexp subregions)
   "Isearch forward within the bounds of a thing."
   (interactive
    (append (conn-read-thing-mover-dwim
@@ -8313,8 +8312,7 @@ Exiting the recursive edit will resume the isearch."
                           :regexp regexp
                           :subregions subregions))
 
-(cl-defun conn-isearch-backward ( thing-cmd thing-arg
-                                  &key regexp subregions &allow-other-keys)
+(cl-defun conn-isearch-backward (thing-cmd thing-arg &key regexp subregions)
   "Isearch backward within the bounds of a thing."
   (interactive
    (append (conn-read-thing-mover-dwim
@@ -8327,14 +8325,13 @@ Exiting the recursive edit will resume the isearch."
                           :regexp regexp
                           :subregions subregions))
 
-(cl-defun conn-isearch-region-forward ( thing-cmd thing-arg
-                                        &key regexp &allow-other-keys)
+(defun conn-isearch-region-forward (thing-cmd thing-arg &optional regexp)
   "Isearch forward for region from BEG to END.
 
 Interactively `region-beginning' and `region-end'."
   (interactive
    (append (conn-read-thing-mover nil :recursive-edit t)
-           (list :regexp current-prefix-arg)))
+           (list current-prefix-arg)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
     (conn--isearch-in-thing thing-cmd thing-arg
@@ -8345,14 +8342,13 @@ Interactively `region-beginning' and `region-end'."
            isearch-new-message (mapconcat #'isearch-text-char-description
                                           isearch-new-string "")))))
 
-(cl-defun conn-isearch-region-backward ( thing-cmd thing-arg
-                                         &key regexp &allow-other-keys)
+(defun conn-isearch-region-backward (thing-cmd thing-arg &optional regexp)
   "Isearch backward for region from BEG to END.
 
 Interactively `region-beginning' and `region-end'."
   (interactive
    (append (conn-read-thing-mover nil t)
-           (list :regexp current-prefix-arg)))
+           (list current-prefix-arg)))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
     (conn--isearch-in-thing thing-cmd thing-arg
@@ -8811,9 +8807,9 @@ With arg N, insert N newlines."
   (delete-indentation nil beg end)
   (indent-according-to-mode))
 
-(cl-defun conn-join-lines (thing-mover thing-arg &key subregions &allow-other-keys)
+(cl-defun conn-join-lines (thing-mover thing-arg &key subregions)
   "`delete-indentation' in region from START and END."
-  (interactive (conn-read-thing-mover-dwim nil))
+  (interactive (conn-read-thing-mover-dwim nil :subregions t))
   (save-mark-and-excursion
     (pcase (conn-get-bounds thing-mover thing-arg)
       ((and (guard subregions) (map :contents))
@@ -8904,13 +8900,13 @@ With a prefix arg prepend to a register instead."
            (register-read-with-preview "Prepend to register: "))))
   (conn-prepend-region beg end register t))
 
-(cl-defun conn-copy-thing (thing-mover arg &key register trim &allow-other-keys)
+(cl-defun conn-copy-thing (thing-mover arg &key register trim)
   "Copy THING at point."
   (interactive
-   (append (conn-read-thing-mover-dwim nil :subregions t)
+   (append (conn-read-thing-mover-dwim nil :subregions t :trim t)
            (when current-prefix-arg
              (list :register (register-read-with-preview "Register: ")))))
-  (pcase-let (((map :outer (:trim trimmed))
+  (pcase-let (((map :outer :trimmed)
                (conn-get-bounds thing-mover arg)))
     (if (and trim trimmed)
         (progn
@@ -8931,10 +8927,10 @@ With a prefix arg prepend to a register instead."
 (defun conn-narrow-to-thing (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (append (take 2 (conn-read-thing-mover-dwim
-                    (when current-prefix-arg
-                      (prefix-numeric-value current-prefix-arg))
-                    :recursive-edit t))
+   (append (conn-read-thing-mover-dwim
+            (when current-prefix-arg
+              (prefix-numeric-value current-prefix-arg))
+            :recursive-edit t)
            (list t)))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
@@ -8951,10 +8947,10 @@ With a prefix arg prepend to a register instead."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (append (take 2 (conn-read-thing-mover-dwim
-                    (when current-prefix-arg
-                      (prefix-numeric-value current-prefix-arg))
-                    :recursive-edit t))
+   (append (conn-read-thing-mover-dwim
+            (when current-prefix-arg
+              (prefix-numeric-value current-prefix-arg))
+            :recursive-edit t)
            (list t)))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
@@ -9202,7 +9198,7 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (append (take 2 (conn-read-thing-mover-dwim nil :recursive-edit t))
+   (append (conn-read-thing-mover-dwim nil :recursive-edit t)
            (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-get-bounds thing-mover thing-arg)
     ((map (:outer `(,beg . ,end)))
@@ -9241,7 +9237,7 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (append (take 2 (conn-read-thing-mover-dwim nil :recursive-edit t))
+   (append (conn-read-thing-mover-dwim nil :recursive-edit t)
            (list (prefix-numeric-value current-prefix-arg))))
   (pcase (conn-get-bounds thing-mover thing-arg)
     ((and (map (:outer `(,beg . ,end)))
@@ -9319,7 +9315,7 @@ of `conn-recenter-positions'."
 
 (defun conn-comment-or-uncomment (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
-  (interactive (take 2 (conn-read-thing-mover-dwim nil)))
+  (interactive (conn-read-thing-mover-dwim nil))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
     (if (comment-only-p beg end)
@@ -9379,7 +9375,14 @@ Interactively `region-beginning' and `region-end'."
   (padding-flag nil :type boolean))
 
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
+  :lighter "SURROUND"
   :loop-handler 'conn-surround-thing-state-handler)
+
+(conn-define-state conn-surround-with-state (conn-mode-line-face-state)
+  :lighter "WITH"
+  :loop-handler 'conn-surround-with-state-handler
+  :loop-message 'conn-surround-with-message
+  :mode-line-face 'conn-read-surround-with-mode-line-face)
 
 (defun conn-surround-with-message (ctx error-message)
   (message
@@ -9390,18 +9393,14 @@ Interactively `region-beginning' and `region-end'."
      (propertize (conn-state-loop-format-prefix-arg)
                  'face 'read-multiple-choice-face)
      "; \\[reset-arg] reset arg"
+     "; \\[conn-padding-flag] "
+     (if-let* ((padding (conn-surround-with-padding-flag ctx)))
+         (propertize
+          (format "Padding <%s>" padding)
+          'face 'eldoc-highlight-function-argument)
+       "Padding")
      "): "
-     (when-let* ((padding (conn-surround-with-padding-flag ctx)))
-       (propertize
-        (format "Padding <%s>" padding)
-        'face 'eldoc-highlight-function-argument))
-     " "
      (propertize error-message 'face 'error)))))
-
-(conn-define-state conn-surround-with-state (conn-mode-line-face-state)
-  :loop-handler 'conn-surround-with-state-handler
-  :loop-message 'conn-surround-with-message
-  :mode-line-face 'conn-read-surround-with-mode-line-face)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-surround-with-state)
@@ -9426,7 +9425,7 @@ Interactively `region-beginning' and `region-end'."
   "M-<backspace>" 'reset-arg)
 
 (put 'conn-surround-overlay 'face 'region)
-(put 'conn-surround-overlay 'priority 1000)
+(put 'conn-surround-overlay 'priority (1+ conn-mark-overlay-priority))
 (put 'conn-surround-overlay 'conn-overlay t)
 
 (defun conn-surround-create-regions (regions)
@@ -9442,7 +9441,11 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defgeneric conn-surround-with-state-handler (cmd ctx))
 
-(cl-defmethod conn-surround-with-state-handler (cmd ctx)
+(cl-defmethod conn-surround-with-state-handler (_cmd _ctx)
+  (conn-state-loop-error "Invalid command"))
+
+(cl-defmethod conn-surround-with-state-handler ((cmd (eql surround-self-insert))
+                                                ctx)
   (conn-state-loop-exit
     (list cmd (conn-state-loop-prefix-arg)
           :padding (conn-surround-with-padding-flag ctx))))
@@ -9485,6 +9488,11 @@ Interactively `region-beginning' and `region-end'."
          (ins-pair open close))))
     (when padding (ins-pair padding))))
 
+(defun conn--make-surround-region (beg end)
+  (let ((ov (make-overlay beg end)))
+    (overlay-put ov 'category 'conn-surround-overlay)
+    ov))
+
 (cl-defgeneric conn-prepare-surround (cmd arg &key &allow-other-keys)
   (declare (conn-anonymous-thing-property :prepare-surround-op)
            (important-return-value t))
@@ -9494,18 +9502,18 @@ Interactively `region-beginning' and `region-end'."
         (apply op arg keys)
       (apply #'conn-prepare-surround (conn-anonymous-thing-parent cmd) arg keys))))
 
-(cl-defmethod conn-prepare-surround (cmd arg &key expanse subregions &allow-other-keys)
+(cl-defmethod conn-prepare-surround (cmd arg &key subregions trim &allow-other-keys)
   (let ((bounds (conn-get-bounds cmd arg))
         regions)
     (dolist (bound (if subregions
                        (plist-get bounds :contents)
                      (list bounds)))
-      (pcase (or (plist-get bound expanse)
-                 (plist-get bound :outer))
+      (pcase (if trim
+                 (plist-get bound :trimmed)
+               (plist-get bound :outer))
         ((and `(,beg . ,end) (pred identity))
-         (push (make-overlay beg end) regions)
-         (overlay-put (car regions) 'category 'conn-surround-overlay))))
-    (list regions nil)))
+         (push (conn--make-surround-region beg end) regions))))
+    (list regions)))
 
 (defun conn-surround ()
   (interactive)
@@ -9518,7 +9526,7 @@ Interactively `region-beginning' and `region-end'."
                             'conn-surround-thing-state
                             :context (conn-read-thing-context
                                       :subregions-flag t
-                                      :trim-flag t)))))
+                                      :trim-flag :active)))))
                  (cleanup (plist-get prep-keys :cleanup))
                  (success nil))
       (unwind-protect
@@ -9542,6 +9550,7 @@ Interactively `region-beginning' and `region-end'."
 ;;;;; Change
 
 (conn-define-state conn-change-state (conn-read-thing-state)
+  :lighter "CHG"
   :loop-handler 'conn-change-state-handler)
 
 (cl-defgeneric conn-change-state-handler (cmd ctx))
@@ -9597,6 +9606,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 ;;;;;; Change Surround
 
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
+  :lighter "CHG-SURROUND"
   :loop-handler 'conn-change-surround-state-handler
   :loop-message 'conn-change-surround-message)
 
@@ -9615,6 +9625,9 @@ If KILL is non-nil add region to the `kill-ring'.  When in
      (propertize error-message 'face 'error)))))
 
 (cl-defgeneric conn-change-surround-state-handler (cmd ctx))
+
+(cl-defmethod conn-change-surround-state-handler (_cmd _ctx)
+  (conn-state-loop-error "Invalid command"))
 
 (cl-defmethod conn-change-surround-state-handler ((cmd (eql surround-self-insert))
                                                   _ctx)
@@ -9649,9 +9662,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (exchange-point-and-mark)
             (delete-char -1)
             (exchange-point-and-mark)
-            (let ((ov (make-overlay (region-beginning) (region-end))))
-              (overlay-put ov 'category 'conn-surround-overlay)
-              (throw 'return (list ov)))))))
+            (throw 'return (conn--make-surround-region beg end))))))
     (user-error "No %c found surrounding point" last-input-event)))
 
 (cl-defmethod conn-perform-change ((_cmd (eql conn-surround)) _arg
