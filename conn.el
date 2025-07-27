@@ -2536,7 +2536,7 @@ themselves once the selection process has concluded."
                         nil
                         'conn--loop-message-function)))
 
-(defun conn--loop-prompt-2 (prompt arguments)
+(defun conn--loop-prompt (prompt arguments)
   (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil))
     (message
@@ -2573,10 +2573,10 @@ themselves once the selection process has concluded."
        " "
        (propertize conn--loop-error-message 'face 'error))))))
 
-(cl-defgeneric conn-with-state-loop-2
+(cl-defgeneric conn-with-state-loop
     (state arglist &key command-handler prompt prefix pre post))
 
-(cl-defmethod conn-with-state-loop-2 (state arglist &key command-handler prompt prefix pre post)
+(cl-defmethod conn-with-state-loop (state arglist &key command-handler prompt prefix pre post)
   (conn-protected-let*
       ((arguments (delq nil arglist)
                   (mapc #'conn-loop-cancel-argument arguments))
@@ -2591,7 +2591,7 @@ themselves once the selection process has concluded."
       (while (cl-loop for arg in arguments
                       thereis (conn-loop-argument--required-p arg))
         (unless conn--loop-message-timer
-          (conn--loop-prompt-2 prompt arguments))
+          (conn--loop-prompt prompt arguments))
         (let ((conn-loop-this-command
                (prog1 (key-binding (read-key-sequence nil) t)
                  (setf conn--loop-error-message ""))))
@@ -2626,7 +2626,7 @@ themselves once the selection process has concluded."
             ('keyboard-quit
              (keyboard-quit))
             ((or 'help 'execute-extended-command)
-             (when-let* ((cmd (conn--state-loop-completing-read-2 state arguments)))
+             (when-let* ((cmd (conn--state-loop-completing-read state arguments)))
                (setq conn-loop-this-command cmd)
                (condition-case err
                    (or (cl-loop with handled = nil
@@ -2672,7 +2672,7 @@ themselves once the selection process has concluded."
      (keymap-canonicalize keymap))
     bindings))
 
-(defun conn--state-loop-completing-read-2 (state args)
+(defun conn--state-loop-completing-read (state args)
   (if-let* ((metadata (conn-state-get state :loop-completion-metadata))
             (table (mapcan #'conn--all-bindings (current-active-maps))))
       (condition-case _
@@ -2871,7 +2871,7 @@ ARG is the initial value for the arg to be returned.
 RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
 command."
   (declare (important-return-value t))
-  (conn-with-state-loop-2
+  (conn-with-state-loop
    'conn-read-thing-state
    (list (conn-loop-thing :recursive-edit recursive-edit)
          (when subregions (conn-loop-subregions nil))
@@ -4221,9 +4221,9 @@ order to mark the region that should be defined by any of COMMANDS."
                    ,body)
               body))))))
 
-;;;;; Dispatch Command Loop 2
+;;;;; Dispatch Command Loop
 
-(cl-defmethod conn-with-state-loop-2 ((_state (eql conn-dispatch-state))
+(cl-defmethod conn-with-state-loop ((_state (eql conn-dispatch-state))
                                       _arglist &key &allow-other-keys)
   (catch 'previous-dispatch (cl-call-next-method)))
 
@@ -6955,7 +6955,7 @@ contain targets."
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
   (apply #'conn-perform-dispatch
-         (conn-with-state-loop-2
+         (conn-with-state-loop
           'conn-dispatch-state
           (list (conn-dispatch-loop-action)
                 (conn-loop-thing :recursive-edit t)
@@ -6983,7 +6983,7 @@ contain targets."
                (goto-char pt)
                (when-let* ((bound (conn-get-bounds thing thing-arg)))
                  (push (plist-get bound :outer) bounds))))
-           (conn-with-state-loop-2
+           (conn-with-state-loop
             'conn-dispatch-mover-state
             (list (conn-loop-thing :recursive-edit t)
                   (conn-dispatch-loop-repeat nil))
@@ -7293,7 +7293,7 @@ Expansions and contractions are provided by functions in
                                     &optional arg)
   (call-interactively cmd)
   (apply #'conn-add-bounds
-         (conn-with-state-loop-2
+         (conn-with-state-loop
           'conn-expand-state
           (list
            (oclosure-lambda (conn-loop-argument
@@ -8857,7 +8857,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                       buffer point (or thing thing2)
                       (window-buffer window2) pt2 thing2
                       thing-arg))
-                   (conn-with-state-loop-2
+                   (conn-with-state-loop
                     'conn-dispatch-transpose-state
                     (list thing-arg
                           (conn-dispatch-loop-restrict-windows))
@@ -8875,7 +8875,7 @@ With argument ARG 0, exchange the things at point and mark.
 If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
-   (conn-with-state-loop-2
+   (conn-with-state-loop
     'conn-transpose-state
     (list (conn-loop-thing :recursive-edit t))
     :prompt "Transpose"
@@ -9640,7 +9640,7 @@ Interactively `region-beginning' and `region-end'."
                   (apply #'conn-prepare-surround
                          (if (use-region-p)
                              (list 'region current-prefix-arg)
-                           (conn-with-state-loop-2
+                           (conn-with-state-loop
                             'conn-surround-thing-state
                             (list (conn-loop-thing)
                                   (conn-loop-subregions)
@@ -9651,7 +9651,7 @@ Interactively `region-beginning' and `region-end'."
       (unwind-protect
           (pcase-let ((`(,with ,with-arg . ,with-keys)
                        (conn-with-overriding-map (plist-get prep-keys :keymap)
-                         (conn-with-state-loop-2
+                         (conn-with-state-loop
                           'conn-surround-with-state
                           (list (conn-surround-with)
                                 (conn-surround-padding))
@@ -9702,7 +9702,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (append (if (use-region-p)
                (list 'region nil)
-             (conn-with-state-loop-2
+             (conn-with-state-loop
               'conn-change-state
               (list (conn-loop-thing))
               :prompt "Thing"))
@@ -9782,7 +9782,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (atomic-change-group
       (pcase-let* ((`(,ov . ,prep-keys)
                     (apply #'conn-prepare-change-surround
-                           (conn-with-state-loop-2
+                           (conn-with-state-loop
                             'conn-change-surround-state
                             (list (conn-change-surround))
                             :prompt "Change Surrounding")))
@@ -9792,7 +9792,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
                          (conn-with-overriding-map keymap
-                           (conn-with-state-loop-2
+                           (conn-with-state-loop
                             'conn-surround-with-state
                             (list (conn-surround-with)
                                   (conn-surround-padding))
@@ -11354,7 +11354,7 @@ Operates with the selected windows parent window."
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
   (apply #'conn-perform-dispatch
-         (conn-with-state-loop-2
+         (conn-with-state-loop
           'conn-dired-dispatch-state
           (list (conn-dispatch-loop-action)
                 (conn-loop-thing)
