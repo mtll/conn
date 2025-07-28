@@ -9554,8 +9554,8 @@ Interactively `region-beginning' and `region-end'."
   (concat "\\[conn-padding-flag] "
           (if-let* ((p (conn-dispatch-other-end-argument--value arg)))
               (propertize (format "padding <%s>" p)
-                          'face 'eldoc-highlight-function-argument))
-          "padding"))
+                          'face 'eldoc-highlight-function-argument)
+            "padding")))
 
 ;;;;;; Perform Surround
 
@@ -9577,7 +9577,7 @@ Interactively `region-beginning' and `region-end'."
 (cl-defmethod conn-perform-surround ((_with (eql surround-self-insert)) arg
                                      &key padding &allow-other-keys)
   (cl-labels ((ins-pair (open &optional close)
-                (insert-before-markers open)
+                (insert open)
                 (exchange-point-and-mark)
                 (save-excursion (insert (or close open)))
                 (exchange-point-and-mark)))
