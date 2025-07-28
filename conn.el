@@ -1728,20 +1728,24 @@ See also `conn-exit-functions'.")
 
 (defvar conn-state-lighter-seperator "→")
 
+(defconst conn--lighter-cache
+  (make-hash-table :test 'equal :weakness 'value))
+
 (defun conn--get-lighter ()
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
-    (named-let loop ((lighter (conn-state-get conn-current-state :lighter))
-                     (stack (cdr conn--state-stack)))
-      (pcase stack
-        ('nil
-         (concat " [" lighter "]"))
-        (`(nil . ,rest)
-         (loop (concat "[" lighter "]") rest))
-        (`(,state . ,rest)
-         (loop (concat (conn-state-get state :lighter)
-                       conn-state-lighter-seperator
-                       lighter)
-               rest))))))
+    (with-memoization (gethash conn--state-stack conn--lighter-cache)
+      (named-let loop ((lighter (conn-state-get conn-current-state :lighter))
+                       (stack (cdr conn--state-stack)))
+        (pcase stack
+          ('nil
+           (concat " [" lighter "]"))
+          (`(nil . ,rest)
+           (loop (concat "[" lighter "]") rest))
+          (`(,state . ,rest)
+           (loop (concat (conn-state-get state :lighter)
+                         conn-state-lighter-seperator
+                         lighter)
+                 rest)))))))
 
 (defun conn-update-lighter (&optional buffer)
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
@@ -2257,6 +2261,20 @@ strings have `conn-dispatch-label-face'."
 
 
 ;;;;; Label Reading
+
+(defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
+  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
+  (declare (indent 3))
+  (cl-once-only (keymap)
+    (let ((body `(let ((conn--dispatch-read-event-handlers
+                        (cons ,handler conn--dispatch-read-event-handlers)))
+                   ,@body)))
+      `(catch ,tag
+         ,(if keymap
+              `(let ((conn--dispatch-event-handler-maps
+                      (cons ,keymap conn--dispatch-event-handler-maps)))
+                 ,body)
+            body)))))
 
 (cl-defgeneric conn-label-delete (label)
   "Delete the label LABEL.
@@ -4183,21 +4201,6 @@ order to mark the region that should be defined by any of COMMANDS."
                (put-text-property 0 (length thing)
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
-
-(eval-and-compile
-  (defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
-    "\(fn (DESCRIPTION &rest CASE) &body BODY)"
-    (declare (indent 3))
-    (cl-once-only (keymap)
-      (let ((body `(let ((conn--dispatch-read-event-handlers
-                          (cons ,handler conn--dispatch-read-event-handlers)))
-                     ,@body)))
-        `(catch ,tag
-           ,(if keymap
-                `(let ((conn--dispatch-event-handler-maps
-                        (cons ,keymap conn--dispatch-event-handler-maps)))
-                   ,body)
-              body))))))
 
 ;;;;; Dispatch Command Loop
 
@@ -6523,33 +6526,32 @@ contain targets."
            (dolist (undo conn--dispatch-loop-change-groups)
              (funcall undo :accept)))))))
 
-(eval-and-compile
-  (defmacro conn-with-dispatch-suspended (&rest body)
-    (declare (indent 0))
-    (cl-with-gensyms (select-mode)
-      `(pcase-let ((`(,conn-target-window-predicate
-                      ,conn-target-predicate
-                      ,conn-target-sort-function)
-                    conn--dispatch-init-state)
-                   (conn-dispatch-looping nil)
-                   (conn--dispatch-loop-change-groups nil)
-                   (inhibit-message nil)
-                   (recenter-last-op nil)
-                   (conn-dispatch-repeat-count nil)
-                   (conn-dispatch-other-end nil)
-                   (conn-state-loop-last-command nil)
-                   (conn--loop-prefix-mag nil)
-                   (conn--loop-prefix-sign nil)
-                   (conn--dispatch-read-event-handlers nil)
-                   (conn--dispatch-read-event-message-prefixes nil)
-                   (conn--dispatch-always-retarget nil)
-                   (,select-mode conn-dispatch-select-mode))
-         (conn-delete-targets)
-         (message nil)
-         (if ,select-mode (conn-dispatch-select-mode -1))
-         (unwind-protect
-             ,(macroexp-progn body)
-           (if ,select-mode (conn-dispatch-select-mode 1)))))))
+(defmacro conn-with-dispatch-suspended (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (select-mode)
+    `(pcase-let ((`(,conn-target-window-predicate
+                    ,conn-target-predicate
+                    ,conn-target-sort-function)
+                  conn--dispatch-init-state)
+                 (conn-dispatch-looping nil)
+                 (conn--dispatch-loop-change-groups nil)
+                 (inhibit-message nil)
+                 (recenter-last-op nil)
+                 (conn-dispatch-repeat-count nil)
+                 (conn-dispatch-other-end nil)
+                 (conn-state-loop-last-command nil)
+                 (conn--loop-prefix-mag nil)
+                 (conn--loop-prefix-sign nil)
+                 (conn--dispatch-read-event-handlers nil)
+                 (conn--dispatch-read-event-message-prefixes nil)
+                 (conn--dispatch-always-retarget nil)
+                 (,select-mode conn-dispatch-select-mode))
+       (conn-delete-targets)
+       (message nil)
+       (if ,select-mode (conn-dispatch-select-mode -1))
+       (unwind-protect
+           ,(macroexp-progn body)
+         (if ,select-mode (conn-dispatch-select-mode 1))))))
 
 (cl-defgeneric conn-handle-dispatch-select (command)
   (:method (_cmd) nil))
