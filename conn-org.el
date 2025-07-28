@@ -284,6 +284,20 @@
   "E" 'org-export
   "e" 'org-example)
 
+(cl-defmethod conn-handle-surround-with-argument :extra "Org" (cmd arg)
+  (if (memq cmd '(org-quote
+                  org-center
+                  org-comment
+                  org-src
+                  org-verse
+                  org-export-ascii
+                  org-export-html
+                  org-export-latex
+                  org-export
+                  org-example))
+      (conn-set-argument-value arg (list cmd (conn-state-loop-consume-prefix-arg)))
+    (cl-call-next-method)))
+
 (cl-defmethod conn-perform-surround ((_cmd (eql org-quote)) _arg
                                      &key &allow-other-keys)
   (org-insert-structure-template "quote"))
