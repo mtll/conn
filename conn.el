@@ -2249,25 +2249,22 @@ By default `conn-emacs-state' does not bind anything."
        (conn--loop-message-timer nil)
        (conn--state-loop-exiting nil)
        (inhibit-message t))
-    (cl-flet ((process-args ()
-                (condition-case err
-                    (catch 'state-loop-continue
-                      (cl-loop
-                       with handled = (when command-handler
-                                        (ignore-error conn-invalid-argument
-                                          (funcall command-handler
-                                                   conn-loop-this-command)
-                                          t))
-                       for arg in (cons command-handler arguments)
-                       when (conn-state-loop-argument-p arg)
-                       do (cl-callf or handled
-                            (ignore-error conn-invalid-argument
-                              (funcall arg conn-loop-this-command)
-                              t))
-                       finally do (unless handled
-                                    (conn-state-loop-error "Invalid command"))))
-                  (user-error
-                   (conn-state-loop-error (error-message-string err))))))
+    (cl-labels ((call-arg (arg)
+                  (ignore-error conn-invalid-argument
+                    (funcall arg conn-loop-this-command)
+                    t))
+                (process-args ()
+                  (condition-case err
+                      (catch 'state-loop-continue
+                        (let ((handled (when command-handler
+                                         (call-arg command-handler))))
+                          (dolist (arg arguments)
+                            (when (conn-state-loop-argument-p arg)
+                              (cl-callf or handled (call-arg arg))))
+                          (unless handled
+                            (conn-state-loop-error "Invalid command"))))
+                    (user-error
+                     (conn-state-loop-error (error-message-string err))))))
       (conn-with-recursive-state state
         (while (cl-loop for arg in arguments
                         when (conn-state-loop-argument-p arg)
@@ -2601,8 +2598,6 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
 
 
 ;;;; Things
-
-;; Definitions for various things and thing commands.
 
 (defun conn-register-thing-commands (thing handler &rest commands)
   "Associate COMMANDS with a THING and a HANDLER.
