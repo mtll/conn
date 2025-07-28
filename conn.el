@@ -2275,6 +2275,9 @@ By default `conn-emacs-state' does not bind anything."
           (let ((conn-loop-this-command
                  (prog1 (key-binding (read-key-sequence nil) t)
                    (setf conn--loop-error-message ""))))
+            (while (arrayp conn-loop-this-command) ; keyboard macro
+              (setq conn-loop-this-command
+                    (key-binding conn-loop-this-command t)))
             (when conn--loop-message-timer
               (cancel-timer conn--loop-message-timer)
               (setq conn--loop-message-timer nil))
