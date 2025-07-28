@@ -2863,7 +2863,9 @@ themselves once the selection process has concluded."
 
 ;;;;; Read Thing Command Loop
 
-(cl-defun conn-read-thing-mover (arg &key recursive-edit subregions trim)
+(cl-defun conn-read-thing-mover (arg &rest keys
+                                     &key recursive-edit subregions trim prompt
+                                     &allow-other-keys)
   "Interactively read a thing command and arg.
 
 ARG is the initial value for the arg to be returned.
@@ -2873,12 +2875,14 @@ command."
   (conn-with-state-loop
    'conn-read-thing-state
    (list (conn-thing-argument :recursive-edit recursive-edit)
-         (when subregions (conn-subregions-argument))
-         (when trim (conn-trim-argument)))
-   :prompt "Thing"
+         (when (plist-member keys :subregions)
+           (conn-subregions-argument subregions))
+         (when (plist-member keys :trim)
+           (conn-trim-argument trim)))
+   :prompt (or prompt "Thing")
    :prefix arg))
 
-(cl-defun conn-read-thing-mover-dwim (arg &key recursive-edit subregions trim)
+(cl-defun conn-read-thing-mover-dwim (arg &key recursive-edit subregions trim prompt)
   "Interactively read a thing command and arg.
 
 ARG is the initial value for the arg to be returned.
@@ -2893,7 +2897,8 @@ If `use-region-p' returns non-nil this will always return
     (conn-read-thing-mover arg
                            :recursive-edit recursive-edit
                            :subregions subregions
-                           :trim trim)))
+                           :trim trim
+                           :prompt prompt)))
 
 (cl-defun conn-read-thing-region (arg &key recursive-edit subregions trim)
   (declare (important-return-value t))
@@ -9624,14 +9629,10 @@ Interactively `region-beginning' and `region-end'."
     (save-mark-and-excursion
       (pcase-let* ((`(,regions . ,prep-keys)
                     (apply #'conn-prepare-surround
-                           (if (use-region-p)
-                               (list 'region current-prefix-arg)
-                             (conn-with-state-loop
-                              'conn-surround-thing-state
-                              (list (conn-thing-argument)
-                                    (conn-subregions-argument)
-                                    (conn-trim-argument t))
-                              :prompt "Surround Thing"))))
+                           (conn-read-thing-mover-dwim
+                            nil
+                            :trim t
+                            :subregions nil)))
                    (cleanup (plist-get prep-keys :cleanup))
                    (success nil))
         (unwind-protect
