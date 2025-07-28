@@ -2540,7 +2540,7 @@ themselves once the selection process has concluded."
                (cl-loop for arg in arguments
                         for disp = (conn-display-argument arg)
                         when disp
-                        if (conn-loop-argument--suffix arg)
+                        if (conn-state-loop-argument--suffix arg)
                         concat (concat "; " disp) into suffix
                         else concat (concat "; " disp) into main
                         finally return
@@ -2592,8 +2592,8 @@ themselves once the selection process has concluded."
          (inhibit-message t))
       (conn-with-recursive-state state
         (while (cl-loop for arg in arguments
-                        thereis (and (conn-loop-argument--required arg)
-                                     (not (conn-loop-argument--set-p arg))))
+                        thereis (and (conn-state-loop-argument--required arg)
+                                     (not (conn-state-loop-argument--set-p arg))))
           (unless conn--loop-message-timer
             (conn--state-loop-prompt prompt arguments))
           (let ((conn-loop-this-command
@@ -2669,7 +2669,7 @@ themselves once the selection process has concluded."
 
 ;;;;; Loop Arguments
 
-(oclosure-define (conn-loop-argument)
+(oclosure-define (conn-state-loop-argument)
   (value :mutable t :type t)
   (required :type boolean)
   (set-p :mutable t :type boolean)
@@ -2685,28 +2685,28 @@ themselves once the selection process has concluded."
 (define-inline conn-set-argument-value (arg value)
   (inline-letevals (arg)
     (inline-quote
-     (setf (conn-loop-argument--value ,arg) ,value
-           (conn-loop-argument--set-p ,arg) t))))
+     (setf (conn-state-loop-argument--value ,arg) ,value
+           (conn-state-loop-argument--set-p ,arg) t))))
 
 (define-inline conn-unset-argument-value (arg)
   (inline-letevals (arg)
     (inline-quote
-     (setf (conn-loop-argument--value ,arg) nil
-           (conn-loop-argument--set-p ,arg) nil))))
+     (setf (conn-state-loop-argument--value ,arg) nil
+           (conn-state-loop-argument--set-p ,arg) nil))))
 
 (cl-defgeneric conn-cancel-argument (argument)
   (:method (_) nil))
 
 (cl-defgeneric conn-extract-argument (argument)
   (:method (arg) arg)
-  ( :method ((arg conn-loop-argument))
-    (if-let* ((kw (conn-loop-argument--keyword arg)))
-        (list kw (conn-loop-argument--value arg))
-      (conn-loop-argument--value arg))))
+  ( :method ((arg conn-state-loop-argument))
+    (if-let* ((kw (conn-state-loop-argument--keyword arg)))
+        (list kw (conn-state-loop-argument--value arg))
+      (conn-state-loop-argument--value arg))))
 
 (cl-defgeneric conn-display-argument (argument)
   ( :method (arg)
-    (pcase (conn-loop-argument--name arg)
+    (pcase (conn-state-loop-argument--name arg)
       ((and (pred stringp) str) str)
       ((and (pred functionp) fn) (funcall fn arg)))))
 
@@ -2719,7 +2719,7 @@ themselves once the selection process has concluded."
 ;;;;; Thing Args
 
 (oclosure-define (conn-thing-argument
-                  (:parent conn-loop-argument))
+                  (:parent conn-state-loop-argument))
   (recursive-edit :type boolean))
 
 (cl-defun conn-thing-argument (&key (required t) recursive-edit)
@@ -2751,9 +2751,9 @@ themselves once the selection process has concluded."
 ;;;;;; Subregions
 
 (oclosure-define (conn-subregions-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
-(defun conn-loop-subregions (&optional initial-value)
+(defun conn-subregions-argument (&optional initial-value)
   (conn-anaphoricate self
     (oclosure-lambda (conn-subregions-argument
                       (value initial-value)
@@ -2787,7 +2787,7 @@ themselves once the selection process has concluded."
 ;;;;;; Trim
 
 (oclosure-define (conn-trim-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-trim-argument (&optional initial-value)
   (oclosure-lambda (conn-trim-argument
@@ -2813,11 +2813,7 @@ themselves once the selection process has concluded."
 
 (conn-define-state conn-read-thing-state (conn-read-thing-common-state)
   "A state for reading things."
-  :lighter "M"
-  :loop-completion-predicate (lambda (sym)
-                               (and (functionp sym)
-                                    (not (eq sym 'help))
-                                    (conn-command-thing sym)))
+  :lighter "THG"
   :loop-completion-metadata `((affixation-function
                                . conn--dispatch-command-affixation)
                               (category
@@ -2833,7 +2829,7 @@ themselves once the selection process has concluded."
   "," (conn-remap-key "<conn-thing-map>")
   "r" 'recursive-edit
   "x" 'toggle-trim
-  "." 'toggle-subregions)
+  "z" 'toggle-subregions)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
@@ -2856,8 +2852,8 @@ command."
   (conn-with-state-loop
    'conn-read-thing-state
    (list (conn-thing-argument :recursive-edit recursive-edit)
-         (when subregions (conn-loop-subregions nil))
-         (when trim (conn-trim-argument nil)))
+         (when subregions (conn-subregions-argument))
+         (when trim (conn-trim-argument)))
    :prompt "Thing"
    :prefix arg))
 
@@ -4015,7 +4011,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (conn-define-state conn-dispatch-mover-state (conn-read-thing-common-state)
   "State for reading a dispatch command."
-  :lighter "D"
+  :lighter "DISPATCH"
   :mode-line-face 'conn-dispatch-mode-line-face
   :loop-completion-metadata `((affixation-function
                                . conn--dispatch-command-affixation)
@@ -4209,7 +4205,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;;; Action
 
 (oclosure-define (conn-dispatch-action-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-action-argument ()
   (oclosure-lambda (conn-dispatch-action-argument)
@@ -4244,7 +4240,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;;; Other End
 
 (oclosure-define (conn-dispatch-other-end-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-other-end-argument (&optional initial-value)
   (oclosure-lambda (conn-dispatch-other-end-argument
@@ -4269,7 +4265,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;;; Repeat
 
 (oclosure-define (conn-dispatch-repeat-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-repeat-argument (&optional initial-value)
   (oclosure-lambda (conn-dispatch-repeat-argument
@@ -4294,7 +4290,7 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;;; Restrict Windows
 
 (oclosure-define (conn-dispatch-restrict-windows-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-restrict-windows-argument (&optional initial-value)
   (oclosure-lambda (conn-dispatch-restrict-windows-argument
@@ -7284,7 +7280,7 @@ Expansions and contractions are provided by functions in
          (conn-with-state-loop
           'conn-expand-state
           (list
-           (oclosure-lambda (conn-loop-argument
+           (oclosure-lambda (conn-state-loop-argument
                              (required t)
                              (name 'conn--read-expand-message)
                              (keyword :outer))
@@ -8702,11 +8698,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 ;;;;; Transpose
 
 (conn-define-state conn-transpose-state (conn-read-thing-state)
-  :lighter "T"
-  :loop-completion-predicate (lambda (sym)
-                               (and (functionp sym)
-                                    (not (memq sym '(help conn-expand conn-contract)))
-                                    (conn-command-thing sym)))
+  :lighter "TRANSPOSE"
   :loop-completion-metadata `((affixation-function
                                . conn--dispatch-command-affixation)
                               (category
@@ -9518,7 +9510,7 @@ Interactively `region-beginning' and `region-end'."
 ;;;;;; Surround With arg
 
 (oclosure-define (conn-surround-with-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-surround-with-argument ()
   (conn-anaphoricate self
@@ -9537,7 +9529,7 @@ Interactively `region-beginning' and `region-end'."
 ;;;;;; Padding Arg
 
 (oclosure-define (conn-surround-padding-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-surround-padding-argument ()
   (oclosure-lambda (conn-surround-padding-argument
@@ -9629,7 +9621,7 @@ Interactively `region-beginning' and `region-end'."
                              (conn-with-state-loop
                               'conn-surround-thing-state
                               (list (conn-thing-argument)
-                                    (conn-loop-subregions)
+                                    (conn-subregions-argument)
                                     (conn-trim-argument t))
                               :prompt "Surround Thing"))))
                    (cleanup (plist-get prep-keys :cleanup))
@@ -9720,7 +9712,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (keymap-set (conn-get-state-map 'conn-change-state) "s" 'conn-surround)
 
 (oclosure-define (conn-change-surround-argument
-                  (:parent conn-loop-argument)))
+                  (:parent conn-state-loop-argument)))
 
 (defun conn-change-surround-argument ()
   (conn-anaphoricate self
@@ -11336,7 +11328,6 @@ Operates with the selected windows parent window."
 (conn-define-state conn-dired-dispatch-state (conn-dispatch-state)
   "State for dispatch in `dired-mode'."
   :cursor 'box
-  :lighter "D"
   :suppress-input-method t)
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
