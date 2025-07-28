@@ -2167,354 +2167,6 @@ By default `conn-emacs-state' does not bind anything."
 (add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
 
 
-;;;; Labels
-
-(defcustom conn-simple-label-characters
-  (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e"
-        "r" "t" "y" "u" "i" "c" "v" "b" "n" "m")
-  "Chars to use for label overlays for the default labeling function."
-  :group 'conn
-  :type '(list integer))
-
-(defcustom conn-disptach-stable-label-characters
-  `(("j" "u" "m" "k" "i" "," "l" "o" "h" "y" "n" "p" ";")
-    ("f" "r" "v" "d" "e" "c" "s" "w" "x" "g" "t" "b" "a"))
-  "Chars to use for label overlays when recording a keyboard macro."
-  :group 'conn
-  :type '(list integer))
-
-(defface conn-dispatch-label-face
-  '((t (:inherit highlight :bold t)))
-  "Face for group in dispatch lead overlay."
-  :group 'conn-faces)
-
-(defvar conn-window-labeling-function 'conn-header-line-label
-  "Function to label windows for `conn-prompt-for-window'.
-
-The function should accept a single argument, the list of windows to be
-labeled and it should return a list of structs for `conn-label-select',
-which see.")
-
-(defvar conn-target-window-predicate)
-
-(defvar conn-dispatch-all-frames 'visible)
-
-(cl-defstruct (conn-dispatch-label)
-  "State for a dispatch label."
-  (string nil :type string)
-  (narrowed-string nil :type string)
-  (overlay nil :type overlay)
-  (target nil :type overlay)
-  (setup-function nil :type function)
-  (padding-function nil :type function))
-
-(cl-defstruct (conn-window-label
-               (:constructor nil)
-               ( :constructor conn-window-label
-                 ( string window
-                   &aux
-                   (state (list (window-point window)
-                                (window-vscroll window)
-                                (window-hscroll window))))))
-  "State for a window label."
-  (string nil :type string)
-  (window nil :type window)
-  (state nil :type list))
-
-(defun conn-simple-labels (count &optional face)
-  "Return a list of label strings of length COUNT.
-
-If FACE is non-nil set label string face to FACE.  Otherwise label
-strings have `conn-dispatch-label-face'."
-  (named-let rec ((count count)
-                  (labels (mapcar #'copy-sequence
-                                  (take count conn-simple-label-characters))))
-    (let* ((prefixes nil))
-      (while (and labels
-                  (> count (+ (length labels)
-                              (* (length prefixes)
-                                 (length conn-simple-label-characters)))))
-        (push (pop labels) prefixes))
-      (if (and (null labels) (> count 0))
-          (let (new-labels)
-            (dolist (a prefixes)
-              (dolist (b conn-simple-label-characters)
-                (push (concat a b) new-labels)))
-            (rec count new-labels))
-        (catch 'done
-          (let ((n (length labels)))
-            (setq labels (nreverse labels))
-            (dolist (prefix (nreverse prefixes))
-              (dolist (c conn-simple-label-characters)
-                (push (concat prefix c) labels)
-                (when (= (cl-incf n) count)
-                  (throw 'done nil))))))
-        (dolist (label labels)
-          (put-text-property 0 (length label) 'face face label))
-        (nreverse labels)))))
-
-(defun conn--get-target-windows ()
-  (if conn-target-window-predicate
-      (conn--get-windows nil nil conn-dispatch-all-frames
-                         nil conn-target-window-predicate)
-    (list (selected-window))))
-
-
-;;;;; Label Reading
-
-(defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
-  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
-  (declare (indent 3))
-  (cl-once-only (keymap)
-    (let ((body `(let ((conn--dispatch-read-event-handlers
-                        (cons ,handler conn--dispatch-read-event-handlers)))
-                   ,@body)))
-      `(catch ,tag
-         ,(if keymap
-              `(let ((conn--dispatch-event-handler-maps
-                      (cons ,keymap conn--dispatch-event-handler-maps)))
-                 ,body)
-            body)))))
-
-(cl-defgeneric conn-label-delete (label)
-  "Delete the label LABEL.
-
-This function is called on each label after a label has been selected
-and allow labels to clean up after themselves."
-  (:method (_label) "Noop" nil))
-
-(cl-defgeneric conn-label-narrow (label prefix)
-  "Narrow LABEL by PREFIX.
-
-If LABEL contains PREFIX then the label state should be updated to
-reflect that prefix has been processed and LABEL should be returned.  If
-the label does not contain the prefix then the label state be updated
-to reflect that the label is no longer active and nil should be
-returned."
-  (declare (important-return-value t)))
-
-(cl-defgeneric conn-label-redisplay (label)
-  (:method (_) "Noop" nil))
-
-(cl-defgeneric conn-label-reset (label)
-  "Reset LABEL to its initial state.")
-
-(cl-defgeneric conn-label-payload (label)
-  "Return LABEL\'s payload."
-  (declare (important-return-value t)))
-
-(cl-defmethod conn-label-payload ((label conn-dispatch-label))
-  (conn-dispatch-label-target label))
-
-(cl-defmethod conn-label-reset ((label conn-dispatch-label))
-  (setf (conn-dispatch-label-narrowed-string label)
-        (conn-dispatch-label-string label)))
-
-(cl-defmethod conn-label-delete ((label conn-dispatch-label))
-  (delete-overlay (conn-dispatch-label-overlay label))
-  (setf (overlay-get (conn-dispatch-label-target label) 'conn-label) nil))
-
-(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
-  (if (thread-first
-        (conn-dispatch-label-narrowed-string label)
-        (aref 0) (eql prefix-char) not)
-      (setf (conn-dispatch-label-narrowed-string label) nil)
-    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
-    label))
-
-(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
-  (pcase-let (((cl-struct conn-dispatch-label
-                          overlay
-                          target
-                          narrowed-string
-                          setup-function)
-               label))
-    (with-current-buffer (overlay-buffer overlay)
-      (if narrowed-string
-          (progn
-            (overlay-put overlay 'display nil)
-            (overlay-put overlay 'before-string nil)
-            (overlay-put overlay 'after-string nil)
-            (funcall setup-function label)
-            (overlay-put target 'face 'conn-target-overlay-face))
-        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
-        (overlay-put overlay 'display nil)
-        (overlay-put overlay 'after-string nil)
-        (overlay-put overlay 'before-string nil)
-        (overlay-put target 'after-string nil)
-        (overlay-put target 'face nil)))))
-
-(cl-defmethod conn-label-payload ((label conn-window-label))
-  (conn-window-label-window label))
-
-(cl-defmethod conn-label-reset ((label conn-window-label))
-  (set-window-parameter (conn-window-label-window label)
-                        'conn-label-string
-                        (conn-window-label-string label)))
-
-(cl-defmethod conn-label-delete ((label conn-window-label))
-  (pcase-let* (((cl-struct conn-window-label window string state) label)
-               (`(,pt ,vscroll ,hscroll) state))
-    (with-current-buffer (window-buffer window)
-      (when (eq 'conn-mode (car-safe (car-safe header-line-format)))
-        (setq-local header-line-format (cadadr header-line-format))))
-    (set-window-point window pt)
-    (set-window-hscroll window hscroll)
-    (set-window-vscroll window vscroll)
-    (set-window-parameter window 'conn-label-string string)
-    (set-window-parameter window 'conn-window-labeled-p nil)))
-
-(cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
-  (pcase-let* (((cl-struct conn-window-label window) label)
-               (string (window-parameter window 'conn-label-string)))
-    (unless (or (length= string 0)
-                (not (eql prefix-char (aref string 0))))
-      (set-window-parameter window 'conn-label-string (substring string 1))
-      label)))
-
-(defvar conn-label-select-always-prompt nil)
-
-(defun conn-label-select (candidates char-reader &optional prompt always-prompt)
-  "Select a label from CANDIDATES.
-
-Prompts the user for prefix characters one at a time and narrows the
-labels after each one.
-
-Each of CANDIDATES should be a DFA that defines its transition functions
-as methods of the `conn-label-narrow' and `conn-label-reset' generic
-functions.  `conn-label-narrow' is called when user input is received
-for the label to process and `conn-label-reset' is called when the user
-has failed to select a label and the narrowing process must restart from
-the beginning.  `conn-label-delete' allows labels to clean up after
-themselves once the selection process has concluded."
-  (declare (important-return-value t))
-  (let* ((prompt (propertize (or prompt "Chars")
-                             'face 'minibuffer-prompt))
-         (prompt-suffix "")
-         (prompt-flag (or conn-label-select-always-prompt
-                          always-prompt))
-         (current candidates))
-    (while-no-input
-      (mapc #'conn-label-redisplay candidates))
-    (cl-loop
-     (pcase current
-       ('nil
-        (setq current candidates
-              prompt-suffix ""
-              prompt-flag (or conn-label-select-always-prompt
-                              always-prompt))
-        (conn-state-loop-error "No matches")
-        (mapc #'conn-label-reset current)
-        (while-no-input
-          (mapc #'conn-label-redisplay candidates)))
-       (`(,it . nil)
-        (unless prompt-flag
-          (cl-return (conn-label-payload it)))))
-     (setq prompt-flag nil)
-     (let ((next nil)
-           (c (funcall char-reader prompt)))
-       (setq prompt-suffix (concat prompt-suffix (string c))
-             current (dolist (label current next)
-                       (when-let* ((l (conn-label-narrow label c)))
-                         (push l next)))
-             conn--loop-error-message nil)
-       (while-no-input
-         (mapc #'conn-label-redisplay candidates))))))
-
-
-;;;;; Window Header-line Labels
-
-(defface conn-window-label-face
-  '((t (:inherit help-key-binding :height 2.5)))
-  "Face for conn window prompt overlay."
-  :group 'conn-faces)
-
-(defun conn--centered-header-label ()
-  (when (window-parameter (selected-window) 'conn-window-labeled-p)
-    (let* ((window-width (window-width nil t))
-           (label (window-parameter nil 'conn-label-string))
-           (label-width (string-pixel-width label))
-           (padding-width (floor (- window-width label-width) 2))
-           (padding (propertize " " 'display `(space :width (,padding-width)))))
-      (concat padding label))))
-
-(defvar conn--window-label-pool
-  (conn-simple-labels 30 'conn-window-label-face))
-
-(defun conn--ensure-window-labels ()
-  (let* ((windows (conn--get-windows nil 'nomini t))
-         (window-count (length windows)))
-    (when (length< conn--window-label-pool window-count)
-      (setq conn--window-label-pool
-            (conn-simple-labels (* 2 window-count))))
-    (cl-loop with available = (copy-sequence conn--window-label-pool)
-             for win in windows
-             for label = (window-parameter win 'conn-label-string)
-             unless (and label
-                         (when (member label available)
-                           (setq available (delete label available))
-                           t))
-             collect win into unlabeled
-             finally (dolist (win unlabeled)
-                       (set-window-parameter win 'conn-label-string
-                                             (pop available))))))
-
-(defun conn-header-line-label (window string)
-  "Label WINDOWS using `head-line-format'."
-  (let ((header-line-label
-         '(conn-mode (:eval (conn--centered-header-label)))))
-    (set-window-parameter window 'conn-window-labeled-p t)
-    (with-selected-window window
-      (unless (equal header-line-label (car header-line-format))
-        (setq-local header-line-format
-                    `(,header-line-label (nil ,header-line-format))))
-      (prog1
-          (conn-window-label (propertize string 'face 'conn-window-label-face) window)
-        (goto-char (window-start))))))
-
-;; From ace-window
-(defun conn--get-windows (&optional window minibuffer all-frames dedicated predicate)
-  (declare (important-return-value t))
-  (cl-loop for win in (window-list-1 window minibuffer all-frames)
-           unless (or ;; ignore child frames
-                   (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
-                   ;; When `ignore-window-parameters' is nil, ignore windows whose
-                   ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
-                   (unless ignore-window-parameters
-                     (window-parameter window 'no-other-window))
-                   (and (null dedicated) (window-dedicated-p win))
-                   (and predicate (not (funcall predicate win))))
-           collect win))
-
-(defun conn-prompt-for-window (windows &optional always-prompt)
-  "Label and prompt for a window among WINDOWS."
-  (declare (important-return-value t))
-  (cond
-   ((null windows) nil)
-   (t
-    (conn--ensure-window-labels)
-    (let ((labels
-           (cl-loop for win in windows
-                    collect (funcall conn-window-labeling-function
-                                     win (window-parameter win 'conn-label-string))))
-          (conn-label-select-always-prompt always-prompt))
-      (unwind-protect
-          (conn-with-dispatch-event-handler 'mouse-click
-              nil
-              (lambda (cmd)
-                (when (or (and (eq cmd 'act)
-                               (mouse-event-p last-input-event))
-                          (eq 'dispatch-mouse-repeat
-                              (event-basic-type last-input-event)))
-                  (let* ((posn (event-start last-input-event))
-                         (win (posn-window posn)))
-                    (when (and (not (posn-area posn))
-                               (funcall conn-target-window-predicate win))
-                      (throw 'mouse-click win)))))
-            (conn-label-select labels #'conn-dispatch-read-event))
-        (mapc #'conn-label-delete labels))))))
-
-
 ;;;; State Command Loops
 
 (defvar conn-loop-this-command nil)
@@ -2601,12 +2253,17 @@ themselves once the selection process has concluded."
                 (condition-case err
                     (catch 'state-loop-continue
                       (cl-loop
+                       with handled = (when command-handler
+                                        (ignore-error conn-invalid-argument
+                                          (funcall command-handler
+                                                   conn-loop-this-command)
+                                          t))
                        for arg in (cons command-handler arguments)
                        when (conn-state-loop-argument-p arg)
-                       for handled = (or handled
-                                         (ignore-error conn-invalid-argument
-                                           (funcall arg conn-loop-this-command)
-                                           t))
+                       do (cl-callf or handled
+                            (ignore-error conn-invalid-argument
+                              (funcall arg conn-loop-this-command)
+                              t))
                        finally do (unless handled
                                     (conn-state-loop-error "Invalid command"))))
                   (user-error
@@ -2625,35 +2282,37 @@ themselves once the selection process has concluded."
               (cancel-timer conn--loop-message-timer)
               (setq conn--loop-message-timer nil))
             (when pre (funcall pre))
-            (pcase conn-loop-this-command
-              ('nil)
-              ('digit-argument
-               (let* ((char (if (integerp last-input-event)
-                                last-input-event
-                              (get last-input-event 'ascii-character)))
-                      (digit (- (logand char ?\177) ?0)))
-                 (setf conn--loop-prefix-mag
-                       (if (integerp conn--loop-prefix-mag)
-                           (+ (* 10 conn--loop-prefix-mag) digit)
-                         (when (/= 0 digit) digit)))))
-              ('backward-delete-arg
-               (when conn--loop-prefix-mag
-                 (cl-callf floor conn--loop-prefix-mag 10)))
-              ('reset-arg
-               (setf conn--loop-prefix-mag nil))
-              ('negative-argument
-               (cl-callf not conn--loop-prefix-sign))
-              ('keyboard-quit
-               (keyboard-quit))
-              ((or 'help 'execute-extended-command)
-               (when-let* ((cmd (conn--state-loop-completing-read state arguments)))
-                 (setq conn-loop-this-command cmd)
-                 (process-args)))
-              (_ (process-args)))
-            (cl-shiftf conn-state-loop-last-command
-                       conn-loop-this-command
-                       nil)
-            (when post (funcall post)))))
+            (unwind-protect
+                (pcase conn-loop-this-command
+                  ('nil)
+                  ('digit-argument
+                   (let* ((char (if (integerp last-input-event)
+                                    last-input-event
+                                  (get last-input-event 'ascii-character)))
+                          (digit (- (logand char ?\177) ?0)))
+                     (setf conn--loop-prefix-mag
+                           (if (integerp conn--loop-prefix-mag)
+                               (+ (* 10 conn--loop-prefix-mag) digit)
+                             (when (/= 0 digit) digit)))))
+                  ('backward-delete-arg
+                   (when conn--loop-prefix-mag
+                     (cl-callf floor conn--loop-prefix-mag 10)))
+                  ('reset-arg
+                   (setf conn--loop-prefix-mag nil))
+                  ('negative-argument
+                   (cl-callf not conn--loop-prefix-sign))
+                  ('keyboard-quit
+                   (keyboard-quit))
+                  ((or 'help 'execute-extended-command)
+                   (when-let* ((cmd (conn--state-loop-completing-read
+                                     state arguments)))
+                     (setq conn-loop-this-command cmd)
+                     (process-args)))
+                  (_ (process-args)))
+              (cl-shiftf conn-state-loop-last-command
+                         conn-loop-this-command
+                         nil)
+              (when post (funcall post))))))
       (let ((inhibit-message nil))
         (message nil)
         (mapcan #'conn-extract-argument arguments)))))
@@ -2734,6 +2393,547 @@ themselves once the selection process has concluded."
 
 (cl-defgeneric conn-argument-completion-predicate (argument symbol)
   (:method (_ _) nil))
+
+
+;;;; Mark Handlers
+
+(defvar-local conn-mark-handler-overrides-alist nil
+  "Buffer local overrides for command mark handlers.
+
+Is an alist of the form ((CMD . MARK-HANDLER) ...).
+
+For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
+
+(define-inline conn-command-mark-handler (command)
+  "Return the mark handler for COMMAND."
+  (declare (important-return-value t)
+           (side-effect-free t)
+           (gv-setter conn-set-command-mark-handler))
+  (inline-letevals (command)
+    (inline-quote
+     (and (symbolp ,command)
+          (or (alist-get ,command conn-mark-handler-overrides-alist)
+              (get ,command :conn-mark-handler))))))
+
+(defun conn-set-command-mark-handler (command handler)
+  (put command :conn-mark-handler handler))
+
+(defun conn-symbol-handler (beg)
+  "Mark handler for symbols."
+  (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
+    (cond ((not (derived-mode-p 'prog-mode))
+           (conn-continuous-thing-handler beg))
+          ((and (conn--point-in-comment-or-string-p)
+                (save-excursion
+                  (goto-char beg)
+                  (conn--point-in-comment-or-string-p)))
+           (conn-continuous-thing-handler beg))
+          ((or (conn--point-in-comment-or-string-p)
+               (save-excursion
+                 (goto-char beg)
+                 (conn--point-in-comment-or-string-p)))
+           (conn-discrete-thing-handler beg))
+          ((equal list (save-excursion
+                         (goto-char beg)
+                         (bounds-of-thing-at-point 'list)))
+           (conn-continuous-thing-handler beg))
+          ((conn-discrete-thing-handler beg)))))
+
+(defun conn-continuous-thing-handler (beg)
+  "Mark the things which have been moved over."
+  (ignore-errors
+    (cond ((= 0 (abs (prefix-numeric-value current-prefix-arg))))
+          ((= (point) beg)
+           (pcase (bounds-of-thing-at-point conn-this-command-thing)
+             (`(,beg . ,end)
+              (cond ((= (point) beg) (conn--push-ephemeral-mark end))
+                    ((= (point) end) (conn--push-ephemeral-mark beg))))))
+          ((let ((dir (pcase (- (point) beg)
+                        (0 0)
+                        ((pred (< 0)) 1)
+                        ((pred (> 0)) -1))))
+             (save-excursion
+               (goto-char beg)
+               (forward-thing conn-this-command-thing dir)
+               (forward-thing conn-this-command-thing (- dir))
+               (conn--push-ephemeral-mark)))))))
+
+(defun conn-discrete-thing-handler (_beg)
+  "Mark the thing at point."
+  (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
+    (`(,beg . ,end)
+     (conn--push-ephemeral-mark (if (= (point) end) beg end)))))
+
+(defun conn-jump-handler (beg)
+  "Place a mark where point used to be."
+  (unless (= beg (point))
+    (conn--push-ephemeral-mark beg)))
+
+
+;;;; Mark Cursor
+
+(defcustom conn-mark-overlay-priority 2000
+  "Priority of mark overlay."
+  :type 'integer
+  :set (lambda (sym val)
+         (set sym val)
+         (put 'conn--mark-cursor 'priority val))
+  :group 'conn)
+
+(defface conn-mark-face
+  '((t (:inherit region :extend nil)))
+  "Face for conn mark cursor."
+  :group 'conn-faces)
+
+(defvar-local conn--mark-cursor nil)
+(put 'conn--mark-cursor 'permanent-local t)
+
+(defvar conn--prev-mark-even-if-inactive nil
+  "Previous value of `mark-even-if-inactive'.
+
+Used to restore previous value when `conn-mode' is disabled.")
+
+(defvar-local conn--ephemeral-mark nil)
+
+(put 'conn--mark-cursor 'face 'conn-mark-face)
+(put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
+(put 'conn--mark-cursor 'conn-overlay t)
+(put 'conn--mark-cursor 'overlay-after-string
+     (propertize " " 'face 'conn-mark-face))
+
+(defun conn--mark-cursor-redisplay (win)
+  (if (or (not conn-local-mode)
+          conn--hide-mark-cursor
+          (null (mark t))
+          (and (window-minibuffer-p win)
+               (not (eq win (active-minibuffer-window)))))
+      (progn
+        (when conn--mark-cursor
+          (delete-overlay conn--mark-cursor))
+        (setf conn--mark-cursor nil))
+    (unless conn--mark-cursor
+      (setf conn--mark-cursor (make-overlay (mark t) (1+ (mark t))))
+      (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
+    (cond ((or (use-region-p)
+               (= (point-max) (mark t) (point)))
+           (when (overlay-get conn--mark-cursor 'after-string)
+             (overlay-put conn--mark-cursor 'after-string nil))
+           (unless (eql (overlay-start conn--mark-cursor)
+                        (overlay-end conn--mark-cursor))
+             (move-overlay conn--mark-cursor (point-max) (point-max))))
+          ((and (eql (overlay-start conn--mark-cursor) (mark t))
+                (or (eql (overlay-end conn--mark-cursor) (1+ (mark t)))
+                    (and (eql (overlay-start conn--mark-cursor) (point-max))
+                         (overlay-get conn--mark-cursor 'after-string)))))
+          ((= (mark t) (point-max))
+           (move-overlay conn--mark-cursor (point-max) (point-max))
+           (overlay-put conn--mark-cursor 'after-string
+                        (get 'conn--mark-cursor 'overlay-after-string)))
+          ((and (eql (char-after (mark t)) ?\t)
+                (< 1 (save-excursion
+                       (goto-char (mark t))
+                       (let ((col (current-column)))
+                         (- (indent-next-tab-stop col) col)))))
+           (move-overlay conn--mark-cursor (mark t) (mark t))
+           (overlay-put conn--mark-cursor 'after-string
+                        (get 'conn--mark-cursor 'overlay-after-string)))
+          (t
+           (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
+           (overlay-put conn--mark-cursor 'after-string nil)))))
+
+(defun conn--push-ephemeral-mark (&optional location msg activate)
+  "Push a mark at LOCATION that will not be added to `mark-ring'.
+
+For the meaning of MSG and ACTIVATE see `push-mark'."
+  (if (not conn-local-mode)
+      (push-mark location (not msg) activate)
+    (push-mark location (not msg) activate)
+    (setq conn--ephemeral-mark t)
+    nil))
+
+(defvar conn--movement-ring-rotating nil)
+(defvar conn--movement-tick nil)
+(defvar conn--movement-mark nil)
+
+(defun conn--mark-pre-command-hook ()
+  (unless conn--hide-mark-cursor
+    (set-marker conn-this-command-start (point))
+    (setq conn--movement-tick (buffer-chars-modified-tick)
+          conn--movement-mark (mark t)
+          conn--movement-ring-rotating nil
+          conn-this-command-thing nil
+          conn-this-command-handler nil)))
+
+(defun conn--mark-post-command-hook ()
+  (unless conn--hide-mark-cursor
+    (cl-callf2 assq-delete-all (recursion-depth) conn--last-perform-bounds)
+    (unless conn-this-command-thing
+      (setq conn-this-command-thing (or (conn-command-thing this-command)
+                                        (conn-command-thing real-this-command))))
+    (when (and conn-local-mode
+               (marker-position conn-this-command-start)
+               (eq (current-buffer) (marker-buffer conn-this-command-start)))
+      (when-let* (((not (region-active-p)))
+                  (handler
+                   (or (conn-command-mark-handler this-command)
+                       (conn-command-mark-handler real-this-command))))
+        (with-demoted-errors "Error in Mark Handler: %s"
+          (funcall handler conn-this-command-start)))
+      (unless (or conn--movement-ring-rotating
+                  (null conn--movement-mark)
+                  (not (eql conn--movement-tick (buffer-chars-modified-tick)))
+                  (eql (mark t) conn--movement-mark))
+        (with-demoted-errors "Error in Movement Ring: %s"
+          (conn-push-region (point-marker) (mark-marker)))))))
+
+(defun conn--setup-mark ()
+  (if conn-mode
+      (progn
+        (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
+              mark-even-if-inactive t)
+        (add-hook 'pre-redisplay-functions 'conn--mark-cursor-redisplay 91)
+        (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+        (add-hook 'post-command-hook #'conn--mark-post-command-hook))
+    (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
+    (remove-hook 'pre-redisplay-functions 'conn--mark-cursor-redisplay)
+    (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
+    (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
+
+
+;;;; Things
+
+;; Definitions for various things and thing commands.
+
+(defun conn-register-thing-commands (thing handler &rest commands)
+  "Associate COMMANDS with a THING and a HANDLER.
+
+HANDLER will be run from the `post-command-hook' and should be a
+function of one argument, the location of `point' before the command
+ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
+order to mark the region that should be defined by any of COMMANDS."
+  (dolist (cmd commands)
+    (cl-assert (not (conn-state-name-p cmd))
+               nil "States and thing commands must be disjoint")
+    (setf (conn-command-thing cmd) thing
+          (conn-command-mark-handler cmd) handler)))
+
+(defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
+  `(progn
+     (defun ,name ()
+       (interactive)
+       (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
+         (`(,beg . ,end)
+          (if ,(unless ignore-mark-active '(region-active-p))
+              (pcase (car (read-multiple-choice
+                           "Mark to?"
+                           '((?e "end")
+                             (?a "beginning"))))
+                (?e (goto-char end))
+                (?b (goto-char beg)))
+            (goto-char beg)
+            (conn--push-ephemeral-mark end)))))
+     (conn-register-thing-commands ',thing 'ignore ',name)))
+
+
+;;;; Thing Definitions
+
+(conn-define-mark-command conn-mark-email email)
+(conn-define-mark-command conn-mark-uuid uuid)
+(conn-define-mark-command conn-mark-string string)
+(conn-define-mark-command conn-mark-filename filename)
+(conn-define-mark-command conn-mark-comment comment)
+
+(conn-register-thing
+ 'comment
+ :bounds-op (lambda ()
+              (if (conn--point-in-comment-p)
+                  (cons (save-excursion
+                          (while (and (conn--point-in-comment-p)
+                                      (not (eobp)))
+                            (forward-char 1)
+                            (skip-chars-forward " \t\n\r"))
+                          (skip-chars-backward " \t\n\r")
+                          (point))
+                        (save-excursion
+                          (while (conn--point-in-comment-p)
+                            (forward-char -1)
+                            (skip-chars-backward " \t\n\r"))
+                          (skip-chars-forward " \t\n\r")
+                          (unless (conn--point-in-comment-p)
+                            (forward-char 1))
+                          (point)))
+                (error "Point not in comment"))))
+
+(conn-register-thing 'defun :forward-op 'conn-forward-defun)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing defun)))
+  (conn-dispatch-all-defuns))
+
+(conn-register-thing
+ 'visual-line
+ :forward-op (lambda (&optional N)
+               (let ((line-move-visual t))
+                 (vertical-motion 0)
+                 (line-move N t))))
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line)))
+  'conn-dispatch-visual-lines)
+
+(conn-define-mark-command conn-mark-visual-line visual-line)
+
+(conn-register-thing
+ 'region
+ :bounds-op (lambda () (cons (region-beginning) (region-end))))
+
+(conn-register-thing
+ 'buffer-after-point
+ :bounds-op (lambda () (cons (point) (point-max))))
+
+(conn-register-thing
+ 'buffer-before-point
+ :bounds-op (lambda () (cons (point-min) (point))))
+
+(conn-define-mark-command conn-mark-after-point buffer-after-point t)
+(conn-define-mark-command conn-mark-before-point buffer-before-point t)
+
+(conn-register-thing
+ 'visible
+ :bounds-op (lambda () (cons (window-start) (window-end))))
+
+(conn-define-mark-command conn-mark-visible visible)
+
+(conn-register-thing-commands
+ 'recursive-edit nil
+ 'recursive-edit 'exit-recursive-edit)
+
+(conn-register-thing-commands 'dispatch nil 'conn-dispatch)
+
+(conn-register-thing-commands
+ 'isearch nil
+ 'isearch-forward
+ 'isearch-backward
+ 'isearch-forward-regexp
+ 'isearch-backward-regexp
+ 'isearch-forward-symbol
+ 'isearch-forward-word
+ 'isearch-forward-symbol-at-point
+ 'isearch-forward-thing-at-point)
+
+(conn-register-thing-commands
+ 'visible nil
+ 'conn-scroll-up 'conn-scroll-down
+ 'scroll-up-command 'scroll-down-command
+ 'conn-mark-visible)
+
+(conn-register-thing-commands
+ 'region nil
+ 'conn-toggle-mark-command)
+
+(conn-register-thing 'symbol :forward-op 'forward-symbol)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing symbol)))
+  (conn-dispatch-things-read-prefix 'symbol 1))
+
+(conn-register-thing-commands
+ 'symbol 'conn-continuous-thing-handler
+ 'forward-symbol 'conn-backward-symbol)
+
+(conn-register-thing 'page :forward-op 'forward-page)
+
+(conn-register-thing-commands
+ 'page 'conn-discrete-thing-handler
+ 'forward-page 'backward-page)
+
+(defun conn-char-mark-handler (beg)
+  (when current-prefix-arg
+    (conn--push-ephemeral-mark beg)))
+
+(conn-register-thing-commands
+ 'char 'conn-char-mark-handler
+ 'forward-char 'backward-char)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing word)))
+  (conn-dispatch-things-read-prefix 'word 1))
+
+(conn-register-thing-commands
+ 'word 'conn-symbol-handler
+ 'forward-word 'backward-word
+ 'upcase-word 'downcase-word 'capitalize-word
+ 'upcase-dwim 'downcase-dwim 'capitalize-dwim)
+
+(conn-register-thing 'sexp :forward-op 'forward-sexp)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sexp)))
+  (conn-dispatch-things-read-prefix 'sexp 1))
+
+(conn-register-thing-commands
+ 'sexp 'conn-continuous-thing-handler
+ 'forward-sexp 'backward-sexp)
+
+(conn-register-thing 'list :forward-op 'forward-list)
+
+(conn-register-thing-commands
+ 'list 'conn-continuous-thing-handler
+ 'forward-list 'backward-list)
+
+(defun conn--up-list-mark-handler (beg)
+  (condition-case _err
+      (cond ((> (point) beg)
+             (save-excursion
+               (forward-thing 'list -1)
+               (conn--push-ephemeral-mark (point))))
+            ((< (point) beg)
+             (save-excursion
+               (forward-thing 'list 1)
+               (conn--push-ephemeral-mark (point)))))
+    (scan-error nil)))
+
+(conn-register-thing-commands
+ 'list 'conn--up-list-mark-handler
+ 'up-list 'backward-up-list)
+
+(defun conn--down-list-mark-handler (_beg)
+  (condition-case _err
+      (cond ((= (point) (save-excursion
+                          (up-list 1 t t)
+                          (down-list -1 t)
+                          (point)))
+             (conn--push-ephemeral-mark (save-excursion
+                                          (up-list -1 t t)
+                                          (down-list 1 t)
+                                          (point))))
+            ((= (point) (save-excursion
+                          (up-list -1 t t)
+                          (down-list 1 t)
+                          (point)))
+             (conn--push-ephemeral-mark (save-excursion
+                                          (up-list 1 t t)
+                                          (down-list -1 t)
+                                          (point)))))
+    (scan-error nil)))
+
+(conn-register-thing-commands
+ 'list 'conn--down-list-mark-handler
+ 'down-list)
+
+(conn-register-thing 'whitespace :forward-op 'forward-whitespace)
+
+(conn-register-thing-commands
+ 'whitespace 'conn-discrete-thing-handler
+ 'forward-whitespace 'conn-backward-whitespace)
+
+(conn-register-thing 'sentence :forward-op 'forward-sentence)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence)))
+  (conn-dispatch-all-things 'sentence))
+
+(conn-register-thing-commands
+ 'sentence 'conn-continuous-thing-handler
+ 'forward-sentence 'backward-sentence)
+
+(conn-register-thing 'paragraph :forward-op 'forward-paragraph)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph)))
+  (conn-dispatch-all-things 'paragraph))
+
+(conn-register-thing-commands
+ 'paragraph 'conn-continuous-thing-handler
+ 'forward-paragraph 'backward-paragraph)
+
+(conn-register-thing-commands
+ 'defun 'conn-continuous-thing-handler
+ 'end-of-defun 'beginning-of-defun
+ 'conn-forward-defun)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing char)))
+  (conn-dispatch-read-string-with-timeout))
+
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing char)))
+  (conn-make-action 'conn-dispatch-jump))
+
+(conn-register-thing-commands
+ 'buffer 'conn-discrete-thing-handler
+ 'end-of-buffer 'beginning-of-buffer)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing line)))
+  'conn-dispatch-lines)
+
+(conn-register-thing-commands
+ 'line 'conn-continuous-thing-handler
+ 'forward-line 'conn-backward-line
+ 'conn-line-forward-op
+ 'conn-goto-line)
+
+(conn-register-thing 'line-column :forward-op 'next-line)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column)))
+  'conn-dispatch-columns)
+
+(cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
+  (conn-make-action 'conn-dispatch-jump))
+
+(conn-register-thing-commands
+ 'line-column 'conn-jump-handler
+ 'next-line 'previous-line
+ 'rectangle-next-line 'rectangle-previous-line)
+
+(conn-register-thing-commands 'line nil 'comment-line)
+
+(conn-register-thing
+ 'outer-line
+ :beg-op (lambda () (move-beginning-of-line nil))
+ :end-op (lambda () (move-end-of-line nil)))
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line)))
+  'conn-dispatch-lines)
+
+(conn-register-thing-commands
+ 'outer-line 'conn-discrete-thing-handler
+ 'move-beginning-of-line 'move-end-of-line
+ 'org-beginning-of-line 'org-end-of-line)
+
+(defun conn--bounds-of-inner-line ()
+  (cons
+   (save-excursion
+     (back-to-indentation)
+     (point))
+   (save-excursion
+     (conn--end-of-inner-line-1)
+     (point))))
+
+(conn-register-thing
+ 'inner-line
+ :bounds-op 'conn--bounds-of-inner-line
+ :forward-op 'conn-forward-inner-line)
+
+(cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line)))
+  'conn-dispatch-inner-lines)
+
+(conn-register-thing-commands
+ 'inner-line 'conn-continuous-thing-handler
+ 'back-to-indentation
+ 'conn-forward-inner-line
+ 'conn-backward-inner-line
+ 'conn-beginning-of-inner-line
+ 'conn-end-of-inner-line
+ 'comment-line)
+
+(conn-register-thing-commands
+ 'org-link 'conn-discrete-thing-handler
+ 'org-next-link 'org-previous-link)
+
+(conn-register-thing-commands
+ 'org-link nil
+ 'org-insert-link-global 'org-store-link 'org-insert-link)
+
+(conn-register-thing-commands
+ 'expansion nil
+ 'conn-expand 'conn-contract)
+
+(conn-register-thing-commands
+ 'list 'conn--down-list-mark-handler
+ 'conn-beginning-of-list
+ 'conn-end-of-list)
 
 
 ;;;; Read Things
@@ -2861,58 +3061,6 @@ themselves once the selection process has concluded."
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
-;;;;; Read Thing Command Loop
-
-(cl-defun conn-read-thing-mover (arg &rest keys
-                                     &key recursive-edit subregions trim prompt
-                                     &allow-other-keys)
-  "Interactively read a thing command and arg.
-
-ARG is the initial value for the arg to be returned.
-RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
-command."
-  (declare (important-return-value t))
-  (conn-with-state-loop
-   'conn-read-thing-state
-   (list (conn-thing-argument :recursive-edit recursive-edit)
-         (when (plist-member keys :subregions)
-           (conn-subregions-argument subregions))
-         (when (plist-member keys :trim)
-           (conn-trim-argument trim)))
-   :prompt (or prompt "Thing")
-   :prefix arg))
-
-(cl-defun conn-read-thing-mover-dwim (arg &key recursive-edit subregions trim prompt)
-  "Interactively read a thing command and arg.
-
-ARG is the initial value for the arg to be returned.
-RECURSIVE-EDIT allows `recursive-edit' to be returned as a thing
-command.
-
-If `use-region-p' returns non-nil this will always return
-`conn-toggle-mark-command' as the mover."
-  (declare (important-return-value t))
-  (if (use-region-p)
-      (list 'region nil :subregions t)
-    (conn-read-thing-mover arg
-                           :recursive-edit recursive-edit
-                           :subregions subregions
-                           :trim trim
-                           :prompt prompt)))
-
-(cl-defun conn-read-thing-region (arg &key recursive-edit subregions trim)
-  (declare (important-return-value t))
-  (pcase-let* ((`(,cmd ,arg . ,keys)
-                (conn-read-thing-mover-dwim
-                 arg
-                 :recursive-edit recursive-edit
-                 :subregions subregions
-                 :trim trim))
-               ((map :outer :contents)
-                (conn-get-bounds cmd arg)))
-    (if (and (plist-get keys :subregions) contents)
-        contents
-      (list outer))))
 
 ;;;; Bounds of Thing
 
@@ -3777,244 +3925,352 @@ The iterator must be the first argument in ARGLIST.
     (kmacro-call-macro (or count 0))))
 
 
-;;;; Mark Handlers
+;;;; Labels
 
-(defvar-local conn-mark-handler-overrides-alist nil
-  "Buffer local overrides for command mark handlers.
+(defcustom conn-simple-label-characters
+  (list "d" "j" "f" "k" "s" "g" "h" "l" "w" "e"
+        "r" "t" "y" "u" "i" "c" "v" "b" "n" "m")
+  "Chars to use for label overlays for the default labeling function."
+  :group 'conn
+  :type '(list integer))
 
-Is an alist of the form ((CMD . MARK-HANDLER) ...).
+(defcustom conn-disptach-stable-label-characters
+  `(("j" "u" "m" "k" "i" "," "l" "o" "h" "y" "n" "p" ";")
+    ("f" "r" "v" "d" "e" "c" "s" "w" "x" "g" "t" "b" "a"))
+  "Chars to use for label overlays when recording a keyboard macro."
+  :group 'conn
+  :type '(list integer))
 
-For the meaning of MARK-HANDLER see `conn-command-mark-handler'.")
-
-(define-inline conn-command-mark-handler (command)
-  "Return the mark handler for COMMAND."
-  (declare (important-return-value t)
-           (side-effect-free t)
-           (gv-setter conn-set-command-mark-handler))
-  (inline-letevals (command)
-    (inline-quote
-     (and (symbolp ,command)
-          (or (alist-get ,command conn-mark-handler-overrides-alist)
-              (get ,command :conn-mark-handler))))))
-
-(defun conn-set-command-mark-handler (command handler)
-  (put command :conn-mark-handler handler))
-
-(defun conn-symbol-handler (beg)
-  "Mark handler for symbols."
-  (let ((list (ignore-errors (bounds-of-thing-at-point 'list))))
-    (cond ((not (derived-mode-p 'prog-mode))
-           (conn-continuous-thing-handler beg))
-          ((and (conn--point-in-comment-or-string-p)
-                (save-excursion
-                  (goto-char beg)
-                  (conn--point-in-comment-or-string-p)))
-           (conn-continuous-thing-handler beg))
-          ((or (conn--point-in-comment-or-string-p)
-               (save-excursion
-                 (goto-char beg)
-                 (conn--point-in-comment-or-string-p)))
-           (conn-discrete-thing-handler beg))
-          ((equal list (save-excursion
-                         (goto-char beg)
-                         (bounds-of-thing-at-point 'list)))
-           (conn-continuous-thing-handler beg))
-          ((conn-discrete-thing-handler beg)))))
-
-(defun conn-continuous-thing-handler (beg)
-  "Mark the things which have been moved over."
-  (ignore-errors
-    (cond ((= 0 (abs (prefix-numeric-value current-prefix-arg))))
-          ((= (point) beg)
-           (pcase (bounds-of-thing-at-point conn-this-command-thing)
-             (`(,beg . ,end)
-              (cond ((= (point) beg) (conn--push-ephemeral-mark end))
-                    ((= (point) end) (conn--push-ephemeral-mark beg))))))
-          ((let ((dir (pcase (- (point) beg)
-                        (0 0)
-                        ((pred (< 0)) 1)
-                        ((pred (> 0)) -1))))
-             (save-excursion
-               (goto-char beg)
-               (forward-thing conn-this-command-thing dir)
-               (forward-thing conn-this-command-thing (- dir))
-               (conn--push-ephemeral-mark)))))))
-
-(defun conn-discrete-thing-handler (_beg)
-  "Mark the thing at point."
-  (pcase (ignore-errors (bounds-of-thing-at-point conn-this-command-thing))
-    (`(,beg . ,end)
-     (conn--push-ephemeral-mark (if (= (point) end) beg end)))))
-
-(defun conn-jump-handler (beg)
-  "Place a mark where point used to be."
-  (unless (= beg (point))
-    (conn--push-ephemeral-mark beg)))
-
-
-;;;; Mark Cursor
-
-(defcustom conn-mark-overlay-priority 2000
-  "Priority of mark overlay."
-  :type 'integer
-  :set (lambda (sym val)
-         (set sym val)
-         (put 'conn--mark-cursor 'priority val))
-  :group 'conn)
-
-(defface conn-mark-face
-  '((t (:inherit region :extend nil)))
-  "Face for conn mark cursor."
+(defface conn-dispatch-label-face
+  '((t (:inherit highlight :bold t)))
+  "Face for group in dispatch lead overlay."
   :group 'conn-faces)
 
-(defvar-local conn--mark-cursor nil)
-(put 'conn--mark-cursor 'permanent-local t)
+(defvar conn-window-labeling-function 'conn-header-line-label
+  "Function to label windows for `conn-prompt-for-window'.
 
-(defvar conn--prev-mark-even-if-inactive nil
-  "Previous value of `mark-even-if-inactive'.
+The function should accept a single argument, the list of windows to be
+labeled and it should return a list of structs for `conn-label-select',
+which see.")
 
-Used to restore previous value when `conn-mode' is disabled.")
+(defvar conn-target-window-predicate)
 
-(defvar-local conn--ephemeral-mark nil)
+(defvar conn-dispatch-all-frames 'visible)
 
-(put 'conn--mark-cursor 'face 'conn-mark-face)
-(put 'conn--mark-cursor 'priority conn-mark-overlay-priority)
-(put 'conn--mark-cursor 'conn-overlay t)
-(put 'conn--mark-cursor 'overlay-after-string
-     (propertize " " 'face 'conn-mark-face))
+(cl-defstruct (conn-dispatch-label)
+  "State for a dispatch label."
+  (string nil :type string)
+  (narrowed-string nil :type string)
+  (overlay nil :type overlay)
+  (target nil :type overlay)
+  (setup-function nil :type function)
+  (padding-function nil :type function))
 
-(defun conn--mark-cursor-redisplay (win)
-  (if (or (not conn-local-mode)
-          conn--hide-mark-cursor
-          (null (mark t))
-          (and (window-minibuffer-p win)
-               (not (eq win (active-minibuffer-window)))))
-      (progn
-        (when conn--mark-cursor
-          (delete-overlay conn--mark-cursor))
-        (setf conn--mark-cursor nil))
-    (unless conn--mark-cursor
-      (setf conn--mark-cursor (make-overlay (mark t) (1+ (mark t))))
-      (overlay-put conn--mark-cursor 'category 'conn--mark-cursor))
-    (cond ((or (use-region-p)
-               (= (point-max) (mark t) (point)))
-           (when (overlay-get conn--mark-cursor 'after-string)
-             (overlay-put conn--mark-cursor 'after-string nil))
-           (unless (eql (overlay-start conn--mark-cursor)
-                        (overlay-end conn--mark-cursor))
-             (move-overlay conn--mark-cursor (point-max) (point-max))))
-          ((and (eql (overlay-start conn--mark-cursor) (mark t))
-                (or (eql (overlay-end conn--mark-cursor) (1+ (mark t)))
-                    (and (eql (overlay-start conn--mark-cursor) (point-max))
-                         (overlay-get conn--mark-cursor 'after-string)))))
-          ((= (mark t) (point-max))
-           (move-overlay conn--mark-cursor (point-max) (point-max))
-           (overlay-put conn--mark-cursor 'after-string
-                        (get 'conn--mark-cursor 'overlay-after-string)))
-          ((and (eql (char-after (mark t)) ?\t)
-                (< 1 (save-excursion
-                       (goto-char (mark t))
-                       (let ((col (current-column)))
-                         (- (indent-next-tab-stop col) col)))))
-           (move-overlay conn--mark-cursor (mark t) (mark t))
-           (overlay-put conn--mark-cursor 'after-string
-                        (get 'conn--mark-cursor 'overlay-after-string)))
-          (t
-           (move-overlay conn--mark-cursor (mark t) (1+ (mark t)))
-           (overlay-put conn--mark-cursor 'after-string nil)))))
+(cl-defstruct (conn-window-label
+               (:constructor nil)
+               ( :constructor conn-window-label
+                 ( string window
+                   &aux
+                   (state (list (window-point window)
+                                (window-vscroll window)
+                                (window-hscroll window))))))
+  "State for a window label."
+  (string nil :type string)
+  (window nil :type window)
+  (state nil :type list))
 
-(defun conn--push-ephemeral-mark (&optional location msg activate)
-  "Push a mark at LOCATION that will not be added to `mark-ring'.
+(defun conn-simple-labels (count &optional face)
+  "Return a list of label strings of length COUNT.
 
-For the meaning of MSG and ACTIVATE see `push-mark'."
-  (if (not conn-local-mode)
-      (push-mark location (not msg) activate)
-    (push-mark location (not msg) activate)
-    (setq conn--ephemeral-mark t)
-    nil))
+If FACE is non-nil set label string face to FACE.  Otherwise label
+strings have `conn-dispatch-label-face'."
+  (named-let rec ((count count)
+                  (labels (mapcar #'copy-sequence
+                                  (take count conn-simple-label-characters))))
+    (let* ((prefixes nil))
+      (while (and labels
+                  (> count (+ (length labels)
+                              (* (length prefixes)
+                                 (length conn-simple-label-characters)))))
+        (push (pop labels) prefixes))
+      (if (and (null labels) (> count 0))
+          (let (new-labels)
+            (dolist (a prefixes)
+              (dolist (b conn-simple-label-characters)
+                (push (concat a b) new-labels)))
+            (rec count new-labels))
+        (catch 'done
+          (let ((n (length labels)))
+            (setq labels (nreverse labels))
+            (dolist (prefix (nreverse prefixes))
+              (dolist (c conn-simple-label-characters)
+                (push (concat prefix c) labels)
+                (when (= (cl-incf n) count)
+                  (throw 'done nil))))))
+        (dolist (label labels)
+          (put-text-property 0 (length label) 'face face label))
+        (nreverse labels)))))
 
-(defvar conn--movement-ring-rotating nil)
-(defvar conn--movement-tick nil)
-(defvar conn--movement-mark nil)
-
-(defun conn--mark-pre-command-hook ()
-  (unless conn--hide-mark-cursor
-    (set-marker conn-this-command-start (point))
-    (setq conn--movement-tick (buffer-chars-modified-tick)
-          conn--movement-mark (mark t)
-          conn--movement-ring-rotating nil
-          conn-this-command-thing nil
-          conn-this-command-handler nil)))
-
-(defun conn--mark-post-command-hook ()
-  (unless conn--hide-mark-cursor
-    (cl-callf2 assq-delete-all (recursion-depth) conn--last-perform-bounds)
-    (unless conn-this-command-thing
-      (setq conn-this-command-thing (or (conn-command-thing this-command)
-                                        (conn-command-thing real-this-command))))
-    (when (and conn-local-mode
-               (marker-position conn-this-command-start)
-               (eq (current-buffer) (marker-buffer conn-this-command-start)))
-      (when-let* (((not (region-active-p)))
-                  (handler
-                   (or (conn-command-mark-handler this-command)
-                       (conn-command-mark-handler real-this-command))))
-        (with-demoted-errors "Error in Mark Handler: %s"
-          (funcall handler conn-this-command-start)))
-      (unless (or conn--movement-ring-rotating
-                  (null conn--movement-mark)
-                  (not (eql conn--movement-tick (buffer-chars-modified-tick)))
-                  (eql (mark t) conn--movement-mark))
-        (with-demoted-errors "Error in Movement Ring: %s"
-          (conn-push-region (point-marker) (mark-marker)))))))
-
-(defun conn--setup-mark ()
-  (if conn-mode
-      (progn
-        (setq conn--prev-mark-even-if-inactive mark-even-if-inactive
-              mark-even-if-inactive t)
-        (add-hook 'pre-redisplay-functions 'conn--mark-cursor-redisplay 91)
-        (add-hook 'pre-command-hook #'conn--mark-pre-command-hook)
-        (add-hook 'post-command-hook #'conn--mark-post-command-hook))
-    (setq mark-even-if-inactive conn--prev-mark-even-if-inactive)
-    (remove-hook 'pre-redisplay-functions 'conn--mark-cursor-redisplay)
-    (remove-hook 'pre-command-hook #'conn--mark-pre-command-hook)
-    (remove-hook 'post-command-hook #'conn--mark-post-command-hook)))
+(defun conn--get-target-windows ()
+  (if conn-target-window-predicate
+      (conn--get-windows nil nil conn-dispatch-all-frames
+                         nil conn-target-window-predicate)
+    (list (selected-window))))
 
 
-;;;; Things
+;;;;; Label Reading
 
-;; Definitions for various things and thing commands.
+(defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
+  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
+  (declare (indent 3))
+  (cl-once-only (keymap)
+    (let ((body `(let ((conn--dispatch-read-event-handlers
+                        (cons ,handler conn--dispatch-read-event-handlers)))
+                   ,@body)))
+      `(catch ,tag
+         ,(if keymap
+              `(let ((conn--dispatch-event-handler-maps
+                      (cons ,keymap conn--dispatch-event-handler-maps)))
+                 ,body)
+            body)))))
 
-(defun conn-register-thing-commands (thing handler &rest commands)
-  "Associate COMMANDS with a THING and a HANDLER.
+(cl-defgeneric conn-label-delete (label)
+  "Delete the label LABEL.
 
-HANDLER will be run from the `post-command-hook' and should be a
-function of one argument, the location of `point' before the command
-ran.  HANDLER is responsible for calling `conn--push-ephemeral-mark' in
-order to mark the region that should be defined by any of COMMANDS."
-  (dolist (cmd commands)
-    (cl-assert (not (conn-state-name-p cmd))
-               nil "States and thing commands must be disjoint")
-    (setf (conn-command-thing cmd) thing
-          (conn-command-mark-handler cmd) handler)))
+This function is called on each label after a label has been selected
+and allow labels to clean up after themselves."
+  (:method (_label) "Noop" nil))
 
-(defmacro conn-define-mark-command (name thing &optional ignore-mark-active)
-  `(progn
-     (defun ,name ()
-       (interactive)
-       (pcase (ignore-errors (bounds-of-thing-at-point ',thing))
-         (`(,beg . ,end)
-          (if ,(unless ignore-mark-active '(region-active-p))
-              (pcase (car (read-multiple-choice
-                           "Mark to?"
-                           '((?e "end")
-                             (?a "beginning"))))
-                (?e (goto-char end))
-                (?b (goto-char beg)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)))))
-     (conn-register-thing-commands ',thing 'ignore ',name)))
+(cl-defgeneric conn-label-narrow (label prefix)
+  "Narrow LABEL by PREFIX.
+
+If LABEL contains PREFIX then the label state should be updated to
+reflect that prefix has been processed and LABEL should be returned.  If
+the label does not contain the prefix then the label state be updated
+to reflect that the label is no longer active and nil should be
+returned."
+  (declare (important-return-value t)))
+
+(cl-defgeneric conn-label-redisplay (label)
+  (:method (_) "Noop" nil))
+
+(cl-defgeneric conn-label-reset (label)
+  "Reset LABEL to its initial state.")
+
+(cl-defgeneric conn-label-payload (label)
+  "Return LABEL\'s payload."
+  (declare (important-return-value t)))
+
+(cl-defmethod conn-label-payload ((label conn-dispatch-label))
+  (conn-dispatch-label-target label))
+
+(cl-defmethod conn-label-reset ((label conn-dispatch-label))
+  (setf (conn-dispatch-label-narrowed-string label)
+        (conn-dispatch-label-string label)))
+
+(cl-defmethod conn-label-delete ((label conn-dispatch-label))
+  (delete-overlay (conn-dispatch-label-overlay label))
+  (setf (overlay-get (conn-dispatch-label-target label) 'conn-label) nil))
+
+(cl-defmethod conn-label-narrow ((label conn-dispatch-label) prefix-char)
+  (if (thread-first
+        (conn-dispatch-label-narrowed-string label)
+        (aref 0) (eql prefix-char) not)
+      (setf (conn-dispatch-label-narrowed-string label) nil)
+    (cl-callf substring (conn-dispatch-label-narrowed-string label) 1)
+    label))
+
+(cl-defmethod conn-label-redisplay ((label conn-dispatch-label))
+  (pcase-let (((cl-struct conn-dispatch-label
+                          overlay
+                          target
+                          narrowed-string
+                          setup-function)
+               label))
+    (with-current-buffer (overlay-buffer overlay)
+      (if narrowed-string
+          (progn
+            (overlay-put overlay 'display nil)
+            (overlay-put overlay 'before-string nil)
+            (overlay-put overlay 'after-string nil)
+            (funcall setup-function label)
+            (overlay-put target 'face 'conn-target-overlay-face))
+        (move-overlay overlay (overlay-start overlay) (overlay-start overlay))
+        (overlay-put overlay 'display nil)
+        (overlay-put overlay 'after-string nil)
+        (overlay-put overlay 'before-string nil)
+        (overlay-put target 'after-string nil)
+        (overlay-put target 'face nil)))))
+
+(cl-defmethod conn-label-payload ((label conn-window-label))
+  (conn-window-label-window label))
+
+(cl-defmethod conn-label-reset ((label conn-window-label))
+  (set-window-parameter (conn-window-label-window label)
+                        'conn-label-string
+                        (conn-window-label-string label)))
+
+(cl-defmethod conn-label-delete ((label conn-window-label))
+  (pcase-let* (((cl-struct conn-window-label window string state) label)
+               (`(,pt ,vscroll ,hscroll) state))
+    (with-current-buffer (window-buffer window)
+      (when (eq 'conn-mode (car-safe (car-safe header-line-format)))
+        (setq-local header-line-format (cadadr header-line-format))))
+    (set-window-point window pt)
+    (set-window-hscroll window hscroll)
+    (set-window-vscroll window vscroll)
+    (set-window-parameter window 'conn-label-string string)
+    (set-window-parameter window 'conn-window-labeled-p nil)))
+
+(cl-defmethod conn-label-narrow ((label conn-window-label) prefix-char)
+  (pcase-let* (((cl-struct conn-window-label window) label)
+               (string (window-parameter window 'conn-label-string)))
+    (unless (or (length= string 0)
+                (not (eql prefix-char (aref string 0))))
+      (set-window-parameter window 'conn-label-string (substring string 1))
+      label)))
+
+(defvar conn-label-select-always-prompt nil)
+
+(defun conn-label-select (candidates char-reader &optional prompt always-prompt)
+  "Select a label from CANDIDATES.
+
+Prompts the user for prefix characters one at a time and narrows the
+labels after each one.
+
+Each of CANDIDATES should be a DFA that defines its transition functions
+as methods of the `conn-label-narrow' and `conn-label-reset' generic
+functions.  `conn-label-narrow' is called when user input is received
+for the label to process and `conn-label-reset' is called when the user
+has failed to select a label and the narrowing process must restart from
+the beginning.  `conn-label-delete' allows labels to clean up after
+themselves once the selection process has concluded."
+  (declare (important-return-value t))
+  (let* ((prompt (propertize (or prompt "Chars")
+                             'face 'minibuffer-prompt))
+         (prompt-suffix "")
+         (prompt-flag (or conn-label-select-always-prompt
+                          always-prompt))
+         (current candidates))
+    (while-no-input
+      (mapc #'conn-label-redisplay candidates))
+    (cl-loop
+     (pcase current
+       ('nil
+        (setq current candidates
+              prompt-suffix ""
+              prompt-flag (or conn-label-select-always-prompt
+                              always-prompt))
+        (conn-state-loop-error "No matches")
+        (mapc #'conn-label-reset current)
+        (while-no-input
+          (mapc #'conn-label-redisplay candidates)))
+       (`(,it . nil)
+        (unless prompt-flag
+          (cl-return (conn-label-payload it)))))
+     (setq prompt-flag nil)
+     (let ((next nil)
+           (c (funcall char-reader prompt)))
+       (setq prompt-suffix (concat prompt-suffix (string c))
+             current (dolist (label current next)
+                       (when-let* ((l (conn-label-narrow label c)))
+                         (push l next)))
+             conn--loop-error-message nil)
+       (while-no-input
+         (mapc #'conn-label-redisplay candidates))))))
+
+
+;;;;; Window Header-line Labels
+
+(defface conn-window-label-face
+  '((t (:inherit help-key-binding :height 2.5)))
+  "Face for conn window prompt overlay."
+  :group 'conn-faces)
+
+(defun conn--centered-header-label ()
+  (when (window-parameter (selected-window) 'conn-window-labeled-p)
+    (let* ((window-width (window-width nil t))
+           (label (window-parameter nil 'conn-label-string))
+           (label-width (string-pixel-width label))
+           (padding-width (floor (- window-width label-width) 2))
+           (padding (propertize " " 'display `(space :width (,padding-width)))))
+      (concat padding label))))
+
+(defvar conn--window-label-pool
+  (conn-simple-labels 30 'conn-window-label-face))
+
+(defun conn--ensure-window-labels ()
+  (let* ((windows (conn--get-windows nil 'nomini t))
+         (window-count (length windows)))
+    (when (length< conn--window-label-pool window-count)
+      (setq conn--window-label-pool
+            (conn-simple-labels (* 2 window-count))))
+    (cl-loop with available = (copy-sequence conn--window-label-pool)
+             for win in windows
+             for label = (window-parameter win 'conn-label-string)
+             unless (and label
+                         (when (member label available)
+                           (setq available (delete label available))
+                           t))
+             collect win into unlabeled
+             finally (dolist (win unlabeled)
+                       (set-window-parameter win 'conn-label-string
+                                             (pop available))))))
+
+(defun conn-header-line-label (window string)
+  "Label WINDOWS using `head-line-format'."
+  (let ((header-line-label
+         '(conn-mode (:eval (conn--centered-header-label)))))
+    (set-window-parameter window 'conn-window-labeled-p t)
+    (with-selected-window window
+      (unless (equal header-line-label (car header-line-format))
+        (setq-local header-line-format
+                    `(,header-line-label (nil ,header-line-format))))
+      (prog1
+          (conn-window-label (propertize string 'face 'conn-window-label-face) window)
+        (goto-char (window-start))))))
+
+;; From ace-window
+(defun conn--get-windows (&optional window minibuffer all-frames dedicated predicate)
+  (declare (important-return-value t))
+  (cl-loop for win in (window-list-1 window minibuffer all-frames)
+           unless (or ;; ignore child frames
+                   (and (fboundp 'frame-parent) (frame-parent (window-frame window)))
+                   ;; When `ignore-window-parameters' is nil, ignore windows whose
+                   ;; `no-other-window’ or `no-delete-other-windows' parameter is non-nil.
+                   (unless ignore-window-parameters
+                     (window-parameter window 'no-other-window))
+                   (and (null dedicated) (window-dedicated-p win))
+                   (and predicate (not (funcall predicate win))))
+           collect win))
+
+(defun conn-prompt-for-window (windows &optional always-prompt)
+  "Label and prompt for a window among WINDOWS."
+  (declare (important-return-value t))
+  (cond
+   ((null windows) nil)
+   (t
+    (conn--ensure-window-labels)
+    (let ((labels
+           (cl-loop for win in windows
+                    collect (funcall conn-window-labeling-function
+                                     win (window-parameter win 'conn-label-string))))
+          (conn-label-select-always-prompt always-prompt))
+      (unwind-protect
+          (conn-with-dispatch-event-handler 'mouse-click
+              nil
+              (lambda (cmd)
+                (when (or (and (eq cmd 'act)
+                               (mouse-event-p last-input-event))
+                          (eq 'dispatch-mouse-repeat
+                              (event-basic-type last-input-event)))
+                  (let* ((posn (event-start last-input-event))
+                         (win (posn-window posn)))
+                    (when (and (not (posn-area posn))
+                               (funcall conn-target-window-predicate win))
+                      (throw 'mouse-click win)))))
+            (conn-label-select labels #'conn-dispatch-read-event))
+        (mapc #'conn-label-delete labels))))))
 
 
 ;;;; Dispatch State
@@ -6665,9 +6921,6 @@ contain targets."
 
 ;;;;; Dispatch Ring
 
-
-;;;;; Dispatch Command Loop
-
 (cl-defstruct (conn-previous-dispatch
                (:constructor
                 conn-make-dispatch
@@ -6780,6 +7033,20 @@ contain targets."
   (unless executing-kbd-macro
     (message (conn-describe-dispatch
               (conn-ring-head conn-dispatch-ring)))))
+
+(defun conn-call-previous-dispatch (dispatch &rest override-keys)
+  (pcase-let (((cl-struct conn-previous-dispatch
+                          thing thing-arg action keys other-end
+                          always-retarget repeat restrict-windows)
+               dispatch))
+    (apply #'conn-perform-dispatch
+           `( ,action ,thing ,thing-arg
+              ,@override-keys
+              :always-retarget ,always-retarget
+              :repeat ,repeat
+              :restrict-windows ,restrict-windows
+              :other-end ,other-end
+              ,@keys))))
 
 
 ;;;;; Dispatch Commands
@@ -6937,20 +7204,6 @@ contain targets."
                win1 pt1 (or thing-override1 thing)
                win2 pt2 (or thing-override2 thing)
                thing-arg))))
-
-(defun conn-call-previous-dispatch (dispatch &rest override-keys)
-  (pcase-let (((cl-struct conn-previous-dispatch
-                          thing thing-arg action keys other-end
-                          always-retarget repeat restrict-windows)
-               dispatch))
-    (apply #'conn-perform-dispatch
-           `( ,action ,thing ,thing-arg
-              ,@override-keys
-              :always-retarget ,always-retarget
-              :repeat ,repeat
-              :restrict-windows ,restrict-windows
-              :other-end ,other-end
-              ,@keys))))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
@@ -7318,307 +7571,6 @@ Expansions and contractions are provided by functions in
           :prefix arg)))
 
 
-;;;; Thing Definitions
-
-(conn-define-mark-command conn-mark-email email)
-(conn-define-mark-command conn-mark-uuid uuid)
-(conn-define-mark-command conn-mark-string string)
-(conn-define-mark-command conn-mark-filename filename)
-(conn-define-mark-command conn-mark-comment comment)
-
-(conn-register-thing
- 'comment
- :bounds-op (lambda ()
-              (if (conn--point-in-comment-p)
-                  (cons (save-excursion
-                          (while (and (conn--point-in-comment-p)
-                                      (not (eobp)))
-                            (forward-char 1)
-                            (skip-chars-forward " \t\n\r"))
-                          (skip-chars-backward " \t\n\r")
-                          (point))
-                        (save-excursion
-                          (while (conn--point-in-comment-p)
-                            (forward-char -1)
-                            (skip-chars-backward " \t\n\r"))
-                          (skip-chars-forward " \t\n\r")
-                          (unless (conn--point-in-comment-p)
-                            (forward-char 1))
-                          (point)))
-                (error "Point not in comment"))))
-
-(conn-register-thing 'defun :forward-op 'conn-forward-defun)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing defun)))
-  (conn-dispatch-all-defuns))
-
-(conn-register-thing
- 'visual-line
- :forward-op (lambda (&optional N)
-               (let ((line-move-visual t))
-                 (vertical-motion 0)
-                 (line-move N t))))
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing visual-line)))
-  'conn-dispatch-visual-lines)
-
-(conn-define-mark-command conn-mark-visual-line visual-line)
-
-(conn-register-thing
- 'region
- :bounds-op (lambda () (cons (region-beginning) (region-end))))
-
-(conn-register-thing
- 'buffer-after-point
- :bounds-op (lambda () (cons (point) (point-max))))
-
-(conn-register-thing
- 'buffer-before-point
- :bounds-op (lambda () (cons (point-min) (point))))
-
-(conn-define-mark-command conn-mark-after-point buffer-after-point t)
-(conn-define-mark-command conn-mark-before-point buffer-before-point t)
-
-(conn-register-thing
- 'visible
- :bounds-op (lambda () (cons (window-start) (window-end))))
-
-(conn-define-mark-command conn-mark-visible visible)
-
-(conn-register-thing-commands
- 'recursive-edit nil
- 'recursive-edit 'exit-recursive-edit)
-
-(conn-register-thing-commands 'dispatch nil 'conn-dispatch)
-
-(conn-register-thing-commands
- 'isearch nil
- 'isearch-forward
- 'isearch-backward
- 'isearch-forward-regexp
- 'isearch-backward-regexp
- 'isearch-forward-symbol
- 'isearch-forward-word
- 'isearch-forward-symbol-at-point
- 'isearch-forward-thing-at-point)
-
-(conn-register-thing-commands
- 'visible nil
- 'conn-scroll-up 'conn-scroll-down
- 'scroll-up-command 'scroll-down-command
- 'conn-mark-visible)
-
-(conn-register-thing-commands
- 'region nil
- 'conn-toggle-mark-command)
-
-(conn-register-thing 'symbol :forward-op 'forward-symbol)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing symbol)))
-  (conn-dispatch-things-read-prefix 'symbol 1))
-
-(conn-register-thing-commands
- 'symbol 'conn-continuous-thing-handler
- 'forward-symbol 'conn-backward-symbol)
-
-(conn-register-thing 'page :forward-op 'forward-page)
-
-(conn-register-thing-commands
- 'page 'conn-discrete-thing-handler
- 'forward-page 'backward-page)
-
-(defun conn-char-mark-handler (beg)
-  (when current-prefix-arg
-    (conn--push-ephemeral-mark beg)))
-
-(conn-register-thing-commands
- 'char 'conn-char-mark-handler
- 'forward-char 'backward-char)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing word)))
-  (conn-dispatch-things-read-prefix 'word 1))
-
-(conn-register-thing-commands
- 'word 'conn-symbol-handler
- 'forward-word 'backward-word
- 'upcase-word 'downcase-word 'capitalize-word
- 'upcase-dwim 'downcase-dwim 'capitalize-dwim)
-
-(conn-register-thing 'sexp :forward-op 'forward-sexp)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sexp)))
-  (conn-dispatch-things-read-prefix 'sexp 1))
-
-(conn-register-thing-commands
- 'sexp 'conn-continuous-thing-handler
- 'forward-sexp 'backward-sexp)
-
-(conn-register-thing 'list :forward-op 'forward-list)
-
-(conn-register-thing-commands
- 'list 'conn-continuous-thing-handler
- 'forward-list 'backward-list)
-
-(defun conn--up-list-mark-handler (beg)
-  (condition-case _err
-      (cond ((> (point) beg)
-             (save-excursion
-               (forward-thing 'list -1)
-               (conn--push-ephemeral-mark (point))))
-            ((< (point) beg)
-             (save-excursion
-               (forward-thing 'list 1)
-               (conn--push-ephemeral-mark (point)))))
-    (scan-error nil)))
-
-(conn-register-thing-commands
- 'list 'conn--up-list-mark-handler
- 'up-list 'backward-up-list)
-
-(defun conn--down-list-mark-handler (_beg)
-  (condition-case _err
-      (cond ((= (point) (save-excursion
-                          (up-list 1 t t)
-                          (down-list -1 t)
-                          (point)))
-             (conn--push-ephemeral-mark (save-excursion
-                                          (up-list -1 t t)
-                                          (down-list 1 t)
-                                          (point))))
-            ((= (point) (save-excursion
-                          (up-list -1 t t)
-                          (down-list 1 t)
-                          (point)))
-             (conn--push-ephemeral-mark (save-excursion
-                                          (up-list 1 t t)
-                                          (down-list -1 t)
-                                          (point)))))
-    (scan-error nil)))
-
-(conn-register-thing-commands
- 'list 'conn--down-list-mark-handler
- 'down-list)
-
-(conn-register-thing 'whitespace :forward-op 'forward-whitespace)
-
-(conn-register-thing-commands
- 'whitespace 'conn-discrete-thing-handler
- 'forward-whitespace 'conn-backward-whitespace)
-
-(conn-register-thing 'sentence :forward-op 'forward-sentence)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing sentence)))
-  (conn-dispatch-all-things 'sentence))
-
-(conn-register-thing-commands
- 'sentence 'conn-continuous-thing-handler
- 'forward-sentence 'backward-sentence)
-
-(conn-register-thing 'paragraph :forward-op 'forward-paragraph)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing paragraph)))
-  (conn-dispatch-all-things 'paragraph))
-
-(conn-register-thing-commands
- 'paragraph 'conn-continuous-thing-handler
- 'forward-paragraph 'backward-paragraph)
-
-(conn-register-thing-commands
- 'defun 'conn-continuous-thing-handler
- 'end-of-defun 'beginning-of-defun
- 'conn-forward-defun)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing char)))
-  (conn-dispatch-read-string-with-timeout))
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing char)))
-  (conn-make-action 'conn-dispatch-jump))
-
-(conn-register-thing-commands
- 'buffer 'conn-discrete-thing-handler
- 'end-of-buffer 'beginning-of-buffer)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing line)))
-  'conn-dispatch-lines)
-
-(conn-register-thing-commands
- 'line 'conn-continuous-thing-handler
- 'forward-line 'conn-backward-line
- 'conn-line-forward-op
- 'conn-goto-line)
-
-(conn-register-thing 'line-column :forward-op 'next-line)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing line-column)))
-  'conn-dispatch-columns)
-
-(cl-defmethod conn-make-default-action ((_cmd (conn-thing line-column)))
-  (conn-make-action 'conn-dispatch-jump))
-
-(conn-register-thing-commands
- 'line-column 'conn-jump-handler
- 'next-line 'previous-line
- 'rectangle-next-line 'rectangle-previous-line)
-
-(conn-register-thing-commands 'line nil 'comment-line)
-
-(conn-register-thing
- 'outer-line
- :beg-op (lambda () (move-beginning-of-line nil))
- :end-op (lambda () (move-end-of-line nil)))
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing outer-line)))
-  'conn-dispatch-lines)
-
-(conn-register-thing-commands
- 'outer-line 'conn-discrete-thing-handler
- 'move-beginning-of-line 'move-end-of-line
- 'org-beginning-of-line 'org-end-of-line)
-
-(defun conn--bounds-of-inner-line ()
-  (cons
-   (save-excursion
-     (back-to-indentation)
-     (point))
-   (save-excursion
-     (conn--end-of-inner-line-1)
-     (point))))
-
-(conn-register-thing
- 'inner-line
- :bounds-op 'conn--bounds-of-inner-line
- :forward-op 'conn-forward-inner-line)
-
-(cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line)))
-  'conn-dispatch-inner-lines)
-
-(conn-register-thing-commands
- 'inner-line 'conn-continuous-thing-handler
- 'back-to-indentation
- 'conn-forward-inner-line
- 'conn-backward-inner-line
- 'conn-beginning-of-inner-line
- 'conn-end-of-inner-line
- 'comment-line)
-
-(conn-register-thing-commands
- 'org-link 'conn-discrete-thing-handler
- 'org-next-link 'org-previous-link)
-
-(conn-register-thing-commands
- 'org-link nil
- 'org-insert-link-global 'org-store-link 'org-insert-link)
-
-(conn-register-thing-commands
- 'expansion nil
- 'conn-expand 'conn-contract)
-
-(conn-register-thing-commands
- 'list 'conn--down-list-mark-handler
- 'conn-beginning-of-list
- 'conn-end-of-list)
-
-
 ;;;; Narrow Ring
 
 (defvar-local conn-narrow-ring nil
@@ -7678,7 +7630,11 @@ Expansions and contractions are provided by functions in
   "Prepend thing regions to narrow register."
   (interactive
    (pcase-let ((`(,thing-cmd ,thing-arg . ,keys)
-                (conn-read-thing-mover-dwim nil :subregions t)))
+                (conn-with-state-loop
+                 'conn-read-thing-state
+                 (list (conn-thing-argument)
+                       (conn-subregions-argument))
+                 :prompt "Thing")))
      `( ,thing-cmd ,thing-arg
         ,(register-read-with-preview "Push region to register: ")
         ,@keys)))
@@ -7701,7 +7657,12 @@ Expansions and contractions are provided by functions in
 
 (cl-defun conn-thing-to-narrow-ring (thing-cmd thing-arg &key subregions)
   "Push thing regions to narrow ring."
-  (interactive (conn-read-thing-mover-dwim nil :subregions t))
+  (interactive
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument)
+          (conn-subregions-argument))
+    :prompt "Thing"))
   (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
                 (conn-get-bounds thing-cmd thing-arg)))
     (if (not subregions)
@@ -8163,10 +8124,11 @@ instances of from-string.")
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg . ,props)
-                 (conn-read-thing-mover-dwim
-                  nil
-                  :recursive-edit t
-                  :subregions t))
+                 (conn-with-state-loop
+                  'conn-read-thing-state
+                  (list (conn-thing-argument :recursive-edit t)
+                        (conn-subregions-argument t))
+                  :prompt "Replace in Thing"))
                 (bounds (conn-get-bounds thing-mover arg))
                 (subregions (and (plist-get props :subregions)
                                  (plist-get bounds :contents)))
@@ -8218,10 +8180,11 @@ instances of from-string.")
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg . ,props)
-                 (conn-read-thing-mover-dwim
-                  nil
-                  :recursive-edit t
-                  :subregions t))
+                 (conn-with-state-loop
+                  'conn-read-thing-state
+                  (list (conn-thing-argument :recursive-edit t)
+                        (conn-subregions-argument t))
+                  :prompt "Replace Regexp in Thing"))
                 (bounds (conn-get-bounds thing-mover arg))
                 (subregions (and (plist-get props :subregions)
                                  (plist-get bounds :contents)))
@@ -8420,11 +8383,12 @@ Exiting the recursive edit will resume the isearch."
 (cl-defun conn-isearch-forward (thing-cmd thing-arg &key regexp subregions)
   "Isearch forward within the bounds of a thing."
   (interactive
-   (append (conn-read-thing-mover-dwim
-            nil
-            :recursive-edit t
-            :subregions t)
-           (list :regexp current-prefix-arg)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (conn-subregions-argument nil)
+          (list :regexp current-prefix-arg))
+    :prompt "Isearch in Thing"))
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward nil
                           :regexp regexp
@@ -8433,11 +8397,12 @@ Exiting the recursive edit will resume the isearch."
 (cl-defun conn-isearch-backward (thing-cmd thing-arg &key regexp subregions)
   "Isearch backward within the bounds of a thing."
   (interactive
-   (append (conn-read-thing-mover-dwim
-            nil
-            :recursive-edit t
-            :subregions t)
-           (list :regexp current-prefix-arg)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (conn-subregions-argument nil)
+          (list :regexp current-prefix-arg))
+    :prompt "Isearch in Thing"))
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward t
                           :regexp regexp
@@ -8448,8 +8413,11 @@ Exiting the recursive edit will resume the isearch."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (append (conn-read-thing-mover nil :recursive-edit t)
-           (list current-prefix-arg)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (list current-prefix-arg))
+    :prompt "Thing"))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
     (conn--isearch-in-thing thing-cmd thing-arg
@@ -8465,8 +8433,11 @@ Interactively `region-beginning' and `region-end'."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (append (conn-read-thing-mover nil t)
-           (list current-prefix-arg)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (list current-prefix-arg))
+    :prompt "Thing"))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
     (conn--isearch-in-thing thing-cmd thing-arg
@@ -8919,7 +8890,12 @@ With arg N, insert N newlines."
 
 (cl-defun conn-join-lines (thing-mover thing-arg &key subregions)
   "`delete-indentation' in region from START and END."
-  (interactive (conn-read-thing-mover-dwim nil :subregions t))
+  (interactive
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (conn-subregions-argument))
+    :prompt "Thing"))
   (save-mark-and-excursion
     (pcase (conn-get-bounds thing-mover thing-arg)
       ((and (guard subregions) (map :contents))
@@ -9013,9 +8989,14 @@ With a prefix arg prepend to a register instead."
 (cl-defun conn-copy-thing (thing-mover arg &key register trim)
   "Copy THING at point."
   (interactive
-   (append (conn-read-thing-mover-dwim nil :subregions t :trim t)
-           (when current-prefix-arg
-             (list :register (register-read-with-preview "Register: ")))))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument)
+          (conn-subregions-argument)
+          (conn-trim-argument)
+          (when current-prefix-arg
+            (list :register (register-read-with-preview "Register: "))))
+    :prompt "Thing"))
   (pcase-let (((map :outer :trimmed)
                (conn-get-bounds thing-mover arg)))
     (if (and trim trimmed)
@@ -9037,11 +9018,12 @@ With a prefix arg prepend to a register instead."
 (defun conn-narrow-to-thing (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (append (conn-read-thing-mover-dwim
-            (when current-prefix-arg
-              (prefix-numeric-value current-prefix-arg))
-            :recursive-edit t)
-           (list t)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (list t))
+    :prompt "Thing"
+    :prefix current-prefix-arg))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
     (unless (and (<= beg (point) end)
@@ -9057,11 +9039,12 @@ With a prefix arg prepend to a register instead."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (append (conn-read-thing-mover-dwim
-            (when current-prefix-arg
-              (prefix-numeric-value current-prefix-arg))
-            :recursive-edit t)
-           (list t)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (list t))
+    :prompt "Thing"
+    :prefix current-prefix-arg))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
@@ -9308,8 +9291,11 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (append (conn-read-thing-mover-dwim nil :recursive-edit t)
-           (list (prefix-numeric-value current-prefix-arg))))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (list (prefix-numeric-value current-prefix-arg)))
+    :prompt "Thing"))
   (pcase (conn-get-bounds thing-mover thing-arg)
     ((map (:outer `(,beg . ,end)))
      (if (use-region-p)
@@ -9347,8 +9333,11 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (append (conn-read-thing-mover-dwim nil :recursive-edit t)
-           (list (prefix-numeric-value current-prefix-arg))))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t)
+          (list (prefix-numeric-value current-prefix-arg)))
+    :prompt "Thing"))
   (pcase (conn-get-bounds thing-mover thing-arg)
     ((and (map (:outer `(,beg . ,end)))
           (let offset (- (point) end))
@@ -9425,7 +9414,11 @@ of `conn-recenter-positions'."
 
 (defun conn-comment-or-uncomment (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
-  (interactive (conn-read-thing-mover-dwim nil))
+  (interactive
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument :recursive-edit t))
+    :prompt "Thing"))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
     (if (comment-only-p beg end)
@@ -9623,16 +9616,19 @@ Interactively `region-beginning' and `region-end'."
          (push (conn--make-surround-region beg end) regions))))
     (list regions)))
 
-(defun conn-surround ()
-  (interactive)
+(defun conn-surround (&optional arg)
+  (interactive "P")
   (atomic-change-group
     (save-mark-and-excursion
       (pcase-let* ((`(,regions . ,prep-keys)
                     (apply #'conn-prepare-surround
-                           (conn-read-thing-mover-dwim
-                            nil
-                            :trim t
-                            :subregions nil)))
+                           (conn-with-state-loop
+                            'conn-read-thing-state
+                            (list (conn-thing-argument :recursive-edit t)
+                                  (conn-subregions-argument)
+                                  (conn-trim-argument t))
+                            :prompt "Surround"
+                            :prefix arg)))
                    (cleanup (plist-get prep-keys :cleanup))
                    (success nil))
         (unwind-protect

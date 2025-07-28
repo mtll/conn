@@ -308,6 +308,19 @@ before each iteration."
 
 ;;;;; Kapply suffixes
 
+(defun conn-read-thing-regions ()
+  (declare (important-return-value t))
+  (pcase-let* ((`(,cmd ,arg :subregions ,sr)
+                (conn-with-state-loop
+                 'conn-read-thing-state
+                 (list (conn-thing-argument :recursive-edit t)
+                       (conn-subregions-argument))
+                 :prompt "Thing")))
+    (if sr
+        (cl-loop for r in (plist-get (conn-get-bounds cmd arg) :contents)
+                 collect (plist-get r :outer))
+      (list (plist-get (conn-get-bounds cmd arg) :outer)))))
+
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.
 (transient-define-suffix conn--kapply-replace-region-string (args)
@@ -321,7 +334,7 @@ Begins the keyboard macro by deleting the string at each match."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (let* ((delimited (oref transient-current-prefix scope))
-          (regions (conn-read-thing-region nil))
+          (regions (conn-read-thing-regions))
           (string (filter-buffer-substring
                    (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -352,7 +365,7 @@ Begins the keyboard macro in `conn-emacs-state'."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (let* ((delimited (oref transient-current-prefix scope))
-          (regions (conn-read-thing-region nil))
+          (regions (conn-read-thing-regions))
           (string (filter-buffer-substring
                    (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -382,7 +395,7 @@ Begins the keyboard macro in `conn-command-state'."
   (deactivate-mark)
   (conn--kapply-compose-iterator
    (let* ((delimited (oref transient-current-prefix scope))
-          (regions (conn-read-thing-region nil))
+          (regions (conn-read-thing-regions))
           (string (filter-buffer-substring
                    (region-beginning) (region-end))))
      (conn--kapply-match-iterator
@@ -486,7 +499,7 @@ Begins the keyboard macro in `conn-command-state'."
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
   (let* ((delimited (oref transient-current-prefix scope))
-         (regions (conn-read-thing-region nil))
+         (regions (conn-read-thing-regions))
          (conn-query-flag conn-query-flag)
          (string (minibuffer-with-setup-hook
                      (lambda ()
@@ -522,7 +535,7 @@ Begins the keyboard macro in `conn-command-state'."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (let* ((delimited (oref transient-current-prefix scope))
-         (regions (conn-read-thing-region nil))
+         (regions (conn-read-thing-regions))
          (conn-query-flag conn-query-flag)
          (regexp (minibuffer-with-setup-hook
                      (lambda ()
@@ -561,7 +574,11 @@ apply to each contiguous component of the region."
   :key "f"
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let* ((`(,cmd ,arg) (conn-read-thing-mover nil t))
+  (pcase-let* ((`(,cmd ,arg)
+                (conn-with-state-loop
+                 'conn-read-thing-state
+                 (list (conn-thing-argument :recursive-edit t))
+                 :prompt "Thing"))
                ((map :outer :contents)
                 (conn-get-bounds cmd arg)))
     (conn--kapply-compose-iterator
@@ -587,8 +604,11 @@ apply to each contiguous component of the region."
   :key "v"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let ((`(,cmd ,n . ,_)
-               (conn-read-thing-mover nil)))
+  (pcase-let ((`(,cmd ,n)
+               (conn-with-state-loop
+                'conn-read-thing-state
+                (list (conn-thing-argument :recursive-edit t))
+                :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
      'conn--kapply-relocate-to-region
@@ -785,7 +805,10 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (apply #'conn-get-bounds
-                      (conn-read-thing-mover-dwim nil))))
+                      (conn-with-state-loop
+                       'conn-read-thing-state
+                       (list (conn-thing-argument))
+                       :prompt "Thing"))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))

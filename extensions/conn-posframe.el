@@ -368,7 +368,8 @@
                  (conn--kmacro-display (kmacro--keys km)))
                (take (min 4 (ceiling (length kmacro-ring) 2))
                      kmacro-ring)
-               "\n"))
+               "\n")
+              "\n")
      :left-fringe 0
      :right-fringe 0
      :background-color (face-attribute 'menu :background)
@@ -386,15 +387,14 @@
               (propertize "Dispatch Ring\n"
                           'face 'conn-posframe-header)
               (mapconcat 'conn-describe-dispatch
-                         (reverse (take (min 4 (ceiling (length (cdr ring)) 2))
+                         (reverse (take (min 4 (floor (length (cdr ring)) 2))
                                         (cdr ring)))
                          "\n")
-              (when (length> ring 1) "\n")
-              (propertize (concat (conn-describe-dispatch (car ring))
-                                  (when (length> ring 2) "\n"))
+              (when (length> ring 2) "\n")
+              (propertize (concat (conn-describe-dispatch (car ring)) "\n")
                           'face 'conn-posframe-highlight)
               (mapconcat 'conn-describe-dispatch
-                         (take (min 4 (floor (length (cdr ring)) 2))
+                         (take (min 4 (ceiling (length (cdr ring)) 2))
                                (reverse (cdr ring)))
                          "\n"))
      :left-fringe 0
