@@ -458,7 +458,9 @@ If ring is (1 2 3 4) 4 would be returned."
 
 (defun conn-ring-delete (ring elem)
   (cl-callf2 delete elem (conn-ring-list ring))
-  (cl-callf2 delete elem (conn-ring-history ring)))
+  (cl-callf2 delete elem (conn-ring-history ring))
+  (when-let* ((cleanup (conn-ring-cleanup ring)))
+    (funcall cleanup elem)))
 
 
 ;;;;; Keymap Utils
@@ -6475,9 +6477,10 @@ contain targets."
 
 (defmacro conn-perform-dispatch-loop (repeat &rest body)
   (declare (indent 1))
-  (let ((rep (gensym "repeat")))
+  (cl-with-gensyms (rep display-always)
     `(catch 'dispatch-select-exit
        (let* ((,rep nil)
+              (,display-always nil)
               (conn-dispatch-looping t)
               (conn--dispatch-loop-change-groups nil)
               (conn--loop-error-message nil)
@@ -6485,11 +6488,14 @@ contain targets."
                `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                     (lambda ()
                       (when-let* ((binding
-                                   (and ,rep
+                                   (and (or ,rep
+                                            ,display-always
+                                            conn--dispatch-always-retarget)
                                         (where-is-internal
                                          'always-retarget
                                          conn-dispatch-read-event-map
                                          t))))
+                        (setf ,display-always t)
                         (concat
                          (propertize (key-description binding)
                                      'face 'help-key-binding)
