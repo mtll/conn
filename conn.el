@@ -1730,18 +1730,18 @@ See also `conn-exit-functions'.")
 
 (defun conn--get-lighter ()
   (with-memoization (buffer-local-value 'conn-lighter (current-buffer))
-    (named-let rec ((lighter (conn-state-get conn-current-state :lighter))
-                    (stack (cdr conn--state-stack)))
+    (named-let loop ((lighter (conn-state-get conn-current-state :lighter))
+                     (stack (cdr conn--state-stack)))
       (pcase stack
         ('nil
          (concat " [" lighter "]"))
         (`(nil . ,rest)
-         (rec (concat "[" lighter "]") rest))
+         (loop (concat "[" lighter "]") rest))
         (`(,state . ,rest)
-         (rec (concat (conn-state-get state :lighter)
-                      conn-state-lighter-seperator
-                      lighter)
-              rest))))))
+         (loop (concat (conn-state-get state :lighter)
+                       conn-state-lighter-seperator
+                       lighter)
+               rest))))))
 
 (defun conn-update-lighter (&optional buffer)
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
@@ -2699,6 +2699,7 @@ themselves once the selection process has concluded."
   (:method (_) nil))
 
 (cl-defgeneric conn-extract-argument (argument)
+  (declare (important-return-value t))
   (:method (arg) arg)
   ( :method ((arg conn-state-loop-argument))
     (if-let* ((kw (conn-state-loop-argument--keyword arg)))
@@ -2706,6 +2707,7 @@ themselves once the selection process has concluded."
       (conn-state-loop-argument--value arg))))
 
 (cl-defgeneric conn-display-argument (argument)
+  (declare (important-return-value t))
   ( :method (_) nil)
   ( :method ((arg conn-state-loop-argument))
     (pcase (conn-state-loop-argument--name arg)
@@ -2725,6 +2727,7 @@ themselves once the selection process has concluded."
   (recursive-edit :type boolean))
 
 (cl-defun conn-thing-argument (&key (required t) recursive-edit)
+  (declare (important-return-value t))
   (conn-anaphoricate self
     (oclosure-lambda (conn-thing-argument
                       (required required)
@@ -2756,6 +2759,7 @@ themselves once the selection process has concluded."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-subregions-argument (&optional initial-value)
+  (declare (important-return-value t))
   (conn-anaphoricate self
     (oclosure-lambda (conn-subregions-argument
                       (value initial-value)
@@ -2766,13 +2770,16 @@ themselves once the selection process has concluded."
 (cl-defgeneric conn-handle-subregions-argument (cmd arg)
   (:method (_ _) (conn-invalid-argument)))
 
-(cl-defmethod conn-handle-subregions-argument ((_cmd (eql toggle-subregions)) arg)
+(cl-defmethod conn-handle-subregions-argument ((_cmd (eql toggle-subregions))
+                                               arg)
   (cl-callf not (conn-subregions-argument--value arg)))
 
-(cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing region)) arg)
+(cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing region))
+                                               arg)
   (setf (conn-subregions-argument--value arg) t))
 
-(cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing recursive-edit)) arg)
+(cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing recursive-edit))
+                                               arg)
   (setf (conn-subregions-argument--value arg) t))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-subregions-argument)
@@ -2792,6 +2799,7 @@ themselves once the selection process has concluded."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-trim-argument (&optional initial-value)
+  (declare (important-return-value t))
   (oclosure-lambda (conn-trim-argument
                     (keyword :trim)
                     (value initial-value))
@@ -2836,13 +2844,6 @@ themselves once the selection process has concluded."
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
 ;;;;; Read Thing Command Loop
-
-(cl-defstruct (conn-read-thing
-               (:constructor conn-read-thing (&optional recursive-edit))
-               (:constructor conn-read-thing-context))
-  (recursive-edit nil :type boolean)
-  (trim-flag nil :type symbol)
-  (subregions-flag nil :type symbol))
 
 (cl-defun conn-read-thing-mover (arg &key recursive-edit subregions trim)
   "Interactively read a thing command and arg.
@@ -4210,6 +4211,7 @@ order to mark the region that should be defined by any of COMMANDS."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-action-argument ()
+  (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-action-argument)
       (type)
     (if (conn--action-type-p type)
@@ -4242,6 +4244,7 @@ order to mark the region that should be defined by any of COMMANDS."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-other-end-argument (&optional initial-value)
+  (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-other-end-argument
                     (value initial-value)
                     (keyword :other-end))
@@ -4267,6 +4270,7 @@ order to mark the region that should be defined by any of COMMANDS."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-repeat-argument (&optional initial-value)
+  (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-repeat-argument
                     (value initial-value)
                     (keyword :repeat))
@@ -4292,6 +4296,7 @@ order to mark the region that should be defined by any of COMMANDS."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-dispatch-restrict-windows-argument (&optional initial-value)
+  (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-restrict-windows-argument
                     (value initial-value)
                     (keyword :restrict-windows))
@@ -9467,11 +9472,6 @@ Interactively `region-beginning' and `region-end'."
   "Face for mode-line in a read-thing state."
   :group 'conn-faces)
 
-(cl-defstruct (conn-surround-with-context
-               (:conc-name conn-surround-with-)
-               (:constructor conn-make-surround-with-context))
-  (padding-flag nil :type boolean))
-
 (conn-define-state conn-surround-thing-state (conn-read-thing-state)
   :lighter "SURROUND")
 
@@ -9517,6 +9517,7 @@ Interactively `region-beginning' and `region-end'."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-surround-with-argument ()
+  (declare (important-return-value t))
   (conn-anaphoricate self
     (oclosure-lambda (conn-surround-with-argument
                       (required t))
@@ -9536,6 +9537,7 @@ Interactively `region-beginning' and `region-end'."
                   (:parent conn-state-loop-argument)))
 
 (defun conn-surround-padding-argument ()
+  (declare (important-return-value t))
   (oclosure-lambda (conn-surround-padding-argument
                     (keyword :padding))
       (cmd)
@@ -9719,6 +9721,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
                   (:parent conn-state-loop-argument)))
 
 (defun conn-change-surround-argument ()
+  (declare (important-return-value t))
   (conn-anaphoricate self
     (oclosure-lambda (conn-change-surround-argument
                       (required t))
