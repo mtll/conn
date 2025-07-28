@@ -2151,10 +2151,11 @@ By default `conn-emacs-state' does not bind anything."
                      (conn-get-buffer-property :hide-mark-cursor))
           t)
     (conn-push-state 'conn-emacs-state)
-    (letrec ((hook (lambda ()
-                     (conn--push-ephemeral-mark)
-                     (remove-hook 'minibuffer-setup-hook hook))))
-      (add-hook 'minibuffer-setup-hook hook))
+    (add-hook 'minibuffer-setup-hook
+              (conn-anaphoricate hook
+                (lambda ()
+                  (conn--push-ephemeral-mark)
+                  (remove-hook 'minibuffer-setup-hook hook))))
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-minibuffer-state -95)
 
@@ -2368,20 +2369,20 @@ themselves once the selection process has concluded."
   (declare (important-return-value t))
   (let* ((prompt (propertize (or prompt "chars")
                              'face 'minibuffer-prompt))
+         (prompt-suffix "")
          (prompt-flag (or conn-label-select-always-prompt
                           always-prompt))
-         (current candidates)
-         (no-matches (concat prompt (propertize "no matches" 'face 'error)))
-         (init-prompt prompt))
+         (current candidates))
     (while-no-input
       (mapc #'conn-label-redisplay candidates))
     (cl-loop
      (pcase current
        ('nil
         (setq current candidates
-              prompt no-matches
+              prompt-suffix ""
               prompt-flag (or conn-label-select-always-prompt
                               always-prompt))
+        (conn-state-loop-error "No matches")
         (mapc #'conn-label-reset current)
         (while-no-input
           (mapc #'conn-label-redisplay candidates)))
@@ -2391,11 +2392,11 @@ themselves once the selection process has concluded."
      (setq prompt-flag nil)
      (let ((next nil)
            (c (funcall char-reader prompt)))
-       (setq prompt (concat (if (eq no-matches prompt) init-prompt prompt)
-                            (string c))
+       (setq prompt-suffix (concat prompt-suffix (string c))
              current (dolist (label current next)
                        (when-let* ((l (conn-label-narrow label c)))
-                         (push l next))))
+                         (push l next)))
+             conn--loop-error-message nil)
        (while-no-input
          (mapc #'conn-label-redisplay candidates))))))
 
@@ -2530,8 +2531,17 @@ themselves once the selection process has concluded."
                         'conn--loop-message-function)))
 
 (defun conn--state-loop-prompt (prompt arguments)
-  (let ((inhibit-message conn-state-loop-inhibit-message)
-        (message-log-max nil))
+  (pcase-let ((inhibit-message conn-state-loop-inhibit-message)
+              (message-log-max nil)
+              (`(,main . ,suffix)
+               (cl-loop for arg in arguments
+                        for disp = (conn-loop-display-argument arg)
+                        when disp
+                        if (conn-loop-argument--suffix arg)
+                        concat (concat "; " disp) into suffix
+                        else concat (concat "; " disp) into main
+                        finally return
+                        (cons main (substring suffix (min (length suffix) 1))))))
     (message
      (substitute-command-keys
       (concat
@@ -2546,29 +2556,7 @@ themselves once the selection process has concluded."
               (t "[1]"))
         'face 'read-multiple-choice-face)
        ", \\[reset-arg] reset"
-       (named-let loop ((strings nil)
-                        (args arguments))
-         (pcase (car args)
-           ('nil
-            (when-let* ((string (delq nil strings)))
-              (concat "; " (string-join (nreverse strings) "; "))))
-           ((pred conn-loop-argument--suffix-p)
-            (loop strings (cdr args)))
-           (arg
-            (loop (cons (conn-loop-display-argument arg) strings)
-                  (cdr args)))))
-       "):"
-       (named-let loop ((strings nil)
-                        (args arguments))
-         (pcase (car args)
-           ('nil
-            (when-let* ((string (delq nil strings)))
-              (concat " " (string-join (nreverse strings) "; "))))
-           ((and arg (pred conn-loop-argument--suffix-p))
-            (loop (cons (conn-loop-display-argument arg) strings)
-                  (cdr args)))
-           (_ (loop strings (cdr args)))))
-       " "
+       main "):" suffix " "
        (propertize conn--loop-error-message 'face 'error))))))
 
 (cl-defgeneric conn-with-state-loop
@@ -2599,7 +2587,8 @@ themselves once the selection process has concluded."
          (inhibit-message t))
       (conn-with-recursive-state state
         (while (cl-loop for arg in arguments
-                        thereis (conn-loop-argument--required-p arg))
+                        thereis (and (conn-loop-argument--required arg)
+                                     (not (conn-loop-argument--set-p arg))))
           (unless conn--loop-message-timer
             (conn--state-loop-prompt prompt arguments))
           (let ((conn-loop-this-command
@@ -2620,12 +2609,6 @@ themselves once the selection process has concluded."
                        (if (integerp conn--loop-prefix-mag)
                            (+ (* 10 conn--loop-prefix-mag) digit)
                          (when (/= 0 digit) digit)))))
-              ('forward-delete-arg
-               (when conn--loop-prefix-mag
-                 (if (= conn--loop-prefix-mag 0)
-                     (setf conn--loop-prefix-mag nil)
-                   (cl-callf mod conn--loop-prefix-mag
-                     (expt 10 (floor (log conn--loop-prefix-mag 10)))))))
               ('backward-delete-arg
                (when conn--loop-prefix-mag
                  (cl-callf floor conn--loop-prefix-mag 10)))
@@ -2683,9 +2666,10 @@ themselves once the selection process has concluded."
 
 (oclosure-define (conn-loop-argument)
   (value :mutable t :type t)
-  (required-p :mutable t :type boolean)
+  (required :type boolean)
+  (set-p :mutable t :type boolean)
+  (suffix :type boolean)
   (name :type (or nil string function))
-  (suffix-p :type boolean)
   (keyword :type (or nil keyword)))
 
 (defconst conn--arg-unhandled (gensym "unhandled"))
@@ -2697,13 +2681,13 @@ themselves once the selection process has concluded."
   (inline-letevals (arg)
     (inline-quote
      (setf (conn-loop-argument--value ,arg) ,value
-           (conn-loop-argument--required-p ,arg) nil))))
+           (conn-loop-argument--set-p ,arg) t))))
 
-(define-inline conn-loop-unset-arg-value (value)
+(define-inline conn-loop-unset-arg-value (arg)
   (inline-letevals (arg)
     (inline-quote
      (setf (conn-loop-argument--value ,arg) nil
-           (conn-loop-argument--required-p ,arg) t))))
+           (conn-loop-argument--set-p ,arg) nil))))
 
 (cl-defgeneric conn-loop-cancel-argument (argument)
   (:method (_) nil))
@@ -2736,7 +2720,7 @@ themselves once the selection process has concluded."
 (cl-defun conn-loop-thing (&key (required t) recursive-edit)
   (conn-anaphoricate self
     (oclosure-lambda (conn-loop-thing
-                      (required-p required)
+                      (required required)
                       (recursive-edit recursive-edit))
         (cmd)
       (conn-loop-handle-thing cmd self))))
@@ -2745,12 +2729,13 @@ themselves once the selection process has concluded."
   (:method (_ _) (conn-state-loop-invalid-command)))
 
 (cl-defmethod conn-loop-handle-thing ((cmd (conn-thing t)) arg)
-  (conn-loop-set-arg-value arg (list cmd (conn-state-loop-consume-prefix-arg))))
+  (conn-loop-set-arg-value
+   arg (list cmd (conn-state-loop-consume-prefix-arg))))
 
 (cl-defmethod conn-loop-handle-thing ((cmd (conn-thing recursive-edit)) arg)
   (if (conn-loop-thing--recursive-edit arg)
-      (setf (conn-loop-thing--value arg) (list cmd (conn-state-loop-consume-prefix-arg))
-            (conn-loop-thing--required-p arg) nil)
+      (conn-loop-set-arg-value
+       arg (list cmd (conn-state-loop-consume-prefix-arg)))
     (cl-call-next-method)))
 
 (cl-defmethod conn-loop-argument-completion-predicate ((_arg conn-loop-thing) sym)
@@ -2835,14 +2820,14 @@ themselves once the selection process has concluded."
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-read-thing-state)
-  "C-w" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
+  "DEL" 'backward-delete-arg
+  "<backspace>" 'backward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   "C-h" 'help
   "," (conn-remap-key "<conn-thing-map>")
   "r" 'recursive-edit
-  "DEL" 'toggle-trim
+  "x" 'toggle-trim
   "." 'toggle-subregions)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
@@ -4066,8 +4051,6 @@ order to mark the region that should be defined by any of COMMANDS."
   "<backspace>" 'backward-delete-char
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
-  "C-d" 'forward-delete-arg
-  "C-w" 'backward-delete-arg
   "C-f" 'retarget
   "M-f" 'always-retarget
   "<escape>" 'finish
@@ -4087,12 +4070,10 @@ order to mark the region that should be defined by any of COMMANDS."
   "C-h" 'help
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
-  "C-w" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
   "TAB" 'repeat-dispatch
   "C-n" 'restrict-windows
-  "<backspace>" 'backward-delete-arg
   "DEL" 'backward-delete-arg
+  "<backspace>" 'backward-delete-arg
   "f" 'conn-dispatch-over-or-goto
   "u" 'forward-symbol
   "i" 'forward-line
@@ -4226,8 +4207,7 @@ order to mark the region that should be defined by any of COMMANDS."
                   (:parent conn-loop-argument)))
 
 (defun conn-dispatch-loop-action ()
-  (oclosure-lambda (conn-dispatch-loop-action
-                    (suffix-p t))
+  (oclosure-lambda (conn-dispatch-loop-action)
       (type)
     (if (conn--action-type-p type)
         (progn
@@ -4843,29 +4823,32 @@ Target overlays may override this default by setting the
 (defun conn--dispatch-read-event-prefix ()
   (declare (important-return-value t))
   (concat
-   "("
+   " ("
    conn--dispatch-action-description
    (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
             for str = (pcase pfx
                         ((pred functionp) (funcall pfx))
                         ((pred stringp) pfx))
             if str concat "; " and concat str)
-   ") "))
+   "): "))
 
 (defun conn-dispatch-read-event (&optional prompt
                                            inherit-input-method
                                            seconds
-                                           inhibit-message-prefix)
+                                           inhibit-message-prefix
+                                           prompt-suffix)
   (declare (important-return-value t))
   (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil)
-        (prompt (concat prompt (when conn--loop-error-message
+        (prompt-suffix (concat (when conn--loop-error-message
                                  (propertize conn--loop-error-message
-                                             'face 'error)))))
+                                             'face 'error))
+                               prompt-suffix)))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
-                            (read-event prompt inherit-input-method seconds))))
+                            (read-event (concat prompt ": " prompt-suffix)
+                                        inherit-input-method seconds))))
             (when (characterp ev)
               (throw 'return ev)))
         (while t
@@ -4874,7 +4857,9 @@ Target overlays may override this default by setting the
                                            conn-dispatch-read-event-map)
                    (thread-first
                      (if inhibit-message-prefix prompt
-                       (concat (conn--dispatch-read-event-prefix) prompt))
+                       (concat prompt
+                               (conn--dispatch-read-event-prefix)
+                               prompt-suffix))
                      (read-key-sequence-vector)
                      (key-binding t)))
             ('dispatch-character-event
@@ -4884,7 +4869,9 @@ Target overlays may override this default by setting the
                     (conn-with-input-method
                       (read-event
                        (if inhibit-message-prefix prompt
-                         (concat (conn--dispatch-read-event-prefix) prompt))
+                         (concat prompt
+                                 (conn--dispatch-read-event-prefix)
+                                 prompt-suffix))
                        inherit-input-method))))
             ('keyboard-quit
              (keyboard-quit))
@@ -4930,9 +4917,9 @@ Target overlays may override this default by setting the
         (thread-first
           (funcall conn-dispatch-label-function)
           (conn-label-select #'conn-dispatch-read-event
-                             (concat "["
+                             (concat "chars ["
                                      (number-to-string conn-target-count)
-                                     "] chars: ")
+                                     "]")
                              (or conn--dispatch-must-prompt
                                  conn--dispatch-action-always-prompt
                                  (> conn-dispatch-repeat-count 0)))
@@ -5028,9 +5015,9 @@ Target overlays may override this default by setting the
                       (when (length> string 0)
                         (cl-callf substring string 0 -1))
                       (throw 'backspace nil)))
-                (cl-callf thread-last string
-                  (concat prompt (propertize ": " 'face 'minibuffer-prompt))
-                  (conn--flip-first conn-dispatch-read-event t)
+                (cl-callf thread-last
+                    string
+                  (conn-dispatch-read-event prompt t nil nil)
                   (char-to-string)
                   (concat string))))
             (conn-delete-targets))
@@ -5044,13 +5031,12 @@ Target overlays may override this default by setting the
   (with-slots (string timeout predicate) state
     (if string
         (conn-make-string-target-overlays string predicate)
-      (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt)))
+      (let* ((prompt (propertize "string" 'face 'minibuffer-prompt)))
         (setq string (char-to-string (conn-dispatch-read-event prompt t)))
         (while-no-input
           (conn-make-string-target-overlays string predicate))
         (while-let ((next-char (conn-dispatch-read-event
-                                (concat prompt string)
-                                t timeout)))
+                                prompt t timeout nil string)))
           (conn-delete-targets)
           (setq string (concat string (char-to-string next-char)))
           (while-no-input
@@ -7294,7 +7280,7 @@ Expansions and contractions are provided by functions in
           'conn-expand-state
           (list
            (oclosure-lambda (conn-loop-argument
-                             (required-p t)
+                             (required t)
                              (name 'conn--read-expand-message)
                              (keyword :outer))
                (command)
@@ -7309,7 +7295,7 @@ Expansions and contractions are provided by functions in
                 (conn-toggle-mark-command))
                ((or 'end 'exit-recursive-edit)
                 (setf value (cons (region-beginning) (region-end))
-                      required-p nil))
+                      set-p t))
                (_ (conn-state-loop-invalid-command)))))
           :prompt "Expansion"
           :prefix arg)))
@@ -8849,7 +8835,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                     'conn-dispatch-transpose-state
                     (list (conn-anaphoricate self
                             (oclosure-lambda (conn-loop-thing
-                                              (required-p t)
+                                              (required t)
                                               (recursive-edit t))
                                 (cmd)
                               (pcase cmd
@@ -9509,8 +9495,8 @@ Interactively `region-beginning' and `region-end'."
   "<remap> <self-insert-command>" 'surround-self-insert
   "C-q <t>" 'surround-self-insert
   "RET" 'conn-padding-flag
-  "C-w" 'backward-delete-arg
-  "C-d" 'forward-delete-arg
+  "DEL" 'backward-delete-arg
+  "<backspace>" 'backward-delete-arg
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg)
 
@@ -9532,7 +9518,7 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-surround-with ()
   (conn-anaphoricate self
     (oclosure-lambda (conn-surround-with
-                      (required-p t))
+                      (required t))
         (cmd)
       (conn-surround-with-handler cmd self))))
 
@@ -9541,9 +9527,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defmethod conn-surround-with-handler ((cmd (eql surround-self-insert))
                                           arg)
-  (setf (conn-loop-argument--value arg)
-        (list cmd (conn-state-loop-consume-prefix-arg))
-        (conn-loop-argument--required-p arg) nil))
+  (conn-loop-set-arg-value arg (list cmd (conn-state-loop-consume-prefix-arg))))
 
 ;;;;;; Padding Arg
 
@@ -9703,7 +9687,7 @@ Interactively `region-beginning' and `region-end'."
               'conn-change-state
               (list (conn-anaphoricate self
                       (oclosure-lambda (conn-loop-thing
-                                        (required-p t))
+                                        (required t))
                           (cmd)
                         (pcase cmd
                           ('conn-surround
@@ -9736,7 +9720,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (defun conn-change-surround ()
   (conn-anaphoricate self
     (oclosure-lambda (conn-change-surround
-                      (required-p t))
+                      (required t))
         (cmd)
       (conn-change-surround-handler cmd self))))
 
@@ -9746,7 +9730,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn-state-loop-invalid-command))
 
 (cl-defmethod conn-change-surround-handler ((cmd (eql surround-self-insert)) arg)
-  (conn-loop-set-arg-value arg (list cmd (conn-state-loop-prefix-arg))))
+  (conn-loop-set-arg-value
+   arg (list cmd (conn-state-loop-consume-prefix-arg))))
 
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)
@@ -10135,12 +10120,11 @@ Currently selected window remains selected afterwards."
   "C-M-d" 'delete-other-frames
   "C-S-l" 'move-to-window-line-top-bottom
   "C-]" 'conn-wincontrol-abort
-  "C-d" 'conn-wincontrol-forward-delete-arg
   "C-h" 'help-command
   "C-r" 'conn-wincontrol-isearch-backward
   "C-s" 'conn-wincontrol-isearch
   "C-u" 'conn-wincontrol-universal-arg
-  "C-w" 'conn-wincontrol-backward-delete-arg
+  "DEL" 'conn-wincontrol-backward-delete-arg
   "M-/" 'undelete-frame
   "M-<backspace>" 'conn-wincontrol-digit-argument-reset
   "M-<down>" 'windmove-swap-states-down
@@ -10334,17 +10318,18 @@ Currently selected window remains selected afterwards."
 (defun conn-wincontrol-one-command ()
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
-  (letrec ((pre (lambda ()
-                  (unless (memq this-command
-                                '(conn-wincontrol-forward-delete-arg
-                                  conn-wincontrol-backward-delete-arg
-                                  conn-wincontrol-digit-argument-reset
-                                  conn-wincontrol-invert-argument
-                                  conn-wincontrol-digit-argument
-                                  conn-wincontrol-universal-arg))
-                    (remove-hook 'pre-command-hook pre)
-                    (conn-wincontrol-exit)))))
-    (add-hook 'pre-command-hook pre 99))
+  (add-hook 'pre-command-hook
+            (conn-anaphoricate pre
+              (lambda ()
+                (unless (memq this-command
+                              '(conn-wincontrol-backward-delete-arg
+                                conn-wincontrol-digit-argument-reset
+                                conn-wincontrol-invert-argument
+                                conn-wincontrol-digit-argument
+                                conn-wincontrol-universal-arg))
+                  (remove-hook 'pre-command-hook pre)
+                  (conn-wincontrol-exit))))
+            99)
   (conn-wincontrol))
 
 (defun conn-wincontrol-ignore ()
@@ -10392,16 +10377,6 @@ Currently selected window remains selected afterwards."
   (interactive)
   (setq conn--wincontrol-preserve-arg t
         conn--wincontrol-arg (floor conn--wincontrol-arg 10)))
-
-(defun conn-wincontrol-forward-delete-arg ()
-  "Delete most significant digit of prefix arg."
-  (interactive)
-  (setq conn--wincontrol-preserve-arg t
-        conn--wincontrol-arg (thread-last
-                               (log conn--wincontrol-arg 10)
-                               (floor)
-                               (expt 10)
-                               (mod conn--wincontrol-arg))))
 
 (defun conn-wincontrol-prefix-arg ()
   (when conn--wincontrol-arg
