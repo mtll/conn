@@ -2207,17 +2207,15 @@ By default `conn-emacs-state' does not bind anything."
   (throw 'state-loop-continue nil))
 
 (defun conn--state-loop-prompt (prompt arguments)
-  (pcase-let ((inhibit-message conn-state-loop-inhibit-message)
-              (message-log-max nil)
-              (`(,main . ,suffix)
-               (cl-loop for arg in arguments
-                        for disp = (conn-display-argument arg)
-                        when disp
-                        if (conn-state-loop-argument--suffix arg)
-                        concat (concat "; " disp) into suffix
-                        else concat (concat "; " disp) into main
-                        finally return
-                        (cons main (substring suffix (min (length suffix) 1))))))
+  (let ((inhibit-message conn-state-loop-inhibit-message)
+        (message-log-max nil)
+        (main nil)
+        (suffix nil))
+    (dolist (arg arguments)
+      (when-let* ((disp (conn-display-argument arg)))
+        (cl-callf concat
+            (if (conn-state-loop-argument--suffix arg) suffix main)
+          "; " disp)))
     (message
      (substitute-command-keys
       (concat
@@ -2232,7 +2230,7 @@ By default `conn-emacs-state' does not bind anything."
               (t "[1]"))
         'face 'read-multiple-choice-face)
        ", \\[reset-arg] reset"
-       main "):" suffix " "
+       main "):" (when suffix (substring suffix 1)) " "
        (propertize conn--loop-error-message 'face 'error))))))
 
 (cl-defgeneric conn-with-state-loop
