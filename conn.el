@@ -2582,18 +2582,20 @@ themselves once the selection process has concluded."
     (cl-flet ((process-args ()
                 (condition-case err
                     (catch 'state-loop-continue
-                      (or (cl-loop with handled = nil
-                                   for arg in (cons command-handler arguments)
-                                   when arg
-                                   for result = (funcall arg conn-loop-this-command)
-                                   unless (eq result conn--arg-unhandled)
-                                   do (setf handled t)
-                                   finally return handled)
-                          (conn-state-loop-error "Invalid command")))
+                      (cl-loop
+                       for arg in (cons command-handler arguments)
+                       when (conn-state-loop-argument-p arg)
+                       for handled = (or handled
+                                         (ignore-error conn-invalid-argument
+                                           (funcall arg conn-loop-this-command)
+                                           t))
+                       finally do (unless handled
+                                    (conn-state-loop-error "Invalid command"))))
                   (user-error
                    (conn-state-loop-error (error-message-string err))))))
       (conn-with-recursive-state state
         (while (cl-loop for arg in arguments
+                        when (conn-state-loop-argument-p arg)
                         thereis (and (conn-state-loop-argument--required arg)
                                      (not (conn-state-loop-argument--set-p arg))))
           (unless conn--loop-message-timer
@@ -2671,9 +2673,8 @@ themselves once the selection process has concluded."
 
 ;;;;; Loop Arguments
 
-(defconst conn--arg-unhandled (gensym "unhandled"))
-
-(oclosure-define (conn-state-loop-argument)
+(oclosure-define (conn-state-loop-argument
+                  (:predicate conn-state-loop-argument-p))
   (value :mutable t :type t)
   (required :type boolean)
   (set-p :mutable t :type boolean)
@@ -2681,8 +2682,10 @@ themselves once the selection process has concluded."
   (name :type (or nil string function))
   (keyword :type (or nil keyword)))
 
+(define-error 'conn-invalid-argument "Invalid argument")
+
 (defun conn-invalid-argument ()
-  conn--arg-unhandled)
+  (signal 'conn-invalid-argument nil))
 
 (defun conn-set-argument-value (arg value)
   (setf (conn-state-loop-argument--value arg) value
@@ -2703,7 +2706,8 @@ themselves once the selection process has concluded."
       (conn-state-loop-argument--value arg))))
 
 (cl-defgeneric conn-display-argument (argument)
-  ( :method (arg)
+  ( :method (_) nil)
+  ( :method ((arg conn-state-loop-argument))
     (pcase (conn-state-loop-argument--name arg)
       ((and (pred stringp) str) str)
       ((and (pred functionp) fn) (funcall fn arg)))))
@@ -4211,11 +4215,8 @@ order to mark the region that should be defined by any of COMMANDS."
     (if (conn--action-type-p type)
         (progn
           (conn-cancel-action value)
-          (if (cl-typep value type)
-              (setf value nil)
-            (setf value (condition-case _
-                            (conn-make-action type)
-                          (error nil)))))
+          (setf value (unless (cl-typep value type)
+                        (conn-make-action type))))
       (conn-invalid-argument))))
 
 (cl-defmethod conn-cancel-argument ((arg conn-dispatch-action-argument))
