@@ -268,6 +268,7 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-anaphoricate (name lambda)
   (declare (indent 1))
+  (cl-check-type name symbol)
   `(letrec ((,name ,lambda)) ,name))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
@@ -2566,30 +2567,29 @@ themselves once the selection process has concluded."
     (state arglist &key command-handler prompt prefix pre post))
 
 (cl-defmethod conn-with-state-loop (state arglist &key command-handler prompt prefix pre post)
-  (cl-macrolet
-      ((process-args ()
-         `(condition-case err
-              (catch 'state-loop-continue
-                (or (cl-loop with handled = nil
-                             for arg in (cons command-handler arguments)
-                             when arg
-                             for result = (funcall arg conn-loop-this-command)
-                             unless (eq result conn--arg-unhandled)
-                             do (setf handled t)
-                             finally return handled)
-                    (conn-state-loop-error "Invalid command")))
-            (user-error
-             (conn-state-loop-error (error-message-string err))))))
-    (conn-protected-let*
-        ((arguments (delq nil arglist)
-                    (mapc #'conn-cancel-argument arguments))
-         (prompt (or prompt (symbol-name state)))
-         (conn--loop-prefix-mag (when prefix (abs prefix)))
-         (conn--loop-prefix-sign (when prefix (> 0 prefix)))
-         (conn--loop-error-message "")
-         (conn--loop-message-timer nil)
-         (conn--state-loop-exiting nil)
-         (inhibit-message t))
+  (conn-protected-let*
+      ((arguments (delq nil arglist)
+                  (mapc #'conn-cancel-argument arguments))
+       (prompt (or prompt (symbol-name state)))
+       (conn--loop-prefix-mag (when prefix (abs prefix)))
+       (conn--loop-prefix-sign (when prefix (> 0 prefix)))
+       (conn--loop-error-message "")
+       (conn--loop-message-timer nil)
+       (conn--state-loop-exiting nil)
+       (inhibit-message t))
+    (cl-flet ((process-args ()
+                (condition-case err
+                    (catch 'state-loop-continue
+                      (or (cl-loop with handled = nil
+                                   for arg in (cons command-handler arguments)
+                                   when arg
+                                   for result = (funcall arg conn-loop-this-command)
+                                   unless (eq result conn--arg-unhandled)
+                                   do (setf handled t)
+                                   finally return handled)
+                          (conn-state-loop-error "Invalid command")))
+                  (user-error
+                   (conn-state-loop-error (error-message-string err))))))
       (conn-with-recursive-state state
         (while (cl-loop for arg in arguments
                         thereis (and (conn-state-loop-argument--required arg)
@@ -2669,6 +2669,8 @@ themselves once the selection process has concluded."
 
 ;;;;; Loop Arguments
 
+(defconst conn--arg-unhandled (gensym "unhandled"))
+
 (oclosure-define (conn-state-loop-argument)
   (value :mutable t :type t)
   (required :type boolean)
@@ -2677,22 +2679,16 @@ themselves once the selection process has concluded."
   (name :type (or nil string function))
   (keyword :type (or nil keyword)))
 
-(defconst conn--arg-unhandled (gensym "unhandled"))
+(defun conn-invalid-argument ()
+  conn--arg-unhandled)
 
-(define-inline conn-invalid-argument ()
-  (inline-quote conn--arg-unhandled))
+(defun conn-set-argument-value (arg value)
+  (setf (conn-state-loop-argument--value arg) value
+        (conn-state-loop-argument--set-p arg) t))
 
-(define-inline conn-set-argument-value (arg value)
-  (inline-letevals (arg)
-    (inline-quote
-     (setf (conn-state-loop-argument--value ,arg) ,value
-           (conn-state-loop-argument--set-p ,arg) t))))
-
-(define-inline conn-unset-argument-value (arg)
-  (inline-letevals (arg)
-    (inline-quote
-     (setf (conn-state-loop-argument--value ,arg) nil
-           (conn-state-loop-argument--set-p ,arg) nil))))
+(defun conn-unset-argument-value (arg)
+  (setf (conn-state-loop-argument--value arg) nil
+        (conn-state-loop-argument--set-p arg) nil))
 
 (cl-defgeneric conn-cancel-argument (argument)
   (:method (_) nil))
@@ -9897,10 +9893,11 @@ If ARG is non-nil move down ARG lines before opening line."
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
   (conn-push-state 'conn-emacs-state)
-  (letrec ((hook (lambda (_state)
-                   (overwrite-mode -1)
-                   (remove-hook 'conn-state-exit-functions hook))))
-    (add-hook 'conn-state-exit-functions hook))
+  (add-hook 'conn-state-exit-functions
+            (conn-anaphoricate hook
+              (lambda (_state)
+                (overwrite-mode -1)
+                (remove-hook 'conn-state-exit-functions hook))))
   (if arg
       (binary-overwrite-mode 1)
     (overwrite-mode 1)))
