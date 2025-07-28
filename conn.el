@@ -2368,7 +2368,7 @@ has failed to select a label and the narrowing process must restart from
 the beginning.  `conn-label-delete' allows labels to clean up after
 themselves once the selection process has concluded."
   (declare (important-return-value t))
-  (let* ((prompt (propertize (or prompt "chars")
+  (let* ((prompt (propertize (or prompt "Chars")
                              'face 'minibuffer-prompt))
          (prompt-suffix "")
          (prompt-flag (or conn-label-select-always-prompt
@@ -4462,7 +4462,7 @@ Optionally the overlay may have an associated THING."
 (defun conn--read-string-with-timeout (&optional predicate)
   (unwind-protect
       (conn-with-input-method
-        (let* ((prompt (propertize "string: " 'face 'minibuffer-prompt))
+        (let* ((prompt (propertize "String" 'face 'minibuffer-prompt))
                (string (char-to-string (read-char prompt t))))
           (while-no-input
             (conn-make-string-target-overlays string predicate))
@@ -4914,7 +4914,7 @@ Target overlays may override this default by setting the
         (thread-first
           (funcall conn-dispatch-label-function)
           (conn-label-select #'conn-dispatch-read-event
-                             (concat "chars ["
+                             (concat "Label ["
                                      (number-to-string conn-target-count)
                                      "]")
                              (or conn--dispatch-must-prompt
@@ -4998,8 +4998,8 @@ Target overlays may override this default by setting the
         (conn-make-string-target-overlays string predicate)
       (conn-with-input-method
         (let* ((prompt (if (> string-length 1)
-                           (propertize "chars" 'face 'minibuffer-prompt)
-                         (propertize "char" 'face 'minibuffer-prompt))))
+                           (propertize "Chars" 'face 'minibuffer-prompt)
+                         (propertize "Char" 'face 'minibuffer-prompt))))
           (while (length< string string-length)
             (when (length> string 0)
               (while-no-input
@@ -5028,7 +5028,7 @@ Target overlays may override this default by setting the
   (with-slots (string timeout predicate) state
     (if string
         (conn-make-string-target-overlays string predicate)
-      (let* ((prompt (propertize "string" 'face 'minibuffer-prompt)))
+      (let* ((prompt (propertize "String" 'face 'minibuffer-prompt)))
         (setq string (char-to-string (conn-dispatch-read-event prompt t)))
         (while-no-input
           (conn-make-string-target-overlays string predicate))

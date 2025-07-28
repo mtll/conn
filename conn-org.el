@@ -284,7 +284,7 @@
   "E" 'org-export
   "e" 'org-example)
 
-(cl-defmethod conn-handle-surround-with-argument :extra "Org" (cmd arg)
+(cl-defmethod conn-handle-surround-with-argument :extra "conn-org" (cmd arg)
   (if (memq cmd '(org-quote
                   org-center
                   org-comment
