@@ -295,7 +295,8 @@
                   org-export-latex
                   org-export
                   org-example))
-      (conn-set-argument-value arg (list cmd (conn-state-loop-consume-prefix-arg)))
+      (setf (conn-state-loop-argument-value arg)
+            (list cmd (conn-state-loop-consume-prefix-arg)))
     (cl-call-next-method)))
 
 (cl-defmethod conn-perform-surround ((_cmd (eql org-quote)) _arg
