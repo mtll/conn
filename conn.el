@@ -7246,10 +7246,11 @@ contain targets."
                                          :key #'car :in-place t)
              minimize b into beg
              maximize e into end
-             finally (conn-add-bounds :outer (cons beg end)
-                                      :contents (mapcar (lambda (bound)
-                                                          (list :outer bound))
-                                                        bounds)))))
+             finally (conn-add-bounds
+                      :outer (cons beg end)
+                      :contents (mapcar (lambda (bound)
+                                          (list :outer bound))
+                                        bounds)))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
@@ -7623,18 +7624,15 @@ Expansions and contractions are provided by functions in
                              (list (cons (conn--create-marker beg)
                                          (conn--create-marker end))))))))
 
-(defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register &key subregions)
+(defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register &optional subregions)
   "Prepend thing regions to narrow register."
   (interactive
-   (pcase-let ((`(,thing-cmd ,thing-arg . ,keys)
-                (conn-with-state-loop
-                 'conn-read-thing-state
-                 (list (conn-thing-argument)
-                       (conn-subregions-argument))
-                 :prompt "Thing")))
-     `( ,thing-cmd ,thing-arg
-        ,(register-read-with-preview "Push region to register: ")
-        ,@keys)))
+   (conn-with-state-loop
+    'conn-read-thing-state
+    (list (conn-thing-argument)
+          (register-read-with-preview "Push region to register: ")
+          (conn-subregions-argument))
+    :prompt "Thing"))
   (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
                 (conn-get-bounds thing-cmd thing-arg))
                (narrowings
