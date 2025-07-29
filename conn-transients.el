@@ -310,10 +310,10 @@ before each iteration."
 
 (defun conn-read-thing-regions ()
   (declare (important-return-value t))
-  (pcase-let* ((`(,cmd ,arg :subregions ,sr)
+  (pcase-let* ((`(,cmd ,arg ,sr)
                 (conn-with-state-loop
                  'conn-read-thing-state
-                 (list (conn-thing-argument :recursive-edit t)
+                 (list (conn-thing-argument t)
                        (conn-subregions-argument))
                  :prompt "Thing")))
     (if sr
@@ -577,7 +577,7 @@ apply to each contiguous component of the region."
   (pcase-let* ((`(,cmd ,arg)
                 (conn-with-state-loop
                  'conn-read-thing-state
-                 (list (conn-thing-argument :recursive-edit t))
+                 (list (conn-thing-argument t))
                  :prompt "Thing"))
                ((map :outer :contents)
                 (conn-get-bounds cmd arg)))
@@ -607,7 +607,7 @@ apply to each contiguous component of the region."
   (pcase-let ((`(,cmd ,n)
                (conn-with-state-loop
                 'conn-read-thing-state
-                (list (conn-thing-argument :recursive-edit t))
+                (list (conn-thing-argument t))
                 :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
