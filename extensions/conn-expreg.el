@@ -31,7 +31,6 @@
 ;;;###autoload
 (defun conn-expreg-expansions ()
   (save-mark-and-excursion
-    (activate-mark)
     (mapcan (lambda (fn) (save-excursion
                            (mapcar #'cdr (funcall fn))))
             expreg-functions)))

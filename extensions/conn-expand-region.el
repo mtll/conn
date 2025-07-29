@@ -33,34 +33,35 @@
 ;;;###autoload
 (defun conn-er-expansions ()
   (save-mark-and-excursion
+    (conn--push-ephemeral-mark)
     (cl-loop
-     with expansions = (list (cons (region-beginning) (region-end))) do
-     (let ((start (region-beginning))
-           (end (region-end))
-           (best-start (point-min))
-           (best-end (point-max)))
-       (when (and expand-region-skip-whitespace
-                  (er--point-is-surrounded-by-white-space)
-                  (= (region-beginning) (region-end)))
-         (skip-chars-forward er--space-str))
+     with expansions = nil
+     do (let ((start (region-beginning))
+              (end (region-end))
+              (best-start (point-min))
+              (best-end (point-max)))
+          (when (and expand-region-skip-whitespace
+                     (er--point-is-surrounded-by-white-space)
+                     (= (region-beginning) (region-end)))
+            (skip-chars-forward er--space-str))
 
-       (dolist (try er/try-expand-list)
-         (er--save-excursion
-          (ignore-errors
-            (funcall try)
-            (when (and (region-active-p)
-                       (er--this-expansion-is-better
-                        start end best-start best-end))
-              (setq best-start (region-beginning))
-              (setq best-end (region-end))))))
+          (dolist (try er/try-expand-list)
+            (er--save-excursion
+             (ignore-errors
+               (funcall try)
+               (when (and (region-active-p)
+                          (er--this-expansion-is-better
+                           start end best-start best-end))
+                 (setq best-start (region-beginning))
+                 (setq best-end (region-end))))))
 
-       (goto-char best-start)
-       (set-mark best-end)
-       (push (cons (region-beginning) (region-end)) expansions)
+          (goto-char best-start)
+          (set-mark best-end)
+          (push (cons (region-beginning) (region-end)) expansions)
 
-       (when (and (= best-start (point-min))
-                  (= best-end (point-max)))
-         (cl-return expansions))))))
+          (when (and (= best-start (point-min))
+                     (= best-end (point-max)))
+            (cl-return expansions))))))
 
 (provide 'conn-expand-region)
 

@@ -7405,8 +7405,7 @@ potential expansions.  Functions may return invalid expansions
                    (delete-dups regions))
       (when (and beg end
                  (/= beg end)
-                 (<= beg (region-beginning))
-                 (>= end (region-end)))
+                 (<= beg (point) end))
         (push reg result)))
     result))
 
@@ -7430,7 +7429,6 @@ potential expansions.  Functions may return invalid expansions
           (compat-call sort
                        (thread-last
                          (mapcan #'funcall conn-expansion-functions)
-                         (cons (cons (region-beginning) (region-end)))
                          (conn--expand-filter-regions))
                        :lessp (lambda (a b)
                                 (or (> (car a) (car b))
