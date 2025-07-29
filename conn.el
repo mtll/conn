@@ -7548,6 +7548,7 @@ Expansions and contractions are provided by functions in
          (conn-with-state-loop
           'conn-expand-state
           (list
+           :outer
            (oclosure-lambda (conn-state-loop-argument
                              (required t)
                              (name 'conn--read-expand-message))
@@ -8272,9 +8273,9 @@ instances of from-string.")
                    (let ((current-tab (thread-first
                                         (funcall tab-bar-tabs-function)
                                         tab-bar--current-tab-find)))
-                     (or (alist-get 'conn-tab-cookie current-tab)
-                         (setf (alist-get 'conn-tab-cookie (cdr current-tab))
-                               (gensym "conn-tab-cookie")))))
+                     (with-memoization
+                         (alist-get 'conn-tab-cookie (cdr current-tab))
+                       (gensym "conn-tab-cookie"))))
                   (frame (selected-frame)))))
   (cookie nil :read-only t)
   (frame nil :read-only t))
