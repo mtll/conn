@@ -3306,15 +3306,17 @@ BOUNDS is of the form returned by `region-bounds', which see."
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-get-bounds-subr ((_cmd (eql conn-things-in-region)) _arg)
-  (list :outer (cons (region-beginning) (region-end))
-        :contents (cl-loop for region in (conn-get-things-in-region
-                                          (car (conn-with-state-loop
-                                                'conn-read-thing-state
-                                                (list (conn-thing-argument))
-                                                :prompt "Things in Region"))
-                                          (region-beginning)
-                                          (region-end))
-                           collect (list :outer region))))
+  (cl-loop for region in (conn-get-things-in-region
+                          (car (conn-with-state-loop
+                                'conn-read-thing-state
+                                (list (conn-thing-argument))
+                                :prompt "Things in Region"))
+                          (region-beginning)
+                          (region-end))
+           collect (list :outer region) into contents
+           finally return (list :outer (cons (region-beginning)
+                                             (region-end))
+                                :contents contents)))
 
 
 ;;;; Kapply
@@ -7295,15 +7297,16 @@ contain targets."
                                    (window-predicate
                                     (let ((win (selected-window)))
                                       (lambda (window) (eq win window)))))
-                     (_window pt thing thing-arg)
-                   (save-mark-and-excursion
-                     (goto-char pt)
-                     (pcase (conn-get-bounds thing thing-arg)
-                       ((map (:outer `(,beg . ,end)))
-                        (push (make-overlay beg end) ovs)
-                        (overlay-put (car ovs) 'face 'region))
-                       (_
-                        (user-error "No thing found at point")))))
+                     (window pt thing thing-arg)
+                   (with-selected-window window
+                     (save-mark-and-excursion
+                       (goto-char pt)
+                       (pcase (conn-get-bounds thing thing-arg)
+                         ((map (:outer `(,beg . ,end)))
+                          (push (make-overlay beg end) ovs)
+                          (overlay-put (car ovs) 'face 'region))
+                         (_
+                          (user-error "No thing found at point"))))))
                  (conn-with-state-loop
                   'conn-dispatch-mover-state
                   (list (conn-thing-argument :recursive-edit t)
