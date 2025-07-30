@@ -9,7 +9,7 @@ Command State Map
 ┃  window  │          │          │          │          │          │          │          │          │          │          │          │          │              ┃
 ┠──────────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────┴───┬──────────┨
 ┃ TAB          │ Q        │ W        │ E emacs  │ R        │ T        │ Y        │ O        │ I        │ U        │ P  reg   │ {        │ }        │ |        ┃
-┃              │          │  widen   │   state  │          │  copy    │   yank   │  ←symbol │  ↑para   │  →symbol │ load and │ ←sentence│ →sentence│ shell cmd┃
+┃              │          │  widen   │   state  │          │  change  │   yank   │  ←symbol │  ↑para   │  →symbol │ load and │ ←sentence│ →sentence│ shell cmd┃
 ┃              │          │          │  at mark │          │  thing   │   read   │          │          │          │ replace  │          │          │ on region┃
 ┃              ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┨
 ┃              │ q        │ w        │ e        │ r        │ t        │ y        │ o        │ i        │ u        │ p        │ [        │ ]        │ \        ┃
@@ -17,8 +17,8 @@ Command State Map
 ┃              │          │  region  │  state   │   map    │  region  │          │          │          │          │  prefix  │          │          │          ┃
 ┠──────────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴─┬────────┴──────────┨
 ┃                │ A        │ S        │ D        │ F        │ G        │ H        │ J        │ K        │ L        │ :        │ "        │ RET               ┃
-┃                │   M-X    │          │ duplicate│          │          │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
-┃                │          │          │  region  │          │          │  region  │   line   │          │   line   │          │          │                   ┃
+┃                │   M-X    │ surround │ duplicate│          │  copy    │  expand  │  ←inner  │  ↓para   │  →inner  │          │          │                   ┃
+┃                │          │          │  region  │          │  thing   │  region  │   line   │          │   line   │          │          │                   ┃
 ┃                ├┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┤                   ┃
 ┃                │ a        │ s        │ d        │ f        │ g        │ h        │ j        │ k        │ l        │ ;        │ '        │                   ┃
 ┃                │   M-x    │   M-s    │  →delete │ dispatch │   M-g    │  winctl  │  ←char   │  ↓column │  →char   │  winctl  │ conntext │                   ┃

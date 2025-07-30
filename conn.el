@@ -1374,9 +1374,10 @@ The composed map is a keymap of the form:
                            parents)))
       (conn--compat-callf sort (cdr (conn-state-minor-mode-maps-alist state))
         :key (lambda (cons)
-               (or (seq-some (lambda (table)
-                               (gethash (car cons) table))
-                             tables)
+               (or (catch 'break
+                     (dolist (table tables)
+                       (when-let* ((v (gethash (car cons) table)))
+                         (throw 'break v))))
                    (get (car cons) :conn-mode-depth)
                    0))
         :in-place t)
@@ -2238,16 +2239,15 @@ By default `conn-emacs-state' does not bind anything."
     (state arglist &key command-handler prompt prefix pre post))
 
 (cl-defmethod conn-with-state-loop (state arglist &key command-handler prompt prefix pre post)
-  (conn-protected-let*
-      ((arguments (delq nil arglist)
-                  (mapc #'conn-cancel-argument arguments))
-       (prompt (or prompt (symbol-name state)))
-       (conn--loop-prefix-mag (when prefix (abs prefix)))
-       (conn--loop-prefix-sign (when prefix (> 0 prefix)))
-       (conn--loop-error-message "")
-       (conn--loop-message-timer nil)
-       (conn--state-loop-exiting nil)
-       (inhibit-message t))
+  (conn-protected-let* ((arguments (delq nil arglist)
+                                   (mapc #'conn-cancel-argument arguments))
+                        (prompt (or prompt (symbol-name state)))
+                        (conn--loop-prefix-mag (when prefix (abs prefix)))
+                        (conn--loop-prefix-sign (when prefix (> 0 prefix)))
+                        (conn--loop-error-message "")
+                        (conn--loop-message-timer nil)
+                        (conn--state-loop-exiting nil)
+                        (inhibit-message t))
     (cl-labels ((call-arg (arg)
                   (ignore-error conn-invalid-argument
                     (funcall arg conn-loop-this-command)
@@ -2993,7 +2993,7 @@ order to mark the region that should be defined by any of COMMANDS."
     (cl-call-next-method)))
 
 (cl-defmethod conn-extract-argument ((arg conn-thing-argument))
-  (conn-thing-argument--value arg))
+  (conn-state-loop-argument-value arg))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-thing-argument) sym)
   (or (conn-thing-p sym)
@@ -3020,15 +3020,15 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (eql toggle-subregions))
                                                arg)
-  (cl-callf not (conn-subregions-argument--value arg)))
+  (cl-callf not (conn-state-loop-argument-value arg)))
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing region))
                                                arg)
-  (setf (conn-subregions-argument--value arg) t))
+  (setf (conn-state-loop-argument-value arg) t))
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing recursive-edit))
                                                arg)
-  (setf (conn-subregions-argument--value arg) t))
+  (setf (conn-state-loop-argument-value arg) t))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-subregions-argument)
                                                   sym)
@@ -3038,7 +3038,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-display-argument ((arg conn-subregions-argument))
   (concat "\\[toggle-subregions] "
           (propertize "subregions"
-                      'face (when (conn-subregions-argument--value arg)
+                      'face (when (conn-state-loop-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Trim
@@ -3065,7 +3065,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-display-argument ((arg conn-trim-argument))
   (concat "\\[toggle-trim] "
           (propertize "trim"
-                      'face (when (conn-trim-argument--value arg)
+                      'face (when (conn-state-loop-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;; Read Mover State
@@ -4518,10 +4518,10 @@ themselves once the selection process has concluded."
       (conn-invalid-argument))))
 
 (cl-defmethod conn-cancel-argument ((arg conn-dispatch-action-argument))
-  (conn-cancel-action (conn-dispatch-action-argument--value arg)))
+  (conn-cancel-action (conn-state-loop-argument-value arg)))
 
 (cl-defmethod conn-extract-argument ((arg conn-dispatch-action-argument))
-  (list (when-let* ((action (conn-dispatch-action-argument--value arg)))
+  (list (when-let* ((action (conn-state-loop-argument-value arg)))
           (conn-accept-action action))))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-action-argument)
@@ -4530,7 +4530,7 @@ themselves once the selection process has concluded."
       (cl-call-next-method)))
 
 (cl-defmethod conn-display-argument ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-dispatch-action-argument--value arg)))
+  (when-let* ((action (conn-state-loop-argument-value arg)))
     (propertize (conn-describe-action action)
                 'face 'eldoc-highlight-function-argument)))
 
@@ -4560,7 +4560,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-display-argument ((arg conn-dispatch-other-end-argument))
   (concat "\\[dispatch-other-end] "
           (propertize "other-end"
-                      'face (when (conn-dispatch-other-end-argument--value arg)
+                      'face (when (conn-state-loop-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Repeat
@@ -4577,7 +4577,9 @@ themselves once the selection process has concluded."
                     (value (unless (eq value conn--key-missing) value)))
       (cmd)
     (if (eq cmd 'repeat-dispatch)
-        (cl-callf not value)
+        (progn
+          (cl-callf not value)
+          (setf set-flag t))
       (conn-invalid-argument))))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-repeat-argument)
@@ -4588,7 +4590,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-display-argument ((arg conn-dispatch-repeat-argument))
   (concat "\\[repeat-dispatch] "
           (propertize "repeat"
-                      'face (when (conn-dispatch-repeat-argument--value arg)
+                      'face (when (conn-state-loop-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Restrict Windows
@@ -4618,7 +4620,7 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-display-argument ((arg conn-dispatch-restrict-windows-argument))
   (concat "\\[restrict-windows] "
           (propertize "this-win"
-                      'face (when (conn-dispatch-restrict-windows-argument--value arg)
+                      'face (when (conn-state-loop-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Command Handler
@@ -7257,7 +7259,8 @@ contain targets."
                 (conn-dispatch-other-end-argument
                  :value nil
                  :keyword :other-end)
-                (conn-dispatch-restrict-windows-argument :keyword :restrict-window))
+                (conn-dispatch-restrict-windows-argument
+                 :keyword :restrict-window))
           :command-handler #'conn-handle-dispatch-command
           :prefix initial-arg
           :prompt "Dispatch"
@@ -7267,35 +7270,44 @@ contain targets."
 
 (cl-defmethod conn-get-bounds-subr ((_ (conn-thing dispatch))
                                     &optional arg)
-  (let (bounds)
-    (apply #'conn-perform-dispatch
-           (oclosure-lambda (conn-action
-                             (description "Bounds")
-                             (window-predicate
-                              (let ((win (selected-window)))
-                                (lambda (window) (eq win window)))))
-               (_window pt thing thing-arg)
-             (save-mark-and-excursion
-               (goto-char pt)
-               (when-let* ((bound (conn-get-bounds thing thing-arg)))
-                 (push (plist-get bound :outer) bounds))))
-           (conn-with-state-loop
-            'conn-dispatch-mover-state
-            (list (conn-thing-argument :recursive-edit t)
-                  (conn-dispatch-repeat-argument nil))
-            :prefix arg
-            :prompt "Dispatch"))
-    (unless bounds (keyboard-quit))
-    (cl-loop for (b . e) in (compat-call sort
-                                         (conn--merge-regions bounds t)
-                                         :key #'car :in-place t)
-             minimize b into beg
-             maximize e into end
-             finally (conn-add-bounds
-                      :outer (cons beg end)
-                      :contents (mapcar (lambda (bound)
-                                          (list :outer bound))
-                                        bounds)))))
+  (let (ovs)
+    (unwind-protect
+        (progn
+          (apply #'conn-perform-dispatch
+                 (oclosure-lambda (conn-action
+                                   (description "Bounds")
+                                   (window-predicate
+                                    (let ((win (selected-window)))
+                                      (lambda (window) (eq win window)))))
+                     (_window pt thing thing-arg)
+                   (save-mark-and-excursion
+                     (goto-char pt)
+                     (when-let* ((bound (conn-get-bounds thing thing-arg)))
+                       (pcase (plist-get bound :outer)
+                         (`(,beg . ,end)
+                          (push (make-overlay beg end) ovs)
+                          (overlay-put (car ovs) 'category 'region))))))
+                 (conn-with-state-loop
+                  'conn-dispatch-mover-state
+                  (list (conn-thing-argument :recursive-edit t)
+                        (conn-dispatch-repeat-argument :keyword :repeat))
+                  :prefix arg
+                  :prompt "Dispatch"))
+          (unless ovs (keyboard-quit))
+          (cl-loop with bounds = (compat-call sort
+                                              (conn--merge-regions
+                                               (mapcar #'conn--overlay-bounds ovs)
+                                               t)
+                                              :key #'car :in-place t)
+                   for (b . e) in bounds
+                   minimize b into beg
+                   maximize e into end
+                   finally (conn-add-bounds
+                            :outer (cons beg end)
+                            :contents (mapcar (lambda (bound)
+                                                (list :outer bound))
+                                              bounds))))
+      (mapc #'delete-overlay ovs))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
@@ -9565,6 +9577,9 @@ Interactively `region-beginning' and `region-end'."
         (cmd)
       (conn-handle-surround-with-argument cmd self))))
 
+(cl-defmethod conn-extract-argument ((arg conn-surround-with-argument))
+  (conn-state-loop-argument-value arg))
+
 (cl-defgeneric conn-handle-surround-with-argument (cmd ctx)
   (:method (_ _) (conn-invalid-argument)))
 
@@ -9592,7 +9607,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defmethod conn-display-argument ((arg conn-surround-padding-argument))
   (concat "\\[conn-padding-flag] "
-          (if-let* ((p (conn-dispatch-other-end-argument--value arg)))
+          (if-let* ((p (conn-state-loop-argument-value arg)))
               (propertize (format "padding <%s>" p)
                           'face 'eldoc-highlight-function-argument)
             "padding")))
@@ -9600,6 +9615,14 @@ Interactively `region-beginning' and `region-end'."
 ;;;;;; Perform Surround
 
 (cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
+
+(cl-defmethod conn-perform-surround :around (_with _arg &key regions &allow-other-keys)
+  (pcase-dolist (`(,beg . ,end)
+                 (conn--nnearest-first
+                  (mapcar 'conn--overlay-bounds-markers regions)))
+    (goto-char beg)
+    (conn--push-ephemeral-mark end nil t)
+    (cl-call-next-method)))
 
 (cl-defmethod conn-perform-surround :before (_with _arg &key &allow-other-keys)
   ;; Normalize point and mark
@@ -9652,7 +9675,8 @@ Interactively `region-beginning' and `region-end'."
                        (plist-get bounds :contents)
                      (list bounds)))
       (pcase (if trim
-                 (plist-get bound :trimmed)
+                 (or (plist-get bound :trimmed)
+                     (plist-get bound :outer))
                (plist-get bound :outer))
         ((and `(,beg . ,end) (pred identity))
          (push (conn--make-surround-region beg end) regions))))
@@ -9667,8 +9691,10 @@ Interactively `region-beginning' and `region-end'."
                            (conn-with-state-loop
                             'conn-read-thing-state
                             (list (conn-thing-argument :recursive-edit t)
-                                  (conn-subregions-argument)
-                                  (conn-trim-argument :value t))
+                                  (conn-subregions-argument
+                                   :keyword :subregions)
+                                  (conn-trim-argument
+                                   :value t :keyword :trim))
                             :prompt "Surround"
                             :prefix arg)))
                    (cleanup (plist-get prep-keys :cleanup))
@@ -9679,14 +9705,11 @@ Interactively `region-beginning' and `region-end'."
                            (conn-with-state-loop
                             'conn-surround-with-state
                             (list (conn-surround-with-argument)
-                                  (conn-surround-padding-argument))
+                                  (conn-surround-padding-argument
+                                   :keyword :padding))
                             :prompt "Surround With"))))
-              (pcase-dolist ((app conn--overlay-bounds `(,beg . ,end))
-                             regions)
-                (goto-char beg)
-                (conn--push-ephemeral-mark end nil t)
-                (apply #'conn-perform-surround
-                       `(,with ,with-arg ,@prep-keys ,@with-keys)))
+              (apply #'conn-perform-surround
+                     `(,with ,with-arg :regions ,regions ,@prep-keys ,@with-keys))
               (setq success t))
           (mapc #'delete-overlay regions)
           (when cleanup
@@ -9752,6 +9775,8 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 
 ;;;;;; Change Surround
 
+(define-error 'conn-no-surround "No surround at point" 'user-error)
+
 (conn-define-state conn-change-surround-state (conn-surround-with-state)
   :lighter "CHG-SURROUND")
 
@@ -9812,7 +9837,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
             (throw 'return (list (conn--make-surround-region
                                   (region-beginning)
                                   (region-end))))))))
-    (user-error "No %c found surrounding point" last-input-event)))
+    (signal 'conn-no-surround nil)))
 
 (cl-defmethod conn-perform-change ((_cmd (eql conn-surround)) _arg
                                    &optional _kill)

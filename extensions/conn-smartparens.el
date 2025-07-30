@@ -224,6 +224,30 @@
   (conn-push-state 'conntext-paren-state)
   t)
 
+(defvar conn-sp-surround-pair)
+
+(cl-defmethod conn-perform-surround ((_with (eql conn-sp-wrap-region))
+                                     arg &key &allow-other-keys)
+  (require 'posframe)
+  (sp-wrap-with-pair
+   (with-memoization conn-sp-surround-pair
+     (conn-progressive-read "Pair" (cl-loop for (open . _) in sp-pair-list
+                                            collect (copy-sequence open))))))
+
+(cl-defmethod conn-perform-surround :around ((_with (eql conn-sp-wrap-region))
+                                             _arg &key &allow-other-keys)
+  (let ((conn-sp-surround-pair nil))
+    (cl-call-next-method)))
+
+(cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-sp-wrap-region))
+                                                  arg)
+  (setf (conn-state-loop-argument-value arg)
+        (list cmd (conn-state-loop-consume-prefix-arg))))
+
+(define-keymap
+  :keymap (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
+  "m" 'conn-sp-wrap-region)
+
 ;;;###autoload
 (define-minor-mode conntext-smartparens-mode
   "Minor mode for contextual bindings in outline-mode."

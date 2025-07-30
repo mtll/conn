@@ -472,6 +472,55 @@
   string window bufname overlay)
 
 ;;;###autoload
+(defun conn-progressive-read (prompt collection)
+  (let ((so-far "")
+        (narrowed
+         (compat-call
+          sort (delete-dups collection)
+          :lessp (lambda (x y)
+                   (or (< (length x) (length y))
+                       (and (= (length x) (length y))
+                            (string< x y))))))
+        (prompt (concat prompt ": "))
+        (display nil)
+        (next nil)
+        (next-char nil))
+    (unwind-protect
+        (while (not (length= narrowed 1))
+          (while (not next)
+            (cl-loop with dsp = (propertize (concat prompt "\n")
+                                            'face 'conn-posframe-header)
+                     for i from 0 below 10
+                     for item in narrowed
+                     concat (concat item "\n") into dsp
+                     finally do (setq display dsp))
+            (posframe-show " *conn pair posframe*"
+                           :string display
+                           :left-fringe 0
+                           :right-fringe 0
+                           :background-color (face-attribute 'menu :background)
+                           :border-width conn-posframe-border-width
+                           :border-color conn-posframe-border-color
+                           :min-width 8)
+            (setq next-char (read-char
+                             (concat (propertize prompt 'face 'minibuffer-prompt)
+                                     so-far)
+                             t))
+            (cl-loop for item in narrowed
+                     when (eql (aref item (length so-far)) next-char)
+                     do (add-text-properties
+                         0 (1+ (length so-far))
+                         '(face completions-highlight)
+                         item)
+                     and collect item into items
+                     finally do (setq next items)))
+          (setq narrowed next
+                next nil)
+          (setq so-far (concat so-far (string next-char))))
+      (posframe-hide " *conn pair posframe*"))
+    (car narrowed)))
+
+;;;###autoload
 (defun conn-posframe-window-label (window string)
   (let ((bufname (format " *conn-label-posfame-%s*" string)))
     (with-selected-window window
