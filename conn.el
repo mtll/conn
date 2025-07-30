@@ -7302,11 +7302,12 @@ contain targets."
                      (save-mark-and-excursion
                        (goto-char pt)
                        (pcase (conn-get-bounds thing thing-arg)
-                         ((map (:outer `(,beg . ,end)))
+                         ((and bound (map (:outer `(,beg . ,end))))
                           (push (make-overlay beg end) ovs)
-                          (overlay-put (car ovs) 'face 'region))
+                          (overlay-put (car ovs) 'face 'region)
+                          (push bound bounds))
                          (_
-                          (user-error "No thing found at point"))))))
+                          (user-error "No %s found at point" thing))))))
                  (conn-with-state-loop
                   'conn-dispatch-mover-state
                   (list (conn-thing-argument :recursive-edit t)
@@ -7314,20 +7315,14 @@ contain targets."
                   :prefix arg
                   :prompt "Bounds of Dispatch"))
           (unless ovs (keyboard-quit))
-          (cl-loop with bounds = (compat-call
-                                  sort (conn--merge-regions
-                                        (mapcar #'conn--overlay-bounds ovs)
-                                        t)
-                                  :key #'car
-                                  :in-place t)
-                   for (b . e) in bounds
+          (setq bounds (nreverse bounds))
+          (cl-loop for bound in bounds
+                   for (b . e) = (plist-get bound :outer)
                    minimize b into beg
                    maximize e into end
                    finally return
                    (list :outer (cons beg end)
-                         :contents (mapcar (lambda (bound)
-                                             (list :outer bound))
-                                           bounds))))
+                         :contents bounds)))
       (mapc #'delete-overlay ovs))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
