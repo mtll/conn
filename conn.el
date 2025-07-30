@@ -1727,7 +1727,7 @@ See also `conn-exit-functions'.")
 
 (defvar-local conn--face-remap-cookie nil)
 
-(defvar conn-state-lighter-seperator "→")
+(defvar conn-state-lighter-separator "→")
 
 (defconst conn--lighter-cache
   (make-hash-table :test 'equal :weakness 'value))
@@ -1744,7 +1744,7 @@ See also `conn-exit-functions'.")
            (loop (concat "[" lighter "]") rest))
           (`(,state . ,rest)
            (loop (concat (conn-state-get state :lighter)
-                         conn-state-lighter-seperator
+                         conn-state-lighter-separator
                          lighter)
                  rest)))))))
 
@@ -5259,6 +5259,10 @@ Target overlays may override this default by setting the
 
 ;;;;; Dispatch Target Finders
 
+(defface conn-dispatch-context-separator-face
+  '((t (:inherit (shadow tooltip) :extend t)))
+  "Face for context region separator.")
+
 (defun conn-target-nearest-op (a b)
   (declare (side-effect-free t))
   (< (abs (- (overlay-end a) (point)))
@@ -5380,7 +5384,8 @@ Target overlays may override this default by setting the
 
 (defclass conn-dispatch-focus-targets ()
   ((hidden :initform nil)
-   (context-lines :initform 0 :initarg :context-lines))
+   (context-lines :initform 0 :initarg :context-lines)
+   (separator-p :initarg :separator))
   "Abstract type for target finders that hide buffer contents that do not
 contain targets."
   :abstract t)
@@ -5390,8 +5395,12 @@ contain targets."
 
 (cl-defmethod conn-dispatch-update-targets :after ((state conn-dispatch-focus-targets))
   (unless (oref state hidden)
-    (conn-protected-let* ((hidden nil (mapc #'delete-overlay hidden))
-                          (context-lines (oref state context-lines)))
+    (conn-protected-let* ((hidden (list (make-overlay (point-min) (point-min)))
+                                  (mapc #'delete-overlay hidden))
+                          (context-lines (oref state context-lines))
+                          (separator-p (if (slot-boundp state 'separator-p)
+                                           (oref state separator-p)
+                                         (> context-lines 0))))
       (pcase-dolist (`(,win . ,targets) conn-targets)
         (with-selected-window win
           (let ((regions (list (cons (pos-bol) (pos-bol 2)))))
@@ -5408,9 +5417,18 @@ contain targets."
             (cl-loop for beg = (point-min) then next-beg
                      for (end . next-beg) in regions
                      while end
-                     do (thread-first
-                          (push (make-overlay beg end) hidden)
-                          car (overlay-put 'invisible t))
+                     do (progn
+                          (thread-first
+                            (push (make-overlay beg end) hidden)
+                            car (overlay-put 'invisible t))
+                          (when (and separator-p (/= end (point-max)))
+                            (overlay-put
+                             (car hidden)
+                             'before-string
+                             (propertize (format " %s\n"
+                                                 (+ (line-number-at-pos end)
+                                                    context-lines))
+                                         'face 'conn-dispatch-context-separator-face))))
                      finally (thread-first
                                (push (make-overlay beg (point-max)) hidden)
                                car (overlay-put 'invisible t))))
@@ -5880,13 +5898,13 @@ contain targets."
 (oclosure-define (conn-dispatch-copy-to
                   (:parent conn-action))
   (str :type string)
-  (seperator :type string))
+  (separator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
   (oclosure-lambda (conn-dispatch-copy-to
                     (str (funcall region-extract-function nil))
-                    (seperator (when (conn-state-loop-consume-prefix-arg)
-                                 (read-string "Seperator: " nil nil nil t)))
+                    (separator (when (conn-state-loop-consume-prefix-arg)
+                                 (read-string "Separator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -5900,20 +5918,20 @@ contain targets."
         (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
           (`(,beg . ,end)
            (goto-char (if conn-dispatch-other-end end beg))
-           (when (and seperator conn-dispatch-other-end)
-             (insert seperator))
+           (when (and separator conn-dispatch-other-end)
+             (insert separator))
            (insert-for-yank str)
-           (when (and seperator (not conn-dispatch-other-end))
-             (insert seperator))
+           (when (and separator (not conn-dispatch-other-end))
+             (insert separator))
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point)
                                                   (+ (length str)
-                                                     (length seperator)))
+                                                     (length separator)))
                                                (point)))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-copy-to) &optional short)
   (if-let* ((sep (and (not short)
-                      (conn-dispatch-copy-to--seperator action))))
+                      (conn-dispatch-copy-to--separator action))))
       (format "Copy To <%s>" sep)
     "Copy To"))
 
@@ -5998,13 +6016,13 @@ contain targets."
 (oclosure-define (conn-dispatch-yank-to
                   (:parent conn-action))
   (str :type string)
-  (seperator :type string))
+  (separator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
   (oclosure-lambda (conn-dispatch-yank-to
                     (str (current-kill 0))
-                    (seperator (when (conn-state-loop-consume-prefix-arg)
-                                 (read-string "Seperator: " nil nil nil t)))
+                    (separator (when (conn-state-loop-consume-prefix-arg)
+                                 (read-string "Separator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -6018,32 +6036,32 @@ contain targets."
         (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
           (`(,beg . ,end)
            (goto-char (if conn-dispatch-other-end end beg))
-           (when (and seperator conn-dispatch-other-end)
-             (insert seperator))
+           (when (and separator conn-dispatch-other-end)
+             (insert separator))
            (insert-for-yank str)
-           (when (and seperator (not conn-dispatch-other-end))
-             (insert seperator))
+           (when (and separator (not conn-dispatch-other-end))
+             (insert separator))
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point)
                                                   (+ (length str)
-                                                     (length seperator)))
+                                                     (length separator)))
                                                (point)))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-yank-to) &optional short)
-  (if-let* ((sep (and (not short) (conn-dispatch-yank-to--seperator action))))
+  (if-let* ((sep (and (not short) (conn-dispatch-yank-to--separator action))))
       (format "Yank To <%s>" sep)
     "Yank To"))
 
 (oclosure-define (conn-dispatch-reading-yank-to
                   (:parent conn-action))
   (str :type string)
-  (seperator :type string))
+  (separator :type string))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
   (oclosure-lambda (conn-dispatch-reading-yank-to
                     (str (read-from-kill-ring "Yank To: "))
-                    (seperator (when (conn-state-loop-consume-prefix-arg)
-                                 (read-string "Seperator: " nil nil nil t)))
+                    (separator (when (conn-state-loop-consume-prefix-arg)
+                                 (read-string "Separator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
                        (not
@@ -6057,43 +6075,43 @@ contain targets."
         (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
           (`(,beg . ,end)
            (goto-char (if conn-dispatch-other-end end beg))
-           (when (and seperator conn-dispatch-other-end)
-             (insert seperator))
+           (when (and separator conn-dispatch-other-end)
+             (insert separator))
            (insert-for-yank str)
-           (when (and seperator (not conn-dispatch-other-end))
-             (insert seperator))
+           (when (and separator (not conn-dispatch-other-end))
+             (insert separator))
            (unless executing-kbd-macro
              (pulse-momentary-highlight-region (- (point)
                                                   (+ (length str)
-                                                     (length seperator)))
+                                                     (length separator)))
                                                (point)))))
         (unless executing-kbd-macro
           (pulse-momentary-highlight-region (- (point)
                                                (+ (length str)
-                                                  (length seperator)))
+                                                  (length separator)))
                                             (point)))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-reading-yank-to) &optional short)
   (if-let* ((sep (and (not short)
-                      (conn-dispatch-reading-yank-to--seperator action))))
+                      (conn-dispatch-reading-yank-to--separator action))))
       (format "Yank To <%s>" sep)
     "Yank To"))
 
 (oclosure-define (conn-dispatch-send
                   (:parent conn-action))
   (str :type string)
-  (seperator :type string)
+  (separator :type string)
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
   (let ((sep (when (conn-state-loop-consume-prefix-arg)
-               (read-string "Seperator: " nil nil nil t)))
+               (read-string "Separator: " nil nil nil t)))
         (cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send
                       (change-group cg)
                       (str (prog1 (funcall region-extract-function t)
                              (conn--dispatch-fixup-whitespace)))
-                      (seperator sep)
+                      (separator sep)
                       (window-predicate
                        (lambda (win)
                          (not
@@ -6107,24 +6125,24 @@ contain targets."
           (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
             (`(,beg . ,end)
              (goto-char (if conn-dispatch-other-end end beg))
-             (when (and seperator conn-dispatch-other-end)
-               (insert seperator))
+             (when (and separator conn-dispatch-other-end)
+               (insert separator))
              (insert-for-yank str)
-             (when (and seperator (not conn-dispatch-other-end))
-               (insert seperator))
+             (when (and separator (not conn-dispatch-other-end))
+               (insert separator))
              (unless executing-kbd-macro
                (pulse-momentary-highlight-region (- (point)
                                                     (+ (length str)
-                                                       (length seperator)))
+                                                       (length separator)))
                                                  (point)))))
           (unless executing-kbd-macro
             (pulse-momentary-highlight-region (- (point)
                                                  (+ (length str)
-                                                    (length seperator)))
+                                                    (length separator)))
                                               (point))))))))
 
 (cl-defmethod conn-describe-action ((action conn-dispatch-send) &optional short)
-  (if-let* ((sep (and (not short) (conn-dispatch-send--seperator action))))
+  (if-let* ((sep (and (not short) (conn-dispatch-send--separator action))))
       (format "Send <%s>" sep)
     "Send"))
 
@@ -7288,7 +7306,7 @@ contain targets."
 
 (cl-defmethod conn-get-bounds-subr ((_ (conn-thing dispatch))
                                     &optional arg)
-  (let (ovs)
+  (let (ovs bounds)
     (unwind-protect
         (progn
           (apply #'conn-perform-dispatch
@@ -7303,8 +7321,9 @@ contain targets."
                        (goto-char pt)
                        (pcase (conn-get-bounds thing thing-arg)
                          ((and bound (map (:outer `(,beg . ,end))))
-                          (push (make-overlay beg end) ovs)
-                          (overlay-put (car ovs) 'face 'region)
+                          (unless executing-kbd-macro
+                            (push (make-overlay beg end) ovs)
+                            (overlay-put (car ovs) 'face 'region))
                           (push bound bounds))
                          (_
                           (user-error "No %s found at point" thing))))))
@@ -9128,16 +9147,16 @@ associated with that command (see `conn-register-thing')."
 
 ;;;;; Register Setting and Loading
 
-(defvar conn--seperator-history nil
-  "History var for `conn-set-register-seperator'.")
+(defvar conn--separator-history nil
+  "History var for `conn-set-register-separator'.")
 
-(defun conn-set-register-seperator (string)
-  "Set `register-seperator' register to string STRING."
+(defun conn-set-register-separator (string)
+  "Set `register-separator' register to string STRING."
   (interactive
    (list (read-string "Separator: "
                       (let ((reg (get-register register-separator)))
                         (when (stringp reg) reg))
-                      conn--seperator-history nil t)))
+                      conn--separator-history nil t)))
   (set-register register-separator string))
 
 ;; register-load from consult
@@ -11024,7 +11043,7 @@ Operates with the selected windows parent window."
   "G" 'conn-copy-thing
   "D" 'conn-duplicate-region
   "P" 'conn-register-load-and-replace
-  "+" 'conn-set-register-seperator
+  "+" 'conn-set-register-separator
   "H" 'conn-expand
   "b" (conn-remap-key "<conn-edit-map>")
   "Z" 'pop-to-mark-command

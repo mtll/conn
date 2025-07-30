@@ -1437,7 +1437,7 @@ A zero means repeat until error."
   [[ :description "Register"
      ("e" "Load" conn-register-load)
      ("u" "Unset" conn-unset-register)
-     ("s" "Set Seperator" conn-set-register-seperator)
+     ("s" "Set Separator" conn-set-register-seperator)
      ("i" "Increment" increment-register)
      ("l" "List" list-registers)]
    [ :description "Register Store"
