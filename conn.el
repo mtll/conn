@@ -530,7 +530,8 @@ the original binding.  Also see `conn-remap-key'."
            (progn
              (cl-loop for (beg end) on (nconc (list (point-min))
                                               (thread-first
-                                                (conn--merge-regions ,regions t)
+                                                (conn--merge-overlapping-regions
+                                                 ,regions t)
                                                 flatten-tree sort)
                                               (list (point-max)))
                       by #'cddr
@@ -591,7 +592,7 @@ This function destructively modifies LIST."
                 min-dist new-dist))))
     (if min (cons min (delq min list)) list)))
 
-(defun conn--merge-regions (regions &optional points)
+(defun conn--merge-overlapping-regions (regions &optional points)
   "Merge all overlapping regions in REGIONS.
 
 REGIONS is a list of the form ((BEG . END) ...), the returned list is of
@@ -5418,7 +5419,7 @@ contain targets."
                             (cons (pos-bol (- 1 context-lines))
                                   (pos-bol (+ 2 context-lines)))))
                       regions)))
-            (cl-callf conn--merge-regions regions t)
+            (cl-callf conn--merge-overlapping-regions regions t)
             (conn--compat-callf sort regions :key #'car :in-place t)
             (cl-loop for beg = (point-min) then next-beg
                      for (end . next-beg) in regions
@@ -7814,7 +7815,8 @@ Expansions and contractions are provided by functions in
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
-  (setq conn-narrow-ring (nreverse (conn--merge-regions conn-narrow-ring)))
+  (setq conn-narrow-ring (nreverse (conn--merge-overlapping-regions
+                                    conn-narrow-ring)))
   (when (and interactive (not executing-kbd-macro))
     (message "Narrow ring merged into %s region"
              (length conn-narrow-ring))))
@@ -8254,7 +8256,7 @@ instances of from-string.")
     (save-excursion
       (if (and subregions contents)
           (let* ((regions
-                  (conn--merge-regions
+                  (conn--merge-overlapping-regions
                    (cl-loop for bound in contents
                             collect (plist-get bound :outer))
                    t))
@@ -8312,7 +8314,7 @@ instances of from-string.")
     (save-excursion
       (if (and subregions contents)
           (let* ((regions
-                  (conn--merge-regions
+                  (conn--merge-overlapping-regions
                    (cl-loop for bound in contents
                             collect (plist-get bound :outer))
                    t))
@@ -8450,7 +8452,7 @@ Exiting the recursive edit will resume the isearch."
                           (cons (conn--create-marker beg)
                                 (conn--create-marker end nil t)))
                         (or (if subregions
-                                (conn--merge-regions
+                                (conn--merge-overlapping-regions
                                  (cl-loop for bound in contents
                                           collect (plist-get bound :outer))
                                  t)
