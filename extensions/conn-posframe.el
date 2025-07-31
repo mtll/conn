@@ -473,50 +473,51 @@
 
 ;;;###autoload
 (defun conn-progressive-read (prompt collection)
-  (let ((so-far "")
-        (narrowed
-         (compat-call
-          sort (delete-dups collection)
-          :lessp (lambda (x y)
-                   (or (< (length x) (length y))
-                       (and (= (length x) (length y))
-                            (string< x y))))))
-        (prompt (concat prompt ": "))
-        (display nil)
-        (next nil)
-        (next-char nil))
+  (let* ((collection (compat-call
+                      sort (delete-dups collection)
+                      :lessp (lambda (x y)
+                               (or (< (length x) (length y))
+                                   (and (= (length x) (length y))
+                                        (string< x y))))))
+         (narrowed collection)
+         (prompt (propertize (concat prompt ": ") 'face 'minibuffer-prompt))
+         (display nil)
+         (so-far ""))
     (unwind-protect
-        (while (not (length= narrowed 1))
-          (while (not next)
-            (cl-loop with dsp = (propertize (concat prompt "\n")
-                                            'face 'conn-posframe-header)
-                     for i from 0 below 10
-                     for item in narrowed
-                     concat (concat item "\n") into dsp
-                     finally do (setq display dsp))
-            (posframe-show " *conn pair posframe*"
-                           :string display
-                           :left-fringe 0
-                           :right-fringe 0
-                           :background-color (face-attribute 'menu :background)
-                           :border-width conn-posframe-border-width
-                           :border-color conn-posframe-border-color
-                           :min-width 8)
-            (setq next-char (read-char
-                             (concat (propertize prompt 'face 'minibuffer-prompt)
-                                     so-far)
-                             t))
-            (cl-loop for item in narrowed
-                     when (eql (aref item (length so-far)) next-char)
-                     do (add-text-properties
-                         0 (1+ (length so-far))
-                         '(face completions-highlight)
-                         item)
-                     and collect item into items
-                     finally do (setq next items)))
-          (setq narrowed next
-                next nil)
-          (setq so-far (concat so-far (string next-char))))
+        (while (length> narrowed 1)
+          (posframe-show " *conn pair posframe*"
+                         :string (cl-loop for i from 0 below 10
+                                          for item in narrowed
+                                          concat (concat item "\n"))
+                         :left-fringe 0
+                         :right-fringe 0
+                         :background-color (face-attribute 'menu :background)
+                         :border-width conn-posframe-border-width
+                         :border-color conn-posframe-border-color
+                         :min-width 8)
+          (conn-with-dispatch-event-handler 'backspace
+              (define-keymap
+                "<remap> <backward-delete-char>" 'backspace)
+              (lambda (cmd)
+                (when (eq cmd 'backspace)
+                  (when (length> so-far 0)
+                    (cl-callf substring so-far 0 -1)
+                    (setq narrowed collection)
+                    (throw 'backspace nil))))
+            (cl-callf thread-last
+                so-far
+              (conn-dispatch-read-event (concat prompt so-far) t nil t)
+              (char-to-string)
+              (concat so-far)))
+          (cl-loop for item in narrowed
+                   when (string-prefix-p so-far item)
+                   do
+                   (remove-text-properties 0 (1- (length item)) '(face) item)
+                   (add-text-properties 0 (length so-far)
+                                        '(face completions-highlight)
+                                        item)
+                   and collect item into next
+                   finally do (setq narrowed next)))
       (posframe-hide " *conn pair posframe*"))
     (car narrowed)))
 
