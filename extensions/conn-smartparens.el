@@ -224,20 +224,19 @@
   (conn-push-state 'conntext-paren-state)
   t)
 
-(defvar conn-sp-surround-pair)
-
 (cl-defmethod conn-perform-surround ((_with (eql conn-sp-wrap-region))
-                                     arg &key &allow-other-keys)
+                                     arg &key pair &allow-other-keys)
   (require 'posframe)
-  (sp-wrap-with-pair
-   (with-memoization conn-sp-surround-pair
-     (conn-progressive-read "Pair" (cl-loop for (open . _) in sp-pair-list
-                                            collect (copy-sequence open))))))
+  (sp-wrap-with-pair pair))
 
-(cl-defmethod conn-perform-surround :around ((_with (eql conn-sp-wrap-region))
-                                             _arg &key &allow-other-keys)
-  (let ((conn-sp-surround-pair nil))
-    (cl-call-next-method)))
+(cl-defmethod conn-perform-surround :around ((with (eql conn-sp-wrap-region))
+                                             arg &rest keys &key pair &allow-other-keys)
+  (if pair
+      (cl-call-next-method)
+    (let ((pair
+           (conn-progressive-read "Pair" (cl-loop for (open . _) in sp-pair-list
+                                                  collect (copy-sequence open)))))
+      (apply #'cl-call-next-method with arg :pair pair keys))))
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-sp-wrap-region))
                                                   arg)
