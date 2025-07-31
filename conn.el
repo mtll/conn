@@ -268,7 +268,6 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 
 (defmacro conn-anaphoricate (name lambda)
   (declare (indent 1))
-  (cl-check-type name symbol)
   `(letrec ((,name ,lambda)) ,name))
 
 (defmacro conn-with-overriding-map (keymap &rest body)
@@ -2983,9 +2982,9 @@ order to mark the region that should be defined by any of COMMANDS."
   (declare (important-return-value t))
   (conn-anaphoricate self
     (oclosure-lambda (conn-thing-argument
-                      (value (when (region-active-p)
+                      (value (when (use-region-p)
                                (list 'region nil)))
-                      (set-flag (region-active-p))
+                      (set-flag (use-region-p))
                       (keyword keyword)
                       (required t)
                       (recursive-edit recursive-edit))
