@@ -444,7 +444,8 @@
         (advice-add 'conn-dispatch-cycle-ring-previous :after
                     'conn-posframe--dispatch-ring-display)
         (advice-add 'conn-dispatch-cycle-ring-next :after
-                    'conn-posframe--dispatch-ring-display))
+                    'conn-posframe--dispatch-ring-display)
+        (setq conn-read-pair-function 'conn-posframe-progressive-read-pair))
     (advice-remove 'kmacro-cycle-ring-next 'conn-posframe--switch-kmacro-display)
     (advice-remove 'kmacro-cycle-ring-previous 'conn-posframe--switch-kmacro-display)
     (advice-remove 'previous-buffer 'conn-posframe--switch-buffer-display)
@@ -454,7 +455,8 @@
     (advice-remove 'tab-bar-new-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
-    (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)))
+    (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)
+    (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)))
 
 ;;;; Posframe window labels
 
@@ -472,7 +474,7 @@
   string window bufname overlay)
 
 ;;;###autoload
-(defun conn-progressive-read (prompt collection)
+(defun conn-posframe-progressive-read-pair (collection)
   (let* ((collection (compat-call
                       sort (seq-uniq (mapcar #'copy-sequence collection))
                       :lessp (lambda (x y)
@@ -481,8 +483,7 @@
                                         (string< x y))))
                       :in-place t))
          (narrowed collection)
-         (prompt (propertize (concat prompt ": ") 'face 'minibuffer-prompt))
-         (display nil)
+         (prompt (propertize "Pair" 'face 'minibuffer-prompt))
          (so-far ""))
     (unwind-protect
         (while (length> narrowed 1)
@@ -507,7 +508,7 @@
                     (throw 'backspace nil))))
             (cl-callf thread-last
                 so-far
-              (conn-dispatch-read-event (concat prompt so-far) t nil)
+              (conn-dispatch-read-event prompt t nil)
               (char-to-string)
               (concat so-far)))
           (cl-loop for item in narrowed
@@ -518,7 +519,9 @@
                                         '(face completions-highlight)
                                         item)
                    and collect item into next
-                   finally do (setq narrowed next)))
+                   finally do (if (null next)
+                                  (setq so-far (substring so-far 0 -1))
+                                (setq narrowed next))))
       (posframe-hide " *conn pair posframe*"))
     (car narrowed)))
 

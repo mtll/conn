@@ -5179,10 +5179,10 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil)
-        (prompt-suffix (concat (when conn--loop-error-message
+        (prompt-suffix (concat prompt-suffix " "
+                               (when conn--loop-error-message
                                  (propertize conn--loop-error-message
-                                             'face 'error))
-                               prompt-suffix)))
+                                             'face 'error)))))
     (catch 'return
       (if seconds
           (while-let ((ev (conn-with-input-method
@@ -9596,6 +9596,7 @@ Interactively `region-beginning' and `region-end'."
   "7" 'digit-argument
   "8" 'digit-argument
   "9" 'digit-argument
+  "m" 'conn-read-pair
   "c" 'surround-comment
   "C" 'surround-uncomment
   "<remap> <self-insert-command>" 'surround-self-insert
@@ -9690,14 +9691,13 @@ Interactively `region-beginning' and `region-end'."
                                      &key &allow-other-keys)
   (uncomment-region (region-beginning) (region-end) arg))
 
-(cl-defmethod conn-perform-surround ((_with (eql surround-self-insert)) arg
-                                     &key padding &allow-other-keys)
+(defun conn--perform-surround-with-pair-subr (pair padding arg)
   (cl-labels ((ins-pair (open &optional close)
                 (insert open)
                 (exchange-point-and-mark)
                 (save-excursion (insert (or close open)))
                 (exchange-point-and-mark)))
-    (pcase (assoc last-input-event insert-pair-alist)
+    (pcase pair
       ('nil
        (dotimes (_ (prefix-numeric-value arg))
          (ins-pair last-input-event)))
@@ -9706,6 +9706,12 @@ Interactively `region-beginning' and `region-end'."
        (dotimes (_ (prefix-numeric-value arg))
          (ins-pair open close))))
     (when padding (ins-pair padding))))
+
+(cl-defmethod conn-perform-surround ((_with (eql surround-self-insert)) arg
+                                     &key padding &allow-other-keys)
+  (conn--perform-surround-with-pair-subr
+   (assoc last-input-event insert-pair-alist)
+   padding arg))
 
 (defun conn--make-surround-region (beg end)
   (let ((ov (make-overlay beg end)))
@@ -9768,6 +9774,89 @@ Interactively `region-beginning' and `region-end'."
           (mapc #'delete-overlay regions)
           (when cleanup
             (funcall cleanup (if success :accept :cancel))))))))
+
+;;;;;; Surround Read Pair
+
+(defvar conn-read-pair-function 'conn-progressive-read-pair)
+
+(defun conn-progressive-read-pair (collection)
+  (let* ((collection (compat-call
+                      sort (seq-uniq (mapcar #'copy-sequence collection))
+                      :lessp (lambda (x y)
+                               (or (< (length x) (length y))
+                                   (and (= (length x) (length y))
+                                        (string< x y))))
+                      :in-place t))
+         (narrowed collection)
+         (prompt (propertize "Pair" 'face 'minibuffer-prompt))
+         (so-far ""))
+    (unwind-protect
+        (while (not (length= narrowed 1))
+          (with-current-buffer-window
+              "*Conn Pairs*"
+              `((display-buffer--maybe-same-window
+                 display-buffer-reuse-window
+                 display-buffer-below-selected)
+                (window-height . completions--fit-window-to-buffer)
+                ,(when temp-buffer-resize-mode
+                   '(preserve-size . (nil . t)))
+                (body-function
+                 . ,#'(lambda (_window)
+                        (insert (cl-loop for i from 0 below 10
+                                         for item in narrowed
+                                         concat (concat item "\n"))))))
+              nil)
+          (conn-with-dispatch-event-handler 'backspace
+              (define-keymap
+                "<remap> <backward-delete-char>" 'backspace)
+              (lambda (cmd)
+                (when (eq cmd 'backspace)
+                  (when (length> so-far 0)
+                    (cl-callf substring so-far 0 -1)
+                    (setq narrowed collection)
+                    (throw 'backspace nil))))
+            (cl-callf thread-last
+                so-far
+              (conn-dispatch-read-event prompt t nil)
+              (char-to-string)
+              (concat so-far)))
+          (cl-loop for item in narrowed
+                   when (string-prefix-p so-far item)
+                   do
+                   (remove-text-properties 0 (1- (length item)) '(face) item)
+                   (add-text-properties 0 (length so-far)
+                                        '(face completions-highlight)
+                                        item)
+                   and collect item into next
+                   finally do (if (null next)
+                                  (setq so-far (substring so-far 0 -1))
+                                (setq narrowed next))))
+      (delete-window (get-buffer-window "*Conn Pairs*" 0)))
+    (car narrowed)))
+
+(cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-read-pair))
+                                                  arg)
+  (setf (conn-state-loop-argument-value arg)
+        (list cmd (conn-state-loop-consume-prefix-arg))))
+
+(cl-defmethod conn-perform-surround ((_with (eql conn-read-pair)) arg
+                                     &key padding pair &allow-other-keys)
+  (conn--perform-surround-with-pair-subr pair padding arg))
+
+(cl-defmethod conn-perform-surround :around ((with (eql conn-read-pair))
+                                             arg &rest keys &key pair &allow-other-keys)
+  (if pair
+      (cl-call-next-method)
+    (let ((open (funcall conn-read-pair-function
+                         (cl-loop for (open . _) in insert-pair-alist
+                                  collect (pcase open
+                                            ((pred stringp) open)
+                                            (_ (string open)))))))
+      (apply #'cl-call-next-method
+             with arg
+             :pair (or (assoc open insert-pair-alist)
+                       (assq (aref open 0) insert-pair-alist))
+             keys))))
 
 
 ;;;;; Change
