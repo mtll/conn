@@ -412,10 +412,10 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
   (conn-ring--visit ring item)
   (when-let* ((old (drop (conn-ring-capacity ring) (conn-ring-history ring))))
     (cl-callf2 take (conn-ring-capacity ring) (conn-ring-history ring))
-    (dolist (mk old)
-      (cl-callf2 delete mk (conn-ring-list ring))
+    (dolist (o old)
+      (cl-callf2 delete o (conn-ring-list ring))
       (when-let* ((cleanup (conn-ring-cleanup ring)))
-        (funcall cleanup mk)))))
+        (funcall cleanup o)))))
 
 (defun conn-ring-insert-back (ring item)
   "Insert ITEM into back of RING."
@@ -2056,12 +2056,12 @@ By default `conn-emacs-state' does not bind anything."
 
 (cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
   (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
-    (conn-ring-insert-front conn-emacs-state-ring (point-marker))
-    (when conn-emacs-state-register
-      (when-let* ((marker (get-register conn-emacs-state-register))
-                  ((markerp marker)))
-        (set-marker marker nil))
-      (set-register conn-emacs-state-register (point-marker)))))
+    (conn-ring-insert-front conn-emacs-state-ring (point-marker)))
+  (when conn-emacs-state-register
+    (when-let* ((marker (get-register conn-emacs-state-register))
+                ((markerp marker)))
+      (set-marker marker nil))
+    (set-register conn-emacs-state-register (point-marker))))
 
 (defun conn-copy-emacs-state-ring ()
   (when (conn-ring-p conn-emacs-state-ring)
@@ -5295,7 +5295,7 @@ Target overlays may override this default by setting the
   (declare (important-return-value t))
   (:method (_) "Noop" nil))
 
-(cl-defgeneric conn-dispatch-targets-other-end-p (target-finder)
+(cl-defgeneric conn-dispatch-targets-other-end (target-finder)
   (declare (important-return-value t))
   (:method (_) nil))
 
@@ -5425,10 +5425,13 @@ contain targets."
                             (overlay-put
                              (car hidden)
                              'before-string
-                             (propertize (format " %s\n"
-                                                 (+ (line-number-at-pos end)
-                                                    context-lines))
-                                         'face 'conn-dispatch-context-separator-face))))
+                             (propertize
+                              (format " %s\n"
+                                      (when (memq display-line-numbers
+                                                  '(nil relative visual))
+                                        (+ (line-number-at-pos end)
+                                           context-lines)))
+                              'face 'conn-dispatch-context-separator-face))))
                      finally (thread-first
                                (push (make-overlay beg (point-max)) hidden)
                                car (overlay-put 'invisible t))))
@@ -5438,6 +5441,9 @@ contain targets."
 
 (defclass conn-dispatch-previous-emacs-state (conn-dispatch-focus-targets)
   ((context-lines :initform 1 :initarg :context-lines)))
+
+(cl-defmethod conn-dispatch-targets-other-end ((_ conn-dispatch-previous-emacs-state))
+  :no-other-end)
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-previous-emacs-state))
   (unless conn-targets
@@ -5666,7 +5672,7 @@ contain targets."
                                  (propertize " " 'display '(space :width 0))))
                 (conn-make-target-overlay (point) 0)))))))))
 
-(cl-defmethod conn-dispatch-targets-other-end-p ((_ (eql conn-dispatch-end-of-lines)))
+(cl-defmethod conn-dispatch-targets-other-end ((_ (eql conn-dispatch-end-of-lines)))
   t)
 
 (defun conn-dispatch-inner-lines ()
@@ -5714,7 +5720,7 @@ contain targets."
                  (point) 0
                  :thing thing)))))))))
 
-(cl-defmethod conn-dispatch-targets-other-end-p
+(cl-defmethod conn-dispatch-targets-other-end
   ((_ (eql conn-dispatch-end-of-inner-lines)))
   t)
 
@@ -6984,13 +6990,15 @@ contain targets."
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql restrict-windows)))
-  (if (advice-function-member-p 'conn--dispatch-restrict-windows
-                                conn-target-window-predicate)
-      (remove-function conn-target-window-predicate
+  (cond ((advice-function-member-p 'conn--dispatch-restrict-windows
+                                   conn-target-window-predicate)
+         (remove-function conn-target-window-predicate
+                          'conn--dispatch-restrict-windows)
+         (conn-dispatch-handle-and-redisplay))
+        ((length> conn-targets 1)
+         (add-function :after-while conn-target-window-predicate
                        'conn--dispatch-restrict-windows)
-    (add-function :after-while conn-target-window-predicate
-                  'conn--dispatch-restrict-windows))
-  (conn-dispatch-handle-and-redisplay))
+         (conn-dispatch-handle-and-redisplay))))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql undo)))
   (when conn--dispatch-loop-change-groups
@@ -7181,12 +7189,13 @@ contain targets."
          (conn--dispatch-always-retarget
           (or always-retarget
               (conn-action--always-retarget action)))
-         (conn-dispatch-no-other-end (eq other-end :no-other-end))
+         (target-other-end (conn-dispatch-targets-other-end
+                            conn-dispatch-target-finder))
+         (conn-dispatch-no-other-end (or (eq other-end :no-other-end)
+                                         (eq target-other-end :no-other-end)))
          (conn-dispatch-other-end
           (unless conn-dispatch-no-other-end
-            (xor (conn-dispatch-targets-other-end-p
-                  conn-dispatch-target-finder)
-                 (or other-end conn-dispatch-other-end))))
+            (xor target-other-end (or other-end conn-dispatch-other-end))))
          (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn--dispatch-read-event-message-prefixes
           `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
@@ -7216,7 +7225,10 @@ contain targets."
                      'face (when conn-dispatch-other-end
                              'eldoc-highlight-function-argument))))))
             (lambda ()
-              (when-let* ((binding
+              (when-let* (((or (length> conn-targets 1)
+                               (advice-function-member-p 'conn--dispatch-restrict-windows
+                                                         conn-target-window-predicate)))
+                          (binding
                            (where-is-internal 'restrict-windows
                                               conn-dispatch-read-event-map
                                               t)))
