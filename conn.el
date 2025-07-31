@@ -5151,12 +5151,12 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-read-event-prefix ()
   (declare (important-return-value t))
-  (when-let ((prefix
-              (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
-                       for str = (pcase pfx
-                                   ((pred functionp) (funcall pfx))
-                                   ((pred stringp) pfx))
-                       if str collect str)))
+  (when-let* ((prefix
+               (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+                        for str = (pcase pfx
+                                    ((pred functionp) (funcall pfx))
+                                    ((pred stringp) pfx))
+                        if str collect str)))
     (concat " (" (string-join prefix "; ") ")")))
 
 (defun conn-dispatch-read-event (&optional prompt
