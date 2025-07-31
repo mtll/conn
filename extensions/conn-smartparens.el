@@ -233,9 +233,7 @@
                                              arg &rest keys &key pair &allow-other-keys)
   (if pair
       (cl-call-next-method)
-    (let ((pair
-           (conn-progressive-read "Pair" (cl-loop for (open . _) in sp-pair-list
-                                                  collect (copy-sequence open)))))
+    (let ((pair (conn-progressive-read "Pair" (mapcar #'car sp-pair-list))))
       (apply #'cl-call-next-method with arg :pair pair keys))))
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-sp-wrap-region))

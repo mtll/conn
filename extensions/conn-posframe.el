@@ -474,11 +474,12 @@
 ;;;###autoload
 (defun conn-progressive-read (prompt collection)
   (let* ((collection (compat-call
-                      sort (delete-dups collection)
+                      sort (seq-uniq (mapcar #'copy-sequence collection))
                       :lessp (lambda (x y)
                                (or (< (length x) (length y))
                                    (and (= (length x) (length y))
-                                        (string< x y))))))
+                                        (string< x y))))
+                      :in-place t))
          (narrowed collection)
          (prompt (propertize (concat prompt ": ") 'face 'minibuffer-prompt))
          (display nil)
