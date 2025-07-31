@@ -2979,6 +2979,19 @@ order to mark the region that should be defined by any of COMMANDS."
         (cmd)
       (conn-handle-thing-argument cmd self))))
 
+(cl-defun conn-thing-argument-dwim (&key recursive-edit keyword)
+  (declare (important-return-value t))
+  (conn-anaphoricate self
+    (oclosure-lambda (conn-thing-argument
+                      (value (when (region-active-p)
+                               (list 'region nil)))
+                      (set-flag (region-active-p))
+                      (keyword keyword)
+                      (required t)
+                      (recursive-edit recursive-edit))
+        (cmd)
+      (conn-handle-thing-argument cmd self))))
+
 (cl-defgeneric conn-handle-thing-argument (cmd arg)
   (:method (_ _) (conn-invalid-argument)))
 
@@ -3309,7 +3322,7 @@ BOUNDS is of the form returned by `region-bounds', which see."
   (cl-loop for region in (conn-get-things-in-region
                           (car (conn-with-state-loop
                                 'conn-read-thing-state
-                                (list (conn-thing-argument))
+                                (list (conn-thing-argument-dwim))
                                 :prompt "Things in Region"))
                           (region-beginning)
                           (region-end))
@@ -7726,7 +7739,7 @@ Expansions and contractions are provided by functions in
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument)
+    (list (conn-thing-argument-dwim)
           (register-read-with-preview "Push region to register: ")
           (conn-subregions-argument))
     :prompt "Thing"))
@@ -7752,7 +7765,7 @@ Expansions and contractions are provided by functions in
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument)
+    (list (conn-thing-argument-dwim)
           (conn-subregions-argument))
     :prompt "Thing"))
   (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
@@ -8218,7 +8231,7 @@ instances of from-string.")
    (pcase-let* ((`(,thing-mover ,arg . ,props)
                  (conn-with-state-loop
                   'conn-read-thing-state
-                  (list (conn-thing-argument :recursive-edit t)
+                  (list (conn-thing-argument-dwim :recursive-edit t)
                         (conn-subregions-argument :value t))
                   :prompt "Replace in Thing"))
                 (bounds (conn-get-bounds thing-mover arg))
@@ -8274,7 +8287,7 @@ instances of from-string.")
    (pcase-let* ((`(,thing-mover ,arg . ,props)
                  (conn-with-state-loop
                   'conn-read-thing-state
-                  (list (conn-thing-argument :recursive-edit t)
+                  (list (conn-thing-argument-dwim :recursive-edit t)
                         (conn-subregions-argument :value t))
                   :prompt "Replace Regexp in Thing"))
                 (bounds (conn-get-bounds thing-mover arg))
@@ -8477,7 +8490,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (list current-prefix-arg)
           (conn-subregions-argument))
     :prompt "Isearch in Thing"))
@@ -8491,7 +8504,7 @@ Exiting the recursive edit will resume the isearch."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (list current-prefix-arg)
           (conn-subregions-argument))
     :prompt "Isearch in Thing"))
@@ -8935,7 +8948,7 @@ region after a `recursive-edit'."
   (interactive
    (conn-with-state-loop
     'conn-transpose-state
-    (list (conn-thing-argument :recursive-edit t))
+    (list (conn-thing-argument-dwim :recursive-edit t))
     :prompt "Transpose"
     :prefix current-prefix-arg))
   (when conn-transpose-recursive-edit-mode
@@ -8984,7 +8997,7 @@ With arg N, insert N newlines."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (conn-subregions-argument))
     :prompt "Thing"))
   (save-mark-and-excursion
@@ -9082,7 +9095,7 @@ With a prefix arg prepend to a register instead."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument)
+    (list (conn-thing-argument-dwim)
           (conn-subregions-argument)
           (when current-prefix-arg
             (list (register-read-with-preview "Register: ")))
@@ -9111,7 +9124,7 @@ With a prefix arg prepend to a register instead."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (list t))
     :prompt "Thing"
     :prefix current-prefix-arg))
@@ -9132,7 +9145,7 @@ associated with that command (see `conn-register-thing')."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (list t))
     :prompt "Thing"
     :prefix current-prefix-arg))
@@ -9384,7 +9397,7 @@ With prefix arg N duplicate region N times."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (list (prefix-numeric-value current-prefix-arg)))
     :prompt "Thing"))
   (pcase (conn-get-bounds thing-mover thing-arg)
@@ -9426,7 +9439,7 @@ With prefix arg N duplicate region N times."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t)
+    (list (conn-thing-argument-dwim :recursive-edit t)
           (list (prefix-numeric-value current-prefix-arg)))
     :prompt "Thing"))
   (pcase (conn-get-bounds thing-mover thing-arg)
@@ -9508,7 +9521,7 @@ of `conn-recenter-positions'."
   (interactive
    (conn-with-state-loop
     'conn-read-thing-state
-    (list (conn-thing-argument :recursive-edit t))
+    (list (conn-thing-argument-dwim :recursive-edit t))
     :prompt "Thing"))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (conn-get-bounds thing-mover arg)))
@@ -9730,7 +9743,7 @@ Interactively `region-beginning' and `region-end'."
                     (apply #'conn-prepare-surround
                            (conn-with-state-loop
                             'conn-read-thing-state
-                            (list (conn-thing-argument :recursive-edit t)
+                            (list (conn-thing-argument-dwim :recursive-edit t)
                                   (conn-subregions-argument
                                    :keyword :subregions)
                                   (conn-trim-argument
