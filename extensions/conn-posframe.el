@@ -506,7 +506,7 @@
                     (throw 'backspace nil))))
             (cl-callf thread-last
                 so-far
-              (conn-dispatch-read-event (concat prompt so-far) t nil t)
+              (conn-dispatch-read-event (concat prompt so-far) t nil)
               (char-to-string)
               (concat so-far)))
           (cl-loop for item in narrowed

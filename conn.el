@@ -4330,7 +4330,6 @@ themselves once the selection process has concluded."
   :group 'conn-faces)
 
 (defvar conn-dispatch-ring)
-(defvar conn--dispatch-action-description nil)
 
 (defvar conn--dispatch-must-prompt nil)
 (defvar conn--dispatch-action-always-prompt nil)
@@ -5152,20 +5151,17 @@ Target overlays may override this default by setting the
 
 (defun conn--dispatch-read-event-prefix ()
   (declare (important-return-value t))
-  (concat
-   " ("
-   conn--dispatch-action-description
-   (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
-            for str = (pcase pfx
-                        ((pred functionp) (funcall pfx))
-                        ((pred stringp) pfx))
-            if str concat "; " and concat str)
-   "): "))
+  (when-let ((prefix
+              (cl-loop for pfx in conn--dispatch-read-event-message-prefixes
+                       for str = (pcase pfx
+                                   ((pred functionp) (funcall pfx))
+                                   ((pred stringp) pfx))
+                       if str collect str)))
+    (concat " (" (string-join prefix "; ") ")")))
 
 (defun conn-dispatch-read-event (&optional prompt
                                            inherit-input-method
                                            seconds
-                                           inhibit-message-prefix
                                            prompt-suffix)
   (declare (important-return-value t))
   (let ((inhibit-message conn-state-loop-inhibit-message)
@@ -5186,10 +5182,9 @@ Target overlays may override this default by setting the
                      (make-composed-keymap conn--dispatch-event-handler-maps
                                            conn-dispatch-read-event-map)
                    (thread-first
-                     (if inhibit-message-prefix prompt
-                       (concat prompt
-                               (conn--dispatch-read-event-prefix)
-                               prompt-suffix))
+                     (concat prompt
+                             (conn--dispatch-read-event-prefix)
+                             ":" prompt-suffix)
                      (read-key-sequence-vector)
                      (key-binding t)))
             ('dispatch-character-event
@@ -5198,10 +5193,9 @@ Target overlays may override this default by setting the
              (throw 'return
                     (conn-with-input-method
                       (read-event
-                       (if inhibit-message-prefix prompt
-                         (concat prompt
-                                 (conn--dispatch-read-event-prefix)
-                                 prompt-suffix))
+                       (concat prompt
+                               (conn--dispatch-read-event-prefix)
+                               ":" prompt-suffix)
                        inherit-input-method))))
             ('keyboard-quit
              (keyboard-quit))
@@ -5351,7 +5345,7 @@ Target overlays may override this default by setting the
                       (throw 'backspace nil)))
                 (cl-callf thread-last
                     string
-                  (conn-dispatch-read-event prompt t nil nil)
+                  (conn-dispatch-read-event prompt t)
                   (char-to-string)
                   (concat string))))
             (conn-delete-targets))
@@ -5370,7 +5364,7 @@ Target overlays may override this default by setting the
         (while-no-input
           (conn-make-string-target-overlays string predicate))
         (while-let ((next-char (conn-dispatch-read-event
-                                prompt t timeout nil string)))
+                                prompt t timeout string)))
           (conn-delete-targets)
           (setq string (concat string (char-to-string next-char)))
           (while-no-input
@@ -7178,9 +7172,6 @@ contain targets."
          (conn--dispatch-must-prompt nil)
          (conn--loop-prefix-mag nil)
          (conn--loop-prefix-sign nil)
-         (conn--dispatch-action-description
-          (propertize (conn-describe-action action t)
-                      'face 'eldoc-highlight-function-argument))
          (conn--dispatch-read-event-handlers
           (cons #'conn-handle-dispatch-select-command
                 conn--dispatch-read-event-handlers))
@@ -7198,7 +7189,9 @@ contain targets."
             (xor target-other-end (or other-end conn-dispatch-other-end))))
          (conn--dispatch-action-always-prompt (conn-action--always-prompt action))
          (conn--dispatch-read-event-message-prefixes
-          `(,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
+          `(,(propertize (conn-describe-action action t)
+                         'face 'eldoc-highlight-function-argument)
+            ,(when (conn-dispatch-retargetable-p conn-dispatch-target-finder)
                (lambda ()
                  (when-let* ((binding
                               (and (conn-dispatch-has-target-p conn-dispatch-target-finder)
@@ -7224,24 +7217,24 @@ contain targets."
                      "other end"
                      'face (when conn-dispatch-other-end
                              'eldoc-highlight-function-argument))))))
-            (lambda ()
-              (when-let* (((or (length> conn-targets 1)
-                               (advice-function-member-p 'conn--dispatch-restrict-windows
-                                                         conn-target-window-predicate)))
-                          (binding
-                           (where-is-internal 'restrict-windows
-                                              conn-dispatch-read-event-map
-                                              t)))
-                (concat
-                 (propertize (key-description binding)
-                             'face 'help-key-binding)
-                 " "
-                 (propertize
-                  "this win"
-                  'face (when (advice-function-member-p
-                               'conn--dispatch-restrict-windows
-                               conn-target-window-predicate)
-                          'eldoc-highlight-function-argument)))))
+            ,(lambda ()
+               (when-let* (((or (length> conn-targets 1)
+                                (advice-function-member-p 'conn--dispatch-restrict-windows
+                                                          conn-target-window-predicate)))
+                           (binding
+                            (where-is-internal 'restrict-windows
+                                               conn-dispatch-read-event-map
+                                               t)))
+                 (concat
+                  (propertize (key-description binding)
+                              'face 'help-key-binding)
+                  " "
+                  (propertize
+                   "this win"
+                   'face (when (advice-function-member-p
+                                'conn--dispatch-restrict-windows
+                                conn-target-window-predicate)
+                           'eldoc-highlight-function-argument)))))
             ,@conn--dispatch-read-event-message-prefixes)))
     (when-let* ((predicate (conn-action--window-predicate action)))
       (add-function :after-while conn-target-window-predicate predicate))
