@@ -244,9 +244,8 @@
   (setf (conn-state-loop-argument-value arg)
         (list cmd (conn-state-loop-consume-prefix-arg))))
 
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
-  "m" 'conn-sp-wrap-region)
+(keymap-set (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
+            "r" 'conn-sp-wrap-region)
 
 ;;;###autoload
 (define-minor-mode conntext-smartparens-mode

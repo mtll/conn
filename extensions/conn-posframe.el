@@ -523,7 +523,9 @@
                                   (setq so-far (substring so-far 0 -1))
                                 (setq narrowed next))))
       (posframe-hide " *conn pair posframe*"))
-    (car narrowed)))
+    (let ((result (car narrowed)))
+      (remove-text-properties 0 (1- (length result)) '(face) result)
+      result)))
 
 ;;;###autoload
 (defun conn-posframe-window-label (window string)

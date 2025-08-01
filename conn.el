@@ -31,11 +31,8 @@
 
 (require 'compat)
 (require 'eieio)
-(static-if (<= 31 emacs-major-version)
-    (require 'subr-x)
-  (eval-when-compile
-    (require 'subr-x)))
 (eval-when-compile
+  (require 'subr-x)
   (require 'cl-lib)
   (require 'map))
 
@@ -9250,7 +9247,7 @@ for the meaning of prefix ARG."
                  (filter-buffer-substring beg end))))
      (_ (user-error "No region in buffer")))))
 
-(defun conn-yank-replace (start end &optional arg)
+(defun conn-yank-replace (start end &optional kill-region)
   "`yank' replacing region between START and END.
 
 If called interactively uses the region between point and mark.
@@ -9261,7 +9258,7 @@ of deleting it."
                      current-prefix-arg))
   (atomic-change-group
     (conn--without-conn-maps
-      (if arg
+      (if kill-region
           (let ((str (filter-buffer-substring start end t)))
             (funcall (keymap-lookup nil conn-yank-keys t))
             (kill-new str))
@@ -9596,7 +9593,7 @@ Interactively `region-beginning' and `region-end'."
   "7" 'digit-argument
   "8" 'digit-argument
   "9" 'digit-argument
-  "m" 'conn-read-pair
+  "r" 'conn-read-pair
   "c" 'surround-comment
   "C" 'surround-uncomment
   "<remap> <self-insert-command>" 'surround-self-insert
@@ -9832,7 +9829,9 @@ Interactively `region-beginning' and `region-end'."
                                   (setq so-far (substring so-far 0 -1))
                                 (setq narrowed next))))
       (delete-window (get-buffer-window "*Conn Pairs*" 0)))
-    (car narrowed)))
+    (let ((result (car narrowed)))
+      (remove-text-properties 0 (1- (length result)) '(face) result)
+      result)))
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-read-pair))
                                                   arg)
