@@ -2253,7 +2253,7 @@ By default `conn-emacs-state' does not bind anything."
                                  handled))
                     ((pred conn-state-loop-argument-p)
                      (or (call-arg args) handled))))
-                (process-args ()
+                (process-command ()
                   (condition-case err
                       (map-args arguments (when command-handler
                                             (call-arg command-handler)))
@@ -2307,8 +2307,8 @@ By default `conn-emacs-state' does not bind anything."
                    (when-let* ((cmd (conn--state-loop-completing-read
                                      state arguments)))
                      (setq conn-loop-this-command cmd)
-                     (process-args)))
-                  (_ (process-args)))
+                     (process-command)))
+                  (_ (process-command)))
               (cl-shiftf conn-state-loop-last-command
                          conn-loop-this-command
                          nil)
@@ -7157,7 +7157,7 @@ contain targets."
                                              &rest keys
                                              &key
                                              restrict-windows
-                                             (other-end :no-other-end)
+                                             other-end
                                              always-retarget
                                              &allow-other-keys)
   (let* ((opoint (point-marker))
@@ -7334,7 +7334,8 @@ contain targets."
                  (conn-with-state-loop
                   'conn-dispatch-mover-state
                   `(,(conn-thing-argument t)
-                    :repeat ,(conn-dispatch-repeat-argument repeat))
+                    :repeat ,(conn-dispatch-repeat-argument repeat)
+                    :other-end :no-other-end)
                   :prefix (nth 1 bounds)
                   :prompt "Bounds of Dispatch"))
           (unless ovs (keyboard-quit))
@@ -7417,7 +7418,8 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-anonymous-thing
     'button
     :description "all-buttons"
-    :target-finder (lambda () 'conn-dispatch-all-buttons))
+    :target-finder (lambda () 'conn-dispatch-all-buttons)
+    :other-end :no-other-end)
    nil))
 
 (defun conn-dispatch-isearch ()
@@ -7435,14 +7437,17 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
        (conn-anonymous-thing nil :target-finder (lambda () target-finder))
-       nil :restrict-windows t))))
+       nil
+       :restrict-windows t
+       :other-end :no-other-end))))
 
 (defun conn-goto-char-2 ()
   "Jump to point defined by two characters and maybe a label."
   (interactive)
   (conn-perform-dispatch
    (conn-make-action 'conn-dispatch-jump)
-   nil nil))
+   nil nil
+   :other-end :no-other-end))
 
 (cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line)))
   'conn-dispatch-end-of-inner-lines)
@@ -8930,6 +8935,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                               (conn-invalid-argument))
                              (_
                               (conn-handle-thing-argument cmd self)))))
+                      :other-end :no-other-end
                       :restrict-windows ,(conn-dispatch-restrict-windows-argument))
                     :prompt "Transpose Dispatch"
                     :prefix arg))
@@ -11549,7 +11555,8 @@ Operates with the selected windows parent window."
           `(,(conn-dispatch-action-argument)
             ,(conn-thing-argument)
             :repeat ,(conn-dispatch-repeat-argument)
-            :restrict-windows ,(conn-dispatch-restrict-windows-argument))
+            :restrict-windows ,(conn-dispatch-restrict-windows-argument)
+            :other-end :no-other-end)
           :prefix initial-arg
           :prompt "Dired Dispatch")))
 
@@ -11985,7 +11992,8 @@ Operates with the selected windows parent window."
                                       (setq last-pt (point))))
                          (<= (window-start) (point) (window-end)))
                (conn-make-target-overlay (point) 0)))))))
-   nil nil))
+   nil nil
+   :other-end :no-other-end))
 
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
