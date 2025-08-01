@@ -313,13 +313,12 @@ before each iteration."
   (pcase-let* ((`(,cmd ,arg ,sr)
                 (conn-with-state-loop
                  'conn-read-thing-state
-                 (list (conn-thing-argument t)
+                 (list (conn-thing-argument-dwim :recursive-edit t)
                        (conn-subregions-argument))
                  :prompt "Thing")))
     (if sr
-        (cl-loop for r in (plist-get (conn-get-bounds cmd arg) :contents)
-                 collect (plist-get r :outer))
-      (list (plist-get (conn-get-bounds cmd arg) :outer)))))
+        (conn-bounds-of cmd arg)
+      (list (conn-bounds-of cmd arg)))))
 
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.
@@ -577,12 +576,12 @@ apply to each contiguous component of the region."
   (pcase-let* ((`(,cmd ,arg)
                 (conn-with-state-loop
                  'conn-read-thing-state
-                 (list (conn-thing-argument t))
+                 (list (conn-thing-argument-dwim :recursive-edit t))
                  :prompt "Thing"))
-               ((map :outer :contents)
-                (conn-get-bounds cmd arg)))
+               ((map :outer :subregions)
+                (conn-bounds-of cmd arg)))
     (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator (or contents (list outer)))
+     (conn--kapply-region-iterator (or subregions (list outer)))
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-point-invisible
      (alist-get :undo args)
@@ -607,7 +606,7 @@ apply to each contiguous component of the region."
   (pcase-let ((`(,cmd ,n)
                (conn-with-state-loop
                 'conn-read-thing-state
-                (list (conn-thing-argument t))
+                (list (conn-thing-argument :recursive-edit t))
                 :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
@@ -738,10 +737,10 @@ A zero means repeat until error."
                        (conn--kapply-region-iterator
                         (save-excursion
                           (goto-char pt)
-                          (pcase (conn-get-bounds thing thing-arg)
+                          (pcase (conn-bounds-of thing thing-arg)
                             ('nil (user-error "Cannot find thing at point"))
-                            ((map :outer :contents)
-                             (or contents (list outer))))))
+                            ((map :outer :subregions)
+                             (or subregions (list outer))))))
                        `(,@pipeline
                          ,(pcase (alist-get :kmacro args)
                             ('conn--kmacro-apply
@@ -804,10 +803,10 @@ A zero means repeat until error."
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let (((map (:outer `(,beg . ,end)))
-               (apply #'conn-get-bounds
+               (apply #'conn-bounds-of
                       (conn-with-state-loop
                        'conn-read-thing-state
-                       (list (conn-thing-argument))
+                       (list (conn-thing-argument-dwim))
                        :prompt "Thing"))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator

@@ -196,7 +196,7 @@
        'forward-sexp
        :description "list"
        :bounds-op (lambda (arg)
-                    (conn-get-bounds 'forward-sexp arg))
+                    (conn-bounds-of 'forward-sexp arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)
@@ -205,7 +205,7 @@
        'forward-sexp
        :description "list"
        :bounds-op (lambda (arg)
-                    (conn-get-bounds 'forward-sexp arg))
+                    (conn-bounds-of 'forward-sexp arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)
@@ -214,7 +214,7 @@
        'sexp
        :description "inner-list"
        :bounds-op (lambda (arg)
-                    (conn-get-bounds 'sp-down-sexp arg))
+                    (conn-bounds-of 'sp-down-sexp arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (or (syntax open-parenthesis)

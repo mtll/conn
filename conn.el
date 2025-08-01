@@ -2201,19 +2201,27 @@ By default `conn-emacs-state' does not bind anything."
                         nil
                         'conn--loop-message-function)))
 
-(defun conn-state-loop-continue ()
-  (throw 'state-loop-continue nil))
-
 (defun conn--state-loop-prompt (prompt arguments)
   (let ((inhibit-message conn-state-loop-inhibit-message)
         (message-log-max nil)
         (body nil)
         (suffix nil))
-    (dolist (arg arguments)
-      (when-let* ((disp (conn-display-argument arg)))
-        (cl-callf concat
-            (if (conn-state-loop-argument--suffix arg) suffix body)
-          "; " disp)))
+    (mapc (conn-anaphoricate map-args
+            (lambda (args)
+              (if (listp args)
+                  (mapc map-args args)
+                (when-let* ((disp (conn-display-argument args)))
+                  (cl-callf concat
+                      (if (conn-state-loop-argument--suffix args)
+                          suffix
+                        body)
+                    "; " disp)))))
+          arguments)
+    ;; (dolist (arg arguments)
+    ;;   (when-let* ((disp (conn-display-argument arg)))
+    ;;     (cl-callf concat
+    ;;         (if (conn-state-loop-argument--suffix arg) suffix body)
+    ;;       "; " disp)))
     (message
      (substitute-command-keys
       (concat
@@ -2249,23 +2257,47 @@ By default `conn-emacs-state' does not bind anything."
                   (ignore-error conn-invalid-argument
                     (funcall arg conn-loop-this-command)
                     t))
+                (map-arg-tree (args handled)
+                  (pcase args
+                    ('nil)
+                    ((pred listp)
+                     (seq-reduce (lambda (a b)
+                                   (or (map-arg-tree b handled) a))
+                                 args
+                                 handled))
+                    ((pred conn-state-loop-argument-p)
+                     (or (call-arg args) handled))))
                 (process-args ()
                   (condition-case err
-                      (catch 'state-loop-continue
-                        (let ((handled (when command-handler
-                                         (call-arg command-handler))))
-                          (dolist (arg arguments)
-                            (when (conn-state-loop-argument-p arg)
-                              (cl-callf2 or (call-arg arg) handled)))
-                          (unless handled
-                            (conn-state-loop-error "Invalid command"))))
+                      (map-arg-tree arguments (when command-handler
+                                                (call-arg command-handler)))
+                    ;; (let ((handled (when command-handler
+                    ;;                  (call-arg command-handler))))
+                    ;;   (dolist (arg arguments)
+                    ;;     (when (conn-state-loop-argument-p arg)
+                    ;;       (cl-callf2 or (call-arg arg) handled)))
+                    ;;   (unless handled
+                    ;;     (conn-state-loop-error "Invalid command")))
                     (user-error
-                     (conn-state-loop-error (error-message-string err))))))
+                     (conn-state-loop-error (error-message-string err)))))
+                (required-p (tree)
+                  (pcase tree
+                    ((pred listp)
+                     (seq-reduce (lambda (a b) (or a (required-p b)))
+                                 tree
+                                 nil))
+                    ((pred conn-state-loop-argument-p)
+                     (and (conn-state-loop-argument-required-p tree)
+                          (not (conn-state-loop-argument-set-p tree))))))
+                (extract (tree)
+                  (pcase tree
+                    ((pred listp)
+                     (list (mapcan #'extract tree)))
+                    ((pred conn-state-loop-argument-p)
+                     (conn-extract-argument tree))
+                    (_ (list tree)))))
       (conn-with-recursive-state state
-        (while (cl-loop for arg in arguments
-                        when (conn-state-loop-argument-p arg)
-                        thereis (and (conn-state-loop-argument-required-p arg)
-                                     (not (conn-state-loop-argument-set-p arg))))
+        (while (required-p arguments)
           (unless conn--loop-message-timer
             (conn--state-loop-prompt prompt arguments))
           (let ((conn-loop-this-command
@@ -2311,7 +2343,7 @@ By default `conn-emacs-state' does not bind anything."
               (when post (funcall post))))))
       (let ((inhibit-message nil))
         (message nil)
-        (mapcan #'conn-extract-argument arguments)))))
+        (mapcan #'extract arguments)))))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
@@ -3110,52 +3142,63 @@ order to mark the region that should be defined by any of COMMANDS."
 
 ;;;; Bounds of Thing
 
-(defvar conn-current-bounds)
-
 (defvar conn-bounds-trim-chars " \t\r\n")
 
 (defvar conn--last-perform-bounds nil)
 
-(defun conn-get-bounds (thing &optional arg)
-  (save-mark-and-excursion
-    (conn-get-bounds-subr thing arg)))
+(define-inline conn-bounds-of (thing arg)
+  (inline-quote
+   (setf (alist-get (recursion-depth) conn--last-perform-bounds)
+         (save-mark-and-excursion
+           (conn-bounds-of-subr ,thing ,arg)))))
 
-(cl-defgeneric conn-get-bounds-subr (cmd &optional arg)
+(define-inline conn-bounds-get (bounds prop)
+  (declare (gv-setter
+            (lambda (val)
+              `(setf (plist-get (cddr ,bounds) ,prop) ,val))))
+  (inline-letevals (bounds)
+    (inline-quote
+     (pcase (plist-get ,bounds ,prop)
+       ((and (pred functionp) fn)
+        (funcall fn ,bounds))
+       (val val)))))
+
+(pcase-defmacro conn-bounds-get (property &optional pat)
+  `(app (lambda (bound) (conn-bounds-get bound ,property))
+        ,(or pat (intern (substring (symbol-name property) 1)))))
+
+(cl-defgeneric conn-bounds-of-subr (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
            (important-return-value t))
-  ( :method ((cmd (conn-thing anonymous-thing)) &optional arg)
+  ( :method ((cmd (conn-thing anonymous-thing)) arg)
     (if-let* ((bounds-op (conn-anonymous-thing-property cmd :bounds-op)))
         (funcall bounds-op arg)
-      (conn-get-bounds-subr (conn-anonymous-thing-parent cmd) arg))))
+      (conn-bounds-of-subr (conn-anonymous-thing-parent cmd) arg))))
 
-(cl-defmethod conn-get-bounds-subr :around (_cmd &optional _arg)
-  (let ((conn-current-bounds nil))
-    (setf (alist-get (recursion-depth) conn--last-perform-bounds)
-          (cl-call-next-method))))
+(defun conn--trim-bounds (bounds)
+  (pcase-let ((`(,beg . ,end)
+               (conn-bounds-get bounds :outer)))
+    (setf (conn-bounds-get bounds :trimmed)
+          (cons (save-excursion
+                  (goto-char beg)
+                  (skip-chars-forward conn-bounds-trim-chars end)
+                  (point))
+                (save-excursion
+                  (goto-char end)
+                  (skip-chars-backward conn-bounds-trim-chars beg)
+                  (point))))))
 
-(cl-defmethod conn-get-bounds-subr :extra "trim" ((_ (conn-thing t)) &optional _)
-  (pcase (cl-call-next-method)
-    ((and bounds
-          (map (:outer `(,beg . ,end)) :trimmed)
-          (guard (not trimmed)))
-     (let ((trimmed
-            (cons (save-excursion
-                    (goto-char beg)
-                    (skip-chars-forward conn-bounds-trim-chars end)
-                    (point))
-                  (save-excursion
-                    (goto-char end)
-                    (skip-chars-backward conn-bounds-trim-chars beg)
-                    (point)))))
-       (nconc bounds (list :trimmed trimmed))))
-    (bounds bounds)))
+(cl-defmethod conn-bounds-of-subr :extra "trim" ((_ (conn-thing t)) _arg)
+  (let ((bounds (cl-call-next-method)))
+    (unless (plist-member bounds :trimmed)
+      (setf (conn-bounds-get bounds :trimmed)
+            #'conn--trim-bounds))
+    bounds))
 
-(cl-defmethod conn-get-bounds-subr ((thing (conn-thing t))
-                                    &optional _arg)
-  (list :outer (bounds-of-thing-at-point thing)))
+(cl-defmethod conn-bounds-of-subr ((thing (conn-thing t)) arg)
+  (list thing arg :outer (bounds-of-thing-at-point thing)))
 
-(cl-defmethod conn-get-bounds-subr ((cmd (conn-thing-command t))
-                                    &optional arg)
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing-command t)) arg)
   (deactivate-mark t)
   (pcase (prefix-numeric-value arg)
     (0 nil)
@@ -3177,28 +3220,27 @@ order to mark the region that should be defined by any of COMMANDS."
      (let (contents)
        (catch 'break
          (dotimes (_ n)
-           (if-let* ((bound (conn-get-bounds-subr cmd (cl-signum arg))))
+           (if-let* ((bound (conn-bounds-of-subr cmd (cl-signum arg))))
                (push bound contents)
              (throw 'break nil))))
-       (list :outer (cl-loop for bound in contents
+       (list cmd arg
+             :outer (cl-loop for bound in contents
                              for (b . e) = (plist-get bound :outer)
                              minimize b into beg
                              maximize e into end
                              finally return (cons beg end))
-             :contents (nreverse contents))))))
+             :subregions (nreverse contents))))))
 
-(cl-defmethod conn-get-bounds-subr ((_cmd (conn-thing region))
-                                    &optional _arg)
-  (list :outer (cons (region-beginning) (region-end))
-        :contents (cl-loop for r in (region-bounds)
-                           collect `(:outer ,r))))
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing region)) arg)
+  (list cmd arg
+        :outer (cons (region-beginning) (region-end))
+        :subregions (cl-loop for r in (region-bounds)
+                             collect `(:outer ,r))))
 
-(cl-defmethod conn-get-bounds-subr ((_cmd (conn-thing buffer))
-                                    &optional _arg)
-  (list :outer (cons (point-min) (point-max))))
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing buffer)) arg)
+  (list cmd arg :outer (cons (point-min) (point-max))))
 
-(cl-defmethod conn-get-bounds-subr ((_cmd (eql conn-get-bounds))
-                                    &optional _arg)
+(cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
 
 
@@ -3222,8 +3264,7 @@ order to mark the region that should be defined by any of COMMANDS."
   "C-]" 'abort-recursive-edit
   "q" 'abort-recursive-edit)
 
-(cl-defmethod conn-get-bounds-subr ((_cmd (conn-thing recursive-edit))
-                                    &optional _arg)
+(cl-defmethod conn-bounds-of-subr ((_cmd (conn-thing recursive-edit)) _arg)
   (let* ((eldoc-message-function 'ignore)
          (pre (lambda ()
                 (message
@@ -3237,13 +3278,10 @@ order to mark the region that should be defined by any of COMMANDS."
           (conn-with-recursive-state 'conn-bounds-of-recursive-edit-state
             (funcall pre)
             (recursive-edit))
-          (list :outer (cons (region-beginning) (region-end))
-                :contents (cl-loop for r in (region-bounds)
-                                   collect `(:outer ,r))))
+          (conn-bounds-of-subr 'region nil))
       (remove-hook 'pre-command-hook pre))))
 
-(cl-defmethod conn-get-bounds-subr ((cmd (conn-thing emacs-state))
-                                    &optional arg)
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing emacs-state)) arg)
   (setq arg (prefix-numeric-value arg))
   (when (> arg 0) (cl-decf arg))
   (when (eq cmd 'conn-next-emacs-state)
@@ -3251,10 +3289,9 @@ order to mark the region that should be defined by any of COMMANDS."
   (let* ((ring (conn-ring-list conn-emacs-state-ring))
          (mk (nth (mod arg (length ring)) ring))
          (pt (point)))
-    (list :outer (cons (min pt mk) (max pt mk)))))
+    (list cmd arg :outer (cons (min pt mk) (max pt mk)))))
 
-(cl-defmethod conn-get-bounds-subr ((cmd (conn-thing isearch))
-                                    &optional _arg)
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) arg)
   (let ((start (point))
         (name (symbol-name cmd))
         (quit (lambda ()
@@ -3266,7 +3303,7 @@ order to mark the region that should be defined by any of COMMANDS."
                       (string-match-p "regexp" name)
                       nil t)
       (remove-hook 'isearch-mode-end-hook quit))
-    (list :outer (cons (min start (point)) (max start (point))))))
+    (list cmd arg :outer (cons (min start (point)) (max start (point))))))
 
 
 ;;;; Bounds of Things in Region
@@ -3315,7 +3352,7 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (conn-register-thing 'conn-things-in-region)
 
-(cl-defmethod conn-get-bounds-subr ((_cmd (eql conn-things-in-region)) _arg)
+(cl-defmethod conn-bounds-of-subr ((cmd (eql conn-things-in-region)) arg)
   (cl-loop for region in (conn-get-things-in-region
                           (car (conn-with-state-loop
                                 'conn-read-thing-state
@@ -3324,9 +3361,10 @@ BOUNDS is of the form returned by `region-bounds', which see."
                           (region-beginning)
                           (region-end))
            collect (list :outer region) into contents
-           finally return (list :outer (cons (region-beginning)
+           finally return (list cmd arg
+                                :outer (cons (region-beginning)
                                              (region-end))
-                                :contents contents)))
+                                :subregions contents)))
 
 
 ;;;; Kapply
@@ -4428,7 +4466,7 @@ themselves once the selection process has concluded."
                            'expansion
                            :bounds-op (lambda (arg)
                                         (conn--push-ephemeral-mark)
-                                        (conn-get-bounds 'conn-expand arg)))
+                                        (conn-bounds-of-subr 'conn-expand arg)))
   "m" 'forward-sexp
   ";" 'conn-forward-inner-line
   "<conn-thing-map> e" 'move-end-of-line
@@ -4471,7 +4509,7 @@ themselves once the selection process has concluded."
        'sexp
        :description "inner-list"
        :bounds-op (lambda (arg)
-                    (conn-get-bounds 'down-list arg))
+                    (conn-bounds-of-subr 'down-list arg))
        :target-finder (lambda ()
                         (conn-dispatch-things-with-re-prefix
                          'sexp (rx (syntax open-parenthesis))))))
@@ -5686,7 +5724,7 @@ contain targets."
                 (lambda (arg)
                   (save-excursion
                     (goto-char (pos-bol))
-                    (conn-get-bounds 'conn-forward-inner-line arg))))))
+                    (conn-bounds-of-subr 'conn-forward-inner-line arg))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -5709,7 +5747,7 @@ contain targets."
                 (lambda (arg)
                   (save-excursion
                     (goto-char (pos-bol))
-                    (conn-get-bounds 'conn-forward-inner-line arg))))))
+                    (conn-bounds-of-subr 'conn-forward-inner-line arg))))))
     (dolist (win (conn--get-target-windows))
       (with-selected-window win
         (save-excursion
@@ -5881,7 +5919,7 @@ contain targets."
         (unless (region-active-p)
           (push-mark nil t))
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (when conn-dispatch-other-end
              (cl-rotatef beg end))
@@ -5925,7 +5963,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (goto-char (if conn-dispatch-other-end end beg))
            (when (and separator conn-dispatch-other-end)
@@ -5963,7 +6001,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
@@ -5989,7 +6027,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
@@ -6015,7 +6053,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (delete-region beg end)
            (insert-for-yank str)
@@ -6043,7 +6081,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (goto-char (if conn-dispatch-other-end end beg))
            (when (and separator conn-dispatch-other-end)
@@ -6082,7 +6120,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (goto-char (if conn-dispatch-other-end end beg))
            (when (and separator conn-dispatch-other-end)
@@ -6132,7 +6170,7 @@ contain targets."
         (conn-dispatch-loop-undo-boundary)
         (save-excursion
           (goto-char pt)
-          (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
             (`(,beg . ,end)
              (goto-char (if conn-dispatch-other-end end beg))
              (when (and separator conn-dispatch-other-end)
@@ -6185,7 +6223,7 @@ contain targets."
         (conn-dispatch-loop-undo-boundary)
         (save-excursion
           (goto-char pt)
-          (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
             (`(,beg . ,end)
              (delete-region beg end)
              (insert-for-yank str)
@@ -6216,7 +6254,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end) (downcase-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -6236,7 +6274,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end) (upcase-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -6256,7 +6294,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-mark-and-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end) (capitalize-region beg end))
           (_ (user-error "Cannot find thing at point")))))))
 
@@ -6275,7 +6313,7 @@ contain targets."
       (with-undo-amalgamate
         (save-excursion
           (goto-char pt)
-          (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
             (`(,beg . ,end)
              (goto-char (if conn-dispatch-other-end end beg))
              (conn-register-load register))))))))
@@ -6299,7 +6337,7 @@ contain targets."
       (with-undo-amalgamate
         (save-excursion
           (goto-char pt)
-          (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
             (`(,beg . ,end)
              (delete-region beg end)
              (conn-register-load register))
@@ -6327,7 +6365,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (cond ((> conn-dispatch-repeat-count 0)
                   (conn-append-region beg end register t))
@@ -6362,7 +6400,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -6397,7 +6435,7 @@ contain targets."
       (conn-dispatch-loop-undo-boundary)
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -6426,7 +6464,7 @@ contain targets."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -6453,7 +6491,7 @@ contain targets."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (let ((str (filter-buffer-substring beg end)))
              (if register
@@ -6495,7 +6533,7 @@ contain targets."
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
             (`(,beg . ,end)
              (pulse-momentary-highlight-region beg end)
              (setq str (filter-buffer-substring beg end))))))
@@ -6524,7 +6562,7 @@ contain targets."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (pulse-momentary-highlight-region beg end)
            (copy-region-as-kill beg end)
@@ -6571,7 +6609,7 @@ contain targets."
       (with-selected-window window
         (save-excursion
           (goto-char pt)
-          (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
             (`(,beg . ,end)
              (kill-region beg end)
              (conn--dispatch-fixup-whitespace))
@@ -6623,7 +6661,7 @@ contain targets."
     (with-selected-window window
       (save-excursion
         (goto-char pt)
-        (pcase (plist-get (conn-get-bounds thing thing-arg) :outer)
+        (pcase (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
           (`(,beg . ,end)
            (kill-region beg end)
            (conn--dispatch-fixup-whitespace))
@@ -6649,11 +6687,11 @@ contain targets."
                (/= pt (point)))
       (unless (region-active-p)
         (push-mark nil t))
-      (pcase (cons (or (plist-get (conn-get-bounds thing thing-arg) :outer)
+      (pcase (cons (or (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)
                        (point))
                    (progn
                      (goto-char pt)
-                     (plist-get (conn-get-bounds thing thing-arg) :outer)))
+                     (conn-bounds-get (conn-bounds-of thing thing-arg) :outer)))
         ((and `((,beg1 . ,end1) . (,beg2 . ,end2))
               (or (guard (<= beg1 end1 beg2 end2))
                   (guard (>= end1 beg1 end2 beg2))
@@ -6717,12 +6755,12 @@ contain targets."
           (pcase-let ((`(,beg1 . ,end1)
                        (progn
                          (goto-char pt1)
-                         (or (plist-get (conn-get-bounds thing1 thing-arg) :outer)
+                         (or (conn-bounds-get (conn-bounds-of thing1 thing-arg) :outer)
                              (user-error "Cannot find thing at point"))))
                       (`(,beg2 . ,end2)
                        (progn
                          (goto-char pt2)
-                         (or (plist-get (conn-get-bounds thing2 thing-arg) :outer)
+                         (or (conn-bounds-get (conn-bounds-of thing2 thing-arg) :outer)
                              (user-error "Cannot find thing at point")))))
             (if (and (or (<= beg1 end1 beg2 end2)
                          (<= beg2 end2 beg1 end1))
@@ -6741,7 +6779,7 @@ contain targets."
       (with-current-buffer buffer1
         (save-excursion
           (goto-char pt1)
-          (pcase (plist-get (conn-get-bounds thing1 thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing1 thing-arg) :outer)
             (`(,beg . ,end)
              (setq pt1 beg)
              (setq str1 (filter-buffer-substring beg end))
@@ -6750,7 +6788,7 @@ contain targets."
       (with-current-buffer buffer2
         (save-excursion
           (goto-char pt2)
-          (pcase (plist-get (conn-get-bounds thing2 thing-arg) :outer)
+          (pcase (conn-bounds-get (conn-bounds-of thing2 thing-arg) :outer)
             (`(,beg . ,end)
              (setq str2 (filter-buffer-substring beg end))
              (delete-region beg end)
@@ -7319,9 +7357,8 @@ contain targets."
                           (fboundp 'posframe-hide))
                  (lambda () (posframe-hide " *conn-list-posframe*"))))))
 
-(cl-defmethod conn-get-bounds-subr ((_ (conn-thing dispatch))
-                                    &optional arg)
-  (let (ovs bounds)
+(defun conn--dispatch-bounds (bounds &optional repeat)
+  (let (ovs subregions)
     (unwind-protect
         (progn
           (apply #'conn-perform-dispatch
@@ -7334,30 +7371,41 @@ contain targets."
                    (with-selected-window window
                      (save-mark-and-excursion
                        (goto-char pt)
-                       (pcase (conn-get-bounds thing thing-arg)
-                         ((and bound (map (:outer `(,beg . ,end))))
-                          (unless executing-kbd-macro
-                            (push (make-overlay beg end) ovs)
-                            (overlay-put (car ovs) 'face 'region))
-                          (push bound bounds))
-                         (_
-                          (user-error "No %s found at point" thing))))))
+                       (let ((bound (conn-bounds-of-subr thing thing-arg)))
+                         (pcase (conn-bounds-get bound :outer)
+                           (`(,beg . ,end)
+                            (unless executing-kbd-macro
+                              (push (make-overlay beg end) ovs)
+                              (overlay-put (car ovs) 'face 'region))
+                            (push bound subregions))
+                           (_
+                            (user-error "No %s found at point" thing)))))))
                  (conn-with-state-loop
                   'conn-dispatch-mover-state
                   (list (conn-thing-argument :recursive-edit t)
-                        (conn-dispatch-repeat-argument :keyword :repeat))
-                  :prefix arg
+                        (conn-dispatch-repeat-argument
+                         :keyword :repeat
+                         :value repeat))
+                  :prefix (nth 1 bounds)
                   :prompt "Bounds of Dispatch"))
           (unless ovs (keyboard-quit))
-          (setq bounds (nreverse bounds))
-          (cl-loop for bound in bounds
+          (setq subregions (nreverse subregions))
+          (cl-loop for bound in subregions
                    for (b . e) = (plist-get bound :outer)
                    minimize b into beg
                    maximize e into end
-                   finally return
-                   (list :outer (cons beg end)
-                         :contents bounds)))
+                   finally do
+                   (setf (conn-bounds-get bounds :outer) (cons beg end)
+                         (conn-bounds-get bounds :subregions) subregions))
+          bounds)
       (mapc #'delete-overlay ovs))))
+
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing dispatch)) arg)
+  (list cmd arg
+        :outer (lambda (bounds)
+                 (plist-get (conn--dispatch-bounds bounds) :outer))
+        :subregions (lambda (bounds)
+                      (plist-get (conn--dispatch-bounds bounds t) :subregions))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
@@ -7648,32 +7696,30 @@ Expansions and contractions are provided by functions in
     "\\[conn-toggle-mark-command] toggle mark; "
     "\\[end] finish")))
 
-(cl-defmethod conn-get-bounds-subr ((cmd (conn-thing expansion))
-                                    &optional arg)
+(cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
-  `(,@(conn-with-state-loop
-       'conn-expand-state
-       (list
-        :outer
-        (oclosure-lambda (conn-state-loop-argument
-                          (required t)
-                          (name 'conn--read-expand-message))
-            (command)
-          (pcase command
-            ('conn-expand-exchange
-             (conn-expand-exchange))
-            ('conn-contract
-             (conn-contract (conn-state-loop-consume-prefix-arg)))
-            ('conn-expand
-             (conn-expand (conn-state-loop-consume-prefix-arg)))
-            ('conn-toggle-mark-command
-             (conn-toggle-mark-command))
-            ((or 'end 'exit-recursive-edit)
-             (setf value (cons (region-beginning) (region-end))
-                   set-flag t))
-            (_ (conn-invalid-argument)))))
-       :prompt "Expansion"
-       :prefix arg)))
+  `( ,cmd ,arg
+     :outer ,(conn-with-state-loop
+              'conn-expand-state
+              (list (oclosure-lambda (conn-state-loop-argument
+                                      (required t)
+                                      (name 'conn--read-expand-message))
+                        (command)
+                      (pcase command
+                        ('conn-expand-exchange
+                         (conn-expand-exchange))
+                        ('conn-contract
+                         (conn-contract (conn-state-loop-consume-prefix-arg)))
+                        ('conn-expand
+                         (conn-expand (conn-state-loop-consume-prefix-arg)))
+                        ('conn-toggle-mark-command
+                         (conn-toggle-mark-command))
+                        ((or 'end 'exit-recursive-edit)
+                         (setf value (cons (region-beginning) (region-end))
+                               set-flag t))
+                        (_ (conn-invalid-argument)))))
+              :prompt "Expansion"
+              :prefix arg)))
 
 
 ;;;; Narrow Ring
@@ -7731,7 +7777,7 @@ Expansions and contractions are provided by functions in
                              (list (cons (conn--create-marker beg)
                                          (conn--create-marker end))))))))
 
-(defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register &optional subregions)
+(defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register &optional subregions-p)
   "Prepend thing regions to narrow register."
   (interactive
    (conn-with-state-loop
@@ -7740,16 +7786,18 @@ Expansions and contractions are provided by functions in
           (register-read-with-preview "Push region to register: ")
           (conn-subregions-argument))
     :prompt "Thing"))
-  (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
-                (conn-get-bounds thing-cmd thing-arg))
+  (pcase-let* ((bounds (conn-bounds-of thing-cmd thing-arg))
                (narrowings
-                (if subregions
-                    (cl-loop for bound in contents
-                             for (b . e) = (plist-get bound :outer)
+                (if-let* ((_ subregions-p)
+                          (subregions (conn-bounds-get bounds :subregions)))
+                    (cl-loop for bound in subregions
+                             for (b . e) = (conn-bounds-get bound :outer)
                              collect (cons (conn--create-marker b)
                                            (conn--create-marker e)))
-                  (list (cons (conn--create-marker beg)
-                              (conn--create-marker end))))))
+                  (pcase-let ((`(,beg . ,end)
+                               (conn-bounds-get bounds :outer)))
+                    (list (cons (conn--create-marker beg)
+                                (conn--create-marker end)))))))
     (pcase (get-register register)
       ((and (cl-struct conn-narrow-register narrow-ring) struct)
        (setf (conn-narrow-register-narrow-ring struct)
@@ -7757,7 +7805,7 @@ Expansions and contractions are provided by functions in
       (_
        (set-register register (conn--make-narrow-register narrowings))))))
 
-(defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional subregions)
+(defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional subregions-p)
   "Push thing regions to narrow ring."
   (interactive
    (conn-with-state-loop
@@ -7765,11 +7813,11 @@ Expansions and contractions are provided by functions in
     (list (conn-thing-argument-dwim)
           (conn-subregions-argument))
     :prompt "Thing"))
-  (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
-                (conn-get-bounds thing-cmd thing-arg)))
-    (if (not subregions)
+  (pcase-let* (((map (:outer `(,beg . ,end)) :subregions)
+                (conn-bounds-of thing-cmd thing-arg)))
+    (if (not subregions-p)
         (conn--narrow-ring-record beg end)
-      (cl-loop for bound in contents
+      (cl-loop for bound in subregions
                for (b . e) = (plist-get bound :outer)
                do (conn--narrow-ring-record b e)))))
 
@@ -8223,39 +8271,42 @@ instances of from-string.")
               conn-query-flag)))))
 
 (defun conn-replace ( thing-mover arg from-string to-string
-                      &optional delimited backward query-flag subregions)
+                      &optional delimited backward query-flag subregions-p)
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg . ,props)
                  (conn-with-state-loop
                   'conn-read-thing-state
                   (list (conn-thing-argument-dwim :recursive-edit t)
-                        (conn-subregions-argument :value t))
+                        (conn-subregions-argument :keyword :subregions))
                   :prompt "Replace in Thing"))
-                (bounds (conn-get-bounds thing-mover arg))
-                (subregions (and (plist-get props :subregions)
-                                 (plist-get bounds :contents)))
+                (subregions-p (plist-get props :subregions))
+                (bounds (conn-bounds-of thing-mover arg))
+                (subregions (and subregions-p (conn-bounds-get bounds :subregions)))
                 (common
                  (conn--replace-read-args
                   (concat "Replace"
                           (if current-prefix-arg
                               (if (eq current-prefix-arg '-) " backward" " word")
                             ""))
-                  nil (if subregions
+                  nil (if (and subregions-p subregions)
                           (cl-loop for bound in subregions
                                    collect (plist-get bound :outer))
                         (list (plist-get bounds :outer))))))
-     (append (list thing-mover arg) common (list (and subregions t)))))
-  (pcase-let (((map (:outer `(,beg . ,end)) :contents)
-               (or (conn-get-bounds 'conn-get-bounds)
-                   (conn-get-bounds thing-mover arg))))
+     (append (list thing-mover arg) common
+             (list (and subregions-p subregions t)))))
+  (pcase-let* ((bounds
+                (or (conn-bounds-of 'conn-bounds-of nil)
+                    (conn-bounds-of thing-mover arg)))
+               (`(,beg . ,end)
+                (conn-bounds-get bounds :outer)))
     (deactivate-mark t)
     (save-excursion
-      (if (and subregions contents)
+      (if (and subregions-p (conn-bounds-get bounds :subregions))
           (let* ((regions
                   (conn--merge-overlapping-regions
-                   (cl-loop for bound in contents
-                            collect (plist-get bound :outer))
+                   (cl-loop for bound in (conn-bounds-get bounds :subregions)
+                            collect (conn-bounds-get bound :outer))
                    t))
                  (region-extract-function
                   (lambda (method)
@@ -8279,7 +8330,7 @@ instances of from-string.")
                          delimited nil nil beg end backward)))))
 
 (defun conn-regexp-replace ( thing-mover arg from-string to-string
-                             &optional delimited backward query-flag subregions)
+                             &optional delimited backward query-flag subregions-p)
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg . ,props)
@@ -8288,9 +8339,9 @@ instances of from-string.")
                   (list (conn-thing-argument-dwim :recursive-edit t)
                         (conn-subregions-argument :value t))
                   :prompt "Replace Regexp in Thing"))
-                (bounds (conn-get-bounds thing-mover arg))
-                (subregions (and (plist-get props :subregions)
-                                 (plist-get bounds :contents)))
+                (subregions-p (plist-get props :subregions))
+                (bounds (conn-bounds-of thing-mover arg))
+                (subregions (and subregions-p (plist-get bounds :subregions)))
                 (common
                  (conn--replace-read-args
                   (concat "Replace"
@@ -8299,20 +8350,21 @@ instances of from-string.")
                                   " backward"
                                 " word")
                             ""))
-                  t (if subregions
+                  t (if (and subregions-p subregions)
                         (cl-loop for bound in subregions
                                  collect (plist-get bound :outer))
                       (list (plist-get bounds :outer))))))
-     (append (list thing-mover arg) common (list (and subregions t)))))
-  (pcase-let* (((map (:outer `(,beg . ,end)) :contents)
-                (or (conn-get-bounds 'conn-get-bounds)
-                    (conn-get-bounds thing-mover arg))))
+     (append (list thing-mover arg) common
+             (list (and subregions-p subregions t)))))
+  (pcase-let* (((map (:outer `(,beg . ,end)) :subregions)
+                (or (conn-bounds-of 'conn-bounds-of nil)
+                    (conn-bounds-of thing-mover arg))))
     (deactivate-mark t)
     (save-excursion
-      (if (and subregions contents)
+      (if (and subregions-p subregions)
           (let* ((regions
                   (conn--merge-overlapping-regions
-                   (cl-loop for bound in contents
+                   (cl-loop for bound in subregions
                             collect (plist-get bound :outer))
                    t))
                  (region-extract-function
@@ -8441,19 +8493,19 @@ Exiting the recursive edit will resume the isearch."
     (with-isearch-suspended
      (recursive-edit))))
 
-(cl-defun conn--isearch-in-thing (thing-cmd thing-arg &key backward regexp subregions)
-  (pcase-let* (((map :outer :contents)
-                (conn-get-bounds thing-cmd thing-arg))
+(cl-defun conn--isearch-in-thing (thing-cmd thing-arg &key backward regexp subregions-p)
+  (pcase-let* ((bounds
+                (conn-bounds-of thing-cmd thing-arg))
                (regions
                 (mapcar (pcase-lambda (`(,beg . ,end))
                           (cons (conn--create-marker beg)
                                 (conn--create-marker end nil t)))
-                        (or (if subregions
+                        (or (if (and subregions-p (conn-bounds-get bounds :subregions))
                                 (conn--merge-overlapping-regions
-                                 (cl-loop for bound in contents
-                                          collect (plist-get bound :outer))
+                                 (cl-loop for bound in (conn-bounds-get bounds :subregions)
+                                          collect (conn-bounds-get bound :outer))
                                  t)
-                              (list outer)))))
+                              (list (conn-bounds-get bounds :outer))))))
                (depth (recursion-depth))
                (in-regions-p (lambda (beg end)
                                (or (/= depth (recursion-depth))
@@ -8483,7 +8535,7 @@ Exiting the recursive edit will resume the isearch."
         (isearch-backward regexp t)
       (isearch-forward regexp t))))
 
-(defun conn-isearch-forward (thing-cmd thing-arg &optional regexp subregions)
+(defun conn-isearch-forward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch forward within the bounds of a thing."
   (interactive
    (conn-with-state-loop
@@ -8495,9 +8547,9 @@ Exiting the recursive edit will resume the isearch."
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward nil
                           :regexp regexp
-                          :subregions subregions))
+                          :subregions-p subregions-p))
 
-(defun conn-isearch-backward (thing-cmd thing-arg &optional regexp subregions)
+(defun conn-isearch-backward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch backward within the bounds of a thing."
   (interactive
    (conn-with-state-loop
@@ -8509,7 +8561,7 @@ Exiting the recursive edit will resume the isearch."
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward t
                           :regexp regexp
-                          :subregions subregions))
+                          :subregions-p subregions-p))
 
 (defun conn-isearch-region-forward (thing-cmd thing-arg &optional regexp)
   "Isearch forward for region from BEG to END.
@@ -8990,7 +9042,7 @@ With arg N, insert N newlines."
   (delete-indentation nil beg end)
   (indent-according-to-mode))
 
-(defun conn-join-lines (thing-mover thing-arg &optional subregions)
+(defun conn-join-lines (thing-mover thing-arg &optional subregions-p)
   "`delete-indentation' in region from START and END."
   (interactive
    (conn-with-state-loop
@@ -8999,12 +9051,14 @@ With arg N, insert N newlines."
           (conn-subregions-argument))
     :prompt "Thing"))
   (save-mark-and-excursion
-    (pcase (conn-get-bounds thing-mover thing-arg)
-      ((and (guard subregions) (map :contents))
-       (pcase-dolist ((map (:outer `(,beg . ,end))) contents)
+    (pcase (conn-bounds-of thing-mover thing-arg)
+      ((and (guard subregions-p)
+            (conn-bounds-get :subregions))
+       (pcase-dolist ((conn-bounds-get :outer `(,beg . ,end))
+                      subregions)
          (delete-indentation nil beg end)
          (indent-according-to-mode)))
-      ((map (:outer `(,beg . ,end)))
+      ((conn-bounds-get :outer `(,beg . ,end))
        (delete-indentation nil beg end)
        (indent-according-to-mode)))))
 
@@ -9100,7 +9154,7 @@ With a prefix arg prepend to a register instead."
           (conn-trim-argument))
     :prompt "Thing"))
   (pcase-let (((map :outer :trimmed)
-               (conn-get-bounds thing-mover arg)))
+               (conn-bounds-of thing-mover arg)))
     (if (and trim trimmed)
         (progn
           (conn-copy-region (car trimmed) (cdr trimmed) register)
@@ -9127,7 +9181,7 @@ With a prefix arg prepend to a register instead."
     :prompt "Thing"
     :prefix current-prefix-arg))
   (pcase-let (((map (:outer `(,beg . ,end)))
-               (conn-get-bounds thing-mover arg)))
+               (conn-bounds-of thing-mover arg)))
     (unless (and (<= beg (point) end)
                  (<= beg (mark t) end))
       (deactivate-mark))
@@ -9148,7 +9202,7 @@ associated with that command (see `conn-register-thing')."
     :prompt "Thing"
     :prefix current-prefix-arg))
   (pcase-let (((map (:outer `(,beg . ,end)))
-               (conn-get-bounds thing-mover arg)))
+               (conn-bounds-of thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
     (when (called-interactively-p 'interactive)
       (message "Buffer narrowed indirect"))))
@@ -9398,7 +9452,7 @@ With prefix arg N duplicate region N times."
     (list (conn-thing-argument-dwim :recursive-edit t)
           (list (prefix-numeric-value current-prefix-arg)))
     :prompt "Thing"))
-  (pcase (conn-get-bounds thing-mover thing-arg)
+  (pcase (conn-bounds-of thing-mover thing-arg)
     ((map (:outer `(,beg . ,end)))
      (if (use-region-p)
          (duplicate-dwim)
@@ -9440,7 +9494,7 @@ With prefix arg N duplicate region N times."
     (list (conn-thing-argument-dwim :recursive-edit t)
           (list (prefix-numeric-value current-prefix-arg)))
     :prompt "Thing"))
-  (pcase (conn-get-bounds thing-mover thing-arg)
+  (pcase (conn-bounds-of thing-mover thing-arg)
     ((and (map (:outer `(,beg . ,end)))
           (let offset (- (point) end))
           (let mark-offset (- (point) (mark t)))
@@ -9522,7 +9576,7 @@ of `conn-recenter-positions'."
     (list (conn-thing-argument-dwim :recursive-edit t))
     :prompt "Thing"))
   (pcase-let (((map (:outer `(,beg . ,end)))
-               (conn-get-bounds thing-mover arg)))
+               (conn-bounds-of thing-mover arg)))
     (if (comment-only-p beg end)
         (uncomment-region beg end)
       (let ((comment-empty-lines t))
@@ -9725,16 +9779,14 @@ Interactively `region-beginning' and `region-end'."
       (apply #'conn-prepare-surround (conn-anonymous-thing-parent cmd) arg keys))))
 
 (cl-defmethod conn-prepare-surround (cmd arg &key subregions trim &allow-other-keys)
-  (let ((bounds (conn-get-bounds cmd arg))
+  (let ((bounds (conn-bounds-of cmd arg))
         regions)
-    (dolist (bound (if subregions
-                       (or (plist-get bounds :contents)
-                           (list bounds))
-                     (list bounds)))
-      (pcase (if trim
-                 (or (plist-get bound :trimmed)
-                     (plist-get bound :outer))
-               (plist-get bound :outer))
+    (dolist (bound (or (when subregions
+                         (conn-bounds-get bounds :subregions))
+                       (list bounds)))
+      (pcase (or (when trim
+                   (conn-bounds-get bound :trimmed))
+                 (conn-bounds-get bound :outer))
         ((and `(,beg . ,end) (pred identity))
          (push (conn--make-surround-region beg end) regions))))
     (list regions)))
@@ -9872,7 +9924,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defmethod conn-perform-change (cmd arg &optional kill)
   (pcase-let (((map (:outer `(,beg . ,end)))
-               (conn-get-bounds cmd arg)))
+               (conn-bounds-of cmd arg)))
     (goto-char beg)
     (cond (kill
            (funcall (conn--without-conn-maps
