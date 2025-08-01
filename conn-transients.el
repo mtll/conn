@@ -313,8 +313,8 @@ before each iteration."
   (pcase-let* ((`(,cmd ,arg ,sr)
                 (conn-with-state-loop
                  'conn-read-thing-state
-                 (list (conn-thing-argument-dwim :recursive-edit t)
-                       (conn-subregions-argument))
+                 `(,(conn-thing-argument-dwim t)
+                   ,(conn-subregions-argument))
                  :prompt "Thing")))
     (if sr
         (conn-bounds-of cmd arg)
@@ -576,7 +576,7 @@ apply to each contiguous component of the region."
   (pcase-let* ((`(,cmd ,arg)
                 (conn-with-state-loop
                  'conn-read-thing-state
-                 (list (conn-thing-argument-dwim :recursive-edit t))
+                 `(,(conn-thing-argument-dwim t))
                  :prompt "Thing"))
                ((map :outer :subregions)
                 (conn-bounds-of cmd arg)))
@@ -606,7 +606,7 @@ apply to each contiguous component of the region."
   (pcase-let ((`(,cmd ,n)
                (conn-with-state-loop
                 'conn-read-thing-state
-                (list (conn-thing-argument :recursive-edit t))
+                `(,(conn-thing-argument t))
                 :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
@@ -806,7 +806,7 @@ A zero means repeat until error."
                (apply #'conn-bounds-of
                       (conn-with-state-loop
                        'conn-read-thing-state
-                       (list (conn-thing-argument-dwim))
+                       `(,(conn-thing-argument-dwim))
                        :prompt "Thing"))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
