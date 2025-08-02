@@ -3110,6 +3110,24 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (defvar conn--last-perform-bounds nil)
 
+(cl-defstruct (conn-bounds
+               (:constructor conn-bounds--make))
+  (thing nil :type symbol)
+  (arg nil :type (or nil integer))
+  (properties nil :type list))
+
+(defun conn-bounds (thing arg &rest properties)
+  (declare (compiler-macro
+            (lambda (_exp)
+              `(conn-bounds--make
+                :thing ,thing
+                :arg ,arg
+                :properties (list ,@properties)))))
+  (conn-bounds--make
+   :thing thing
+   :arg arg
+   :properties properties))
+
 (define-inline conn-bounds-of (thing arg)
   (inline-quote
    (setf (alist-get (recursion-depth) conn--last-perform-bounds)
@@ -3119,10 +3137,11 @@ order to mark the region that should be defined by any of COMMANDS."
 (define-inline conn-bounds-get (bounds prop)
   (declare (gv-setter
             (lambda (val)
-              `(setf (plist-get (cddr ,bounds) ,prop) ,val))))
+              `(setf (plist-get (conn-bounds-properties ,bounds) ,prop)
+                     ,val))))
   (inline-letevals (bounds)
     (inline-quote
-     (pcase (plist-get ,bounds ,prop)
+     (pcase (plist-get (conn-bounds-properties ,bounds) ,prop)
        ((and (pred functionp) fn)
         (funcall fn ,bounds))
        (val val)))))
@@ -3157,13 +3176,13 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defmethod conn-bounds-of-subr :extra "trim" ((_ (conn-thing t)) _arg)
   (let ((bounds (cl-call-next-method)))
-    (unless (plist-member bounds :trimmed)
+    (unless (plist-member (conn-bounds-properties bounds) :trimmed)
       (setf (conn-bounds-get bounds :trimmed)
             #'conn--trim-bounds))
     bounds))
 
 (cl-defmethod conn-bounds-of-subr ((thing (conn-thing t)) arg)
-  (list thing arg :outer (bounds-of-thing-at-point thing)))
+  (conn-bounds thing arg :outer (bounds-of-thing-at-point thing)))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing-command t)) arg)
   (deactivate-mark t)
@@ -3182,7 +3201,7 @@ order to mark the region that should be defined by any of COMMANDS."
          (funcall conn-this-command-handler conn-this-command-start))
        (unless (and (eql pt (point))
                     (eql mk (mark)))
-         (list :outer (cons (region-beginning) (region-end))))))
+         (conn-bounds cmd 1 :outer (cons (region-beginning) (region-end))))))
     (n
      (let (contents)
        (catch 'break
@@ -3190,22 +3209,24 @@ order to mark the region that should be defined by any of COMMANDS."
            (if-let* ((bound (conn-bounds-of-subr cmd (cl-signum arg))))
                (push bound contents)
              (throw 'break nil))))
-       (list cmd arg
-             :outer (cl-loop for bound in contents
-                             for (b . e) = (plist-get bound :outer)
-                             minimize b into beg
-                             maximize e into end
-                             finally return (cons beg end))
-             :subregions (nreverse contents))))))
+       (conn-bounds
+        cmd arg
+        :outer (cl-loop for bound in contents
+                        for (b . e) = (plist-get bound :outer)
+                        minimize b into beg
+                        maximize e into end
+                        finally return (cons beg end))
+        :subregions (nreverse contents))))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing region)) arg)
-  (list cmd arg
-        :outer (cons (region-beginning) (region-end))
-        :subregions (cl-loop for r in (region-bounds)
-                             collect `(:outer ,r))))
+  (conn-bounds
+   cmd arg
+   :outer (cons (region-beginning) (region-end))
+   :subregions (cl-loop for r in (region-bounds)
+                        collect `(:outer ,r))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing buffer)) arg)
-  (list cmd arg :outer (cons (point-min) (point-max))))
+  (conn-bounds cmd arg :outer (cons (point-min) (point-max))))
 
 (cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-bounds-of)) _arg)
   (alist-get (recursion-depth) conn--last-perform-bounds))
@@ -3256,7 +3277,7 @@ order to mark the region that should be defined by any of COMMANDS."
   (let* ((ring (conn-ring-list conn-emacs-state-ring))
          (mk (nth (mod arg (length ring)) ring))
          (pt (point)))
-    (list cmd arg :outer (cons (min pt mk) (max pt mk)))))
+    (conn-bounds cmd arg :outer (cons (min pt mk) (max pt mk)))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing isearch)) arg)
   (let ((start (point))
@@ -3270,7 +3291,7 @@ order to mark the region that should be defined by any of COMMANDS."
                       (string-match-p "regexp" name)
                       nil t)
       (remove-hook 'isearch-mode-end-hook quit))
-    (list cmd arg :outer (cons (min start (point)) (max start (point))))))
+    (conn-bounds cmd arg :outer (cons (min start (point)) (max start (point))))))
 
 
 ;;;; Bounds of Things in Region
@@ -3327,11 +3348,12 @@ BOUNDS is of the form returned by `region-bounds', which see."
                                 :prompt "Things in Region"))
                           (region-beginning)
                           (region-end))
-           collect (list :outer region) into contents
-           finally return (list cmd arg
-                                :outer (cons (region-beginning)
-                                             (region-end))
-                                :subregions (nreverse contents))))
+           collect (conn-bounds cmd nil :outer region) into contents
+           finally return (conn-bounds
+                           cmd arg
+                           :outer (cons (region-beginning)
+                                        (region-end))
+                           :subregions (nreverse contents))))
 
 
 ;;;; Kapply
@@ -7339,11 +7361,11 @@ contain targets."
                   `(,(conn-thing-argument t)
                     :repeat ,(conn-dispatch-repeat-argument repeat)
                     :other-end :no-other-end)
-                  :prefix (nth 1 bounds)
+                  :prefix (conn-bounds-arg bounds)
                   :prompt "Bounds of Dispatch"))
           (unless ovs (keyboard-quit))
           (cl-loop for bound in subregions
-                   for (b . e) = (plist-get bound :outer)
+                   for (b . e) = (conn-bounds-get bound :outer)
                    minimize b into beg
                    maximize e into end
                    finally do
@@ -7353,11 +7375,12 @@ contain targets."
       (mapc #'delete-overlay ovs))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing dispatch)) arg)
-  (list cmd arg
-        :outer (lambda (bounds)
-                 (plist-get (conn--dispatch-bounds bounds) :outer))
-        :subregions (lambda (bounds)
-                      (plist-get (conn--dispatch-bounds bounds t) :subregions))))
+  (conn-bounds
+   cmd arg
+   :outer (lambda (bounds)
+            (conn-bounds-get (conn--dispatch-bounds bounds) :outer))
+   :subregions (lambda (bounds)
+                 (conn-bounds-get (conn--dispatch-bounds bounds t) :subregions))))
 
 (defun conn-repeat-last-dispatch (invert-repeat)
   "Repeat the last dispatch command.
@@ -7654,28 +7677,29 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
-  `( ,cmd ,arg
-     ,(conn-read-with-state
-       'conn-expand-state
-       `(:outer ,(oclosure-lambda (conn-state-loop-argument
-                                   (required t)
-                                   (name 'conn--read-expand-message))
-                     (command)
-                   (pcase command
-                     ('conn-expand-exchange
-                      (conn-expand-exchange))
-                     ('conn-contract
-                      (conn-contract (conn-state-loop-consume-prefix-arg)))
-                     ('conn-expand
-                      (conn-expand (conn-state-loop-consume-prefix-arg)))
-                     ('conn-toggle-mark-command
-                      (conn-toggle-mark-command))
-                     ((or 'end 'exit-recursive-edit)
-                      (setf value (cons (region-beginning) (region-end))
-                            set-flag t))
-                     (_ (conn-invalid-argument)))))
-       :prompt "Expansion"
-       :prefix arg)))
+  (conn-bounds
+   cmd arg
+   (conn-read-with-state
+    'conn-expand-state
+    `(:outer ,(oclosure-lambda (conn-state-loop-argument
+                                (required t)
+                                (name 'conn--read-expand-message))
+                  (command)
+                (pcase command
+                  ('conn-expand-exchange
+                   (conn-expand-exchange))
+                  ('conn-contract
+                   (conn-contract (conn-state-loop-consume-prefix-arg)))
+                  ('conn-expand
+                   (conn-expand (conn-state-loop-consume-prefix-arg)))
+                  ('conn-toggle-mark-command
+                   (conn-toggle-mark-command))
+                  ((or 'end 'exit-recursive-edit)
+                   (setf value (cons (region-beginning) (region-end))
+                         set-flag t))
+                  (_ (conn-invalid-argument)))))
+    :prompt "Expansion"
+    :prefix arg)))
 
 
 ;;;; Narrow Ring
@@ -9878,7 +9902,7 @@ Interactively `region-beginning' and `region-end'."
       (conn-perform-change (conn-anonymous-thing-parent cmd) arg kill))))
 
 (cl-defmethod conn-perform-change (cmd arg &optional kill)
-  (pcase-let (((map (:outer `(,beg . ,end)))
+  (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
                (conn-bounds-of cmd arg)))
     (goto-char beg)
     (cond (kill
