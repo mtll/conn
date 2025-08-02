@@ -311,7 +311,7 @@ before each iteration."
 (defun conn-read-thing-regions ()
   (declare (important-return-value t))
   (pcase-let* ((`(,cmd ,arg ,sr)
-                (conn-with-state-loop
+                (conn-read-with-state
                  'conn-read-thing-state
                  `(,(conn-thing-argument-dwim t)
                    ,(conn-subregions-argument))
@@ -574,7 +574,7 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((`(,cmd ,arg)
-                (conn-with-state-loop
+                (conn-read-with-state
                  'conn-read-thing-state
                  `(,(conn-thing-argument-dwim t))
                  :prompt "Thing"))
@@ -604,7 +604,7 @@ apply to each contiguous component of the region."
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,cmd ,n)
-               (conn-with-state-loop
+               (conn-read-with-state
                 'conn-read-thing-state
                 `(,(conn-thing-argument t))
                 :prompt "Thing")))
@@ -804,7 +804,7 @@ A zero means repeat until error."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let (((map (:outer `(,beg . ,end)))
                (apply #'conn-bounds-of
-                      (conn-with-state-loop
+                      (conn-read-with-state
                        'conn-read-thing-state
                        `(,(conn-thing-argument-dwim))
                        :prompt "Thing"))))

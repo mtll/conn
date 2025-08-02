@@ -2217,19 +2217,19 @@ By default `conn-emacs-state' does not bind anything."
               (conn--loop-prefix-sign "[-1]")
               (t "[1]"))
         'face 'read-multiple-choice-face)
-       ", \\[reset-arg] reset; "
-       (string-join (thread-last
-                      (conn-display-argument arguments)
-                      flatten-tree
-                      (delq nil))
-                    "; ")
+       ", \\[reset-arg] reset"
+       (when-let* ((arg-strs (thread-last
+                               (conn-display-argument arguments)
+                               flatten-tree
+                               (delq nil))))
+         (string-join (cons nil arg-strs) "; "))
        "): "
        (propertize conn--loop-error-message 'face 'error))))))
 
-(cl-defgeneric conn-with-state-loop
+(cl-defgeneric conn-read-with-state
     (state arglist &key command-handler prompt prefix pre post))
 
-(cl-defmethod conn-with-state-loop (state arglist &key command-handler prompt prefix pre post)
+(cl-defmethod conn-read-with-state (state arglist &key command-handler prompt prefix pre post)
   (conn-protected-let* ((arguments (delq nil arglist)
                                    (mapc #'conn-cancel-argument arguments))
                         (prompt (or prompt (symbol-name state)))
@@ -3318,7 +3318,7 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (cl-defmethod conn-bounds-of-subr ((cmd (eql conn-things-in-region)) arg)
   (cl-loop for region in (conn-get-things-in-region
-                          (car (conn-with-state-loop
+                          (car (conn-read-with-state
                                 'conn-read-thing-state
                                 `(,(conn-thing-argument-dwim))
                                 :prompt "Things in Region"))
@@ -4525,7 +4525,7 @@ themselves once the selection process has concluded."
 
 ;;;;; Dispatch Command Loop
 
-(cl-defmethod conn-with-state-loop ((_state (eql conn-dispatch-state))
+(cl-defmethod conn-read-with-state ((_state (eql conn-dispatch-state))
                                     _arglist &key &allow-other-keys)
   (catch 'previous-dispatch (cl-call-next-method)))
 
@@ -7294,7 +7294,7 @@ contain targets."
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
   (apply #'conn-perform-dispatch
-         (conn-with-state-loop
+         (conn-read-with-state
           'conn-dispatch-state
           `(,(conn-dispatch-action-argument)
             ,(conn-thing-argument t)
@@ -7331,7 +7331,7 @@ contain targets."
                             (push bound subregions))
                            (_
                             (user-error "No %s found at point" thing)))))))
-                 (conn-with-state-loop
+                 (conn-read-with-state
                   'conn-dispatch-mover-state
                   `(,(conn-thing-argument t)
                     :repeat ,(conn-dispatch-repeat-argument repeat)
@@ -7653,7 +7653,7 @@ Expansions and contractions are provided by functions in
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
   `( ,cmd ,arg
-     ,(conn-with-state-loop
+     ,(conn-read-with-state
        'conn-expand-state
        `(:outer ,(oclosure-lambda (conn-state-loop-argument
                                    (required t)
@@ -7734,7 +7734,7 @@ Expansions and contractions are provided by functions in
 (defun conn-push-thing-to-narrow-register (thing-cmd thing-arg register &optional subregions-p)
   "Prepend thing regions to narrow register."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim)
       ,(register-read-with-preview "Push region to register: ")
@@ -7762,7 +7762,7 @@ Expansions and contractions are provided by functions in
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional subregions-p)
   "Push thing regions to narrow ring."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim)
       ,(conn-subregions-argument))
@@ -8229,7 +8229,7 @@ instances of from-string.")
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg ,subregions-p)
-                 (conn-with-state-loop
+                 (conn-read-with-state
                   'conn-read-thing-state
                   `(,(conn-thing-argument-dwim t)
                     ,(conn-subregions-argument))
@@ -8287,7 +8287,7 @@ instances of from-string.")
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg ,subregions-p)
-                 (conn-with-state-loop
+                 (conn-read-with-state
                   'conn-read-thing-state
                   `(,(conn-thing-argument-dwim t)
                     ,(conn-subregions-argument t))
@@ -8493,7 +8493,7 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-forward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch forward within the bounds of a thing."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,current-prefix-arg
@@ -8507,7 +8507,7 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-backward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch backward within the bounds of a thing."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,current-prefix-arg
@@ -8523,7 +8523,7 @@ Exiting the recursive edit will resume the isearch."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument t)
       ,current-prefix-arg)
@@ -8543,7 +8543,7 @@ Interactively `region-beginning' and `region-end'."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument t)
       ,current-prefix-arg)
@@ -8923,7 +8923,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                       buffer point (or thing thing2)
                       (window-buffer window2) pt2 thing2
                       thing-arg))
-                   (conn-with-state-loop
+                   (conn-read-with-state
                     'conn-dispatch-transpose-state
                     `(,(conn-anaphoricate self
                          (oclosure-lambda (conn-thing-argument
@@ -8951,7 +8951,7 @@ With argument ARG 0, exchange the things at point and mark.
 If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-transpose-state
     `(,(conn-thing-argument-dwim t))
     :prompt "Transpose"
@@ -9000,7 +9000,7 @@ With arg N, insert N newlines."
 (defun conn-join-lines (thing-mover thing-arg &optional subregions-p)
   "`delete-indentation' in region from START and END."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,(conn-subregions-argument))
@@ -9100,7 +9100,7 @@ With a prefix arg prepend to a register instead."
 (defun conn-copy-thing (thing-mover arg &optional register trim)
   "Copy THING at point."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim)
       ,(conn-subregions-argument)
@@ -9129,7 +9129,7 @@ With a prefix arg prepend to a register instead."
 (defun conn-narrow-to-thing (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       t)
@@ -9150,7 +9150,7 @@ With a prefix arg prepend to a register instead."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       t)
@@ -9402,7 +9402,7 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,(prefix-numeric-value current-prefix-arg))
@@ -9444,7 +9444,7 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,(prefix-numeric-value current-prefix-arg))
@@ -9526,7 +9526,7 @@ of `conn-recenter-positions'."
 (defun conn-comment-or-uncomment (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
   (interactive
-   (conn-with-state-loop
+   (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t))
     :prompt "Thing"))
@@ -9750,7 +9750,7 @@ Interactively `region-beginning' and `region-end'."
     (save-mark-and-excursion
       (pcase-let* ((`(,regions . ,prep-keys)
                     (apply #'conn-prepare-surround
-                           (conn-with-state-loop
+                           (conn-read-with-state
                             'conn-read-thing-state
                             `(,(conn-thing-argument-dwim t)
                               :subregions ,(conn-subregions-argument)
@@ -9762,7 +9762,7 @@ Interactively `region-beginning' and `region-end'."
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
-                           (conn-with-state-loop
+                           (conn-read-with-state
                             'conn-surround-with-state
                             `(,(conn-surround-with-argument)
                               :padding ,(conn-surround-padding-argument))
@@ -9894,7 +9894,7 @@ Interactively `region-beginning' and `region-end'."
   (interactive
    (append (if (use-region-p)
                (list 'region nil)
-             (conn-with-state-loop
+             (conn-read-with-state
               'conn-change-state
               `(,(conn-anaphoricate self
                    (oclosure-lambda (conn-thing-argument
@@ -9988,7 +9988,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
     (atomic-change-group
       (pcase-let* ((`(,ov . ,prep-keys)
                     (apply #'conn-prepare-change-surround
-                           (conn-with-state-loop
+                           (conn-read-with-state
                             'conn-change-surround-state
                             `(,(conn-change-surround-argument))
                             :prompt "Change Surrounding")))
@@ -9998,7 +9998,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
                          (conn-with-overriding-map keymap
-                           (conn-with-state-loop
+                           (conn-read-with-state
                             'conn-surround-with-state
                             `(,(conn-surround-with-argument)
                               ,(conn-surround-padding-argument))
@@ -11550,7 +11550,7 @@ Operates with the selected windows parent window."
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
   (apply #'conn-perform-dispatch
-         (conn-with-state-loop
+         (conn-read-with-state
           'conn-dired-dispatch-state
           `(,(conn-dispatch-action-argument)
             ,(conn-thing-argument)
