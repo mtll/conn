@@ -3223,7 +3223,7 @@ order to mark the region that should be defined by any of COMMANDS."
    cmd arg
    :outer (cons (region-beginning) (region-end))
    :subregions (cl-loop for r in (region-bounds)
-                        collect `(:outer ,r))))
+                        collect (conn-bounds cmd arg :outer r))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing buffer)) arg)
   (conn-bounds cmd arg :outer (cons (point-min) (point-max))))
@@ -7771,7 +7771,7 @@ Expansions and contractions are provided by functions in
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim)
       ,(register-read-with-preview "Push region to register: ")
-      ,(conn-subregions-argument))
+      ,(conn-subregions-argument (use-region-p)))
     :prompt "Thing"))
   (pcase-let* ((bounds (conn-bounds-of thing-cmd thing-arg))
                (narrowings
@@ -7798,7 +7798,7 @@ Expansions and contractions are provided by functions in
    (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim)
-      ,(conn-subregions-argument))
+      ,(conn-subregions-argument (use-region-p)))
     :prompt "Thing"))
   (pcase-let* (((and (conn-bounds-get :outer `(,beg . ,end))
                      (conn-bounds-get :subregions))
@@ -7895,6 +7895,7 @@ Expansions and contractions are provided by functions in
            collect (cons beg end) into narrowings
            finally return (cons (cons narrow-beg narrow-end)
                                 narrowings)))
+
 (conn-register-thing-commands
  'narrowing nil
  'narrow-to-region 'widen
@@ -8266,7 +8267,7 @@ instances of from-string.")
                  (conn-read-with-state
                   'conn-read-thing-state
                   `(,(conn-thing-argument-dwim t)
-                    ,(conn-subregions-argument))
+                    ,(conn-subregions-argument (use-region-p)))
                   :prompt "Replace in Thing"))
                 (bounds (conn-bounds-of thing-mover arg))
                 (subregions (and subregions-p
@@ -8532,7 +8533,7 @@ Exiting the recursive edit will resume the isearch."
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,current-prefix-arg
-      ,(conn-subregions-argument))
+      ,(conn-subregions-argument (use-region-p)))
     :prompt "Isearch in Thing"))
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward nil
@@ -8546,7 +8547,7 @@ Exiting the recursive edit will resume the isearch."
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
       ,current-prefix-arg
-      ,(conn-subregions-argument))
+      ,(conn-subregions-argument (use-region-p)))
     :prompt "Isearch in Thing"))
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward t
@@ -9038,7 +9039,7 @@ With arg N, insert N newlines."
    (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim t)
-      ,(conn-subregions-argument))
+      ,(conn-subregions-argument (use-region-p)))
     :prompt "Thing"))
   (save-mark-and-excursion
     (pcase (conn-bounds-of thing-mover thing-arg)
@@ -9138,7 +9139,7 @@ With a prefix arg prepend to a register instead."
    (conn-read-with-state
     'conn-read-thing-state
     `(,(conn-thing-argument-dwim)
-      ,(conn-subregions-argument)
+      ,(conn-subregions-argument (use-region-p))
       ,(when current-prefix-arg
          (register-read-with-preview "Register: "))
       ,(conn-trim-argument))
@@ -9788,7 +9789,8 @@ Interactively `region-beginning' and `region-end'."
                            (conn-read-with-state
                             'conn-read-thing-state
                             `(,(conn-thing-argument-dwim t)
-                              :subregions ,(conn-subregions-argument)
+                              :subregions ,(conn-subregions-argument
+                                            (use-region-p))
                               :trim ,(conn-trim-argument t))
                             :prompt "Surround"
                             :prefix arg)))

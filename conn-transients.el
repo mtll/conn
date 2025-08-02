@@ -314,7 +314,7 @@ before each iteration."
                 (conn-read-with-state
                  'conn-read-thing-state
                  `(,(conn-thing-argument-dwim t)
-                   ,(conn-subregions-argument))
+                   ,(conn-subregions-argument (use-region-p)))
                  :prompt "Thing")))
     (if sr
         (conn-bounds-of cmd arg)
