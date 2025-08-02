@@ -3203,20 +3203,20 @@ order to mark the region that should be defined by any of COMMANDS."
                     (eql mk (mark)))
          (conn-bounds cmd 1 :outer (cons (region-beginning) (region-end))))))
     (n
-     (let (contents)
+     (let (subregions)
        (catch 'break
          (dotimes (_ n)
            (if-let* ((bound (conn-bounds-of-subr cmd (cl-signum arg))))
-               (push bound contents)
+               (push bound subregions)
              (throw 'break nil))))
        (conn-bounds
         cmd arg
-        :outer (cl-loop for bound in contents
-                        for (b . e) = (plist-get bound :outer)
+        :outer (cl-loop for bound in subregions
+                        for (b . e) = (conn-bounds-get bound :outer)
                         minimize b into beg
                         maximize e into end
                         finally return (cons beg end))
-        :subregions (nreverse contents))))))
+        :subregions (nreverse subregions))))))
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing region)) arg)
   (conn-bounds
@@ -7806,7 +7806,7 @@ Expansions and contractions are provided by functions in
     (if (not subregions-p)
         (conn--narrow-ring-record beg end)
       (cl-loop for bound in subregions
-               for (b . e) = (plist-get bound :outer)
+               for (b . e) = (conn-bounds-get bound :outer)
                do (conn--narrow-ring-record b e)))))
 
 (defun conn--narrow-ring-record (beg end)
@@ -8269,7 +8269,8 @@ instances of from-string.")
                     ,(conn-subregions-argument))
                   :prompt "Replace in Thing"))
                 (bounds (conn-bounds-of thing-mover arg))
-                (subregions (and subregions-p (conn-bounds-get bounds :subregions)))
+                (subregions (and subregions-p
+                                 (conn-bounds-get bounds :subregions)))
                 (common
                  (conn--replace-read-args
                   (concat "Replace"
@@ -8278,8 +8279,8 @@ instances of from-string.")
                             ""))
                   nil (if (and subregions-p subregions)
                           (cl-loop for bound in subregions
-                                   collect (plist-get bound :outer))
-                        (list (plist-get bounds :outer))))))
+                                   collect (conn-bounds-get bound :outer))
+                        (list (conn-bounds-get bounds :outer))))))
      (append (list thing-mover arg) common
              (list (and subregions-p subregions t)))))
   (pcase-let* (((and (conn-bounds-get :outer `(,beg . ,end))
@@ -8339,8 +8340,8 @@ instances of from-string.")
                             ""))
                   t (if (and subregions-p subregions)
                         (cl-loop for bound in subregions
-                                 collect (plist-get bound :outer))
-                      (list (plist-get bounds :outer))))))
+                                 collect (conn-bounds-get bound :outer))
+                      (list (conn-bounds-get bounds :outer))))))
      (append (list thing-mover arg) common
              (list (and subregions-p subregions t)))))
   (pcase-let* (((and (conn-bounds-get :outer `(,beg . ,end))
