@@ -3128,8 +3128,11 @@ order to mark the region that should be defined by any of COMMANDS."
        (val val)))))
 
 (pcase-defmacro conn-bounds-get (property &optional pat)
-  `(app (lambda (bound) (conn-bounds-get bound ,property))
-        ,(or pat (intern (substring (symbol-name property) 1)))))
+  (static-if (< emacs-major-version 30)
+      `(app (pcase--flip conn-bounds-get ,property)
+            ,(or pat (intern (substring (symbol-name property) 1))))
+    `(app (conn-bounds-get _ ,property)
+          ,(or pat (intern (substring (symbol-name property) 1))))))
 
 (cl-defgeneric conn-bounds-of-subr (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
