@@ -3328,7 +3328,7 @@ BOUNDS is of the form returned by `region-bounds', which see."
            finally return (list cmd arg
                                 :outer (cons (region-beginning)
                                              (region-end))
-                                :subregions contents)))
+                                :subregions (nreverse contents))))
 
 
 ;;;; Kapply
@@ -7339,7 +7339,6 @@ contain targets."
                   :prefix (nth 1 bounds)
                   :prompt "Bounds of Dispatch"))
           (unless ovs (keyboard-quit))
-          (setq subregions (nreverse subregions))
           (cl-loop for bound in subregions
                    for (b . e) = (plist-get bound :outer)
                    minimize b into beg
@@ -9676,8 +9675,7 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defmethod conn-perform-surround :around (_with _arg &key regions &allow-other-keys)
   (pcase-dolist (`(,beg . ,end)
-                 (conn--nnearest-first
-                  (mapcar 'conn--overlay-bounds-markers regions)))
+                 (mapcar 'conn--overlay-bounds-markers regions))
     (goto-char beg)
     (conn--push-ephemeral-mark end nil t)
     (cl-call-next-method)))
@@ -9742,7 +9740,7 @@ Interactively `region-beginning' and `region-end'."
                  (conn-bounds-get bound :outer))
         ((and `(,beg . ,end) (pred identity))
          (push (conn--make-surround-region beg end) regions))))
-    (list regions)))
+    (list (nreverse regions))))
 
 (defun conn-surround (&optional arg)
   (interactive "P")
@@ -9759,6 +9757,8 @@ Interactively `region-beginning' and `region-end'."
                             :prefix arg)))
                    (cleanup (plist-get prep-keys :cleanup))
                    (success nil))
+        (when regions
+          (goto-char (overlay-start (car regions))))
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
@@ -9840,24 +9840,26 @@ Interactively `region-beginning' and `region-end'."
   (setf (conn-state-loop-argument-value arg)
         (list cmd (conn-state-loop-consume-prefix-arg))))
 
-(cl-defmethod conn-perform-surround ((_with (eql conn-read-pair)) arg
-                                     &key padding pair &allow-other-keys)
-  (conn--perform-surround-with-pair-subr pair padding arg))
+(defvar conn--surround-current-pair nil)
 
-(cl-defmethod conn-perform-surround :around ((with (eql conn-read-pair))
-                                             arg &rest keys &key pair &allow-other-keys)
-  (if pair
-      (cl-call-next-method)
-    (let ((open (funcall conn-read-pair-function
-                         (cl-loop for (open . _) in insert-pair-alist
-                                  collect (pcase open
-                                            ((pred stringp) open)
-                                            (_ (string open)))))))
-      (apply #'cl-call-next-method
-             with arg
-             :pair (or (assoc open insert-pair-alist)
-                       (assq (aref open 0) insert-pair-alist))
-             keys))))
+(cl-defmethod conn-perform-surround ((_with (eql conn-read-pair)) arg
+                                     &key padding &allow-other-keys)
+  (conn--perform-surround-with-pair-subr
+   (with-memoization conn--surround-current-pair
+     (let ((open (funcall conn-read-pair-function
+                          (cl-loop for (open . _) in insert-pair-alist
+                                   collect (pcase open
+                                             ((pred stringp) open)
+                                             (_ (string open)))))))
+       (or (assoc open insert-pair-alist)
+           (assq (aref open 0) insert-pair-alist))))
+   padding
+   arg))
+
+(cl-defmethod conn-perform-surround :around ((_with (eql conn-read-pair))
+                                             _arg &keys &allow-other-keys)
+  (let ((conn--surround-current-pair nil))
+    (cl-call-next-method)))
 
 
 ;;;;; Change
