@@ -311,11 +311,10 @@ before each iteration."
 (defun conn-read-thing-regions ()
   (declare (important-return-value t))
   (pcase-let* ((`(,cmd ,arg ,sr)
-                (conn-read-with-state
-                 'conn-read-thing-state
-                 `(,(conn-thing-argument-dwim t)
-                   ,(conn-subregions-argument (use-region-p)))
-                 :prompt "Thing")))
+                (conn-eval-with-state 'conn-read-thing-state
+                    `(list ,@(conn-thing-argument-dwim t)
+                           ,(conn-subregions-argument (use-region-p)))
+                  :prompt "Thing")))
     (if sr
         (conn-bounds-of cmd arg)
       (list (conn-bounds-of cmd arg)))))
@@ -574,10 +573,9 @@ apply to each contiguous component of the region."
   :description "Things"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((`(,cmd ,arg)
-                (conn-read-with-state
-                 'conn-read-thing-state
-                 `(,(conn-thing-argument-dwim t))
-                 :prompt "Thing"))
+                (conn-eval-with-state 'conn-read-thing-state
+                    `(list ,@(conn-thing-argument-dwim t))
+                  :prompt "Thing"))
                ((map :outer :subregions)
                 (conn-bounds-of cmd arg)))
     (conn--kapply-compose-iterator
@@ -604,10 +602,9 @@ apply to each contiguous component of the region."
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,cmd ,n)
-               (conn-read-with-state
-                'conn-read-thing-state
-                `(,(conn-thing-argument t))
-                :prompt "Thing")))
+               (conn-eval-with-state 'conn-read-thing-state
+                   `(list ,@(conn-thing-argument t))
+                 :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
      'conn--kapply-relocate-to-region
@@ -802,12 +799,11 @@ A zero means repeat until error."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let (((map (:outer `(,beg . ,end)))
+  (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
                (apply #'conn-bounds-of
-                      (conn-read-with-state
-                       'conn-read-thing-state
-                       `(,(conn-thing-argument-dwim))
-                       :prompt "Thing"))))
+                      (conn-eval-with-state 'conn-read-thing-state
+                          `(list ,@(conn-thing-argument-dwim))
+                        :prompt "Thing"))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))

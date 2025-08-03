@@ -2167,33 +2167,32 @@ By default `conn-emacs-state' does not bind anything."
 
 ;;;; State Command Loops
 
-(defvar conn-loop-this-command nil)
-(defvar conn-state-loop-last-command nil)
-(defvar conn-state-loop-inhibit-message nil)
+(defvar conn-state-eval-last-command nil)
+(defvar conn-state-eval-inhibit-message nil)
 (defvar conn--loop-prefix-mag nil)
 (defvar conn--loop-prefix-sign nil)
 (defvar conn--loop-error-message nil)
 (defvar conn--loop-message-timer nil)
 (defvar conn--loop-message-function nil)
-(defvar conn--state-loop-exiting nil)
+(defvar conn--state-eval-exiting nil)
 
-(defun conn-state-loop-prefix-arg ()
+(defun conn-state-eval-prefix-arg ()
   (declare (important-return-value t)
            (side-effect-free t))
   (cond (conn--loop-prefix-mag
          (* (if conn--loop-prefix-sign -1 1) conn--loop-prefix-mag))
         (conn--loop-prefix-sign -1)))
 
-(defun conn-state-loop-consume-prefix-arg ()
-  (prog1 (conn-state-loop-prefix-arg)
+(defun conn-state-eval-consume-prefix-arg ()
+  (prog1 (conn-state-eval-prefix-arg)
     (setf conn--loop-prefix-mag nil
           conn--loop-prefix-sign nil)))
 
-(defun conn-state-loop-error (string)
+(defun conn-state-eval-error (string)
   (setf conn--loop-error-message string))
 
-(defun conn-state-loop-message (format-string args)
-  (let ((inhibit-message conn-state-loop-inhibit-message)
+(defun conn-state-eval-message (format-string args)
+  (let ((inhibit-message conn-state-eval-inhibit-message)
         (message-log-max nil))
     (message format-string args))
   (setq conn--loop-message-timer
@@ -2201,8 +2200,8 @@ By default `conn-emacs-state' does not bind anything."
                         nil
                         'conn--loop-message-function)))
 
-(defun conn--state-loop-prompt (prompt arguments)
-  (let ((inhibit-message conn-state-loop-inhibit-message)
+(defun conn--state-eval-prompt (prompt arguments)
+  (let ((inhibit-message conn-state-eval-inhibit-message)
         (message-log-max nil))
     (message
      (substitute-command-keys
@@ -2218,72 +2217,44 @@ By default `conn-emacs-state' does not bind anything."
               (t "[1]"))
         'face 'read-multiple-choice-face)
        ", \\[reset-arg] reset"
-       (when-let* ((arg-strs (thread-last
-                               (conn-display-argument arguments)
-                               flatten-tree
-                               (delq nil))))
-         (string-join (cons nil arg-strs) "; "))
+       (string-join (cons nil (conn-display-argument arguments)) "; ")
        "): "
        (propertize conn--loop-error-message 'face 'error))))))
 
-(cl-defgeneric conn-read-with-state
-    (state arglist &key command-handler prompt prefix pre post))
-
-(cl-defmethod conn-read-with-state (state arglist &key command-handler prompt prefix pre post)
-  (conn-protected-let* ((arguments (delq nil arglist)
-                                   (mapc #'conn-cancel-argument arguments))
+(cl-defun conn--eval-with-state (state arglist &key command-handler prompt prefix pre post)
+  (conn-protected-let* ((arguments arglist (conn-cancel-argument arguments))
                         (prompt (or prompt (symbol-name state)))
                         (conn--loop-prefix-mag (when prefix (abs prefix)))
                         (conn--loop-prefix-sign (when prefix (> 0 prefix)))
                         (conn--loop-error-message "")
                         (conn--loop-message-timer nil)
-                        (conn--state-loop-exiting nil)
+                        (conn--state-eval-exiting nil)
                         (inhibit-message t))
-    (cl-labels ((call-arg (arg)
-                  (ignore-error conn-invalid-argument
-                    (funcall arg conn-loop-this-command)
-                    t))
-                (map-args (args handled)
-                  (pcase args
-                    ('nil)
-                    ((pred listp)
-                     (seq-reduce (lambda (a b)
-                                   (or (map-args b handled) a))
-                                 args
-                                 handled))
-                    ((pred conn-state-loop-argument-p)
-                     (or (call-arg args) handled))))
-                (process-command ()
+    (cl-labels ((eval-command (cmd)
                   (condition-case err
-                      (map-args arguments (when command-handler
-                                            (call-arg command-handler)))
+                      (setq arguments
+                            (conn-update-argument
+                             (if command-handler
+                                 (funcall command-handler cmd arguments)
+                               arguments)
+                             cmd))
                     (user-error
-                     (conn-state-loop-error (error-message-string err)))))
-                (required-p (tree)
-                  (pcase tree
-                    ((pred listp)
-                     (seq-reduce (lambda (a b) (or a (required-p b)))
-                                 tree
-                                 nil))
-                    ((pred conn-state-loop-argument-p)
-                     (and (conn-state-loop-argument-required-p tree)
-                          (not (conn-state-loop-argument-set-p tree)))))))
+                     (conn-state-eval-error
+                      (setq conn--loop-error-message (error-message-string err)))))))
       (conn-with-recursive-state state
-        (while (required-p arguments)
+        (while (conn-argument-required-p arguments)
           (unless conn--loop-message-timer
-            (conn--state-loop-prompt prompt arguments))
-          (let ((conn-loop-this-command
-                 (prog1 (key-binding (read-key-sequence nil) t)
-                   (setf conn--loop-error-message ""))))
-            (while (arrayp conn-loop-this-command) ; keyboard macro
-              (setq conn-loop-this-command
-                    (key-binding conn-loop-this-command t)))
+            (conn--state-eval-prompt prompt arguments))
+          (let ((cmd (prog1 (key-binding (read-key-sequence nil) t)
+                       (setf conn--loop-error-message ""))))
+            (while (arrayp cmd) ; keyboard macro
+              (setq cmd (key-binding cmd t)))
             (when conn--loop-message-timer
               (cancel-timer conn--loop-message-timer)
               (setq conn--loop-message-timer nil))
-            (when pre (funcall pre))
+            (when pre (funcall pre cmd))
             (unwind-protect
-                (pcase conn-loop-this-command
+                (pcase cmd
                   ('nil)
                   ('digit-argument
                    (let* ((char (if (integerp last-input-event)
@@ -2304,18 +2275,63 @@ By default `conn-emacs-state' does not bind anything."
                   ('keyboard-quit
                    (keyboard-quit))
                   ((or 'help 'execute-extended-command)
-                   (when-let* ((cmd (conn--state-loop-completing-read
+                   (when-let* ((cmd (conn--state-eval-completing-read
                                      state arguments)))
-                     (setq conn-loop-this-command cmd)
-                     (process-command)))
-                  (_ (process-command)))
-              (cl-shiftf conn-state-loop-last-command
-                         conn-loop-this-command
-                         nil)
-              (when post (funcall post))))))
+                     (eval-command cmd)))
+                  (_ (eval-command cmd)))
+              (setq conn-state-eval-last-command cmd)
+              (when post (funcall post cmd))))))
       (let ((inhibit-message nil))
         (message nil)
-        (mapcan #'conn-extract-argument arguments)))))
+        (conn-eval-argument arguments)))))
+
+(defmacro conn-eval-with-state (state arglist &rest keys)
+  (declare (indent 2))
+  (let ((vars nil))
+    (cl-labels
+        ((parse-vars (arg)
+           (cond ((null arg) nil)
+                 ((eq '\` (car-safe arg)) (parse-vars (cadr arg)))
+                 ((eq '\, (car-safe arg)) (list '\, (car (push (gensym) vars))))
+                 ((eq '\,@ (car-safe arg)) (list '\, (car (push (gensym) vars))))
+                 ((consp arg)
+                  (if (not (consp (car arg)))
+                      (parse-vars (cdr arg))
+                    (nconc (list (parse-vars (car arg)))
+                           (parse-vars (cdr arg)))))
+                 (t arg)))
+         (parse-vals (arg)
+           (cond ((null arg) nil)
+                 ((eq '\` (car-safe arg)) (parse-vals (cadr arg)))
+                 ((eq '\,@ (car-safe arg)) (list '\, (cadr arg)))
+                 ((eq '\, (car-safe arg)) (list '\, (cadr arg)))
+                 ((consp arg)
+                  (if (not (consp (car arg)))
+                      (parse-vals (cdr arg))
+                    (nconc (list (parse-vals (car arg)))
+                           (parse-vals (cdr arg)))))
+                 (t arg)))
+         (parse-result (arg)
+           (cond ((null arg) nil)
+                 ((eq '\, (car-safe arg))
+                  (list 'quote (list '\, (pop vars))))
+                 ((eq '\,@ (car-safe arg))
+                  (list '\,@ (list 'mapcar '#'macroexp-quote (pop vars))))
+                 ((eq '\` (car-safe arg))
+                  (cdr (backquote-process (parse-result (cadr arg)))))
+                 ((consp arg)
+                  (nconc (list (parse-result (car arg)))
+                         (parse-result (cdr arg))))
+                 (t arg))))
+      (let* ((varlist (parse-vars arglist))
+             (result (progn
+                       (setq vars (nreverse vars))
+                       (parse-result arglist))))
+        `(pcase-let ((,(list '\` varlist)
+                      (conn--eval-with-state ,state
+                                             ,(list '\` (parse-vals arglist))
+                                             ,@keys)))
+           (eval ,result t))))))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
@@ -2330,7 +2346,7 @@ By default `conn-emacs-state' does not bind anything."
      (keymap-canonicalize keymap))
     bindings))
 
-(defun conn--state-loop-completing-read (state args)
+(defun conn--state-eval-completing-read (state args)
   (if-let* ((metadata (conn-state-get state :loop-completion-metadata))
             (table (mapcan #'conn--all-bindings (current-active-maps))))
       (condition-case _
@@ -2350,64 +2366,68 @@ By default `conn-emacs-state' does not bind anything."
 
 ;;;;; Loop Arguments
 
-(oclosure-define (conn-state-loop-argument
-                  (:predicate conn-state-loop-argument-p))
-  (value :mutable t :type t)
-  (set-flag :mutable t :type boolean)
+(oclosure-define (conn-state-eval-argument
+                  (:predicate conn-state-eval-argument-p)
+                  (:copier conn-set-argument (value &aux (set-flag t)))
+                  (:copier conn-unset-argument (value &aux (set-flag nil))))
+  (value :type t)
+  (set-flag :type boolean)
   (required :type boolean)
   (name :type (or nil string function)))
 
-(defalias 'conn-state-loop-argument-name
-  'conn-state-loop-argument--name)
+(defalias 'conn-state-eval-argument-name
+  'conn-state-eval-argument--name)
 
-(defalias 'conn-state-loop-argument-required-p
-  'conn-state-loop-argument--required)
+(defalias 'conn-state-eval-argument-value
+  'conn-state-eval-argument--value)
 
-(define-inline conn-state-loop-argument-value (arg)
-  (declare (important-return-value t)
-           (side-effect-free t)
-           (gv-setter
-            (lambda (value)
-              (macroexp-let2 nil arg arg
-                `(setf (conn-state-loop-argument--set-flag ,arg) t
-                       (conn-state-loop-argument--value ,arg) ,value)))))
-  (inline-quote (conn-state-loop-argument--value ,arg)))
-
-(define-inline conn-state-loop-argument-set-p (arg)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  (inline-quote (conn-state-loop-argument--set-flag ,arg)))
-
-(define-inline conn-state-loop-argument-unset (arg)
-  (inline-letevals (arg)
-    (inline-quote
-     (setf (conn-state-loop-argument-value ,arg) nil
-           (conn-state-loop-argument-set-p ,arg) nil))))
-
-(define-error 'conn-invalid-argument "Invalid argument")
-
-(defun conn-invalid-argument ()
-  (signal 'conn-invalid-argument nil))
+(defun conn-invalid-argument () nil)
 
 (cl-defgeneric conn-cancel-argument (argument)
-  (:method (_) nil))
-
-(cl-defgeneric conn-extract-argument (argument)
-  (declare (important-return-value t))
-  ( :method (arg)
-    (list arg))
+  ( :method (_arg) nil)
+  ( :method ((_arg (eql nil))) nil)
   ( :method ((arg list))
-    (list (mapcan #'conn-extract-argument arg)))
-  ( :method ((arg conn-state-loop-argument))
-    (list (conn-state-loop-argument-value arg))))
+    (conn-cancel-argument (car arg))
+    (conn-cancel-argument (cdr arg))))
+
+(cl-defgeneric conn-argument-required-p (argument)
+  ( :method (_arg) nil)
+  ( :method ((_arg (eql nil))) nil)
+  ( :method ((arg list))
+    (or (conn-argument-required-p (car arg))
+        (conn-argument-required-p (cdr arg))))
+  ( :method ((arg conn-state-eval-argument))
+    (and (conn-state-eval-argument--required arg)
+         (not (conn-state-eval-argument--set-flag arg)))))
+
+(cl-defgeneric conn-update-argument (argument form)
+  ( :method (arg _form) arg)
+  ( :method ((_arg (eql nil)) _form) nil)
+  ( :method ((arg list) form)
+    (cons (conn-update-argument (car arg) form)
+          (conn-update-argument (cdr arg) form)))
+  ( :method ((arg conn-state-eval-argument) form)
+    (funcall arg arg form)))
+
+(cl-defgeneric conn-eval-argument (argument)
+  (declare (important-return-value t))
+  ( :method (arg) arg)
+  ( :method ((_arg (eql nil))) nil)
+  ( :method ((arg list))
+    (cons (conn-eval-argument (car arg))
+          (conn-eval-argument (cdr arg))))
+  ( :method ((arg conn-state-eval-argument))
+    (conn-state-eval-argument-value arg)))
 
 (cl-defgeneric conn-display-argument (argument)
   (declare (important-return-value t))
-  ( :method (_) nil)
+  ( :method (_arg) nil)
+  ( :method ((_arg (eql nil))) nil)
   ( :method ((arg list))
-    (mapcar #'conn-display-argument arg))
-  ( :method ((arg conn-state-loop-argument))
-    (pcase (conn-state-loop-argument-name arg)
+    (nconc (ensure-list (conn-display-argument (car arg)))
+           (ensure-list (conn-display-argument (cdr arg)))))
+  ( :method ((arg conn-state-eval-argument))
+    (pcase (conn-state-eval-argument-name arg)
       ((and (pred stringp) str)
        str)
       ((and (pred functionp) fn)
@@ -2416,7 +2436,11 @@ By default `conn-emacs-state' does not bind anything."
          str)))))
 
 (cl-defgeneric conn-argument-completion-predicate (argument symbol)
-  (:method (_ _) nil))
+  ( :method (_arg) nil)
+  ( :method ((_arg (eql nil))) nil)
+  ( :method ((arg list) sym)
+    (or (conn-argument-completion-predicate (car arg) sym)
+        (conn-argument-completion-predicate (cdr arg) sym))))
 
 
 ;;;; Mark Handlers
@@ -2965,45 +2989,43 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;; Thing Args
 
 (oclosure-define (conn-thing-argument
-                  (:parent conn-state-loop-argument))
+                  (:parent conn-state-eval-argument))
   (recursive-edit :type boolean))
 
 (defun conn-thing-argument (&optional recursive-edit)
   (declare (important-return-value t))
-  (conn-anaphoricate self
-    (oclosure-lambda (conn-thing-argument
-                      (required t)
-                      (recursive-edit recursive-edit))
-        (cmd)
-      (conn-handle-thing-argument cmd self))))
+  (oclosure-lambda (conn-thing-argument
+                    (required t)
+                    (recursive-edit recursive-edit))
+      (self cmd)
+    (conn-handle-thing-argument cmd self)))
 
 (defun conn-thing-argument-dwim (&optional recursive-edit)
   (declare (important-return-value t))
-  (conn-anaphoricate self
-    (oclosure-lambda (conn-thing-argument
-                      (value (when (use-region-p)
-                               (list 'region nil)))
-                      (set-flag (use-region-p))
-                      (required t)
-                      (recursive-edit recursive-edit))
-        (cmd)
-      (conn-handle-thing-argument cmd self))))
+  (oclosure-lambda (conn-thing-argument
+                    (value (when (use-region-p)
+                             (list 'region nil)))
+                    (set-flag (use-region-p))
+                    (required t)
+                    (recursive-edit recursive-edit))
+      (self cmd)
+    (conn-handle-thing-argument cmd self)))
 
 (cl-defgeneric conn-handle-thing-argument (cmd arg)
-  (:method (_ _) (conn-invalid-argument)))
+  ( :method (_ arg)
+    (conn-invalid-argument)
+    arg))
 
 (cl-defmethod conn-handle-thing-argument ((cmd (conn-thing t)) arg)
-  (setf (conn-state-loop-argument-value arg)
-        (list cmd (conn-state-loop-consume-prefix-arg))))
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 (cl-defmethod conn-handle-thing-argument ((cmd (conn-thing recursive-edit)) arg)
   (if (conn-thing-argument--recursive-edit arg)
-      (setf (conn-state-loop-argument-value arg)
-            (list cmd (conn-state-loop-consume-prefix-arg)))
+      (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg)))
     (cl-call-next-method)))
 
-(cl-defmethod conn-extract-argument ((arg conn-thing-argument))
-  (conn-state-loop-argument-value arg))
+(cl-defmethod conn-eval-argument ((arg conn-thing-argument))
+  (conn-state-eval-argument-value arg))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-thing-argument) sym)
   (or (conn-thing-p sym)
@@ -3013,34 +3035,35 @@ order to mark the region that should be defined by any of COMMANDS."
 ;;;;;; Subregions
 
 (oclosure-define (conn-subregions-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-subregions-argument (&optional value)
   (declare (important-return-value t))
-  (conn-anaphoricate self
-    (oclosure-lambda (conn-subregions-argument
-                      (value value))
-        (cmd)
-      (conn-handle-subregions-argument cmd self))))
+  (oclosure-lambda (conn-subregions-argument
+                    (value value))
+      (self cmd)
+    (conn-handle-subregions-argument cmd self)))
 
 (cl-defgeneric conn-handle-subregions-argument (cmd arg)
-  (:method (_ _) (conn-invalid-argument)))
+  ( :method (_ arg)
+    (conn-invalid-argument)
+    arg))
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (eql toggle-subregions))
                                                arg)
-  (cl-callf not (conn-state-loop-argument-value arg)))
+  (conn-set-argument arg (not (conn-state-eval-argument-value arg))))
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (eql conn-things-in-region))
                                                arg)
-  (setf (conn-state-loop-argument-value arg) t))
+  (conn-set-argument arg t))
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing region))
                                                arg)
-  (setf (conn-state-loop-argument-value arg) t))
+  (conn-set-argument arg t))
 
 (cl-defmethod conn-handle-subregions-argument ((_cmd (conn-thing recursive-edit))
                                                arg)
-  (setf (conn-state-loop-argument-value arg) t))
+  (conn-set-argument arg t))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-subregions-argument)
                                                   sym)
@@ -3050,22 +3073,23 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-display-argument ((arg conn-subregions-argument))
   (concat "\\[toggle-subregions] "
           (propertize "subregions"
-                      'face (when (conn-state-loop-argument-value arg)
+                      'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Trim
 
 (oclosure-define (conn-trim-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-trim-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-trim-argument
                     (value value))
-      (cmd)
+      (self cmd)
     (if (eq cmd 'toggle-trim)
-        (cl-callf not value)
-      (conn-invalid-argument))))
+        (conn-set-argument self t)
+      (conn-invalid-argument)
+      self)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-trim-argument)
                                                   sym)
@@ -3075,7 +3099,7 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-display-argument ((arg conn-trim-argument))
   (concat "\\[toggle-trim] "
           (propertize "trim"
-                      'face (when (conn-state-loop-argument-value arg)
+                      'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;; Read Mover State
@@ -3149,9 +3173,13 @@ order to mark the region that should be defined by any of COMMANDS."
 (pcase-defmacro conn-bounds-get (property &optional pat)
   (static-if (< emacs-major-version 30)
       `(app (pcase--flip conn-bounds-get ,property)
-            ,(or pat (intern (substring (symbol-name property) 1))))
+            ,(or pat (if (keywordp property)
+                         (intern (substring (symbol-name property) 1))
+                       property)))
     `(app (conn-bounds-get _ ,property)
-          ,(or pat (intern (substring (symbol-name property) 1))))))
+          ,(or pat (if (keywordp property)
+                       (intern (substring (symbol-name property) 1))
+                     property)))))
 
 (cl-defgeneric conn-bounds-of-subr (cmd arg)
   (declare (conn-anonymous-thing-property :bounds-op)
@@ -3162,8 +3190,7 @@ order to mark the region that should be defined by any of COMMANDS."
       (conn-bounds-of-subr (conn-anonymous-thing-parent cmd) arg))))
 
 (defun conn--trim-bounds (bounds)
-  (pcase-let ((`(,beg . ,end)
-               (conn-bounds-get bounds :outer)))
+  (pcase-let (((conn-bounds-get :outer `(,beg . ,end)) bounds))
     (setf (conn-bounds-get bounds :trimmed)
           (cons (save-excursion
                   (goto-char beg)
@@ -3341,13 +3368,12 @@ BOUNDS is of the form returned by `region-bounds', which see."
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-bounds-of-subr ((cmd (eql conn-things-in-region)) arg)
-  (cl-loop for region in (conn-get-things-in-region
-                          (car (conn-read-with-state
-                                'conn-read-thing-state
-                                `(,(conn-thing-argument-dwim))
-                                :prompt "Things in Region"))
-                          (region-beginning)
-                          (region-end))
+  (cl-loop for region in (apply #'conn-get-things-in-region
+                                (conn-eval-with-state 'conn-read-thing-state
+                                    `((car ,(conn-thing-argument-dwim))
+                                      ,(region-beginning)
+                                      ,(region-end))
+                                  :prompt "Things in Region"))
            collect (conn-bounds cmd nil :outer region) into contents
            finally return (conn-bounds
                            cmd arg
@@ -4247,7 +4273,7 @@ themselves once the selection process has concluded."
               prompt-suffix ""
               prompt-flag (or conn-label-select-always-prompt
                               always-prompt))
-        (conn-state-loop-error "No matches")
+        (conn-state-eval-error "No matches")
         (mapc #'conn-label-reset current)
         (while-no-input
           (mapc #'conn-label-redisplay candidates)))
@@ -4548,33 +4574,29 @@ themselves once the selection process has concluded."
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
 
-;;;;; Dispatch Command Loop
-
-(cl-defmethod conn-read-with-state ((_state (eql conn-dispatch-state))
-                                    _arglist &key &allow-other-keys)
-  (catch 'previous-dispatch (cl-call-next-method)))
-
 ;;;;;; Action
 
 (oclosure-define (conn-dispatch-action-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-dispatch-action-argument ()
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-action-argument)
-      (type)
+      (self type)
     (if (conn--action-type-p type)
         (progn
           (conn-cancel-action value)
-          (setf value (unless (cl-typep value type)
-                        (conn-make-action type))))
-      (conn-invalid-argument))))
+          (conn-set-argument
+           self (unless (cl-typep value type)
+                  (conn-make-action type))))
+      (conn-invalid-argument)
+      self)))
 
 (cl-defmethod conn-cancel-argument ((arg conn-dispatch-action-argument))
-  (conn-cancel-action (conn-state-loop-argument-value arg)))
+  (conn-cancel-action (conn-state-eval-argument-value arg)))
 
-(cl-defmethod conn-extract-argument :before ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-state-loop-argument-value arg)))
+(cl-defmethod conn-eval-argument :before ((arg conn-dispatch-action-argument))
+  (when-let* ((action (conn-state-eval-argument-value arg)))
     (conn-accept-action action)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-action-argument)
@@ -4583,23 +4605,24 @@ themselves once the selection process has concluded."
       (cl-call-next-method)))
 
 (cl-defmethod conn-display-argument ((arg conn-dispatch-action-argument))
-  (when-let* ((action (conn-state-loop-argument-value arg)))
+  (when-let* ((action (conn-state-eval-argument-value arg)))
     (propertize (conn-describe-action action)
                 'face 'eldoc-highlight-function-argument)))
 
 ;;;;;; Other End
 
 (oclosure-define (conn-dispatch-other-end-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-dispatch-other-end-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-other-end-argument
                     (value value))
-      (cmd)
+      (self cmd)
     (if (eq cmd 'dispatch-other-end)
-        (cl-callf not value)
-      (conn-invalid-argument))))
+        (conn-set-argument self (not value))
+      (conn-invalid-argument)
+      self)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-other-end-argument)
                                                   sym)
@@ -4609,24 +4632,23 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-display-argument ((arg conn-dispatch-other-end-argument))
   (concat "\\[dispatch-other-end] "
           (propertize "other-end"
-                      'face (when (conn-state-loop-argument-value arg)
+                      'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Repeat
 
 (oclosure-define (conn-dispatch-repeat-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-dispatch-repeat-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-repeat-argument
                     (value value))
-      (cmd)
+      (self cmd)
     (if (eq cmd 'repeat-dispatch)
-        (progn
-          (cl-callf not value)
-          (setf set-flag t))
-      (conn-invalid-argument))))
+        (conn-set-argument self (not value))
+      (conn-invalid-argument)
+      self)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-repeat-argument)
                                                   sym)
@@ -4636,24 +4658,23 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-display-argument ((arg conn-dispatch-repeat-argument))
   (concat "\\[repeat-dispatch] "
           (propertize "repeat"
-                      'face (when (conn-state-loop-argument-value arg)
+                      'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Restrict Windows
 
 (oclosure-define (conn-dispatch-restrict-windows-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-dispatch-restrict-windows-argument (&optional value)
   (declare (important-return-value t))
   (oclosure-lambda (conn-dispatch-restrict-windows-argument
                     (value value))
-      (cmd)
+      (self cmd)
     (if (eq cmd 'restrict-windows)
-        (progn
-          (cl-callf not value)
-          (setf set-flag t))
-      (conn-invalid-argument))))
+        (conn-set-argument self (not value))
+      (conn-invalid-argument)
+      self)))
 
 (cl-defmethod conn-argument-completion-predicate ((_arg conn-dispatch-restrict-windows-argument)
                                                   sym)
@@ -4663,34 +4684,42 @@ themselves once the selection process has concluded."
 (cl-defmethod conn-display-argument ((arg conn-dispatch-restrict-windows-argument))
   (concat "\\[restrict-windows] "
           (propertize "this-win"
-                      'face (when (conn-state-loop-argument-value arg)
+                      'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
 ;;;;;; Command Handler
 
-(cl-defgeneric conn-handle-dispatch-command (cmd)
-  (:method (_) (conn-invalid-argument)))
+(cl-defgeneric conn-handle-dispatch-command (cmd arglist)
+  ( :method (_ arglist)
+    (conn-invalid-argument)
+    arglist))
 
-(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-cycle-ring-next)))
+(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-cycle-ring-next))
+                                            arglist)
   (conn-dispatch-cycle-ring-next)
   (if (bound-and-true-p conn-posframe-mode)
       (conn-posframe--dispatch-ring-display-subr)
-    (conn-state-loop-message "%s" (conn-describe-dispatch
-                                   (conn-ring-head conn-dispatch-ring)))))
+    (conn-state-eval-message "%s" (conn-describe-dispatch
+                                   (conn-ring-head conn-dispatch-ring))))
+  arglist)
 
-(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-cycle-ring-previous)))
+(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-cycle-ring-previous))
+                                            arglist)
   (conn-dispatch-cycle-ring-previous)
   (if (bound-and-true-p conn-posframe-mode)
       (conn-posframe--dispatch-ring-display-subr)
-    (conn-state-loop-message "%s" (conn-describe-dispatch
-                                   (conn-ring-head conn-dispatch-ring)))))
+    (conn-state-eval-message "%s" (conn-describe-dispatch
+                                   (conn-ring-head conn-dispatch-ring))))
+  arglist)
 
-(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-ring-describe-head)))
+(cl-defmethod conn-handle-dispatch-command ((_ (eql conn-dispatch-ring-describe-head))
+                                            arglist)
   (conn-dispatch-ring-remove-stale)
   (if (bound-and-true-p conn-posframe-mode)
       (conn-posframe--dispatch-ring-display-subr)
-    (conn-state-loop-message "%s" (conn-describe-dispatch
-                                   (conn-ring-head conn-dispatch-ring)))))
+    (conn-state-eval-message "%s" (conn-describe-dispatch
+                                   (conn-ring-head conn-dispatch-ring))))
+  arglist)
 
 
 ;;;;; Dispatch Window Filtering
@@ -5190,7 +5219,7 @@ Target overlays may override this default by setting the
                                            seconds
                                            prompt-suffix)
   (declare (important-return-value t))
-  (let ((inhibit-message conn-state-loop-inhibit-message)
+  (let ((inhibit-message conn-state-eval-inhibit-message)
         (message-log-max nil)
         (prompt-suffix (concat prompt-suffix " "
                                (when conn--loop-error-message
@@ -5233,7 +5262,7 @@ Target overlays may override this default by setting the
                               do (funcall handler cmd))
                      (setq unhandled t))
                  (unless unhandled
-                   (setf conn-state-loop-last-command cmd)))))))))))
+                   (setf conn-state-eval-last-command cmd)))))))))))
 
 (cl-defgeneric conn-dispatch-select-target ()
   (declare (important-return-value t)))
@@ -5835,7 +5864,7 @@ contain targets."
 (cl-defgeneric conn-make-action (type)
   (declare (important-return-value t))
   (:method (type) (error "Unknown action type %s" type))
-  (:method :after (_type) (conn-state-loop-consume-prefix-arg)))
+  (:method :after (_type) (conn-state-eval-consume-prefix-arg)))
 
 (cl-defmethod conn-make-action :around (type)
   (let ((wconf (current-window-configuration)))
@@ -5929,7 +5958,7 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-to)))
   (oclosure-lambda (conn-dispatch-copy-to
                     (str (funcall region-extract-function nil))
-                    (separator (when (conn-state-loop-consume-prefix-arg)
+                    (separator (when (conn-state-eval-consume-prefix-arg)
                                  (read-string "Separator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
@@ -6047,7 +6076,7 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-yank-to)))
   (oclosure-lambda (conn-dispatch-yank-to
                     (str (current-kill 0))
-                    (separator (when (conn-state-loop-consume-prefix-arg)
+                    (separator (when (conn-state-eval-consume-prefix-arg)
                                  (read-string "Separator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
@@ -6086,7 +6115,7 @@ contain targets."
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-reading-yank-to)))
   (oclosure-lambda (conn-dispatch-reading-yank-to
                     (str (read-from-kill-ring "Yank To: "))
-                    (separator (when (conn-state-loop-consume-prefix-arg)
+                    (separator (when (conn-state-eval-consume-prefix-arg)
                                  (read-string "Separator: " nil nil nil t)))
                     (window-predicate
                      (lambda (win)
@@ -6130,7 +6159,7 @@ contain targets."
   (change-group))
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-send)))
-  (let ((sep (when (conn-state-loop-consume-prefix-arg)
+  (let ((sep (when (conn-state-eval-consume-prefix-arg)
                (read-string "Separator: " nil nil nil t)))
         (cg (conn--action-buffer-change-group)))
     (oclosure-lambda (conn-dispatch-send
@@ -6334,7 +6363,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill)))
   (oclosure-lambda (conn-dispatch-kill
-                    (register (when (conn-state-loop-consume-prefix-arg)
+                    (register (when (conn-state-eval-consume-prefix-arg)
                                 (register-read-with-preview "Register: ")))
                     (window-predicate
                      (lambda (win)
@@ -6369,7 +6398,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-append)))
   (oclosure-lambda (conn-dispatch-kill-append
-                    (register (when (conn-state-loop-consume-prefix-arg)
+                    (register (when (conn-state-eval-consume-prefix-arg)
                                 (register-read-with-preview "Register: ")))
                     (window-predicate
                      (lambda (win)
@@ -6404,7 +6433,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-kill-prepend)))
   (oclosure-lambda (conn-dispatch-kill-prepend
-                    (register (when (conn-state-loop-consume-prefix-arg)
+                    (register (when (conn-state-eval-consume-prefix-arg)
                                 (register-read-with-preview "Register: ")))
                     (window-predicate
                      (lambda (win)
@@ -6439,7 +6468,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-append)))
   (oclosure-lambda (conn-dispatch-copy-append
-                    (register (when (conn-state-loop-consume-prefix-arg)
+                    (register (when (conn-state-eval-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
       (window pt thing thing-arg)
     (with-selected-window window
@@ -6466,7 +6495,7 @@ contain targets."
 
 (cl-defmethod conn-make-action ((_type (eql conn-dispatch-copy-prepend)))
   (oclosure-lambda (conn-dispatch-copy-prepend
-                    (register (when (conn-state-loop-consume-prefix-arg)
+                    (register (when (conn-state-eval-consume-prefix-arg)
                                 (register-read-with-preview "Register: "))))
       (window pt thing thing-arg)
     (with-selected-window window
@@ -6892,7 +6921,7 @@ contain targets."
                        ,@body
                        (cl-incf conn-dispatch-repeat-count))
                    (user-error
-                    (conn-state-loop-error (error-message-string err))))))
+                    (conn-state-eval-error (error-message-string err))))))
            (dolist (undo conn--dispatch-loop-change-groups)
              (funcall undo :accept)))))))
 
@@ -6909,7 +6938,7 @@ contain targets."
                  (recenter-last-op nil)
                  (conn-dispatch-repeat-count nil)
                  (conn-dispatch-other-end nil)
-                 (conn-state-loop-last-command nil)
+                 (conn-state-eval-last-command nil)
                  (conn--loop-prefix-mag nil)
                  (conn--loop-prefix-sign nil)
                  (conn--dispatch-read-event-handlers nil)
@@ -6939,8 +6968,8 @@ contain targets."
 
 (cl-defmethod conn-handle-dispatch-select-command ((cmd (eql recenter-top-bottom)))
   (let ((this-command cmd)
-        (last-command conn-state-loop-last-command))
-    (recenter-top-bottom (conn-state-loop-prefix-arg)))
+        (last-command conn-state-eval-last-command))
+    (recenter-top-bottom (conn-state-eval-prefix-arg)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql toggle-input-method)))
@@ -6974,14 +7003,14 @@ contain targets."
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-up)))
-  (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-up))
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql scroll-down)))
-  (let ((next-screen-context-lines (or (conn-state-loop-prefix-arg)
+  (let ((next-screen-context-lines (or (conn-state-eval-prefix-arg)
                                        next-screen-context-lines)))
     (conn-scroll-down))
   (goto-char (window-start (selected-window)))
@@ -7060,7 +7089,8 @@ contain targets."
   (conn-make-ring conn-dispatch-ring-max
                   :cleanup 'conn-dispatch--cleanup))
 
-(cl-defmethod conn-handle-dispatch-command ((_cmd (eql conn-repeat-last-dispatch)))
+(cl-defmethod conn-handle-dispatch-command ((_cmd (eql conn-repeat-last-dispatch))
+                                            arglist)
   (pcase (conn-ring-head conn-dispatch-ring)
     ((and prev
           (cl-struct conn-previous-dispatch
@@ -7075,17 +7105,18 @@ contain targets."
      (if (conn-action-stale-p action)
          (progn
            (conn-dispatch-ring-remove-stale)
-           (conn-state-loop-error "Last dispatch action stale"))
+           (conn-state-eval-error "Last dispatch action stale")
+           arglist)
        (conn-ring-delete conn-dispatch-ring prev)
-       (throw 'previous-dispatch
-              `( ,action ,thing ,thing-arg
-                 :always-retarget ,always-retarget
-                 :repeat ,repeat
-                 :restrict-windows ,restrict-windows
-                 :other-end ,other-end
-                 ,@keys))))
+       `( ,action ,thing ,thing-arg
+          :always-retarget ,always-retarget
+          :repeat ,repeat
+          :restrict-windows ,restrict-windows
+          :other-end ,other-end
+          ,@keys)))
     (_
-     (conn-state-loop-error "Dispatch ring empty"))))
+     (conn-state-eval-error "Dispatch ring empty")
+     arglist)))
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -7191,7 +7222,7 @@ contain targets."
   (let* ((opoint (point-marker))
          (eldoc-display-functions nil)
          (recenter-last-op nil)
-         (conn-state-loop-last-command nil)
+         (conn-state-eval-last-command nil)
          (conn--dispatch-init-state
           (list conn-target-window-predicate
                 conn-target-predicate
@@ -7287,7 +7318,7 @@ contain targets."
           (unless (= (point) opoint)
             (conn--push-mark-ring opoint))))
       (set-marker opoint nil)
-      (let ((inhibit-message conn-state-loop-inhibit-message))
+      (let ((inhibit-message conn-state-eval-inhibit-message))
         (message nil)))))
 
 (cl-defmethod conn-perform-dispatch ((action conn-action)
@@ -7321,27 +7352,27 @@ contain targets."
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")
-  (apply #'conn-perform-dispatch
-         (conn-read-with-state
-          'conn-dispatch-state
-          `(,(conn-dispatch-action-argument)
-            ,(conn-thing-argument t)
-            :repeat ,(conn-dispatch-repeat-argument)
-            :other-end ,(conn-dispatch-other-end-argument nil)
-            :restrict-windows ,(conn-dispatch-restrict-windows-argument))
-          :command-handler #'conn-handle-dispatch-command
-          :prefix initial-arg
-          :prompt "Dispatch"
-          :pre (when (and (bound-and-true-p conn-posframe-mode)
-                          (fboundp 'posframe-hide))
-                 (lambda () (posframe-hide " *conn-list-posframe*"))))))
+  (conn-eval-with-state 'conn-dispatch-state
+      `(conn-perform-dispatch
+        ,(conn-dispatch-action-argument)
+        ,@(conn-thing-argument t)
+        :repeat ,(conn-dispatch-repeat-argument)
+        :other-end ,(conn-dispatch-other-end-argument nil)
+        :restrict-windows ,(conn-dispatch-restrict-windows-argument))
+    :command-handler #'conn-handle-dispatch-command
+    :prefix initial-arg
+    :prompt "Dispatch"
+    :pre (when (and (bound-and-true-p conn-posframe-mode)
+                    (fboundp 'posframe-hide))
+           (lambda (_) (posframe-hide " *conn-list-posframe*")))))
 
 (defun conn--dispatch-bounds (bounds &optional repeat)
   (let (ovs subregions)
     (unwind-protect
         (progn
-          (apply #'conn-perform-dispatch
-                 (oclosure-lambda (conn-action
+          (conn-eval-with-state 'conn-dispatch-mover-state
+              `(conn-perform-dispatch
+                ,(oclosure-lambda (conn-action
                                    (description "Bounds")
                                    (window-predicate
                                     (let ((win (selected-window)))
@@ -7359,13 +7390,11 @@ contain targets."
                           (push bound subregions))
                          (_
                           (user-error "No %s found at point" thing))))))
-                 (conn-read-with-state
-                  'conn-dispatch-mover-state
-                  `(,(conn-thing-argument t)
-                    :repeat ,(conn-dispatch-repeat-argument repeat)
-                    :other-end :no-other-end)
-                  :prefix (conn-bounds-arg bounds)
-                  :prompt "Bounds of Dispatch"))
+                ,@(conn-thing-argument t)
+                :repeat ,(conn-dispatch-repeat-argument repeat)
+                :other-end :no-other-end)
+            :prefix (conn-bounds-arg bounds)
+            :prompt "Bounds of Dispatch")
           (unless ovs (keyboard-quit))
           (cl-loop for bound in subregions
                    for (b . e) = (conn-bounds-get bound :outer)
@@ -7411,7 +7440,7 @@ Prefix arg INVERT-REPEAT inverts the value of repeat in the last dispatch."
     (user-error "Last dispatch action stale"))
   (push `(no-record . (dispatch-mouse-repeat ,@(cdr event)))
         unread-command-events)
-  (let ((conn-state-loop-inhibit-message t)
+  (let ((conn-state-eval-inhibit-message t)
         (conn-kapply-suppress-message t))
     (conn-repeat-last-dispatch
      (and (conn-previous-dispatch-repeat (conn-ring-head conn-dispatch-ring))
@@ -7680,29 +7709,29 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
-  (conn-bounds
-   cmd arg
-   (conn-read-with-state
-    'conn-expand-state
-    `(:outer ,(oclosure-lambda (conn-state-loop-argument
-                                (required t)
-                                (name 'conn--read-expand-message))
-                  (command)
-                (pcase command
-                  ('conn-expand-exchange
-                   (conn-expand-exchange))
-                  ('conn-contract
-                   (conn-contract (conn-state-loop-consume-prefix-arg)))
-                  ('conn-expand
-                   (conn-expand (conn-state-loop-consume-prefix-arg)))
-                  ('conn-toggle-mark-command
-                   (conn-toggle-mark-command))
-                  ((or 'end 'exit-recursive-edit)
-                   (setf value (cons (region-beginning) (region-end))
-                         set-flag t))
-                  (_ (conn-invalid-argument)))))
+  (conn-eval-with-state
+      'conn-expand-state
+      `(conn-bounds
+        ,cmd ,arg
+        :outer ,(oclosure-lambda (conn-state-eval-argument
+                                  (required t)
+                                  (name 'conn--read-expand-message))
+                    (command self)
+                  (pcase command
+                    ('conn-expand-exchange
+                     (conn-expand-exchange))
+                    ('conn-contract
+                     (conn-contract (conn-state-eval-consume-prefix-arg)))
+                    ('conn-expand
+                     (conn-expand (conn-state-eval-consume-prefix-arg)))
+                    ('conn-toggle-mark-command
+                     (conn-toggle-mark-command))
+                    ((or 'end 'exit-recursive-edit)
+                     (conn-set-argument self (cons (region-beginning)
+                                                   (region-end))))
+                    (_ (conn-invalid-argument)))))
     :prompt "Expansion"
-    :prefix arg)))
+    :prefix arg))
 
 
 ;;;; Narrow Ring
@@ -7767,12 +7796,11 @@ Expansions and contractions are provided by functions in
                                             subregions-p)
   "Prepend thing regions to narrow register."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim)
-      ,(register-read-with-preview "Push region to register: ")
-      ,(conn-subregions-argument (use-region-p)))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim)
+              ,(register-read-with-preview "Push region to register: ")
+              ,(conn-subregions-argument (use-region-p)))
+     :prompt "Thing"))
   (pcase-let* ((bounds (conn-bounds-of thing-cmd thing-arg))
                (narrowings
                 (if-let* ((_ subregions-p)
@@ -7795,11 +7823,10 @@ Expansions and contractions are provided by functions in
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional subregions-p)
   "Push thing regions to narrow ring."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim)
-      ,(conn-subregions-argument (use-region-p)))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim)
+              ,(conn-subregions-argument (use-region-p)))
+     :prompt "Thing"))
   (pcase-let* (((and (conn-bounds-get :outer `(,beg . ,end))
                      (conn-bounds-get :subregions))
                 (conn-bounds-of thing-cmd thing-arg)))
@@ -8264,11 +8291,10 @@ instances of from-string.")
   "Perform a `replace-string' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg ,subregions-p)
-                 (conn-read-with-state
-                  'conn-read-thing-state
-                  `(,(conn-thing-argument-dwim t)
-                    ,(conn-subregions-argument (use-region-p)))
-                  :prompt "Replace in Thing"))
+                 (conn-eval-with-state 'conn-read-thing-state
+                     `(list ,@(conn-thing-argument-dwim t)
+                            ,(conn-subregions-argument (use-region-p)))
+                   :prompt "Replace in Thing"))
                 (bounds (conn-bounds-of thing-mover arg))
                 (subregions (and subregions-p
                                  (conn-bounds-get bounds :subregions)))
@@ -8323,11 +8349,10 @@ instances of from-string.")
   "Perform a `regexp-replace' within the bounds of a thing."
   (interactive
    (pcase-let* ((`(,thing-mover ,arg ,subregions-p)
-                 (conn-read-with-state
-                  'conn-read-thing-state
-                  `(,(conn-thing-argument-dwim t)
-                    ,(conn-subregions-argument t))
-                  :prompt "Replace Regexp in Thing"))
+                 (conn-eval-with-state 'conn-read-thing-state
+                     `(list ,@(conn-thing-argument-dwim t)
+                            ,(conn-subregions-argument t))
+                   :prompt "Replace Regexp in Thing"))
                 (bounds (conn-bounds-of thing-mover arg))
                 (subregions (and subregions-p
                                  (conn-bounds-get bounds :subregions)))
@@ -8529,12 +8554,11 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-forward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch forward within the bounds of a thing."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      ,current-prefix-arg
-      ,(conn-subregions-argument (use-region-p)))
-    :prompt "Isearch in Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t)
+              ,current-prefix-arg
+              ,(conn-subregions-argument (use-region-p)))
+     :prompt "Isearch in Thing"))
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward nil
                           :regexp regexp
@@ -8543,12 +8567,11 @@ Exiting the recursive edit will resume the isearch."
 (defun conn-isearch-backward (thing-cmd thing-arg &optional regexp subregions-p)
   "Isearch backward within the bounds of a thing."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      ,current-prefix-arg
-      ,(conn-subregions-argument (use-region-p)))
-    :prompt "Isearch in Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t)
+              ,current-prefix-arg
+              ,(conn-subregions-argument (use-region-p)))
+     :prompt "Isearch in Thing"))
   (conn--isearch-in-thing thing-cmd thing-arg
                           :backward t
                           :regexp regexp
@@ -8559,11 +8582,10 @@ Exiting the recursive edit will resume the isearch."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument t)
-      ,current-prefix-arg)
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument t)
+              ,current-prefix-arg)
+     :prompt "Thing"))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
     (conn--isearch-in-thing thing-cmd thing-arg
@@ -8579,11 +8601,10 @@ Interactively `region-beginning' and `region-end'."
 
 Interactively `region-beginning' and `region-end'."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument t)
-      ,current-prefix-arg)
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument t)
+              ,current-prefix-arg)
+     :prompt "Thing"))
   (let ((string (buffer-substring-no-properties (region-beginning)
                                                 (region-end))))
     (conn--isearch-in-thing thing-cmd thing-arg
@@ -8942,8 +8963,9 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   (while
       (condition-case err
           (progn
-            (apply #'conn-perform-dispatch
-                   (oclosure-lambda
+            (conn-eval-with-state 'conn-dispatch-transpose-state
+                `(conn-perform-dispatch
+                  ,(oclosure-lambda
                        (conn-transpose-command
                         (description "Transpose")
                         (no-history t)
@@ -8959,22 +8981,19 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
                       buffer point (or thing thing2)
                       (window-buffer window2) pt2 thing2
                       thing-arg))
-                   (conn-read-with-state
-                    'conn-dispatch-transpose-state
-                    `(,(conn-anaphoricate self
-                         (oclosure-lambda (conn-thing-argument
-                                           (required t)
-                                           (recursive-edit t))
-                             (cmd)
-                           (pcase cmd
-                             ((or 'conn-expand 'conn-contract)
-                              (conn-invalid-argument))
-                             (_
-                              (conn-handle-thing-argument cmd self)))))
-                      :other-end :no-other-end
-                      :restrict-windows ,(conn-dispatch-restrict-windows-argument))
-                    :prompt "Transpose Dispatch"
-                    :prefix arg))
+                  ,(oclosure-lambda (conn-thing-argument
+                                     (required t)
+                                     (recursive-edit t))
+                       (self cmd)
+                     (pcase cmd
+                       ((or 'conn-expand 'conn-contract)
+                        (conn-invalid-argument))
+                       (_
+                        (conn-handle-thing-argument cmd self))))
+                  :other-end :no-other-end
+                  :restrict-windows ,(conn-dispatch-restrict-windows-argument))
+              :prompt "Transpose Dispatch"
+              :prefix arg)
             nil)
         ;; TODO: make this display somehow
         (user-error (message "%s" (cadr err)) t))))
@@ -8987,11 +9006,10 @@ With argument ARG 0, exchange the things at point and mark.
 If MOVER is \\='recursive-edit then exchange the current region and the
 region after a `recursive-edit'."
   (interactive
-   (conn-read-with-state
-    'conn-transpose-state
-    `(,(conn-thing-argument-dwim t))
-    :prompt "Transpose"
-    :prefix current-prefix-arg))
+   (conn-eval-with-state 'conn-transpose-state
+       `(list ,@(conn-thing-argument-dwim t))
+     :prompt "Transpose"
+     :prefix current-prefix-arg))
   (when conn-transpose-recursive-edit-mode
     (user-error "Recursive call to conn-transpose-regions"))
   (conn-perform-transpose mover arg))
@@ -9036,11 +9054,10 @@ With arg N, insert N newlines."
 (defun conn-join-lines (thing-mover thing-arg &optional subregions-p)
   "`delete-indentation' in region from START and END."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      ,(conn-subregions-argument (use-region-p)))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t)
+              ,(conn-subregions-argument (use-region-p)))
+     :prompt "Thing"))
   (save-mark-and-excursion
     (pcase (conn-bounds-of thing-mover thing-arg)
       ((and (guard subregions-p)
@@ -9136,14 +9153,13 @@ With a prefix arg prepend to a register instead."
 (defun conn-copy-thing (thing-mover arg &optional register trim)
   "Copy THING at point."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim)
-      ,(conn-subregions-argument (use-region-p))
-      ,(when current-prefix-arg
-         (register-read-with-preview "Register: "))
-      ,(conn-trim-argument))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim)
+              ,(conn-subregions-argument (use-region-p))
+              ,(when current-prefix-arg
+                 (register-read-with-preview "Register: "))
+              ,(conn-trim-argument))
+     :prompt "Thing"))
   (pcase-let (((and (conn-bounds-get :outer)
                     (conn-bounds-get :trimmed))
                (conn-bounds-of thing-mover arg)))
@@ -9166,12 +9182,10 @@ With a prefix arg prepend to a register instead."
 (defun conn-narrow-to-thing (thing-mover arg &optional record)
   "Narrow to region from BEG to END and record it in `conn-narrow-ring'."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      t)
-    :prompt "Thing"
-    :prefix current-prefix-arg))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t) t)
+     :prompt "Thing"
+     :prefix current-prefix-arg))
   (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
                (conn-bounds-of thing-mover arg)))
     (unless (and (<= beg (point) end)
@@ -9187,12 +9201,10 @@ With a prefix arg prepend to a register instead."
 Interactively prompt for the keybinding of a command and use THING
 associated with that command (see `conn-register-thing')."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      t)
-    :prompt "Thing"
-    :prefix current-prefix-arg))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t) t)
+     :prompt "Thing"
+     :prefix current-prefix-arg))
   (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
                (conn-bounds-of thing-mover arg)))
     (conn--narrow-indirect beg end interactive)
@@ -9439,11 +9451,10 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      ,(prefix-numeric-value current-prefix-arg))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t)
+              ,(prefix-numeric-value current-prefix-arg))
+     :prompt "Thing"))
   (pcase (conn-bounds-of thing-mover thing-arg)
     ((conn-bounds-get :outer `(,beg . ,end))
      (if (use-region-p)
@@ -9481,11 +9492,10 @@ With prefix arg N duplicate region N times."
 
 With prefix arg N duplicate region N times."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t)
-      ,(prefix-numeric-value current-prefix-arg))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t)
+              ,(prefix-numeric-value current-prefix-arg))
+     :prompt "Thing"))
   (pcase (conn-bounds-of thing-mover thing-arg)
     ((and (conn-bounds-get :outer `(,beg . ,end))
           (let offset (- (point) end))
@@ -9563,10 +9573,9 @@ of `conn-recenter-positions'."
 (defun conn-comment-or-uncomment (thing-mover arg)
   "Toggle commenting of a region defined by a thing command."
   (interactive
-   (conn-read-with-state
-    'conn-read-thing-state
-    `(,(conn-thing-argument-dwim t))
-    :prompt "Thing"))
+   (conn-eval-with-state 'conn-read-thing-state
+       `(list ,@(conn-thing-argument-dwim t))
+     :prompt "Thing"))
   (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
                (conn-bounds-of thing-mover arg)))
     (if (comment-only-p beg end)
@@ -9663,46 +9672,45 @@ Interactively `region-beginning' and `region-end'."
 ;;;;;; Surround With arg
 
 (oclosure-define (conn-surround-with-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-surround-with-argument ()
   (declare (important-return-value t))
-  (conn-anaphoricate self
-    (oclosure-lambda (conn-surround-with-argument
-                      (required t))
-        (cmd)
-      (conn-handle-surround-with-argument cmd self))))
+  (oclosure-lambda (conn-surround-with-argument
+                    (required t))
+      (self cmd)
+    (conn-handle-surround-with-argument cmd self)))
 
-(cl-defmethod conn-extract-argument ((arg conn-surround-with-argument))
-  (conn-state-loop-argument-value arg))
+(cl-defmethod conn-eval-argument ((arg conn-surround-with-argument))
+  (conn-state-eval-argument-value arg))
 
 (cl-defgeneric conn-handle-surround-with-argument (cmd ctx)
   (:method (_ _) (conn-invalid-argument)))
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql surround-self-insert))
                                                   arg)
-  (setf (conn-state-loop-argument-value arg)
-        (list cmd (conn-state-loop-consume-prefix-arg))))
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 ;;;;;; Padding Arg
 
 (oclosure-define (conn-surround-padding-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-surround-padding-argument ()
   (declare (important-return-value t))
   (oclosure-lambda (conn-surround-padding-argument)
-      (cmd)
+      (self cmd)
     (if (eq cmd 'conn-padding-flag)
-        (cl-callf unless value
-          (if (conn-state-loop-consume-prefix-arg)
-              (read-string "Padding: ")
-            " "))
+        (conn-set-argument
+         self (unless value
+                (if (conn-state-eval-consume-prefix-arg)
+                    (read-string "Padding: ")
+                  " ")))
       (conn-invalid-argument))))
 
 (cl-defmethod conn-display-argument ((arg conn-surround-padding-argument))
   (concat "\\[conn-padding-flag] "
-          (if-let* ((p (conn-state-loop-argument-value arg)))
+          (if-let* ((p (conn-state-eval-argument-value arg)))
               (propertize (format "padding <%s>" p)
                           'face 'eldoc-highlight-function-argument)
             "padding")))
@@ -9785,15 +9793,14 @@ Interactively `region-beginning' and `region-end'."
   (atomic-change-group
     (save-mark-and-excursion
       (pcase-let* ((`(,regions . ,prep-keys)
-                    (apply #'conn-prepare-surround
-                           (conn-read-with-state
-                            'conn-read-thing-state
-                            `(,(conn-thing-argument-dwim t)
-                              :subregions ,(conn-subregions-argument
-                                            (use-region-p))
-                              :trim ,(conn-trim-argument t))
-                            :prompt "Surround"
-                            :prefix arg)))
+                    (conn-eval-with-state 'conn-read-thing-state
+                        `(conn-prepare-surround
+                          ,@(conn-thing-argument-dwim t)
+                          :subregions ,(conn-subregions-argument
+                                        (use-region-p))
+                          :trim ,(conn-trim-argument t))
+                      :prompt "Surround"
+                      :prefix arg))
                    (cleanup (plist-get prep-keys :cleanup))
                    (success nil))
         (when regions
@@ -9801,11 +9808,10 @@ Interactively `region-beginning' and `region-end'."
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
                          (conn-with-overriding-map (plist-get prep-keys :keymap)
-                           (conn-read-with-state
-                            'conn-surround-with-state
-                            `(,(conn-surround-with-argument)
-                              :padding ,(conn-surround-padding-argument))
-                            :prompt "Surround With"))))
+                           (conn-eval-with-state 'conn-surround-with-state
+                               `(list ,@(conn-surround-with-argument)
+                                      :padding ,(conn-surround-padding-argument))
+                             :prompt "Surround With"))))
               (apply #'conn-perform-surround
                      `(,with ,with-arg :regions ,regions ,@prep-keys ,@with-keys))
               (setq success t))
@@ -9876,8 +9882,8 @@ Interactively `region-beginning' and `region-end'."
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-read-pair))
                                                   arg)
-  (setf (conn-state-loop-argument-value arg)
-        (list cmd (conn-state-loop-consume-prefix-arg))))
+  (conn-set-argument
+   arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 (defvar conn--surround-current-pair nil)
 
@@ -9933,21 +9939,20 @@ Interactively `region-beginning' and `region-end'."
 (defun conn-change-thing (cmd arg &optional kill)
   "Change region defined by CMD and ARG."
   (interactive
-   (append (if (use-region-p)
-               (list 'region nil)
-             (conn-read-with-state
-              'conn-change-state
-              `(,(conn-anaphoricate self
-                   (oclosure-lambda (conn-thing-argument
-                                     (required t))
-                       (cmd)
-                     (pcase cmd
-                       ('conn-surround
-                        (setf value (list cmd (conn-state-loop-consume-prefix-arg))
-                              set-flag t))
-                       (_ (conn-handle-thing-argument cmd self))))))
-              :prompt "Thing"))
-           (list current-prefix-arg)))
+   (conn-eval-with-state 'conn-change-state
+       `(list ,(oclosure-lambda (conn-thing-argument
+                                 (required t)
+                                 (value (when (use-region-p)
+                                          (list 'region nil)))
+                                 (set-flag (use-region-p)))
+                   (self cmd)
+                 (pcase cmd
+                   ('conn-surround
+                    (conn-set-argument
+                     self (list cmd (conn-state-eval-consume-prefix-arg))))
+                   (_ (conn-handle-thing-argument cmd self))))
+              current-prefix-arg)
+     :prompt "Thing"))
   (conn-perform-change cmd arg kill))
 
 (defun conn-change (&optional kill)
@@ -9968,15 +9973,14 @@ If KILL is non-nil add region to the `kill-ring'.  When in
 (keymap-set (conn-get-state-map 'conn-change-state) "s" 'conn-surround)
 
 (oclosure-define (conn-change-surround-argument
-                  (:parent conn-state-loop-argument)))
+                  (:parent conn-state-eval-argument)))
 
 (defun conn-change-surround-argument ()
   (declare (important-return-value t))
-  (conn-anaphoricate self
-    (oclosure-lambda (conn-change-surround-argument
-                      (required t))
-        (cmd)
-      (conn-handle-change-surround-argument cmd self))))
+  (oclosure-lambda (conn-change-surround-argument
+                    (required t))
+      (self cmd)
+    (conn-handle-change-surround-argument cmd self)))
 
 (cl-defgeneric conn-handle-change-surround-argument (cmd ctx))
 
@@ -9984,8 +9988,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (conn-invalid-argument))
 
 (cl-defmethod conn-handle-change-surround-argument ((cmd (eql surround-self-insert)) arg)
-  (setf (conn-state-loop-argument-value arg)
-        (list cmd (conn-state-loop-consume-prefix-arg))))
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 (cl-defgeneric conn-prepare-change-surround (cmd arg)
   (declare (conn-anonymous-thing-property :prepare-change-surround-op)
@@ -10028,22 +10031,20 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   (save-mark-and-excursion
     (atomic-change-group
       (pcase-let* ((`(,ov . ,prep-keys)
-                    (apply #'conn-prepare-change-surround
-                           (conn-read-with-state
-                            'conn-change-surround-state
-                            `(,(conn-change-surround-argument))
-                            :prompt "Change Surrounding")))
+                    (conn-eval-with-state 'conn-change-surround-state
+                        `(conn-prepare-change-surround
+                          ,(conn-change-surround-argument))
+                      :prompt "Change Surrounding"))
                    (cleanup (plist-get prep-keys :cleanup))
                    (keymap (plist-get prep-keys :keymap))
                    (success nil))
         (unwind-protect
             (pcase-let ((`(,with ,with-arg . ,with-keys)
                          (conn-with-overriding-map keymap
-                           (conn-read-with-state
-                            'conn-surround-with-state
-                            `(,(conn-surround-with-argument)
-                              ,(conn-surround-padding-argument))
-                            :prompt "Surround With"))))
+                           (conn-eval-with-state 'conn-surround-with-state
+                               `(list ,@(conn-surround-with-argument)
+                                      ,(conn-surround-padding-argument))
+                             :prompt "Surround With"))))
               (goto-char (overlay-start ov))
               (conn--push-ephemeral-mark (overlay-end ov) nil t)
               (apply #'conn-perform-surround
@@ -11590,16 +11591,15 @@ Operates with the selected windows parent window."
 
 (defun conn-dired-dispatch-state (&optional initial-arg)
   (interactive "P")
-  (apply #'conn-perform-dispatch
-         (conn-read-with-state
-          'conn-dired-dispatch-state
-          `(,(conn-dispatch-action-argument)
-            ,(conn-thing-argument)
-            :repeat ,(conn-dispatch-repeat-argument)
-            :restrict-windows ,(conn-dispatch-restrict-windows-argument)
-            :other-end :no-other-end)
-          :prefix initial-arg
-          :prompt "Dired Dispatch")))
+  (conn-eval-with-state 'conn-dired-dispatch-state
+      `(conn-perform-dispatch
+        ,(conn-dispatch-action-argument)
+        ,@(conn-thing-argument)
+        :repeat ,(conn-dispatch-repeat-argument)
+        :restrict-windows ,(conn-dispatch-restrict-windows-argument)
+        :other-end :no-other-end)
+    :prefix initial-arg
+    :prompt "Dired Dispatch"))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dired-dispatch-state)

@@ -238,8 +238,7 @@
 
 (cl-defmethod conn-handle-surround-with-argument ((cmd (eql conn-sp-wrap-region))
                                                   arg)
-  (setf (conn-state-loop-argument-value arg)
-        (list cmd (conn-state-loop-consume-prefix-arg))))
+  (conn-set-argument arg (list cmd (conn-state-eval-consume-prefix-arg))))
 
 (keymap-set (conn-get-minor-mode-map 'conn-surround-with-state 'smartparens-mode)
             "r" 'conn-sp-wrap-region)
