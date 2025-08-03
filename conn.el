@@ -2283,55 +2283,34 @@ By default `conn-emacs-state' does not bind anything."
               (when post (funcall post cmd))))))
       (let ((inhibit-message nil))
         (message nil)
-        (conn-eval-argument arguments)))))
+        (eval (conn-eval-argument arguments))))))
 
-(defmacro conn-eval-with-state (state arglist &rest keys)
+(defmacro conn-eval-with-state (state form &rest keys)
+  "Eval FORM after replacing arguments with values read in STATE.
+
+\(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST)"
   (declare (indent 2))
-  (let ((vars nil))
-    (cl-labels
-        ((parse-vars (arg)
-           (cond ((null arg) nil)
-                 ((eq '\` (car-safe arg)) (parse-vars (cadr arg)))
-                 ((eq '\, (car-safe arg)) (list '\, (car (push (gensym) vars))))
-                 ((eq '\,@ (car-safe arg)) (list '\, (car (push (gensym) vars))))
-                 ((consp arg)
-                  (if (not (consp (car arg)))
-                      (parse-vars (cdr arg))
-                    (nconc (list (parse-vars (car arg)))
-                           (parse-vars (cdr arg)))))
-                 (t arg)))
-         (parse-vals (arg)
-           (cond ((null arg) nil)
-                 ((eq '\` (car-safe arg)) (parse-vals (cadr arg)))
-                 ((eq '\,@ (car-safe arg)) (list '\, (cadr arg)))
-                 ((eq '\, (car-safe arg)) (list '\, (cadr arg)))
-                 ((consp arg)
-                  (if (not (consp (car arg)))
-                      (parse-vals (cdr arg))
-                    (nconc (list (parse-vals (car arg)))
-                           (parse-vals (cdr arg)))))
-                 (t arg)))
-         (parse-result (arg)
-           (cond ((null arg) nil)
-                 ((eq '\, (car-safe arg))
-                  (list 'quote (list '\, (pop vars))))
-                 ((eq '\,@ (car-safe arg))
-                  (list '\,@ (list 'mapcar '#'macroexp-quote (pop vars))))
-                 ((eq '\` (car-safe arg))
-                  (cdr (backquote-process (parse-result (cadr arg)))))
-                 ((consp arg)
-                  (nconc (list (parse-result (car arg)))
-                         (parse-result (cdr arg))))
-                 (t arg))))
-      (let* ((varlist (parse-vars arglist))
-             (result (progn
-                       (setq vars (nreverse vars))
-                       (parse-result arglist))))
-        `(pcase-let ((,(list '\` varlist)
-                      (conn--eval-with-state ,state
-                                             ,(list '\` (parse-vals arglist))
-                                             ,@keys)))
-           (eval ,result t))))))
+  (cl-labels ((parse-form (arg)
+                (cond ((null arg) nil)
+                      ((eq '\, (car-safe arg))
+                       (list '\, (list 'quote (list 'quote (list '\, (cadr arg))))))
+                      ((eq '\,@ (car-safe arg))
+                       (list '\,@ (list 'mapcar ''macroexp-quote
+                                        (list 'quote (list '\, (cadr arg))))))
+                      ((eq '\` (car-safe arg))
+                       (error "Nested backquotes are not supported"))
+                      ((consp arg)
+                       (nconc (list (parse-form (car arg)))
+                              (parse-form (cdr arg))))
+                      (t arg))))
+    (cl-assert (or (eq (car-safe form) '\`)
+                   (eq (car-safe form) 'backquote))
+               nil "FORM must be a backquote form")
+    `(eval (conn--eval-with-state
+            ,state
+            ,(list '\` (cdr (backquote-process (parse-form (cadr form)))))
+            ,@keys)
+           t)))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
@@ -3368,12 +3347,12 @@ BOUNDS is of the form returned by `region-bounds', which see."
 (conn-register-thing 'conn-things-in-region)
 
 (cl-defmethod conn-bounds-of-subr ((cmd (eql conn-things-in-region)) arg)
-  (cl-loop for region in (apply #'conn-get-things-in-region
-                                (conn-eval-with-state 'conn-read-thing-state
-                                    `((car ,(conn-thing-argument-dwim))
-                                      ,(region-beginning)
-                                      ,(region-end))
-                                  :prompt "Things in Region"))
+  (cl-loop for region in (conn-eval-with-state 'conn-read-thing-state
+                             `(conn-get-things-in-region
+                               (car ,(conn-thing-argument-dwim))
+                               ,(region-beginning)
+                               ,(region-end))
+                           :prompt "Things in Region")
            collect (conn-bounds cmd nil :outer region) into contents
            finally return (conn-bounds
                            cmd arg
@@ -4133,7 +4112,6 @@ strings have `conn-dispatch-label-face'."
 ;;;;; Label Reading
 
 (defmacro conn-with-dispatch-event-handler (tag keymap handler &rest body)
-  "\(fn (DESCRIPTION &rest CASE) &body BODY)"
   (declare (indent 3))
   (cl-once-only (keymap)
     (let ((body `(let ((conn--dispatch-read-event-handlers
