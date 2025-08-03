@@ -2293,7 +2293,7 @@ By default `conn-emacs-state' does not bind anything."
   (cl-labels ((parse-form (arg)
                 (cond ((null arg) nil)
                       ((eq '\, (car-safe arg))
-                       (list '\, (list 'quote (list 'quote (list '\, (cadr arg))))))
+                       (list 'quote (list '\, (list 'quote arg))))
                       ((eq '\,@ (car-safe arg))
                        (list '\,@ (list 'mapcar ''macroexp-quote
                                         (list 'quote (list '\, (cadr arg))))))
@@ -2308,7 +2308,7 @@ By default `conn-emacs-state' does not bind anything."
                nil "FORM must be a backquote form")
     `(eval (conn--eval-with-state
             ,state
-            ,(list '\` (cdr (backquote-process (parse-form (cadr form)))))
+            ,(list '\` (list '\` (parse-form (cadr form))))
             ,@keys)
            t)))
 
@@ -7068,13 +7068,12 @@ contain targets."
                   :cleanup 'conn-dispatch--cleanup))
 
 (cl-defmethod conn-handle-dispatch-command ((_cmd (eql conn-repeat-last-dispatch))
-                                            arglist)
+                                            form)
   (pcase (conn-ring-head conn-dispatch-ring)
     ((and prev
           (cl-struct conn-previous-dispatch
+                     thing thing-arg
                      action
-                     thing
-                     thing-arg
                      keys
                      other-end
                      always-retarget
@@ -7084,17 +7083,17 @@ contain targets."
          (progn
            (conn-dispatch-ring-remove-stale)
            (conn-state-eval-error "Last dispatch action stale")
-           arglist)
+           form)
        (conn-ring-delete conn-dispatch-ring prev)
-       `( ,action ,thing ,thing-arg
-          :always-retarget ,always-retarget
-          :repeat ,repeat
-          :restrict-windows ,restrict-windows
-          :other-end ,other-end
-          ,@keys)))
+       `(conn-perform-dispatch ',action ',thing ',thing-arg
+                               :always-retarget ,always-retarget
+                               :repeat ,repeat
+                               :restrict-windows ,restrict-windows
+                               :other-end ,other-end
+                               ,@(mapcar 'macroexp-quote keys))))
     (_
      (conn-state-eval-error "Dispatch ring empty")
-     arglist)))
+     form)))
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -7156,8 +7155,13 @@ contain targets."
 
 (defun conn-call-previous-dispatch (dispatch &rest override-keys)
   (pcase-let (((cl-struct conn-previous-dispatch
-                          thing thing-arg action keys other-end
-                          always-retarget repeat restrict-windows)
+                          thing thing-arg
+                          action
+                          keys
+                          other-end
+                          always-retarget
+                          repeat
+                          restrict-windows)
                dispatch))
     (apply #'conn-perform-dispatch
            `( ,action ,thing ,thing-arg
