@@ -2230,7 +2230,7 @@ By default `conn-emacs-state' does not bind anything."
                         (conn--loop-message-timer nil)
                         (conn--state-eval-exiting nil)
                         (inhibit-message t))
-    (cl-labels ((eval-command (cmd)
+    (cl-labels ((update-args (cmd)
                   (condition-case err
                       (setq arguments
                             (conn-update-argument
@@ -2277,40 +2277,41 @@ By default `conn-emacs-state' does not bind anything."
                   ((or 'help 'execute-extended-command)
                    (when-let* ((cmd (conn--state-eval-completing-read
                                      state arguments)))
-                     (eval-command cmd)))
-                  (_ (eval-command cmd)))
+                     (update-args cmd)))
+                  (_ (update-args cmd)))
               (setq conn-state-eval-last-command cmd)
               (when post (funcall post cmd))))))
       (let ((inhibit-message nil))
         (message nil)
         (eval (conn-eval-argument arguments))))))
 
+(defmacro conn-eval-parse-backquote (form)
+  (cl-labels ((parse-form (form)
+                (cond ((null form) nil)
+                      ((eq '\, (car-safe form))
+                       (list 'quote (list '\, (list 'quote form))))
+                      ((eq '\,@ (car-safe form))
+                       (list '\,@ (list 'mapcar ''macroexp-quote
+                                        (list 'quote (list '\, (cadr form))))))
+                      ((eq '\` (car-safe form))
+                       (error "Nested backquotes are not supported"))
+                      ((consp form)
+                       (nconc (list (parse-form (car form)))
+                              (parse-form (cdr form))))
+                      (t form))))
+    (cl-assert (eq (car-safe form) '\`)
+               nil "Form must be a backquote form")
+    (list '\` (list '\` (parse-form (cadr form))))))
+
 (defmacro conn-eval-with-state (state form &rest keys)
   "Eval FORM after replacing arguments with values read in STATE.
 
 \(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST)"
   (declare (indent 2))
-  (cl-labels ((parse-form (arg)
-                (cond ((null arg) nil)
-                      ((eq '\, (car-safe arg))
-                       (list 'quote (list '\, (list 'quote arg))))
-                      ((eq '\,@ (car-safe arg))
-                       (list '\,@ (list 'mapcar ''macroexp-quote
-                                        (list 'quote (list '\, (cadr arg))))))
-                      ((eq '\` (car-safe arg))
-                       (error "Nested backquotes are not supported"))
-                      ((consp arg)
-                       (nconc (list (parse-form (car arg)))
-                              (parse-form (cdr arg))))
-                      (t arg))))
-    (cl-assert (or (eq (car-safe form) '\`)
-                   (eq (car-safe form) 'backquote))
-               nil "FORM must be a backquote form")
-    `(eval (conn--eval-with-state
-            ,state
-            ,(list '\` (list '\` (parse-form (cadr form))))
-            ,@keys)
-           t)))
+  `(eval (conn--eval-with-state ,state
+                                (conn-eval-parse-backquote ,form)
+                                ,@keys)
+         t))
 
 ;; From embark
 (defun conn--all-bindings (keymap)
@@ -7085,12 +7086,13 @@ contain targets."
            (conn-state-eval-error "Last dispatch action stale")
            form)
        (conn-ring-delete conn-dispatch-ring prev)
-       `(conn-perform-dispatch ',action ',thing ',thing-arg
-                               :always-retarget ,always-retarget
-                               :repeat ,repeat
-                               :restrict-windows ,restrict-windows
-                               :other-end ,other-end
-                               ,@(mapcar 'macroexp-quote keys))))
+       (conn-eval-parse-backquote
+        `(conn-perform-dispatch ,action ,thing ,thing-arg
+                                :always-retarget ,always-retarget
+                                :repeat ,repeat
+                                :restrict-windows ,restrict-windows
+                                :other-end ,other-end
+                                ,@keys))))
     (_
      (conn-state-eval-error "Dispatch ring empty")
      form)))
