@@ -2327,25 +2327,28 @@ By default `conn-emacs-state' does not bind anything."
         (eval (conn-eval-argument (car arguments)) t)))))
 
 (eval-and-compile
-  (defun conn--state-eval-parse-form (form)
-    (cond ((null form) nil)
-          ((eq '&! (car-safe form))
-           (cons (cadr form)
-                 (conn--state-eval-parse-form (cddr form))))
-          ((eq '& (car-safe form))
-           (cons (list 'quote (list '\, (list 'quote (list '\, (cadr form)))))
-                 (conn--state-eval-parse-form (cddr form))))
-          ((eq '&& (car-safe form))
-           (cons (list '\,@ (list 'mapcar ''macroexp-quote
-                                  (list 'quote (list '\, (cadr form)))))
-                 (conn--state-eval-parse-form (cddr form))))
-          ((consp form)
-           (nconc (list (conn--state-eval-parse-form (car form)))
-                  (conn--state-eval-parse-form (cdr form))))
-          (t form))))
+  (defun conn--state-eval-quote (form)
+    (pcase form
+      ('nil nil)
+      (`(&! ,exp . ,tail)
+       (cons `(list 'list '',exp)
+             (conn--state-eval-quote tail)))
+      (`(& ,exp . ,tail)
+       (cons `(list 'list (list 'quote (list 'quote ,exp)))
+             (conn--state-eval-quote tail)))
+      (`(&& ,exp . ,tail)
+       (cons `(list 'mapcar ''macroexp-quote (list 'quote ,exp))
+             (conn--state-eval-quote tail)))
+      (`(,(and (pred consp) head) . ,tail)
+       (cons `(list 'list (list 'nconc ,@(conn--state-eval-quote head)))
+             (conn--state-eval-quote tail)))
+      (`(,head . ,tail)
+       (cons (conn--state-eval-quote head)
+             (conn--state-eval-quote tail)))
+      (_ `(list 'list '',form)))))
 
-(defmacro conn-state-eval-parse-form (form)
-  (list '\` (list '\` (conn--state-eval-parse-form form))))
+(defmacro conn-state-eval-quote (form)
+  `(list 'nconc ,@(conn--state-eval-quote form)))
 
 (defmacro conn-eval-with-state (state form &rest keys)
   "Eval FORM after replacing arguments with values read in STATE.
@@ -2353,7 +2356,7 @@ By default `conn-emacs-state' does not bind anything."
 \(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST)"
   (declare (indent 2))
   `(eval (conn--eval-with-state ,state
-                                (conn-state-eval-parse-form ,form)
+                                (conn-state-eval-quote ,form)
                                 ,@keys)
          t))
 
@@ -3380,8 +3383,8 @@ BOUNDS is of the form returned by `region-bounds', which see."
   (cl-loop for region in (conn-eval-with-state 'conn-read-thing-state
                              (conn-get-things-in-region
                               (car & (conn-thing-argument-dwim))
-                              & (region-beginning)
-                              & (region-end))
+                              (region-beginning)
+                              (region-end))
                            :prompt "Things in Region")
            collect (conn-bounds cmd nil :outer region) into contents
            finally return (conn-bounds
@@ -7120,7 +7123,7 @@ contain targets."
            (conn-state-eval-error "Last dispatch action stale"))
        (conn-ring-delete conn-dispatch-ring prev)
        (conn-state-eval-handle
-        (cons (conn-state-eval-parse-form
+        (cons (conn-state-eval-quote
                (conn-perform-dispatch & action & thing & thing-arg
                                       :always-retarget & always-retarget
                                       :repeat & repeat
@@ -7726,8 +7729,7 @@ Expansions and contractions are provided by functions in
 
 (cl-defmethod conn-bounds-of-subr ((cmd (conn-thing expansion)) arg)
   (call-interactively cmd)
-  (conn-eval-with-state
-      'conn-expand-state
+  (conn-eval-with-state 'conn-expand-state
       (conn-bounds
        & cmd & arg
        :outer & (oclosure-lambda (conn-state-eval-argument
@@ -7814,7 +7816,7 @@ Expansions and contractions are provided by functions in
   (interactive
    (conn-eval-with-state 'conn-read-thing-state
        (list && (conn-thing-argument-dwim)
-             & (register-read-with-preview "Push region to register: ")
+             (register-read-with-preview "Push region to register: ")
              & (conn-subregions-argument (use-region-p)))
      :prompt "Thing"))
   (pcase-let* ((bounds (conn-bounds-of thing-cmd thing-arg))
