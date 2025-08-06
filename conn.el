@@ -2338,7 +2338,7 @@ By default `conn-emacs-state' does not bind anything."
        (cons ``(mapcar 'macroexp-quote ',,exp) (conn--state-eval-quote tail)))
       (`(,head . ,tail)
        (cons (if (consp head)
-                 ``(list (nconc ,@(list ,@(conn--state-eval-quote head))))
+                 ``(list ,(list 'nconc ,@(conn--state-eval-quote head)))
                (conn--state-eval-quote head))
              (if (listp tail)
                  (conn--state-eval-quote tail)
@@ -3133,7 +3133,7 @@ order to mark the region that should be defined by any of COMMANDS."
   "r" 'recursive-edit
   "x" 'toggle-trim
   "z" 'toggle-subregions
-  "v" 'conn-things-in-region)
+  "y" 'conn-things-in-region)
 
 (put 'reset-arg :advertised-binding (key-parse "M-DEL"))
 
@@ -11153,7 +11153,6 @@ Operates with the selected windows parent window."
   "C-M-r" 'isearch-backward-regexp
   ";" 'comment
   "d" 'conn-forward-defun
-  "y" 'forward-symbol
   "t" 'conn-forward-inner-line
   "i" 'conn-backward-line
   "k" 'forward-line
