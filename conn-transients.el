@@ -312,8 +312,8 @@ before each iteration."
   (declare (important-return-value t))
   (pcase-let* ((`(,cmd ,arg ,sr)
                 (conn-eval-with-state 'conn-read-thing-state
-                    (list && (conn-thing-argument-dwim t)
-                          & (conn-subregions-argument (use-region-p)))
+                    `(list &,(conn-thing-argument-dwim t)
+                           ,(conn-subregions-argument (use-region-p)))
                   :prompt "Thing")))
     (if sr
         (conn-bounds-of cmd arg)
@@ -574,7 +574,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let* ((`(,cmd ,arg)
                 (conn-eval-with-state 'conn-read-thing-state
-                    (list && (conn-thing-argument-dwim t))
+                    `(list &,(conn-thing-argument-dwim t))
                   :prompt "Thing"))
                ((map :outer :subregions)
                 (conn-bounds-of cmd arg)))
@@ -603,7 +603,7 @@ apply to each contiguous component of the region."
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,cmd ,n)
                (conn-eval-with-state 'conn-read-thing-state
-                   (list && (conn-thing-argument t))
+                   `(list &,(conn-thing-argument t))
                  :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-thing-iterator cmd (region-bounds))
@@ -802,7 +802,7 @@ A zero means repeat until error."
   (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
                (apply #'conn-bounds-of
                       (conn-eval-with-state 'conn-read-thing-state
-                          (list && (conn-thing-argument-dwim))
+                          `(list &,(conn-thing-argument-dwim))
                         :prompt "Thing"))))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
