@@ -598,7 +598,7 @@ If the region is discontinuous (e.g. a rectangular region) then
 apply to each contiguous component of the region."
   :if (lambda () conn-local-mode)
   :transient 'transient--do-exit
-  :key "v"
+  :key "y"
   :description "Things in Region"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let ((`(,cmd ,n)
@@ -856,7 +856,7 @@ A zero means repeat until error."
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
   :transient 'transient--do-exit
-  :key "y"
+  :key "T"
   :description "Text Prop"
   (interactive
    (let* ((prop (intern (completing-read

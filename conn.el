@@ -2335,7 +2335,7 @@ By default `conn-emacs-state' does not bind anything."
             (`(& ,exp . ,tail)
              (cons `(mapcar 'macroexp-quote ',exp) (qt tail)))
             (`(,head . ,tail)
-             (cons (if (consp head) `(nconc ,@(qt head)) (qt head))
+             (cons (if (consp head) `(list (nconc ,@(qt head))) (qt head))
                    (if (listp tail) (qt tail) (list `',tail))))
             (_ `(list ',form)))))))
 
@@ -2351,7 +2351,7 @@ By default `conn-emacs-state' does not bind anything."
 
 (defun conn--fontify-state-eval ()
   (font-lock-add-keywords
-   nil '(("\\_<\\(&[&!]?\\)\\_>" 1 'font-lock-keyword-face))))
+   nil '(("\\_<\\(&\\)\\_>" 1 'font-lock-keyword-face))))
 
 ;;;###autoload
 (define-minor-mode conn-fontify-state-eval-mode
