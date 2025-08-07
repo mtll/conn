@@ -2241,7 +2241,11 @@ By default `conn-emacs-state' does not bind anything."
 
 (defun conn--state-eval-completing-read (state args)
   (when-let* ((metadata (conn-state-get state :loop-completion-metadata))
-              (table (mapcan #'conn--all-bindings (current-active-maps))))
+              (table
+               (cl-loop for sym in (mapcan #'conn--all-bindings
+                                           (current-active-maps))
+                        when (conn-argument-completion-predicate args sym)
+                        collect sym)))
     (condition-case _
         (intern
          (completing-read
@@ -2250,10 +2254,7 @@ By default `conn-emacs-state' does not bind anything."
             (if (eq action 'metadata)
                 `(metadata ,@metadata)
               (complete-with-action action table string pred)))
-          (lambda (sym)
-            (cl-loop for arg in args
-                     thereis (conn-argument-completion-predicate arg sym)))
-          t))
+          nil t))
       (quit nil))))
 
 (cl-defun conn--eval-with-state (state arglist &key command-handler prompt prefix pre post)
@@ -2316,8 +2317,7 @@ By default `conn-emacs-state' does not bind anything."
               ('keyboard-quit
                (keyboard-quit))
               ((or 'help 'execute-extended-command)
-               (when-let* ((cmd (conn--state-eval-completing-read
-                                 state (car arguments))))
+               (when-let* ((cmd (conn--state-eval-completing-read state arguments)))
                  (update-args cmd)))
               (_ (update-args cmd)))
             (setq conn-state-eval-last-command cmd)
@@ -2442,8 +2442,8 @@ By default `conn-emacs-state' does not bind anything."
 (cl-defgeneric conn-argument-completion-predicate (argument symbol)
   (declare (important-return-value t)
            (side-effect-free t))
-  ( :method (_arg) nil)
-  ( :method ((_arg (eql nil))) nil)
+  ( :method (_arg _sym) nil)
+  ( :method ((_arg (eql nil)) _sym) nil)
   ( :method ((arg list) sym)
     (or (conn-argument-completion-predicate (car arg) sym)
         (conn-argument-completion-predicate (cdr arg) sym))))
