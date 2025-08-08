@@ -2969,6 +2969,9 @@ order to mark the region that should be defined by any of COMMANDS."
 (cl-defmethod conn-get-target-finder ((_cmd (conn-thing inner-line)))
   'conn-dispatch-inner-lines)
 
+(cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line)))
+  'conn-dispatch-end-of-inner-lines)
+
 (conn-register-thing-commands
  'inner-line 'conn-continuous-thing-handler
  'back-to-indentation
@@ -4454,6 +4457,7 @@ themselves once the selection process has concluded."
   "M-<backspace>" 'reset-arg
   "C-f" 'retarget
   "M-f" 'always-retarget
+  "C-t" 'change-target-finder
   "<escape>" 'finish
   "C-o" 'conn-goto-window
   "C-s" 'isearch-forward
@@ -7070,6 +7074,18 @@ contain targets."
     (funcall (pop conn--dispatch-loop-change-groups) :cancel))
   (conn-dispatch-handle-and-redisplay))
 
+(defun conn-dispatch-change-target (thing thing-arg)
+  (conn-dispatch-cleanup-target-finder conn-dispatch-target-finder)
+  (setq conn-dispatch-target-finder (conn-get-target-finder thing))
+  (throw 'dispatch-change-target (list thing thing-arg)))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql change-target-finder)))
+  (apply #'conn-dispatch-change-target
+         (conn-with-dispatch-suspended
+           (conn-eval-with-state 'conn-dispatch-mover-state
+               (list && (conn-thing-argument-dwim t))
+             :prompt "New Targets"))))
+
 
 ;;;;; Dispatch Ring
 
@@ -7322,7 +7338,11 @@ contain targets."
                     'conn--dispatch-restrict-windows))
     (unwind-protect
         (progn
-          (cl-call-next-method)
+          (while-let ((new-target
+                       (catch 'dispatch-change-target
+                         (apply #'cl-call-next-method action thing thing-arg keys)
+                         nil)))
+            (pcase-setq `(,thing ,thing-arg) new-target))
           (conn-dispatch-push-history
            (conn-make-dispatch action thing thing-arg keys)))
       (ignore-errors
@@ -7521,12 +7541,6 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
    (conn-make-action 'conn-dispatch-jump)
    nil nil
    :other-end :no-other-end))
-
-(cl-defmethod conn-get-target-finder ((_cmd (eql conn-forward-inner-line)))
-  'conn-dispatch-end-of-inner-lines)
-
-(cl-defmethod conn-get-target-finder ((_cmd (eql move-end-of-line)))
-  'conn-dispatch-end-of-lines)
 
 ;;;;; Dispatch Registers
 
