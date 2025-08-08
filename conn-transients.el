@@ -314,10 +314,12 @@ before each iteration."
                 (conn-eval-with-state 'conn-read-thing-state
                     (list && (conn-thing-argument-dwim t)
                           & (conn-subregions-argument (use-region-p)))
-                  :prompt "Thing")))
-    (if sr
-        (conn-bounds-of cmd arg)
-      (list (conn-bounds-of cmd arg)))))
+                  :prompt "Thing"))
+               (bounds (conn-bounds-of cmd arg)))
+    (or (when sr
+          (cl-loop for reg in (conn-bounds-get bounds :subregions)
+                   collect (conn-bounds-get reg :outer)))
+        (list (conn-bounds-get bounds :outer)))))
 
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.
@@ -495,9 +497,10 @@ Begins the keyboard macro in `conn-command-state'."
   :key "m"
   :description "String"
   (interactive (list (transient-args transient-current-command)))
-  (deactivate-mark)
   (let* ((delimited (oref transient-current-prefix scope))
-         (regions (conn-read-thing-regions))
+         (regions (prog1
+                      (conn-read-thing-regions)
+                    (deactivate-mark)))
          (conn-query-flag conn-query-flag)
          (string (minibuffer-with-setup-hook
                      (lambda ()
@@ -533,7 +536,9 @@ Begins the keyboard macro in `conn-command-state'."
   :description "Regexp"
   (interactive (list (transient-args transient-current-command)))
   (let* ((delimited (oref transient-current-prefix scope))
-         (regions (conn-read-thing-regions))
+         (regions (prog1
+                      (conn-read-thing-regions)
+                    (deactivate-mark)))
          (conn-query-flag conn-query-flag)
          (regexp (minibuffer-with-setup-hook
                      (lambda ()
