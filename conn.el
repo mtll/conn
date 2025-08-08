@@ -3625,13 +3625,13 @@ Possibilities: \\<query-replace-map>
          (overlay-put hl 'conn-overlay t)
          (unwind-protect
              (cl-loop
-              for callback = (funcall iterator state)
-              until (or (null callback)
+              for val = (funcall iterator state)
+              until (or (null val)
                         (progn
                           (recenter nil)
                           (move-overlay hl (region-beginning) (region-end) (current-buffer))
                           (y-or-n-p (format "Record here?"))))
-              finally return callback)
+              finally return val)
            (delete-overlay hl))))
       ((or :cleanup :next)
        (funcall iterator state)))))
@@ -7815,18 +7815,18 @@ Expansions and contractions are provided by functions in
              (register-read-with-preview "Push region to register: ")
              & (conn-subregions-argument (use-region-p)))
      :prompt "Thing"))
-  (pcase-let* ((bounds (conn-bounds-of thing-cmd thing-arg))
-               (narrowings
-                (if-let* ((_ subregions-p)
-                          (subregions (conn-bounds-get bounds :subregions)))
-                    (cl-loop for bound in subregions
-                             for (b . e) = (conn-bounds-get bound :outer)
-                             collect (cons (conn--create-marker b)
-                                           (conn--create-marker e)))
-                  (pcase-let ((`(,beg . ,end)
-                               (conn-bounds-get bounds :outer)))
-                    (list (cons (conn--create-marker beg)
-                                (conn--create-marker end)))))))
+  (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
+         (narrowings
+          (if-let* ((_ subregions-p)
+                    (subregions (conn-bounds-get bounds :subregions)))
+              (cl-loop for bound in subregions
+                       for (b . e) = (conn-bounds-get bound :outer)
+                       collect (cons (conn--create-marker b)
+                                     (conn--create-marker e)))
+            (pcase-let ((`(,beg . ,end)
+                         (conn-bounds-get bounds :outer)))
+              (list (cons (conn--create-marker beg)
+                          (conn--create-marker end)))))))
     (pcase (get-register register)
       ((and (cl-struct conn-narrow-register narrow-ring) struct)
        (setf (conn-narrow-register-narrow-ring struct)
