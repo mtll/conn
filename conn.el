@@ -4515,7 +4515,7 @@ themselves once the selection process has concluded."
   "," (conn-remap-key "<conn-thing-map>"))
 
 (keymap-set (conn-get-state-map 'conn-dispatch-state)
-            "\\" 'conn-dispatch-kapply)
+            "'" 'conn-dispatch-kapply)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-dispatch-mover-state)
@@ -10984,7 +10984,7 @@ Operates with the selected windows parent window."
 (defvar-keymap conn-default-region-map
   "m" 'conn-replace
   "u" 'conn-regexp-replace
-  "\\" 'conn-kapply-on-region-prefix
+  "'" 'conn-kapply-on-region-prefix
   "TAB" 'indent-rigidly
   "$" 'ispell-region
   "*" 'calc-grab-region
@@ -11011,7 +11011,7 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-default-edit-map
   "l" 'duplicate-line
-  "\\" 'conn-kapply-on-thing-prefix
+  "'" 'conn-kapply-on-thing-prefix
   "v" 'diff-buffer-with-file
   "F" 'conn-bind-last-dispatch-to-key
   "SPC" 'whitespace-cleanup
@@ -11229,11 +11229,11 @@ Operates with the selected windows parent window."
   "t" 'conn-change
   "`" 'conn-wincontrol-mru-window
   "|" 'conn-shell-command-on-region
-  "'" 'conntext-state
+  "\\" 'conntext-state
   "." 'conn-other-window-prefix
   "/" (conn-remap-key conn-undo-keys t)
   ";" 'conn-wincontrol
-  "\\" 'conn-kapply-prefix
+  "'" 'conn-kapply-prefix
   "?" (conn-remap-key conn-undo-redo-keys t)
   "_" 'repeat-complex-command
   "SPC" 'conn-set-mark-command

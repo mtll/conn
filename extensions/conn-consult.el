@@ -203,13 +203,13 @@
 
   (defvar-keymap conn-embark-consult-xref-map
     :parent embark-general-map
-    "\\" 'conn-kapply-xref-candidates)
+    "'" 'conn-kapply-xref-candidates)
   (cl-pushnew 'conn-embark-consult-xref-map
               (alist-get 'consult-xref embark-keymap-alist))
 
   (defvar-keymap conn-embark-consult-location-map
     :parent embark-general-map
-    "\\" 'conn-kapply-location-candidates
+    "'" 'conn-kapply-location-candidates
     "c"   '("clone-indirect-buffer" .
             conn-clone-indirect-buffer-location-candidate))
   (cl-pushnew 'conn-embark-consult-location-map
@@ -217,7 +217,7 @@
 
   (defvar-keymap conn-embark-consult-grep-map
     :parent embark-general-map
-    "\\" 'conn-kapply-grep-candidates)
+    "'" 'conn-kapply-grep-candidates)
   (cl-pushnew 'conn-embark-consult-grep-map
               (alist-get 'consult-grep embark-keymap-alist)))
 
