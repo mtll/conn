@@ -210,8 +210,8 @@
   (defvar-keymap conn-embark-consult-location-map
     :parent embark-general-map
     "'" 'conn-kapply-location-candidates
-    "c"   '("clone-indirect-buffer" .
-            conn-clone-indirect-buffer-location-candidate))
+    "c" '("clone-indirect-buffer" .
+          conn-clone-indirect-buffer-location-candidate))
   (cl-pushnew 'conn-embark-consult-location-map
               (alist-get 'consult-location embark-keymap-alist))
 

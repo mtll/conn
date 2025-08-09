@@ -2644,7 +2644,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (with-demoted-errors "Error in Movement Ring: %s"
-          (conn-push-region (point-marker) (mark-marker)))))))
+          (conn-push-region (point) (mark-marker)))))))
 
 (defun conn--setup-mark ()
   (if conn-mode
@@ -3233,12 +3233,15 @@ order to mark the region that should be defined by any of COMMANDS."
            (conn-this-command-thing (conn-command-thing cmd))
            (conn-this-command-start (point-marker))
            (this-command cmd))
-       (ignore-errors
-         (call-interactively cmd)
-         (funcall conn-this-command-handler conn-this-command-start))
-       (unless (and (eql pt (point))
-                    (eql mk (mark)))
-         (conn-bounds cmd 1 :outer (cons (region-beginning) (region-end))))))
+       (unwind-protect
+           (progn
+             (ignore-errors
+               (call-interactively cmd)
+               (funcall conn-this-command-handler conn-this-command-start))
+             (unless (and (eql pt (point))
+                          (eql mk (mark)))
+               (conn-bounds cmd 1 :outer (cons (region-beginning) (region-end)))))
+         (set-marker conn-this-command-start nil))))
     (n
      (let (subregions)
        (catch 'break
@@ -3336,10 +3339,6 @@ order to mark the region that should be defined by any of COMMANDS."
 (defun conn--things-in-region-subr (thing beg end)
   (ignore-errors
     (goto-char beg)
-    (pcase-let ((`(,b . ,e) (bounds-of-thing-at-point thing)))
-      (unless (or (= (point) b)
-                  (= (point) e))
-        (goto-char beg)))
     (forward-thing thing 1)
     (cl-loop for bounds = (cons (save-excursion
                                   (forward-thing thing -1)
