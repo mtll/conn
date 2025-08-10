@@ -183,8 +183,8 @@ the edit in the macro."
   :choices `((nil . conn--kmacro-apply)
              ("apply" . ,(lambda (it)
                            (conn--kmacro-apply it 0 last-kbd-macro)))
-             ("step-edit" . conn--kmacro-apply-append)
-             ("append" . conn--kmacro-apply-step-edit)))
+             ("step-edit" . conn--kmacro-apply-step-edit)
+             ("append" . conn--kmacro-apply-append)))
 
 (transient-define-argument conn--kapply-sort-infix ()
   :class 'conn-transient-lisp-choices
