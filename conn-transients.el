@@ -741,8 +741,8 @@ A zero means repeat until error."
                           (goto-char pt)
                           (pcase (conn-bounds-of thing thing-arg)
                             ('nil (user-error "Cannot find thing at point"))
-                            ((map :outer :subregions)
-                             (or subregions (list outer))))))
+                            ((conn-bounds-get :outer)
+                             (list outer)))))
                        `(,@pipeline
                          ,(pcase (alist-get :kmacro args)
                             ('conn--kmacro-apply
