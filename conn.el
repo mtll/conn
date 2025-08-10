@@ -2644,7 +2644,7 @@ For the meaning of MSG and ACTIVATE see `push-mark'."
                   (not (eql conn--movement-tick (buffer-chars-modified-tick)))
                   (eql (mark t) conn--movement-mark))
         (with-demoted-errors "Error in Movement Ring: %s"
-          (conn-push-region (point) (mark-marker)))))))
+          (conn-push-region (point) (mark t)))))))
 
 (defun conn--setup-mark ()
   (if conn-mode
@@ -3406,6 +3406,45 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (defvar conn-kmacro-apply-end-hook nil
   "Hook run after macro application has completed.")
+
+;;;;; Kmacro Utils
+
+(defun conn--kmacro-display (macro &optional trunc)
+  (pcase macro
+    ((or 'nil '[] "") "nil")
+    (_ (let* ((m (format-kbd-macro macro))
+              (l (length m))
+              (z (and trunc (> l trunc))))
+         (format "%s%s"
+                 (if z (substring m 0 (1- trunc)) m)
+                 (if z "…" ""))))))
+
+(defun conn--kmacro-ring-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Ring: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value)
+     " - "
+     (propertize
+      (conn--kmacro-display last-kbd-macro 35)
+      'face 'transient-value))))
+
+(defun conn--kmacro-counter-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Counter: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value))))
+
+(defun conn--in-kbd-macro-p ()
+  (or defining-kbd-macro executing-kbd-macro))
 
 
 ;;;;; Kapply Query
@@ -6752,6 +6791,33 @@ contain targets."
         (select-window window)
         (goto-char pt)))))
 
+(oclosure-define (conn-dispatch-kapply
+                  (:parent conn-action))
+  (macro :mutable t))
+
+(cl-defmethod conn-make-action ((_type (eql conn-dispatch-kapply)))
+  (require 'conn-transients)
+  (letrec ((action nil)
+           (setup (lambda ()
+                    (conn-without-recursive-state
+                      (conn-dispatch-kapply-prefix
+                       (lambda (kapply-action)
+                         (setf action kapply-action))))
+                    (remove-hook 'post-command-hook setup))))
+    (add-hook 'post-command-hook setup -99)
+    (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
+    (unwind-protect
+        (recursive-edit)
+      (remove-hook 'post-command-hook setup)
+      (remove-hook 'transient-post-exit-hook 'exit-recursive-edit))
+    action))
+
+(cl-defmethod conn-describe-action ((action conn-dispatch-kapply) &optional short)
+  (if short "Kapply"
+    (concat "Kapply"
+            (when-let* ((macro (oref action macro)))
+              (concat " <" (conn--kmacro-display (kmacro--keys macro)) ">")))))
+
 (oclosure-define (conn-dispatch-transpose
                   (:parent conn-action)))
 
@@ -7384,6 +7450,25 @@ contain targets."
                win1 pt1 (or thing-override1 thing)
                win2 pt2 (or thing-override2 thing)
                thing-arg))))
+
+(cl-defmethod conn-perform-dispatch ((action conn-dispatch-kapply)
+                                     thing thing-arg
+                                     &key repeat &allow-other-keys)
+  (let ((conn-label-select-always-prompt t))
+    (conn-perform-dispatch-loop repeat
+      (pcase-let* ((`(,pt ,win ,thing-override)
+                    (conn-dispatch-select-target)))
+        (while
+            (condition-case err
+                (progn
+                  (funcall action win pt
+                           (or thing-override thing)
+                           thing-arg)
+                  nil)
+              (user-error (message (cadr err)) t))))))
+  (unless conn-kapply-suppress-message
+    (message "Kapply completed successfully after %s iterations"
+             conn-dispatch-repeat-count)))
 
 (defun conn-dispatch (&optional initial-arg)
   (interactive "P")

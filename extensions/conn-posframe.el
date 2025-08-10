@@ -28,7 +28,6 @@
 (defvar kmacro-initial-counter-value)
 (defvar kmacro-ring)
 
-(declare-function conn--kmacro-display "conn-transient")
 (declare-function kmacro--keys "kmacro")
 
 ;;;; Posframe command displays

@@ -225,14 +225,14 @@
   t)
 
 (cl-defmethod conn-perform-surround ((_with (eql conn-sp-wrap-region))
-                                     arg &key pair &allow-other-keys)
+                                     _arg &key &allow-other-keys)
   (sp-wrap-with-pair
    (with-memoization conn--surround-current-pair
      (funcall conn-read-pair-function
               (mapcar #'car sp-pair-list)))))
 
-(cl-defmethod conn-perform-surround :around ((with (eql conn-sp-wrap-region))
-                                             arg &rest keys &key pair &allow-other-keys)
+(cl-defmethod conn-perform-surround :around ((_with (eql conn-sp-wrap-region))
+                                             _arg &key &allow-other-keys)
   (let ((conn--surround-current-pair nil))
     (cl-call-next-method)))
 
