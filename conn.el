@@ -718,8 +718,7 @@ be restricted to those before or after the current match inclusive."
                with case-fold-search = isearch-case-fold-search
                while (isearch-search-string isearch-string bound t)
                when (funcall isearch-filter-predicate (match-beginning 0) (match-end 0))
-               collect (cons (conn--create-marker (match-beginning 0))
-                             (conn--create-marker (match-end 0)))
+               collect (cons (match-beginning 0) (match-end 0))
                when (and (= (match-beginning 0) (match-end 0))
                          (not (if isearch-forward (eobp) (bobp))))
                do (forward-char (if isearch-forward 1 -1))))))
@@ -3532,7 +3531,7 @@ Possibilities: \\<query-replace-map>
               iterator))
 
 (defun conn--kapply-infinite-iterator ()
-  (lambda (_state) t))
+  (lambda (_state) (cons (point) (point))))
 
 (defun conn--kapply-highlight-iterator (beg end &optional sort-function read-patterns)
   (let ((patterns
@@ -3708,7 +3707,7 @@ Possibilities: \\<query-replace-map>
             (when (markerp end) (set-marker end nil)))))
        (funcall iterator state)))))
 
-(defun conn--kapply-skip-point-invisible (iterator)
+(defun conn--kapply-skip-invisible-points (iterator)
   (lambda (state)
     (pcase state
       ((or :next :record)
@@ -3719,7 +3718,7 @@ Possibilities: \\<query-replace-map>
                 finally return ret))
       (:cleanup (funcall iterator state)))))
 
-(defun conn--kapply-skip-region-invisible (iterator)
+(defun conn--kapply-skip-invisible-regions (iterator)
   (lambda (state)
     (pcase state
       ((or :next :record)
@@ -3737,14 +3736,14 @@ Possibilities: \\<query-replace-map>
     (lambda (state)
       (pcase state
         ((or :next :record)
-         (cl-loop for ret = (funcall iterator state)
-                  for res = (or (null ret)
-                                (conn--open-invisible (car ret) (cdr ret)))
+         (cl-loop for next = (funcall iterator state)
+                  for res = (or (null next)
+                                (conn--open-invisible (car next) (cdr next)))
                   until res
-                  do (pcase-let ((`(,beg . ,end) ret))
+                  do (pcase-let ((`(,beg . ,end) next))
                        (when (markerp beg) (set-marker beg nil))
                        (when (markerp end) (set-marker end nil)))
-                  finally return (prog1 ret
+                  finally return (prog1 next
                                    (when (consp res)
                                      (setq restore (nconc res restore))))))
         (:cleanup
@@ -4445,6 +4444,8 @@ themselves once the selection process has concluded."
 (defvar conn--dispatch-must-prompt nil)
 (defvar conn--dispatch-action-always-prompt nil)
 (defvar conn--dispatch-always-retarget nil)
+
+(defvar conn--dispatch-remap-cookies nil)
 
 (defvar conn-dispatch-repeat-count nil)
 (defvar conn-dispatch-other-end nil)
@@ -5322,24 +5323,26 @@ Target overlays may override this default by setting the
   (declare (important-return-value t)))
 
 (cl-defmethod conn-dispatch-select-target :around ()
-  (conn-with-dispatch-event-handler 'mouse-click
-      nil
-      (lambda (cmd)
-        (when (or (and (eq cmd 'act)
-                       (mouse-event-p last-input-event))
-                  (eq 'dispatch-mouse-repeat
-                      (event-basic-type last-input-event)))
-          (let* ((posn (event-start last-input-event))
-                 (win (posn-window posn))
-                 (pt (posn-point posn)))
-            (when (and (not (posn-area posn))
-                       (funcall conn-target-window-predicate win))
-              (throw 'mouse-click (list pt win nil))))))
-    (conn-dispatch-select-mode 1)
-    (unwind-protect
-        (let ((inhibit-message t))
-          (cl-call-next-method))
-      (conn-dispatch-select-mode -1))))
+  (let ((conn--dispatch-remap-cookies nil))
+    (conn-with-dispatch-event-handler 'mouse-click
+        nil
+        (lambda (cmd)
+          (when (or (and (eq cmd 'act)
+                         (mouse-event-p last-input-event))
+                    (eq 'dispatch-mouse-repeat
+                        (event-basic-type last-input-event)))
+            (let* ((posn (event-start last-input-event))
+                   (win (posn-window posn))
+                   (pt (posn-point posn)))
+              (when (and (not (posn-area posn))
+                         (funcall conn-target-window-predicate win))
+                (throw 'mouse-click (list pt win nil))))))
+      (conn-dispatch-select-mode 1)
+      (unwind-protect
+          (let ((inhibit-message t))
+            (cl-call-next-method))
+        (message "cookies: %s" conn--dispatch-remap-cookies)
+        (conn-dispatch-select-mode -1)))))
 
 (cl-defmethod conn-dispatch-select-target ()
   (unwind-protect
@@ -5408,10 +5411,17 @@ Target overlays may override this default by setting the
   "Abstract type for target finders with a window predicate."
   :abstract t)
 
-(cl-defmethod conn-dispatch-update-targets :around ((state conn-dispatch-target-window-predicate))
-  (let ((conn-target-window-predicate conn-target-window-predicate))
-    (when-let* ((pred (oref state window-predicate)))
-      (add-function :before-while conn-target-window-predicate pred))
+(cl-defmethod conn-dispatch-update-targets :before ((state conn-dispatch-target-window-predicate))
+  (let ((pred (oref state window-predicate)))
+    (unless (advice-function-member-p pred conn-target-window-predicate)
+      (add-function :before-while conn-target-window-predicate pred)))
+  (ignore-error cl-no-next-method
+    (cl-call-next-method)))
+
+(cl-defmethod conn-dispatch-cleanup-target-finder ((state conn-dispatch-target-window-predicate))
+  (remove-function conn-target-window-predicate
+                   (oref state window-predicate))
+  (ignore-error cl-no-next-method
     (cl-call-next-method)))
 
 (defclass conn-dispatch-string-targets ()
@@ -5589,8 +5599,10 @@ contain targets."
                (match-beginning 0) 0
                :window win))))))))
 
-(defclass conn-dispatch-all-defuns (conn-dispatch-focus-targets)
-  ())
+(defclass conn-dispatch-all-defuns (conn-dispatch-focus-targets
+                                    conn-dispatch-target-window-predicate)
+  ((window-predicate
+    :initform (lambda (win) (eq win (selected-window))))))
 
 (cl-defmethod conn-dispatch-update-targets ((_state conn-dispatch-all-defuns))
   (dolist (win (conn--get-target-windows))
@@ -6951,9 +6963,13 @@ contain targets."
   :global t
   :lighter " SELECT"
   (if conn-dispatch-select-mode
-      (when-let* ((face (conn-state-get 'conn-dispatch-state :mode-line-face)))
-        (setf (alist-get 'mode-line face-remapping-alist) face))
-    (cl-callf2 remq (assq 'mode-line face-remapping-alist) face-remapping-alist)))
+      (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+        (face-remap-add-relative
+         'mode-line
+         (conn-state-get 'conn-dispatch-state :mode-line-face)))
+    (pcase-dolist (`(,buf . ,cookie) conn--dispatch-remap-cookies)
+      (with-current-buffer buf
+        (face-remap-remove-relative cookie)))))
 
 (cl-defun conn-dispatch-handle-and-redisplay (&key (prompt t))
   (redisplay)
@@ -7097,12 +7113,19 @@ contain targets."
   (goto-char (window-start (selected-window)))
   (conn-dispatch-handle-and-redisplay))
 
+(defun conn-dispatch-goto-window (window)
+  (select-window window)
+  (with-memoization (alist-get (current-buffer) conn--dispatch-remap-cookies)
+    (face-remap-add-relative
+     'mode-line
+     (conn-state-get 'conn-dispatch-state :mode-line-face))))
+
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql conn-goto-window)))
-  (conn-goto-window
-   (conn-prompt-for-window
-    (delq (selected-window)
-          (conn--get-windows nil 'nomini 'visible))))
-  (conn-dispatch-handle-and-redisplay :prompt nil))
+  (if-let* ((windows (delq (selected-window) (conn--get-target-windows))))
+      (progn
+        (conn-dispatch-goto-window (conn-prompt-for-window windows))
+        (conn-dispatch-handle-and-redisplay :prompt nil))
+    (conn-dispatch-handle)))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql finish)))
   (throw 'dispatch-select-exit nil))
@@ -10829,17 +10852,16 @@ Currently selected window remains selected afterwards."
   (interactive)
   (other-window -1))
 
-(defun conn-goto-window (window)
+(defun conn-goto-window ()
   "Prompt for a window and then select it."
-  (interactive
-   (list (conn-prompt-for-window
-          (delq (selected-window)
-                (conn--get-windows
-                 nil 'nomini
-                 (if current-prefix-arg 'visible))))))
-  (if (null window)
-      (user-error "No other windows available to select")
-    (select-window window)))
+  (interactive)
+  (if-let* ((window (conn-prompt-for-window
+                     (delq (selected-window)
+                           (conn--get-windows
+                            nil 'nomini
+                            (if current-prefix-arg 'visible))))))
+      (select-window window)
+    (user-error "No other windows available to select")))
 
 (defun conn-wincontrol-mru-window ()
   "Select most recently used window."
@@ -11058,7 +11080,7 @@ Operates with the selected windows parent window."
   "M-<return>" 'conn-isearch-exit-and-mark
   "C-<return>" 'conn-isearch-exit-other-end
   "M-RET" 'conn-isearch-exit-and-mark
-  "M-\\" 'conn-isearch-kapply-prefix
+  "M-'" 'conn-isearch-kapply-prefix
   "C-," 'conn-dispatch-isearch
   "C-'" 'conn-isearch-open-recursive-edit)
 
