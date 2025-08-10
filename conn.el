@@ -4685,6 +4685,8 @@ themselves once the selection process has concluded."
 
 ;;;;;; Repeat
 
+(defvar conn-dispatch-autorepeat-actions (list 'conn-dispatch-kapply))
+
 (oclosure-define (conn-dispatch-repeat-argument
                   (:parent conn-state-eval-argument)))
 
@@ -4693,7 +4695,8 @@ themselves once the selection process has concluded."
   (oclosure-lambda (conn-dispatch-repeat-argument
                     (value value))
       (self cmd)
-    (if (eq cmd 'repeat-dispatch)
+    (if (or (eq cmd 'repeat-dispatch)
+            (memq cmd conn-dispatch-autorepeat-actions))
         (conn-set-argument self (not value))
       self)))
 
