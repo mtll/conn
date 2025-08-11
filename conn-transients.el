@@ -186,6 +186,16 @@ the edit in the macro."
              ("step-edit" . conn--kmacro-apply-step-edit)
              ("append" . conn--kmacro-apply-append)))
 
+(transient-define-argument conn--kapply-query-infix ()
+  :class 'conn-transient-lisp-choices
+  :description "Query"
+  :key "q"
+  :keyword :query
+  :choices `(nil
+             ("record" . conn--kapply-query)
+             ("per iteration" . ,(lambda (iterator)
+                                   (conn--kapply-query iterator t)))))
+
 (transient-define-argument conn--kapply-sort-infix ()
   :class 'conn-transient-lisp-choices
   :description "Order"
@@ -328,7 +338,7 @@ before each iteration."
 
 Begins the keyboard macro by deleting the string at each match."
   :transient 'transient--do-exit
-  :key "q"
+  :key "m"
   :description "Replace"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
@@ -344,6 +354,7 @@ Begins the keyboard macro by deleting the string at each match."
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-invisible-regions)
+   (alist-get :query args)
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -375,6 +386,7 @@ Begins the keyboard macro in `conn-emacs-state'."
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-invisible-regions)
+   (alist-get :query args)
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -405,6 +417,7 @@ Begins the keyboard macro in `conn-command-state'."
    (if (eq search-invisible 'open)
        'conn--kapply-open-invisible
      'conn--kapply-skip-invisible-regions)
+   (alist-get :query args)
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -417,7 +430,7 @@ Begins the keyboard macro in `conn-command-state'."
 (transient-define-suffix conn--kapply-replace-rectangle-suffix (args)
   "Apply keyboard macro to a rectangle replacing each line."
   :transient 'transient--do-exit
-  :key "q"
+  :key "m"
   :description "Replace"
   (interactive (list (transient-args transient-current-command)))
   (let ((regions (region-bounds)))
@@ -429,6 +442,7 @@ Begins the keyboard macro in `conn-command-state'."
      (conn--kapply-region-iterator regions)
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-invisible-regions
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -454,6 +468,7 @@ Begins the keyboard macro in `conn-command-state'."
      (conn--kapply-region-iterator regions)
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-invisible-regions
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -480,6 +495,7 @@ Begins the keyboard macro in `conn-command-state'."
      (conn--kapply-region-iterator regions)
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-invisible-regions
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -501,7 +517,6 @@ Begins the keyboard macro in `conn-command-state'."
          (regions (prog1
                       (conn-read-thing-regions)
                     (deactivate-mark)))
-         (conn-query-flag conn-query-flag)
          (string (minibuffer-with-setup-hook
                      (lambda ()
                        (thread-last
@@ -519,7 +534,7 @@ Begins the keyboard macro in `conn-command-state'."
      (if (eq search-invisible 'open)
          'conn--kapply-open-invisible
        'conn--kapply-skip-invisible-regions)
-     (when conn-query-flag 'conn--kapply-query)
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -539,7 +554,6 @@ Begins the keyboard macro in `conn-command-state'."
          (regions (prog1
                       (conn-read-thing-regions)
                     (deactivate-mark)))
-         (conn-query-flag conn-query-flag)
          (regexp (minibuffer-with-setup-hook
                      (lambda ()
                        (thread-last
@@ -557,7 +571,7 @@ Begins the keyboard macro in `conn-command-state'."
      (if (eq search-invisible 'open)
          'conn--kapply-open-invisible
        'conn--kapply-skip-invisible-regions)
-     (when conn-query-flag 'conn--kapply-query)
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -587,6 +601,7 @@ apply to each contiguous component of the region."
      (conn--kapply-region-iterator (or subregions (list outer)))
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-invisible-points
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -615,6 +630,7 @@ apply to each contiguous component of the region."
      'conn--kapply-relocate-to-region
      'conn--kapply-skip-invisible-points
      `(conn--kapply-every-nth ,(prefix-numeric-value n))
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -657,6 +673,7 @@ A zero means repeat until error."
    iterator
    'conn--kapply-relocate-to-region
    'conn--kapply-open-invisible
+   (alist-get :query args)
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -718,14 +735,14 @@ A zero means repeat until error."
   (let* ((matches
           (cond ((bound-and-true-p multi-isearch-file-list)
                  (mapcan 'conn--isearch-matches
-                         (append
-                          (remq (current-buffer)
+                         (nconc
+                          (delq (current-buffer)
                                 (mapcar 'find-file-noselect
                                         multi-isearch-file-list))
                           (list (current-buffer)))))
                 ((bound-and-true-p multi-isearch-buffer-list)
                  (mapcan 'conn--isearch-matches
-                         (append
+                         (nconc
                           (remq (current-buffer) multi-isearch-buffer-list)
                           (list (current-buffer)))))
                 (t
@@ -740,6 +757,7 @@ A zero means repeat until error."
                                          'conn--nnearest-first))
        'conn--kapply-relocate-to-region
        'conn--kapply-open-invisible
+       (alist-get :query args)
        (alist-get :undo args)
        (alist-get :restrictions args)
        (alist-get :excursions args)
@@ -757,10 +775,9 @@ A zero means repeat until error."
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
   (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
-               (apply #'conn-bounds-of
-                      (conn-eval-with-state 'conn-read-thing-state
-                          (list && (conn-thing-argument-dwim))
-                        :prompt "Thing"))))
+               (conn-eval-with-state 'conn-read-thing-state
+                   (conn-bounds-of && (conn-thing-argument-dwim))
+                 :prompt "Thing")))
     (conn--kapply-compose-iterator
      (conn--kapply-highlight-iterator
       (or beg (point-min))
@@ -770,6 +787,7 @@ A zero means repeat until error."
       (alist-get :read-patterns args))
      'conn--kapply-relocate-to-region
      'conn--kapply-open-invisible
+     (alist-get :query args)
      (alist-get :undo args)
      (alist-get :restrictions args)
      (alist-get :excursions args)
@@ -800,6 +818,7 @@ A zero means repeat until error."
         'conn--nnearest-first))
    'conn--kapply-relocate-to-region
    'conn--kapply-skip-invisible-regions
+   (alist-get :query args)
    (alist-get :undo args)
    (alist-get :restrictions args)
    (alist-get :excursions args)
@@ -888,7 +907,8 @@ A zero means repeat until error."
       (conn--kapply-state-infix)
       (conn--kapply-sort-infix)]
     [ (conn--kapply-macro-infix)
-      (conn--kapply-ibuffer-infix)]]
+      (conn--kapply-ibuffer-infix)
+      (conn--kapply-query-infix)]]
   [ [ :if (lambda () (bound-and-true-p rectangle-mark-mode))
       :description "With State:"
       (conn--kapply-things-in-region-suffix)
@@ -946,7 +966,8 @@ A zero means repeat until error."
   [ :if-not (lambda () (bound-and-true-p rectangle-mark-mode))
     :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-state-infix)]
+      (conn--kapply-state-infix)
+      (conn--kapply-query-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
   [ [ :description "With State:"
@@ -991,7 +1012,8 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-macro-infix)
-      (conn--kapply-ibuffer-infix)]]
+      (conn--kapply-ibuffer-infix)
+      (conn--kapply-query-infix)]]
   [ [ :description "With State:"
       (conn--kapply-replace-region-string)
       (conn--kapply-emacs-region-string)
@@ -1038,7 +1060,8 @@ A zero means repeat until error."
       (conn--kapply-highlights-in-thing)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)
-      (conn--kapply-read-hl-patterns)]]
+      (conn--kapply-read-hl-patterns)
+      (conn--kapply-query-infix)]]
   [ [ :description "Apply Kmacro On:"
       (conn--kapply-highlights)]
     [ :description "Save State:"
@@ -1079,7 +1102,8 @@ A zero means repeat until error."
   [ :description "Options:"
     [ (conn--kapply-region-infix)
       (conn--kapply-state-infix)
-      (conn--kapply-sort-infix)]
+      (conn--kapply-sort-infix)
+      (conn--kapply-query-infix)]
     [ (conn--kapply-matches-infix)
       (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
@@ -1122,7 +1146,8 @@ A zero means repeat until error."
        :transient transient--do-suspend)]]
   [ :description "Options:"
     [ (conn--kapply-region-infix)
-      (conn--kapply-state-infix)]
+      (conn--kapply-state-infix)
+      (conn--kapply-query-infix)]
     [ (conn--kapply-macro-infix)
       (conn--kapply-ibuffer-infix)]]
   [ [ :description "Apply Kmacro On:"

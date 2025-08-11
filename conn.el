@@ -44,6 +44,8 @@
 
 (defvar-local conn--hide-mark-cursor nil)
 
+(defvar conn-lighter " Conn")
+
 (declare-function kmacro-p "kmacro")
 (declare-function kmacro-step-edit-macro "kmacro")
 (declare-function project-files "project")
@@ -94,11 +96,6 @@ dynamically.")
   "Conn-mode key remapping."
   :prefix "conn-"
   :group 'conn)
-
-(defcustom conn-lighter " Conn"
-  "Default modeline lighter for conn-mode."
-  :type '(choice string (const nil))
-  :group 'conn-states)
 
 
 ;;;;; Key Remapping
@@ -1617,7 +1614,7 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
 
-(defmacro conn-with-recursive-state (state &rest body)
+(defmacro conn-with-recursive-stack (state &rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (form body))
            (indent 1))
@@ -1941,7 +1938,7 @@ added as methods to `conn-enter-state' and `conn-exit-state', or added
 to the abnormal hooks `conn-state-entry-functions' or
 `conn-state-exit-functions'.
 
-\(fn NAME PARENTS &optional DOCSTRING [KEYWORD VAL ...])"
+\(fn NAME PARENTS &optional DOCSTRING [KEY VALUE ...])"
   (declare (debug ( name form string-or-null-p
                     [&rest keywordp sexp]))
            (indent 2))
@@ -2280,7 +2277,7 @@ By default `conn-emacs-state' does not bind anything."
                       (when (updated-p (car arguments) next)
                         (setq conn--state-eval-error-message "")
                         (setq arguments (cons next handler)))))))
-      (conn-with-recursive-state state
+      (conn-with-recursive-stack state
         (while (conn-argument-required-p (car arguments))
           (when (and conn--state-eval-message-timeout
                      (time-less-p conn--state-eval-message-timeout nil))
@@ -3302,7 +3299,7 @@ order to mark the region that should be defined by any of COMMANDS."
     (unwind-protect
         (progn
           (add-hook 'pre-command-hook pre)
-          (conn-with-recursive-state 'conn-bounds-of-recursive-edit-state
+          (conn-with-recursive-stack 'conn-bounds-of-recursive-edit-state
             (funcall pre)
             (recursive-edit))
           (conn-bounds-of-subr 'region nil))
@@ -3655,7 +3652,7 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Pipeline Functions
 
-(defun conn--kapply-query (iterator)
+(defun conn--kapply-query (iterator &optional each-iteration)
   (lambda (state)
     (pcase state
       (:record
@@ -3671,7 +3668,10 @@ Possibilities: \\<query-replace-map>
                           (recenter nil)
                           (move-overlay hl (region-beginning) (region-end) (current-buffer))
                           (y-or-n-p (format "Record here?"))))
-              finally return val)
+              finally return (progn
+                               (when each-iteration
+                                 (push 'conn-kbd-macro-query unread-command-events))
+                               val))
            (delete-overlay hl))))
       ((or :cleanup :next)
        (funcall iterator state)))))
@@ -3694,7 +3694,6 @@ Possibilities: \\<query-replace-map>
               (when (markerp end) (set-marker end nil))))))))))
 
 (defun conn--kapply-every-nth (iterator N)
-  (cl-assert (> N 0))
   (lambda (state)
     (pcase state
       (:cleanup
@@ -4057,7 +4056,7 @@ The iterator must be the first argument in ARGLIST.
                  (user-error "Not defining keyboard macro")))
            (when defining-kbd-macro (kmacro-end-macro nil)))
          (when (eq last-macro last-kbd-macro)
-           (user-error "New keyboard not defined"))
+           (user-error "New keyboard macro not defined"))
          (kmacro-call-macro (or count 0)))))))
 
 (conn--define-kapply conn--kmacro-apply-append (iterator &optional count skip-exec)
@@ -7634,8 +7633,7 @@ Prefix arg REPEAT inverts the value of repeat in the last dispatch."
            (lambda ()
              (cl-loop for (beg . end) in targets
                       do (conn-make-target-overlay beg (- end beg)))))))
-    ;; In case this was a recursive isearch
-    (unwind-protect
+    (unwind-protect ; In case this was a recursive isearch
         (isearch-exit)
       (conn-perform-dispatch
        (conn-make-action 'conn-dispatch-jump)
@@ -9088,7 +9086,7 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
         (buf (current-buffer)))
     (conn-transpose-recursive-edit-mode 1)
     (unwind-protect
-        (conn-with-recursive-state 'conn-bounds-of-recursive-edit-state
+        (conn-with-recursive-stack 'conn-bounds-of-recursive-edit-state
           (recursive-edit))
       (conn-transpose-recursive-edit-mode -1))
     (conn--dispatch-transpose-subr
@@ -9722,7 +9720,7 @@ of `conn-recenter-positions'."
 
 (defun conn-outline-insert-heading ()
   (interactive)
-  (conn-with-recursive-state 'conn-emacs-state
+  (conn-with-recursive-stack 'conn-emacs-state
     (save-mark-and-excursion
       (save-current-buffer
         (outline-insert-heading)
@@ -11205,6 +11203,7 @@ Operates with the selected windows parent window."
 (put 'conn-previous-emacs-state 'repeat-check-key 'no)
 
 (defvar-keymap conn-local-mode-map
+  "<conn-kbd-macro-query>" 'conn-kapply-kbd-macro-query
   "C-<escape>" 'exit-recursive-edit
   "C-x y" conn-dispatch-cycle-map
   "M-g o" 'conn-pop-mark-ring
@@ -11574,7 +11573,7 @@ Operates with the selected windows parent window."
   (declare-function calc-dispatch "calc")
 
   (defun conn--calc-dispatch-ad (&rest app)
-    (conn-with-recursive-state 'conn-null-state
+    (conn-with-recursive-stack 'conn-null-state
       (apply app)))
   (advice-add 'calc-dispatch :around 'conn--calc-dispatch-ad))
 

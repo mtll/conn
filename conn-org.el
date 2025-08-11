@@ -75,7 +75,7 @@
   (interactive)
   (forward-char 1)
   (call-interactively 'org-insert-heading-respect-content)
-  (conn-with-recursive-state 'conn-emacs-state
+  (conn-with-recursive-stack 'conn-emacs-state
     (recursive-edit)))
 
 (put 'org-inner-math 'bounds-of-thing-at-point
@@ -314,7 +314,7 @@
                                      &key &allow-other-keys)
   (org-insert-structure-template "src")
   (undo-boundary)
-  (conn-with-recursive-state 'conn-emacs-state
+  (conn-with-recursive-stack 'conn-emacs-state
     (recursive-edit)))
 
 (cl-defmethod conn-perform-surround ((_cmd (eql org-verse)) _arg
@@ -341,7 +341,7 @@
                                      &key &allow-other-keys)
   (org-insert-structure-template "export")
   (undo-boundary)
-  (conn-with-recursive-state 'conn-emacs-state
+  (conn-with-recursive-stack 'conn-emacs-state
     (recursive-edit)))
 
 (provide 'conn-org)
