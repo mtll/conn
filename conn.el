@@ -397,16 +397,16 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 (define-inline conn-ring--visit (ring item)
   (inline-quote
    (cl-callf thread-last (conn-ring-history ,ring)
-     (delete ,item) (cons ,item))))
+     (delq ,item) (cons ,item))))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
-  (cl-callf thread-last (conn-ring-list ring) (delete item) (cons item))
+  (cl-callf thread-last (conn-ring-list ring) (delq item) (cons item))
   (conn-ring--visit ring item)
   (when-let* ((old (drop (conn-ring-capacity ring) (conn-ring-history ring))))
     (cl-callf2 take (conn-ring-capacity ring) (conn-ring-history ring))
     (dolist (o old)
-      (cl-callf2 delete o (conn-ring-list ring))
+      (cl-callf2 delq o (conn-ring-list ring))
       (when-let* ((cleanup (conn-ring-cleanup ring)))
         (funcall cleanup o)))))
 
@@ -450,8 +450,8 @@ If ring is (1 2 3 4) 4 would be returned."
   (car (last (conn-ring-list ring))))
 
 (defun conn-ring-delete (ring elem)
-  (cl-callf2 delete elem (conn-ring-list ring))
-  (cl-callf2 delete elem (conn-ring-history ring))
+  (cl-callf2 delq elem (conn-ring-list ring))
+  (cl-callf2 delq elem (conn-ring-history ring))
   (when-let* ((cleanup (conn-ring-cleanup ring)))
     (funcall cleanup elem)))
 
@@ -1609,7 +1609,6 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
 (pcase-defmacro conn-substate (parent)
   "Matches if EXPVAL is a substate of PARENT."
   `(and (pred conn-state-name-p)
-        (guard (conn-state-name-p ',parent))
         (pred ,(static-if (< emacs-major-version 30)
                    `(pcase--flip conn-substate-p ',parent)
                  `(conn-substate-p _ ',parent)))))
@@ -3241,7 +3240,7 @@ order to mark the region that should be defined by any of COMMANDS."
     (n
      (let (subregions)
        (catch 'break
-         (dotimes (_ n)
+         (dotimes (_ (abs n))
            (if-let* ((bound (conn-bounds-of-subr cmd (cl-signum arg))))
                (push bound subregions)
              (throw 'break nil))))
@@ -11638,6 +11637,9 @@ Operates with the selected windows parent window."
  'outline-previous-heading
  'outline-forward-same-level
  'outline-backward-same-level)
+
+(cl-defmethod conn-bounds-of-subr ((_cmd (eql conn-outline-state-prev-heading)) arg)
+  (conn-bounds-of-subr 'outline-previous-visible-heading arg))
 
 (define-minor-mode conntext-outline-mode
   "Minor mode for contextual bindings in outline-mode."
