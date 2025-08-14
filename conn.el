@@ -1738,7 +1738,23 @@ See also `conn-exit-functions'.")
 
 (defmacro conn-state-defer (&rest body)
   (declare (indent 0))
-  `(cl-pushnew (lambda () ,@body) conn--state-defered))
+  `(push (lambda () ,@body) conn--state-defered))
+
+(oclosure-define (conn-state-defered
+                  (:predicate conn-state-defered-p))
+  (id :type symbol))
+
+(defmacro conn-state-defer-once (&rest body)
+  (declare (indent 0))
+  (cl-with-gensyms (id)
+    `(when (cl-loop for fn in conn--state-defered
+                    never (and (conn-state-defered-p fn)
+                               (eq ',id (conn-state-defered--id fn))))
+       (push (oclosure-lambda (conn-state-defered
+                               (id ',id))
+                 ()
+               ,@body)
+             conn--state-defered))))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -11538,9 +11554,8 @@ Operates with the selected windows parent window."
 ;;;; Completion
 
 (defun conn--exit-completion ()
-  (when completion-in-region-mode
-    (conn-state-defer
-      (completion-in-region-mode -1))))
+  (conn-state-defer-once
+    (completion-in-region-mode -1)))
 (add-hook 'completion-in-region-mode-hook 'conn--exit-completion)
 
 
