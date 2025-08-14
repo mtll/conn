@@ -976,6 +976,9 @@ of highlighting."
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
 
+(defvar-local conn-next-state nil)
+(defvar-local conn-previous-state nil)
+
 (defvar-local conn--state-stack nil
   "Previous conn states in buffer.")
 
@@ -1701,14 +1704,6 @@ These match if the argument is a substate of STATE."
 
 ;;;;; Enter/Exit Functions
 
-(defvar conn-exit-functions nil
-  "Abnormal hook run when a state is exited.
-
-Each function is passed the state being exited
-(eg '`conn-command-state' or '`conn-emacs-state').
-
-See also `conn-state-entry-functions'.")
-
 (defvar conn-state-entry-functions nil
   "Abnormal hook run when a state is entered.
 
@@ -1717,7 +1712,7 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
-(defvar-local conn--state-cleanup-functions nil)
+(defvar-local conn--state-defered nil)
 
 (defvar conn-state-lighter-separator "→")
 
@@ -1741,9 +1736,9 @@ See also `conn-exit-functions'.")
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
-(defmacro conn-state-with-cleanup (&rest body)
+(defmacro conn-state-defer (&rest body)
   (declare (indent 0))
-  `(push (lambda () ,@body) conn--state-cleanup-functions))
+  `(cl-pushnew (lambda () ,@body) conn--state-defered))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -1764,34 +1759,6 @@ See also `conn-exit-functions'.")
                                    (conn-state-get state :hide-mark-cursor))
         cursor-type (conn-state-get state :cursor nil t)))
 
-(defun conn-exit-state ()
-  (let ((success nil)
-        (state conn-current-state))
-    (unwind-protect
-        (progn
-          (setq conn-current-state nil
-                cursor-type t)
-          (set state nil)
-          (let ((cleanup t))
-            (dolist (fn conn--state-cleanup-functions)
-              (cl-callf2 and
-                  (ignore-errors (funcall fn) t)
-                  cleanup))
-            (setq conn--state-cleanup-functions nil)
-            (unless cleanup (error "Error cleaning up state")))
-          (setq success t))
-      (unless success
-        (conn-local-mode -1)
-        (message "Error exiting state %s." (symbol-value state))))
-    (run-hook-wrapped
-     'conn-state-exit-functions
-     (lambda (fn)
-       (condition-case err
-           (funcall fn state)
-         (error
-          (remove-hook 'conn-state-exit-functions fn)
-          (message "Error in conn-exit-functions %s" (car err))))))))
-
 (cl-defgeneric conn-enter-state (state &key &allow-other-keys)
   "Enter conn state STATE."
   ( :method ((_state (eql 'nil)) &key &allow-other-keys) "Noop" nil)
@@ -1803,12 +1770,12 @@ See also `conn-exit-functions'.")
   (unless (symbol-value state)
     (when (conn-state-get state :abstract)
       (error "Attempting to enter abstract state %s" state))
-    (let ((success nil))
+    (let (conn-previous-state)
       (unwind-protect
           (progn
-            (when conn-current-state
-              (conn-exit-state))
-            (setf conn-current-state state)
+            (let ((conn-next-state state))
+              (mapc #'funcall (cl-shiftf conn--state-defered nil)))
+            (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties state)
             (conn--activate-input-method)
             (unless (conn--mode-maps-sorted-p state)
@@ -1816,18 +1783,21 @@ See also `conn-exit-functions'.")
             (cl-call-next-method)
             (conn-update-lighter)
             (set state t)
-            (setq success t))
-        (unless success
+            (conn-state-defer
+              (set conn-current-state nil)
+              (setq cursor-type t
+                    conn-current-state nil)))
+        (unless (symbol-value state)
           (conn-local-mode -1)
-          (message "Error entering state %s." state))))
-    (run-hook-wrapped
-     'conn-state-entry-functions
-     (lambda (fn)
-       (condition-case err
-           (funcall fn state)
-         (error
-          (remove-hook 'conn-state-entry-functions fn)
-          (message "Error in conn-state-entry-functions: %s" (car err))))))))
+          (message "Error entering state %s." state)))
+      (run-hook-wrapped
+       'conn-state-entry-functions
+       (lambda (fn)
+         (condition-case err
+             (funcall fn)
+           (error
+            (remove-hook 'conn-state-entry-functions fn)
+            (message "Error in conn-state-entry-functions: %s" (car err)))))))))
 
 (defun conn-push-state (state)
   (unless (symbol-value state)
@@ -2016,7 +1986,7 @@ By default `conn-emacs-state' does not bind anything."
 (cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
   (when-let* ((face (conn-state-get state :mode-line-face))
               (cookie (face-remap-add-relative 'mode-line face)))
-    (conn-state-with-cleanup
+    (conn-state-defer
       (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
@@ -2041,7 +2011,7 @@ By default `conn-emacs-state' does not bind anything."
 (defvar-local conn-emacs-state-ring nil)
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
-  (conn-state-with-cleanup
+  (conn-state-defer
     (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
       (conn-ring-insert-front conn-emacs-state-ring (point-marker)))
     (when conn-emacs-state-register
@@ -2083,8 +2053,7 @@ By default `conn-emacs-state' does not bind anything."
             (let ((pred (conn-state-get state :pop-predicate)))
               (cl-check-type pred function)
               (lambda ()
-                (unless (or (prog1 prefix-command
-                              (setq prefix-command nil))
+                (unless (or (cl-shiftf prefix-command nil)
                             (not (funcall pred)))
                   (when msg-fn
                     (remove-hook 'post-command-hook msg-fn t))
@@ -3272,7 +3241,7 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
   (setq buffer-read-only t)
-  (conn-state-with-cleanup
+  (conn-state-defer
     (setq buffer-read-only nil))
   (cl-call-next-method))
 
@@ -10285,11 +10254,8 @@ If ARG is non-nil move down ARG lines before opening line."
 If ARG is non-nil enter emacs state in `binary-overwrite-mode' instead."
   (interactive "P")
   (conn-push-state 'conn-emacs-state)
-  (add-hook 'conn-state-exit-functions
-            (conn-anaphoricate hook
-              (lambda (_state)
-                (overwrite-mode -1)
-                (remove-hook 'conn-state-exit-functions hook))))
+  (conn-state-defer
+    (overwrite-mode -1))
   (if arg
       (binary-overwrite-mode 1)
     (overwrite-mode 1)))
@@ -11501,11 +11467,7 @@ Operates with the selected windows parent window."
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    ;; conn-exit-state sets conn-current-state to nil before
-    ;; anything else, so if we got here after an error in
-    ;; conn-exit-state this prevents an infinite loop.
-    (when conn-current-state
-      (conn-exit-state))
+    (mapc #'funcall (cl-shiftf conn--state-defered nil))
     (conn--clear-overlays)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)
@@ -11575,10 +11537,11 @@ Operates with the selected windows parent window."
 
 ;;;; Completion
 
-(defun conn--exit-completion (_state)
+(defun conn--exit-completion ()
   (when completion-in-region-mode
-    (completion-in-region-mode -1)))
-(add-hook 'conn-state-exit-functions 'conn--exit-completion)
+    (conn-state-defer
+      (completion-in-region-mode -1))))
+(add-hook 'completion-in-region-mode-hook 'conn--exit-completion)
 
 
 ;;;; Eldoc
