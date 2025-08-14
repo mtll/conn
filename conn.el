@@ -1620,21 +1620,21 @@ it is an abbreviation of the form (:SYMBOL SYMBOL)."
   (cl-with-gensyms (buffer stack)
     `(let ((,stack conn--state-stack)
            (,buffer (current-buffer)))
-       (conn-enter-recursive-state ,state)
+       (conn-enter-recursive-stack ,state)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
            (conn-enter-state (car ,stack))
            (setq conn--state-stack ,stack))))))
 
-(defmacro conn-without-recursive-state (&rest body)
+(defmacro conn-without-recursive-stack (&rest body)
   "Call TRANSITION-FN and run BODY preserving state variables."
   (declare (debug (body))
            (indent 0))
   (cl-with-gensyms (stack buffer)
     `(let ((,stack conn--state-stack)
            (,buffer (current-buffer)))
-       (conn-exit-recurive-state)
+       (conn-exit-recursive-stack)
        (unwind-protect
            ,(macroexp-progn body)
          (with-current-buffer ,buffer
@@ -1717,7 +1717,7 @@ Each function is passed the state being entered
 
 See also `conn-exit-functions'.")
 
-(defvar-local conn--face-remap-cookie nil)
+(defvar-local conn--state-cleanup-functions nil)
 
 (defvar conn-state-lighter-separator "→")
 
@@ -1741,6 +1741,10 @@ See also `conn-exit-functions'.")
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
+(defmacro conn-state-with-cleanup (&rest body)
+  (declare (indent 0))
+  `(push (lambda () ,@body) conn--state-cleanup-functions))
+
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
       (setf conn--state-map nil
@@ -1760,26 +1764,25 @@ See also `conn-exit-functions'.")
                                    (conn-state-get state :hide-mark-cursor))
         cursor-type (conn-state-get state :cursor nil t)))
 
-(cl-defgeneric conn-exit-state (state)
-  "Exit conn state STATE."
-  (:method ((_state (eql 'nil))) "Noop" nil)
-  (:method ((_state (conn-substate t))) "Noop" nil)
-  (:method ((_state (eql 'conn-null-state))) (error "Cannot exit null-state"))
-  (:method (state) (error "Attempting to exit unknown state: %s" state)))
-
-(cl-defmethod conn-exit-state :around ((state (conn-substate t)))
-  (when (symbol-value state)
-    (let ((success nil))
-      (unwind-protect
-          (progn
-            (setq conn-current-state nil
-                  cursor-type t)
-            (set state nil)
-            (cl-call-next-method)
-            (setq success t))
-        (unless success
-          (conn-local-mode -1)
-          (message "Error exiting state %s." (symbol-value state)))))
+(defun conn-exit-state ()
+  (let ((success nil)
+        (state conn-current-state))
+    (unwind-protect
+        (progn
+          (setq conn-current-state nil
+                cursor-type t)
+          (set state nil)
+          (let ((cleanup t))
+            (dolist (fn conn--state-cleanup-functions)
+              (setq cleanup (and cleanup (ignore-errors
+                                           (funcall fn)
+                                           t))))
+            (setq conn--state-cleanup-functions nil)
+            (unless cleanup (error "Error cleaning up state")))
+          (setq success t))
+      (unless success
+        (conn-local-mode -1)
+        (message "Error exiting state %s." (symbol-value state))))
     (run-hook-wrapped
      'conn-state-exit-functions
      (lambda (fn)
@@ -1798,13 +1801,13 @@ See also `conn-exit-functions'.")
 
 (cl-defmethod conn-enter-state :around ((state (conn-substate t)))
   (unless (symbol-value state)
+    (when (conn-state-get state :abstract)
+      (error "Attempting to enter abstract state %s" state))
     (let ((success nil))
       (unwind-protect
           (progn
-            (when (conn-state-get state :abstract)
-              (error "Attempting to enter abstract state %s" state))
-            (conn-exit-state conn-current-state)
-            (set state t)
+            (when conn-current-state
+              (conn-exit-state))
             (setf conn-current-state state)
             (conn--setup-state-properties state)
             (conn--activate-input-method)
@@ -1812,6 +1815,7 @@ See also `conn-exit-functions'.")
               (conn--sort-mode-maps state))
             (cl-call-next-method)
             (conn-update-lighter)
+            (set state t)
             (setq success t))
         (unless success
           (conn-local-mode -1)
@@ -1845,14 +1849,14 @@ See also `conn-exit-functions'.")
            (important-return-value t))
   (cadr conn--state-stack))
 
-(defun conn-enter-recursive-state (state)
+(defun conn-enter-recursive-stack (state)
   (conn-enter-state state)
   ;; Ensure the lighter gets updates even if we haven't changed state
   (conn-update-lighter)
   (push nil conn--state-stack)
   (push state conn--state-stack))
 
-(defun conn-exit-recurive-state ()
+(defun conn-exit-recursive-stack ()
   (interactive)
   (if-let* ((tail (memq nil conn--state-stack)))
       (progn
@@ -1932,11 +1936,6 @@ NAME.
 
 :CURSOR is the `cursor-type' in NAME.
 
-Code that should be run whenever a state is entered or exited can be
-added as methods to `conn-enter-state' and `conn-exit-state', or added
-to the abnormal hooks `conn-state-entry-functions' or
-`conn-state-exit-functions'.
-
 \(fn NAME PARENTS &optional DOCSTRING [KEY VALUE ...])"
   (declare (debug ( name form string-or-null-p
                     [&rest keywordp sexp]))
@@ -2015,12 +2014,10 @@ By default `conn-emacs-state' does not bind anything."
   :no-keymap t)
 
 (cl-defmethod conn-enter-state ((state (conn-substate conn-mode-line-face-state)))
-  (when-let* ((face (conn-state-get state :mode-line-face)))
-    (setf conn--face-remap-cookie (face-remap-add-relative 'mode-line face)))
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-mode-line-face-state)))
-  (face-remap-remove-relative conn--face-remap-cookie)
+  (when-let* ((face (conn-state-get state :mode-line-face))
+              (cookie (face-remap-add-relative 'mode-line face)))
+    (conn-state-with-cleanup
+      (face-remap-remove-relative cookie)))
   (cl-call-next-method))
 
 ;;;;; Read Thing State
@@ -2043,14 +2040,15 @@ By default `conn-emacs-state' does not bind anything."
 
 (defvar-local conn-emacs-state-ring nil)
 
-(cl-defmethod conn-exit-state ((_state (conn-substate conn-emacs-state)))
-  (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
-    (conn-ring-insert-front conn-emacs-state-ring (point-marker)))
-  (when conn-emacs-state-register
-    (when-let* ((marker (get-register conn-emacs-state-register))
-                ((markerp marker)))
-      (set-marker marker nil))
-    (set-register conn-emacs-state-register (point-marker))))
+(cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
+  (conn-state-with-cleanup
+    (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
+      (conn-ring-insert-front conn-emacs-state-ring (point-marker)))
+    (when conn-emacs-state-register
+      (when-let* ((marker (get-register conn-emacs-state-register))
+                  ((markerp marker)))
+        (set-marker marker nil))
+      (set-register conn-emacs-state-register (point-marker)))))
 
 (defun conn-copy-emacs-state-ring ()
   (when (conn-ring-p conn-emacs-state-ring)
@@ -3274,10 +3272,8 @@ order to mark the region that should be defined by any of COMMANDS."
 
 (cl-defmethod conn-enter-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
   (setq buffer-read-only t)
-  (cl-call-next-method))
-
-(cl-defmethod conn-exit-state ((_ (conn-substate conn-bounds-of-recursive-edit-state)))
-  (setq buffer-read-only nil)
+  (conn-state-with-cleanup
+    (setq buffer-read-only nil))
   (cl-call-next-method))
 
 (define-keymap
@@ -3962,7 +3958,7 @@ Possibilities: \\<query-replace-map>
                  (setf conn--state-stack stack)
                (setf (alist-get (current-buffer) buffer-stacks)
                      conn--state-stack))
-             (conn-enter-recursive-state conn-state))))))))
+             (conn-enter-recursive-stack conn-state))))))))
 
 (defun conn--kapply-at-end (iterator)
   (lambda (state)
@@ -6812,10 +6808,10 @@ contain targets."
   (require 'conn-transients)
   (letrec ((action nil)
            (setup (lambda ()
-                    (conn-without-recursive-state
-                      (conn-dispatch-kapply-prefix
-                       (lambda (kapply-action)
-                         (setf action kapply-action))))
+                    (conn-without-recursive-stack
+                     (conn-dispatch-kapply-prefix
+                      (lambda (kapply-action)
+                        (setf action kapply-action))))
                     (remove-hook 'post-command-hook setup))))
     (add-hook 'post-command-hook setup -99)
     (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
@@ -11509,7 +11505,7 @@ Operates with the selected windows parent window."
     ;; anything else, so if we got here after an error in
     ;; conn-exit-state this prevents an infinite loop.
     (when conn-current-state
-      (conn-exit-state conn-current-state))
+      (conn-exit-state))
     (conn--clear-overlays)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)
