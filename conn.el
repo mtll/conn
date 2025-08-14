@@ -1774,9 +1774,9 @@ See also `conn-exit-functions'.")
           (set state nil)
           (let ((cleanup t))
             (dolist (fn conn--state-cleanup-functions)
-              (setq cleanup (and cleanup (ignore-errors
-                                           (funcall fn)
-                                           t))))
+              (cl-callf2 and
+                  (ignore-errors (funcall fn) t)
+                  cleanup))
             (setq conn--state-cleanup-functions nil)
             (unless cleanup (error "Error cleaning up state")))
           (setq success t))
