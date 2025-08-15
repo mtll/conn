@@ -1705,16 +1705,15 @@ These match if the argument is a substate of STATE."
 ;;;;; Enter/Exit Functions
 
 (defvar conn-state-entry-functions nil
-  "Abnormal hook run when a state is entered.
+  "Hook run when a state is entered.
 
-Each function is passed the state being entered
-(eg '`conn-command-state' or '`conn-emacs-state').
-
-See also `conn-exit-functions'.")
+When this hook is run `conn-previous-state' will be bound to the state
+that has just been exited.")
 
 (defvar-local conn--state-defered nil)
 
-(defvar conn-state-lighter-separator "→")
+(defvar conn-state-lighter-separator "→"
+  "Separator string for state lighters in `conn-lighter'.")
 
 (defconst conn--lighter-cache
   (make-hash-table :test 'equal :weakness 'value))
@@ -1733,28 +1732,39 @@ See also `conn-exit-functions'.")
         (concat " [" lighter "]")))))
 
 (defun conn-update-lighter (&optional buffer)
+  "Force the mode-line lighter to be updated in BUFFER.
+
+If BUFFER is nil then use the current buffer."
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
 (defmacro conn-state-defer (&rest body)
+  "Defer evaluation of BODY until the current state is exited.
+
+Note that if a `conn-state-defer' form is evaluated multiple times in
+one state then BODY will evaluated that many times when the state is
+exited.  If you want to ensure that BODY will be evaluated only once
+when the current state exits then use `conn-state-defer-once'.
+
+When BODY is evaluated `conn-next-state' will be bound to the state
+that is being entered after the current state has exited."
   (declare (indent 0))
   `(push (lambda () ,@body) conn--state-defered))
 
-(oclosure-define (conn-state-defered
-                  (:predicate conn-state-defered-p))
-  (id :type symbol))
-
 (defmacro conn-state-defer-once (&rest body)
+  "Like `conn-state-defer' but BODY will be evaluated only once per state.
+
+For more information see `conn-state-defer'."
   (declare (indent 0))
   (cl-with-gensyms (id)
     `(when (cl-loop for fn in conn--state-defered
-                    never (and (conn-state-defered-p fn)
-                               (eq ',id (conn-state-defered--id fn))))
-       (push (oclosure-lambda (conn-state-defered
-                               (id ',id))
-                 ()
-               ,@body)
+                    never (eq ',id (car-safe fn)))
+       (push (cons ',id (lambda () ,@body))
              conn--state-defered))))
+
+(defun conn--state-run-deferred ()
+  (dolist (fn (cl-shiftf conn--state-defered nil))
+    (funcall (or (cdr-safe fn) fn))))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -1790,7 +1800,7 @@ See also `conn-exit-functions'.")
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (mapc #'funcall (cl-shiftf conn--state-defered nil)))
+              (conn--state-run-deferred))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties state)
             (conn--activate-input-method)
@@ -6794,9 +6804,9 @@ contain targets."
   (letrec ((action nil)
            (setup (lambda ()
                     (conn-without-recursive-stack
-                     (conn-dispatch-kapply-prefix
-                      (lambda (kapply-action)
-                        (setf action kapply-action))))
+                      (conn-dispatch-kapply-prefix
+                       (lambda (kapply-action)
+                         (setf action kapply-action))))
                     (remove-hook 'post-command-hook setup))))
     (add-hook 'post-command-hook setup -99)
     (add-hook 'transient-post-exit-hook 'exit-recursive-edit)
@@ -11483,7 +11493,7 @@ Operates with the selected windows parent window."
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (mapc #'funcall (cl-shiftf conn--state-defered nil))
+    (conn--state-run-deferred)
     (conn--clear-overlays)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)
