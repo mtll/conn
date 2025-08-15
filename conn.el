@@ -3436,8 +3436,6 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (defvar kmacro-step-edit-replace)
 
-(defvar conn--kapply-iterator nil)
-
 (defvar conn-kmacro-applying-p nil
   "Non-nil during kmacro application.")
 
@@ -3568,7 +3566,8 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Iterators
 
-(defun conn--kapply-compose-iterator (applier iterator &rest pipeline)
+(defun conn--kapply-macro (applier iterator &rest pipeline)
+  (declare (important-return-value t))
   (funcall applier
            (seq-reduce (pcase-lambda (iterator (or `(,ctor . ,args) ctor))
                          (apply ctor iterator args))
@@ -3576,9 +3575,13 @@ Possibilities: \\<query-replace-map>
                        iterator)))
 
 (defun conn--kapply-infinite-iterator ()
+  (declare (important-return-value t)
+           (side-effect-free t))
   (lambda (_state) (cons (point) (point))))
 
 (defun conn--kapply-highlight-iterator (beg end &optional sort-function read-patterns)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (let ((patterns
          (when (and (boundp 'hi-lock-interactive-patterns)
                     (boundp 'hi-lock-interactive-lighters))
@@ -3620,6 +3623,7 @@ Possibilities: \\<query-replace-map>
          (pop matches))))))
 
 (defun conn--kapply-thing-iterator (thing bounds)
+  (declare (important-return-value t))
   (deactivate-mark t)
   (conn--kapply-region-iterator
    (let ((regions (conn-bounds-of-things-in-region thing bounds)))
@@ -3628,6 +3632,7 @@ Possibilities: \\<query-replace-map>
        regions))))
 
 (defun conn--kapply-region-iterator (regions &optional sort-function)
+  (declare (important-return-value t))
   (unless regions
     (user-error "No regions for kapply."))
   (pcase-dolist ((and reg `(,beg . ,end))
@@ -3650,6 +3655,7 @@ Possibilities: \\<query-replace-map>
        (pop regions)))))
 
 (defun conn--kapply-point-iterator (points &optional sort-function)
+  (declare (important-return-value t))
   (unless points
     (user-error "No points for kapply."))
   (let ((points
@@ -3670,6 +3676,7 @@ Possibilities: \\<query-replace-map>
                                      sort-function
                                      regexp-flag
                                      delimited-flag)
+  (declare (important-return-value t))
   (let (matches)
     (save-excursion
       (pcase-dolist (`(,beg . ,end) regions)
@@ -3700,10 +3707,36 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Pipeline Functions
 
+(defconst conn--kapply-pipeline-depths
+  '((kapply-skip-empty . 95)
+    (kapply-relocate . 85)
+    (kapply-invisible . 75)
+    (kapply-nth . 70)
+    (kapply-query-record . 50)
+    (kapply-query-per-iteration . 49)
+    (kapply-restrictions . 10)
+    (kapply-excursions . 0)
+    (kapply-undo . -10)
+    (kapply-region . -20)
+    (kapply-state . -30)
+    (kapply-wconf . -70)
+    (kapply-ibuffer . -80)
+    (kapply-pulse . -90)))
+
 (defun conn--kapply-query (iterator &optional each-iteration)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (when each-iteration
+    (add-function
+     :after (var iterator)
+     (lambda (state)
+       (when (eq state :record)
+         (push 'conn-kbd-macro-query unread-command-events)))
+     `((depth . ,(alist-get 'kapply-query-record
+                            conn--kapply-pipeline-depths))
+       (name . kapply-query-per-iteration))))
   (add-function
-   :around
-   (var iterator)
+   :around (var iterator)
    (lambda (iterator state)
      (pcase state
        (:record
@@ -3717,29 +3750,23 @@ Possibilities: \\<query-replace-map>
                until (or (null val)
                          (progn
                            (recenter nil)
-                           (move-overlay hl (region-beginning) (region-end) (current-buffer))
+                           (move-overlay hl
+                                         (region-beginning)
+                                         (region-end)
+                                         (current-buffer))
                            (y-or-n-p (format "Record here?"))))
                finally return val)
             (delete-overlay hl))))
        ((or :cleanup :next)
         (funcall iterator state))))
-   '((depth . 50)
-     (name . kapply-query-record)))
-  (when each-iteration
-    (add-function
-     :after
-     (var iterator)
-     (lambda (state)
-       (when (eq state :record)
-         (push 'conn-kbd-macro-query unread-command-events)))
-     '((depth . 49)
-       (name . kapply-query-per-iteration))))
-  iterator)
+   `((depth . ,(alist-get 'kapply-query-record conn--kapply-pipeline-depths))
+     (name . kapply-query-record))))
 
 (defun conn--kapply-skip-empty (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
-   :around
-   (var iterator)
+   :around (var iterator)
    (lambda (iterator state)
      (pcase state
        (:cleanup
@@ -3755,13 +3782,15 @@ Possibilities: \\<query-replace-map>
               (`(,beg . ,end)
                (when (markerp beg) (set-marker beg nil))
                (when (markerp end) (set-marker end nil)))))))))
-   '((depth . 95)
+   `((depth . ,(alist-get 'kapply-skip-empty
+                          conn--kapply-pipeline-depths))
      (name . kapply-skip-empty))))
 
 (defun conn--kapply-every-nth (iterator N)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
-   :around
-   (var iterator)
+   :around (var iterator)
    (lambda (iterator state)
      (pcase state
        (:cleanup
@@ -3773,12 +3802,14 @@ Possibilities: \\<query-replace-map>
              (when (markerp beg) (set-marker beg nil))
              (when (markerp end) (set-marker end nil)))))
         (funcall iterator state))))
-   '((depth . 60))))
+   `((depth . ,(alist-get 'kapply-nth conn--kapply-pipeline-depths))
+     (name . kapply-nth))))
 
 (defun conn--kapply-skip-invisible-points (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
-   :around
-   (var iterator)
+   :around (var iterator)
    (lambda (iterator state)
      (pcase state
        ((or :next :record)
@@ -3788,13 +3819,14 @@ Possibilities: \\<query-replace-map>
                  when (markerp ret) do (set-marker ret nil)
                  finally return ret))
        (:cleanup (funcall iterator state))))
-   '((depth . 75)
+   `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
 (defun conn--kapply-skip-invisible-regions (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
-   :around
-   (var iterator)
+   :around (var iterator)
    (lambda (iterator state)
      (pcase state
        ((or :next :record)
@@ -3806,10 +3838,12 @@ Possibilities: \\<query-replace-map>
                       (when (markerp end) (set-marker end nil)))
                  finally return ret))
        (:cleanup (funcall iterator state))))
-   '((depth . 75)
+   `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
 (defun conn--kapply-open-invisible (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (restore)
@@ -3829,10 +3863,12 @@ Possibilities: \\<query-replace-map>
          (:cleanup
           (funcall iterator state)
           (mapc #'funcall restore)))))
-   '((depth . 75)
+   `((depth . ,(alist-get 'kapply-invisible conn--kapply-pipeline-depths))
      (name . kapply-invisible))))
 
 (defun conn--kapply-relocate-to-region (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (lambda (iterator state)
@@ -3851,10 +3887,12 @@ Possibilities: \\<query-replace-map>
              (goto-char beg)
              (conn--push-ephemeral-mark end)))))
        region))
-   '((depth . 85)
+   `((depth . ,(alist-get 'kapply-relocate conn--kapply-pipeline-depths))
      (name . kapply-relocate))))
 
 (defun conn--kapply-per-buffer-undo (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (undo-handles)
@@ -3873,10 +3911,12 @@ Possibilities: \\<query-replace-map>
               (activate-change-group
                (setf (alist-get (current-buffer) undo-handles)
                      (prepare-change-group)))))))))
-   '((depth . -25)
+   `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
 (defun conn--kapply-per-buffer-atomic-undo (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (undo-handles)
@@ -3897,10 +3937,12 @@ Possibilities: \\<query-replace-map>
               (activate-change-group
                (setf (alist-get (current-buffer) undo-handles)
                      (prepare-change-group)))))))))
-   '((depth . -25)
+   `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
 (defun conn--kapply-per-iteration-undo (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (handle)
@@ -3928,10 +3970,12 @@ Possibilities: \\<query-replace-map>
               (undo-boundary)
               (setq handle (prepare-change-group))
               (activate-change-group handle)))))))
-   '((depth . -25)
+   `((depth . ,(alist-get 'kapply-undo conn--kapply-pipeline-depths))
      (name . kapply-undo))))
 
 (defun conn--kapply-ibuffer-overview (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let ((msg (substitute-command-keys
@@ -3984,10 +4028,12 @@ Possibilities: \\<query-replace-map>
 \\[automatic]	Continue iteration and don't ask to save again."))
                          (with-current-buffer standard-output
                            (help-mode))))))))))))))
-   '((depth . -80)
+   `((depth . ,(alist-get 'kapply-ibuffer conn--kapply-pipeline-depths))
      (name . kapply-ibuffer))))
 
 (defun conn--kapply-save-excursion (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (saved-excursions)
@@ -4015,10 +4061,12 @@ Possibilities: \\<query-replace-map>
             (setf (alist-get (current-buffer) saved-excursions)
                   (cons (point-marker) (save-mark-and-excursion--save)))
             (funcall iterator state))))))
-   '((depth . 0)
+   `((depth . ,(alist-get 'kapply-excursions conn--kapply-pipeline-depths))
      (name . kapply-excursions))))
 
 (defun conn--kapply-save-restriction (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (kapply-saved-restrictions)
@@ -4047,28 +4095,34 @@ Possibilities: \\<query-replace-map>
                (widen)
                (narrow-to-region (or beg (point-min))
                                  (or end (point-max))))))))))
-   '((depth . 10)
+   `((depth . ,(alist-get 'kapply-restrictions conn--kapply-pipeline-depths))
      (name . kapply-restrictions))))
 
 (defun conn--kapply-change-region (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :after (var iterator)
    (lambda (state)
      (unless (eq state :cleanup)
        (delete-region (region-beginning) (region-end))))
-   '((depth . -30)
+   `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region))))
 
 (defun conn--kapply-at-end (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :after (var iterator)
    (lambda (state)
      (unless (eq state :cleanup)
        (conn-exchange-mark-command)))
-   '((depth . -30)
+   `((depth . ,(alist-get 'kapply-region conn--kapply-pipeline-depths))
      (name . kapply-region))))
 
 (defun conn--kapply-with-state (iterator conn-state)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :after (var iterator)
    (let (buffer-stacks)
@@ -4087,10 +4141,12 @@ Possibilities: \\<query-replace-map>
               (setf (alist-get (current-buffer) buffer-stacks)
                     conn--state-stack))
             (conn-enter-recursive-stack conn-state))))))
-   '((depth . -25)
+   `((depth . ,(alist-get 'kapply-state conn--kapply-pipeline-depths))
      (name . kapply-state))))
 
 (defun conn--kapply-pulse-region (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :after (var iterator)
    (lambda (state)
@@ -4098,10 +4154,12 @@ Possibilities: \\<query-replace-map>
        (pulse-momentary-highlight-region (region-beginning)
                                          (region-end)
                                          'query-replace)))
-   '((depth . -90)
+   `((depth . ,(alist-get 'kapply-pulse conn--kapply-pipeline-depths))
      (name . kapply-pulse))))
 
 (defun conn--kapply-save-windows (iterator)
+  (declare (important-return-value t)
+           (side-effect-free t))
   (add-function
    :around (var iterator)
    (let (wconf)
@@ -4113,7 +4171,7 @@ Possibilities: \\<query-replace-map>
          ((or :record :next)
           (unless wconf (setq wconf (current-window-configuration)))
           (funcall iterator state)))))
-   '((depth . -70)
+   `((depth . ,(alist-get 'kapply-wconf conn--kapply-pipeline-depths))
      (name . kapply-wconf))))
 
 
@@ -4267,6 +4325,8 @@ which see.")
 
 If FACE is non-nil set label string face to FACE.  Otherwise label
 strings have `conn-dispatch-label-face'."
+  (declare (side-effect-free t)
+           (important-return-value t))
   (cl-labels
       ((rec (count labels)
          (let* ((prefixes nil))
@@ -4296,6 +4356,7 @@ strings have `conn-dispatch-label-face'."
                        (take count conn-simple-label-characters)))))
 
 (defun conn--get-target-windows ()
+  (declare (important-return-value t))
   (if conn-target-window-predicate
       (conn--get-windows nil nil conn-dispatch-all-frames
                          nil conn-target-window-predicate)
