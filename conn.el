@@ -971,7 +971,14 @@ of highlighting."
   :group 'conn
   :type '(list symbol))
 
-(defvar conn-setup-state-hook nil)
+(defvar conn-setup-state-hook nil
+  "Hook responsible for setting up the base state in a new buffer.
+
+The hook is run when `conn-local-mode' is turned on. Each function is
+called in turn until one returns non-nil.  A function returning non-nil
+should set the base state for the current buffer by pushing it to the
+stack with `conn-push-state'.  The function may setup any other
+necessary state as well.")
 
 (defvar-local conn-current-state nil
   "Current conn state in buffer.")
@@ -1692,7 +1699,7 @@ These match if the argument is a substate of STATE."
         (conn-thing t)))))
 
 (cl-defmethod cl-generic-generalizers ((_specializer (head conn-thing)))
-  "Support for conn-thing specializers."
+  "Support for (conn-thing THING) specializers."
   (list conn--thing-command-generalizer
         conn--anonymous-thing-generalizer
         conn--thing-generalizer))
@@ -1710,7 +1717,8 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(defvar-local conn--state-defered nil)
+(defvar-local conn--state-defered nil
+  "Code to be run when the current state is exited.")
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -1762,9 +1770,10 @@ For more information see `conn-state-defer'."
        (push (cons ',id (lambda () ,@body))
              conn--state-defered))))
 
-(defun conn--state-run-deferred ()
-  (dolist (fn (cl-shiftf conn--state-defered nil))
-    (funcall (or (cdr-safe fn) fn))))
+(define-inline conn--state-call-deferred ()
+  (inline-quote
+   (dolist (fn (cl-shiftf conn--state-defered nil))
+     (funcall (or (cdr-safe fn) fn)))))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -1785,12 +1794,18 @@ For more information see `conn-state-defer'."
                                    (conn-state-get state :hide-mark-cursor))
         cursor-type (conn-state-get state :cursor nil t)))
 
-(cl-defgeneric conn-enter-state (state &key &allow-other-keys)
-  "Enter conn state STATE."
-  ( :method ((_state (eql 'nil)) &key &allow-other-keys) "Noop" nil)
-  ( :method ((_state (conn-substate t)) &key &allow-other-keys) "Noop" nil)
-  ( :method (state &key &allow-other-keys)
-    (error "Attempting to enter unknown state: %s" state)))
+(cl-defgeneric conn-enter-state (state)
+  "Enter STATE.
+
+Code that should be run when a state is entered should be added as
+methods to this function.  The (conn-substate STATE) method specializer is
+provided so that code can be run for every state inheriting from some
+state.
+
+To execute code when a state is exiting use `conn-state-defer'."
+  (:method ((_state (eql 'nil))) "Noop" nil)
+  (:method ((_state (conn-substate t))) "Noop" nil)
+  (:method (state) (error "Attempting to enter unknown state: %s" state)))
 
 (cl-defmethod conn-enter-state :around ((state (conn-substate t)))
   (unless (symbol-value state)
@@ -1800,7 +1815,7 @@ For more information see `conn-state-defer'."
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (conn--state-run-deferred))
+              (conn--state-call-deferred))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties state)
             (conn--activate-input-method)
@@ -1826,11 +1841,13 @@ For more information see `conn-state-defer'."
             (message "Error in conn-state-entry-functions: %s" (car err)))))))))
 
 (defun conn-push-state (state)
+  "Push STATE to the state stack."
   (unless (symbol-value state)
     (conn-enter-state state)
     (push state conn--state-stack)))
 
 (defun conn-pop-state ()
+  "Pop to the previous state in the state stack."
   (interactive)
   (if-let* ((state (cadr conn--state-stack)))
       (progn
@@ -1841,11 +1858,15 @@ For more information see `conn-state-defer'."
                      t 'conn-command-state))))
 
 (defun conn-peek-state ()
+  "Peek the state stack.
+
+Returns the next state in the state stack."
   (declare (side-effect-free t)
            (important-return-value t))
   (cadr conn--state-stack))
 
 (defun conn-enter-recursive-stack (state)
+  "Enter a recursive state stack."
   (conn-enter-state state)
   ;; Ensure the lighter gets updates even if we haven't changed state
   (conn-update-lighter)
@@ -1853,6 +1874,9 @@ For more information see `conn-state-defer'."
   (push state conn--state-stack))
 
 (defun conn-exit-recursive-stack ()
+  "Exit the current recursive state stack.
+
+If there is not recursive stack an error is signaled."
   (interactive)
   (if-let* ((tail (memq nil conn--state-stack)))
       (progn
@@ -1932,6 +1956,9 @@ NAME.
 
 :CURSOR is the `cursor-type' in NAME.
 
+:ABSTRACT if non-nil indicates that NAME is only for other states to
+inherit from and should never be entered directly.
+
 \(fn NAME PARENTS &optional DOCSTRING [KEY VALUE ...])"
   (declare (debug ( name form string-or-null-p
                     [&rest keywordp sexp]))
@@ -1981,8 +2008,7 @@ For use in buffers that should not have any other state."
   "A `conn-mode' state for remapping key menus."
   :abstract t)
 
-(conn-define-state conn-command-state
-    (conn-menu-state conn-movement-state)
+(conn-define-state conn-command-state (conn-menu-state conn-movement-state)
   "A `conn-mode' state for editing test."
   :pop-alternate 'conn-emacs-state
   :lighter "C"
@@ -2006,6 +2032,10 @@ By default `conn-emacs-state' does not bind anything."
   :cursor '(bar . 4))
 
 (conn-define-state conn-mode-line-face-state ()
+  "An abstract state for adding a mode-line face to a state.
+
+Causes the mode-line face to be remapped to the face specified by the
+:mode-line-face state property when the state is current."
   :abstract t
   :no-keymap t)
 
@@ -2032,9 +2062,11 @@ By default `conn-emacs-state' does not bind anything."
 
 ;;;;; Emacs State
 
-(defvar conn-emacs-state-register nil)
+(defvar conn-emacs-state-register nil
+  "If non-nil specifies a register to contain the last `conn-emacs-state' position.")
 
-(defvar-local conn-emacs-state-ring nil)
+(defvar-local conn-emacs-state-ring nil
+  "Ring of previous positions where `conn-emacs-state' was exited.")
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
@@ -2043,10 +2075,13 @@ By default `conn-emacs-state' does not bind anything."
     (when conn-emacs-state-register
       (when-let* ((marker (get-register conn-emacs-state-register))
                   ((markerp marker)))
-        (set-marker marker nil))
+        (set-marker marker (point) (current-buffer)))
       (set-register conn-emacs-state-register (point-marker)))))
 
 (defun conn-copy-emacs-state-ring ()
+  "Create a copy of `conn-emacs-state-ring'.
+
+Used by `conn--clone-buffer-setup' to copy the ring when cloning a buffer."
   (when (conn-ring-p conn-emacs-state-ring)
     (let ((new-ring (copy-conn-ring conn-emacs-state-ring)))
       (setf (conn-ring-list new-ring)
@@ -2063,6 +2098,13 @@ By default `conn-emacs-state' does not bind anything."
 ;;;;; Autopop
 
 (conn-define-state conn-autopop-state ()
+  "Abstract state that automatically pops the state after executing a command.
+
+The :pop-predicate state property is called at the end of
+`post-command-hook' and should return non-nil if the state should be
+popped and nil if the state should stay active.  The default value of
+:pop-predicate is `always'.  Note that `pop-predicate' is not called and
+the state stays active if the previous command was a prefix command."
   :abstract t
   :no-keymap t
   :pop-predicate #'always)
@@ -2100,42 +2142,49 @@ By default `conn-emacs-state' does not bind anything."
 
 (conn-define-state conn-one-command-state (conn-command-state
                                            conn-autopop-state)
+  "Execute one command in `conn-command-state'."
   :lighter "1C")
 
 
 ;;;;; State Setup Functions
 
 (defun conn-setup-commit-state ()
+  "Set the base state to `conn-emacs-state' in commit message buffers."
   (when (buffer-match-p "COMMIT_EDITMSG" (current-buffer))
     (conn-push-state 'conn-emacs-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-commit-state -80)
 
 (defun conn-setup-edmacro-state ()
+  "Set the base state to `conn-command-state' in edit macro buffers."
   (when (buffer-match-p "\\*Edit Macro\\*" (current-buffer))
     (conn-push-state 'conn-command-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-edmacro-state -80)
 
 (defun conn-setup-dired-state ()
+  "Set the base state to `conn-emacs-state' in dired buffers."
   (when (derived-mode-p 'dired-mode)
     (conn-push-state 'conn-emacs-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-dired-state -50)
 
 (defun conn-setup-null-state ()
+  "Set the base state to `conn-null-state' in `conn-null-state-modes' buffers."
   (when (derived-mode-p conn-null-state-modes)
     (conn-push-state 'conn-null-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-null-state -90)
 
 (defun conn-setup-command-state ()
+  "Set base state to `conn-command-state' in `conn-command-state-modes' buffers."
   (when (derived-mode-p conn-command-state-modes)
     (conn-push-state 'conn-command-state)
     t))
 (add-hook 'conn-setup-state-hook 'conn-setup-command-state)
 
 (defun conn-setup-minibuffer-state ()
+  "Setup `minibuffer-mode' buffer state."
   (when (eq major-mode 'minibuffer-mode)
     (setf (alist-get 'conn-emacs-state
                      (conn-get-buffer-property :hide-mark-cursor))
@@ -2152,8 +2201,12 @@ By default `conn-emacs-state' does not bind anything."
 
 ;;;; State Command Loops
 
-(defvar conn-state-eval-last-command nil)
-(defvar conn-state-eval-inhibit-message nil)
+(defvar conn-state-eval-last-command nil
+  "Last command read by `conn-eval-with-state'.")
+
+(defvar conn-state-eval-inhibit-message nil
+  "Value for `inhibit-message' in `conn-eval-with-state' message functions.")
+
 (defvar conn--state-eval-prefix-mag nil)
 (defvar conn--state-eval-prefix-sign nil)
 (defvar conn--state-eval-error-message nil)
@@ -2161,9 +2214,8 @@ By default `conn-emacs-state' does not bind anything."
 (defvar conn--state-eval-message-timeout nil)
 (defvar conn--state-eval-exiting nil)
 
-(define-error 'conn-state-eval-error "State eval error" 'user-error)
-
 (defun conn-state-eval-prefix-arg ()
+  "Return the value of the current prefix argument during `conn-eval-with-state'."
   (declare (important-return-value t)
            (side-effect-free t))
   (cond (conn--state-eval-prefix-mag
@@ -2171,15 +2223,19 @@ By default `conn-emacs-state' does not bind anything."
         (conn--state-eval-prefix-sign -1)))
 
 (defun conn-state-eval-consume-prefix-arg ()
+  "Return the value of the current prefix argument during `conn-eval-with-state'.
+
+Resets the current prefix argument."
   (prog1 (conn-state-eval-prefix-arg)
     (setf conn--state-eval-prefix-mag nil
           conn--state-eval-prefix-sign nil)))
 
-(defun conn-state-eval-error (string)
-  (setf conn--state-eval-error-message string)
-  (signal 'conn-state-eval-error nil))
-
 (defun conn-state-eval-handle (&optional form)
+  "Handle the current command.
+
+This function should be called from any function passed as the
+:command-handler argument to `conn-eval-with-state' when the function
+chooses to handle a command."
   (setf conn--state-eval-error-message "")
   form)
 
@@ -2261,14 +2317,13 @@ By default `conn-emacs-state' does not bind anything."
                         (not (conn-argument-equal-p old new)))))
                 (update-args (cmd)
                   (setf conn--state-eval-error-message "Invalid Command")
-                  (ignore-error conn-state-eval-error
-                    (let* ((handler (if command-handler
-                                        (funcall command-handler cmd arguments)
-                                      arguments))
-                           (next (conn-update-argument (car handler) cmd)))
-                      (when (updated-p (car arguments) next)
-                        (setq conn--state-eval-error-message "")
-                        (setq arguments (cons next handler)))))))
+                  (let* ((handler (if command-handler
+                                      (funcall command-handler cmd arguments)
+                                    arguments))
+                         (next (conn-update-argument (car handler) cmd)))
+                    (when (updated-p (car arguments) next)
+                      (setq conn--state-eval-error-message "")
+                      (setq arguments (cons next handler))))))
       (conn-with-recursive-stack state
         (while (conn-argument-required-p (car arguments))
           (when (and conn--state-eval-message-timeout
@@ -3381,6 +3436,8 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (defvar kmacro-step-edit-replace)
 
+(defvar conn--kapply-iterator nil)
+
 (defvar conn-kmacro-applying-p nil
   "Non-nil during kmacro application.")
 
@@ -3511,11 +3568,12 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Iterators
 
-(defun conn--kapply-compose-iterator (iterator &rest pipeline)
-  (seq-reduce (pcase-lambda (iterator (or `(,ctor . ,args) ctor))
-                (apply ctor iterator args))
-              (delq nil pipeline)
-              iterator))
+(defun conn--kapply-compose-iterator (applier iterator &rest pipeline)
+  (funcall applier
+           (seq-reduce (pcase-lambda (iterator (or `(,ctor . ,args) ctor))
+                         (apply ctor iterator args))
+                       (delq nil pipeline)
+                       iterator)))
 
 (defun conn--kapply-infinite-iterator ()
   (lambda (_state) (cons (point) (point))))
@@ -3643,343 +3701,420 @@ Possibilities: \\<query-replace-map>
 ;;;;; Pipeline Functions
 
 (defun conn--kapply-query (iterator &optional each-iteration)
-  (lambda (state)
-    (pcase state
-      (:record
-       (let ((hl (make-overlay (point) (point))))
-         (overlay-put hl 'priority 2000)
-         (overlay-put hl 'face 'query-replace)
-         (overlay-put hl 'conn-overlay t)
-         (unwind-protect
-             (cl-loop
-              for val = (funcall iterator state)
-              until (or (null val)
-                        (progn
-                          (recenter nil)
-                          (move-overlay hl (region-beginning) (region-end) (current-buffer))
-                          (y-or-n-p (format "Record here?"))))
-              finally return (progn
-                               (when each-iteration
-                                 (push 'conn-kbd-macro-query unread-command-events))
-                               val))
-           (delete-overlay hl))))
-      ((or :cleanup :next)
-       (funcall iterator state)))))
+  (add-function
+   :around
+   (var iterator)
+   (lambda (iterator state)
+     (pcase state
+       (:record
+        (let ((hl (make-overlay (point) (point))))
+          (overlay-put hl 'priority 2000)
+          (overlay-put hl 'face 'query-replace)
+          (overlay-put hl 'conn-overlay t)
+          (unwind-protect
+              (cl-loop
+               for val = (funcall iterator state)
+               until (or (null val)
+                         (progn
+                           (recenter nil)
+                           (move-overlay hl (region-beginning) (region-end) (current-buffer))
+                           (y-or-n-p (format "Record here?"))))
+               finally return val)
+            (delete-overlay hl))))
+       ((or :cleanup :next)
+        (funcall iterator state))))
+   '((depth . 50)
+     (name . kapply-query-record)))
+  (when each-iteration
+    (add-function
+     :after
+     (var iterator)
+     (lambda (state)
+       (when (eq state :record)
+         (push 'conn-kbd-macro-query unread-command-events)))
+     '((depth . 49)
+       (name . kapply-query-per-iteration))))
+  iterator)
 
 (defun conn--kapply-skip-empty (iterator)
-  (lambda (state)
-    (pcase state
-      (:cleanup
-       (funcall iterator state))
-      ((or :next :record)
-       (catch 'non-empty
-         (while-let ((region (funcall iterator state)))
-           (pcase region
-             ((and `(,beg . ,end)
-                   (guard (/= beg end))
-                   region)
-              (throw 'non-empty region))
-             (`(,beg . ,end)
-              (when (markerp beg) (set-marker beg nil))
-              (when (markerp end) (set-marker end nil))))))))))
+  (add-function
+   :around
+   (var iterator)
+   (lambda (iterator state)
+     (pcase state
+       (:cleanup
+        (funcall iterator state))
+       ((or :next :record)
+        (catch 'non-empty
+          (while-let ((region (funcall iterator state)))
+            (pcase region
+              ((and `(,beg . ,end)
+                    (guard (/= beg end))
+                    region)
+               (throw 'non-empty region))
+              (`(,beg . ,end)
+               (when (markerp beg) (set-marker beg nil))
+               (when (markerp end) (set-marker end nil)))))))))
+   '((depth . 95)
+     (name . kapply-skip-empty))))
 
 (defun conn--kapply-every-nth (iterator N)
-  (lambda (state)
-    (pcase state
-      (:cleanup
-       (funcall iterator state))
-      ((or :next :record)
-       (dotimes (_ (1- N))
-         (pcase (funcall iterator state)
-           (`(,beg . ,end)
-            (when (markerp beg) (set-marker beg nil))
-            (when (markerp end) (set-marker end nil)))))
-       (funcall iterator state)))))
+  (add-function
+   :around
+   (var iterator)
+   (lambda (iterator state)
+     (pcase state
+       (:cleanup
+        (funcall iterator state))
+       ((or :next :record)
+        (dotimes (_ (1- N))
+          (pcase (funcall iterator state)
+            (`(,beg . ,end)
+             (when (markerp beg) (set-marker beg nil))
+             (when (markerp end) (set-marker end nil)))))
+        (funcall iterator state))))
+   '((depth . 60))))
 
 (defun conn--kapply-skip-invisible-points (iterator)
-  (lambda (state)
-    (pcase state
-      ((or :next :record)
-       (cl-loop for ret = (funcall iterator state)
-                until (or (null ret)
-                          (not (invisible-p (car ret))))
-                when (markerp ret) do (set-marker ret nil)
-                finally return ret))
-      (:cleanup (funcall iterator state)))))
+  (add-function
+   :around
+   (var iterator)
+   (lambda (iterator state)
+     (pcase state
+       ((or :next :record)
+        (cl-loop for ret = (funcall iterator state)
+                 until (or (null ret)
+                           (not (invisible-p (car ret))))
+                 when (markerp ret) do (set-marker ret nil)
+                 finally return ret))
+       (:cleanup (funcall iterator state))))
+   '((depth . 75)
+     (name . kapply-invisible))))
 
 (defun conn--kapply-skip-invisible-regions (iterator)
-  (lambda (state)
-    (pcase state
-      ((or :next :record)
-       (cl-loop for ret = (funcall iterator state)
-                until (or (null ret)
-                          (conn--region-visible-p (car ret) (cdr ret)))
-                do (pcase-let ((`(,beg . ,end) ret))
-                     (when (markerp beg) (set-marker beg nil))
-                     (when (markerp end) (set-marker end nil)))
-                finally return ret))
-      (:cleanup (funcall iterator state)))))
+  (add-function
+   :around
+   (var iterator)
+   (lambda (iterator state)
+     (pcase state
+       ((or :next :record)
+        (cl-loop for ret = (funcall iterator state)
+                 until (or (null ret)
+                           (conn--region-visible-p (car ret) (cdr ret)))
+                 do (pcase-let ((`(,beg . ,end) ret))
+                      (when (markerp beg) (set-marker beg nil))
+                      (when (markerp end) (set-marker end nil)))
+                 finally return ret))
+       (:cleanup (funcall iterator state))))
+   '((depth . 75)
+     (name . kapply-invisible))))
 
 (defun conn--kapply-open-invisible (iterator)
-  (let (restore)
-    (lambda (state)
-      (pcase state
-        ((or :next :record)
-         (cl-loop for next = (funcall iterator state)
-                  for res = (or (null next)
-                                (conn--open-invisible (car next) (cdr next)))
-                  until res
-                  do (pcase-let ((`(,beg . ,end) next))
-                       (when (markerp beg) (set-marker beg nil))
-                       (when (markerp end) (set-marker end nil)))
-                  finally return (prog1 next
-                                   (when (consp res)
-                                     (setq restore (nconc res restore))))))
-        (:cleanup
-         (funcall iterator state)
-         (mapc #'funcall restore))))))
+  (add-function
+   :around (var iterator)
+   (let (restore)
+     (lambda (iterator state)
+       (pcase state
+         ((or :next :record)
+          (cl-loop for next = (funcall iterator state)
+                   for res = (or (null next)
+                                 (conn--open-invisible (car next) (cdr next)))
+                   until res
+                   do (pcase-let ((`(,beg . ,end) next))
+                        (when (markerp beg) (set-marker beg nil))
+                        (when (markerp end) (set-marker end nil)))
+                   finally return (prog1 next
+                                    (when (consp res)
+                                      (setq restore (nconc res restore))))))
+         (:cleanup
+          (funcall iterator state)
+          (mapc #'funcall restore)))))
+   '((depth . 75)
+     (name . kapply-invisible))))
 
 (defun conn--kapply-relocate-to-region (iterator)
-  (lambda (state)
-    (let ((region (funcall iterator state)))
-      (pcase state
-        ((or :next :record)
-         (pcase region
-           ((and (pred identity)
-                 `(,beg . ,end))
-            (when-let* ((buffer (and (markerp beg) (marker-buffer beg)))
-                        ((not (eq buffer (current-buffer)))))
-              (pop-to-buffer-same-window buffer)
-              (deactivate-mark t)
-              (unless (eq buffer (window-buffer (selected-window)))
-                (error "Could not pop to buffer %s" buffer)))
-            (goto-char beg)
-            (conn--push-ephemeral-mark end)))))
-      region)))
+  (add-function
+   :around (var iterator)
+   (lambda (iterator state)
+     (let ((region (funcall iterator state)))
+       (pcase state
+         ((or :next :record)
+          (pcase region
+            ((and (pred identity)
+                  `(,beg . ,end))
+             (when-let* ((buffer (and (markerp beg) (marker-buffer beg)))
+                         ((not (eq buffer (current-buffer)))))
+               (pop-to-buffer-same-window buffer)
+               (deactivate-mark t)
+               (unless (eq buffer (window-buffer (selected-window)))
+                 (error "Could not pop to buffer %s" buffer)))
+             (goto-char beg)
+             (conn--push-ephemeral-mark end)))))
+       region))
+   '((depth . 85)
+     (name . kapply-relocate))))
 
 (defun conn--kapply-per-buffer-undo (iterator)
-  (let (undo-handles)
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (funcall iterator state)
-         (pcase-dolist (`(_ . ,handle) undo-handles)
-           (accept-change-group handle)
-           (undo-amalgamate-change-group handle)))
-        ((or :record :next)
-         (prog1
-             (funcall iterator state)
-           (unless (or (alist-get (current-buffer) undo-handles)
-                       (eq buffer-undo-list t))
-             (activate-change-group
-              (setf (alist-get (current-buffer) undo-handles)
-                    (prepare-change-group))))))))))
+  (add-function
+   :around (var iterator)
+   (let (undo-handles)
+     (lambda (iterator state)
+       (pcase state
+         (:cleanup
+          (funcall iterator state)
+          (pcase-dolist (`(_ . ,handle) undo-handles)
+            (accept-change-group handle)
+            (undo-amalgamate-change-group handle)))
+         ((or :record :next)
+          (prog1
+              (funcall iterator state)
+            (unless (or (alist-get (current-buffer) undo-handles)
+                        (eq buffer-undo-list t))
+              (activate-change-group
+               (setf (alist-get (current-buffer) undo-handles)
+                     (prepare-change-group)))))))))
+   '((depth . -25)
+     (name . kapply-undo))))
 
 (defun conn--kapply-per-buffer-atomic-undo (iterator)
-  (let (undo-handles)
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (funcall iterator state)
-         (pcase-dolist (`(_ . ,handle) undo-handles)
-           (if conn-kmacro-apply-error
-               (cancel-change-group handle)
-             (accept-change-group handle)
-             (undo-amalgamate-change-group handle))))
-        ((or :record :next)
-         (prog1
-             (funcall iterator state)
-           (unless (or (alist-get (current-buffer) undo-handles)
-                       (eq buffer-undo-list t))
-             (activate-change-group
-              (setf (alist-get (current-buffer) undo-handles)
-                    (prepare-change-group))))))))))
+  (add-function
+   :around (var iterator)
+   (let (undo-handles)
+     (lambda (iterator state)
+       (pcase state
+         (:cleanup
+          (funcall iterator state)
+          (pcase-dolist (`(_ . ,handle) undo-handles)
+            (if conn-kmacro-apply-error
+                (cancel-change-group handle)
+              (accept-change-group handle)
+              (undo-amalgamate-change-group handle))))
+         ((or :record :next)
+          (prog1
+              (funcall iterator state)
+            (unless (or (alist-get (current-buffer) undo-handles)
+                        (eq buffer-undo-list t))
+              (activate-change-group
+               (setf (alist-get (current-buffer) undo-handles)
+                     (prepare-change-group)))))))))
+   '((depth . -25)
+     (name . kapply-undo))))
 
 (defun conn--kapply-per-iteration-undo (iterator)
-  (let (handle)
-    (lambda (state)
-      (pcase state
-        (:record
-         (prog1
-             (funcall iterator state)
-           (unless (eq buffer-undo-list t)
-             (setq handle (prepare-change-group))
-             (activate-change-group handle))))
-        (:cleanup
-         (when handle
-           (accept-change-group handle)
-           (undo-amalgamate-change-group handle))
-         (funcall iterator state))
-        (:next
-         (when handle
-           (accept-change-group handle)
-           (undo-amalgamate-change-group handle))
-         (prog1
-             (funcall iterator state)
-           (if (eq buffer-undo-list t)
-               (setq handle nil)
-             (undo-boundary)
-             (setq handle (prepare-change-group))
-             (activate-change-group handle))))))))
-
-(defun conn--kapply-save-excursion (iterator)
-  (let (saved-excursions)
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (funcall iterator state)
-         (pcase-dolist (`(,buffer ,pt . ,saved) saved-excursions)
-           (with-current-buffer buffer
-             (goto-char pt)
-             (set-marker pt nil)
-             (save-mark-and-excursion--restore saved))))
-        (:record
-         (setf (alist-get (current-buffer) saved-excursions)
-               (let ((pt (point-marker)))
-                 (set-marker-insertion-type pt t)
-                 (cons pt (save-mark-and-excursion--save))))
-         (funcall iterator state))
-        (:next
-         (if saved-excursions
-             (prog1 (funcall iterator state)
-               (unless (alist-get (current-buffer) saved-excursions)
-                 (setf (alist-get (current-buffer) saved-excursions)
-                       (cons (point-marker) (save-mark-and-excursion--save)))))
-           (setf (alist-get (current-buffer) saved-excursions)
-                 (cons (point-marker) (save-mark-and-excursion--save)))
-           (funcall iterator state)))))))
+  (add-function
+   :around (var iterator)
+   (let (handle)
+     (lambda (iterator state)
+       (pcase state
+         (:record
+          (prog1
+              (funcall iterator state)
+            (unless (eq buffer-undo-list t)
+              (setq handle (prepare-change-group))
+              (activate-change-group handle))))
+         (:cleanup
+          (when handle
+            (accept-change-group handle)
+            (undo-amalgamate-change-group handle))
+          (funcall iterator state))
+         (:next
+          (when handle
+            (accept-change-group handle)
+            (undo-amalgamate-change-group handle))
+          (prog1
+              (funcall iterator state)
+            (if (eq buffer-undo-list t)
+                (setq handle nil)
+              (undo-boundary)
+              (setq handle (prepare-change-group))
+              (activate-change-group handle)))))))
+   '((depth . -25)
+     (name . kapply-undo))))
 
 (defun conn--kapply-ibuffer-overview (iterator)
-  (let ((msg (substitute-command-keys
-              "\\<query-replace-map>Buffer is modified, save before continuing?\
+  (add-function
+   :around (var iterator)
+   (let ((msg (substitute-command-keys
+               "\\<query-replace-map>Buffer is modified, save before continuing?\
  \\[act], \\[skip], \\[quit], \\[edit], \\[automatic], \\[help]"))
-        buffers automatic)
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (funcall iterator state)
-         (when (and (not conn-kmacro-apply-error)
-                    (length> buffers 1))
-           (ibuffer t "*Kapply Ibuffer*"
-                    `((predicate . (memq (current-buffer) ',buffers))))))
-        ((or :record :next)
-         (prog1 (funcall iterator state)
-           (unless (or automatic
-                       (memq (current-buffer) buffers))
-             (push (current-buffer) buffers)
-             (when (and (buffer-modified-p)
-                        buffer-file-name)
-               (redisplay)
-               (catch 'end
-                 (while t
-                   (ding t)
-                   (pcase (let ((executing-kbd-macro nil)
-                                (defining-kbd-macro nil))
-                            (message "%s" msg)
-                            (lookup-key query-replace-map (vector (read-event))))
-                     ('act (throw 'end (save-buffer '(16))))
-                     ('skip (throw 'end nil))
-                     ('quit (setq quit-flag t))
-                     ('edit
-                      (let (executing-kbd-macro defining-kbd-macro)
-                        (recursive-edit))
-                      (throw 'end nil))
-                     ('automatic
-                      (setq automatic t)
-                      (throw 'end nil))
-                     ('help
-                      (with-output-to-temp-buffer "*Help*"
-                        (princ
-                         (substitute-command-keys
-                          "Specify how to proceed with keyboard macro execution.
+         buffers automatic)
+     (lambda (iterator state)
+       (pcase state
+         (:cleanup
+          (funcall iterator state)
+          (when (and (not conn-kmacro-apply-error)
+                     (length> buffers 1))
+            (ibuffer t "*Kapply Ibuffer*"
+                     `((predicate . (memq (current-buffer) ',buffers))))))
+         ((or :record :next)
+          (prog1 (funcall iterator state)
+            (unless (or automatic
+                        (memq (current-buffer) buffers))
+              (push (current-buffer) buffers)
+              (when (and (buffer-modified-p)
+                         buffer-file-name)
+                (redisplay)
+                (catch 'end
+                  (while t
+                    (ding t)
+                    (pcase (let ((executing-kbd-macro nil)
+                                 (defining-kbd-macro nil))
+                             (message "%s" msg)
+                             (lookup-key query-replace-map (vector (read-event))))
+                      ('act (throw 'end (save-buffer '(16))))
+                      ('skip (throw 'end nil))
+                      ('quit (setq quit-flag t))
+                      ('edit
+                       (let (executing-kbd-macro defining-kbd-macro)
+                         (recursive-edit))
+                       (throw 'end nil))
+                      ('automatic
+                       (setq automatic t)
+                       (throw 'end nil))
+                      ('help
+                       (with-output-to-temp-buffer "*Help*"
+                         (princ
+                          (substitute-command-keys
+                           "Specify how to proceed with keyboard macro execution.
 Possibilities: \\<query-replace-map>
 \\[act]	Save file and continue iteration.
 \\[skip]	Don't save file and continue iteration.
 \\[quit]	Stop the macro entirely right now.
 \\[edit]	Enter recursive edit; resume executing the keyboard macro afterwards.
 \\[automatic]	Continue iteration and don't ask to save again."))
-                        (with-current-buffer standard-output
-                          (help-mode)))))))))))))))
+                         (with-current-buffer standard-output
+                           (help-mode))))))))))))))
+   '((depth . -80)
+     (name . kapply-ibuffer))))
+
+(defun conn--kapply-save-excursion (iterator)
+  (add-function
+   :around (var iterator)
+   (let (saved-excursions)
+     (lambda (iterator state)
+       (pcase state
+         (:cleanup
+          (funcall iterator state)
+          (pcase-dolist (`(,buffer ,pt . ,saved) saved-excursions)
+            (with-current-buffer buffer
+              (goto-char pt)
+              (set-marker pt nil)
+              (save-mark-and-excursion--restore saved))))
+         (:record
+          (setf (alist-get (current-buffer) saved-excursions)
+                (let ((pt (point-marker)))
+                  (set-marker-insertion-type pt t)
+                  (cons pt (save-mark-and-excursion--save))))
+          (funcall iterator state))
+         (:next
+          (if saved-excursions
+              (prog1 (funcall iterator state)
+                (unless (alist-get (current-buffer) saved-excursions)
+                  (setf (alist-get (current-buffer) saved-excursions)
+                        (cons (point-marker) (save-mark-and-excursion--save)))))
+            (setf (alist-get (current-buffer) saved-excursions)
+                  (cons (point-marker) (save-mark-and-excursion--save)))
+            (funcall iterator state))))))
+   '((depth . 0)
+     (name . kapply-excursions))))
 
 (defun conn--kapply-save-restriction (iterator)
-  (let (kapply-saved-restrictions)
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (funcall iterator state)
-         (pcase-dolist (`(,buffer ,beg . ,end) kapply-saved-restrictions)
-           (with-current-buffer buffer
-             (widen)
-             (narrow-to-region (or beg (point-min))
-                               (or end (point-max))))))
-        ((or :record :next)
-         (prog1
-             (funcall iterator state)
-           (pcase (alist-get (current-buffer) kapply-saved-restrictions)
-             ('nil
-              (let ((beg (point-min-marker))
-                    (end (point-max-marker)))
-                (without-restriction
-                  (setf (alist-get (current-buffer) kapply-saved-restrictions)
-                        (cons (when (/= beg (point-min)) beg)
-                              (when (/= end (point-max)) end))))))
-             (`(nil . nil) (widen))
-             (`(,beg . ,end)
+  (add-function
+   :around (var iterator)
+   (let (kapply-saved-restrictions)
+     (lambda (iterator state)
+       (pcase state
+         (:cleanup
+          (funcall iterator state)
+          (pcase-dolist (`(,buffer ,beg . ,end) kapply-saved-restrictions)
+            (with-current-buffer buffer
               (widen)
               (narrow-to-region (or beg (point-min))
-                                (or end (point-max)))))))))))
+                                (or end (point-max))))))
+         ((or :record :next)
+          (prog1
+              (funcall iterator state)
+            (pcase (alist-get (current-buffer) kapply-saved-restrictions)
+              ('nil
+               (let ((beg (point-min-marker))
+                     (end (point-max-marker)))
+                 (without-restriction
+                   (setf (alist-get (current-buffer) kapply-saved-restrictions)
+                         (cons (when (/= beg (point-min)) beg)
+                               (when (/= end (point-max)) end))))))
+              (`(nil . nil) (widen))
+              (`(,beg . ,end)
+               (widen)
+               (narrow-to-region (or beg (point-min))
+                                 (or end (point-max))))))))))
+   '((depth . 10)
+     (name . kapply-restrictions))))
 
 (defun conn--kapply-change-region (iterator)
-  (lambda (state)
-    (when-let* ((ret (funcall iterator state)))
-      (delete-region (region-beginning) (region-end))
-      ret)))
-
-(defun conn--kapply-with-state (iterator conn-state)
-  (let (buffer-stacks)
-    (lambda (state)
-      (prog1
-          (funcall iterator state)
-        (pcase state
-          (:cleanup
-           (pcase-dolist (`(,buf . ,stack) buffer-stacks)
-             (with-current-buffer buf
-               (setq conn--state-stack stack
-                     conn-lighter nil)
-               (conn-enter-state (car stack)))))
-          ((or :record :next)
-           (when conn-local-mode
-             (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
-                 (setf conn--state-stack stack)
-               (setf (alist-get (current-buffer) buffer-stacks)
-                     conn--state-stack))
-             (conn-enter-recursive-stack conn-state))))))))
+  (add-function
+   :after (var iterator)
+   (lambda (state)
+     (unless (eq state :cleanup)
+       (delete-region (region-beginning) (region-end))))
+   '((depth . -30)
+     (name . kapply-region))))
 
 (defun conn--kapply-at-end (iterator)
-  (lambda (state)
-    (when-let* ((ret (funcall iterator state)))
-      (conn-exchange-mark-command)
-      ret)))
+  (add-function
+   :after (var iterator)
+   (lambda (state)
+     (unless (eq state :cleanup)
+       (conn-exchange-mark-command)))
+   '((depth . -30)
+     (name . kapply-region))))
+
+(defun conn--kapply-with-state (iterator conn-state)
+  (add-function
+   :after (var iterator)
+   (let (buffer-stacks)
+     (lambda (state)
+       (pcase state
+         (:cleanup
+          (pcase-dolist (`(,buf . ,stack) buffer-stacks)
+            (with-current-buffer buf
+              (setq conn--state-stack stack
+                    conn-lighter nil)
+              (conn-enter-state (car stack)))))
+         ((or :record :next)
+          (when conn-local-mode
+            (if-let* ((stack (alist-get (current-buffer) buffer-stacks)))
+                (setf conn--state-stack stack)
+              (setf (alist-get (current-buffer) buffer-stacks)
+                    conn--state-stack))
+            (conn-enter-recursive-stack conn-state))))))
+   '((depth . -25)
+     (name . kapply-state))))
 
 (defun conn--kapply-pulse-region (iterator)
-  (lambda (state)
-    (when-let* ((ret (funcall iterator state)))
-      (when (eq state :record)
-        (pulse-momentary-highlight-region (region-beginning)
-                                          (region-end)
-                                          'query-replace))
-      ret)))
+  (add-function
+   :after (var iterator)
+   (lambda (state)
+     (when (eq state :record)
+       (pulse-momentary-highlight-region (region-beginning)
+                                         (region-end)
+                                         'query-replace)))
+   '((depth . -90)
+     (name . kapply-pulse))))
 
 (defun conn--kapply-save-windows (iterator)
-  (let (wconf)
-    (lambda (state)
-      (pcase state
-        (:cleanup
-         (funcall iterator state)
-         (set-window-configuration wconf))
-        ((or :record :next)
-         (unless wconf (setq wconf (current-window-configuration)))
-         (funcall iterator state))))))
+  (add-function
+   :around (var iterator)
+   (let (wconf)
+     (lambda (iterator state)
+       (pcase state
+         (:cleanup
+          (funcall iterator state)
+          (set-window-configuration wconf))
+         ((or :record :next)
+          (unless wconf (setq wconf (current-window-configuration)))
+          (funcall iterator state)))))
+   '((depth . -70)
+     (name . kapply-wconf))))
 
 
 ;;;;; Applier Definitions
@@ -4739,7 +4874,8 @@ themselves once the selection process has concluded."
             (conn-posframe--dispatch-ring-display-subr)
           (conn-state-eval-message "%s" (conn-describe-dispatch
                                          (conn-ring-head conn-dispatch-ring))))
-        (conn-state-eval-handle arglist))
+        (conn-state-eval-handle)
+        arglist)
     (user-error
      (setq conn--state-eval-error-message "Dispatch ring empty")
      arglist)))
@@ -4753,7 +4889,8 @@ themselves once the selection process has concluded."
             (conn-posframe--dispatch-ring-display-subr)
           (conn-state-eval-message "%s" (conn-describe-dispatch
                                          (conn-ring-head conn-dispatch-ring))))
-        (conn-state-eval-handle arglist))
+        (conn-state-eval-handle)
+        arglist)
     (user-error
      (setq conn--state-eval-error-message "Dispatch ring empty")
      arglist)))
@@ -4766,7 +4903,8 @@ themselves once the selection process has concluded."
           (conn-posframe--dispatch-ring-display-subr)
         (conn-state-eval-message "%s" (conn-describe-dispatch head)))
     (conn-state-eval-message "Dispatch ring empty"))
-  (conn-state-eval-handle arglist))
+  (conn-state-eval-handle)
+  arglist)
 
 
 ;;;;; Dispatch Window Filtering
@@ -6950,6 +7088,12 @@ contain targets."
 
 ;;;;; Perform Dispatch Loop
 
+(define-error 'conn-dispatch-error "Dispatch error" 'user-error)
+
+(defun conn-dispatch-error (string)
+  (setf conn--state-eval-error-message string)
+  (signal 'conn-dispatch-error nil))
+
 (define-minor-mode conn-dispatch-select-mode
   "Mode for dispatch event reading"
   :global t
@@ -7010,7 +7154,7 @@ contain targets."
                        ,@body
                        (cl-incf conn-dispatch-repeat-count))
                    (user-error
-                    (conn-state-eval-error (error-message-string err))))))
+                    (conn-dispatch-error (error-message-string err))))))
            (dolist (undo conn--dispatch-loop-change-groups)
              (funcall undo :accept)))))))
 
@@ -7212,18 +7356,18 @@ contain targets."
      (if (conn-action-stale-p action)
          (progn
            (conn-dispatch-ring-remove-stale)
-           (conn-state-eval-error "Last dispatch action stale"))
+           (conn-dispatch-error "Last dispatch action stale"))
        (conn-ring-delete conn-dispatch-ring prev)
-       (conn-state-eval-handle
-        (cons (conn-state-eval-quote
-               (conn-perform-dispatch & action & thing & thing-arg
-                                      :always-retarget & always-retarget
-                                      :repeat & repeat
-                                      :restrict-windows & restrict-windows
-                                      :other-end & other-end
-                                      && keys))
-              form))))
-    (_ (conn-state-eval-error "Dispatch ring empty"))))
+       (conn-state-eval-handle)
+       (cons (conn-state-eval-quote
+              (conn-perform-dispatch & action & thing & thing-arg
+                                     :always-retarget & always-retarget
+                                     :repeat & repeat
+                                     :restrict-windows & restrict-windows
+                                     :other-end & other-end
+                                     && keys))
+             form)))
+    (_ (conn-dispatch-error "Dispatch ring empty"))))
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))
@@ -11493,7 +11637,7 @@ Operates with the selected windows parent window."
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (conn--state-run-deferred)
+    (conn--state-call-deferred)
     (conn--clear-overlays)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)

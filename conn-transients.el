@@ -105,8 +105,18 @@
         (funcall (oref obj value-transform)
                  (cdr (oref obj value)))))
 
+;;;;; Kapply Pipeline Infix
+
+(defclass conn-transient-kapply-pipeline (conn-transient-lisp-choices)
+  ((keyword :initform :pipeline)))
+
 
 ;;;; Kapply Transients
+
+(defun conn--transient-kapply-pipeline-args (arglist)
+  (cl-loop for arg in arglist
+           when (eq (car-safe arg) :pipeline)
+           collect (cdr arg)))
 
 (defun conn-recursive-edit-kmacro (arg)
   "Edit last keyboard macro inside a recursive edit.
@@ -187,10 +197,9 @@ the edit in the macro."
              ("append" . conn--kmacro-apply-append)))
 
 (transient-define-argument conn--kapply-query-infix ()
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :description "Query"
   :key "q"
-  :keyword :query
   :choices `(nil
              ("record" . conn--kapply-query)
              ("per iteration" . ,(lambda (iterator)
@@ -207,10 +216,9 @@ the edit in the macro."
 
 (transient-define-argument conn--kapply-ibuffer-infix ()
   "Display buffers touched in an `ibuffer' buffer."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :description "Ibuffer"
   :key "b"
-  :keyword :ibuffer
   :choices `(("auto" . conn--kapply-ibuffer-overview)
              nil))
 
@@ -232,10 +240,9 @@ BEFORE means only those matches before, and including, the current match."
 
 (transient-define-argument conn--kapply-state-infix ()
   "Dispatch in a specific state."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :description "In State"
   :key "g"
-  :keyword :state
   :choices '(("command" . conn-command-state)
              ("emacs" . conn-emacs-state))
   :init-value (lambda (obj)
@@ -253,9 +260,8 @@ START means place the point at the start of the region before
 each iteration.  END means place the point at the end of the
 region before each iteration.  CHANGE means delete the region
 before each iteration."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :key "t"
-  :keyword :regions
   :description "Regions"
   :choices '(("start" . nil)
              ("end" . conn--kapply-at-end)
@@ -279,27 +285,24 @@ before each iteration."
 
 (transient-define-argument conn--kapply-save-excursion-infix ()
   "Save the point and mark in each buffer during dispatch."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :key "x"
-  :keyword :excursions
   :description "Excursions"
   :choices '(("save" . conn--kapply-save-excursion)
              nil))
 
 (transient-define-argument conn--kapply-save-restriction-infix ()
   "Save and restore the current restriction in each buffer during dispatch."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :key "N"
-  :keyword :restrictions
   :description "Restrictions"
   :choices '(("save" . conn--kapply-save-restriction)
              nil))
 
 (transient-define-argument conn--kapply-merge-undo-infix ()
   "Merge all macro iterations into a single undo in each buffer."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :key "/"
-  :keyword :undo
   :description "Merge Undo Per"
   :choices '(("buffer atomic" . conn--kapply-per-buffer-atomic-undo)
              ("buffer" . conn--kapply-per-buffer-undo)
@@ -308,9 +311,8 @@ before each iteration."
 
 (transient-define-argument conn--kapply-save-windows-infix ()
   "Save and restore current window configuration during dispatch."
-  :class 'conn-transient-lisp-choices
+  :class 'conn-transient-kapply-pipeline
   :key "4"
-  :keyword :window-conf
   :description "Window Conf"
   :choices '(nil
              ("save" . conn--kapply-save-windows)))
@@ -342,28 +344,24 @@ Begins the keyboard macro by deleting the string at each match."
   :description "Replace"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (conn--kapply-compose-iterator
-   (let* ((delimited (oref transient-current-prefix scope))
-          (regions (conn-read-thing-regions))
-          (string (filter-buffer-substring
-                   (region-beginning) (region-end))))
-     (conn--kapply-match-iterator
-      string regions
-      'conn--nnearest-first nil delimited))
-   'conn--kapply-relocate-to-region
-   (if (eq search-invisible 'open)
-       'conn--kapply-open-invisible
-     'conn--kapply-skip-invisible-regions)
-   (alist-get :query args)
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   'conn--kapply-change-region
-   (lambda (iterator)
-     (conn--kapply-with-state iterator 'conn-emacs-state))
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :kmacro args)))
+  (apply #'conn--kapply-compose-iterator
+         (alist-get :kmacro args)
+         (let* ((delimited (oref transient-current-prefix scope))
+                (regions (conn-read-thing-regions))
+                (string (filter-buffer-substring
+                         (region-beginning) (region-end))))
+           (conn--kapply-match-iterator
+            string regions
+            'conn--nnearest-first nil delimited))
+         'conn--kapply-relocate-to-region
+         (if (eq search-invisible 'open)
+             'conn--kapply-open-invisible
+           'conn--kapply-skip-invisible-regions)
+         'conn--kapply-change-region
+         'conn--kapply-pulse-region
+         `(,@(conn--transient-kapply-pipeline-args args)
+           ,(lambda (iterator)
+              (conn--kapply-with-state iterator 'conn-emacs-state)))))
 
 (transient-define-suffix conn--kapply-emacs-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
@@ -374,27 +372,23 @@ Begins the keyboard macro in `conn-emacs-state'."
   :description "Emacs"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (conn--kapply-compose-iterator
-   (let* ((delimited (oref transient-current-prefix scope))
-          (regions (conn-read-thing-regions))
-          (string (filter-buffer-substring
-                   (region-beginning) (region-end))))
-     (conn--kapply-match-iterator
-      string regions
-      'conn--nnearest-first nil delimited))
-   'conn--kapply-relocate-to-region
-   (if (eq search-invisible 'open)
-       'conn--kapply-open-invisible
-     'conn--kapply-skip-invisible-regions)
-   (alist-get :query args)
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (lambda (iterator)
-     (conn--kapply-with-state iterator 'conn-emacs-state))
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :kmacro args)))
+  (apply #'conn--kapply-compose-iterator
+         (alist-get :kmacro args)
+         (let* ((delimited (oref transient-current-prefix scope))
+                (regions (conn-read-thing-regions))
+                (string (filter-buffer-substring
+                         (region-beginning) (region-end))))
+           (conn--kapply-match-iterator
+            string regions
+            'conn--nnearest-first nil delimited))
+         'conn--kapply-relocate-to-region
+         (if (eq search-invisible 'open)
+             'conn--kapply-open-invisible
+           'conn--kapply-skip-invisible-regions)
+         'conn--kapply-pulse-region
+         `(,@(conn--transient-kapply-pipeline-args args)
+           ,(lambda (iterator)
+              (conn--kapply-with-state iterator 'conn-emacs-state)))))
 
 (transient-define-suffix conn--kapply-command-region-string (args)
   "Apply keyboard macro to every occurrence of a string within a region.
@@ -405,27 +399,23 @@ Begins the keyboard macro in `conn-command-state'."
   :description "Command"
   (interactive (list (transient-args transient-current-command)))
   (deactivate-mark)
-  (conn--kapply-compose-iterator
-   (let* ((delimited (oref transient-current-prefix scope))
-          (regions (conn-read-thing-regions))
-          (string (filter-buffer-substring
-                   (region-beginning) (region-end))))
-     (conn--kapply-match-iterator
-      string regions
-      'conn--nnearest-first nil delimited))
-   'conn--kapply-relocate-to-region
-   (if (eq search-invisible 'open)
-       'conn--kapply-open-invisible
-     'conn--kapply-skip-invisible-regions)
-   (alist-get :query args)
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (lambda (iterator)
-     (conn--kapply-with-state iterator 'conn-command-state))
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :kmacro args)))
+  (apply #'conn--kapply-compose-iterator
+         (alist-get :kmacro args)
+         (let* ((delimited (oref transient-current-prefix scope))
+                (regions (conn-read-thing-regions))
+                (string (filter-buffer-substring
+                         (region-beginning) (region-end))))
+           (conn--kapply-match-iterator
+            string regions
+            'conn--nnearest-first nil delimited))
+         'conn--kapply-relocate-to-region
+         (if (eq search-invisible 'open)
+             'conn--kapply-open-invisible
+           'conn--kapply-skip-invisible-regions)
+         'conn--kapply-pulse-region
+         `(,@(conn--transient-kapply-pipeline-args args)
+           ,(lambda (iterator)
+              (conn--kapply-with-state iterator 'conn-command-state)))))
 
 (transient-define-suffix conn--kapply-replace-rectangle-suffix (args)
   "Apply keyboard macro to a rectangle replacing each line."
@@ -438,20 +428,16 @@ Begins the keyboard macro in `conn-command-state'."
     (unless (or (length= regions 1)
                 (< (point) (car (nth 1 regions))))
       (setq regions (nreverse regions)))
-    (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions)
-     'conn--kapply-relocate-to-region
-     'conn--kapply-skip-invisible-regions
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     'conn--kapply-change-region
-     (lambda (iterator)
-       (conn--kapply-with-state iterator 'conn-emacs-state))
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-region-iterator regions)
+           'conn--kapply-relocate-to-region
+           'conn--kapply-skip-invisible-regions
+           'conn--kapply-change-region
+           'conn--kapply-pulse-region
+           `(,@(conn--transient-kapply-pipeline-args args)
+             ,(lambda (iterator)
+                (conn--kapply-with-state iterator 'conn-emacs-state))))))
 
 (transient-define-suffix conn--kapply-emacs-rectangle-suffix (args)
   "Apply keyboard macro in `conn-emacs-state' to a rectangle."
@@ -464,21 +450,17 @@ Begins the keyboard macro in `conn-command-state'."
                 (< (point) (car (nth 1 regions))))
       (setq regions (nreverse regions)))
     (deactivate-mark)
-    (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions)
-     'conn--kapply-relocate-to-region
-     'conn--kapply-skip-invisible-regions
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (lambda (iterator)
-       (conn--kapply-with-state iterator 'conn-emacs-state))
-     (when (> (point) (caar regions))
-       'conn--kapply-at-end)
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-region-iterator regions)
+           'conn--kapply-relocate-to-region
+           'conn--kapply-skip-invisible-regions
+           (when (> (point) (caar regions))
+             'conn--kapply-at-end)
+           'conn--kapply-pulse-region
+           `(,@(conn--transient-kapply-pipeline-args args)
+             ,(lambda (iterator)
+                (conn--kapply-with-state iterator 'conn-emacs-state))))))
 
 (transient-define-suffix conn--kapply-command-rectangle-suffix (args)
   "Apply keyboard macro in `conn-command-state' to a rectangle."
@@ -491,21 +473,17 @@ Begins the keyboard macro in `conn-command-state'."
                 (< (point) (car (nth 1 regions))))
       (setq regions (nreverse regions)))
     (deactivate-mark)
-    (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator regions)
-     'conn--kapply-relocate-to-region
-     'conn--kapply-skip-invisible-regions
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (lambda (iterator)
-       (conn--kapply-with-state iterator 'conn-command-state))
-     (when (> (point) (caar regions))
-       'conn--kapply-at-end)
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-region-iterator regions)
+           'conn--kapply-relocate-to-region
+           'conn--kapply-skip-invisible-regions
+           (when (> (point) (caar regions))
+             'conn--kapply-at-end)
+           'conn--kapply-pulse-region
+           `(,@(conn--transient-kapply-pipeline-args args)
+             ,(lambda (iterator)
+                (conn--kapply-with-state iterator 'conn-command-state))))))
 
 (transient-define-suffix conn--kapply-string-suffix (args)
   "Apply keyboard macro to every occurrence of a string within a region."
@@ -524,25 +502,19 @@ Begins the keyboard macro in `conn-command-state'."
                          (make-composed-keymap conn-replace-to-map)
                          (use-local-map)))
                    (conn--read-from-with-preview "String" regions nil))))
-    (conn--kapply-compose-iterator
-     (conn--kapply-match-iterator
-      string regions
-      (or (alist-get :order args)
-          'conn--nnearest-first)
-      nil delimited)
-     'conn--kapply-relocate-to-region
-     (if (eq search-invisible 'open)
-         'conn--kapply-open-invisible
-       'conn--kapply-skip-invisible-regions)
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (alist-get :state args)
-     (alist-get :regions args)
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-match-iterator
+            string regions
+            (or (alist-get :order args)
+                'conn--nnearest-first)
+            nil delimited)
+           'conn--kapply-relocate-to-region
+           (if (eq search-invisible 'open)
+               'conn--kapply-open-invisible
+             'conn--kapply-skip-invisible-regions)
+           'conn--kapply-pulse-region
+           (conn--transient-kapply-pipeline-args args))))
 
 (transient-define-suffix conn--kapply-regexp-suffix (args)
   "Apply keyboard macro to occurrence of a regex within a region."
@@ -561,25 +533,19 @@ Begins the keyboard macro in `conn-command-state'."
                          (use-local-map)))
                    (conn--read-from-with-preview
                     "Regexp" regions t))))
-    (conn--kapply-compose-iterator
-     (conn--kapply-match-iterator
-      regexp regions
-      (or (alist-get :order args)
-          'conn--nnearest-first)
-      t delimited)
-     'conn--kapply-relocate-to-region
-     (if (eq search-invisible 'open)
-         'conn--kapply-open-invisible
-       'conn--kapply-skip-invisible-regions)
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (alist-get :state args)
-     (alist-get :regions args)
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-match-iterator
+            regexp regions
+            (or (alist-get :order args)
+                'conn--nnearest-first)
+            t delimited)
+           'conn--kapply-relocate-to-region
+           (if (eq search-invisible 'open)
+               'conn--kapply-open-invisible
+             'conn--kapply-skip-invisible-regions)
+           'conn--kapply-pulse-region
+           (conn--transient-kapply-pipeline-args args))))
 
 (transient-define-suffix conn--kapply-things-suffix (args)
   "Apply keyboard macro on the current region.
@@ -597,19 +563,13 @@ apply to each contiguous component of the region."
                   :prompt "Thing"))
                ((map :outer :subregions)
                 (conn-bounds-of cmd arg)))
-    (conn--kapply-compose-iterator
-     (conn--kapply-region-iterator (or subregions (list outer)))
-     'conn--kapply-relocate-to-region
-     'conn--kapply-skip-invisible-points
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (alist-get :state args)
-     (alist-get :regions args)
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-region-iterator (or subregions (list outer)))
+           'conn--kapply-relocate-to-region
+           'conn--kapply-skip-invisible-points
+           'conn--kapply-pulse-region
+           (conn--transient-kapply-pipeline-args args))))
 
 (transient-define-suffix conn--kapply-things-in-region-suffix (args)
   "Apply keyboard macro on the current region.
@@ -624,25 +584,17 @@ apply to each contiguous component of the region."
   (pcase-let ((`(,cmd ,n)
                (conn-eval-with-state 'conn-read-thing-state
                    (list && (conn-thing-argument t))
-                 :prompt "Thing")))
-    (conn--kapply-compose-iterator
-     (conn--kapply-thing-iterator cmd (region-bounds))
-     'conn--kapply-relocate-to-region
-     'conn--kapply-skip-invisible-points
-     `(conn--kapply-every-nth ,(prefix-numeric-value n))
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (alist-get :state args)
-     (if (eq (alist-get :regions args)
-             'conn--kapply-change-region)
-         'conn--kapply-change-region
-       (when (> (point) (mark t))
-         'conn--kapply-at-end))
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+                 :prompt "Thing"))
+              (pipeline (conn--transient-kapply-pipeline-args args)))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-thing-iterator cmd (region-bounds))
+           'conn--kapply-relocate-to-region
+           'conn--kapply-skip-invisible-points
+           `(conn--kapply-every-nth ,(prefix-numeric-value n))
+           (when (> (point) (mark t)) 'conn--kapply-at-end)
+           'conn--kapply-pulse-region
+           pipeline)))
 
 (transient-define-suffix conn--kapply-iterate-suffix (args)
   "Apply keyboard macro a specified number of times.
@@ -652,15 +604,13 @@ A zero means repeat until error."
   :key "i"
   :description "Iterate"
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-compose-iterator
-   (conn--kapply-infinite-iterator)
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (alist-get :ibuffer args)
-   (list (alist-get :kmacro args)
-         (read-number "Iterations: " 0))))
+  (apply #'conn--kapply-compose-iterator
+         (lambda (iterator)
+           (funcall (alist-get :kmacro args)
+                    iterator
+                    (read-number "Iterations: " 0)))
+         (conn--kapply-infinite-iterator)
+         (conn--transient-kapply-pipeline-args args)))
 
 (transient-define-suffix conn--kapply-regions-suffix (iterator args)
   "Apply keyboard macro on regions."
@@ -669,20 +619,13 @@ A zero means repeat until error."
   :description "Regions"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (conn--kapply-compose-iterator
-   iterator
-   'conn--kapply-relocate-to-region
-   'conn--kapply-open-invisible
-   (alist-get :query args)
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (alist-get :regions args)
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :ibuffer args)
-   (alist-get :kmacro args)))
+  (apply #'conn--kapply-compose-iterator
+         (alist-get :kmacro args)
+         iterator
+         'conn--kapply-relocate-to-region
+         'conn--kapply-open-invisible
+         'conn--kapply-pulse-region
+         (conn--transient-kapply-pipeline-args args)))
 
 (transient-define-suffix conn--kapply-dispatch-suffix (callback args)
   "Apply keyboard macro on dispatch targets."
@@ -691,13 +634,8 @@ A zero means repeat until error."
   :description "Resume"
   (interactive (list (oref transient-current-prefix scope)
                      (transient-args transient-current-command)))
-  (let* ((pipeline (list 'conn--kapply-relocate-to-region
-                         (alist-get :restrictions args)
-                         (alist-get :excursions args)
-                         (alist-get :state args)
-                         (alist-get :regions args)
-                         'conn--kapply-pulse-region
-                         (alist-get :window-conf args))))
+  (let ((pipeline (conn--transient-kapply-pipeline-args args))
+        (applier (alist-get :kmacro args)))
     (thread-last
       (oclosure-lambda (conn-dispatch-kapply
                         (macro nil))
@@ -710,6 +648,11 @@ A zero means repeat until error."
             (with-selected-window window
               (with-undo-amalgamate
                 (apply #'conn--kapply-compose-iterator
+                       (pcase applier
+                         ('conn--kmacro-apply
+                          (lambda (iterator)
+                            (conn--kmacro-apply iterator nil macro)))
+                         (kmacro kmacro))
                        (conn--kapply-region-iterator
                         (save-excursion
                           (goto-char pt)
@@ -717,12 +660,9 @@ A zero means repeat until error."
                             ('nil (user-error "Cannot find thing at point"))
                             ((conn-bounds-get :outer)
                              (list outer)))))
-                       `(,@pipeline
-                         ,(pcase (alist-get :kmacro args)
-                            ('conn--kmacro-apply
-                             (lambda (iterator)
-                               (conn--kmacro-apply iterator nil macro)))
-                            (kmacro kmacro))))))))
+                       'conn--kapply-relocate-to-region
+                       'conn--kapply-pulse-region
+                       pipeline)))))
         (unless macro (setq macro (kmacro-ring-head))))
       (funcall callback))))
 
@@ -751,22 +691,16 @@ A zero means repeat until error."
                   (alist-get :matches args))))))
     (unwind-protect
         (isearch-done)
-      (conn--kapply-compose-iterator
-       (conn--kapply-region-iterator matches
-                                     (or (alist-get :order args)
-                                         'conn--nnearest-first))
-       'conn--kapply-relocate-to-region
-       'conn--kapply-open-invisible
-       (alist-get :query args)
-       (alist-get :undo args)
-       (alist-get :restrictions args)
-       (alist-get :excursions args)
-       (alist-get :state args)
-       (alist-get :regions args)
-       'conn--kapply-pulse-region
-       (alist-get :window-conf args)
-       (alist-get :ibuffer args)
-       (alist-get :kmacro args)))))
+      (apply #'conn--kapply-compose-iterator
+             (alist-get :kmacro args)
+             (conn--kapply-region-iterator
+              matches
+              (or (alist-get :order args)
+                  'conn--nnearest-first))
+             'conn--kapply-relocate-to-region
+             'conn--kapply-open-invisible
+             'conn--kapply-pulse-region
+             (conn--transient-kapply-pipeline-args args)))))
 
 (transient-define-suffix conn--kapply-highlights (args)
   "Apply keyboard macro on regions of text with a specified text property."
@@ -778,24 +712,18 @@ A zero means repeat until error."
                (conn-eval-with-state 'conn-read-thing-state
                    (conn-bounds-of && (conn-thing-argument-dwim))
                  :prompt "Thing")))
-    (conn--kapply-compose-iterator
-     (conn--kapply-highlight-iterator
-      (or beg (point-min))
-      (or end (point-max))
-      (or (alist-get :order args)
-          'conn--nnearest-first)
-      (alist-get :read-patterns args))
-     'conn--kapply-relocate-to-region
-     'conn--kapply-open-invisible
-     (alist-get :query args)
-     (alist-get :undo args)
-     (alist-get :restrictions args)
-     (alist-get :excursions args)
-     (alist-get :state args)
-     (alist-get :regions args)
-     'conn--kapply-pulse-region
-     (alist-get :window-conf args)
-     (alist-get :kmacro args))))
+    (apply #'conn--kapply-compose-iterator
+           (alist-get :kmacro args)
+           (conn--kapply-highlight-iterator
+            (or beg (point-min))
+            (or end (point-max))
+            (or (alist-get :order args)
+                'conn--nnearest-first)
+            (alist-get :read-patterns args))
+           'conn--kapply-relocate-to-region
+           'conn--kapply-open-invisible
+           'conn--kapply-pulse-region
+           (conn--transient-kapply-pipeline-args args))))
 
 (transient-define-suffix conn--kapply-occur (args)
   "Apply keyboard macro on regions of text with a specified text property."
@@ -804,30 +732,23 @@ A zero means repeat until error."
   :description "Occur Matches"
   :if (lambda () (eq major-mode 'occur-mode))
   (interactive (list (transient-args transient-current-command)))
-  (conn--kapply-compose-iterator
-   (conn--kapply-region-iterator
-    (save-excursion
-      (goto-char (point-min))
-      (cl-loop for match = (text-property-search-forward 'occur-target)
-               while match
-               append (pcase (prop-match-value match)
-                        ((and pt (guard (markerp pt)))
-                         (list (cons pt (marker-position pt))))
-                        (reg reg))))
-    (or (alist-get :order args)
-        'conn--nnearest-first))
-   'conn--kapply-relocate-to-region
-   'conn--kapply-skip-invisible-regions
-   (alist-get :query args)
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (alist-get :regions args)
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :ibuffer args)
-   (alist-get :kmacro args)))
+  (apply #'conn--kapply-compose-iterator
+         (alist-get :kmacro args)
+         (conn--kapply-region-iterator
+          (save-excursion
+            (goto-char (point-min))
+            (cl-loop for match = (text-property-search-forward 'occur-target)
+                     while match
+                     append (pcase (prop-match-value match)
+                              ((and pt (guard (markerp pt)))
+                               (list (cons pt (marker-position pt))))
+                              (reg reg))))
+          (or (alist-get :order args)
+              'conn--nnearest-first))
+         'conn--kapply-relocate-to-region
+         'conn--kapply-skip-invisible-regions
+         'conn--kapply-pulse-region
+         (conn--transient-kapply-pipeline-args args)))
 
 (transient-define-suffix conn--kapply-text-property-suffix (prop value args)
   "Apply keyboard macro on regions of text with a specified text property."
@@ -845,28 +766,23 @@ A zero means repeat until error."
           (val (alist-get (completing-read "Value: " vals) vals
                           nil nil #'string=)))
      (list prop val (transient-args transient-current-command))))
-  (conn--kapply-compose-iterator
-   (conn--kapply-region-iterator
-    (save-excursion
-      (goto-char (point-min))
-      (let (regions)
-        (while-let ((match (text-property-search-forward prop value t)))
-          (push (cons (prop-match-beginning match)
-                      (prop-match-end match))
-                regions))
-        regions))
-    (or (alist-get :order args)
-        'conn--nnearest-first))
-   'conn--kapply-advance-region
-   'conn--kapply-open-invisible
-   (alist-get :undo args)
-   (alist-get :restrictions args)
-   (alist-get :excursions args)
-   (alist-get :state args)
-   (alist-get :regions args)
-   'conn--kapply-pulse-region
-   (alist-get :window-conf args)
-   (alist-get :kmacro args)))
+  (apply #'conn--kapply-compose-iterator
+         (alist-get :kmacro args)
+         (conn--kapply-region-iterator
+          (save-excursion
+            (goto-char (point-min))
+            (let (regions)
+              (while-let ((match (text-property-search-forward prop value t)))
+                (push (cons (prop-match-beginning match)
+                            (prop-match-end match))
+                      regions))
+              regions))
+          (or (alist-get :order args)
+              'conn--nnearest-first))
+         'conn--kapply-advance-region
+         'conn--kapply-open-invisible
+         'conn--kapply-pulse-region
+         (conn--transient-kapply-pipeline-args args)))
 
 
 ;;;;; Kapply prefixes
