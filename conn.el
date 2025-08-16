@@ -819,22 +819,6 @@ of highlighting."
 
 ;;;;; Overlay Utils
 
-(defun conn--overlay-start-marker (ov)
-  "Return marker pointing to the start of overlay OV."
-  (conn--create-marker (overlay-start ov) (overlay-buffer ov)))
-
-(defun conn--overlay-end-marker (ov)
-  "Return marker pointing to the end of overlay OV."
-  (conn--create-marker (overlay-end ov) (overlay-buffer ov)))
-
-(defun conn--overlay-bounds (ov)
-  (cons (overlay-start ov) (overlay-end ov)))
-
-(defun conn--overlay-bounds-markers (ov)
-  "Return (BEG . END) where BEG and END are markers at each end of OV."
-  (cons (conn--overlay-start-marker ov)
-        (conn--overlay-end-marker ov)))
-
 (defun conn--clear-overlays ()
   "Delete all conn overlays in BUFFER."
   (without-restriction
@@ -3566,8 +3550,7 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Iterators
 
-(defun conn--kapply-macro (applier iterator &rest pipeline)
-  (declare (important-return-value t))
+(defun conn--kapply-macro (applier iterator pipeline)
   (funcall applier
            (seq-reduce (pcase-lambda (iterator (or `(,ctor . ,args) ctor))
                          (apply ctor iterator args))
@@ -3707,7 +3690,7 @@ Possibilities: \\<query-replace-map>
 
 ;;;;; Pipeline Functions
 
-(defconst conn--kapply-pipeline-depths
+(defvar conn--kapply-pipeline-depths
   '((kapply-skip-empty . 95)
     (kapply-relocate . 85)
     (kapply-invisible . 75)
@@ -4396,6 +4379,7 @@ returned."
   (declare (important-return-value t)))
 
 (cl-defgeneric conn-label-redisplay (label)
+  "Redisplay LABEL."
   (:method (_) "Noop" nil))
 
 (cl-defgeneric conn-label-reset (label)
@@ -10050,10 +10034,9 @@ Interactively `region-beginning' and `region-end'."
 (cl-defgeneric conn-perform-surround (with arg &key &allow-other-keys))
 
 (cl-defmethod conn-perform-surround :around (_with _arg &key regions &allow-other-keys)
-  (pcase-dolist (`(,beg . ,end)
-                 (mapcar 'conn--overlay-bounds-markers regions))
-    (goto-char beg)
-    (conn--push-ephemeral-mark end nil t)
+  (dolist (ov regions)
+    (goto-char (overlay-start ov))
+    (conn--push-ephemeral-mark (overlay-end ov) nil t)
     (cl-call-next-method)))
 
 (cl-defmethod conn-perform-surround :before (_with _arg &key &allow-other-keys)
