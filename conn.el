@@ -3552,9 +3552,8 @@ Possibilities: \\<query-replace-map>
 
 (defun conn--kapply-macro (applier iterator pipeline)
   (funcall applier
-           (seq-reduce (pcase-lambda (iterator (or `(,ctor . ,args) ctor))
-                         (apply ctor iterator args))
-                       (delq nil pipeline)
+           (seq-reduce (lambda (it ctor) (funcall ctor it))
+                       (remq nil pipeline)
                        iterator)))
 
 (defun conn--kapply-infinite-iterator ()
@@ -3715,7 +3714,7 @@ Possibilities: \\<query-replace-map>
      (lambda (state)
        (when (eq state :record)
          (push 'conn-kbd-macro-query unread-command-events)))
-     `((depth . ,(alist-get 'kapply-query-record
+     `((depth . ,(alist-get 'kapply-query-per-iteration
                             conn--kapply-pipeline-depths))
        (name . kapply-query-per-iteration))))
   (add-function
@@ -3742,7 +3741,8 @@ Possibilities: \\<query-replace-map>
             (delete-overlay hl))))
        ((or :cleanup :next)
         (funcall iterator state))))
-   `((depth . ,(alist-get 'kapply-query-record conn--kapply-pipeline-depths))
+   `((depth . ,(alist-get 'kapply-query-record
+                          conn--kapply-pipeline-depths))
      (name . kapply-query-record))))
 
 (defun conn--kapply-skip-empty (iterator)
