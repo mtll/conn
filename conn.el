@@ -53,6 +53,7 @@
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function mwheel-scroll "mwheel")
+(declare-function conn--kmacro-display "conn-transient")
 
 
 ;;;;; Mark Variables
@@ -3431,45 +3432,6 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 (defvar conn-kmacro-apply-end-hook nil
   "Hook run after macro application has completed.")
-
-;;;;; Kmacro Utils
-
-(defun conn--kmacro-display (macro &optional trunc)
-  (pcase macro
-    ((or 'nil '[] "") "nil")
-    (_ (let* ((m (format-kbd-macro macro))
-              (l (length m))
-              (z (and trunc (> l trunc))))
-         (format "%s%s"
-                 (if z (substring m 0 (1- trunc)) m)
-                 (if z "…" ""))))))
-
-(defun conn--kmacro-ring-display ()
-  (with-temp-message ""
-    (concat
-     (propertize "Kmacro Ring: " 'face 'transient-heading)
-     (propertize (format "%s" (or (if defining-kbd-macro
-                                      kmacro-counter
-                                    kmacro-initial-counter-value)
-                                  (format "[%s]" kmacro-counter)))
-                 'face 'transient-value)
-     " - "
-     (propertize
-      (conn--kmacro-display last-kbd-macro 35)
-      'face 'transient-value))))
-
-(defun conn--kmacro-counter-display ()
-  (with-temp-message ""
-    (concat
-     (propertize "Kmacro Counter: " 'face 'transient-heading)
-     (propertize (format "%s" (or (if defining-kbd-macro
-                                      kmacro-counter
-                                    kmacro-initial-counter-value)
-                                  (format "[%s]" kmacro-counter)))
-                 'face 'transient-value))))
-
-(defun conn--in-kbd-macro-p ()
-  (or defining-kbd-macro executing-kbd-macro))
 
 
 ;;;;; Kapply Query

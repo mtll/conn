@@ -28,6 +28,76 @@
 (defvar sort-fold-case)
 
 
+;;;; Utils
+
+(defmacro conn-transient-mode-suffix (name arglist description mode &rest properties)
+  "Define a `transient' suffix for a minor mode.
+
+\(fn NAME DESCRIPTION MODE &rest [KEYWORD VALUE]... [BODY...])"
+  (declare (indent defun))
+  (pcase-let* (((or `(,mode-command ,mode-var)
+                    (and mode-command mode-var))
+                mode)
+               (body
+                `((interactive)
+                  (,mode-command 'toggle)))
+               (properties
+                (cl-loop for (k . rest) on properties by #'cddr
+                         if (keywordp k)
+                         nconc (list k (car rest)) into props
+                         else
+                         do (setq body (cons k rest))
+                         and return props)))
+    `(transient-define-suffix ,name ,arglist
+       :description (lambda ()
+                      (concat ,description " "
+                              (if (bound-and-true-p ,mode-var)
+                                  (propertize "(*)" 'face 'transient-value)
+                                (propertize "( )" 'face 'transient-inactive-value))))
+       :transient t
+       ,@properties
+       ,@body)))
+
+;;;;; Kmacro Utils
+
+(defun conn--kmacro-display (macro &optional trunc)
+  (pcase macro
+    ((or 'nil '[] "") "nil")
+    (_ (let* ((m (format-kbd-macro macro))
+              (l (length m))
+              (z (and trunc (> l trunc))))
+         (format "%s%s"
+                 (if z (substring m 0 (1- trunc)) m)
+                 (if z "…" ""))))))
+
+(defun conn--kmacro-ring-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Ring: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value)
+     " - "
+     (propertize
+      (conn--kmacro-display last-kbd-macro 35)
+      'face 'transient-value))))
+
+(defun conn--kmacro-counter-display ()
+  (with-temp-message ""
+    (concat
+     (propertize "Kmacro Counter: " 'face 'transient-heading)
+     (propertize (format "%s" (or (if defining-kbd-macro
+                                      kmacro-counter
+                                    kmacro-initial-counter-value)
+                                  (format "[%s]" kmacro-counter)))
+                 'face 'transient-value))))
+
+(defun conn--in-kbd-macro-p ()
+  (or defining-kbd-macro executing-kbd-macro))
+
+
 ;;;; Transient Classes
 
 ;;;;; Lisp Values
@@ -1359,15 +1429,16 @@ A zero means repeat until error."
   :set-value #'ignore
   :variable 'fill-prefix
   :reader (lambda (&rest _)
-            (set-fill-prefix)
-            (substring-no-properties fill-prefix)))
+            (if fill-prefix
+                (progn
+                  (set-fill-prefix t)
+                  nil)
+              (set-fill-prefix)
+              (substring-no-properties fill-prefix))))
 
-(transient-define-infix conn--auto-fill-infix ()
-  "Toggle `auto-fill-function'."
-  :class 'transient-lisp-variable
-  :set-value #'ignore
-  :variable 'auto-fill-function
-  :reader (lambda (&rest _) (auto-fill-mode 'toggle)))
+(conn-transient-mode-suffix conn-auto-fill-suffix ()
+  "Auto Fill"
+  (auto-fill-mode auto-fill-function))
 
 ;;;###autoload (autoload 'conn-fill-prefix "conn-transients" nil t)
 (transient-define-prefix conn-fill-prefix ()
@@ -1379,7 +1450,7 @@ A zero means repeat until error."
     [ "Options:"
       ("c" "Column" conn--set-fill-column-infix)
       ("p" "Prefix" conn--set-fill-prefix-infix)
-      ("a" "Auto Fill Mode" conn--auto-fill-infix)]])
+      ("a" conn-auto-fill-suffix)]])
 
 
 ;;;; Sort Prefix
