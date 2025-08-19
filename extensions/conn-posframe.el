@@ -46,11 +46,11 @@
 (defface conn-posframe-header
   '((t ( :inverse-video nil :extend t :bold t
          :box nil :underline (:style line :position t)
-         :inherit mode-line)))
+         :inherit header-line)))
   "Face for selection in Conn posframes."
   :group 'conn-posframe)
 
-(defcustom conn-posframe-border-width 2
+(defcustom conn-posframe-border-width 3
   "Border width for conn posframes."
   :type 'integer
   :group 'conn-posframe)
@@ -62,6 +62,12 @@
 
 (defcustom conn-posframe-border-color
   "#000000"
+  "Border color for conn posframes."
+  :type 'string
+  :group 'conn-posframe)
+
+(defcustom conn-posframe-completion-bg-color
+  (face-attribute 'menu :background)
   "Border color for conn posframes."
   :type 'string
   :group 'conn-posframe)
@@ -294,7 +300,7 @@
        :string (concat header next "\n" current prev)
        :left-fringe 0
        :right-fringe 0
-       :background-color (face-attribute 'menu :background)
+       ;; :background-color conn-posframe-completion-bg-color
        :width conn-posframe-width
        :poshandler conn-posframe-buffer-poshandler
        :timeout conn-posframe-timeout
@@ -330,7 +336,7 @@
                (reverse (funcall tab-bar-tabs-function))))
      :left-fringe 0
      :right-fringe 0
-     :background-color (face-attribute 'menu :background)
+     ;; :background-color conn-posframe-completion-bg-color
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
@@ -371,7 +377,7 @@
               "\n")
      :left-fringe 0
      :right-fringe 0
-     :background-color (face-attribute 'menu :background)
+     ;; :background-color conn-posframe-completion-bg-color
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
@@ -398,7 +404,7 @@
                          "\n"))
      :left-fringe 0
      :right-fringe 0
-     :background-color (face-attribute 'menu :background)
+     ;; :background-color conn-posframe-completion-bg-color
      :poshandler conn-posframe-tab-poshandler
      :timeout conn-posframe-timeout
      :border-width conn-posframe-border-width
@@ -444,7 +450,8 @@
                     'conn-posframe--dispatch-ring-display)
         (advice-add 'conn-dispatch-cycle-ring-next :after
                     'conn-posframe--dispatch-ring-display)
-        (setq conn-read-pair-function 'conn-posframe-progressive-read-pair))
+        (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
+        (setq conn-quick-ref-display-function 'conn--quick-ref-posframe))
     (advice-remove 'kmacro-cycle-ring-next 'conn-posframe--switch-kmacro-display)
     (advice-remove 'kmacro-cycle-ring-previous 'conn-posframe--switch-kmacro-display)
     (advice-remove 'previous-buffer 'conn-posframe--switch-buffer-display)
@@ -455,7 +462,8 @@
     (advice-remove 'tab-bar-switch-to-next-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)
-    (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)))
+    (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
+    (setq conn-quick-ref-display-function 'conn--quick-ref-minibuffer)))
 
 ;;;; Posframe window labels
 
@@ -492,7 +500,7 @@
                                           concat (concat item "\n"))
                          :left-fringe 0
                          :right-fringe 0
-                         :background-color (face-attribute 'menu :background)
+                         :background-color conn-posframe-completion-bg-color
                          :border-width conn-posframe-border-width
                          :border-color conn-posframe-border-color
                          :min-width 8)
@@ -569,6 +577,18 @@
         (posframe-hide bufname)
         (overlay-put overlay 'face nil)
         nil))))
+
+;;;; Quick Ref
+
+(defun conn--quick-ref-posframe (buffer hide-p)
+  (if hide-p
+      (posframe-hide buffer)
+    (posframe-show buffer
+                   :left-fringe 0
+                   :right-fringe 0
+                   :border-width conn-posframe-border-width
+                   :border-color conn-posframe-border-color
+                   :poshandler conn-posframe-buffer-poshandler)))
 
 (provide 'conn-posframe)
 

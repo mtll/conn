@@ -51,6 +51,7 @@
 (declare-function project-files "project")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
+(declare-function conn-quick-reference "conn-quick-ref")
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function mwheel-scroll "mwheel")
 (declare-function conn--kmacro-display "conn-transient")
@@ -2323,6 +2324,9 @@ chooses to handle a command."
             (when pre (funcall pre cmd))
             (pcase cmd
               ('nil)
+              ('help
+               (conn-quick-reference
+                (conn-get-argument-ref-pages arguments)))
               ('digit-argument
                (let* ((char (if (integerp last-input-event)
                                 last-input-event
@@ -2341,7 +2345,7 @@ chooses to handle a command."
                (cl-callf not conn--state-eval-prefix-sign))
               ('keyboard-quit
                (keyboard-quit))
-              ((or 'help 'execute-extended-command)
+              ('execute-extended-command
                (when-let* ((cmd (conn--state-eval-completing-read state arguments)))
                  (update-args cmd)))
               (_ (update-args cmd)))
@@ -2413,10 +2417,15 @@ chooses to handle a command."
 (defalias 'conn-state-eval-argument-value
   'conn-state-eval-argument--value)
 
+(cl-defgeneric conn-get-argument-ref-pages (argument)
+  ( :method (_arg) nil)
+  ( :method ((arg cons))
+    (nconc (ensure-list (conn-get-argument-ref-pages (car arg)))
+           (ensure-list (conn-get-argument-ref-pages (cdr arg))))))
+
 (cl-defgeneric conn-cancel-argument (argument)
   ( :method (_arg) nil)
-  ( :method ((_arg (eql nil))) nil)
-  ( :method ((arg list))
+  ( :method ((arg cons))
     (conn-cancel-argument (car arg))
     (conn-cancel-argument (cdr arg))))
 
@@ -2424,8 +2433,7 @@ chooses to handle a command."
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((_arg (eql nil))) nil)
-  ( :method ((arg list))
+  ( :method ((arg cons))
     (or (conn-argument-required-p (car arg))
         (conn-argument-required-p (cdr arg))))
   ( :method ((arg conn-state-eval-argument))
@@ -2439,8 +2447,7 @@ chooses to handle a command."
 
 (cl-defgeneric conn-update-argument (argument form)
   ( :method (arg _form) arg)
-  ( :method ((_arg (eql nil)) _form) nil)
-  ( :method ((arg list) form)
+  ( :method ((arg cons) form)
     (cons (conn-update-argument (car arg) form)
           (conn-update-argument (cdr arg) form)))
   ( :method ((arg conn-state-eval-argument) form)
@@ -2449,8 +2456,7 @@ chooses to handle a command."
 (cl-defgeneric conn-eval-argument (argument)
   (declare (important-return-value t))
   ( :method (arg) arg)
-  ( :method ((_arg (eql nil))) nil)
-  ( :method ((arg list))
+  ( :method ((arg cons))
     (cons (conn-eval-argument (car arg))
           (conn-eval-argument (cdr arg))))
   ( :method ((arg conn-state-eval-argument))
@@ -2460,8 +2466,7 @@ chooses to handle a command."
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg) nil)
-  ( :method ((_arg (eql nil))) nil)
-  ( :method ((arg list))
+  ( :method ((arg cons))
     (nconc (ensure-list (conn-display-argument (car arg)))
            (ensure-list (conn-display-argument (cdr arg)))))
   ( :method ((arg conn-state-eval-argument))
@@ -2477,8 +2482,7 @@ chooses to handle a command."
   (declare (important-return-value t)
            (side-effect-free t))
   ( :method (_arg _sym) nil)
-  ( :method ((_arg (eql nil)) _sym) nil)
-  ( :method ((arg list) sym)
+  ( :method ((arg cons) sym)
     (or (conn-argument-completion-predicate (car arg) sym)
         (conn-argument-completion-predicate (cdr arg) sym))))
 
@@ -2588,6 +2592,8 @@ Used to restore previous value when `conn-mode' is disabled.")
 (put 'conn--mark-cursor 'conn-overlay t)
 (put 'conn--mark-cursor 'overlay-after-string
      (propertize " " 'face 'conn-mark-face))
+
+(conn-set-mode-property 'special-mode :hide-mark-cursor t)
 
 (defun conn--mark-cursor-redisplay (win)
   (if (or (not conn-local-mode)
@@ -7093,6 +7099,9 @@ contain targets."
                          (conn-push-state 'conn-emacs-state))))
    :target-finder (lambda () (conn-dispatch-previous-emacs-state))))
 
+(put 'conn-dispatch-upcase :advertised-binding (key-parse "M-u"))
+(put 'conn-dispatch-downcase :advertised-binding (key-parse "M-l"))
+
 ;;;;; Perform Dispatch Loop
 
 (define-error 'conn-dispatch-error "Dispatch error" 'user-error)
@@ -11250,7 +11259,7 @@ Operates with the selected windows parent window."
   "n" 'conn-narrow-to-thing
   "j" 'conn-kill-prepend-region
   "l" 'conn-kill-append-region
-  "J" 'conn-append-region
+  "J" 'conn-prepend-region
   "L" 'conn-append-region)
 
 (defvar-keymap conn-default-edit-map
