@@ -51,6 +51,11 @@
 
 ;;;; Page Impl
 
+(cl-defstruct (conn-reference-page
+               (:constructor conn-reference-page (title definition)))
+  (title nil :type string :read-only t)
+  (definition nil :type list :read-only t))
+
 (defvar-keymap conn-quick-ref-map
   "C-h" 'next
   "M-h" 'previous
@@ -64,16 +69,15 @@
 (defvar conn-quick-ref-post-insert-hook nil)
 
 ;;;###autoload
-(defmacro conn-define-ref-page (name description &rest rows)
+(defmacro conn-define-ref-page (name title &rest rows)
   (declare (indent 2))
-  `(progn
-     (put ',name :conn-quick-ref-layout (list ,@rows))
-     (put ',name :conn-quick-ref-description ,description)))
+  `(put ',name :conn-quick-reference
+        (conn-reference-page ,title (list ,@rows))))
 
 (defun conn--quick-ref-unbound ()
   (propertize "🚫" 'face 'conn-quick-ref-error-face))
 
-(defun conn--format-ref-page (name keymap-buffer)
+(defun conn--format-ref-page (definition keymap-buffer)
   (cl-labels ((transpose (columns)
                 (let ((curr columns)
                       rows)
@@ -128,12 +132,11 @@
                       ((and (pred consp) col)
                        (push (process-col col keymap) result))))
                   (nreverse result))))
-    (let ((rows (get name :conn-quick-ref-layout))
-          (keymap nil))
-      (while rows
-        (pcase (pop rows)
+    (let ((keymap nil))
+      (while definition
+        (pcase (pop definition)
           (:keymap
-           (setq keymap (eval (pop rows) t)))
+           (setq keymap (eval (pop definition) t)))
           ((and row (pred stringp))
            (insert (with-current-buffer keymap-buffer
                      (substitute-command-keys row))
@@ -147,11 +150,10 @@
             :objects (with-current-buffer keymap-buffer
                        (transpose (process-row row keymap))))))))))
 
-(defun conn-quick-ref-insert-header (page)
+(defun conn--quick-ref-insert-header (title)
   (let ((header
          (concat " "
-                 (propertize (get page :conn-quick-ref-description)
-                             'face 'bold)
+                 (propertize title 'face 'bold)
                  ": "
                  (propertize "C-h" 'face 'help-key-binding)
                  " Next; "
@@ -162,16 +164,20 @@
     (insert header)))
 
 (defun conn-quick-ref-insert-page (page buffer)
-  (let ((keymap-buffer (current-buffer)))
+  (pcase-let (((cl-struct conn-reference-page
+                          title
+                          definition)
+               (get page :conn-quick-reference))
+              (keymap-buffer (current-buffer)))
     (with-current-buffer buffer
       (special-mode)
       (let (buffer-read-only
             header-pos)
         (delete-region (point-min) (point-max))
         (run-hooks 'conn-quick-ref-pre-insert-hook)
-        (conn-quick-ref-insert-header page)
+        (conn--quick-ref-insert-header title)
         (setq header-pos (point))
-        (conn--format-ref-page page keymap-buffer)
+        (conn--format-ref-page definition keymap-buffer)
         (run-hooks 'conn-quick-ref-post-insert-hook)
         (indent-region header-pos (point-max) 1)
         (add-face-text-property
@@ -212,12 +218,6 @@
                      (throw 'break nil)))))))
       (funcall conn-quick-ref-display-function buf t))))
 
-;;;###autoload
-(defun conn-quick-ref-state ()
-  (interactive)
-  (when-let* ((manual (conn-state-get conn-current-state :quick-ref-manual)))
-    (conn-quick-reference manual)))
-
 (defun conn--quick-ref-minibuffer (buffer hide-p)
   (let (inhibit-message
         message-log-max)
@@ -226,68 +226,86 @@
       (with-current-buffer buffer
         (message (buffer-string))))))
 
-;;;; Eval With State Ref
+;;;; Eval With State Args Reference
+
+;;;###autoload
+(cl-defgeneric conn-get-argument-ref-pages (argument)
+  ( :method (_arg) nil)
+  ( :method ((arg cons))
+    (nconc (ensure-list (conn-get-argument-ref-pages (car arg)))
+           (ensure-list (conn-get-argument-ref-pages (cdr arg))))))
 
 (cl-defmethod conn-get-argument-ref-pages ((_arg conn-thing-argument))
   'conn-read-thing-ref)
 
 (cl-defmethod conn-get-argument-ref-pages ((_arg conn-dispatch-action-argument))
-  (list 'conn-dispatch-action-ref
-        'conn-dispatch-command-ref))
+  'conn-dispatch-action-ref)
+
+;;;; State Reference
+
+;;;###autoload
+(cl-defgeneric conn-state-get-reference (state))
+
+(cl-defmethod conn-state-get-reference ((state (conn-substate t)))
+  (conn-state-get state :quick-reference t))
+
+(setf (conn-state-get 'conn-dispatch-state :quick-reference)
+      (list 'conn-dispatch-command-ref))
 
 ;;;; Pages
 
-(conn-define-ref-page conn-resize-ref "Window Page 1"
-  "A Test Page"
-  `( :keymap (conn-get-state-map 'conn-dispatch-state)
-     (,(lambda ()
-         (let ((binding
-                (where-is-internal conn-window-resize-map
-                                   conn-wincontrol-map
-                                   t)))
-           (concat (propertize
-                    (if binding
-                        (key-description binding)
-                      (conn--quick-ref-unbound))
-                    'face 'help-key-binding)
-                   " Resize Map:")))
-      ("Max" maximize-window)
-      ("Max Vert/Horiz"
-       conn-wincontrol-maximize-vertically
-       conn-wincontrol-maximize-horizontally)
-      ("Balance" balance-windows)
-      ("heighten/shorten"
-       conn-wincontrol-heighten-window
-       conn-wincontrol-shorten-window)
-      ("widen/narrow"
-       conn-wincontrol-widen-window
-       conn-wincontrol-narrow-window)
-      ("error" conn-wincontrol-not-a-command))))
+;; (conn-define-ref-page conn-resize-ref "Window Page 1"
+;;   "A Test Page"
+;;   `( :keymap (conn-get-state-map 'conn-dispatch-state)
+;;      (,(lambda ()
+;;          (let ((binding
+;;                 (where-is-internal conn-window-resize-map
+;;                                    conn-wincontrol-map
+;;                                    t)))
+;;            (concat (propertize
+;;                     (if binding
+;;                         (key-description binding)
+;;                       (conn--quick-ref-unbound))
+;;                     'face 'help-key-binding)
+;;                    " Resize Map:")))
+;;       ("Max" maximize-window)
+;;       ("Max Vert/Horiz"
+;;        conn-wincontrol-maximize-vertically
+;;        conn-wincontrol-maximize-horizontally)
+;;       ("Balance" balance-windows)
+;;       ("heighten/shorten"
+;;        conn-wincontrol-heighten-window
+;;        conn-wincontrol-shorten-window)
+;;       ("widen/narrow"
+;;        conn-wincontrol-widen-window
+;;        conn-wincontrol-narrow-window)
+;;       ("error" conn-wincontrol-not-a-command))))
 
 (conn-define-ref-page conn-read-thing-ref "Things"
   "Use a thing command to specify a region to operate on.")
 
 (conn-define-ref-page conn-dispatch-action-ref "Actions"
-  `((("yank from"
+  `((("yank from/replace"
       conn-dispatch-yank-from
       conn-dispatch-yank-from-replace)
-     ("yank to"
+     ("yank to/replace"
       conn-dispatch-yank-to
       conn-dispatch-yank-replace-to)
-     ("yank read"
+     ("yank read/replace"
       conn-dispatch-reading-yank-to
       conn-dispatch-yank-read-replace-to)
-     ("kapply" conn-dispatch-kapply))
+     ("send/replace"
+      conn-dispatch-send
+      conn-dispatch-send-replace)
+     ("take/replace"
+      conn-dispatch-take
+      conn-dispatch-take-replace))
     (("copy to"
       conn-dispatch-copy-to
       conn-dispatch-copy-replace-to)
+     ("transpose" conn-dispatch-transpose)
      ("goto/over" conn-dispatch-over-or-goto)
-     ("send"
-      conn-dispatch-send
-      conn-dispatch-send-replace)
-     ("take"
-      conn-dispatch-take
-      conn-dispatch-take-replace))
+     ("kapply" conn-dispatch-kapply))
     (("kill/append/prepend"
       conn-dispatch-kill
       conn-dispatch-kill-append
@@ -296,7 +314,6 @@
       conn-dispatch-copy
       conn-dispatch-copy-append
       conn-dispatch-copy-prepend)
-     ("transpose" conn-dispatch-transpose)
      ("register"
       conn-dispatch-register-load
       conn-dispatch-register-replace)
