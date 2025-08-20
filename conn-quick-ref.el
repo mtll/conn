@@ -138,6 +138,7 @@
                   (nreverse result))))
     (let ((keymap nil))
       (while definition
+        (goto-char (point-max))
         (pcase (pop definition)
           (:keymap
            (setq keymap (eval (pop definition) t)))
@@ -214,7 +215,8 @@
                    (conn-quick-ref-insert-page (car pages) buf)
                    (funcall conn-quick-ref-display-function buf nil))
                   ('index)
-                  ('quit (throw 'break nil))
+                  ((or 'quit 'keyboard-quit)
+                   (keyboard-quit))
                   (_ (setq unread-command-events
                            (mapcar (lambda (key)
                                      (cons 'no-record key))
@@ -230,13 +232,98 @@
       (with-current-buffer buffer
         (message (buffer-string))))))
 
-(defun conn-get-reference (symbol)
-  (declare (side-effect-free t)
-           (important-return-value t)
-           (gv-setter (lambda (val)
-                        `(setf (get ,symbol :conn-quick-reference)
-                               ,val))))
-  (get symbol :conn-quick-reference))
+;;;; Pages
+
+(defvar conn-read-thing-ref
+  (list
+   (conn-reference-page
+    "Things"
+    "Use a thing command to specify a region to operate on.")))
+
+(defvar conn-dispatch-action-ref
+  (list
+   (conn-reference-page
+    "Actions"
+    `((("yank from/replace"
+        conn-dispatch-yank-from
+        conn-dispatch-yank-from-replace)
+       ("yank to/replace" conn-dispatch-yank-to
+        conn-dispatch-yank-replace-to)
+       ("yank read/replace"
+        conn-dispatch-reading-yank-to
+        conn-dispatch-yank-read-replace-to)
+       ("send/replace" conn-dispatch-send
+        conn-dispatch-send-replace)
+       ("take/replace" conn-dispatch-take
+        conn-dispatch-take-replace))
+      (("copy to" conn-dispatch-copy-to
+        conn-dispatch-copy-replace-to)
+       ("transpose" conn-dispatch-transpose)
+       ("goto/over" conn-dispatch-over-or-goto)
+       ("kapply" conn-dispatch-kapply))
+      (("kill/append/prepend" conn-dispatch-kill
+        conn-dispatch-kill-append
+        conn-dispatch-kill-prepend)
+       ("copy/append/prepend" conn-dispatch-copy
+        conn-dispatch-copy-append
+        conn-dispatch-copy-prepend)
+       ("register" conn-dispatch-register-load
+        conn-dispatch-register-replace)
+       ("up/down/capital case"
+        conn-dispatch-upcase
+        conn-dispatch-downcase
+        conn-dispatch-capitalize))))))
+
+(defvar conn-dispatch-command-ref
+  (list
+   (conn-reference-page
+    "Dispatch Commands"
+    `(("History:"
+       ("next/prev"
+        conn-dispatch-cycle-ring-next
+        conn-dispatch-cycle-ring-previous))
+      ("Last Dispatch:"
+       ("repeat" conn-repeat-last-dispatch)
+       ("describe"
+        conn-dispatch-ring-describe-head))))))
+
+(defvar conn-dispatch-select-ref
+  (list (conn-reference-page
+         "Dispatch Selection Commands"
+         :keymap 'conn-dispatch-read-event-map
+         `(("Targeting Commands"
+            ("retarget" retarget)
+            ("always retarget" always-retarget)
+            ("change target finder" change-target-finder))
+           ("Window Commands"
+            ("goto window" conn-goto-window)
+            ("scroll up" scroll-up)
+            ("scroll down" scroll-down)
+            ("restrict" restrict-windows)))
+         `(("Misc"
+            ("dispatch at click" act)
+            ("undo" undo)
+            ("recursive edit" recursive-edit))
+           (""
+            ("isearch forward" isearch-regexp-forward)
+            ("isearch backward" isearch-regexp-backward))))))
+
+(setf (conn-state-get 'conn-dispatch-state :quick-reference)
+      (list (conn-reference-page
+             "Dispatch Commands"
+             `(("History:"
+                ("next/prev"
+                 conn-dispatch-cycle-ring-next
+                 conn-dispatch-cycle-ring-previous))
+               ("Last Dispatch:"
+                ("repeat" conn-repeat-last-dispatch)
+                ("describe" conn-dispatch-ring-describe-head)))
+             `(("Other Args"
+                ("dispatch repeatedly" repeat-dispatch)
+                ("exchange point and mark when selecting THING"
+                 dispatch-other-end)
+                ("restrict matches to selected window"
+                 restrict-windows))))))
 
 ;;;; Eval With State Args Reference
 
@@ -247,13 +334,17 @@
   ( :method (_arg) nil)
   ( :method ((arg cons))
     (append (ensure-list (conn-argument-get-reference (car arg)))
-            (ensure-list (conn-argument-get-reference (cdr arg))))))
+            (ensure-list (conn-argument-get-reference (cdr arg)))))
+  ( :method :around ((arg conn-state-eval-argument))
+    (if-let* ((ref (conn-state-eval-argument--reference arg)))
+        (funcall ref (cl-call-next-method))
+      (cl-call-next-method))))
 
 (cl-defmethod conn-argument-get-reference ((_arg conn-thing-argument))
-  (conn-get-reference 'conn-read-thing-ref))
+  conn-read-thing-ref)
 
 (cl-defmethod conn-argument-get-reference ((_arg conn-dispatch-action-argument))
-  (conn-get-reference 'conn-dispatch-action-ref))
+  conn-dispatch-action-ref)
 
 ;;;; State Reference
 
@@ -271,103 +362,6 @@
                                         &optional argument-pages)
   (append argument-pages
           (conn-state-get state :quick-reference t)))
-
-(setf (conn-state-get 'conn-dispatch-state :quick-reference)
-      (list (conn-reference-page
-             "Dispatch Commands"
-             `(("History:"
-                ("next/prev"
-                 conn-dispatch-cycle-ring-next
-                 conn-dispatch-cycle-ring-previous))
-               ("Last Dispatch:"
-                ("repeat" conn-repeat-last-dispatch)
-                ("describe" conn-dispatch-ring-describe-head))))))
-
-;;;; Pages
-
-;; (setf (conn-get-reference 'conn-resize-ref)
-;;       (conn-reference-page
-;;        "Window Page 1" "A Test Page"
-;;        `(:keymap
-;;          (conn-get-state-map 'conn-dispatch-state)
-;;          (,(lambda nil
-;;              (let
-;;                  ((binding
-;;                    (where-is-internal
-;;                     conn-window-resize-map
-;;                     conn-wincontrol-map t)))
-;;                (concat
-;;                 (propertize
-;;                  (if binding
-;;                      (key-description binding)
-;;                    (conn--quick-ref-unbound))
-;;                  'face 'help-key-binding)
-;;                 " Resize Map:")))
-;;           ("Max" maximize-window)
-;;           ("Max Vert/Horiz"
-;;            conn-wincontrol-maximize-vertically
-;;            conn-wincontrol-maximize-horizontally)
-;;           ("Balance" balance-windows)
-;;           ("heighten/shorten"
-;;            conn-wincontrol-heighten-window
-;;            conn-wincontrol-shorten-window)
-;;           ("widen/narrow"
-;;            conn-wincontrol-widen-window
-;;            conn-wincontrol-narrow-window)
-;;           ("error" conn-wincontrol-not-a-command)))))
-
-(setf (conn-get-reference 'conn-read-thing-ref)
-      (list
-       (conn-reference-page
-        "Things"
-        "Use a thing command to specify a region to operate on.")))
-
-(setf (conn-get-reference 'conn-dispatch-action-ref)
-      (list
-       (conn-reference-page
-        "Actions"
-        `((("yank from/replace"
-            conn-dispatch-yank-from
-            conn-dispatch-yank-from-replace)
-           ("yank to/replace" conn-dispatch-yank-to
-            conn-dispatch-yank-replace-to)
-           ("yank read/replace"
-            conn-dispatch-reading-yank-to
-            conn-dispatch-yank-read-replace-to)
-           ("send/replace" conn-dispatch-send
-            conn-dispatch-send-replace)
-           ("take/replace" conn-dispatch-take
-            conn-dispatch-take-replace))
-          (("copy to" conn-dispatch-copy-to
-            conn-dispatch-copy-replace-to)
-           ("transpose" conn-dispatch-transpose)
-           ("goto/over" conn-dispatch-over-or-goto)
-           ("kapply" conn-dispatch-kapply))
-          (("kill/append/prepend" conn-dispatch-kill
-            conn-dispatch-kill-append
-            conn-dispatch-kill-prepend)
-           ("copy/append/prepend" conn-dispatch-copy
-            conn-dispatch-copy-append
-            conn-dispatch-copy-prepend)
-           ("register" conn-dispatch-register-load
-            conn-dispatch-register-replace)
-           ("up/down/capital case"
-            conn-dispatch-upcase
-            conn-dispatch-downcase
-            conn-dispatch-capitalize))))))
-
-(setf (conn-get-reference 'conn-dispatch-command-ref)
-      (list
-       (conn-reference-page
-        "Dispatch Commands"
-        `(("History:"
-           ("next/prev"
-            conn-dispatch-cycle-ring-next
-            conn-dispatch-cycle-ring-previous))
-          ("Last Dispatch:"
-           ("repeat" conn-repeat-last-dispatch)
-           ("describe"
-            conn-dispatch-ring-describe-head))))))
 
 (provide 'conn-quick-ref)
 

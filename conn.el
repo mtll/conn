@@ -2359,7 +2359,7 @@ chooses to handle a command."
                (setf conn--state-eval-prefix-mag nil))
               ('negative-argument
                (cl-callf not conn--state-eval-prefix-sign))
-              ('keyboard-quit
+              ((or 'keyboard-quit 'quit)
                (keyboard-quit))
               ('execute-extended-command
                (when-let* ((cmd (conn--state-eval-completing-read state arguments)))
@@ -2425,7 +2425,8 @@ chooses to handle a command."
   (value :type t)
   (set-flag :type boolean)
   (required :type boolean)
-  (name :type (or nil string function)))
+  (name :type (or nil string function))
+  (reference :type function))
 
 (defalias 'conn-state-eval-argument-name
   'conn-state-eval-argument--name)
@@ -4633,6 +4634,7 @@ themselves once the selection process has concluded."
 (define-keymap
   :keymap conn-dispatch-read-event-map
   :parent conn-dispatch-common-map
+  "C-h" 'help
   "C-/" 'undo
   "C-'" 'recursive-edit
   "<mouse-1>" 'act
@@ -7213,6 +7215,9 @@ contain targets."
 
 (cl-defgeneric conn-handle-dispatch-select-command (command)
   (:method (_cmd) nil))
+
+(cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
+  (conn-quick-reference conn-dispatch-select-ref))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
   (require 'mwheel)
