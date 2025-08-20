@@ -52,6 +52,8 @@
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 (declare-function conn-quick-reference "conn-quick-ref")
+(declare-function conn-state-get-reference "conn-quick-ref")
+(declare-function conn-get-argument-ref-pages "conn-quick-ref")
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function mwheel-scroll "mwheel")
 (declare-function conn--kmacro-display "conn-transient")
@@ -1703,8 +1705,29 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(defvar-local conn--state-defered nil
+(oclosure-define (conn--defered
+                  (:copier conn--cons-defered
+                           (car id &aux (cdr conn--state-defered))))
+  car cdr id)
+
+(defvar-local conn--state-defered
+  (conn-anaphoricate default
+    (oclosure-lambda (conn--defered) ()
+      (setq-local conn--state-defered default)))
   "Code to be run when the current state is exited.")
+
+(defconst conn--defered-proto
+  (oclosure-lambda (conn--defered) ()
+    (unwind-protect (funcall car) (funcall cdr))))
+
+(defun conn--push-defered (fn &optional id)
+  (when (or (null id)
+            (cl-loop for def = conn--state-defered
+                     then (conn--defered--cdr def)
+                     while def
+                     never (eq id (conn--defered--id def))))
+    (setq-local conn--state-defered
+                (conn--cons-defered conn--defered-proto fn id))))
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -1743,7 +1766,7 @@ when the current state exits then use `conn-state-defer-once'.
 When BODY is evaluated `conn-next-state' will be bound to the state
 that is being entered after the current state has exited."
   (declare (indent 0))
-  `(push (lambda () ,@body) conn--state-defered))
+  `(conn--push-defered (lambda () ,@body)))
 
 (defmacro conn-state-defer-once (&rest body)
   "Like `conn-state-defer' but BODY will be evaluated only once per state.
@@ -1751,15 +1774,7 @@ that is being entered after the current state has exited."
 For more information see `conn-state-defer'."
   (declare (indent 0))
   (cl-with-gensyms (id)
-    `(when (cl-loop for fn in conn--state-defered
-                    never (eq ',id (car-safe fn)))
-       (push (cons ',id (lambda () ,@body))
-             conn--state-defered))))
-
-(define-inline conn--state-call-deferred ()
-  (inline-quote
-   (dolist (fn (cl-shiftf conn--state-defered nil))
-     (funcall (or (cdr-safe fn) fn)))))
+    `(conn--push-defered (lambda () ,@body) ',id)))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -1801,7 +1816,7 @@ To execute code when a state is exiting use `conn-state-defer'."
       (unwind-protect
           (progn
             (let ((conn-next-state state))
-              (conn--state-call-deferred))
+              (funcall conn--state-defered))
             (cl-shiftf conn-previous-state conn-current-state state)
             (conn--setup-state-properties state)
             (conn--activate-input-method)
@@ -2416,12 +2431,6 @@ chooses to handle a command."
 
 (defalias 'conn-state-eval-argument-value
   'conn-state-eval-argument--value)
-
-(cl-defgeneric conn-get-argument-ref-pages (argument)
-  ( :method (_arg) nil)
-  ( :method ((arg cons))
-    (nconc (ensure-list (conn-get-argument-ref-pages (car arg)))
-           (ensure-list (conn-get-argument-ref-pages (cdr arg))))))
 
 (cl-defgeneric conn-cancel-argument (argument)
   ( :method (_arg) nil)
@@ -11652,7 +11661,7 @@ Operates with the selected windows parent window."
         (setq conn--input-method current-input-method)
         (or (run-hook-with-args-until-success 'conn-setup-state-hook)
             (conn-push-state 'conn-emacs-state)))
-    (conn--state-call-deferred)
+    (funcall conn--state-defered)
     (conn--clear-overlays)
     (if (eq 'conn-replace-read-default query-replace-read-from-default)
         (setq query-replace-read-from-default 'conn-replace-read-default)
