@@ -93,67 +93,76 @@
                                           (push row rows)
                                           (setq curr next))))
                   (nreverse rows)))
-              (process-bindings (description bindings keymap)
+              (process-bindings (description bindings)
                 (let (keys)
-                  (dolist (bind bindings)
-                    (if-let* ((key (or (and (symbolp bind)
-                                            (get bind :advertised-binding))
-                                       (where-is-internal bind
-                                                          (and keymap (list keymap))
-                                                          t))))
-                        (push (propertize (key-description key)
-                                          'face 'help-key-binding)
-                              keys)
-                      (push (conn--quick-ref-unbound) keys)))
+                  (while bindings
+                    (pcase (pop bindings)
+                      (`(:call ,fn)
+                       (push (funcall fn) bindings))
+                      (`(:splice ,fn)
+                       (cl-callf2 append (funcall fn) bindings))
+                      ((and str (pred stringp))
+                       str)
+                      (bind
+                       (if-let* ((key (or (and (symbolp bind)
+                                               (get bind :advertised-binding))
+                                          (or (where-is-internal bind
+                                                                 overriding-terminal-local-map
+                                                                 t)
+                                              (where-is-internal bind nil t)))))
+                           (push (propertize (key-description key)
+                                             'face 'help-key-binding)
+                                 keys)
+                         (push (conn--quick-ref-unbound) keys)))))
                   (concat (string-join (nreverse keys) ", ")
                           ": " description)))
-              (process-col (col keymap)
+              (process-col (col)
                 (let ((result nil))
                   (while col
                     (pcase (pop col)
-                      (:keymap (setq keymap (eval (pop col) t)))
-                      ((and fn (pred functionp))
-                       (let ((str (funcall fn)))
-                         (add-face-text-property
-                          0 (length str)
-                          'conn-quick-ref-heading-face t str)
-                         (push str result)))
+                      ('nil)
+                      (`(:call ,fn)
+                       (push (funcall fn) col))
+                      (`(:splice ,fn)
+                       (cl-callf2 append (funcall fn) col))
                       ((and str (pred stringp))
                        (push (propertize str 'face 'conn-quick-ref-heading-face)
                              result))
-                      (`(:keymap ,keymap ,desc . ,bindings)
-                       (push (process-bindings desc bindings keymap)
-                             result))
                       (`(,desc . ,bindings)
-                       (push (process-bindings desc bindings keymap)
+                       (push (process-bindings desc bindings)
                              result))))
                   (nreverse result)))
-              (process-row (row keymap)
+              (process-row (row)
                 (let ((result nil))
                   (while row
                     (pcase (pop row)
-                      (:keymap (setq keymap (eval (pop row) t)))
+                      ('nil)
+                      (`(:call ,fn)
+                       (push (funcall fn) row))
+                      (`(:splice ,fn)
+                       (cl-callf2 append (funcall fn) row))
                       ((and (pred consp) col)
-                       (push (process-col col keymap) result))))
+                       (push (process-col col) result))))
                   (nreverse result))))
-    (let ((keymap nil))
-      (while definition
-        (goto-char (point-max))
-        (pcase (pop definition)
-          (:keymap
-           (setq keymap (eval (pop definition) t)))
-          ((and row (pred stringp))
-           (insert (with-current-buffer keymap-buffer
-                     (substitute-command-keys row))
-                   "\n"))
-          ((and row (pred consp))
-           (make-vtable
-            :face `( :inherit default
-                     :height ,conn-quick-ref-text-scale)
-            :divider-width 2
-            :use-header-line nil
-            :objects (with-current-buffer keymap-buffer
-                       (transpose (process-row row keymap))))))))))
+    (while definition
+      (goto-char (point-max))
+      (pcase (pop definition)
+        ((and row (pred stringp))
+         (insert (with-current-buffer keymap-buffer
+                   (substitute-command-keys row))
+                 "\n"))
+        (`(:call ,fn)
+         (push (funcall fn) definition))
+        (`(:splice ,fn)
+         (cl-callf2 append (funcall fn) definition))
+        ((and row (pred consp))
+         (make-vtable
+          :face `( :inherit default
+                   :height ,conn-quick-ref-text-scale)
+          :divider-width 2
+          :use-header-line nil
+          :objects (with-current-buffer keymap-buffer
+                     (transpose (process-row row)))))))))
 
 (defun conn--quick-ref-insert-header (title)
   (let ((header
@@ -290,7 +299,6 @@
 (defvar conn-dispatch-select-ref
   (list (conn-reference-page
          "Dispatch Selection Commands"
-         :keymap 'conn-dispatch-read-event-map
          `(("Targeting Commands"
             ("retarget" retarget)
             ("always retarget" always-retarget)

@@ -1705,29 +1705,27 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(oclosure-define (conn--defered
-                  (:copier conn--cons-defered
-                           (car id &aux (cdr conn--state-defered))))
-  car cdr id)
+(oclosure-define (conn-defered) car cdr id)
 
 (defvar-local conn--state-defered
   (conn-anaphoricate default
-    (oclosure-lambda (conn--defered) ()
+    (oclosure-lambda (conn-defered) ()
       (setq-local conn--state-defered default)))
   "Code to be run when the current state is exited.")
-
-(defconst conn--defered-proto
-  (oclosure-lambda (conn--defered) ()
-    (unwind-protect (funcall car) (funcall cdr))))
 
 (defun conn--push-defered (fn &optional id)
   (when (or (null id)
             (cl-loop for def = conn--state-defered
-                     then (conn--defered--cdr def)
+                     then (conn-defered--cdr def)
                      while def
-                     never (eq id (conn--defered--id def))))
-    (setq-local conn--state-defered
-                (conn--cons-defered conn--defered-proto fn id))))
+                     never (eq id (conn-defered--id def))))
+    (setq conn--state-defered
+          (oclosure-lambda (conn-defered
+                            (id id)
+                            (car fn)
+                            (cdr conn--state-defered))
+              ()
+            (unwind-protect (funcall car) (funcall cdr))))))
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -7217,7 +7215,11 @@ contain targets."
   (:method (_cmd) nil))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql help)))
-  (conn-quick-reference conn-dispatch-select-ref))
+  (require 'conn-quick-ref)
+  (defvar conn-dispatch-select-ref)
+  (conn-with-overriding-map conn-dispatch-read-event-map
+    (conn-quick-reference conn-dispatch-select-ref))
+  (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
   (require 'mwheel)
