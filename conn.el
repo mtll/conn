@@ -1705,7 +1705,7 @@ These match if the argument is a substate of STATE."
 When this hook is run `conn-previous-state' will be bound to the state
 that has just been exited.")
 
-(oclosure-define (conn-defered) car cdr id)
+(oclosure-define (conn-defered) id car cdr)
 
 (defvar-local conn--state-defered
   (conn-anaphoricate default
@@ -1717,15 +1717,33 @@ that has just been exited.")
   (when (or (null id)
             (cl-loop for def = conn--state-defered
                      then (conn-defered--cdr def)
-                     while def
-                     never (eq id (conn-defered--id def))))
+                     while def never (eq id (conn-defered--id def))))
     (setq conn--state-defered
           (oclosure-lambda (conn-defered
-                            (id id)
-                            (car fn)
-                            (cdr conn--state-defered))
+                            (id id) (car fn) (cdr conn--state-defered))
               ()
             (unwind-protect (funcall car) (funcall cdr))))))
+
+(defmacro conn-state-defer (&rest body)
+  "Defer evaluation of BODY until the current state is exited.
+
+Note that if a `conn-state-defer' form is evaluated multiple times in
+one state then BODY will evaluated that many times when the state is
+exited.  If you want to ensure that BODY will be evaluated only once
+when the current state exits then use `conn-state-defer-once'.
+
+When BODY is evaluated `conn-next-state' will be bound to the state
+that is being entered after the current state has exited."
+  (declare (indent 0))
+  `(conn--push-defered (lambda () ,@body)))
+
+(defmacro conn-state-defer-once (&rest body)
+  "Like `conn-state-defer' but BODY will be evaluated only once per state.
+
+For more information see `conn-state-defer'."
+  (declare (indent 0))
+  (cl-with-gensyms (id)
+    `(conn--push-defered (lambda () ,@body) ',id)))
 
 (defvar conn-state-lighter-separator "→"
   "Separator string for state lighters in `conn-lighter'.")
@@ -1752,27 +1770,6 @@ that has just been exited.")
 If BUFFER is nil then use the current buffer."
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
-
-(defmacro conn-state-defer (&rest body)
-  "Defer evaluation of BODY until the current state is exited.
-
-Note that if a `conn-state-defer' form is evaluated multiple times in
-one state then BODY will evaluated that many times when the state is
-exited.  If you want to ensure that BODY will be evaluated only once
-when the current state exits then use `conn-state-defer-once'.
-
-When BODY is evaluated `conn-next-state' will be bound to the state
-that is being entered after the current state has exited."
-  (declare (indent 0))
-  `(conn--push-defered (lambda () ,@body)))
-
-(defmacro conn-state-defer-once (&rest body)
-  "Like `conn-state-defer' but BODY will be evaluated only once per state.
-
-For more information see `conn-state-defer'."
-  (declare (indent 0))
-  (cl-with-gensyms (id)
-    `(conn--push-defered (lambda () ,@body) ',id)))
 
 (defun conn--setup-state-properties (state)
   (if (conn-state-get state :no-keymap)
@@ -2297,7 +2294,14 @@ chooses to handle a command."
           nil t))
       (quit nil))))
 
-(cl-defun conn--eval-with-state (state arglist &key command-handler prompt prefix pre post)
+(cl-defun conn--eval-with-state ( state arglist
+                                  &key
+                                  command-handler
+                                  prompt
+                                  prefix
+                                  pre
+                                  post
+                                  reference)
   (conn-protected-let* ((arguments (list arglist)
                                    (conn-cancel-argument (car arguments)))
                         (prompt (or prompt (symbol-name state)))
@@ -2339,8 +2343,7 @@ chooses to handle a command."
               ('nil)
               ('help
                (conn-quick-reference
-                (conn-state-get-reference
-                 state (conn-argument-get-reference arguments))))
+                (or reference (conn-state-get-reference state))))
               ('digit-argument
                (let* ((char (if (integerp last-input-event)
                                 last-input-event

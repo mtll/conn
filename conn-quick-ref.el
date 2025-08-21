@@ -37,7 +37,7 @@
   :group 'conn-quick-ref)
 
 (defface conn-quick-ref-error-face
-  '((t (:inherit error :bold t)))
+  '((t (:inherit error)))
   "Face for key not found errors."
   :group 'conn-quick-ref)
 
@@ -79,7 +79,7 @@
 (defvar conn-quick-ref-post-insert-hook nil)
 
 (defun conn--quick-ref-unbound ()
-  (propertize "🚫" 'face 'conn-quick-ref-error-face))
+  (propertize "Ø" 'face 'conn-quick-ref-error-face))
 
 (defun conn--format-ref-page (definition keymap-buffer)
   (cl-labels ((transpose (columns)
@@ -97,6 +97,7 @@
                 (let (keys)
                   (while bindings
                     (pcase (pop bindings)
+                      ('nil)
                       (`(:call ,fn)
                        (push (funcall fn) bindings))
                       (`(:splice ,fn)
@@ -244,115 +245,79 @@
 ;;;; Pages
 
 (defvar conn-read-thing-ref
-  (list
-   (conn-reference-page
-    "Things"
-    "Use a thing command to specify a region to operate on.")))
+  (conn-reference-page
+   "Things"
+   "Use a thing command to specify a region to operate on."))
 
 (defvar conn-dispatch-action-ref
-  (list
-   (conn-reference-page
-    "Actions"
-    `((("yank from/replace"
-        conn-dispatch-yank-from
-        conn-dispatch-yank-from-replace)
-       ("yank to/replace" conn-dispatch-yank-to
-        conn-dispatch-yank-replace-to)
-       ("yank read/replace"
-        conn-dispatch-reading-yank-to
-        conn-dispatch-yank-read-replace-to)
-       ("send/replace" conn-dispatch-send
-        conn-dispatch-send-replace)
-       ("take/replace" conn-dispatch-take
-        conn-dispatch-take-replace))
-      (("copy to" conn-dispatch-copy-to
-        conn-dispatch-copy-replace-to)
-       ("transpose" conn-dispatch-transpose)
-       ("goto/over" conn-dispatch-over-or-goto)
-       ("kapply" conn-dispatch-kapply))
-      (("kill/append/prepend" conn-dispatch-kill
-        conn-dispatch-kill-append
-        conn-dispatch-kill-prepend)
-       ("copy/append/prepend" conn-dispatch-copy
-        conn-dispatch-copy-append
-        conn-dispatch-copy-prepend)
-       ("register" conn-dispatch-register-load
-        conn-dispatch-register-replace)
-       ("up/down/capital case"
-        conn-dispatch-upcase
-        conn-dispatch-downcase
-        conn-dispatch-capitalize))))))
+  (conn-reference-page
+   "Actions"
+   `((("yank from/replace"
+       conn-dispatch-yank-from
+       conn-dispatch-yank-from-replace)
+      ("yank to/replace" conn-dispatch-yank-to
+       conn-dispatch-yank-replace-to)
+      ("yank read/replace"
+       conn-dispatch-reading-yank-to
+       conn-dispatch-yank-read-replace-to)
+      ("send/replace" conn-dispatch-send
+       conn-dispatch-send-replace)
+      ("take/replace" conn-dispatch-take
+       conn-dispatch-take-replace))
+     (("copy to" conn-dispatch-copy-to
+       conn-dispatch-copy-replace-to)
+      ("transpose" conn-dispatch-transpose)
+      ("goto/over" conn-dispatch-over-or-goto)
+      ("kapply" conn-dispatch-kapply))
+     (("kill/append/prepend" conn-dispatch-kill
+       conn-dispatch-kill-append
+       conn-dispatch-kill-prepend)
+      ("copy/append/prepend" conn-dispatch-copy
+       conn-dispatch-copy-append
+       conn-dispatch-copy-prepend)
+      ("register" conn-dispatch-register-load
+       conn-dispatch-register-replace)
+      ("up/down/capital case"
+       conn-dispatch-upcase
+       conn-dispatch-downcase
+       conn-dispatch-capitalize)))))
 
 (defvar conn-dispatch-command-ref
-  (list
-   (conn-reference-page
-    "Dispatch Commands"
-    `(("History:"
-       ("next/prev"
-        conn-dispatch-cycle-ring-next
-        conn-dispatch-cycle-ring-previous))
-      ("Last Dispatch:"
-       ("repeat" conn-repeat-last-dispatch)
-       ("describe"
-        conn-dispatch-ring-describe-head))))))
+  (conn-reference-page
+   "Dispatch Commands"
+   `(("History:"
+      ("next/prev"
+       conn-dispatch-cycle-ring-next
+       conn-dispatch-cycle-ring-previous))
+     ("Last Dispatch:"
+      ("repeat" conn-repeat-last-dispatch)
+      ("describe" conn-dispatch-ring-describe-head)))
+   `(("Other Args"
+      ("dispatch repeatedly" repeat-dispatch)
+      ("exchange point and mark when selecting THING"
+       dispatch-other-end)
+      ("restrict matches to selected window"
+       restrict-windows)))))
 
 (defvar conn-dispatch-select-ref
-  (list (conn-reference-page
-         "Dispatch Selection Commands"
-         `(("Targeting Commands"
-            ("retarget" retarget)
-            ("always retarget" always-retarget)
-            ("change target finder" change-target-finder))
-           ("Window Commands"
-            ("goto window" conn-goto-window)
-            ("scroll up" scroll-up)
-            ("scroll down" scroll-down)
-            ("restrict" restrict-windows)))
-         `(("Misc"
-            ("dispatch at click" act)
-            ("undo" undo)
-            ("recursive edit" recursive-edit))
-           (""
-            ("isearch forward" isearch-regexp-forward)
-            ("isearch backward" isearch-regexp-backward))))))
-
-(setf (conn-state-get 'conn-dispatch-state :quick-reference)
-      (list (conn-reference-page
-             "Dispatch Commands"
-             `(("History:"
-                ("next/prev"
-                 conn-dispatch-cycle-ring-next
-                 conn-dispatch-cycle-ring-previous))
-               ("Last Dispatch:"
-                ("repeat" conn-repeat-last-dispatch)
-                ("describe" conn-dispatch-ring-describe-head)))
-             `(("Other Args"
-                ("dispatch repeatedly" repeat-dispatch)
-                ("exchange point and mark when selecting THING"
-                 dispatch-other-end)
-                ("restrict matches to selected window"
-                 restrict-windows))))))
-
-;;;; Eval With State Args Reference
-
-;;;###autoload
-(cl-defgeneric conn-argument-get-reference (argument)
-  (declare (important-return-value t)
-           (side-effect-free t))
-  ( :method (_arg) nil)
-  ( :method ((arg cons))
-    (append (ensure-list (conn-argument-get-reference (car arg)))
-            (ensure-list (conn-argument-get-reference (cdr arg)))))
-  ( :method :around ((arg conn-state-eval-argument))
-    (if-let* ((ref (conn-state-eval-argument--reference arg)))
-        (funcall ref (cl-call-next-method))
-      (cl-call-next-method))))
-
-(cl-defmethod conn-argument-get-reference ((_arg conn-thing-argument))
-  conn-read-thing-ref)
-
-(cl-defmethod conn-argument-get-reference ((_arg conn-dispatch-action-argument))
-  conn-dispatch-action-ref)
+  (conn-reference-page
+   "Dispatch Selection Commands"
+   `(("Targeting Commands"
+      ("retarget" retarget)
+      ("always retarget" always-retarget)
+      ("change target finder" change-target-finder))
+     ("Window Commands"
+      ("goto window" conn-goto-window)
+      ("scroll up" scroll-up)
+      ("scroll down" scroll-down)
+      ("restrict" restrict-windows)))
+   `(("Misc"
+      ("dispatch at click" act)
+      ("undo" undo)
+      ("recursive edit" recursive-edit))
+     (""
+      ("isearch forward" isearch-regexp-forward)
+      ("isearch backward" isearch-regexp-backward)))))
 
 ;;;; State Reference
 
@@ -361,15 +326,16 @@
   (declare (important-return-value t)
            (side-effect-free t)))
 
-(cl-defmethod conn-state-get-reference ((state (conn-substate t))
-                                        &optional argument-pages)
-  (append (conn-state-get state :quick-reference t)
-          argument-pages))
+(cl-defmethod conn-state-get-reference ((state (conn-substate t)))
+  (conn-state-get state :quick-reference t))
 
-(cl-defmethod conn-state-get-reference ((state (conn-substate conn-dispatch-state))
-                                        &optional argument-pages)
-  (append argument-pages
-          (conn-state-get state :quick-reference t)))
+(setf (conn-state-get 'conn-dispatch-state :quick-reference)
+      (list conn-dispatch-action-ref
+            conn-dispatch-command-ref
+            conn-read-thing-ref))
+
+(cl-defmethod conn-state-get-reference ((state (conn-substate conn-dispatch-state)))
+  (conn-state-get state :quick-reference t))
 
 (provide 'conn-quick-ref)
 
