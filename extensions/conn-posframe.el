@@ -29,6 +29,7 @@
 (defvar kmacro-ring)
 
 (declare-function kmacro--keys "kmacro")
+(declare-function conn--kmacro-display "conn-transient")
 
 ;;;; Posframe command displays
 
@@ -451,6 +452,9 @@
         (advice-add 'conn-dispatch-cycle-ring-next :after
                     'conn-posframe--dispatch-ring-display)
         (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
+        (defvar conn-quick-ref-display-function)
+        (when (bound-and-true-p conn-quick-ref-display-function)
+          (funcall conn-quick-ref-display-function ))
         (setq conn-quick-ref-display-function 'conn--quick-ref-posframe))
     (advice-remove 'kmacro-cycle-ring-next 'conn-posframe--switch-kmacro-display)
     (advice-remove 'kmacro-cycle-ring-previous 'conn-posframe--switch-kmacro-display)
@@ -463,6 +467,7 @@
     (advice-remove 'tab-bar-switch-to-prev-tab 'conn-posframe--switch-tab-display)
     (advice-remove 'tab-bar-close-tab 'conn-posframe--switch-tab-display)
     (setq conn-read-pair-function 'conn-posframe-progressive-read-pair)
+    (defvar conn-quick-ref-display-function)
     (setq conn-quick-ref-display-function 'conn--quick-ref-minibuffer)))
 
 ;;;; Posframe window labels

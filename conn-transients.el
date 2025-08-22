@@ -60,6 +60,7 @@
 
 ;;;;; Kmacro Utils
 
+;;;###autoload
 (defun conn--kmacro-display (macro &optional trunc)
   (pcase macro
     ((or 'nil '[] "") "nil")

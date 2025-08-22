@@ -52,19 +52,27 @@
 ;;;; Page Impl
 
 (cl-defstruct (conn-reference-page
-               (:constructor conn--make-reference-page))
+                  (:constructor conn--make-reference-page (title definition)))
   (title nil :type string :read-only t)
   (definition nil :type list :read-only t))
 
-(defun conn-reference-page (title &rest definition)
-  (declare (compiler-macro
-            (lambda (_exp)
-              `(conn--make-reference-page
-                :title ,title
-                :definition (list ,@definition)))))
-  (conn--make-reference-page
-   :title title
-   :definition definition))
+;;;###autoload
+(defmacro conn-reference-page (title &rest definition)
+  (declare (indent 1))
+  (cl-labels ((process-definition (def)
+                (pcase def
+                  (`(,(and (or :eval :splice :keymap) type) . ,form)
+                   (cons type (list '\, (cons 'lambda (cons nil form)))))
+                  ((pred consp)
+                   (mapcar #'process-definition def))
+                  (_ def))))
+    `(conn--make-reference-page
+      ,title
+      (list ,@(cl-loop for row in definition
+                       if (listp row)
+                       collect (list '\` (process-definition row))
+                       else
+                       collect row)))))
 
 (defvar-keymap conn-quick-ref-map
   "C-h" 'next
@@ -93,57 +101,63 @@
                                           (push row rows)
                                           (setq curr next))))
                   (nreverse rows)))
-              (process-bindings (description bindings)
-                (let (keys)
+              (process-bindings (description bindings keymap)
+                (let (keys noindirect noremap)
                   (while bindings
                     (pcase (pop bindings)
                       ('nil)
-                      (`(:call ,fn)
-                       (push (funcall fn) bindings))
-                      (`(:splice ,fn)
-                       (cl-callf2 append (funcall fn) bindings))
+                      (`(:noindirect ,val) (setf noindirect val))
+                      (`(:noremap ,val) (setf noremap val))
+                      (`(:keymap . ,fn) (setf keymap (funcall fn)))
+                      (`(:eval . ,fn) (push (funcall fn) bindings))
+                      (`(:splice . ,fn) (cl-callf2 append (funcall fn) bindings))
                       ((and str (pred stringp))
                        str)
                       (bind
-                       (if-let* ((key (or (and (symbolp bind)
-                                               (get bind :advertised-binding))
-                                          (or (where-is-internal bind
-                                                                 overriding-terminal-local-map
-                                                                 t)
-                                              (where-is-internal bind nil t)))))
+                       (if-let* ((key (if keymap
+                                          (where-is-internal bind (ensure-list keymap) t
+                                                             noindirect noremap)
+                                        (or (where-is-internal
+                                             bind
+                                             overriding-terminal-local-map
+                                             t noindirect noremap)
+                                            (and (symbolp bind)
+                                                 (get bind :advertised-binding))
+                                            (where-is-internal bind nil t
+                                                               noindirect noremap)))))
                            (push (propertize (key-description key)
                                              'face 'help-key-binding)
                                  keys)
                          (push (conn--quick-ref-unbound) keys)))))
                   (concat (string-join (nreverse keys) ", ")
                           ": " description)))
-              (process-col (col)
+              (process-col (col keymap)
                 (let ((result nil))
                   (while col
                     (pcase (pop col)
                       ('nil)
-                      (`(:call ,fn)
-                       (push (funcall fn) col))
-                      (`(:splice ,fn)
-                       (cl-callf2 append (funcall fn) col))
-                      ((and str (pred stringp))
+                      (`(:keymap . ,fn) (setf keymap (funcall fn)))
+                      (`(:eval . ,fn) (push (funcall fn) col))
+                      (`(:splice . ,fn) (cl-callf2 append (funcall fn) col))
+                      (`(:heading ,str)
                        (push (propertize str 'face 'conn-quick-ref-heading-face)
                              result))
+                      ((and str (pred stringp)) (push str result))
                       (`(,desc . ,bindings)
-                       (push (process-bindings desc bindings)
+                       (push (process-bindings desc bindings keymap)
                              result))))
                   (nreverse result)))
               (process-row (row)
-                (let ((result nil))
+                (let (keymap
+                      result)
                   (while row
                     (pcase (pop row)
                       ('nil)
-                      (`(:call ,fn)
-                       (push (funcall fn) row))
-                      (`(:splice ,fn)
-                       (cl-callf2 append (funcall fn) row))
+                      (`(:keymap . ,fn) (setf keymap (funcall fn)))
+                      (`(:eval . ,fn) (push (funcall fn) row))
+                      (`(:splice . ,fn) (cl-callf2 append (funcall fn) row))
                       ((and (pred consp) col)
-                       (push (process-col col) result))))
+                       (push (process-col col keymap) result))))
                   (nreverse result))))
     (while definition
       (goto-char (point-max))
@@ -152,9 +166,9 @@
          (insert (with-current-buffer keymap-buffer
                    (substitute-command-keys row))
                  "\n"))
-        (`(:call ,fn)
+        (`(:eval . ,fn)
          (push (funcall fn) definition))
-        (`(:splice ,fn)
+        (`(:splice . ,fn)
          (cl-callf2 append (funcall fn) definition))
         ((and row (pred consp))
          (make-vtable
@@ -206,10 +220,11 @@
 ;;;###autoload
 (defun conn-quick-reference (pages)
   (let ((buf (get-buffer-create " *conn-quick-ref*"))
+        (display-function conn-quick-ref-display-function)
         (pages (copy-sequence pages))
         (inhibit-message t))
     (conn-quick-ref-insert-page (car pages) buf)
-    (funcall conn-quick-ref-display-function buf nil)
+    (funcall display-function buf nil)
     (unwind-protect
         (catch 'break
           (conn-with-overriding-map conn-quick-ref-map
@@ -219,11 +234,11 @@
                   ('next
                    (setq pages (nconc (cdr pages) (list (car pages))))
                    (conn-quick-ref-insert-page (car pages) buf)
-                   (funcall conn-quick-ref-display-function buf nil))
+                   (funcall display-function buf nil))
                   ('previous
                    (setq pages (nconc (last pages) (butlast pages)))
                    (conn-quick-ref-insert-page (car pages) buf)
-                   (funcall conn-quick-ref-display-function buf nil))
+                   (funcall display-function buf nil))
                   ('index)
                   ((or 'quit 'keyboard-quit)
                    (keyboard-quit))
@@ -232,11 +247,10 @@
                                      (cons 'no-record key))
                                    (listify-key-sequence keys)))
                      (throw 'break nil)))))))
-      (funcall conn-quick-ref-display-function buf t))))
+      (funcall display-function buf t))))
 
 (defun conn--quick-ref-minibuffer (buffer hide-p)
-  (let (inhibit-message
-        message-log-max)
+  (let (inhibit-message message-log-max)
     (if hide-p
         (message nil)
       (with-current-buffer buffer
@@ -244,38 +258,58 @@
 
 ;;;; Pages
 
-(defvar conn-read-thing-ref
-  (conn-reference-page
-   "Things"
-   "Use a thing command to specify a region to operate on."))
+(defvar conn-dispatch-thing-ref
+  (conn-reference-page "Things"
+    "Use a thing command to specify a region to operate on."
+    "Dispatch state redefines some thing bindings:
+"
+    ((:keymap (conn-get-state-map 'conn-dispatch-mover-state))
+     (("symbol" forward-symbol)
+      ("line" forward-line)
+      ("word"
+       (:keymap nil)
+       (:noindirect t)
+       (:eval conn-forward-word-remap)))
+     (("sexp"
+       (:keymap nil)
+       (:noindirect t)
+       (:eval conn-forward-sexp-remap))
+      ("column" next-line)
+      ("defun" end-of-defun)))))
 
 (defvar conn-dispatch-action-ref
-  (conn-reference-page
-   "Actions"
-   `((("yank from/replace"
+  (conn-reference-page "Actions"
+    ((("yank from/replace"
        conn-dispatch-yank-from
        conn-dispatch-yank-from-replace)
-      ("yank to/replace" conn-dispatch-yank-to
+      ("yank to/replace"
+       conn-dispatch-yank-to
        conn-dispatch-yank-replace-to)
       ("yank read/replace"
        conn-dispatch-reading-yank-to
        conn-dispatch-yank-read-replace-to)
-      ("send/replace" conn-dispatch-send
+      ("send/replace"
+       conn-dispatch-send
        conn-dispatch-send-replace)
-      ("take/replace" conn-dispatch-take
+      ("take/replace"
+       conn-dispatch-take
        conn-dispatch-take-replace))
-     (("copy to" conn-dispatch-copy-to
+     (("copy to"
+       conn-dispatch-copy-to
        conn-dispatch-copy-replace-to)
       ("transpose" conn-dispatch-transpose)
       ("goto/over" conn-dispatch-over-or-goto)
       ("kapply" conn-dispatch-kapply))
-     (("kill/append/prepend" conn-dispatch-kill
+     (("kill/append/prepend"
+       conn-dispatch-kill
        conn-dispatch-kill-append
        conn-dispatch-kill-prepend)
-      ("copy/append/prepend" conn-dispatch-copy
+      ("copy/append/prepend"
+       conn-dispatch-copy
        conn-dispatch-copy-append
        conn-dispatch-copy-prepend)
-      ("register" conn-dispatch-register-load
+      ("register"
+       conn-dispatch-register-load
        conn-dispatch-register-replace)
       ("up/down/capital case"
        conn-dispatch-upcase
@@ -283,16 +317,15 @@
        conn-dispatch-capitalize)))))
 
 (defvar conn-dispatch-command-ref
-  (conn-reference-page
-   "Dispatch Commands"
-   `(("History:"
+  (conn-reference-page "Dispatch Commands"
+    (((:heading "History:")
       ("next/prev"
        conn-dispatch-cycle-ring-next
        conn-dispatch-cycle-ring-previous))
-     ("Last Dispatch:"
+     ((:heading "Last Dispatch:")
       ("repeat" conn-repeat-last-dispatch)
       ("describe" conn-dispatch-ring-describe-head)))
-   `(("Other Args"
+    (((:heading "Other Args")
       ("dispatch repeatedly" repeat-dispatch)
       ("exchange point and mark when selecting THING"
        dispatch-other-end)
@@ -300,24 +333,96 @@
        restrict-windows)))))
 
 (defvar conn-dispatch-select-ref
-  (conn-reference-page
-   "Dispatch Selection Commands"
-   `(("Targeting Commands"
+  (conn-reference-page "Dispatch Selection Commands"
+    (((:heading "Targeting Commands")
       ("retarget" retarget)
       ("always retarget" always-retarget)
       ("change target finder" change-target-finder))
-     ("Window Commands"
+     ((:heading "Window Commands")
       ("goto window" conn-goto-window)
       ("scroll up" scroll-up)
       ("scroll down" scroll-down)
       ("restrict" restrict-windows)))
-   `(("Misc"
+    (((:heading "Misc")
       ("dispatch at click" act)
       ("undo" undo)
       ("recursive edit" recursive-edit))
      (""
       ("isearch forward" isearch-regexp-forward)
       ("isearch backward" isearch-regexp-backward)))))
+
+;; add: bury/unbury buffer
+;;      tear off window
+;;      isearch other window
+;;      register prefix
+;;      windmove commands
+;;      kill this buffer
+(defvar conn-wincontrol-windows-1
+  (conn-reference-page "Wincontrol Window Commands"
+    ((("switch window" conn-goto-window)
+      ("quit win" quit-window)
+      ("delete win" delete-window)
+      ("delete other" delete-other-windows)
+      ("undo/redo" tab-bar-history-back tab-bar-history-forward))
+     (("kill buffer and win" kill-buffer-and-window)
+      ("split win right/vert"
+       conn-wincontrol-split-right
+       conn-wincontrol-split-vertically)
+      (:heading "Scroll:")
+      ("up/down" conn-wincontrol-scroll-up conn-wincontrol-scroll-down)
+      ("other win up/down"
+       conn-wincontrol-other-window-scroll-up
+       conn-wincontrol-other-window-scroll-down))
+     ((:heading "Buffer:")
+      ("switch" switch-to-buffer)
+      ("prev/next" conn-previous-buffer conn-next-buffer)
+      ("beg/end" beginning-of-buffer end-of-buffer)
+      ("zoom in/out" text-scale-increase text-scale-decrease)))
+    (((:keymap conn-window-resize-map)
+      (:eval (concat
+              (propertize "Resize Map:"
+                          'face 'conn-quick-ref-heading-face)
+              " "
+              (propertize (key-description
+                           (where-is-internal conn-window-resize-map
+                                              conn-wincontrol-map t))
+                          'face 'help-key-binding)))
+      ("widen/narrow/heighten/shorten"
+       conn-wincontrol-widen-window
+       conn-wincontrol-narrow-window
+       conn-wincontrol-heighten-window
+       conn-wincontrol-shorten-window)
+      ("maximize" maximize-window)
+      ("max vert/horiz"
+       conn-wincontrol-maximize-vertically
+       conn-wincontrol-maximize-horizontally)
+      ("balance" balance-windows))
+     (("mru win" conn-wincontrol-mru-window)
+      ("yank win" conn-yank-window)
+      ("transpose win" conn-transpose-window)
+      ("throw buffer" conn-throw-buffer)
+      ("fit win" shrink-window-if-larger-than-buffer)))))
+
+;; (defvar conn-wincontrol-tabs
+;;   (conn-reference-page "Wincontrol Tab Commands"
+;;     ((("next/prev" tab-next tab-previous)
+;;       ("new" tab-new)
+;;       ("close" tab-close)
+;;       ("detach" tab-bar-detach-tab))
+;;      (("win to tab" tab-bar-window-to-tab)
+;;       ("duplicate" tab-bar-duplicate-tab)))
+;;     ))
+
+;;;; Wincontrol Reference
+
+;;;###autoload
+(defun conn-wincontrol-quick-ref (&optional page)
+  (interactive "P")
+  (let* ((pages (list conn-wincontrol-windows-1))
+         (page (mod (or page 0) (length pages))))
+    (conn-quick-reference
+     (append (drop page pages)
+             (reverse (take page pages))))))
 
 ;;;; State Reference
 
@@ -332,10 +437,9 @@
 (setf (conn-state-get 'conn-dispatch-state :quick-reference)
       (list conn-dispatch-action-ref
             conn-dispatch-command-ref
-            conn-read-thing-ref))
+            conn-dispatch-thing-ref))
 
 (cl-defmethod conn-state-get-reference ((state (conn-substate conn-dispatch-state)))
   (conn-state-get state :quick-reference t))
 
 (provide 'conn-quick-ref)
-

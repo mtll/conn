@@ -104,132 +104,132 @@ dynamically.")
 
 ;;;;; Key Remapping
 
-(defcustom conn-undo-keys "C-/"
+(defcustom conn-undo-keys (key-parse "C-/")
   "`undo' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-undo-redo-keys "C-?"
+(defcustom conn-undo-redo-keys (key-parse "C-?")
   "`undo-redo' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-yank-keys "C-y"
+(defcustom conn-yank-keys (key-parse "C-y")
   "`yank' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-kill-region-keys "C-w"
+(defcustom conn-kill-region-keys (key-parse "C-w")
   "`kill-region' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-delete-region-keys "C-S-w"
+(defcustom conn-delete-region-keys (key-parse "C-S-w")
   "`delete-region' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-sexp-keys "C-M-f"
+(defcustom conn-forward-sexp-keys (key-parse "C-M-f")
   "`forward-sexp' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-sexp-keys "C-M-b"
+(defcustom conn-backward-sexp-keys (key-parse "C-M-b")
   "`backward-sexp' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-paragraph-keys "M-{"
+(defcustom conn-backward-paragraph-keys (key-parse "M-{")
   "`backward-paragraph' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-paragraph-keys "M-}"
+(defcustom conn-forward-paragraph-keys (key-parse "M-}")
   "`forward-paragraph' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-beginning-of-defun-keys "C-M-a"
+(defcustom conn-beginning-of-defun-keys (key-parse "C-M-a")
   "`beginning-of-defun' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-end-of-defun-keys "C-M-e"
+(defcustom conn-end-of-defun-keys (key-parse "C-M-e")
   "`end-of-defun' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-next-line-keys "C-n"
+(defcustom conn-next-line-keys (key-parse "C-n")
   "`next-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-previous-line-keys "C-p"
+(defcustom conn-previous-line-keys (key-parse "C-p")
   "`previous-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-char-keys "C-f"
+(defcustom conn-forward-char-keys (key-parse "C-f")
   "`forward-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-char-keys "C-b"
+(defcustom conn-backward-char-keys (key-parse "C-b")
   "`backward-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-word-keys "M-f"
+(defcustom conn-forward-word-keys (key-parse "M-f")
   "`forward-word' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-word-keys "M-b"
+(defcustom conn-backward-word-keys (key-parse "M-b")
   "`backward-word' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-sentence-keys "M-a"
+(defcustom conn-backward-sentence-keys (key-parse "M-a")
   "`backward-sentence' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-sentence-keys "M-e"
+(defcustom conn-forward-sentence-keys (key-parse "M-e")
   "`forward-sentence' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-delete-char-keys "DEL"
+(defcustom conn-backward-delete-char-keys (key-parse "DEL")
   "`backward-delete-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-delete-char-keys "C-d"
+(defcustom conn-delete-char-keys (key-parse "C-d")
   "`delete-char' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-up-list-keys "C-M-u"
+(defcustom conn-backward-up-list-keys (key-parse "C-M-u")
   "`backward-up-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-down-list-keys "C-M-d"
+(defcustom conn-down-list-keys (key-parse "C-M-d")
   "`down-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-forward-list-keys "C-M-n"
+(defcustom conn-forward-list-keys (key-parse "C-M-n")
   "`forward-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-backward-list-keys "C-M-p"
+(defcustom conn-backward-list-keys (key-parse "C-M-p")
   "`backward-list' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
 
-(defcustom conn-kill-line-keys "C-k"
+(defcustom conn-kill-line-keys (key-parse "C-k")
   "`kill-line' key binding."
   :group 'conn-key-remapping
   :type '(vector integer))
@@ -482,21 +482,32 @@ If ring is (1 2 3 4) 4 would be returned."
                (conn--without-conn-maps
                  (key-binding (vector last-input-event) t)))))
 
-(defun conn-remap-key (from-keys &optional without-conn-maps no-accept-default)
+(defmacro conn-remap-key (from-keys &optional without-conn-maps no-accept-default)
   "Map to whatever is bound at FROM-KEYS.
 
 This allows for transparently binding keys to commands which may be
 conceptually the same but vary in implementation by mode, for example
 paredit or smartparens commands.  Also see `conn-remap-key'."
-  (let ((from-keys (key-parse from-keys)))
-    `(menu-item
-      ,(format "Remap %s" (key-description from-keys))
-      ,(conn--without-conn-maps (key-binding from-keys (not no-accept-default)))
-      :filter ,(lambda (_real-binding)
-                 (if without-conn-maps
-                     (conn--without-conn-maps
-                       (key-binding from-keys (not no-accept-default)))
-                   (key-binding from-keys (not no-accept-default)))))))
+  (let ((accept-default (if (macroexp-const-p no-accept-default)
+                            (and no-accept-default t)
+                          `(not ,no-accept-default))))
+    (let ((from-keys (if (stringp from-keys)
+                         (key-parse from-keys)
+                       from-keys)))
+      `(list 'menu-item
+             (format "Remap %s" ,from-keys)
+             (conn--without-conn-maps
+               (key-binding ,from-keys ,accept-default))
+             :filter (lambda (_real-binding)
+                       ,(if (macroexp-const-p without-conn-maps)
+                            (if without-conn-maps
+                                `(conn--without-conn-maps
+                                   (key-binding ,from-keys ,accept-default))
+                              `(key-binding ,from-keys ,accept-default))
+                          `(if ,without-conn-maps
+                               (conn--without-conn-maps
+                                 (key-binding ,from-keys ,accept-default))
+                             (key-binding ,from-keys ,accept-default))))))))
 
 (defun conn-remap-keymap (from-keys &optional without-conn-maps)
   "Map to the keymap at FROM-KEYS.
@@ -3437,7 +3448,7 @@ BOUNDS is of the form returned by `region-bounds', which see."
 
 ;;;; Kapply
 
-(defvar kmacro-step-edit-replace)
+(defvar kmacro-step-edit-replace nil)
 
 (defvar conn-kmacro-applying-p nil
   "Non-nil during kmacro application.")
@@ -4661,6 +4672,7 @@ themselves once the selection process has concluded."
   :parent conn-dispatch-common-map
   "z" 'dispatch-other-end
   "<escape>" 'keyboard-quit
+  "C-g" 'keyboard-quit
   "C-h" 'help
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
@@ -9623,12 +9635,12 @@ of deleting it."
     (conn--without-conn-maps
       (if kill-region
           (let ((str (filter-buffer-substring start end t)))
-            (funcall (keymap-lookup nil conn-yank-keys t))
+            (funcall (key-binding conn-yank-keys t))
             (kill-new str))
-        (funcall (or (keymap-lookup nil conn-delete-region-keys t)
+        (funcall (or (key-binding conn-delete-region-keys t)
                      'delete-region)
                  start end)
-        (funcall (keymap-lookup nil conn-yank-keys t))))))
+        (funcall (key-binding conn-yank-keys t))))))
 
 (defun conn-copy-region (start end &optional register)
   "Copy region between START and END as kill.
@@ -9663,7 +9675,7 @@ If ARG is a numeric prefix argument kill region to a register."
   (interactive (list current-prefix-arg))
   (cond ((= (point) (mark t))
          (call-interactively (conn--without-conn-maps
-                               (keymap-lookup nil conn-backward-delete-char-keys t))))
+                               (key-binding conn-backward-delete-char-keys t))))
         ((numberp arg)
          (thread-first
            (concat "Kill "
@@ -9677,7 +9689,7 @@ If ARG is a numeric prefix argument kill region to a register."
          (kill-rectangle (region-beginning) (region-end)))
         (t (call-interactively
             (conn--without-conn-maps
-              (keymap-lookup nil conn-kill-region-keys t))))))
+              (key-binding conn-kill-region-keys t))))))
 
 (defun conn-completing-yank-replace (start end &optional arg)
   "Replace region from START to END with result of `yank-from-kill-ring'.
@@ -10229,12 +10241,12 @@ Interactively `region-beginning' and `region-end'."
     (goto-char beg)
     (cond (kill
            (funcall (conn--without-conn-maps
-                      (keymap-lookup nil conn-kill-region-keys t))
+                      (key-binding conn-kill-region-keys t))
                     beg end)
            (conn-push-state 'conn-emacs-state))
           (t
            (funcall (conn--without-conn-maps
-                      (keymap-lookup nil conn-delete-region-keys t))
+                      (key-binding conn-delete-region-keys t))
                     beg end)
            (if (eq 'conn-emacs-state (conn-peek-state))
                (conn-pop-state)
@@ -10427,7 +10439,7 @@ If KILL is non-nil add region to the `kill-ring'.  When in
   "`kill-line' and enter `conn-emacs-state'."
   (interactive)
   (beginning-of-line)
-  (call-interactively (keymap-lookup nil conn-kill-line-keys t))
+  (call-interactively (key-binding conn-kill-line-keys t))
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-emacs-state-open-line-above (&optional arg)
@@ -10655,9 +10667,14 @@ Currently selected window remains selected afterwards."
   "B" 'tab-bar-move-window-to-tab
   "D" 'tab-bar-detach-tab)
 
+(defalias 'conn-next-buffer 'next-buffer)
+(defalias 'conn-previous-buffer 'previous-buffer)
+
 (defvar-keymap conn-wincontrol-map
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
+  "C-h" 'help-command
+  "<remap> <info-emacs-manual>" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "," (conn-remap-key "<conn-thing-map>" nil t)
   "-" 'conn-wincontrol-invert-argument
@@ -10677,7 +10694,6 @@ Currently selected window remains selected afterwards."
   "C-M-d" 'delete-other-frames
   "C-S-l" 'move-to-window-line-top-bottom
   "C-]" 'conn-wincontrol-abort
-  "C-h" 'help-command
   "C-r" 'conn-wincontrol-isearch-backward
   "C-s" 'conn-wincontrol-isearch
   "C-u" 'conn-wincontrol-universal-arg
@@ -10733,9 +10749,9 @@ Currently selected window remains selected afterwards."
   "g" (conn-remap-key "M-g" t t)
   "h" 'kill-buffer-and-window
   "i" 'conn-wincontrol-scroll-down
-  "j" 'previous-buffer
+  "j" 'conn-previous-buffer
   "k" 'conn-wincontrol-scroll-up
-  "l" 'next-buffer
+  "l" 'conn-next-buffer
   "m" 'end-of-buffer
   "n" 'beginning-of-buffer
   "o" 'tab-next
@@ -11447,32 +11463,51 @@ Operates with the selected windows parent window."
   "," (conn-remap-key "<conn-thing-map>")
   "e" 'end-of-buffer)
 
+(defvar conn-forward-word-remap (conn-remap-key conn-forward-word-keys t))
+(defvar conn-forward-sexp-remap (conn-remap-key conn-forward-sexp-keys t))
+(defvar conn-previous-line-remap (conn-remap-key conn-previous-line-keys t))
+(defvar conn-backward-paragraph-remap (conn-remap-key conn-backward-paragraph-keys t))
+(defvar conn-forward-sentence-remap (conn-remap-key conn-forward-sentence-keys t))
+(defvar conn-backward-sentence-remap (conn-remap-key conn-backward-sentence-keys t))
+(defvar conn-down-list-remap (conn-remap-key conn-down-list-keys t))
+(defvar conn-backward-up-list-remap (conn-remap-key conn-backward-up-list-keys t))
+(defvar conn-forward-list-remap (conn-remap-key conn-forward-list-keys t))
+(defvar conn-backward-list-remap (conn-remap-key conn-backward-list-keys t))
+(defvar conn-backward-word-remap (conn-remap-key conn-backward-word-keys t))
+(defvar conn-backward-char-remap (conn-remap-key conn-backward-char-keys t))
+(defvar conn-forward-paragraph-remap (conn-remap-key conn-forward-paragraph-keys t))
+(defvar conn-next-line-remap (conn-remap-key conn-next-line-keys t))
+(defvar conn-forward-char-remap (conn-remap-key conn-forward-char-keys t))
+(defvar conn-end-of-defun-remap (conn-remap-key conn-end-of-defun-keys t))
+(defvar conn-beginning-of-defun-remap (conn-remap-key conn-beginning-of-defun-keys t))
+(defvar conn-backward-sexp-remap (conn-remap-key conn-backward-sexp-keys t))
+
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
   ">" 'forward-line
   "<" 'conn-backward-line
-  "o" (conn-remap-key conn-forward-word-keys t)
+  "o" conn-forward-word-remap
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
-  "u" (conn-remap-key conn-backward-word-keys t)
-  "(" (conn-remap-key conn-backward-list-keys t)
-  ")" (conn-remap-key conn-forward-list-keys t)
-  "[" (conn-remap-key conn-backward-up-list-keys t)
-  "]" (conn-remap-key conn-down-list-keys t)
-  "{" (conn-remap-key conn-backward-sentence-keys t)
-  "}" (conn-remap-key conn-forward-sentence-keys t)
-  "I" (conn-remap-key conn-backward-paragraph-keys t)
-  "i" (conn-remap-key conn-previous-line-keys t)
+  "u" conn-backward-word-keys
+  "(" conn-backward-list-keys
+  ")" conn-forward-list-keys
+  "[" conn-backward-up-list-keys
+  "]" conn-down-list-keys
+  "{" conn-backward-sentence-keys
+  "}" conn-forward-sentence-keys
+  "I" conn-backward-paragraph-keys
+  "i" conn-previous-line-keys
   "J" 'conn-backward-inner-line
-  "j" (conn-remap-key conn-backward-char-keys t)
-  "K" (conn-remap-key conn-forward-paragraph-keys t)
-  "k" (conn-remap-key conn-next-line-keys t)
+  "j" conn-backward-char-keys
+  "K" conn-forward-paragraph-keys
+  "k" conn-next-line-keys
   "L" 'conn-forward-inner-line
-  "l" (conn-remap-key conn-forward-char-keys t)
-  "M" (conn-remap-key conn-end-of-defun-keys t)
-  "m" (conn-remap-key conn-forward-sexp-keys t)
-  "N" (conn-remap-key conn-beginning-of-defun-keys t)
-  "n" (conn-remap-key conn-backward-sexp-keys t))
+  "l" conn-forward-char-keys
+  "M" conn-end-of-defun-keys
+  "m" conn-forward-sexp-remap
+  "N" conn-beginning-of-defun-keys
+  "n" conn-backward-sexp-keys)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
