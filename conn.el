@@ -490,41 +490,90 @@ conceptually the same but vary in implementation by mode, for example
 paredit or smartparens commands.  Also see `conn-remap-key'."
   (let ((accept-default (if (macroexp-const-p no-accept-default)
                             (and no-accept-default t)
-                          `(not ,no-accept-default))))
-    (let ((from-keys (if (stringp from-keys)
-                         (key-parse from-keys)
-                       from-keys)))
-      `(list 'menu-item
-             (format "Remap %s" ,from-keys)
-             (conn--without-conn-maps
-               (key-binding ,from-keys ,accept-default))
-             :filter (lambda (_real-binding)
-                       ,(if (macroexp-const-p without-conn-maps)
-                            (if without-conn-maps
-                                `(conn--without-conn-maps
-                                   (key-binding ,from-keys ,accept-default))
-                              `(key-binding ,from-keys ,accept-default))
-                          `(if ,without-conn-maps
-                               (conn--without-conn-maps
+                          `(not ,no-accept-default)))
+        (from-keys (if (stringp from-keys)
+                       (key-parse from-keys)
+                     from-keys)))
+    `(list 'menu-item
+           (format "Remap %s" ,from-keys)
+           nil
+           :filter (lambda (_real-binding)
+                     ,(if (macroexp-const-p without-conn-maps)
+                          (if without-conn-maps
+                              `(conn--without-conn-maps
                                  (key-binding ,from-keys ,accept-default))
-                             (key-binding ,from-keys ,accept-default))))))))
+                            `(key-binding ,from-keys ,accept-default))
+                        `(if ,without-conn-maps
+                             (conn--without-conn-maps
+                               (key-binding ,from-keys ,accept-default))
+                           (key-binding ,from-keys ,accept-default)))))))
 
-(defun conn-remap-keymap (from-keys &optional without-conn-maps)
-  "Map to the keymap at FROM-KEYS.
+(defvar conn-search-remap
+  `(menu-item
+    "Conn Search Map"
+    ,(make-sparse-keymap)
+    :filter ,(lambda (real-binding)
+               (let ((map (key-binding [conn-search-map]))
+                     (remap (conn--without-conn-maps (key-binding [134217843]))))
+                 (setf (cdr real-binding)
+                       (delq nil (list (when (keymapp map) map)
+                                       (when (keymapp remap) remap))))
+                 real-binding))))
 
-If the binding at FROM-KEYS is for any reason not a keymap, say because
-a minor mode has shadowed the keymap originally bound there, then map to
-the original binding.  Also see `conn-remap-key'."
-  (let ((from-keys (key-parse from-keys)))
-    `(menu-item
-      ,(format "Remap %s Keymap" (key-description from-keys))
-      ,(conn--without-conn-maps (key-binding from-keys t))
-      :filter ,(lambda (real-binding)
-                 (let ((binding (if without-conn-maps
-                                    (conn--without-conn-maps
-                                      (key-binding from-keys t))
-                                  (key-binding from-keys t))))
-                   (if (keymapp binding) binding real-binding))))))
+(defvar conn-goto-remap
+  `(menu-item
+    "Conn Goto Map"
+    ,(make-sparse-keymap)
+    :filter ,(lambda (real-binding)
+               (let ((map (key-binding [conn-goto-map]))
+                     (remap (conn--without-conn-maps (key-binding [134217831]))))
+                 (setf (cdr real-binding)
+                       (delq nil (list (when (keymapp map) map)
+                                       (when (keymapp remap) remap))))
+                 real-binding))))
+
+(defvar conn-thing-remap
+  `(menu-item
+    "Conn Thing Map"
+    ,(make-sparse-keymap)
+    :filter ,(lambda (real-binding)
+               (setf (cdr real-binding) (key-binding [conn-thing-map]))
+               real-binding)))
+
+(defvar conn-region-remap
+  `(menu-item
+    "Conn Region Map"
+    ,(make-sparse-keymap)
+    :filter ,(lambda (real-binding)
+               (setf (cdr real-binding) (key-binding [conn-region-map]))
+               real-binding)))
+
+(defvar conn-edit-remap
+  `(menu-item
+    "Conn Edit Map"
+    ,(make-sparse-keymap)
+    :filter ,(lambda (real-binding)
+               (setf (cdr real-binding) (key-binding [conn-edit-map]))
+               real-binding)))
+
+(defvar conn-forward-word-remap (conn-remap-key conn-forward-word-keys t))
+(defvar conn-forward-sexp-remap (conn-remap-key conn-forward-sexp-keys t))
+(defvar conn-previous-line-remap (conn-remap-key conn-previous-line-keys t))
+(defvar conn-backward-paragraph-remap (conn-remap-key conn-backward-paragraph-keys t))
+(defvar conn-forward-sentence-remap (conn-remap-key conn-forward-sentence-keys t))
+(defvar conn-backward-sentence-remap (conn-remap-key conn-backward-sentence-keys t))
+(defvar conn-down-list-remap (conn-remap-key conn-down-list-keys t))
+(defvar conn-backward-up-list-remap (conn-remap-key conn-backward-up-list-keys t))
+(defvar conn-forward-list-remap (conn-remap-key conn-forward-list-keys t))
+(defvar conn-backward-list-remap (conn-remap-key conn-backward-list-keys t))
+(defvar conn-backward-word-remap (conn-remap-key conn-backward-word-keys t))
+(defvar conn-backward-char-remap (conn-remap-key conn-backward-char-keys t))
+(defvar conn-forward-paragraph-remap (conn-remap-key conn-forward-paragraph-keys t))
+(defvar conn-next-line-remap (conn-remap-key conn-next-line-keys t))
+(defvar conn-forward-char-remap (conn-remap-key conn-forward-char-keys t))
+(defvar conn-end-of-defun-remap (conn-remap-key conn-end-of-defun-keys t))
+(defvar conn-beginning-of-defun-remap (conn-remap-key conn-beginning-of-defun-keys t))
+(defvar conn-backward-sexp-remap (conn-remap-key conn-backward-sexp-keys t))
 
 
 ;;;;; Region Utils
@@ -3186,7 +3235,7 @@ order to mark the region that should be defined by any of COMMANDS."
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
   "C-h" 'help
-  "," (conn-remap-key "<conn-thing-map>")
+  "," conn-thing-remap
   "r" 'recursive-edit
   "x" 'toggle-trim
   "z" 'toggle-subregions
@@ -4672,7 +4721,6 @@ themselves once the selection process has concluded."
   :parent conn-dispatch-common-map
   "z" 'dispatch-other-end
   "<escape>" 'keyboard-quit
-  "C-g" 'keyboard-quit
   "C-h" 'help
   "M-DEL" 'reset-arg
   "M-<backspace>" 'reset-arg
@@ -4684,8 +4732,8 @@ themselves once the selection process has concluded."
   "u" 'forward-symbol
   "i" 'forward-line
   "k" 'next-line
-  "n" 'end-of-defun
-  "," (conn-remap-key "<conn-thing-map>"))
+  "n" conn-end-of-defun-remap
+  "," conn-thing-remap)
 
 (define-keymap
   :keymap (conn-get-minor-mode-map 'conn-dispatch-mover-state :override)
@@ -4709,11 +4757,6 @@ themselves once the selection process has concluded."
        :target-finder (lambda ()
                         (conn-dispatch-all-things 'symbol)))
   "b" 'conn-dispatch-buttons)
-
-(define-keymap
-  :keymap (conn-get-minor-mode-map 'conn-dispatch-state :override)
-  "M-r" (conn-remap-key "<conn-region-map>")
-  "," (conn-remap-key "<conn-thing-map>"))
 
 (keymap-set (conn-get-state-map 'conn-dispatch-state)
             "'" 'conn-dispatch-kapply)
@@ -5748,7 +5791,8 @@ contain targets."
   ((window-predicate
     :initform (lambda (win)
                 (let ((buf (window-buffer win)))
-                  (or (buffer-local-value 'outline-minor-mode buf)
+                  (or (and (boundp 'outline-minor-mode)
+                           (buffer-local-value 'outline-minor-mode buf))
                       (provided-mode-derived-p
                        (buffer-local-value 'major-mode buf)
                        'outline-mode)))))))
@@ -10676,7 +10720,7 @@ Currently selected window remains selected afterwards."
   "C-h" 'help-command
   "<remap> <info-emacs-manual>" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
-  "," (conn-remap-key "<conn-thing-map>" nil t)
+  "," conn-thing-remap
   "-" 'conn-wincontrol-invert-argument
   "0" 'conn-wincontrol-digit-argument
   "1" 'conn-wincontrol-digit-argument
@@ -10739,7 +10783,7 @@ Currently selected window remains selected afterwards."
   "U" 'tab-close
   "Z" 'text-scale-increase
   "T" 'tear-off-window
-  "_" 'shrink-window-if-larger-than-buffer
+  "{" 'shrink-window-if-larger-than-buffer
   "`" 'conn-wincontrol-mru-window
   "b" 'switch-to-buffer
   "c" (conn-remap-key "C-c" nil t)
@@ -11460,27 +11504,8 @@ Operates with the selected windows parent window."
   "k" 'forward-line
   "h" 'conn-expand
   "p" 'forward-paragraph
-  "," (conn-remap-key "<conn-thing-map>")
+  "," conn-thing-remap
   "e" 'end-of-buffer)
-
-(defvar conn-forward-word-remap (conn-remap-key conn-forward-word-keys t))
-(defvar conn-forward-sexp-remap (conn-remap-key conn-forward-sexp-keys t))
-(defvar conn-previous-line-remap (conn-remap-key conn-previous-line-keys t))
-(defvar conn-backward-paragraph-remap (conn-remap-key conn-backward-paragraph-keys t))
-(defvar conn-forward-sentence-remap (conn-remap-key conn-forward-sentence-keys t))
-(defvar conn-backward-sentence-remap (conn-remap-key conn-backward-sentence-keys t))
-(defvar conn-down-list-remap (conn-remap-key conn-down-list-keys t))
-(defvar conn-backward-up-list-remap (conn-remap-key conn-backward-up-list-keys t))
-(defvar conn-forward-list-remap (conn-remap-key conn-forward-list-keys t))
-(defvar conn-backward-list-remap (conn-remap-key conn-backward-list-keys t))
-(defvar conn-backward-word-remap (conn-remap-key conn-backward-word-keys t))
-(defvar conn-backward-char-remap (conn-remap-key conn-backward-char-keys t))
-(defvar conn-forward-paragraph-remap (conn-remap-key conn-forward-paragraph-keys t))
-(defvar conn-next-line-remap (conn-remap-key conn-next-line-keys t))
-(defvar conn-forward-char-remap (conn-remap-key conn-forward-char-keys t))
-(defvar conn-end-of-defun-remap (conn-remap-key conn-end-of-defun-keys t))
-(defvar conn-beginning-of-defun-remap (conn-remap-key conn-beginning-of-defun-keys t))
-(defvar conn-backward-sexp-remap (conn-remap-key conn-backward-sexp-keys t))
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-movement-state)
@@ -11489,30 +11514,30 @@ Operates with the selected windows parent window."
   "o" conn-forward-word-remap
   "O" 'forward-symbol
   "U" 'conn-backward-symbol
-  "u" conn-backward-word-keys
-  "(" conn-backward-list-keys
-  ")" conn-forward-list-keys
-  "[" conn-backward-up-list-keys
-  "]" conn-down-list-keys
-  "{" conn-backward-sentence-keys
-  "}" conn-forward-sentence-keys
-  "I" conn-backward-paragraph-keys
-  "i" conn-previous-line-keys
+  "u" conn-backward-word-remap
+  "(" conn-backward-list-remap
+  ")" conn-forward-list-remap
+  "[" conn-backward-up-list-remap
+  "]" conn-down-list-remap
+  "{" conn-backward-sentence-remap
+  "}" conn-forward-sentence-remap
+  "I" conn-backward-paragraph-remap
+  "i" conn-previous-line-remap
   "J" 'conn-backward-inner-line
-  "j" conn-backward-char-keys
-  "K" conn-forward-paragraph-keys
-  "k" conn-next-line-keys
+  "j" conn-backward-char-remap
+  "K" conn-forward-paragraph-remap
+  "k" conn-next-line-remap
   "L" 'conn-forward-inner-line
-  "l" conn-forward-char-keys
-  "M" conn-end-of-defun-keys
+  "l" conn-forward-char-remap
+  "M" conn-end-of-defun-remap
   "m" conn-forward-sexp-remap
-  "N" conn-beginning-of-defun-keys
-  "n" conn-backward-sexp-keys)
+  "N" conn-beginning-of-defun-remap
+  "n" conn-backward-sexp-remap)
 
 (define-keymap
   :keymap (conn-get-state-map 'conn-menu-state)
-  "s" (conn-remap-keymap "M-s" t)
-  "g" (conn-remap-keymap "M-g" t)
+  "s" conn-search-remap
+  "g" conn-goto-remap
   "c" (conn-remap-key "C-c" t)
   "x" (conn-remap-key "C-x" t)
   "C-4" (conn-remap-key "C-x 4" t)
@@ -11530,7 +11555,7 @@ Operates with the selected windows parent window."
   "P" 'conn-register-load-and-replace
   "+" 'conn-set-register-separator
   "H" 'conn-expand
-  "b" (conn-remap-key "<conn-edit-map>")
+  "b" conn-edit-remap
   "Z" 'pop-to-mark-command
   "&" 'conn-other-buffer
   "e" 'conn-pop-state
@@ -11556,10 +11581,10 @@ Operates with the selected windows parent window."
   "d" (conn-remap-key conn-delete-char-keys t)
   "f" 'conn-dispatch
   "h" 'conn-wincontrol-one-command
-  "," (conn-remap-key "<conn-thing-map>")
+  "," conn-thing-remap
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
-  "r" (conn-remap-key "<conn-region-map>")
+  "r" conn-region-remap
   "V" 'conn-rectangle-mark
   "v" 'conn-toggle-mark-command
   "w" 'conn-kill-region
@@ -11859,7 +11884,7 @@ Operates with the selected windows parent window."
   (conn-push-state 'conn-outline-state))
 
 (defun conntext-outline-state ()
-  (when (and outline-minor-mode
+  (when (and (bound-and-true-p outline-minor-mode)
              (save-excursion
                (goto-char (pos-bol))
                (looking-at-p outline-regexp)))
@@ -11905,7 +11930,7 @@ Operates with the selected windows parent window."
   "o" 'outline-hide-other
   "p" 'conn-register-prefix
   "q" 'conn-transpose-regions
-  "r" (conn-remap-key "<conn-region-map>")
+  "r" conn-region-remap
   "s" (conn-remap-key "M-s" t)
   "t" 'outline-hide-body
   "u" 'outline-up-heading
