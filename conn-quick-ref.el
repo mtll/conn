@@ -86,7 +86,7 @@
 (defvar conn-quick-ref-pre-insert-hook nil)
 (defvar conn-quick-ref-post-insert-hook nil)
 
-(defun conn--quick-ref-unbound ()
+(defvar conn--quick-ref-unbound
   (propertize "Ø" 'face 'conn-quick-ref-error-face))
 
 (defun conn--format-ref-page (definition keymap-buffer)
@@ -101,34 +101,38 @@
                                           (push row rows)
                                           (setq curr next))))
                   (nreverse rows)))
+              (check-advertised (bind keymap)
+                (when-let* (((symbolp bind))
+                            (adv (get bind :advertised-binding))
+                            (desc (key-description adv))
+                            ((or (eq bind (keymap-lookup keymap desc))
+                                 (eq bind (keymap-lookup
+                                           overriding-terminal-local-map
+                                           desc)))))
+                  adv))
+              (get-key (bind keymap)
+                (if-let* ((key (if keymap
+                                   (where-is-internal bind keymap t)
+                                 (or (check-advertised bind keymap)
+                                     (when overriding-terminal-local-map
+                                       (where-is-internal
+                                        bind
+                                        (list overriding-terminal-local-map)
+                                        t))
+                                     (where-is-internal bind nil t)))))
+                    (propertize (key-description key) 'face 'help-key-binding)
+                  conn--quick-ref-unbound))
               (process-bindings (description bindings keymap)
-                (let (keys noindirect noremap)
+                (let (keys)
                   (while bindings
                     (pcase (pop bindings)
                       ('nil)
-                      (`(:noindirect ,val) (setf noindirect val))
-                      (`(:noremap ,val) (setf noremap val))
                       (`(:keymap . ,fn) (setf keymap (funcall fn)))
                       (`(:eval . ,fn) (push (funcall fn) bindings))
                       (`(:splice . ,fn) (cl-callf2 append (funcall fn) bindings))
                       ((and str (pred stringp))
-                       str)
-                      (bind
-                       (if-let* ((key (if keymap
-                                          (where-is-internal bind (ensure-list keymap) t
-                                                             noindirect noremap)
-                                        (or (where-is-internal
-                                             bind
-                                             overriding-terminal-local-map
-                                             t noindirect noremap)
-                                            (and (symbolp bind)
-                                                 (get bind :advertised-binding))
-                                            (where-is-internal bind nil t
-                                                               noindirect noremap)))))
-                           (push (propertize (key-description key)
-                                             'face 'help-key-binding)
-                                 keys)
-                         (push (conn--quick-ref-unbound) keys)))))
+                       (push str keys))
+                      (bind (push (get-key bind keymap) keys))))
                   (concat (string-join (nreverse keys) ", ")
                           ": " description)))
               (process-col (col keymap)
@@ -263,19 +267,20 @@
     "Use a thing command to specify a region to operate on."
     "Dispatch state redefines some thing bindings:
 "
-    ((:keymap (conn-get-state-map 'conn-dispatch-mover-state))
-     (("symbol" forward-symbol)
-      ("line" forward-line)
-      ("word"
-       (:keymap nil)
-       (:noindirect t)
-       (:eval conn-forward-word-remap)))
-     (("sexp"
-       (:keymap nil)
-       (:noindirect t)
-       (:eval conn-forward-sexp-remap))
-      ("column" next-line)
-      ("defun" end-of-defun)))))
+    ((:keymap (list (conn-get-state-map 'conn-dispatch-mover-state)))
+     (("symbol" forward-symbol))
+     (("line" forward-line))
+     (("column" next-line))
+     (("defun"
+       (:eval
+        (catch 'key
+          (map-keymap
+           (lambda (key def)
+             (when (equal def conn-end-of-defun-remap)
+               (throw 'key (propertize (key-description (vector key))
+                                       'face 'help-key-binding))))
+           (conn-get-state-map 'conn-dispatch-mover-state))
+          conn--quick-ref-unbound)))))))
 
 (defvar conn-dispatch-action-ref
   (conn-reference-page "Actions"
@@ -351,19 +356,17 @@
       ("isearch forward" isearch-regexp-forward)
       ("isearch backward" isearch-regexp-backward)))))
 
-;; add: bury/unbury buffer
-;;      tear off window
+;; add: tear off window
 ;;      isearch other window
-;;      register prefix
 ;;      windmove commands
-;;      kill this buffer
 (defvar conn-wincontrol-windows-1
   (conn-reference-page "Wincontrol Window Commands"
     ((("switch window" conn-goto-window)
       ("quit win" quit-window)
       ("delete win" delete-window)
       ("delete other" delete-other-windows)
-      ("undo/redo" tab-bar-history-back tab-bar-history-forward))
+      ("undo/redo" tab-bar-history-back tab-bar-history-forward)
+      ("zoom in/out" text-scale-increase text-scale-decrease))
      (("kill buffer and win" kill-buffer-and-window)
       ("split win right/vert"
        conn-wincontrol-split-right
@@ -372,12 +375,14 @@
       ("up/down" conn-wincontrol-scroll-up conn-wincontrol-scroll-down)
       ("other win up/down"
        conn-wincontrol-other-window-scroll-up
-       conn-wincontrol-other-window-scroll-down))
+       conn-wincontrol-other-window-scroll-down)
+      ("register prefix" conn-register-prefix))
      ((:heading "Buffer:")
       ("switch" switch-to-buffer)
-      ("prev/next" conn-previous-buffer conn-next-buffer)
       ("beg/end" beginning-of-buffer end-of-buffer)
-      ("zoom in/out" text-scale-increase text-scale-decrease)))
+      ("prev/next" conn-previous-buffer conn-next-buffer)
+      ("bury/unbury" bury-buffer unbury-buffer)
+      ("kill buffer" conn-kill-this-buffer)))
     (((:keymap conn-window-resize-map)
       (:eval (concat
               (propertize "Resize Map:"
