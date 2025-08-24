@@ -76,7 +76,8 @@
 
 (defvar-keymap conn-quick-ref-map
   "C-h" 'next
-  "M-h" 'previous)
+  "M-h" 'previous
+  "<escape>" 'exit-ref)
 
 (defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
 
@@ -162,29 +163,30 @@
                       ((and (pred consp) col)
                        (push (process-col col keymap) result))))
                   (nreverse result))))
-    (while definition
-      (goto-char (point-max))
-      (pcase (pop definition)
-        ((and (pred stringp) row)
-         (let ((beg (point)))
-           (insert (with-current-buffer keymap-buffer
-                     (substitute-command-keys row))
-                   "\n")
-           (goto-char beg)
-           (while (search-forward "\n" nil 'move-to-end)
-             (replace-match " \n"))))
-        (`(:eval . ,fn)
-         (push (funcall fn) definition))
-        (`(:splice . ,fn)
-         (cl-callf2 append (funcall fn) definition))
-        ((and row (pred consp))
-         (make-vtable
-          :face `( :inherit default
-                   :height ,conn-quick-ref-text-scale)
-          :divider-width 2
-          :use-header-line nil
-          :objects (with-current-buffer keymap-buffer
-                     (transpose (process-row row)))))))))
+    (conn--where-is-with-remaps
+      (while definition
+        (goto-char (point-max))
+        (pcase (pop definition)
+          ((and (pred stringp) row)
+           (let ((beg (point)))
+             (insert (with-current-buffer keymap-buffer
+                       (substitute-command-keys row))
+                     "\n")
+             (goto-char beg)
+             (while (search-forward "\n" nil 'move-to-end)
+               (replace-match " \n"))))
+          (`(:eval . ,fn)
+           (push (funcall fn) definition))
+          (`(:splice . ,fn)
+           (cl-callf2 append (funcall fn) definition))
+          ((and row (pred consp))
+           (make-vtable
+            :face `( :inherit default
+                     :height ,conn-quick-ref-text-scale)
+            :divider-width 2
+            :use-header-line nil
+            :objects (with-current-buffer keymap-buffer
+                       (transpose (process-row row))))))))))
 
 (defun conn-quick-ref-insert-page (page buffer)
   (pcase-let (((cl-struct conn-reference-page
@@ -228,6 +230,8 @@
             (while t
               (let ((keys (read-key-sequence-vector nil)))
                 (pcase (key-binding keys)
+                  ('exit-ref
+                   (throw 'break nil))
                   ('next
                    (setq pages (nconc (cdr pages) (list (car pages))))
                    (conn-quick-ref-insert-page (car pages) buf)

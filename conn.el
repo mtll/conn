@@ -508,53 +508,66 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
                                (key-binding ,from-keys ,accept-default))
                            (key-binding ,from-keys ,accept-default)))))))
 
-(defvar conn-search-remap
-  `(menu-item
+(defvar conn--remap-keymaps nil)
+
+(defun conn--define-remap-keymap (description keys)
+  (let ((keys (cl-loop for key in keys
+                       if (stringp key) collect (key-parse key)
+                       else collect key)))
+    `(list 'menu-item
+           ',description
+           nil
+           :filter (lambda (_real-binding)
+                     ,(cl-loop for key in keys
+                               if (symbolp (aref key 0))
+                               collect `(key-binding ,key) into maps
+                               else collect `(conn--without-conn-maps
+                                               (key-binding ,key))
+                               into maps
+                               finally return `(make-composed-keymap
+                                                (cl-loop for map in (list ,@maps)
+                                                         when map collect map)))))))
+
+(defmacro conn-define-remap-keymap (name description &rest keys)
+  (declare (indent 2))
+  `(progn
+     (cl-pushnew ',name conn--remap-keymaps)
+     (defvar ,name
+       ,(conn--define-remap-keymap description keys)
+       ,description)))
+
+(defmacro conn--where-is-with-remaps (&rest body)
+  (declare (indent 0))
+  `(unwind-protect
+       (progn
+         (cl-loop for remap in conn--remap-keymaps
+                  for val = (symbol-value remap)
+                  do (setf (nth 2 val) (keymap--menu-item-binding val)))
+         ,@body)
+     (cl-loop for remap in conn--remap-keymaps
+              do (setf (nth 2 (symbol-value remap)) nil))))
+
+(conn-define-remap-keymap conn-search-remap
     "Conn Search Map"
-    ,(make-sparse-keymap)
-    :filter ,(lambda (real-binding)
-               (let ((map (key-binding [conn-search-map]))
-                     (remap (conn--without-conn-maps (key-binding [134217843]))))
-                 (setf (cdr real-binding)
-                       (delq nil (list (when (keymapp map) map)
-                                       (when (keymapp remap) remap))))
-                 real-binding))))
+  [conn-search-map]
+  "M-s")
 
-(defvar conn-goto-remap
-  `(menu-item
-    "Conn Goto Map"
-    ,(make-sparse-keymap)
-    :filter ,(lambda (real-binding)
-               (let ((map (key-binding [conn-goto-map]))
-                     (remap (conn--without-conn-maps (key-binding [134217831]))))
-                 (setf (cdr real-binding)
-                       (delq nil (list (when (keymapp map) map)
-                                       (when (keymapp remap) remap))))
-                 real-binding))))
+(conn-define-remap-keymap conn-goto-remap
+    "Conn Search Map"
+  [conn-goto-map]
+  "M-g")
 
-(defvar conn-thing-remap
-  `(menu-item
-    "Conn Thing Map"
-    ,(make-sparse-keymap)
-    :filter ,(lambda (real-binding)
-               (setf (cdr real-binding) (key-binding [conn-thing-map]))
-               real-binding)))
+(conn-define-remap-keymap conn-thing-remap
+    "Conn Search Map"
+  [conn-thing-map])
 
-(defvar conn-region-remap
-  `(menu-item
-    "Conn Region Map"
-    ,(make-sparse-keymap)
-    :filter ,(lambda (real-binding)
-               (setf (cdr real-binding) (key-binding [conn-region-map]))
-               real-binding)))
+(conn-define-remap-keymap conn-region-remap
+    "Conn Search Map"
+  [conn-region-map])
 
-(defvar conn-edit-remap
-  `(menu-item
-    "Conn Edit Map"
-    ,(make-sparse-keymap)
-    :filter ,(lambda (real-binding)
-               (setf (cdr real-binding) (key-binding [conn-edit-map]))
-               real-binding)))
+(conn-define-remap-keymap conn-edit-remap
+    "Conn Search Map"
+  [conn-edit-map])
 
 (defvar conn-forward-word-remap (conn-remap-key conn-forward-word-keys t))
 (defvar conn-forward-sexp-remap (conn-remap-key conn-forward-sexp-keys t))
@@ -7272,7 +7285,7 @@ contain targets."
   (require 'conn-quick-ref)
   (defvar conn-dispatch-select-ref)
   (conn-with-overriding-map conn-dispatch-read-event-map
-    (conn-quick-reference conn-dispatch-select-ref))
+    (conn-quick-reference (list conn-dispatch-select-ref)))
   (conn-dispatch-handle-and-redisplay))
 
 (cl-defmethod conn-handle-dispatch-select-command ((_cmd (eql mwheel-scroll)))
@@ -11590,15 +11603,6 @@ Operates with the selected windows parent window."
   "Y" 'yank-from-kill-ring
   "y" (conn-remap-key "C-y" t)
   "z" 'conn-exchange-mark-command)
-
-;; Initialize the REAL-BINDING slot of the remap menu-items now that
-;; all the other conn maps have been initialized.
-(dolist (remap (list conn-search-remap
-                     conn-goto-remap
-                     conn-thing-remap
-                     conn-region-remap
-                     conn-edit-remap))
-  (keymap--menu-item-binding remap))
 
 
 ;;;; Advice
