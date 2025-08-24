@@ -1052,15 +1052,15 @@ necessary state as well.")
                (:conc-name conn-state--)
                (:copier nil))
   (name nil :type symbol :read-only t)
-  (docstring nil :type string)
+  (docstring nil :type string :read-only t)
   (parents nil :type (list-of symbol))
   (children nil :type (list-of symbol))
-  (properties nil :type hash-table)
+  (properties nil :type hash-table :read-only t)
   (keymap nil :type (or nil keymap))
-  (minor-mode-depths nil :type hash-table)
+  (minor-mode-depths nil :type hash-table :read-only t)
   (minor-mode-sort-tick nil :type (or nil integer))
-  (minor-mode-maps nil :type alist)
-  (major-mode-maps nil :type hash-table))
+  (minor-mode-maps nil :type alist :read-only t)
+  (major-mode-maps nil :type hash-table :read-only t))
 
 (defmacro conn--find-state (state)
   `(get ,state :conn--state))
@@ -1068,12 +1068,7 @@ necessary state as well.")
 (define-inline conn-state-minor-mode-maps-alist (state)
   "Return the minor mode maps alist for STATE."
   (declare (side-effect-free t)
-           (important-return-value t)
-           (gv-setter
-            (lambda (value)
-              `(setf (conn-state--minor-mode-maps
-                      (conn--find-state ,state))
-                     ,value))))
+           (important-return-value t))
   (inline-quote
    (conn-state--minor-mode-maps
     (conn--find-state ,state))))
@@ -1338,14 +1333,14 @@ The composed keymap is of the form:
     (cl-check-type (conn--find-state state) conn-state)
     (cl-check-type mode symbol)
     (setf (get-map state) map)
-    (let* ((keymap (make-composed-keymap (parent-maps state))))
-      (setf (get-composed-map state) keymap)
-      (dolist (child (conn-state-all-children state) map)
-        (if-let* ((map (get-composed-map child)))
-            (setf (cdr map) (parent-maps child))
-          (unless (conn-state-get child :no-keymap)
-            (setf (get-composed-map child)
-                  (make-composed-keymap (parent-maps child)))))))))
+    (setf (get-composed-map state)
+          (make-composed-keymap (parent-maps state)))
+    (dolist (child (conn-state-all-children state) map)
+      (if-let* ((map (get-composed-map child)))
+          (setf (cdr map) (parent-maps child))
+        (unless (conn-state-get child :no-keymap)
+          (setf (get-composed-map child)
+                (make-composed-keymap (parent-maps child))))))))
 
 (gv-define-simple-setter conn-get-major-mode-map conn-set-major-mode-map)
 
@@ -1473,10 +1468,11 @@ The composed map is a keymap of the form:
     (cl-check-type (conn--find-state state) conn-state)
     (cl-check-type mode symbol)
     (setf (get-map state) map)
-    (let ((keymap (make-composed-keymap (parent-maps state))))
-      (setf (get-composed-map state) keymap)
-      (conn--sort-mode-maps state)
-      (dolist (child (conn-state-all-children state) map)
+    (setf (get-composed-map state)
+          (make-composed-keymap (parent-maps state)))
+    (conn--sort-mode-maps state)
+    (dolist (child (conn-state-all-children state) map)
+      (unless (conn-state-get child :no-keymap)
         (if-let* ((map (get-composed-map child)))
             (setf (cdr map) (parent-maps child))
           (conn--ensure-minor-mode-map child mode))))))
@@ -1506,11 +1502,11 @@ return it."
                   `(cl-loop for parent in (conn-state-all-keymap-parents ,state)
                             for pmap = (get-map parent)
                             when pmap collect pmap)))
-    (unless (or (conn-state-get state :no-keymap)
-                (get-map state))
+    (unless (conn-state-get state :no-keymap)
       (setf (get-composed-map state)
             (make-composed-keymap (parent-maps state)))
-      (setf (conn--mode-maps-sorted-p state) nil))))
+      (unless (get-map state)
+        (setf (conn--mode-maps-sorted-p state) nil)))))
 
 
 ;;;;; State Input Methods
@@ -1956,8 +1952,8 @@ If there is not recursive stack an error is signaled."
     (if-let* ((state-obj (conn--find-state name)))
         (let ((prev-parents (conn-state--parents state-obj)))
           (remhash name conn--state-all-parents-cache)
-          (setup-properties (setf (conn-state--properties state-obj)
-                                  (make-hash-table :test 'eq)))
+          (clrhash (conn-state--properties state-obj))
+          (setup-properties (conn-state--properties state-obj))
           (setf (conn-state--parents state-obj) parents)
           (dolist (former (seq-difference prev-parents parents))
             (cl-callf2 delq name (conn-state--children
@@ -10936,15 +10932,16 @@ Currently selected window remains selected afterwards."
   "Execute one command in `conn-wincontrol-mode'."
   (interactive)
   (add-hook 'pre-command-hook
-            (conn-anaphoricate pre
+            (conn-anaphoricate hook
               (lambda ()
                 (unless (memq this-command
                               '(conn-wincontrol-backward-delete-arg
                                 conn-wincontrol-digit-argument-reset
                                 conn-wincontrol-invert-argument
                                 conn-wincontrol-digit-argument
-                                conn-wincontrol-universal-arg))
-                  (remove-hook 'pre-command-hook pre)
+                                conn-wincontrol-universal-arg
+                                conn-wincontrol-quick-ref))
+                  (remove-hook 'pre-command-hook hook)
                   (conn-wincontrol-exit))))
             99)
   (conn-wincontrol))
