@@ -536,6 +536,7 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
        ,(conn--define-remap-keymap description keys)
        ,description)))
 
+;; A hack but it allows the binding display in quick ref looks nice
 (defmacro conn--where-is-with-remaps (&rest body)
   (declare (indent 0))
   `(unwind-protect

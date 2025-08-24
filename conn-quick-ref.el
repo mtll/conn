@@ -77,7 +77,8 @@
 (defvar-keymap conn-quick-ref-map
   "C-h" 'next
   "M-h" 'previous
-  "<escape>" 'exit-ref)
+  "<escape>" 'close
+  "ESC" 'close)
 
 (defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
 
@@ -203,7 +204,7 @@
         (insert (substitute-command-keys
                  (concat "\\<conn-quick-ref-map> "
                          (propertize title 'face 'bold)
-                         " — \\[next]: Next; \\[previous]: Previous \n")))
+                         " — \\[next]: Next; \\[previous]: Previous; \\[close]: Close \n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
         (run-hooks 'conn-quick-ref-post-insert-hook)
@@ -230,7 +231,7 @@
             (while t
               (let ((keys (read-key-sequence-vector nil)))
                 (pcase (key-binding keys)
-                  ('exit-ref
+                  ('close
                    (throw 'break nil))
                   ('next
                    (setq pages (nconc (cdr pages) (list (car pages))))
