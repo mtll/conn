@@ -52,7 +52,7 @@
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
 (declare-function conn-quick-reference "conn-quick-ref")
-(declare-function conn-state-get-reference "conn-quick-ref")
+(declare-function conn-state-reference "conn-quick-ref")
 (declare-function conn-argument-get-reference "conn-quick-ref")
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function mwheel-scroll "mwheel")
@@ -2413,7 +2413,7 @@ chooses to handle a command."
               ('nil)
               ('help
                (conn-quick-reference
-                (or reference (conn-state-get-reference state (car arguments)))))
+                (or reference (conn-state-reference state (car arguments)))))
               ('digit-argument
                (let* ((char (if (integerp last-input-event)
                                 last-input-event

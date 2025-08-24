@@ -540,23 +540,23 @@ words.")))
 ;;;; State Reference
 
 ;;;###autoload
-(cl-defgeneric conn-state-get-reference (state &optional args)
+(cl-defgeneric conn-state-reference (state &optional args)
   (declare (important-return-value t)
            (side-effect-free t))
   (:method (_state &optional _) nil))
 
-(cl-defmethod conn-state-get-reference ((_state (eql conn-dispatch-state))
-                                        &optional _args)
+(cl-defmethod conn-state-reference ((_state (eql conn-dispatch-state))
+                                    &optional _args)
   (list conn-dispatch-action-ref
         conn-dispatch-command-ref
         conn-dispatch-thing-ref))
 
-(cl-defmethod conn-state-get-reference ((_state (eql conn-transpose-state))
-                                        &optional _args)
+(cl-defmethod conn-state-reference ((_state (eql conn-transpose-state))
+                                    &optional _args)
   (list conn-transpose-reference))
 
-(cl-defmethod conn-state-get-reference ((_state (eql conn-read-thing-state))
-                                        &optional args)
+(cl-defmethod conn-state-reference ((_state (eql conn-read-thing-state))
+                                    &optional args)
   (append (list conn-read-thing-reference)
           (thread-first
             (conn-argument-reference args)
