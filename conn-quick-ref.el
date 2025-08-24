@@ -262,6 +262,35 @@
 
 ;;;; Pages
 
+(defun conn-quick-ref-find-remap (remap &optional keymap)
+  (let (result)
+    (cl-labels ((find-keys (keymap remap prefix)
+                  (map-keymap
+                   (lambda (key def)
+                     (let ((all-keys (vconcat prefix (vector key))))
+                       (pcase def
+                         ((and (pred keymapp) sub-keymap)
+                          (find-keys (keymap-canonicalize sub-keymap) remap all-keys))
+                         ((guard (and (equal def remap)
+                                      (eq (keymap--menu-item-binding remap)
+                                          (key-binding all-keys))))
+                          (push all-keys result)))))
+                   keymap)))
+      (find-keys (pcase keymap
+                   ('nil
+                    (make-composed-keymap
+                     (mapcar 'keymap-canonicalize (current-active-maps))))
+                   ((pred keymapp)
+                    (keymap-canonicalize keymap))
+                   (_
+                    (make-composed-keymap
+                     (mapcar 'keymap-canonicalize keymap))))
+                 remap []))
+    (if-let* ((keys (car (sort result :key 'length))))
+        (propertize (key-description keys)
+                    'face 'help-key-binding)
+      conn--quick-ref-unbound)))
+
 (defvar conn-dispatch-thing-ref
   (conn-reference-page "Things"
     "Use a thing command to specify a region to operate on."
@@ -272,15 +301,9 @@
      (("line" forward-line))
      (("column" next-line))
      (("defun"
-       (:eval
-        (catch 'key
-          (map-keymap
-           (lambda (key def)
-             (when (equal def conn-end-of-defun-remap)
-               (throw 'key (propertize (key-description (vector key))
-                                       'face 'help-key-binding))))
-           (conn-get-state-map 'conn-dispatch-mover-state))
-          conn--quick-ref-unbound)))))))
+       (:eval (conn-quick-ref-find-remap
+               conn-end-of-defun-remap
+               (conn-get-state-map 'conn-dispatch-mover-state))))))))
 
 (defvar conn-dispatch-action-ref
   (conn-reference-page "Actions"
@@ -322,7 +345,7 @@
        conn-dispatch-capitalize)))))
 
 (defvar conn-dispatch-command-ref
-  (conn-reference-page "Dispatch Commands"
+  (conn-reference-page "Misc Commands"
     (((:heading "History:")
       ("next/prev"
        conn-dispatch-cycle-ring-next
@@ -332,13 +355,13 @@
       ("describe" conn-dispatch-ring-describe-head)))
     (((:heading "Other Args")
       ("dispatch repeatedly" repeat-dispatch)
-      ("exchange point and mark when selecting THING"
+      ("exchange point and mark after selecting THING"
        dispatch-other-end)
-      ("restrict matches to selected window"
+      ("restrict matches to the selected window"
        restrict-windows)))))
 
 (defvar conn-dispatch-select-ref
-  (conn-reference-page "Dispatch Selection Commands"
+  (conn-reference-page "Selection Commands"
     (((:heading "Targeting Commands")
       ("retarget" retarget)
       ("always retarget" always-retarget)
@@ -356,11 +379,8 @@
       ("isearch forward" isearch-regexp-forward)
       ("isearch backward" isearch-regexp-backward)))))
 
-;; add: tear off window
-;;      isearch other window
-;;      windmove commands
 (defvar conn-wincontrol-windows-1
-  (conn-reference-page "Wincontrol Window Commands"
+  (conn-reference-page "Windows"
     ((("switch window" conn-goto-window)
       ("quit win" quit-window)
       ("delete win" delete-window)
@@ -408,22 +428,54 @@
       ("throw buffer" conn-throw-buffer)
       ("fit win" shrink-window-if-larger-than-buffer)))))
 
-;; (defvar conn-wincontrol-tabs
-;;   (conn-reference-page "Wincontrol Tab Commands"
-;;     ((("next/prev" tab-next tab-previous)
-;;       ("new" tab-new)
-;;       ("close" tab-close)
-;;       ("detach" tab-bar-detach-tab))
-;;      (("win to tab" tab-bar-window-to-tab)
-;;       ("duplicate" tab-bar-duplicate-tab)))
-;;     ))
+(defvar conn-wincontrol-windows-2
+  (conn-reference-page "Windows"
+    (((:heading "Windmove")
+      ("up/down/left/right"
+       conn-wincontrol-windmove-up
+       conn-wincontrol-windmove-down
+       conn-wincontrol-windmove-left
+       conn-wincontrol-windmove-right)
+      ("swap states up/down/left/right"
+       windmove-swap-states-up
+       windmove-swap-states-down
+       windmove-swap-states-left
+       windmove-swap-states-right)))
+    (((:heading "Isearch:")
+      ("this window forward/back"
+       conn-wincontrol-isearch
+       conn-wincontrol-isearch-backward)
+      ("other window forward/back"
+       conn-wincontrol-isearch-other-window
+       conn-wincontrol-isearch-other-window-backward)))
+    (((:heading "Misc:")
+      ("tear off window" tear-off-window)))))
+
+(defvar conn-wincontrol-tabs-and-frames
+  (conn-reference-page "Tabs and Frames"
+    (((:heading "Tabs:")))
+    ((("next/prev" tab-next tab-previous)
+      ("new" tab-new)
+      ("close" tab-close))
+     (("win to tab" tab-bar-move-window-to-tab)
+      ("duplicate" tab-bar-duplicate-tab)
+      ("detach" tab-bar-detach-tab)))
+    (((:heading "Frames:")))
+    ((("delete/other" delete-frame delete-other-frames)
+      ("undelete" undelete-frame)
+      ("clone" clone-frame))
+     (("next/prev" tab-next tab-previous)
+      ("other frame" other-frame)
+      ("fullscreen" toggle-frame-fullscreen)))))
 
 ;;;; Wincontrol Reference
 
 ;;;###autoload
 (defun conn-wincontrol-quick-ref (&optional page)
   (interactive "P")
-  (let* ((pages (list conn-wincontrol-windows-1))
+  (let* ((pages (list conn-wincontrol-windows-1
+                      conn-wincontrol-windows-2
+                      conn-wincontrol-tabs-and-frames))
          (page (mod (or page 0) (length pages))))
     (conn-quick-reference
      (append (drop page pages)
@@ -437,14 +489,17 @@
            (side-effect-free t)))
 
 (cl-defmethod conn-state-get-reference ((state (conn-substate t)))
-  (conn-state-get state :quick-reference t))
+  (when-let* ((fn (conn-state-get state :quick-reference t)))
+    (funcall fn)))
 
 (setf (conn-state-get 'conn-dispatch-state :quick-reference)
-      (list conn-dispatch-action-ref
-            conn-dispatch-command-ref
-            conn-dispatch-thing-ref))
+      (lambda ()
+        (list conn-dispatch-action-ref
+              conn-dispatch-command-ref
+              conn-dispatch-thing-ref)))
 
 (cl-defmethod conn-state-get-reference ((state (conn-substate conn-dispatch-state)))
-  (conn-state-get state :quick-reference t))
+  (when-let* ((fn (conn-state-get state :quick-reference t)))
+    (funcall fn)))
 
 (provide 'conn-quick-ref)

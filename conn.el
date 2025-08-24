@@ -2430,7 +2430,7 @@ chooses to handle a command."
             (when post (funcall post cmd)))))
       (let ((inhibit-message nil))
         (message nil)
-        (eval (conn-eval-argument (car arguments)) t)))))
+        (eval (eval (conn-eval-argument (car arguments)) t) t)))))
 
 (eval-and-compile
   (defun conn--state-eval-quote (form)
@@ -2459,10 +2459,9 @@ chooses to handle a command."
 
 \(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST)"
   (declare (indent 2))
-  `(eval (conn--eval-with-state ,state
-                                ,(conn--state-eval-quote form)
-                                ,@keys)
-         t))
+  `(conn--eval-with-state ,state
+                          ,(conn--state-eval-quote form)
+                          ,@keys))
 
 (defun conn--fontify-state-eval ()
   (font-lock-add-keywords
@@ -4202,7 +4201,7 @@ Possibilities: \\<query-replace-map>
 
 (defvar conn-kapply-suppress-message nil)
 
-(defmacro conn--define-kapply (name arglist &rest body)
+(defmacro conn--define-kapplier (name arglist &rest body)
   "Define a macro application function.
 The iterator must be the first argument in ARGLIST.
 
@@ -4245,7 +4244,7 @@ The iterator must be the first argument in ARGLIST.
                (funcall ,iterator :cleanup)
                (run-hooks 'conn-kmacro-apply-end-hook))))))))
 
-(conn--define-kapply conn--kmacro-apply (iterator &optional count macro)
+(conn--define-kapplier conn--kmacro-apply (iterator &optional count macro)
   (pcase-exhaustive macro
     ((pred kmacro-p)
      (funcall macro (or count 0)))
@@ -4265,7 +4264,7 @@ The iterator must be the first argument in ARGLIST.
            (user-error "New keyboard macro not defined"))
          (kmacro-call-macro (or count 0)))))))
 
-(conn--define-kapply conn--kmacro-apply-append (iterator &optional count skip-exec)
+(conn--define-kapplier conn--kmacro-apply-append (iterator &optional count skip-exec)
   (when (funcall iterator :record)
     (kmacro-start-macro (if skip-exec '(16) '(4)))
     (unwind-protect
@@ -4276,7 +4275,7 @@ The iterator must be the first argument in ARGLIST.
       (when defining-kbd-macro (kmacro-end-macro nil)))
     (kmacro-call-macro (or count 0))))
 
-(conn--define-kapply conn--kmacro-apply-step-edit (iterator &optional count)
+(conn--define-kapplier conn--kmacro-apply-step-edit (iterator &optional count)
   (when (funcall iterator :record)
     (let* ((apply nil)
            (hook (lambda () (setq apply kmacro-step-edit-replace))))
