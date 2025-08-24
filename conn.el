@@ -11591,6 +11591,15 @@ Operates with the selected windows parent window."
   "y" (conn-remap-key "C-y" t)
   "z" 'conn-exchange-mark-command)
 
+;; Initialize the REAL-BINDING slot of the remap menu-items now that
+;; all the other conn maps have been initialized.
+(dolist (remap (list conn-search-remap
+                     conn-goto-remap
+                     conn-thing-remap
+                     conn-region-remap
+                     conn-edit-remap))
+  (keymap--menu-item-binding remap))
+
 
 ;;;; Advice
 
