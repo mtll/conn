@@ -186,17 +186,6 @@
           :objects (with-current-buffer keymap-buffer
                      (transpose (process-row row)))))))))
 
-(defun conn--quick-ref-insert-header (title)
-  (let ((header
-         (concat " "
-                 (propertize title 'face 'bold)
-                 ": "
-                 (propertize "C-h" 'face 'help-key-binding)
-                 " Next; "
-                 (propertize "M-h" 'face 'help-key-binding)
-                 " Previous\n")))
-    (insert header)))
-
 (defun conn-quick-ref-insert-page (page buffer)
   (pcase-let (((cl-struct conn-reference-page
                           title
@@ -209,7 +198,10 @@
             header-pos)
         (delete-region (point-min) (point-max))
         (run-hooks 'conn-quick-ref-pre-insert-hook)
-        (conn--quick-ref-insert-header title)
+        (insert (substitute-command-keys
+                 (concat "\\<conn-quick-ref-map> "
+                         (propertize title 'face 'bold)
+                         " — \\[next]: Next; \\[previous]: Previous \n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
         (run-hooks 'conn-quick-ref-post-insert-hook)
@@ -479,14 +471,11 @@ within a recursive edit will be transposed."
         "Transpose defines some addition thing bindings:"
         "")
       "\n"))
-    ((("line"
-       conn-backward-line
-       forward-line))
+    ((("line" conn-backward-line forward-line))
      (("symbol" forward-symbol))
-     (("defun"
-       (:eval (conn-quick-ref-find-remap
-               conn-end-of-defun-remap
-               (conn-get-state-map 'conn-transpose-state)))))
+     (("defun" (:eval (conn-quick-ref-find-remap
+                       conn-end-of-defun-remap
+                       (conn-get-state-map 'conn-transpose-state)))))
      (("recursive-edit" recursive-edit)))))
 
 (defvar conn-read-thing-reference
