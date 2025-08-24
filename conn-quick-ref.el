@@ -76,8 +76,7 @@
 
 (defvar-keymap conn-quick-ref-map
   "C-h" 'next
-  "M-h" 'previous
-  "C-M-h" 'index)
+  "M-h" 'previous)
 
 (defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
 
@@ -166,10 +165,14 @@
     (while definition
       (goto-char (point-max))
       (pcase (pop definition)
-        ((and row (pred stringp))
-         (insert (with-current-buffer keymap-buffer
-                   (substitute-command-keys row))
-                 "\n"))
+        ((and (pred stringp) row)
+         (let ((beg (point)))
+           (insert (with-current-buffer keymap-buffer
+                     (substitute-command-keys row))
+                   "\n")
+           (goto-char beg)
+           (while (search-forward "\n" nil 'move-to-end)
+             (replace-match " \n"))))
         (`(:eval . ,fn)
          (push (funcall fn) definition))
         (`(:splice . ,fn)
@@ -191,9 +194,7 @@
                  (propertize "C-h" 'face 'help-key-binding)
                  " Next; "
                  (propertize "M-h" 'face 'help-key-binding)
-                 " Previous; "
-                 (propertize "C-M-h" 'face 'help-key-binding)
-                 " Index \n")))
+                 " Previous\n")))
     (insert header)))
 
 (defun conn-quick-ref-insert-page (page buffer)
@@ -243,7 +244,6 @@
                    (setq pages (nconc (last pages) (butlast pages)))
                    (conn-quick-ref-insert-page (car pages) buf)
                    (funcall display-function buf nil))
-                  ('index)
                   ((or 'quit 'keyboard-quit)
                    (keyboard-quit))
                   (_ (setq unread-command-events
@@ -468,6 +468,50 @@
       ("other frame" other-frame)
       ("fullscreen" toggle-frame-fullscreen)))))
 
+(defvar conn-transpose-reference
+  (conn-reference-page "Transpose"
+    (:eval
+     (string-join
+      '("Transpose reads a THING command and transposes two of those THINGs. If
+THING is `recursive-edit' then the current region and a region defined
+within a recursive edit will be transposed."
+        ""
+        "Transpose defines some addition thing bindings:"
+        "")
+      "\n"))
+    ((("line"
+       conn-backward-line
+       forward-line))
+     (("symbol" forward-symbol))
+     (("defun"
+       (:eval (conn-quick-ref-find-remap
+               conn-end-of-defun-remap
+               (conn-get-state-map 'conn-transpose-state)))))
+     (("recursive-edit" recursive-edit)))))
+
+(defvar conn-read-thing-reference
+  (conn-reference-page "Thing"
+    (:eval
+     "The region to operate on will be defined by a thing command. A prefix
+argument may be supplied for the thing command.")))
+
+(defvar conn-trim-argument-reference
+  (conn-reference-page "Trim"
+    (:eval
+     "Trim excess characters at either end of the region. By default trims
+whitespace characters. With a non-nil prefix argument this will prompt
+for a custom trim regex.")))
+
+(defvar conn-subregions-argument-reference
+  (conn-reference-page "Subregions"
+    (:eval
+     "If this argument is non-nil then operate on the subregions defined by
+the thing command. By default the subregions of a thing command are the
+individual things that are moved over. For example the subregions of
+`forward-word' with a prefix argument of 3 are the 3 regions containing
+the 3 individual words, as opposed to the single region containing all 3
+words.")))
+
 ;;;; Wincontrol Reference
 
 ;;;###autoload
@@ -481,25 +525,47 @@
      (append (drop page pages)
              (reverse (take page pages))))))
 
+;;;; Argument Reference
+
+;;;###autoload
+(cl-defgeneric conn-argument-reference (arg)
+  ( :method (_) nil)
+  ( :method ((args cons))
+    (list (mapcan 'conn-argument-reference args)))
+  ( :method :around ((arg conn-state-eval-argument))
+    (if-let* ((ref (conn-state-eval-argument--reference arg)))
+        (funcall ref)
+      (cl-call-next-method))))
+
+(cl-defmethod conn-argument-reference ((_arg conn-trim-argument))
+  (list conn-trim-argument-reference))
+
+(cl-defmethod conn-argument-reference ((_arg conn-subregions-argument))
+  (list conn-subregions-argument-reference))
+
 ;;;; State Reference
 
 ;;;###autoload
-(cl-defgeneric conn-state-get-reference (state)
+(cl-defgeneric conn-state-get-reference (state &optional args)
   (declare (important-return-value t)
-           (side-effect-free t)))
+           (side-effect-free t))
+  (:method (_state &optional _) nil))
 
-(cl-defmethod conn-state-get-reference ((state (conn-substate t)))
-  (when-let* ((fn (conn-state-get state :quick-reference t)))
-    (funcall fn)))
+(cl-defmethod conn-state-get-reference ((_state (eql conn-dispatch-state))
+                                        &optional _args)
+  (list conn-dispatch-action-ref
+        conn-dispatch-command-ref
+        conn-dispatch-thing-ref))
 
-(setf (conn-state-get 'conn-dispatch-state :quick-reference)
-      (lambda ()
-        (list conn-dispatch-action-ref
-              conn-dispatch-command-ref
-              conn-dispatch-thing-ref)))
+(cl-defmethod conn-state-get-reference ((_state (eql conn-transpose-state))
+                                        &optional _args)
+  (list conn-transpose-reference))
 
-(cl-defmethod conn-state-get-reference ((state (conn-substate conn-dispatch-state)))
-  (when-let* ((fn (conn-state-get state :quick-reference t)))
-    (funcall fn)))
+(cl-defmethod conn-state-get-reference ((_state (eql conn-read-thing-state))
+                                        &optional args)
+  (append (list conn-read-thing-reference)
+          (thread-first
+            (conn-argument-reference args)
+            flatten-tree delete-dups)))
 
 (provide 'conn-quick-ref)

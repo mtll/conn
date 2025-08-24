@@ -2403,7 +2403,7 @@ chooses to handle a command."
               ('nil)
               ('help
                (conn-quick-reference
-                (or reference (conn-state-get-reference state))))
+                (or reference (conn-state-get-reference state (car arguments)))))
               ('digit-argument
                (let* ((char (if (integerp last-input-event)
                                 last-input-event
@@ -9224,7 +9224,8 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
   "i" 'conn-backward-line
   "k" 'forward-line
   "u" 'forward-symbol
-  "f" 'conn-dispatch)
+  "f" 'conn-dispatch
+  "n" conn-end-of-defun-remap)
 
 (conn-define-state conn-dispatch-transpose-state
     (conn-dispatch-mover-state))
