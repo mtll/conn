@@ -1781,7 +1781,10 @@ that has just been exited.")
 (defvar-local conn--state-defered
   (conn-anaphoricate default
     (oclosure-lambda (conn-defered) ()
-      (setq-local conn--state-defered default)))
+      (setq cursor-type t
+            conn--state-defered default)
+      (when conn-current-state
+        (set (cl-shiftf conn-current-state nil) nil))))
   "Code to be run when the current state is exited.")
 
 (defun conn--push-defered (fn &optional id)
@@ -1890,11 +1893,7 @@ To execute code when a state is exiting use `conn-state-defer'."
               (conn--sort-mode-maps state))
             (cl-call-next-method)
             (conn-update-lighter)
-            (set state t)
-            (conn-state-defer
-              (set conn-current-state nil)
-              (setq cursor-type t
-                    conn-current-state nil)))
+            (set state t))
         (unless (symbol-value state)
           (conn-local-mode -1)
           (message "Error entering state %s." state)))
@@ -2468,7 +2467,7 @@ chooses to handle a command."
 (defmacro conn-eval-with-state (state form &rest keys)
   "Eval FORM after replacing arguments with values read in STATE.
 
-\(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST)"
+\(fn STATE ARGLIST &key COMMAND-HANDLER PROMPT PREFIX PRE POST REFERENCE)"
   (declare (indent 2))
   `(conn--eval-with-state ,state
                           ,(conn--state-eval-quote form)

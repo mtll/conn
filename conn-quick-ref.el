@@ -84,11 +84,37 @@
 
 (defvar conn-quick-ref-text-scale 0.95)
 
-(defvar conn-quick-ref-pre-insert-hook nil)
-(defvar conn-quick-ref-post-insert-hook nil)
-
 (defvar conn--quick-ref-unbound
   (propertize "Ø" 'face 'conn-quick-ref-error-face))
+
+(defun conn-quick-ref-find-remap (remap &optional keymap)
+  (let (result)
+    (cl-labels ((find-keys (keymap remap prefix)
+                  (map-keymap
+                   (lambda (key def)
+                     (let ((all-keys (vconcat prefix (vector key))))
+                       (pcase def
+                         ((and (pred keymapp) sub-keymap)
+                          (find-keys (keymap-canonicalize sub-keymap) remap all-keys))
+                         ((guard (and (equal def remap)
+                                      (eq (keymap--menu-item-binding remap)
+                                          (key-binding all-keys))))
+                          (push all-keys result)))))
+                   keymap)))
+      (find-keys (pcase keymap
+                   ('nil
+                    (make-composed-keymap
+                     (mapcar 'keymap-canonicalize (current-active-maps))))
+                   ((pred keymapp)
+                    (keymap-canonicalize keymap))
+                   (_
+                    (make-composed-keymap
+                     (mapcar 'keymap-canonicalize keymap))))
+                 remap []))
+    (if-let* ((keys (car (sort result :key 'length))))
+        (propertize (key-description keys)
+                    'face 'help-key-binding)
+      conn--quick-ref-unbound)))
 
 (defun conn--format-ref-page (definition keymap-buffer)
   (cl-labels ((transpose (columns)
@@ -200,14 +226,12 @@
       (let (buffer-read-only
             header-pos)
         (delete-region (point-min) (point-max))
-        (run-hooks 'conn-quick-ref-pre-insert-hook)
         (insert (substitute-command-keys
                  (concat "\\<conn-quick-ref-map> "
                          (propertize title 'face 'bold)
                          " — \\[next]: Next; \\[previous]: Previous; \\[close]: Close \n")))
         (setq header-pos (point))
         (conn--format-ref-page definition keymap-buffer)
-        (run-hooks 'conn-quick-ref-post-insert-hook)
         (indent-region header-pos (point-max) 1)
         (add-face-text-property
          (point-min) (point-max)
@@ -258,35 +282,6 @@
         (message (buffer-string))))))
 
 ;;;; Pages
-
-(defun conn-quick-ref-find-remap (remap &optional keymap)
-  (let (result)
-    (cl-labels ((find-keys (keymap remap prefix)
-                  (map-keymap
-                   (lambda (key def)
-                     (let ((all-keys (vconcat prefix (vector key))))
-                       (pcase def
-                         ((and (pred keymapp) sub-keymap)
-                          (find-keys (keymap-canonicalize sub-keymap) remap all-keys))
-                         ((guard (and (equal def remap)
-                                      (eq (keymap--menu-item-binding remap)
-                                          (key-binding all-keys))))
-                          (push all-keys result)))))
-                   keymap)))
-      (find-keys (pcase keymap
-                   ('nil
-                    (make-composed-keymap
-                     (mapcar 'keymap-canonicalize (current-active-maps))))
-                   ((pred keymapp)
-                    (keymap-canonicalize keymap))
-                   (_
-                    (make-composed-keymap
-                     (mapcar 'keymap-canonicalize keymap))))
-                 remap []))
-    (if-let* ((keys (car (sort result :key 'length))))
-        (propertize (key-description keys)
-                    'face 'help-key-binding)
-      conn--quick-ref-unbound)))
 
 (defvar conn-dispatch-thing-ref
   (conn-reference-page "Things"
