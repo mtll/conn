@@ -1259,17 +1259,29 @@ A zero means repeat until error."
 
 ;;;; Narrow Ring Prefix
 
+(defun conn--narrow-ring-save-state ()
+  (thread-last
+    (when-let* ((_(conn-ring-p conn-narrow-ring))
+                (ring (conn--copy-ring conn-narrow-ring)))
+      (setf (conn-ring-copier ring) (pcase-lambda (`(,b . ,e))
+                                      (cons (marker-position b)
+                                            (marker-position e)))
+            ring (conn-copy-ring ring)
+            (conn-ring-copier ring) (pcase-lambda (`(,b . ,e))
+                                      (cons (copy-marker b)
+                                            (copy-marker e)))))
+    (list (point) (save-mark-and-excursion--save)
+          (point-min) (point-max))))
+
 (defun conn--narrow-ring-restore-state (state)
   (widen)
-  (pcase-let ((`(,point ,mark ,min ,max ,narrow-ring) state))
-    (narrow-to-region min max)
-    (goto-char point)
-    (save-mark-and-excursion--restore mark)
-    (conn-clear-narrow-ring)
-    (setq conn-narrow-ring
-          (cl-loop for (beg . end) in narrow-ring
-                   collect (cons (conn--create-marker beg)
-                                 (conn--create-marker end))))))
+  (pcase state
+    (`(,point ,mark ,min ,max ,ring)
+     (narrow-to-region min max)
+     (goto-char point)
+     (save-mark-and-excursion--restore mark)
+     (conn-clear-narrow-ring)
+     (setq conn-narrow-ring (conn-copy-ring ring)))))
 
 (defun conn--format-narrowing (narrowing)
   (if (long-line-optimizations-p)
@@ -1286,28 +1298,31 @@ A zero means repeat until error."
                              (marker-position end)))))))
 
 (defun conn--narrow-ring-display ()
-  (ignore-errors
-    (concat
-     (propertize "Narrow Ring: " 'face 'transient-heading)
-     (propertize (format "[%s]" (length conn-narrow-ring))
-                 'face 'transient-value)
-     " - "
-     (when (length> conn-narrow-ring 2)
-       (format "%s, "  (conn--format-narrowing
-                        (car (last conn-narrow-ring)))))
-     (pcase (car conn-narrow-ring)
-       ('nil (propertize "nil" 'face 'transient-value))
-       ((and reg `(,beg . ,end)
-             (guard (and (= (point-min) beg)
-                         (= (point-max) end))))
-        (propertize (conn--format-narrowing  reg)
-                    'face 'transient-value))
-       (reg
-        (propertize (conn--format-narrowing reg)
-                    'face 'bold)))
-     (when (cdr conn-narrow-ring)
-       (format ", %s"  (conn--format-narrowing
-                        (cadr conn-narrow-ring)))))))
+  (let ((len (length (when (conn-ring-p conn-narrow-ring)
+                       (conn-ring-list conn-narrow-ring)))))
+    (ignore-errors
+      (concat
+       (propertize "Narrow Ring: " 'face 'transient-heading)
+       (propertize (format "[%s]" len)
+                   'face 'transient-value)
+       " - "
+       (when (> len 2)
+         (format "%s, " (conn--format-narrowing
+                         (conn-ring-tail conn-narrow-ring))))
+       (when (> len 0)
+         (pcase (conn-ring-head conn-narrow-ring)
+           ('nil (propertize "nil" 'face 'transient-value))
+           ((and reg `(,beg . ,end)
+                 (guard (and (= (point-min) beg)
+                             (= (point-max) end))))
+            (propertize (conn--format-narrowing reg)
+                        'face 'transient-value))
+           (reg
+            (propertize (conn--format-narrowing reg)
+                        'face 'bold))))
+       (when (> len 1)
+         (format ", %s" (conn--format-narrowing
+                         (cadr (conn-ring-list conn-narrow-ring)))))))))
 
 ;;;###autoload (autoload 'conn-narrow-ring-prefix "conn-transients" nil t)
 (transient-define-prefix conn-narrow-ring-prefix ()
@@ -1345,17 +1360,10 @@ A zero means repeat until error."
              (if (eq (window-buffer win) buf)
                  (with-selected-window win
                    (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))
-               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))
-      ("s" "Save Ring to Register" conn-narrow-ring-to-register :transient t)
-      ("l" "Load Ring From Register" conn-register-load :transient t)]]
+               (conn--narrow-ring-restore-state (oref transient-current-prefix scope)))))))]]
   (interactive)
-  (transient-setup
-   'conn-narrow-ring-prefix nil nil
-   :scope (list (point) (save-mark-and-excursion--save)
-                (point-min) (point-max)
-                (cl-loop for (beg . end) in conn-narrow-ring
-                         collect (cons (marker-position beg)
-                                       (marker-position end))))))
+  (transient-setup 'conn-narrow-ring-prefix nil nil
+                   :scope (conn--narrow-ring-save-state)))
 
 
 ;;;; Register Prefix
@@ -1366,7 +1374,7 @@ A zero means repeat until error."
   [[ :description "Register"
      ("e" "Load" conn-register-load)
      ("u" "Unset" conn-unset-register)
-     ("s" "Set Separator" conn-set-register-seperator)
+     ("s" "Set Separator" conn-set-register-separator)
      ("i" "Increment" increment-register)
      ("l" "List" list-registers)]
    [ :description "Register Store"
@@ -1381,11 +1389,7 @@ A zero means repeat until error."
      ("t" "Tab" conn-tab-to-register)
      ("4" "Window Configuration" window-configuration-to-register)
      ("5" "Frameset" frameset-to-register)]]
-  [[ :description "Narrow Ring"
-     ("n" "To Register" conn-narrow-ring-to-register)
-     ("v" "Push Region" conn-push-region-to-narrow-register)
-     ("T" "Push Thing" conn-push-thing-to-narrow-register)]
-   [ :description "Kill"
+  [[ :description "Kill"
      ("w" "Append to Register"
       (lambda ()
         (interactive)

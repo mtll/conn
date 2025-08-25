@@ -391,17 +391,34 @@ CLEANUP-FORMS are run in reverse order of their appearance in VARLIST."
 ;;;;; Rings
 
 (cl-defstruct (conn-ring
-               (:constructor conn-make-ring (capacity &key cleanup)))
+               (:constructor conn-make-ring (capacity &key cleanup copier))
+               (:copier conn--copy-ring))
   "A ring that removes elements in least recently visited order."
   (list nil :type list)
   (history nil :type list)
   (capacity 0 :type integer)
-  (cleanup nil :type (or nil function)))
+  (cleanup 'ignore :type function)
+  (copier 'identity :type function))
 
 (define-inline conn-ring--visit (ring item)
   (inline-quote
    (cl-callf thread-last (conn-ring-history ,ring)
-     (delq ,item) (cons ,item))))
+     (cl-delete ,item ) (cons ,item))))
+
+(defun conn-copy-ring (ring)
+  (when (conn-ring-p ring)
+    (let ((new-ring (conn--copy-ring ring))
+          (copier (conn-ring-copier ring)))
+      (setf (conn-ring-list new-ring)
+            (cl-loop for elem in (conn-ring-list new-ring)
+                     collect (funcall copier elem))
+            (conn-ring-history new-ring)
+            (cl-loop with old-list = (conn-ring-list ring)
+                     with new-list = (conn-ring-list new-ring)
+                     for elem in (conn-ring-history new-ring)
+                     for pos = (seq-position old-list elem)
+                     when pos collect (nth pos new-list)))
+      new-ring)))
 
 (defun conn-ring-insert-front (ring item)
   "Insert ITEM into front of RING."
@@ -686,7 +703,7 @@ the same form and contains disjoint (BEG . END) pairs."
                           (prog1 end1 (or points (set-marker end2 nil)))
                         (prog1 end2 (or points (set-marker end1 nil))))))
         ('nil (push region merged))))
-    merged))
+    (nreverse merged)))
 
 
 ;;;;; Derived Mode Utils
@@ -2143,23 +2160,6 @@ Causes the mode-line face to be remapped to the face specified by the
                   ((markerp marker)))
         (set-marker marker (point) (current-buffer)))
       (set-register conn-emacs-state-register (point-marker)))))
-
-(defun conn-copy-emacs-state-ring ()
-  "Create a copy of `conn-emacs-state-ring'.
-
-Used by `conn--clone-buffer-setup' to copy the ring when cloning a buffer."
-  (when (conn-ring-p conn-emacs-state-ring)
-    (let ((new-ring (copy-conn-ring conn-emacs-state-ring)))
-      (setf (conn-ring-list new-ring)
-            (cl-loop for mk in (conn-ring-list new-ring)
-                     collect (copy-marker (marker-position mk)))
-            (conn-ring-history new-ring)
-            (cl-loop with old-list = (conn-ring-list conn-emacs-state-ring)
-                     with new-list = (conn-ring-list new-ring)
-                     for elem in (conn-ring-history new-ring)
-                     for pos = (seq-position old-list elem)
-                     when pos collect (nth pos new-list))
-            conn-emacs-state-ring new-ring))))
 
 ;;;;; Autopop
 
@@ -5748,7 +5748,7 @@ contain targets."
             (cl-callf conn--merge-overlapping-regions regions t)
             (conn--compat-callf sort regions :key #'car :in-place t)
             (cl-loop for beg = (point-min) then next-beg
-                     for (end . next-beg) in regions
+                     for (end . next-beg) in (nreverse regions)
                      while end
                      do (progn
                           (thread-first
@@ -8112,85 +8112,6 @@ Expansions and contractions are provided by functions in
 
 (defvar conn-narrow-ring-max 14)
 
-(cl-defstruct (conn-narrow-register
-               (:constructor conn--make-narrow-register (narrow-ring)))
-  (narrow-ring nil :type list))
-
-(defun conn--narrow-ring-to-register ()
-  (conn--make-narrow-register
-   (cl-loop for (beg . end) in conn-narrow-ring
-            collect (cons (copy-marker beg) (copy-marker end)))))
-
-(cl-defmethod register-val-jump-to ((val conn-narrow-register) _arg)
-  (let ((ring (conn-narrow-register-narrow-ring val)))
-    (unless (eq (current-buffer) (marker-buffer (caar ring)))
-      (user-error "Markers do not point to this buffer"))
-    (setq conn-narrow-ring
-          (cl-loop for (beg . end) in ring
-                   collect (cons (copy-marker beg)
-                                 (copy-marker end))))))
-
-(cl-defmethod register-val-describe ((val conn-narrow-register) _arg)
-  (thread-last
-    (conn-narrow-register-narrow-ring val)
-    (caar)
-    (marker-buffer)
-    (format "Narrowings In:  %s")
-    (princ)))
-
-(defun conn-narrow-ring-to-register (register)
-  "Store narrow ring in REGISTER."
-  (interactive (list (register-read-with-preview "Narrow ring to register: ")))
-  (set-register register (conn--narrow-ring-to-register)))
-
-(defun conn-push-region-to-narrow-register (beg end register)
-  "Prepend region to narrow register."
-  (interactive
-   (list (region-beginning)
-         (region-end)
-         (register-read-with-preview "Push region to register: ")))
-  (pcase (get-register register)
-    ((and (cl-struct conn-narrow-register narrow-ring) struct)
-     (setf (conn-narrow-register-narrow-ring struct)
-           (cons (cons (conn--create-marker beg)
-                       (conn--create-marker end))
-                 narrow-ring)))
-    (_
-     (set-register register (conn--make-narrow-register
-                             (list (cons (conn--create-marker beg)
-                                         (conn--create-marker end))))))))
-
-(defun conn-push-thing-to-narrow-register ( thing-cmd
-                                            thing-arg
-                                            register
-                                            &optional
-                                            subregions-p)
-  "Prepend thing regions to narrow register."
-  (interactive
-   (conn-eval-with-state 'conn-read-thing-state
-       (list && (conn-thing-argument-dwim)
-             (register-read-with-preview "Push region to register: ")
-             & (conn-subregions-argument (use-region-p)))
-     :prompt "Thing"))
-  (let* ((bounds (conn-bounds-of thing-cmd thing-arg))
-         (narrowings
-          (if-let* ((_ subregions-p)
-                    (subregions (conn-bounds-get bounds :subregions)))
-              (cl-loop for bound in subregions
-                       for (b . e) = (conn-bounds-get bound :outer)
-                       collect (cons (conn--create-marker b)
-                                     (conn--create-marker e)))
-            (pcase-let ((`(,beg . ,end)
-                         (conn-bounds-get bounds :outer)))
-              (list (cons (conn--create-marker beg)
-                          (conn--create-marker end)))))))
-    (pcase (get-register register)
-      ((and (cl-struct conn-narrow-register narrow-ring) struct)
-       (setf (conn-narrow-register-narrow-ring struct)
-             (nconc narrowings narrow-ring)))
-      (_
-       (set-register register (conn--make-narrow-register narrowings))))))
-
 (defun conn-thing-to-narrow-ring (thing-cmd thing-arg &optional subregions-p)
   "Push thing regions to narrow ring."
   (interactive
@@ -8203,51 +8124,56 @@ Expansions and contractions are provided by functions in
                 (conn-bounds-of thing-cmd thing-arg)))
     (if (not subregions-p)
         (conn--narrow-ring-record beg end)
-      (cl-loop for bound in subregions
+      (cl-loop for bound in (reverse subregions)
                for (b . e) = (conn-bounds-get bound :outer)
                do (conn--narrow-ring-record b e)))))
 
 (defun conn--narrow-ring-record (beg end)
-  (let ((narrowing (cons (conn--create-marker beg)
-                         (conn--create-marker end))))
+  (unless (conn-ring-p conn-narrow-ring)
     (setq conn-narrow-ring
-          (cons narrowing (delete narrowing conn-narrow-ring)))
-    (when-let* ((old (drop conn-narrow-ring-max conn-narrow-ring)))
-      (cl-callf2 take conn-narrow-ring-max conn-narrow-ring)
-      (cl-loop for (beg . end) in old do
-               (set-marker beg nil)
-               (set-marker end nil)))))
+          (conn-make-ring conn-narrow-ring-max
+                          :cleanup (pcase-lambda (`(,b . ,e))
+                                     (set-marker b nil)
+                                     (set-marker e nil))
+                          :copier (pcase-lambda (`(,b . ,e))
+                                    (cons (copy-marker (marker-position b))
+                                          (copy-marker (marker-position e)))))))
+  (pcase-let ((`(,bf . ,ef) (conn-ring-head conn-narrow-ring))
+              (`(,bb . ,eb) (conn-ring-tail conn-narrow-ring)))
+    (cond
+     ((and bf (= beg bf) (= end ef)))
+     ((and bb (= beg bb) (= end eb))
+      (conn-ring-rotate-forward conn-narrow-ring))
+     (t (conn-ring-insert-front conn-narrow-ring
+                                (cons (conn--create-marker beg)
+                                      (conn--create-marker end)))))))
 
 (defun conn-cycle-narrowings (arg)
   "Cycle to the ARGth region in `conn-narrow-ring'."
   (interactive "p")
-  (unless conn-narrow-ring
-    (user-error "Narrow ring empty"))
-  (if (= arg 0)
-      (conn-merge-narrow-ring)
-    (let (start)
-      (unless (ignore-errors
-                (and (= (point-min) (caar conn-narrow-ring))
-                     (= (point-max) (cdar conn-narrow-ring))))
-        (setq start (point)
-              arg (+ arg (if (< arg 0) 1 -1))))
-      (dotimes (_ (mod arg (length conn-narrow-ring)))
-        (setq conn-narrow-ring (nconc (cdr conn-narrow-ring)
-                                      (list (car conn-narrow-ring)))))
-      (pcase (car conn-narrow-ring)
-        (`(,beg . ,end)
-         (unless (or (null start)
-                     (<= beg start end))
-           (push-mark start t))
-         (narrow-to-region beg end)
-         (goto-char (point-min))
-         (conn--push-ephemeral-mark (point-max)))))))
+  (cond ((= arg 0)
+         (conn-merge-narrow-ring))
+        ((> arg 0)
+         (dotimes (_ arg)
+           (conn-ring-rotate-forward conn-narrow-ring)))
+        ((< arg 0)
+         (dotimes (_ (abs arg))
+           (conn-ring-rotate-backward conn-narrow-ring))))
+  (pcase (conn-ring-head conn-narrow-ring)
+    (`(,beg . ,end)
+     (unless (<= beg (point) end)
+       (push-mark (point) t)
+       (goto-char beg))
+     (narrow-to-region beg end))
+    (_ (user-error "Narrow ring empty"))))
 
 (defun conn-merge-narrow-ring (&optional interactive)
   "Merge overlapping narrowings in `conn-narrow-ring'."
   (interactive (list t))
-  (setq conn-narrow-ring (nreverse (conn--merge-overlapping-regions
-                                    conn-narrow-ring)))
+  (let ((new (conn--merge-overlapping-regions
+              (conn-ring-list conn-narrow-ring))))
+    (setf (conn-ring-list conn-narrow-ring) new
+          (conn-ring-history conn-narrow-ring) (copy-sequence new)))
   (when (and interactive (not executing-kbd-macro))
     (message "Narrow ring merged into %s region"
              (length conn-narrow-ring))))
@@ -8255,31 +8181,27 @@ Expansions and contractions are provided by functions in
 (defun conn-clear-narrow-ring ()
   "Remove all narrowings from the `conn-narrow-ring'."
   (interactive)
-  (cl-loop for (beg . end) in conn-narrow-ring
+  (cl-loop for (beg . end) in (conn-ring-list conn-narrow-ring)
            do
            (set-marker beg nil)
            (set-marker end nil))
-  (setq conn-narrow-ring nil))
+  (setf (conn-ring-list conn-narrow-ring) nil
+        (conn-ring-history conn-narrow-ring) nil))
 
 (defun conn-pop-narrow-ring ()
   "Pop `conn-narrow-ring'."
   (interactive)
-  (pcase (pop conn-narrow-ring)
+  (pcase (conn-ring-head conn-narrow-ring)
+    ('nil (widen))
     ((and `(,beg . ,end)
           (guard (= (point-min) beg))
-          (guard (= (point-max) end)))
-     (if conn-narrow-ring
-         (narrow-to-region (caar conn-narrow-ring)
-                           (cdar conn-narrow-ring))
-       (widen))
-     (set-marker beg nil)
-     (set-marker end nil))))
-
-(defun conn-copy-narrow-ring ()
-  (setq conn-narrow-ring
-        (cl-loop for (beg . end) in conn-narrow-ring
-                 collect (cons (copy-marker (marker-position beg) t)
-                               (copy-marker (marker-position end))))))
+          (guard (= (point-max) end))
+          narrowing)
+     (conn-ring-delete conn-narrow-ring narrowing)
+     (pcase (conn-ring-head conn-narrow-ring)
+       (`(,beg . ,end)
+        (narrow-to-region beg end))
+       (_ (widen))))))
 
 
 ;;;;; Bounds of Narrow Ring
@@ -9073,20 +8995,6 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
 (defvar conn-mark-ring-max 40
   "Maximum length of `conn-mark-ring'.")
 
-(defun conn-copy-mark-ring ()
-  (when (conn-ring-p conn-mark-ring)
-    (let ((new-ring (copy-conn-ring conn-mark-ring)))
-      (setf (conn-ring-list new-ring)
-            (cl-loop for mk in (conn-ring-list new-ring)
-                     collect (copy-marker (marker-position mk)))
-            (conn-ring-history new-ring)
-            (cl-loop with old-list = (conn-ring-list conn-mark-ring)
-                     with new-list = (conn-ring-list new-ring)
-                     for elem in (conn-ring-history new-ring)
-                     for pos = (seq-position old-list elem)
-                     when pos collect (nth pos new-list))
-            conn-mark-ring new-ring))))
-
 (defun conn-delete-mark-ring ()
   (when (conn-ring-p conn-mark-ring)
     (mapc (conn-ring-cleanup conn-mark-ring)
@@ -9097,7 +9005,9 @@ filters out the uninteresting marks.  See also `conn-pop-mark-ring' and
   (when (not conn-mark-ring)
     (setq conn-mark-ring
           (conn-make-ring conn-mark-ring-max
-                          :cleanup (lambda (mk) (set-marker mk nil)))))
+                          :cleanup (lambda (mk) (set-marker mk nil))
+                          :copier (lambda (mk)
+                                    (copy-marker (marker-position mk))))))
   (pcase-let ((ptb (conn-ring-tail conn-mark-ring))
               (ptf (conn-ring-head conn-mark-ring)))
     (cond
@@ -9145,28 +9055,16 @@ See also `conn-pop-movement-ring' and `conn-unpop-movement-ring'.")
 (defvar conn-movement-ring-max 10
   "Maximum length of `conn-movement-ring'.")
 
-(defun conn-copy-movement-ring ()
-  (when (conn-ring-p conn-movement-ring)
-    (let ((new-ring (copy-conn-ring conn-movement-ring)))
-      (setf (conn-ring-list new-ring)
-            (cl-loop for (pt . mk) in (conn-ring-list new-ring)
-                     collect (cons (copy-marker (marker-position pt) t)
-                                   (copy-marker (marker-position mk))))
-            (conn-ring-history new-ring)
-            (cl-loop with old-list = (conn-ring-list conn-movement-ring)
-                     with new-list = (conn-ring-list new-ring)
-                     for elem in (conn-ring-history conn-movement-ring)
-                     for pos = (seq-position old-list elem)
-                     when pos collect (nth pos new-list))
-            conn-movement-ring new-ring))))
-
 (defun conn-push-region (point mark &optional back)
   (unless (conn-ring-p conn-movement-ring)
     (setq conn-movement-ring
           (conn-make-ring conn-movement-ring-max
                           :cleanup (pcase-lambda (`(,pt . ,mk))
                                      (set-marker pt nil)
-                                     (set-marker mk nil)))))
+                                     (set-marker mk nil))
+                          :copier (pcase-lambda (`(,pt . ,mk))
+                                    (cons (copy-marker (marker-position pt))
+                                          (copy-marker (marker-position mk)))))))
   (pcase-let ((`(,ptf . ,mkf) (conn-ring-head conn-movement-ring))
               (`(,ptb . ,mkb) (conn-ring-tail conn-movement-ring)))
     (cond
@@ -11689,10 +11587,10 @@ Operates with the selected windows parent window."
                 (conn--overlays-in-of-type (mark t) (1+ (mark t))
                                            'conn--mark-cursor)))
     (delete-overlay ov))
-  (conn-copy-narrow-ring)
-  (conn-copy-movement-ring)
-  (conn-copy-mark-ring)
-  (conn-copy-emacs-state-ring))
+  (setq conn-narrow-ring (conn-copy-ring conn-narrow-ring)
+        conn-movement-ring (conn-copy-ring conn-movement-ring)
+        conn-mark-ring (conn-copy-ring conn-mark-ring)
+        conn-emacs-state-ring (conn-copy-ring conn-emacs-state-ring)))
 
 (defun conn--setup-keymaps ()
   (if conn-mode
@@ -11721,7 +11619,10 @@ Operates with the selected windows parent window."
         (setq-local conn--state-map (list (list 'conn-local-mode))
                     conn--major-mode-map (list (list 'conn-local-mode))
                     conn-emacs-state-ring
-                    (conn-make-ring 8 :cleanup (lambda (mk) (set-marker mk nil))))
+                    (conn-make-ring 8
+                                    :cleanup (lambda (mk) (set-marker mk nil))
+                                    :copier (lambda (mk)
+                                              (copy-marker (marker-position mk)))))
         ;; We would like to be able to do the same to
         ;; query-replace-read-from-regexp-default but it must be
         ;; either nil, a string, a list of strings, or a symbol with a
