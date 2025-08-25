@@ -510,23 +510,24 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 
 (defvar conn--remap-keymaps nil)
 
-(defun conn--define-remap-keymap (description keys)
-  (let ((keys (cl-loop for key in keys
-                       if (stringp key) collect (key-parse key)
-                       else collect key)))
-    `(list 'menu-item
-           ',description
-           nil
-           :filter (lambda (_real-binding)
-                     ,(cl-loop for key in keys
-                               if (symbolp (aref key 0))
-                               collect `(key-binding ,key) into maps
-                               else collect `(conn--without-conn-maps
-                                               (key-binding ,key))
-                               into maps
-                               finally return `(make-composed-keymap
-                                                (cl-loop for map in (list ,@maps)
-                                                         when map collect map)))))))
+(eval-and-compile
+  (defun conn--define-remap-keymap (description keys)
+    (let ((keys (cl-loop for key in keys
+                         if (stringp key) collect (key-parse key)
+                         else collect key)))
+      `(list 'menu-item
+             ',description
+             nil
+             :filter (lambda (_real-binding)
+                       ,(cl-loop for key in keys
+                                 if (symbolp (aref key 0))
+                                 collect `(key-binding ,key) into maps
+                                 else collect `(conn--without-conn-maps
+                                                 (key-binding ,key))
+                                 into maps
+                                 finally return `(make-composed-keymap
+                                                  (cl-loop for map in (list ,@maps)
+                                                           when map collect map))))))))
 
 (defmacro conn-define-remap-keymap (name description &rest keys)
   (declare (indent 2))
