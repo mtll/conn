@@ -98,7 +98,7 @@
                           (find-keys (keymap-canonicalize sub-keymap) remap all-keys))
                          ((guard (and (equal def remap)
                                       (eq (keymap--menu-item-binding remap)
-                                          (key-binding all-keys))))
+                                          (lookup-key keymap all-keys))))
                           (push all-keys result)))))
                    keymap)))
       (find-keys (pcase keymap
@@ -480,26 +480,23 @@ within a recursive edit will be transposed."
 
 (defvar conn-read-thing-reference
   (conn-reference-page "Thing"
-    (:eval
-     "The region to operate on will be defined by a thing command. A prefix
-argument may be supplied for the thing command.")))
+    "The region to operate on will be defined by a thing command. A prefix
+argument may be supplied for the thing command."))
 
 (defvar conn-trim-argument-reference
   (conn-reference-page "Trim"
-    (:eval
-     "Trim excess characters at either end of the region. By default trims
+    "Trim excess characters at either end of the region. By default trims
 whitespace characters. With a non-nil prefix argument this will prompt
-for a custom trim regex.")))
+for a custom trim regex."))
 
 (defvar conn-subregions-argument-reference
   (conn-reference-page "Subregions"
-    (:eval
-     "If this argument is non-nil then operate on the subregions defined by
+    "If this argument is non-nil then operate on the subregions defined by
 the thing command. By default the subregions of a thing command are the
 individual things that are moved over. For example the subregions of
 `forward-word' with a prefix argument of 3 are the 3 regions containing
 the 3 individual words, as opposed to the single region containing all 3
-words.")))
+words."))
 
 ;;;; Wincontrol Reference
 
