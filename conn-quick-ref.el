@@ -77,8 +77,7 @@
 (defvar-keymap conn-quick-ref-map
   "C-h" 'next
   "M-h" 'previous
-  "<escape>" 'close
-  "ESC" 'close)
+  "<escape>" 'close)
 
 (defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
 
@@ -95,21 +94,16 @@
                      (let ((all-keys (vconcat prefix (vector key))))
                        (pcase def
                          ((and (pred keymapp) sub-keymap)
-                          (find-keys (keymap-canonicalize sub-keymap) remap all-keys))
+                          (find-keys sub-keymap remap all-keys))
                          ((guard (and (equal def remap)
                                       (eq (keymap--menu-item-binding remap)
                                           (lookup-key keymap all-keys))))
                           (push all-keys result)))))
                    keymap)))
       (find-keys (pcase keymap
-                   ('nil
-                    (make-composed-keymap
-                     (mapcar 'keymap-canonicalize (current-active-maps))))
-                   ((pred keymapp)
-                    (keymap-canonicalize keymap))
-                   (_
-                    (make-composed-keymap
-                     (mapcar 'keymap-canonicalize keymap))))
+                   ('nil (make-composed-keymap (current-active-maps)))
+                   ((pred keymapp) keymap)
+                   (_ (make-composed-keymap keymap)))
                  remap []))
     (if-let* ((keys (car (sort result :key 'length))))
         (propertize (key-description keys)
@@ -129,13 +123,10 @@
                                           (setq curr next))))
                   (nreverse rows)))
               (check-advertised (bind keymap)
-                (when-let* (((symbolp bind))
+                (when-let* ((_(symbolp bind))
                             (adv (get bind :advertised-binding))
                             (desc (key-description adv))
-                            ((or (eq bind (keymap-lookup keymap desc))
-                                 (eq bind (keymap-lookup
-                                           overriding-terminal-local-map
-                                           desc)))))
+                            (_(eq bind (key-binding adv))))
                   adv))
               (get-key (bind keymap)
                 (if-let* ((key (if keymap
@@ -203,9 +194,11 @@
              (while (search-forward "\n" nil 'move-to-end)
                (replace-match " \n"))))
           (`(:eval . ,fn)
-           (push (funcall fn) definition))
+           (with-current-buffer keymap-buffer
+             (push (funcall fn) definition)))
           (`(:splice . ,fn)
-           (cl-callf2 append (funcall fn) definition))
+           (with-current-buffer keymap-buffer
+             (cl-callf2 append (funcall fn) definition)))
           ((and row (pred consp))
            (make-vtable
             :face `( :inherit default
