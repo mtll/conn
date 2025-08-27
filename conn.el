@@ -7426,7 +7426,7 @@ contain targets."
                                  :no-other-end
                                conn-dispatch-other-end))
                   (always-retarget conn--dispatch-always-retarget)))
-               (:copier conn--previous-dispatch-copy))
+               (:copier conn--copy-previous-dispatch))
   (action nil :type conn-action)
   (thing nil :type (or symbol conn-anonymous-thing))
   (thing-arg nil :type (or nil integer))
@@ -7472,7 +7472,7 @@ contain targets."
 
 (defun conn-dispatch-copy (dispatch)
   (declare (important-return-value t))
-  (let ((copy (conn--previous-dispatch-copy dispatch)))
+  (let ((copy (conn--copy-previous-dispatch dispatch)))
     (setf (conn-previous-dispatch-action copy)
           (conn-action-copy (conn-previous-dispatch-action dispatch)))
     copy))
@@ -8585,7 +8585,7 @@ instances of from-string.")
   (interactive
    (pcase-let* ((`(,thing-mover ,arg ,subregions-p)
                  (conn-eval-with-state 'conn-read-thing-state
-                     (list && (conn-thing-argument-dwim t)
+                     (list && (conn-thing-argument t)
                            & (conn-subregions-argument (use-region-p)))
                    :prompt "Replace in Thing"))
                 (bounds (conn-bounds-of thing-mover arg))
@@ -8643,7 +8643,7 @@ instances of from-string.")
   (interactive
    (pcase-let* ((`(,thing-mover ,arg ,subregions-p)
                  (conn-eval-with-state 'conn-read-thing-state
-                     (list && (conn-thing-argument-dwim t)
+                     (list && (conn-thing-argument t)
                            & (conn-subregions-argument t))
                    :prompt "Replace Regexp in Thing"))
                 (bounds (conn-bounds-of thing-mover arg))
@@ -11167,8 +11167,8 @@ Operates with the selected windows parent window."
 
 (defvar-keymap conn-pop-mark-repeat-map
   :repeat t
-  "o" 'conn-pop-mark-ring
-  "u" 'conn-unpop-mark-ring)
+  "u" 'conn-pop-mark-ring
+  "o" 'conn-unpop-mark-ring)
 
 (defvar-keymap conn-mru-window-repeat-map
   :repeat t
@@ -11295,13 +11295,13 @@ Operates with the selected windows parent window."
   "s" 'xref-find-apropos
   "," 'xref-go-back
   "." 'xref-go-forward
-  "j" 'conn-unpop-movement-ring
-  "l" 'conn-pop-movement-ring)
+  "J" 'conn-unpop-movement-ring
+  "L" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-movement-ring-repeat-map
   :repeat t
-  "j" 'conn-unpop-movement-ring
-  "l" 'conn-pop-movement-ring)
+  "J" 'conn-unpop-movement-ring
+  "L" 'conn-pop-movement-ring)
 
 (defvar-keymap conn-global-mark-repeat-map
   :repeat t
@@ -11341,8 +11341,8 @@ Operates with the selected windows parent window."
   "<conn-kbd-macro-query>" 'conn-kapply-kbd-macro-query
   "C-<escape>" 'exit-recursive-edit
   "C-x y" conn-dispatch-cycle-map
-  "M-g o" 'conn-pop-mark-ring
-  "M-g u" 'conn-unpop-mark-ring
+  "M-g u" 'conn-pop-mark-ring
+  "M-g o" 'conn-unpop-mark-ring
   "M-g e" 'conn-previous-emacs-state
   "M-g E" 'conn-next-emacs-state
   "C-S-w" 'delete-region
@@ -11916,8 +11916,8 @@ Operates with the selected windows parent window."
   "M-w" 'dired-copy-filename-as-kill
   "RET" 'dired-find-file
   "o" 'dired-find-file-other-window
-  "M-o" 'conn-pop-mark-ring
-  "M-u" 'conn-unpop-mark-ring
+  "M-u" 'conn-pop-mark-ring
+  "M-o" 'conn-unpop-mark-ring
   "* p" 'dired-sort-toggle-or-edit
   "* e" 'dired-mark-executables
   "* l" 'dired-mark-symlinks

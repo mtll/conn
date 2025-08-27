@@ -122,7 +122,7 @@
                                           (push row rows)
                                           (setq curr next))))
                   (nreverse rows)))
-              (check-advertised (bind keymap)
+              (check-advertised (bind)
                 (when-let* ((_(symbolp bind))
                             (adv (get bind :advertised-binding))
                             (desc (key-description adv))
@@ -131,7 +131,7 @@
               (get-key (bind keymap)
                 (if-let* ((key (if keymap
                                    (where-is-internal bind keymap t)
-                                 (or (check-advertised bind keymap)
+                                 (or (check-advertised bind)
                                      (when overriding-terminal-local-map
                                        (where-is-internal
                                         bind
