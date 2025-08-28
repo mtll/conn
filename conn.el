@@ -540,15 +540,12 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
                             (pcase key
                               (`(:without-conn-maps ,key)
                                (if (stringp key) (setq key (key-parse key)))
-                               (push `(and-let* ((map (conn--without-conn-maps
-                                                        (key-binding ,key t))))
-                                        map)
+                               (push `(conn--without-conn-maps
+                                        (key-binding ,key t))
                                      maps))
                               (key
                                (if (stringp key) (setq key (key-parse key)))
-                               (push `(and-let* ((map (key-binding ,key t)))
-                                        map)
-                                     maps))))
+                               (push `(key-binding ,key t) maps))))
                           `(make-composed-keymap
                             (delq nil (list ,@(nreverse maps))))))))))
 
