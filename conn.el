@@ -51,12 +51,11 @@
 (declare-function project-files "project")
 (declare-function conn-dispatch-kapply-prefix "conn-transients")
 (declare-function conn-posframe--dispatch-ring-display-subr "conn-posframe")
-(declare-function conn-quick-reference "conn-quick-ref")
-(declare-function conn-state-reference "conn-quick-ref")
-(declare-function conn-argument-get-reference "conn-quick-ref")
 (declare-function face-remap-remove-relative "face-remap")
 (declare-function mwheel-scroll "mwheel")
 (declare-function conn--kmacro-display "conn-transient")
+
+(autoload 'make-vtable "vtable")
 
 
 ;;;;; Mark Variables
@@ -536,15 +535,22 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
              ',description
              nil
              :filter (lambda (_real-binding)
-                       ,(cl-loop for key in keys
-                                 if (symbolp (aref key 0))
-                                 collect `(key-binding ,key) into maps
-                                 else collect `(conn--without-conn-maps
-                                                 (key-binding ,key))
-                                 into maps
-                                 finally return `(make-composed-keymap
-                                                  (cl-loop for map in (list ,@maps)
-                                                           when map collect map))))))))
+                       ,(let (maps)
+                          (dolist (key keys)
+                            (pcase key
+                              (`(:without-conn-maps ,key)
+                               (if (stringp key) (setq key (key-parse key)))
+                               (push `(and-let* ((map (conn--without-conn-maps
+                                                        (key-binding ,key t))))
+                                        map)
+                                     maps))
+                              (key
+                               (if (stringp key) (setq key (key-parse key)))
+                               (push `(and-let* ((map (key-binding ,key t)))
+                                        map)
+                                     maps))))
+                          `(make-composed-keymap
+                            (delq nil (list ,@(nreverse maps))))))))))
 
 (defmacro conn-define-remap-keymap (name description &rest keys)
   (declare (indent 2))
@@ -569,12 +575,12 @@ paredit or smartparens commands.  Also see `conn-remap-key'."
 (conn-define-remap-keymap conn-search-remap
     "Conn Search Map"
   [conn-search-map]
-  "M-s")
+  (:without-conn-maps "M-s"))
 
 (conn-define-remap-keymap conn-goto-remap
     "Conn Search Map"
   [conn-goto-map]
-  "M-g")
+  (:without-conn-maps "M-g"))
 
 (conn-define-remap-keymap conn-thing-remap
     "Conn Search Map"
@@ -919,6 +925,251 @@ of highlighting."
   "Delete all conn overlays in BUFFER."
   (without-restriction
     (remove-overlays nil nil 'conn-overlay t)))
+
+;;;;; Quick Reference
+
+(defgroup conn-quick-ref nil
+  "Conn posframes."
+  :prefix "conn-quick-ref-"
+  :group 'conn)
+
+(defface conn-quick-ref-heading-face
+  '((t (:bold t :underline t)))
+  "Face for column headings in quick ref buffer."
+  :group 'conn-quick-ref)
+
+(defface conn-quick-ref-error-face
+  '((t (:inherit error)))
+  "Face for key not found errors."
+  :group 'conn-quick-ref)
+
+(defface conn-quick-ref-page-header
+  '((t ( :inverse-video nil :extend t
+         :box nil :underline (:style line :position t)
+         :inherit header-line)))
+  "Face for selection in Conn posframes."
+  :group 'conn-quick-ref)
+
+(cl-defstruct (conn-reference-page
+                  (:constructor conn--make-reference-page (title definition)))
+  (title nil :type string :read-only t)
+  (definition nil :type list :read-only t))
+
+(defmacro conn-reference-page (title &rest definition)
+  (declare (indent 1))
+  (cl-labels ((process-definition (def)
+                (pcase def
+                  (`(,(and (or :eval :splice :keymap) type) . ,form)
+                   (cons type (list '\, (cons 'lambda (cons nil form)))))
+                  ((pred consp)
+                   (mapcar #'process-definition def))
+                  (_ def))))
+    `(conn--make-reference-page
+      ,title
+      (list ,@(cl-loop for row in definition
+                       if (listp row)
+                       collect (list '\` (process-definition row))
+                       else
+                       collect row)))))
+
+(defvar-keymap conn-quick-ref-map
+  "C-h" 'next
+  "M-h" 'previous
+  "<escape>" 'close)
+
+(defvar conn-quick-ref-display-function 'conn--quick-ref-minibuffer)
+
+(defvar conn-quick-ref-text-scale 0.95)
+
+(defvar conn--quick-ref-unbound
+  (propertize "Ø" 'face 'conn-quick-ref-error-face))
+
+(defun conn-quick-ref-find-remap (remap &optional keymap)
+  (let (result)
+    (cl-labels ((find-keys (keymap remap prefix)
+                  (map-keymap
+                   (lambda (key def)
+                     (let ((all-keys (vconcat prefix (vector key))))
+                       (pcase def
+                         ((and (pred keymapp) sub-keymap)
+                          (find-keys sub-keymap remap all-keys))
+                         ((guard (and (equal def remap)
+                                      (eq (keymap--menu-item-binding remap)
+                                          (lookup-key keymap all-keys))))
+                          (push all-keys result)))))
+                   keymap)))
+      (find-keys (pcase keymap
+                   ('nil (make-composed-keymap (current-active-maps)))
+                   ((pred keymapp) keymap)
+                   (_ (make-composed-keymap keymap)))
+                 remap []))
+    (if-let* ((keys (car (sort result :key 'length))))
+        (propertize (key-description keys)
+                    'face 'help-key-binding)
+      conn--quick-ref-unbound)))
+
+(defun conn--format-ref-page (definition keymap-buffer)
+  (cl-labels ((transpose (columns)
+                (let ((curr columns)
+                      rows)
+                  (while (seq-find 'identity curr)
+                    (cl-loop for col in curr
+                             collect (or (car col) "-") into row
+                             collect (cdr col) into next
+                             finally do (progn
+                                          (push row rows)
+                                          (setq curr next))))
+                  (nreverse rows)))
+              (check-advertised (bind)
+                (when-let* ((_(symbolp bind))
+                            (adv (get bind :advertised-binding))
+                            (desc (key-description adv))
+                            (_(eq bind (key-binding adv))))
+                  adv))
+              (get-key (bind keymap)
+                (if-let* ((key (if keymap
+                                   (where-is-internal bind keymap t)
+                                 (or (check-advertised bind)
+                                     (when overriding-terminal-local-map
+                                       (where-is-internal
+                                        bind
+                                        (list overriding-terminal-local-map)
+                                        t))
+                                     (where-is-internal bind nil t)))))
+                    (propertize (key-description key) 'face 'help-key-binding)
+                  conn--quick-ref-unbound))
+              (process-bindings (description bindings keymap)
+                (let (keys)
+                  (while bindings
+                    (pcase (pop bindings)
+                      ('nil)
+                      (`(:keymap . ,fn) (setf keymap (funcall fn)))
+                      (`(:eval . ,fn) (push (funcall fn) bindings))
+                      (`(:splice . ,fn) (cl-callf2 append (funcall fn) bindings))
+                      ((and str (pred stringp))
+                       (push str keys))
+                      (bind (push (get-key bind keymap) keys))))
+                  (concat (string-join (nreverse keys) ", ")
+                          ": " description)))
+              (process-col (col keymap)
+                (let ((result nil))
+                  (while col
+                    (pcase (pop col)
+                      ('nil)
+                      (`(:keymap . ,fn) (setf keymap (funcall fn)))
+                      (`(:eval . ,fn) (push (funcall fn) col))
+                      (`(:splice . ,fn) (cl-callf2 append (funcall fn) col))
+                      (`(:heading ,str)
+                       (push (propertize str 'face 'conn-quick-ref-heading-face)
+                             result))
+                      ((and str (pred stringp)) (push str result))
+                      (`(,desc . ,bindings)
+                       (push (process-bindings desc bindings keymap)
+                             result))))
+                  (nreverse result)))
+              (process-row (row)
+                (let (keymap
+                      result)
+                  (while row
+                    (pcase (pop row)
+                      ('nil)
+                      (`(:keymap . ,fn) (setf keymap (funcall fn)))
+                      (`(:eval . ,fn) (push (funcall fn) row))
+                      (`(:splice . ,fn) (cl-callf2 append (funcall fn) row))
+                      ((and (pred consp) col)
+                       (push (process-col col keymap) result))))
+                  (nreverse result))))
+    (conn--where-is-with-remaps
+      (while definition
+        (goto-char (point-max))
+        (pcase (pop definition)
+          ((and (pred stringp) row)
+           (let ((beg (point)))
+             (insert (with-current-buffer keymap-buffer
+                       (substitute-command-keys row))
+                     "\n")
+             (goto-char beg)
+             (while (search-forward "\n" nil 'move-to-end)
+               (replace-match " \n"))))
+          (`(:eval . ,fn)
+           (with-current-buffer keymap-buffer
+             (push (funcall fn) definition)))
+          (`(:splice . ,fn)
+           (with-current-buffer keymap-buffer
+             (cl-callf2 append (funcall fn) definition)))
+          ((and row (pred consp))
+           (make-vtable
+            :face `( :inherit default
+                     :height ,conn-quick-ref-text-scale)
+            :divider-width 2
+            :use-header-line nil
+            :objects (with-current-buffer keymap-buffer
+                       (transpose (process-row row))))))))))
+
+(defun conn-quick-ref-insert-page (page buffer)
+  (pcase-let (((cl-struct conn-reference-page
+                          title
+                          definition)
+               page)
+              (keymap-buffer (current-buffer)))
+    (with-current-buffer buffer
+      (special-mode)
+      (let (buffer-read-only
+            header-pos)
+        (delete-region (point-min) (point-max))
+        (insert (substitute-command-keys
+                 (concat "\\<conn-quick-ref-map> "
+                         (propertize title 'face 'bold)
+                         " — \\[next]: Next; \\[previous]: Previous; \\[close]: Close \n")))
+        (setq header-pos (point))
+        (conn--format-ref-page definition keymap-buffer)
+        (indent-region header-pos (point-max) 1)
+        (add-face-text-property
+         (point-min) (point-max)
+         `(:height ,conn-quick-ref-text-scale)
+         t)
+        (add-face-text-property
+         (point-min) header-pos
+         'conn-quick-ref-page-header t)))))
+
+(defun conn-quick-reference (pages)
+  (let ((buf (get-buffer-create " *conn-quick-ref*"))
+        (display-function conn-quick-ref-display-function)
+        (pages (copy-sequence pages))
+        (inhibit-message t))
+    (conn-quick-ref-insert-page (car pages) buf)
+    (funcall display-function buf nil)
+    (unwind-protect
+        (catch 'break
+          (conn-with-overriding-map conn-quick-ref-map
+            (while t
+              (let ((keys (read-key-sequence-vector nil)))
+                (pcase (key-binding keys)
+                  ('close
+                   (throw 'break nil))
+                  ('next
+                   (setq pages (nconc (cdr pages) (list (car pages))))
+                   (conn-quick-ref-insert-page (car pages) buf)
+                   (funcall display-function buf nil))
+                  ('previous
+                   (setq pages (nconc (last pages) (butlast pages)))
+                   (conn-quick-ref-insert-page (car pages) buf)
+                   (funcall display-function buf nil))
+                  ((or 'quit 'keyboard-quit)
+                   (keyboard-quit))
+                  (_ (setq unread-command-events
+                           (mapcar (lambda (key)
+                                     (cons 'no-record key))
+                                   (listify-key-sequence keys)))
+                     (throw 'break nil)))))))
+      (funcall display-function buf t))))
+
+(defun conn--quick-ref-minibuffer (buffer hide-p)
+  (let (inhibit-message message-log-max)
+    (if hide-p
+        (message nil)
+      (with-current-buffer buffer
+        (message (buffer-string))))))
 
 
 ;;;; Thing Types
@@ -1970,6 +2221,13 @@ If there is not recursive stack an error is signaled."
         (conn-update-lighter))
     (error "Not in a recursive state")))
 
+;;;;; State Quick Ref
+
+(cl-defgeneric conn-state-reference (state &optional args)
+  (declare (important-return-value t)
+           (side-effect-free t))
+  (:method (_state &optional _) nil))
+
 
 ;;;;; State Definitions
 
@@ -2142,6 +2400,18 @@ Causes the mode-line face to be remapped to the face specified by the
   :suppress-input-method t
   :mode-line-face 'conn-read-thing-mode-line-face
   :abstract t)
+
+(defvar conn-read-thing-reference
+  (conn-reference-page "Thing"
+    "The region to operate on will be defined by a thing command. A prefix
+argument may be supplied for the thing command."))
+
+(cl-defmethod conn-state-reference ((_state (eql conn-read-thing-state))
+                                    &optional args)
+  (append (list conn-read-thing-reference)
+          (thread-first
+            (conn-argument-reference args)
+            flatten-tree delete-dups)))
 
 ;;;;; Emacs State
 
@@ -2566,6 +2836,17 @@ chooses to handle a command."
   ( :method ((arg cons) sym)
     (or (conn-argument-completion-predicate (car arg) sym)
         (conn-argument-completion-predicate (cdr arg) sym))))
+
+;;;;;; Argument Quick Ref
+
+(cl-defgeneric conn-argument-reference (arg)
+  ( :method (_) nil)
+  ( :method ((args cons))
+    (list (mapcan 'conn-argument-reference args)))
+  ( :method :around ((arg conn-state-eval-argument))
+    (if-let* ((ref (conn-state-eval-argument--reference arg)))
+        (funcall ref)
+      (cl-call-next-method))))
 
 
 ;;;; Mark Handlers
@@ -3202,6 +3483,18 @@ order to mark the region that should be defined by any of COMMANDS."
                       'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
 
+(defvar conn-subregions-argument-reference
+  (conn-reference-page "Subregions"
+    "If this argument is non-nil then operate on the subregions defined by
+the thing command. By default the subregions of a thing command are the
+individual things that are moved over. For example the subregions of
+`forward-word' with a prefix argument of 3 are the 3 regions containing
+the 3 individual words, as opposed to the single region containing all 3
+words."))
+
+(cl-defmethod conn-argument-reference ((_arg conn-subregions-argument))
+  (list conn-subregions-argument-reference))
+
 ;;;;;; Trim
 
 (oclosure-define (conn-trim-argument
@@ -3226,6 +3519,15 @@ order to mark the region that should be defined by any of COMMANDS."
           (propertize "trim"
                       'face (when (conn-state-eval-argument-value arg)
                               'eldoc-highlight-function-argument))))
+
+(defvar conn-trim-argument-reference
+  (conn-reference-page "Trim"
+    "Trim excess characters at either end of the region. By default trims
+whitespace characters. With a non-nil prefix argument this will prompt
+for a custom trim regex."))
+
+(cl-defmethod conn-argument-reference ((_arg conn-trim-argument))
+  (list conn-trim-argument-reference))
 
 ;;;;; Read Mover State
 
@@ -4837,6 +5139,107 @@ themselves once the selection process has concluded."
                (put-text-property 0 (length thing)
                                   'face 'completions-annotations thing)
                (list command-name "" (concat thing binding))))))
+
+;;;;;; Dispatch Quick Ref
+
+(defvar conn-dispatch-thing-ref
+  (conn-reference-page "Things"
+    "Use a thing command to specify a region to operate on."
+    "Dispatch state redefines some thing bindings:
+"
+    ((:keymap (list (conn-get-state-map 'conn-dispatch-mover-state)))
+     (("symbol" forward-symbol))
+     (("line" forward-line))
+     (("column" next-line))
+     (("defun"
+       (:eval (conn-quick-ref-find-remap
+               conn-end-of-defun-remap
+               (conn-get-state-map 'conn-dispatch-mover-state))))))))
+
+(defvar conn-dispatch-action-ref
+  (conn-reference-page "Actions"
+    ((("yank from/replace"
+       conn-dispatch-yank-from
+       conn-dispatch-yank-from-replace)
+      ("yank to/replace"
+       conn-dispatch-yank-to
+       conn-dispatch-yank-replace-to)
+      ("yank read/replace"
+       conn-dispatch-reading-yank-to
+       conn-dispatch-yank-read-replace-to)
+      ("send/replace"
+       conn-dispatch-send
+       conn-dispatch-send-replace)
+      ("take/replace"
+       conn-dispatch-take
+       conn-dispatch-take-replace))
+     (("copy to"
+       conn-dispatch-copy-to
+       conn-dispatch-copy-replace-to)
+      ("transpose" conn-dispatch-transpose)
+      ("goto/over" conn-dispatch-over-or-goto)
+      ("kapply" conn-dispatch-kapply))
+     (("kill/append/prepend"
+       conn-dispatch-kill
+       conn-dispatch-kill-append
+       conn-dispatch-kill-prepend)
+      ("copy/append/prepend"
+       conn-dispatch-copy
+       conn-dispatch-copy-append
+       conn-dispatch-copy-prepend)
+      ("register"
+       conn-dispatch-register-load
+       conn-dispatch-register-replace)
+      ("up/down/capital case"
+       conn-dispatch-upcase
+       conn-dispatch-downcase
+       conn-dispatch-capitalize)))))
+
+(defvar conn-dispatch-command-ref
+  (conn-reference-page "Misc Commands"
+    (((:heading "History:")
+      ("next/prev"
+       conn-dispatch-cycle-ring-next
+       conn-dispatch-cycle-ring-previous))
+     ((:heading "Last Dispatch:")
+      ("repeat" conn-repeat-last-dispatch)
+      ("describe" conn-dispatch-ring-describe-head)))
+    (((:heading "Other Args")
+      ("dispatch repeatedly" repeat-dispatch)
+      ("exchange point and mark after selecting THING"
+       dispatch-other-end)
+      ("restrict matches to the selected window"
+       restrict-windows)))))
+
+(defvar conn-dispatch-select-ref
+  (conn-reference-page "Selection Commands"
+    (((:heading "Targeting Commands")
+      ("retarget" retarget)
+      ("always retarget" always-retarget)
+      ("change target finder" change-target-finder))
+     ((:heading "Window Commands")
+      ("goto window" conn-goto-window)
+      ("scroll up" scroll-up)
+      ("scroll down" scroll-down)
+      ("restrict" restrict-windows)))
+    (((:heading "Misc")
+      ("dispatch at click" act)
+      ("undo" undo)
+      ("recursive edit" recursive-edit))
+     (""
+      ("isearch forward" isearch-regexp-forward)
+      ("isearch backward" isearch-regexp-backward)))))
+
+(cl-defmethod conn-state-reference ((_state (eql conn-dispatch-state))
+                                    &optional _args)
+  (list conn-dispatch-action-ref
+        conn-dispatch-command-ref
+        conn-dispatch-thing-ref))
+
+(cl-defmethod conn-state-reference ((_state (conn-substate conn-dispatch-mover-state))
+                                    &optional _args)
+  (list conn-dispatch-command-ref
+        conn-dispatch-thing-ref))
 
 ;;;;;; Action
 
@@ -9284,6 +9687,31 @@ region after a `recursive-edit'."
   (conn-perform-transpose mover arg))
 
 
+;;;;;; Transpose Quick Ref
+
+(defvar conn-transpose-reference
+  (conn-reference-page "Transpose"
+    (:eval
+     (string-join
+      '("Transpose reads a THING command and transposes two of those THINGs. If
+THING is `recursive-edit' then the current region and a region defined
+within a recursive edit will be transposed."
+        ""
+        "Transpose defines some addition thing bindings:"
+        "")
+      "\n"))
+    ((("line" conn-backward-line forward-line))
+     (("symbol" forward-symbol))
+     (("defun" (:eval (conn-quick-ref-find-remap
+                       conn-end-of-defun-remap
+                       (conn-get-state-map 'conn-transpose-state)))))
+     (("recursive-edit" recursive-edit)))))
+
+(cl-defmethod conn-state-reference ((_state (eql conn-transpose-state))
+                                    &optional _args)
+  (list conn-transpose-reference))
+
+
 ;;;;; Line Commands
 
 (defun conn-open-line (arg)
@@ -10626,7 +11054,7 @@ Currently selected window remains selected afterwards."
   :doc "Map active in `conn-wincontrol-mode'."
   :suppress 'nodigits
   "C-h" 'help-command
-  "<remap> <info-emacs-manual>" 'conn-wincontrol-quick-ref
+  "C-h j" 'conn-wincontrol-quick-ref
   "C-l" 'recenter-top-bottom
   "," conn-thing-remap
   "-" 'conn-wincontrol-invert-argument
@@ -10862,6 +11290,108 @@ Currently selected window remains selected afterwards."
   (interactive)
   (setq conn--wincontrol-error-message (propertize "Invalid Command" 'face 'error)
         conn--wincontrol-preserve-arg t))
+
+
+;;;;; Wincontrol Quick Ref
+
+(defvar conn-wincontrol-windows-1
+  (conn-reference-page "Windows"
+    ((("switch window" conn-goto-window)
+      ("quit win" quit-window)
+      ("delete win" delete-window)
+      ("delete other" delete-other-windows)
+      ("undo/redo" tab-bar-history-back tab-bar-history-forward)
+      ("zoom in/out" text-scale-increase text-scale-decrease))
+     (("kill buffer and win" kill-buffer-and-window)
+      ("split win right/vert"
+       conn-wincontrol-split-right
+       conn-wincontrol-split-vertically)
+      (:heading "Scroll:")
+      ("up/down" conn-wincontrol-scroll-up conn-wincontrol-scroll-down)
+      ("other win up/down"
+       conn-wincontrol-other-window-scroll-up
+       conn-wincontrol-other-window-scroll-down)
+      ("register prefix" conn-register-prefix))
+     ((:heading "Buffer:")
+      ("switch" switch-to-buffer)
+      ("beg/end" beginning-of-buffer end-of-buffer)
+      ("prev/next" conn-previous-buffer conn-next-buffer)
+      ("bury/unbury" bury-buffer unbury-buffer)
+      ("kill buffer" conn-kill-this-buffer)))
+    (((:keymap conn-window-resize-map)
+      (:eval (concat
+              (propertize "Resize Map:"
+                          'face 'conn-quick-ref-heading-face)
+              " "
+              (propertize (key-description
+                           (where-is-internal conn-window-resize-map
+                                              conn-wincontrol-map t))
+                          'face 'help-key-binding)))
+      ("widen/narrow/heighten/shorten"
+       conn-wincontrol-widen-window
+       conn-wincontrol-narrow-window
+       conn-wincontrol-heighten-window
+       conn-wincontrol-shorten-window)
+      ("maximize" maximize-window)
+      ("max vert/horiz"
+       conn-wincontrol-maximize-vertically
+       conn-wincontrol-maximize-horizontally)
+      ("balance" balance-windows))
+     (("mru win" conn-wincontrol-mru-window)
+      ("yank win" conn-yank-window)
+      ("transpose win" conn-transpose-window)
+      ("throw buffer" conn-throw-buffer)
+      ("fit win" shrink-window-if-larger-than-buffer)))))
+
+(defvar conn-wincontrol-windows-2
+  (conn-reference-page "Windows"
+    (((:heading "Windmove")
+      ("up/down/left/right"
+       conn-wincontrol-windmove-up
+       conn-wincontrol-windmove-down
+       conn-wincontrol-windmove-left
+       conn-wincontrol-windmove-right)
+      ("swap states up/down/left/right"
+       windmove-swap-states-up
+       windmove-swap-states-down
+       windmove-swap-states-left
+       windmove-swap-states-right)))
+    (((:heading "Isearch:")
+      ("this window forward/back"
+       conn-wincontrol-isearch
+       conn-wincontrol-isearch-backward)
+      ("other window forward/back"
+       conn-wincontrol-isearch-other-window
+       conn-wincontrol-isearch-other-window-backward)))
+    (((:heading "Misc:")
+      ("tear off window" tear-off-window)))))
+
+(defvar conn-wincontrol-tabs-and-frames
+  (conn-reference-page "Tabs and Frames"
+    (((:heading "Tabs:")))
+    ((("next/prev" tab-next tab-previous)
+      ("new" tab-new)
+      ("close" tab-close))
+     (("win to tab" tab-bar-move-window-to-tab)
+      ("duplicate" tab-bar-duplicate-tab)
+      ("detach" tab-bar-detach-tab)))
+    (((:heading "Frames:")))
+    ((("delete/other" delete-frame delete-other-frames)
+      ("undelete" undelete-frame)
+      ("clone" clone-frame))
+     (("next/prev" tab-next tab-previous)
+      ("other frame" other-frame)
+      ("fullscreen" toggle-frame-fullscreen)))))
+
+(defun conn-wincontrol-quick-ref (&optional page)
+  (interactive "P")
+  (let* ((pages (list conn-wincontrol-windows-1
+                      conn-wincontrol-windows-2
+                      conn-wincontrol-tabs-and-frames))
+         (page (mod (or page 0) (length pages))))
+    (conn-quick-reference
+     (append (drop page pages)
+             (reverse (take page pages))))))
 
 
 ;;;;; Wincontrol Prefix Arg
@@ -11878,8 +12408,43 @@ Operates with the selected windows parent window."
   "w" 'conn-dispatch-dired-kill-line
   "d" 'conn-dispatch-dired-kill-subdir)
 
+(defvar conn-dired-ref-1
+  (conn-reference-page "Dired"
+    ((("next/prev" dired-next-line dired-previous-line)
+      ("next/prev dirline" dired-next-dirline dired-prev-dirline)
+      ("next/prev subdir" dired-next-subdir dired-prev-subdir)
+      ("next/prev marked" dired-next-marked-file dired-prev-marked-file))
+     (("dir up" dired-up-directory)
+      ("tree up/down" dired-tree-up dired-tree-down)
+      ("undo" dired-undo)
+      ("find alt" dired-find-alternate-file))
+     (("mark/unmark" dired-mark dired-unmark)
+      ("delete" dired-do-delete)
+      ("copy" dired-do-copy)
+      ("isearch/regexp" dired-do-isearch dired-do-isearch-regexp)
+      ("find/replace regexp" dired-do-find-regexp dired-do-find-regexp-and-replace)))))
+
+(defun conn-dired-quick-ref ()
+  (interactive)
+  (conn-quick-reference (list conn-dired-ref-1)))
+
+(conn-define-remap-keymap conn-dired-regexp-remap
+    "Conn Dired Regexp Map"
+  "%")
+
+(conn-define-remap-keymap conn-dired-mark-remap
+    "Conn Dired Mark Map"
+  "*")
+
+(conn-define-remap-keymap conn-dired-search-remap
+    "Conn Dired Search Map"
+  [conn-dired-search-map]
+  [conn--search-map]
+  "M-s")
+
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'dired-mode)
+  "C-h j" 'conn-dired-quick-ref
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "a" 'execute-extended-command
@@ -11900,9 +12465,9 @@ Operates with the selected windows parent window."
   "TAB" 'dired-maybe-insert-subdir
   "M-TAB" 'dired-kill-subdir
   "w" 'dired-do-kill-lines
-  "s" (conn-remap-key "M-s" t)
-  "r" (conn-remap-key "%")
-  "," (conn-remap-key "*")
+  "s" conn-dired-search-remap
+  "r" conn-dired-regexp-remap
+  "," conn-dired-mark-remap
   "x" (conn-remap-key "C-x" t)
   "f" 'conn-dired-dispatch-state
   "M-SPC" 'dired-toggle-marks
@@ -11928,10 +12493,10 @@ Operates with the selected windows parent window."
   "% s" 'dired-do-symlink-regexp
   "% y" 'dired-do-relsymlink-regexp
   "% t" 'dired-flag-garbage-files
-  "M-s s" 'dired-do-isearch
-  "M-s c" 'dired-do-isearch-regexp
-  "M-s q" 'dired-do-find-regexp
-  "M-s r" 'dired-do-find-regexp-and-replace)
+  "<conn-dired-search-map> s" 'dired-do-isearch
+  "<conn-dired-search-map> c" 'dired-do-isearch-regexp
+  "<conn-dired-search-map> q" 'dired-do-find-regexp
+  "<conn-dired-search-map> r" 'dired-do-find-regexp-and-replace)
 
 (defvar dired-subdir-alist)
 (defvar dired-movement-style)
@@ -12069,8 +12634,22 @@ Operates with the selected windows parent window."
 
 (conn-set-mode-property 'magit-section-mode :hide-mark-cursor t)
 
+(defvar conn-magit-ref
+  (conn-reference-page "Magit"
+    ((("section forward/back" magit-section-forward magit-section-backward)
+      ("delete thing" magit-delete-thing)
+      ("dispatch" magit-dispatch))
+     (("reset quickly" magit-reset-quickly)
+      ("gitignore" magit-gitignore)
+      ("apply mail" magit-am)))))
+
+(defun conn-magit-quick-ref ()
+  (interactive)
+  (conn-quick-reference (list conn-magit-ref)))
+
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'magit-section-mode)
+  "C-h j" 'conn-magit-quick-ref
   "SPC <t>" conn-demap-key
   "h" 'conn-wincontrol-one-command
   "," 'magit-dispatch
@@ -12307,9 +12886,25 @@ Operates with the selected windows parent window."
    nil nil
    :other-end :no-other-end))
 
+(defvar conn-info-ref
+  (conn-reference-page "Info"
+    ((("history forward/back" Info-history-forward Info-history-back)
+      ("next/prev" Info-next Info-prev)
+      ("scroll up/down" Info-scroll-up Info-scroll-down))
+     (("node forward/back" Info-forward-node Info-backward-node)
+      ("node up" Info-up)
+      ("menu" Info-menu))
+     (("toc" Info-toc)
+      ("index" Info-index)))))
+
+(defun conn-info-quick-ref ()
+  (interactive)
+  (conn-quick-reference (list conn-info-ref)))
+
 (define-keymap
   :keymap (conn-get-major-mode-map 'conn-emacs-state 'Info-mode)
   "SPC <t>" conn-demap-key
+  "C-h j" 'conn-info-quick-ref
   "h" 'conn-wincontrol-one-command
   "o" 'Info-history-back
   "u" 'Info-history-forward
