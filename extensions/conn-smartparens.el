@@ -155,7 +155,7 @@
   "v" 'conn-toggle-mark-command
   "z" 'conn-exchange-mark-command
   "`" 'other-window
-  "e" 'conn-insert-state
+  "e" 'conn-pop-state
   "<escape>" 'conn-pop-state
   "N" 'beginning-of-defun
   "M" 'end-of-defun

@@ -11314,6 +11314,7 @@ Currently selected window remains selected afterwards."
   "z" 'text-scale-decrease
   "C-c" nil
   "M-g" nil
+  "C-x" nil
   "<t>" 'conn-wincontrol-ignore)
 
 (put 'conn-wincontrol-digit-argument-reset :advertised-binding (key-parse "M-DEL"))
