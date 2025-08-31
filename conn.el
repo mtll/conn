@@ -2418,6 +2418,17 @@ argument may be supplied for the thing command."))
 (defvar-local conn-emacs-state-ring nil
   "Ring of previous positions where `conn-emacs-state' was exited.")
 
+(defvar conn-emacs-state-preserve-prefix-commands
+  '(conn-pop-state
+    conn-emacs-state-at-mark
+    conn-emacs-state))
+
+(cl-defmethod conn-enter-state ((_state (eql conn-emacs-state)))
+  (when (memq this-command conn-emacs-state-preserve-prefix-commands)
+    (run-hooks 'prefix-command-preserve-state-hook)
+    (prefix-command-update))
+  (cl-call-next-method))
+
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
     (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
@@ -2426,7 +2437,8 @@ argument may be supplied for the thing command."))
       (when-let* ((marker (get-register conn-emacs-state-register))
                   ((markerp marker)))
         (set-marker marker (point) (current-buffer)))
-      (set-register conn-emacs-state-register (point-marker)))))
+      (set-register conn-emacs-state-register (point-marker))))
+  (cl-call-next-method))
 
 ;;;;; Autopop
 
@@ -10948,13 +10960,11 @@ If KILL is non-nil add region to the `kill-ring'.  When in
          (goto-char (conn-ring-head conn-emacs-state-ring))
          (conn-push-state 'conn-emacs-state))))
 
-(defun conn-insert-state ()
-  "Enter insert state for the current buffer."
+(defun conn-emacs-state ()
   (interactive)
   (conn-push-state 'conn-emacs-state))
 
 (defun conn-command-state ()
-  "Enter command state for the current buffer."
   (interactive)
   (conn-push-state 'conn-command-state))
 
