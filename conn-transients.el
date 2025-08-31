@@ -393,16 +393,19 @@ before each iteration."
 
 (defun conn-read-thing-regions ()
   (declare (important-return-value t))
-  (pcase-let* ((`(,cmd ,arg ,sr)
+  (pcase-let* ((`(,cmd ,arg ,transform ,subregions)
                 (conn-eval-with-state 'conn-read-thing-state
                     (list && (conn-thing-argument-dwim t)
+                          & (conn-transform-argument)
                           & (conn-subregions-argument (use-region-p)))
-                  :prompt "Thing"))
-               (bounds (conn-bounds-of cmd arg)))
-    (or (when sr
-          (cl-loop for reg in (conn-bounds-get bounds :subregions)
-                   collect (conn-bounds-get reg :outer)))
-        (list (conn-bounds-get bounds :outer)))))
+                  :prompt "Thing")))
+    (pcase (conn-bounds-of cmd arg)
+      ((and (guard subregions)
+            (conn-bounds-get :subregions
+                             transform
+                             (and sr (pred identity))))
+       (cl-loop for reg in sr collect (conn-bounds-get reg :whole)))
+      ((conn-bounds-get :whole transform whole) whole))))
 
 ;; TODO: make this delete match groups instead of the entire match if
 ;; there are any.
@@ -632,11 +635,11 @@ apply to each contiguous component of the region."
                 (conn-eval-with-state 'conn-read-thing-state
                     (list && (conn-thing-argument-dwim t))
                   :prompt "Thing"))
-               ((map :outer :subregions)
+               ((map :whole :subregions)
                 (conn-bounds-of cmd arg)))
     (conn--kapply-macro
      (alist-get :kmacro args)
-     (conn--kapply-region-iterator (or subregions (list outer)))
+     (conn--kapply-region-iterator (or subregions (list whole)))
      `(conn--kapply-relocate-to-region
        conn--kapply-skip-invisible-points
        conn--kapply-pulse-region
@@ -730,8 +733,8 @@ A zero means repeat until error."
                     (goto-char pt)
                     (pcase (conn-bounds-of thing thing-arg)
                       ('nil (user-error "Cannot find thing at point"))
-                      ((conn-bounds-get :outer)
-                       (list outer)))))
+                      ((conn-bounds-get :whole)
+                       (list whole)))))
                  `(conn--kapply-relocate-to-region
                    conn--kapply-pulse-region
                    ,@pipeline))))))
@@ -780,7 +783,7 @@ A zero means repeat until error."
   :key "h"
   :description "Highlights"
   (interactive (list (transient-args transient-current-command)))
-  (pcase-let (((conn-bounds-get :outer `(,beg . ,end))
+  (pcase-let (((conn-bounds-get :whole nil `(,beg . ,end))
                (conn-eval-with-state 'conn-read-thing-state
                    (conn-bounds-of && (conn-thing-argument-dwim))
                  :prompt "Thing")))
