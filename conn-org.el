@@ -238,7 +238,7 @@
  'org-up-heading)
 
 (define-keymap
-  :keymap (conn-get-major-mode-map 'conn-movement-state 'org-mode)
+  :keymap (conn-get-major-mode-map 'conn-command-state 'org-mode)
   "^" 'org-up-element
   ")" 'org-next-visible-heading
   "(" 'org-previous-visible-heading
