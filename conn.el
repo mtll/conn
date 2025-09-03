@@ -476,18 +476,16 @@ If ring is (1 2 3 4) 4 would be returned."
     (funcall cleanup elem)))
 
 (defun conn-ring-remove (ring elem &optional test)
-  (cl-loop with cleanup = (conn-ring-cleanup ring)
-           with test = (or test #'equal)
+  (cl-loop with test = (or test #'equal)
            for e1 in (conn-ring-list ring)
            for e2 in (conn-ring-history ring)
-           if (funcall test e1 elem) do (funcall cleanup e1)
+           if (funcall test e1 elem) collect e1 into remove
            else collect e1 into list
-           if (and (marker-position e2)
-                   (funcall test e2 elem))
-           do (funcall cleanup e2)
-           else if (marker-position e2) collect e2 into hist
-           finally (setf (conn-ring-list ring) list
-                         (conn-ring-history ring) hist)))
+           unless (funcall test e2 elem) collect e2 into hist
+           finally (progn
+                     (setf (conn-ring-list ring) list
+                           (conn-ring-history ring) hist)
+                     (mapc (conn-ring-cleanup ring) remove))))
 
 
 ;;;;; Keymap Utils
