@@ -469,11 +469,25 @@ If ring is (1 2 3 4) 4 would be returned."
            (important-return-value t))
   (car (last (conn-ring-list ring))))
 
-(defun conn-ring-delete (ring elem)
+(defun conn-ring-delq (ring elem)
   (cl-callf2 delq elem (conn-ring-list ring))
   (cl-callf2 delq elem (conn-ring-history ring))
   (when-let* ((cleanup (conn-ring-cleanup ring)))
     (funcall cleanup elem)))
+
+(defun conn-ring-remove (ring elem &optional test)
+  (cl-loop with cleanup = (conn-ring-cleanup ring)
+           with test = (or test #'equal)
+           for e1 in (conn-ring-list ring)
+           for e2 in (conn-ring-history ring)
+           if (funcall test e1 elem) do (funcall cleanup e1)
+           else collect e1 into list
+           if (and (marker-position e2)
+                   (funcall test e2 elem))
+           do (funcall cleanup e2)
+           else if (marker-position e2) collect e2 into hist
+           finally (setf (conn-ring-list ring) list
+                         (conn-ring-history ring) hist)))
 
 
 ;;;;; Keymap Utils
@@ -2417,10 +2431,8 @@ argument may be supplied for the thing command."))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (unless (eql (point)
-                 (and-let* ((mk (conn-ring-head conn-emacs-state-ring)))
-                   (marker-position mk)))
-      (conn-ring-insert-front conn-emacs-state-ring (point-marker)))
+    (conn-ring-remove conn-emacs-state-ring (point) #'=)
+    (conn-ring-insert-front conn-emacs-state-ring (point-marker))
     (when conn-emacs-state-register
       (when-let* ((marker (get-register conn-emacs-state-register))
                   ((markerp marker)))
@@ -7993,7 +8005,7 @@ contain targets."
          (progn
            (conn-dispatch-ring-remove-stale)
            (conn-dispatch-error "Last dispatch action stale"))
-       (conn-ring-delete conn-dispatch-ring prev)
+       (conn-ring-delq conn-dispatch-ring prev)
        (conn-state-eval-handle)
        (cons (conn-state-eval-quote
               (conn-perform-dispatch
@@ -8047,7 +8059,7 @@ contain targets."
                            (conn-action-stale-p
                             (conn-previous-dispatch-action dispatch)))
                          (conn-ring-list conn-dispatch-ring))
-           do (conn-ring-delete conn-dispatch-ring stale)))
+           do (conn-ring-delq conn-dispatch-ring stale)))
 
 (defun conn-dispatch-cycle-ring-next ()
   "Cycle backwards through `conn-dispatch-ring'."
@@ -8755,7 +8767,7 @@ Expansions and contractions are provided by functions in
           (guard (= (point-min) beg))
           (guard (= (point-max) end))
           narrowing)
-     (conn-ring-delete conn-narrow-ring narrowing)
+     (conn-ring-delq conn-narrow-ring narrowing)
      (pcase (conn-ring-head conn-narrow-ring)
        (`(,beg . ,end)
         (narrow-to-region beg end))
