@@ -1540,7 +1540,7 @@ Called when the inheritance hierarchy for STATE changes."
 
 (defconst conn--composed-state-maps (make-hash-table :test 'eq))
 
-(defun conn--compose-state-map (state)
+(defun conn--compose-state-map ()
   "Return composed state map for STATE.
 
 The composed keymap is of the form:
@@ -1550,11 +1550,11 @@ The composed keymap is of the form:
  (keymap . bindings)  ;; state map for STATE parent
  ...)"
   (declare (important-return-value t))
-  (with-memoization (gethash state conn--composed-state-maps)
-    (cl-assert (not (conn-state-get state :no-keymap))
-               nil "%s :no-keymap property is non-nil" state)
+  (with-memoization (gethash conn-current-state conn--composed-state-maps)
+    (cl-assert (not (conn-state-get conn-current-state :no-keymap))
+               nil "%s :no-keymap property is non-nil" conn-current-state)
     (make-composed-keymap
-     (cl-loop for pstate in (conn-state-all-keymap-parents state)
+     (cl-loop for pstate in (conn-state-all-keymap-parents conn-current-state)
               for pmap = (conn-state--keymap (conn--find-state pstate))
               when pmap collect pmap))))
 
@@ -1581,6 +1581,8 @@ The composed keymap is of the form:
           (setf (conn-get-state-map state) (make-sparse-keymap))))))
 
 ;;;;;; Major Mode Maps
+
+(defvar-local conn-major-mode-maps nil)
 
 (defun conn--ensure-major-mode-map (state mode)
   (declare (important-return-value t))
@@ -1640,31 +1642,18 @@ return it."
 
 (defconst conn--composed-major-mode-maps (make-hash-table :test 'equal))
 
-(defun conn--compose-major-mode-map (state)
-  "Return composed major mode maps for STATE.
-
-The composed map is a keymap of the form:
-
-;; Fully composed major-mode map
-(keymap
- ;; major-mode composed map
- (keymap (keymap . bindings)  ;; map in STATE for major-mode
-         (keymap . bindings)  ;; map in STATE-parent for major-mode
-         ...)
- ;; parent-mode composed map
- (keymap (keymap . bindings)  ;; map in STATE for parent-mode
-         (keymap . bindings)  ;; map in STATE-parent for parent-mode
-         ..)
- ...)"
+(defun conn--compose-major-mode-map ()
   (declare (important-return-value t))
   (with-memoization
-      (gethash (cons state (conn--derived-mode-all-parents major-mode))
+      (gethash (cons conn-current-state
+                     (with-memoization conn-major-mode-maps
+                       (copy-sequence (conn--derived-mode-all-parents major-mode))))
                conn--composed-major-mode-maps)
-    (cl-assert (not (conn-state-get state :no-keymap))
-               nil "%s :no-keymap property is non-nil" state)
+    (cl-assert (not (conn-state-get conn-current-state :no-keymap))
+               nil "%s :no-keymap property is non-nil" conn-current-state)
     (make-composed-keymap
-     (cl-loop for pmode in (conn--derived-mode-all-parents major-mode)
-              collect (conn--ensure-major-mode-map state pmode)))))
+     (cl-loop for sym in conn-major-mode-maps
+              collect (conn--ensure-major-mode-map conn-current-state sym)))))
 
 ;;;;;; Minor Mode Maps
 
@@ -2110,24 +2099,29 @@ If BUFFER is nil then use the current buffer."
   (setf (buffer-local-value 'conn-lighter (or buffer (current-buffer))) nil)
   (force-mode-line-update))
 
-(defun conn--setup-state-properties (state)
-  (if (conn-state-get state :no-keymap)
+(defun conn--setup-state-keymaps ()
+  (if (conn-state-get conn-current-state :no-keymap)
       (setf conn--state-map nil
             conn--major-mode-map nil
             conn--minor-mode-maps nil)
-    (setf conn--state-map `((conn-local-mode . ,(conn--compose-state-map state)))
-          conn--major-mode-map `((conn-local-mode . ,(conn--compose-major-mode-map state)))
-          conn--minor-mode-maps (conn-state-minor-mode-maps-alist state)))
+    (setf conn--state-map
+          `((conn-local-mode . ,(conn--compose-state-map)))
+          conn--major-mode-map
+          `((conn-local-mode . ,(conn--compose-major-mode-map)))
+          conn--minor-mode-maps
+          (conn-state-minor-mode-maps-alist conn-current-state))))
+
+(defun conn--setup-state-properties ()
   (setf conn--hide-mark-cursor (or (when-let* ((hide (conn-get-buffer-property
                                                       :hide-mark-cursor)))
                                      (if (eq hide t) t
-                                       (alist-get state hide)))
+                                       (alist-get conn-current-state hide)))
                                    (when-let* ((hide (conn-get-mode-property
                                                       major-mode :hide-mark-cursor)))
                                      (if (eq hide t) t
-                                       (alist-get state hide)))
-                                   (conn-state-get state :hide-mark-cursor))
-        cursor-type (conn-state-get state :cursor nil t)))
+                                       (alist-get conn-current-state hide)))
+                                   (conn-state-get conn-current-state :hide-mark-cursor))
+        cursor-type (conn-state-get conn-current-state :cursor nil t)))
 
 (cl-defgeneric conn-enter-state (state)
   "Enter STATE.
@@ -2152,7 +2146,8 @@ To execute code when a state is exiting use `conn-state-defer'."
             (let ((conn-next-state state))
               (funcall conn--state-defered))
             (cl-shiftf conn-previous-state conn-current-state state)
-            (conn--setup-state-properties state)
+            (conn--setup-state-properties)
+            (conn--setup-state-keymaps)
             (conn--activate-input-method)
             (unless (conn--mode-maps-sorted-p state)
               (conn--sort-mode-maps state))
@@ -2422,7 +2417,9 @@ argument may be supplied for the thing command."))
 
 (cl-defmethod conn-enter-state ((_state (conn-substate conn-emacs-state)))
   (conn-state-defer
-    (unless (eql (point) (conn-ring-head conn-emacs-state-ring))
+    (unless (eql (point)
+                 (and-let* ((mk (conn-ring-head conn-emacs-state-ring)))
+                   (marker-position mk)))
       (conn-ring-insert-front conn-emacs-state-ring (point-marker)))
     (when conn-emacs-state-register
       (when-let* ((marker (get-register conn-emacs-state-register))
@@ -13164,6 +13161,10 @@ Operates with the selected windows parent window."
   "f" 'conn-dispatch
   ";" 'conn-wincontrol
   "x" (conn-remap-key "C-x" t))
+
+(defun conn-occur-edit-map-setup ()
+  (setq conn-major-mode-maps (list 'occur-edit-mode)))
+(add-hook 'occur-edit-mode-hook 'conn-occur-edit-map-setup)
 
 
 ;;;; Compile mode
