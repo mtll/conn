@@ -475,13 +475,13 @@ If ring is (1 2 3 4) 4 would be returned."
   (when-let* ((cleanup (conn-ring-cleanup ring)))
     (funcall cleanup elem)))
 
-(defun conn-ring-remove (ring elem &optional test)
-  (cl-loop with test = (or test #'equal)
-           for e1 in (conn-ring-list ring)
-           for e2 in (conn-ring-history ring)
-           if (funcall test e1 elem) collect e1 into remove
-           else collect e1 into list
-           unless (funcall test e2 elem) collect e2 into hist
+(defun conn-ring-remove (ring elem &optional pred)
+  (cl-loop with pred = (or pred #'equal)
+           for l in (conn-ring-list ring)
+           for h in (conn-ring-history ring)
+           if (funcall pred l elem) collect l into remove
+           else collect l into list
+           unless (funcall pred h elem) collect h into hist
            finally (progn
                      (setf (conn-ring-list ring) list
                            (conn-ring-history ring) hist)
